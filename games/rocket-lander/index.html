@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Real-Time Rocket Lander</title>
+    
+    <!-- 1. Link to SHARED CSS FIRST (for layout, nav, etc.) -->
+    <!-- The ../../ goes up two directories to the root to find the assets folder -->
+    <link rel="stylesheet" href="../../assets/css/style.css">
+    
+    <!-- 2. Link to GAME-SPECIFIC CSS SECOND (for game elements) -->
+    <!-- This file is in the same folder, so the path is simple -->
+    <link rel="stylesheet" href="style.css"> 
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body class="game-active">
+    <div class="background-overlay"></div>
+    <div class="floating-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+    </div>
+
+    <!-- NEW: SHARED SITE-WIDE HEADER & NAVIGATION -->
+    <header class="site-header glass-card">
+        <div class="header-content">
+            <a href="/" class="logo">🚀 My Site</a>
+            <nav class="main-nav">
+                <!-- This is the corrected button for the mobile menu -->
+                <button class="nav-toggle" aria-label="toggle navigation" aria-expanded="false">
+                    <span class="hamburger"></span>
+                    <span class="hamburger"></span>
+                    <span class="hamburger"></span>
+                </button>
+                <ul class="nav-links">
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/games/rocket-lander/">Rocket Lander</a></li>
+                    <li><a href="/pages/page-2/">Page 2</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Your original game content starts here -->
+    <div class="app-container">
+        <!-- The old header that was here has been REMOVED -->
+
+        <div id="start-screen" class="glass-card">
+             <div class="card-content">
+                <h2 id="welcome-title">Welcome, Captain!</h2>
+                <p>Enter your name and aim for the landing pad.</p>
+                <div class="start-input-group">
+                     <input type="text" id="name-input" placeholder="Player 1 Name">
+                </div>
+                <div class="player-toggle">
+                    <label for="player-mode-toggle" class="toggle-label active" id="label-single">Single Player</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="player-mode-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    <label for="player-mode-toggle" class="toggle-label" id="label-multi">Multiplayer</label>
+                </div>
+                <div class="start-input-group" id="player2-input-container">
+                     <input type="text" id="name-input-p2" placeholder="Player 2 Name">
+                </div>
+                <p id="high-score-display" class="high-score-text">High Score: 0</p>
+                <button id="start-button" class="modern-button primary">Start Mission</button>
+            </div>
+        </div>
+
+        <main id="game-screen" class="glass-card">
+            <div id="game-area">
+                <canvas id="gameview" width="600" height="400"></canvas>
+                <!-- Single Player Fuel Message -->
+                <div id="out-of-fuel-message">OUT OF FUEL</div>
+                <!-- Multiplayer Fuel Messages -->
+                <div id="out-of-fuel-p1" class="out-of-fuel-multi">P1 OUT OF FUEL</div>
+                <div id="out-of-fuel-p2" class="out-of-fuel-multi">P2 OUT OF FUEL</div>
+                 <!-- Touch Controls -->
+                <div id="touch-controls-container">
+                    <!-- Single Player Controls -->
+                    <div id="touch-controls-single">
+                        <div class="touch-group-left">
+                            <div class="touch-button" id="touch-sp-left"><span>⟵</span></div>
+                            <div class="touch-button" id="touch-sp-right"><span>⟶</span></div>
+                        </div>
+                        <div class="touch-group-right">
+                            <div class="touch-button" id="touch-sp-thrust"><span>🚀</span></div>
+                        </div>
+                    </div>
+                    <!-- Multiplayer Controls -->
+                    <div id="touch-controls-multi">
+                        <div class="touch-group-left">
+                            <div class="touch-button p1" id="touch-p1-left"><span>⟵</span></div>
+                            <div class="touch-button p1" id="touch-p1-thrust"><span>🚀</span></div>
+                            <div class="touch-button p1" id="touch-p1-right"><span>⟶</span></div>
+                        </div>
+                        <div class="touch-group-right">
+                            <div class="touch-button p2" id="touch-p2-left"><span>⟵</span></div>
+                            <div class="touch-button p2" id="touch-p2-thrust"><span>🚀</span></div>
+                            <div class="touch-button p2" id="touch-p2-right"><span>⟶</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="hud">
+                <div id="stats-display" class="glass-element">
+                    <!-- Stats will be populated by JS -->
+                </div>
+            </div>
+            <p id="instruction-p1" class="instruction-text"></p>
+            <p id="instruction-p2" class="instruction-text"></p>
+            <p id="pad-size-info" class="instruction-text"></p>
+            
+            <div id="message-area" class="glass-card">
+                <h2 id="message-title"></h2>
+                <p id="message-text"></p>
+                <div id="message-stats"></div>
+                <button id="play-again-button" class="modern-button primary">Play Again</button>
+            </div>
+        </main>
+    </div>
+
+    <!-- 3. Link Game-Specific JavaScript -->
+    <script src="game.js"></script>
+
+    <!-- 4. Link Shared JavaScript for the navigation menu -->
+    <script src="../../assets/js/main.js"></script>
+</body>
+</html>
