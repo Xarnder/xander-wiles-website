@@ -29,6 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const instructionP1 = document.getElementById('instruction-p1');
     const instructionP2 = document.getElementById('instruction-p2');
 
+    // --- Touch Control Elements ---
+    const touchControlsContainer = document.getElementById('touch-controls-container');
+    const touchControlsSingle = document.getElementById('touch-controls-single');
+    const touchControlsMulti = document.getElementById('touch-controls-multi');
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
     // --- Sound Effects & Music ---
     const thrustSound = new Audio('audio/rocket.mp3');
     thrustSound.loop = true;
@@ -89,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function displayHighScore() { highScoreDisplay.textContent = `High Score: ${getHighScore().toLocaleString()}`; }
 
-    // --- Keyboard Input Listeners ---
+    // --- Input Listeners ---
     window.addEventListener('keydown', (e) => {
         if (messageArea.classList.contains('visible')) {
             if (e.key === 'Enter') { e.preventDefault(); restartGame(); return; }
@@ -99,12 +105,48 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     window.addEventListener('keyup', (e) => { keysPressed[e.key] = false; });
     
+    // Touch Controls Logic
+    function mapTouchToKey(element, key) {
+        element.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            keysPressed[key] = true;
+        }, { passive: false });
+
+        element.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            keysPressed[key] = false;
+        });
+
+        element.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            keysPressed[key] = false;
+        });
+    }
+
+    if (isTouchDevice) {
+        // Single Player
+        mapTouchToKey(document.getElementById('touch-sp-left'), 'a');
+        mapTouchToKey(document.getElementById('touch-sp-right'), 'd');
+        mapTouchToKey(document.getElementById('touch-sp-thrust'), 'w');
+        // Multiplayer P1
+        mapTouchToKey(document.getElementById('touch-p1-left'), 'a');
+        mapTouchToKey(document.getElementById('touch-p1-right'), 'd');
+        mapTouchToKey(document.getElementById('touch-p1-thrust'), 'w');
+        // Multiplayer P2
+        mapTouchToKey(document.getElementById('touch-p2-left'), 'ArrowLeft');
+        mapTouchToKey(document.getElementById('touch-p2-right'), 'ArrowRight');
+        mapTouchToKey(document.getElementById('touch-p2-thrust'), 'ArrowUp');
+    }
+
     // --- UI Logic ---
     function showStartScreen() {
         body.classList.remove('game-active');
         gameScreen.style.display = 'none';
         startScreen.style.display = 'block';
         messageArea.classList.remove('visible', 'success', 'crash');
+        if (isTouchDevice) {
+            touchControlsContainer.style.display = 'none';
+        }
         if (gameLoopId) { cancelAnimationFrame(gameLoopId); gameLoopId = null; }
         gameMusic.pause();
         gameMusic.currentTime = 0;
@@ -165,6 +207,18 @@ document.addEventListener('DOMContentLoaded', () => {
         isMultiplayer = playerModeToggle.checked;
         clearTimeout(restartTimer);
         spaceRestartEnabled = false;
+        
+        // Show touch controls if on a touch device
+        if (isTouchDevice) {
+            touchControlsContainer.style.display = 'flex';
+            if (isMultiplayer) {
+                touchControlsSingle.style.display = 'none';
+                touchControlsMulti.style.display = 'flex';
+            } else {
+                touchControlsSingle.style.display = 'flex';
+                touchControlsMulti.style.display = 'none';
+            }
+        }
 
         resetGameState();
         body.classList.add('game-active');
@@ -183,7 +237,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const hSpeedRule = `Max H-Speed: <strong>${settings.maxHSpeedForSafeLanding} m/s</strong>.`;
         const vSpeedRule = `Max V-Speed: <strong>${settings.maxVSpeedForSafeLanding} m/s</strong>.`;
         
-        // FIX: Update instructions with player-specific controls
         if (isMultiplayer) {
             instructionP1.innerHTML = `<strong>${state.players[0].name} (P1):</strong> Use <strong>W A D</strong> to fly.`;
             instructionP2.innerHTML = `<strong>${state.players[1].name} (P2):</strong> Use <strong>← ↑ →</strong> to fly. Land on the pad with ${vSpeedRule} ${hSpeedRule}`;
@@ -259,6 +312,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showEndGameMessage(title, text, type, player) {
+        if (isTouchDevice) {
+            touchControlsContainer.style.display = 'none';
+        }
         thrustSound.pause();
         messageArea.classList.remove('success', 'crash');
         messageArea.classList.add(type);
@@ -266,7 +322,6 @@ document.addEventListener('DOMContentLoaded', () => {
         messageText.textContent = text;
 
         if (player) {
-            // FIX: Add a label to the stats box
             messageStats.innerHTML = `
                 <p class="message-stats-label">${player.name}'s Final Stats:</p>
                 <div><span>Final V-Speed:</span> <strong>${player.speed.toFixed(2)} m/s</strong></div>

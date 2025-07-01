@@ -126,3 +126,143 @@ canvas { display: block; width: 100%; height: 100%; }
     font-size: 1rem;
     font-family: 'Inter', sans-serif;
 }
+
+/* --- Touch Controls --- */
+#touch-controls-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 25%; /* Take up bottom quarter of the game area */
+    display: none; /* Hidden by default, shown by JS */
+    pointer-events: none; /* Container doesn't block clicks */
+    z-index: 20;
+    padding: 1rem;
+    gap: 1rem;
+}
+
+#touch-controls-single,
+#touch-controls-multi {
+    width: 100%;
+    height: 100%;
+    display: none; /* Hidden by default */
+    justify-content: space-between;
+    align-items: center;
+}
+
+.touch-group-left, .touch-group-right {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto; /* Buttons are clickable */
+    height: 100%;
+}
+
+/* Single Player Layout */
+#touch-controls-single .touch-group-left {
+    width: 50%;
+}
+#touch-controls-single .touch-group-right {
+    width: 50%;
+}
+
+/* Multiplayer Layout */
+#touch-controls-multi .touch-group-left,
+#touch-controls-multi .touch-group-right {
+    width: 45%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+}
+
+
+.touch-button {
+    background: rgba(26, 26, 32, 0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 50%; /* Make them circular */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    user-select: none; /* Prevents text selection on hold */
+    -webkit-user-select: none;
+    transition: all 0.2s ease-in-out;
+
+    /* Dynamic Sizing for Phones */
+    width: 15vw;
+    height: 15vw;
+    max-width: 70px;
+    max-height: 70px;
+}
+
+.touch-button:active {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(0.95);
+}
+
+.touch-button span {
+    font-size: 8vw; /* Icon size relative to screen width */
+    color: white;
+    text-shadow: 0 0 5px rgba(0,0,0,0.5);
+}
+
+/* Larger button for single player thrust */
+#touch-sp-thrust {
+    width: 25vw;
+    height: 25vw;
+    max-width: 120px;
+    max-height: 120px;
+}
+#touch-sp-thrust span {
+    font-size: 12vw;
+}
+
+
+/* Player-specific colors for multiplayer */
+.touch-button.p1 {
+    border-color: rgba(239, 68, 68, 0.5);
+}
+.touch-button.p1:active {
+     background: rgba(239, 68, 68, 0.3);
+}
+
+.touch-button.p2 {
+    border-color: rgba(59, 130, 246, 0.5);
+}
+.touch-button.p2:active {
+     background: rgba(59, 130, 246, 0.3);
+}
+
+/* --- Media Queries for Tablets --- */
+@media (min-width: 768px) {
+    #touch-controls-container {
+        height: 20%; /* Slightly smaller area on tablets */
+        padding: 1.5rem;
+    }
+
+    .touch-button {
+        /* Fixed larger size for tablets */
+        width: 80px;
+        height: 80px;
+    }
+
+    .touch-button span {
+        font-size: 40px; /* Fixed icon size */
+    }
+
+    #touch-sp-thrust {
+        width: 130px;
+        height: 130px;
+    }
+    #touch-sp-thrust span {
+        font-size: 60px;
+    }
+    
+    #touch-controls-multi .touch-group-left,
+    #touch-controls-multi .touch-group-right {
+        gap: 1rem;
+    }
+}
