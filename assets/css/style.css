@@ -94,6 +94,19 @@ a:hover { color: var(--text-primary); }
 .hero-card { text-align: center; }
 .hero-card h1 { font-size: 2.5rem; margin-bottom: 1rem; background: var(--gradient-primary); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .hero-card p { color: var(--text-secondary); max-width: 600px; margin: 0 auto; line-height: 1.6; }
+
+/* 2. Profile Picture Style */
+.profile-picture {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin: 0 auto 1.5rem;
+    display: block; /* Needed to apply auto horizontal margins */
+    border: 3px solid var(--glass-border);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
 .page-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
 .page-card {
     transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -107,9 +120,37 @@ a:hover { color: var(--text-primary); }
 .page-card h3 { margin-bottom: 0.5rem; font-size: 1.25rem; color: var(--text-primary); }
 .page-card p { color: var(--text-muted); }
 
+/* 3, 4, 5, 6. Support & Social Links Styles */
+.support-links-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+    gap: 1rem;
+}
+
+.support-card {
+    padding: 1.25rem 1rem;
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.support-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+    border-color: var(--accent-cyan);
+    color: var(--text-primary);
+}
+
 /* --- Mobile Navigation --- */
 @media (max-width: 768px) {
     body { padding: 0; }
+    /* 1. Add padding to main container on small screens */
+    .app-container {
+        padding: 0 1rem;
+        margin-top: 1rem;
+        gap: 1rem;
+    }
     .site-header { border-radius: 0; }
     .nav-links {
         position: fixed;
