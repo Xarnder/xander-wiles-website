@@ -51,11 +51,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const settings = {
         initialHeight: 100, initialCoal: 100, 
         maxVSpeedForSafeLanding: 1, 
-        maxHSpeedForSafeLanding: 0.6, // FIX: Updated horizontal speed limit
+        maxHSpeedForSafeLanding: 0.6,
         GRAVITY_PULL: 0.03, THRUST_POWER: 0.1, FUEL_CONSUMPTION_RATE: 0.25,
         THRUST_POWER_X: 0.05,
         FUEL_CONSUMPTION_RATE_X: 0.05,
-        MAX_PAD_WIDTH_PERCENT: 0.12,
+        // FIX 1: Increase max pad width percentage for a more generous max size.
+        MAX_PAD_WIDTH_PERCENT: 0.20, 
     };
     const HIGH_SCORE_KEY = 'rocketLanderHighScore';
 
@@ -159,7 +160,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetGameState() {
         const rocketH = canvas.height * 0.12;
         const rocketBodyW = rocketH * (22 / 65), rocketFinW = rocketH * (12 / 65), rocketWidth = rocketBodyW + rocketFinW * 2;
-        const minPadWidth = rocketWidth * (isMultiplayer ? 2.5 : 1) + 4;
+        
+        const minPadWidth = rocketWidth * (isMultiplayer ? 3 : 2);
         const maxPadWidth = canvas.width * settings.MAX_PAD_WIDTH_PERCENT * (isMultiplayer ? 1.5 : 1);
         const padWidth = minPadWidth + Math.random() * Math.max(0, (maxPadWidth - minPadWidth));
         const padX = Math.random() * (canvas.width - padWidth);
@@ -184,12 +186,31 @@ document.addEventListener('DOMContentLoaded', () => {
             state.players.push(createPlayer(nameInput.value || "Anonymous", canvas.width / 2, { up: ['w', 'ArrowUp', ' '], left: ['a', 'ArrowLeft'], right: ['d', 'ArrowRight'] }, '#ef4444', '#ef4444'));
         }
 
-        const numPlanets = Math.floor(Math.random() * 2) + 2;
+        let numPlanets;
+        let planetRadiusMin, planetRadiusRange;
+
+        if (isTouchDevice) {
+            numPlanets = 1;
+            planetRadiusMin = 30;
+            planetRadiusRange = 40;
+        } else {
+            numPlanets = Math.floor(Math.random() * 2) + 2;
+            planetRadiusMin = 70;
+            planetRadiusRange = 80;
+        }
+
         for (let i = 0; i < numPlanets; i++) {
             let candidatePlanet, isOverlapping, attempts = 0;
             do {
                 isOverlapping = false;
-                candidatePlanet = { radius: (Math.random() * 80) + 70, x: Math.random() * canvas.width, y: Math.random() * (canvas.height * 0.4) + 20, color1: `hsl(${Math.random() * 360}, 60%, 70%)`, color2: `hsl(${Math.random() * 360}, 50%, 50%)`, hasRings: Math.random() > 0.6 };
+                candidatePlanet = { 
+                    radius: (Math.random() * planetRadiusRange) + planetRadiusMin, 
+                    x: Math.random() * canvas.width, 
+                    y: Math.random() * (canvas.height * 0.4) + 20, 
+                    color1: `hsl(${Math.random() * 360}, 60%, 70%)`, 
+                    color2: `hsl(${Math.random() * 360}, 50%, 50%)`, 
+                    hasRings: Math.random() > 0.6 
+                };
                 for (const existingPlanet of state.planets) {
                     const distance = Math.hypot(candidatePlanet.x - existingPlanet.x, candidatePlanet.y - existingPlanet.y);
                     if (distance < candidatePlanet.radius + existingPlanet.radius + 50) { isOverlapping = true; break; }
@@ -208,7 +229,19 @@ document.addEventListener('DOMContentLoaded', () => {
         clearTimeout(restartTimer);
         spaceRestartEnabled = false;
         
-        // Show touch controls if on a touch device
+        body.classList.add('game-active');
+        startScreen.style.display = 'none';
+        messageArea.classList.remove('visible', 'success', 'crash');
+        messageStats.classList.remove('visible');
+        outOfFuelMessage.classList.remove('visible');
+        outOfFuelP1.classList.remove('visible');
+        outOfFuelP2.classList.remove('visible');
+        gameScreen.style.display = 'flex';
+
+        // FIX 2: Resize the canvas BEFORE resetting the state to ensure all calculations use the correct screen dimensions.
+        resizeCanvas(); 
+        resetGameState();
+
         if (isTouchDevice) {
             touchControlsContainer.style.display = 'flex';
             if (isMultiplayer) {
@@ -220,17 +253,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        resetGameState();
-        body.classList.add('game-active');
-        startScreen.style.display = 'none';
-        messageArea.classList.remove('visible', 'success', 'crash');
-        messageStats.classList.remove('visible');
-        outOfFuelMessage.classList.remove('visible');
-        outOfFuelP1.classList.remove('visible');
-        outOfFuelP2.classList.remove('visible');
-
-        gameScreen.style.display = 'flex';
-        resizeCanvas();
         if (gameLoopId) cancelAnimationFrame(gameLoopId);
         gameLoopId = requestAnimationFrame(gameLoop);
 
@@ -510,6 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.height = rect.height;
         generateStars();
         if (!gameLoopId || (state.players && state.isGameOver)) {
+            // This check might need adjustment if it causes issues, but it's for resizing the end screen correctly.
             if (!state.players) resetGameState(); 
             draw();
         }
