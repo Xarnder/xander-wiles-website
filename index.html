@@ -18,7 +18,7 @@
     <!-- Link to Shared CSS -->
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -29,12 +29,12 @@
         <div class="shape shape-2"></div>
     </div>
 
-    <!-- NEW Shared Header/Navigation -->
+    <!-- The header now correctly contains the navigation again -->
     <header class="site-header glass-card">
         <div class="header-content">
             <a href="/" class="logo">Xander Wiles</a>
             <nav class="main-nav">
-                <button class="nav-toggle" aria-label="toggle navigation">
+                <button class="nav-toggle" aria-label="toggle navigation" aria-expanded="false">
                     <span class="hamburger"></span>
                     <span class="hamburger"></span>
                     <span class="hamburger"></span>
@@ -42,10 +42,8 @@
                 <ul class="nav-links">
                     <li><a href="/">Home</a></li>
                     <li><a href="/games/rocket-lander/">Rocket Lander</a></li>
-                    <!-- <li><a href="/games/original-rocket-lander/">Original-Rocket-Lander</a></li> -->
                     <li><a href="https://www.whatsappchatviewer.com/">WhatsApp Chat Viewer</a></li>
-                    <!-- <li><a href="http://www.akensile.com/">Akensile</a></li> -->
-                    <!-- Add more links here in the future -->
+                    <li><a href="/pages/Flashcard_App/">Flash Card App</a></li>
                 </ul>
             </nav>
         </div>
@@ -53,8 +51,6 @@
 
     <main class="app-container">
         <div class="hero-card glass-card">
-            <!-- 2. Profile picture added -->
-            <!-- NOTE: Replace the src with the path to your actual profile picture e.g. assets/images/profile.jpg -->
             <img src="assets/images/xanderwiles.jpg" alt="A profile picture of Xander Wiles" class="profile-picture">
             <h1>Welcome</h1>
             <p>Select a game or page from the navigation menu bellow to get started. All projects are built with passion and a lot of JavaScript.</p>
@@ -62,12 +58,12 @@
         
         <div class="page-grid">
             <a href="/games/rocket-lander/" class="page-card glass-card">
-                <h3>Rocket Lander</h3>
+                <h3>Rocket Lander 2</h3>
                 <p>A challenging physics-based game. Can you land the rocket safely?</p>
             </a>
             <a href="/games/original-rocket-lander/" class="page-card glass-card">
-                <h3>Original-Rocket-Lander</h3>
-                <p>The Original Rocket Lander game made in 2012</p>
+                <h3>Original Rocket Lander (2012)</h3>
+                <p>The Original Rocket Lander game made at age 10</p>
             </a>
             <a href="https://www.whatsappchatviewer.com/" class="page-card glass-card">
                 <h3>WhatsApp Chat Viewer</h3>
@@ -85,13 +81,9 @@
                 <h3>Your life in weeks</h3>
                 <p>Visualize your life in weeks with this simple tool.</p>
             </a>
-
-            <!-- Add more cards for future pages -->
         </div>
 
-        <!-- 3, 4, 5, 6. Support and social links grid added -->
         <div class="support-links-grid">
-            <!-- NOTE: Replace '#' with your actual links -->
             <a href="https://github.com/Xarnder" target="_blank" rel="noopener noreferrer" class="support-card glass-card">
                 <span>GitHub</span>
             </a>
@@ -113,7 +105,6 @@
         </div>
     </main>
 
-    <!-- Link to Shared JS for Nav Menu -->
     <script src="assets/js/main.js"></script>
 </body>
 </html>
