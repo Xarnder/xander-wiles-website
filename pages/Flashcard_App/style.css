@@ -1,0 +1,795 @@
+:root {
+    /* 2025 Modern Color Palette */
+    --bg-primary: #0a0a0b;
+    --bg-secondary: #111115;
+    --bg-tertiary: #1a1a20;
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: rgba(0, 0, 0, 0.3);
+    
+    /* Vibrant Accent Colors */
+    --accent-purple: #8b5cf6;
+    --accent-cyan: #06b6d4;
+    --accent-pink: #ec4899;
+    --accent-emerald: #10b981;
+    --accent-orange: #f59e0b;
+    --accent-red: #ef4444;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+    --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    --gradient-secondary: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    --gradient-card: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+    --gradient-danger: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    
+    /* Text Colors */
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    
+    /* Modern Typography */
+    --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    
+    /* Spacing & Sizing */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 24px;
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --shadow-glow: 0 0 20px rgba(139, 92, 246, 0.3);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-primary);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+}
+
+/* Animated Background */
+.background-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 25% 25%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 75% 75%, rgba(6, 182, 212, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(236, 72, 153, 0.05) 0%, transparent 50%);
+    z-index: -2;
+    animation: backgroundPulse 20s ease-in-out infinite;
+}
+
+@keyframes backgroundPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Floating Shapes */
+.floating-shapes {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(1px);
+    animation: float 20s infinite ease-in-out;
+}
+
+.shape-1 {
+    width: 80px;
+    height: 80px;
+    background: var(--gradient-primary);
+    top: 20%;
+    left: 10%;
+    animation-delay: 0s;
+    opacity: 0.6;
+}
+
+.shape-2 {
+    width: 120px;
+    height: 120px;
+    background: var(--gradient-success);
+    top: 60%;
+    right: 15%;
+    animation-delay: -5s;
+    opacity: 0.6;
+}
+
+.shape-3 {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, var(--accent-pink), var(--accent-orange));
+    top: 80%;
+    left: 20%;
+    animation-delay: -10s;
+    opacity: 0.6;
+}
+
+.shape-4 {
+    width: 100px;
+    height: 100px;
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+    top: 10%;
+    right: 30%;
+    animation-delay: -15s;
+    opacity: 0.6;
+}
+
+.shape-5 {
+    width: 140px;
+    height: 140px;
+    background: linear-gradient(135deg, var(--accent-emerald), var(--accent-cyan));
+    top: 40%;
+    left: 70%;
+    animation-delay: -8s;
+    opacity: 0.6;
+}
+
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0px) rotate(0deg) scale(1);
+        opacity: 0.6;
+    }
+    33% {
+        transform: translateY(-30px) rotate(120deg) scale(1.05);
+        opacity: 0.8;
+    }
+    66% {
+        transform: translateY(-15px) rotate(240deg) scale(0.95);
+        opacity: 0.5;
+    }
+}
+
+/* Glass Morphism */
+.glass-card {
+    background: var(--glass-bg);
+    /* backdrop-filter: blur(20px); -- Kept commented out from successful flip test */
+    /* -webkit-backdrop-filter: blur(20px); -- Kept commented out */
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-glass);
+    position: relative;
+    /* overflow: hidden; -- Ensure this is NOT on the main flipping .flashcard if it's also a .glass-card */
+}
+
+.glass-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    opacity: 0.7;
+}
+
+.glass-element {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px); /* This is on other elements, should be fine */
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+}
+
+/* App Container */
+.app-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+/* Header */
+header {
+    padding: 1.5rem 2rem;
+    transition: all 0.3s ease;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.logo-icon {
+    width: 50px;
+    height: 50px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: white;
+    box-shadow: var(--shadow-glow);
+    animation: logoFloat 3s ease-in-out infinite;
+}
+
+@keyframes logoFloat {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-5px); }
+}
+
+header h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.02em;
+}
+
+.score-container {
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 80px;
+}
+
+.score-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.score-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+/* Upload Section */
+.upload-section {
+    padding: 2rem;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.upload-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.upload-icon {
+    font-size: 3rem;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.upload-header h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.upload-methods {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.file-upload-wrapper {
+    position: relative;
+}
+
+.modern-file-upload {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 1rem 2rem;
+    background: var(--gradient-primary);
+    color: white;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+    border: none;
+}
+
+.modern-file-upload:hover {
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: var(--shadow-xl), var(--shadow-glow);
+}
+
+.modern-file-upload:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-lg);
+}
+
+.upload-shine {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    transition: left 0.5s ease;
+}
+
+.modern-file-upload:hover .upload-shine {
+    left: 100%;
+}
+
+#fileInput {
+    display: none;
+}
+
+.divider {
+    text-align: center;
+    position: relative;
+    margin: 1rem 0;
+}
+
+.divider::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--glass-border), transparent);
+    z-index: -1;
+}
+
+.divider span {
+    background: var(--bg-primary);
+    padding: 0 1rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    position: relative;
+}
+
+.paste-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.input-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.textarea-wrapper {
+    position: relative;
+}
+
+#pasteArea {
+    width: 100%;
+    min-height: 120px;
+    padding: 1rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: var(--font-primary);
+    font-size: 0.875rem;
+    resize: vertical;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+#pasteArea:focus {
+    outline: none;
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
+}
+
+#pasteArea::placeholder {
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+
+.textarea-decoration {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--gradient-primary);
+    transition: width 0.3s ease;
+    border-radius: 1px;
+    z-index: 1;
+}
+
+#pasteArea:focus + .textarea-decoration {
+    width: 100%;
+}
+
+/* Modern Buttons */
+.modern-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1.5rem;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    min-width: 140px;
+    box-shadow: var(--shadow-md);
+}
+
+.modern-button.primary {
+    background: var(--gradient-primary);
+    color: white;
+}
+
+.modern-button.success {
+    background: var(--gradient-success);
+    color: white;
+}
+
+.modern-button.secondary {
+    background: var(--gradient-secondary);
+    color: white;
+}
+
+.modern-button:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: var(--shadow-lg), 0 0 15px rgba(139, 92, 246, 0.15);
+}
+.modern-button.primary:hover { box-shadow: var(--shadow-lg), 0 0 15px rgba(139, 92, 246, 0.25); }
+.modern-button.success:hover { box-shadow: var(--shadow-lg), 0 0 15px rgba(16, 185, 129, 0.25); }
+.modern-button.secondary:hover { box-shadow: var(--shadow-lg), 0 0 15px rgba(107, 114, 128, 0.25); }
+
+
+.modern-button:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-md);
+}
+
+.modern-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: var(--shadow-md);
+}
+
+/* Flashcard Area */
+.flashcard-area {
+    perspective: 1000px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 400px;
+    padding: 2rem 0;
+    transition: all 0.5s ease;
+}
+
+.flashcard {
+    width: 100%;
+    max-width: 600px;
+    height: 350px;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    will-change: transform; /* MODIFIED: Added for performance */
+    /* The .flashcard itself (which is also a .glass-card) should NOT have overflow:hidden */
+    /* if it does, this would be in the .glass-card rule. Let's assume it's not there for now. */
+}
+
+.flashcard.is-flipped {
+    transform: rotateY(180deg);
+}
+
+.card-face {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0; left: 0;
+    
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    
+    border-radius: var(--radius-2xl);
+    overflow: hidden; /* ADDED THIS to clip shimmer */
+    
+    background: var(--gradient-card); 
+    border: 1px solid var(--glass-border);
+    /* backdrop-filter was removed as it broke the flip */
+
+    transition: box-shadow 0.3s ease;
+}
+
+.card-face:hover {
+    box-shadow: var(--shadow-xl), 0 0 30px rgba(139, 92, 246, 0.2);
+}
+
+.card-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    padding: 2rem;
+    text-align: center;
+    position: relative;
+    z-index: 2; 
+}
+
+.card-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1.5rem;
+    color: var(--accent-purple);
+    opacity: 0.8;
+}
+
+.answer-icon {
+    color: var(--accent-emerald);
+}
+
+.card-face p {
+    font-size: 1.25rem;
+    line-height: 1.6;
+    color: var(--text-primary);
+    font-weight: 500;
+    max-width: 90%;
+}
+
+.card-front {
+    transform: translateZ(0.1px);
+}
+
+.card-back {
+    transform: rotateY(180deg) translateZ(0.1px);
+}
+
+.card-shimmer {
+    position: absolute;
+    top: -50%; /* Positioned to be larger than parent */
+    left: -50%;
+    width: 200%; /* Larger than parent */
+    height: 200%;
+    background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.07) 50%, transparent 70%);
+    transform: rotate(45deg); /* Initial rotation of the shimmer band */
+    animation: shimmer 3s infinite linear;
+    pointer-events: none;
+    z-index: 1; /* Below content, above card-face background */
+    /* border-radius: var(--radius-2xl); -- REMOVED, parent .card-face handles clipping radius */
+    /* overflow: hidden; -- REMOVED, shimmer itself should not clip */
+}
+
+
+@keyframes shimmer {
+    0% { transform: rotate(45deg) translateX(-150%); } /* Animate the pre-rotated band */
+    100% { transform: rotate(45deg) translateX(150%); }
+}
+
+
+/* Controls */
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 1rem 0;
+}
+
+/* Progress Section */
+.progress-section {
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.progress-info {
+    margin-bottom: 1rem;
+}
+
+.progress-text {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-family: var(--font-mono);
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--glass-bg);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--glass-border);
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--gradient-primary);
+    width: 0%;
+    transition: width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+    border-radius: 4px;
+    position: relative;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: progressShine 2s infinite linear;
+}
+
+
+@keyframes progressShine {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(0%); }
+    100% { transform: translateX(100%); }
+}
+
+/* Quiz Started State */
+.app-container.quiz-started .upload-section {
+    opacity: 0;
+    max-height: 0;
+    padding: 0;
+    margin: 0;
+    visibility: hidden;
+    transform: translateY(-20px) scale(0.95);
+    overflow: hidden;
+}
+
+
+.app-container.quiz-started .flashcard-area {
+    min-height: 450px;
+}
+
+.app-container.quiz-started .flashcard {
+    max-width: 700px;
+    height: 400px;
+}
+
+.app-container.quiz-started .card-face p {
+    font-size: 1.375rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .app-container {
+        padding: 1rem;
+        gap: 1.5rem;
+    }
+    
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    header h1 {
+        font-size: 1.75rem;
+    }
+    
+    .flashcard {
+        height: 300px;
+        max-width: 100%;
+    }
+    
+    .controls {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .modern-button {
+        width: 100%;
+    }
+    
+    .card-face p {
+        font-size: 1.125rem;
+    }
+
+    .app-container.quiz-started .flashcard-area {
+        min-height: 380px;
+    }
+
+    .app-container.quiz-started .flashcard {
+        height: 320px;
+    }
+}
+
+@media (max-width: 480px) {
+    .app-container {
+        padding: 0.5rem;
+    }
+    
+    .upload-section,
+    .progress-section,
+    header {
+        padding: 1.5rem 1rem;
+    }
+        
+    .flashcard {
+        height: 280px;
+    }
+    
+    .card-content {
+        padding: 1.5rem;
+    }
+    
+    .card-icon {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .card-face p {
+        font-size: 1rem;
+    }
+
+    .app-container.quiz-started .flashcard-area {
+        min-height: 340px;
+    }
+    .app-container.quiz-started .flashcard {
+        height: 300px;
+    }
+}
+
+/* Special Effects */
+.success-glow {
+    box-shadow: 0 0 25px var(--accent-emerald), 0 0 40px rgba(16, 185, 129, 0.3) !important;
+    animation: successPulse 0.6s ease-out;
+}
+
+@keyframes successPulse {
+    0% { transform: scale(1); box-shadow: 0 0 25px var(--accent-emerald), 0 0 40px rgba(16, 185, 129, 0.3) !important; }
+    50% { transform: scale(1.03); box-shadow: 0 0 35px var(--accent-emerald), 0 0 50px rgba(16, 185, 129, 0.4) !important; }
+    100% { transform: scale(1); box-shadow: 0 0 25px var(--accent-emerald), 0 0 40px rgba(16, 185, 129, 0.3) !important; }
+}
