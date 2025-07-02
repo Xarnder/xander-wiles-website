@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Life in Weeks</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Title at the top -->
+  <h1 id="page-title">Your Life in Weeks</h1>
+
+  <div id="container">
+    <div id="week-labels-container">
+      <p id="weeks-title">Weeks since birthday</p>
+      <div id="week-labels"></div>
+    </div>
+
+    <div>
+      <!-- Age labels at the top -->
+      <div id="age-labels"></div>
+      <!-- Life grid below -->
+      <div id="life-grid"></div>
+    </div>
+  </div>
+
+  <!-- Stats at the bottom -->
+  <div id="stats">
+    <p id="time-left"></p>
+    <p id="percentage-completed"></p>
+    <p id="weeks-since-birthday"></p>
+  </div>
+  
+
+  <!-- Button to open the menu -->
+  <button id="menu-button">Settings</button>
+
+<!-- Hidden menu for inputs -->
+<div id="menu">
+  <!-- Toggle button for light/dark mode -->
+  <button id="theme-toggle">Switch to Dark Mode</button>
+  
+  <label for="dob">Date of Birth:</label>
+  <input type="date" id="dob">
+  
+  <label for="lifespan">Predicted Lifespan (in years):</label>
+  <input type="number" id="lifespan">
+
+  <button id="save-button">Save</button>
+</div>
+
+
+  <script src="script.js"></script>
+</body>
+</html>
