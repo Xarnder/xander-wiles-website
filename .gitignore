@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# VS Code
+.vscode/
+
+# Optional: ignore heavy source images you don't want in git
+# pages/Siewli/images/original/
