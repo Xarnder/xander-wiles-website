@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Three.js FPS + Tiny Light Scale (Fixed WASD)</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="ui" class="">
+    <div class="header">
+      <button id="btnCollapse" title="Collapse/expand menu">▾</button>
+      <strong>Controls</strong>
+      <div class="spacer"></div>
+      <div class="fps">FPS: <span id="fps">--</span></div>
+      <button id="btnDebug" title="Toggle debug panel (Backtick)">Debug</button>
+    </div>
+    <div class="body" id="ui-body">
+      <div class="row">
+        <label><input id="toggleCollision" type="checkbox" /> Show collision scene <span class="small"> (H)</span></label>
+      </div>
+      <div class="row">
+        <label><input id="toggleFly" type="checkbox" /> Fly mode (no gravity) <span class="small"> (F)</span></label>
+      </div>
+
+      <div class="row">
+        <label for="exposure"><strong>Exposure</strong> <span class="small">(dims all lighting)</span></label><br/>
+        <input id="exposure" type="range" min="0.01" max="2.00" step="0.01" value="0.25" />
+        <span id="exposureValue" class="small">0.25</span>
+      </div>
+
+      <details class="row" open>
+        <summary><strong>Advanced lighting</strong></summary>
+        <div class="row">
+          <label for="lightScale">Light Intensity Scale <span class="small">(0 → 0.01)</span></label><br/>
+          <input id="lightScale" type="range" min="0.0000" max="0.0100" step="0.0001" value="0.0020" />
+          <span id="lightScaleValue" class="small">0.0020</span>
+        </div>
+      </details>
+
+      <div class="row small">
+        Click canvas • WASD move • Space jump • Shift sprint • E/Q up/down in fly • R respawn (0,20,0) • ` debug
+      </div>
+      <div class="row small">
+        <span id="status">Loading scenes…</span>
+      </div>
+    </div>
+  </div>
+
+  <pre id="debug"></pre>
+  <canvas id="c"></canvas>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.159.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.159.0/examples/jsm/",
+      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
