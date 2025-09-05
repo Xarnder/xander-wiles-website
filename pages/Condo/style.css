@@ -23,6 +23,15 @@ html, body {
 #ui .small { font-size: 12px; opacity: 0.85; }
 label { cursor: pointer; user-select: none; }
 input[type="checkbox"] { transform: translateY(1px); }
+select {
+  background: rgba(255,255,255,0.05);
+  color: #e6eef8;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  padding: 6px;
+  width: 100%;
+}
+
 
 #ui.collapsed .body { display: none; }
 #ui.collapsed #btnCollapse { transform: rotate(-90deg); }
