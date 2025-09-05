@@ -37,6 +37,19 @@
           <span id="lightScaleValue" class="small">0.0020</span>
         </div>
       </details>
+      
+      <!-- New Performance Controls Section -->
+      <details class="row" open>
+        <summary><strong>Performance &amp; Quality</strong></summary>
+        <div class="row">
+          <label><input id="toggleHQLighting" type="checkbox" checked /> High Quality Lighting <span class="small">(shadows, env map)</span></label>
+        </div>
+        <div class="row">
+          <label for="shadowQuality">Shadow Quality</label><br/>
+          <input id="shadowQuality" type="range" min="0" max="3" step="1" value="2" />
+          <span id="shadowQualityValue" class="small">Medium</span>
+        </div>
+      </details>
 
       <div class="row small">
         Click canvas • WASD move • Space jump • Shift sprint • E/Q up/down in fly • R respawn (0,20,0) • ` debug

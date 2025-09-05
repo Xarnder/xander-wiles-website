@@ -7,7 +7,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import * as CANNON from 'cannon-es';
 
-// UI
+// --- UI ---
 const statusEl = document.getElementById('status');
 const debugEl  = document.getElementById('debug');
 const fpsEl = document.getElementById('fps');
@@ -16,20 +16,27 @@ const toggleFlyEl = document.getElementById('toggleFly');
 const btnCollapse = document.getElementById('btnCollapse');
 const btnDebug = document.getElementById('btnDebug');
 const uiPanel = document.getElementById('ui');
-
 const exposureSlider = document.getElementById('exposure');
 const exposureValue = document.getElementById('exposureValue');
 const lightScaleSlider = document.getElementById('lightScale');
 const lightScaleValue = document.getElementById('lightScaleValue');
+// --- New UI Elements ---
+const toggleHQLightingEl = document.getElementById('toggleHQLighting');
+const shadowQualitySlider = document.getElementById('shadowQuality');
+const shadowQualityValue = document.getElementById('shadowQualityValue');
 
+// --- LocalStorage ---
 const LS = window.localStorage;
 const LS_UI_COLLAPSED = 'fps.ui.collapsed';
 const LS_DEBUG_VISIBLE = 'fps.debug.visible';
 const LS_EXPOSURE = 'fps.exposure';
 const LS_LIGHT_SCALE = 'fps.lightScale';
+// --- New LocalStorage Keys ---
+const LS_HQ_LIGHTING = 'fps.hqLighting';
+const LS_SHADOW_QUALITY = 'fps.shadowQuality';
 
 if (LS.getItem(LS_UI_COLLAPSED) === 'true') uiPanel.classList.add('collapsed');
-let debugVisible = LS.getItem(LS_DEBUG_VISIBLE) !== 'false'; // default true
+let debugVisible = LS.getItem(LS_DEBUG_VISIBLE) !== 'false';
 debugEl.style.display = debugVisible ? 'block' : 'none';
 
 let exposure = parseFloat(LS.getItem(LS_EXPOSURE) ?? '0.25');
@@ -44,6 +51,17 @@ lightScale = Math.min(0.01, Math.max(0.0, lightScale));
 lightScaleSlider.value = lightScale.toFixed(4);
 lightScaleValue.textContent = lightScale.toFixed(4);
 
+// --- New Settings Loading ---
+const SHADOW_QUALITY_LABELS = ['Off', 'Low', 'Medium', 'High'];
+let hqLighting = LS.getItem(LS_HQ_LIGHTING) !== 'false'; // default true
+toggleHQLightingEl.checked = hqLighting;
+
+let shadowQuality = parseInt(LS.getItem(LS_SHADOW_QUALITY) ?? '2', 10);
+if (!Number.isFinite(shadowQuality) || shadowQuality < 0 || shadowQuality > 3) shadowQuality = 2;
+shadowQualitySlider.value = shadowQuality;
+shadowQualityValue.textContent = SHADOW_QUALITY_LABELS[shadowQuality];
+
+// --- Event Listeners ---
 btnCollapse.addEventListener('click', () => {
   uiPanel.classList.toggle('collapsed');
   LS.setItem(LS_UI_COLLAPSED, uiPanel.classList.contains('collapsed'));
@@ -62,21 +80,32 @@ lightScaleSlider.addEventListener('input', () => {
   applyLightScale();
 });
 
+// --- New Event Listeners ---
+toggleHQLightingEl.addEventListener('change', e => {
+  hqLighting = e.target.checked;
+  LS.setItem(LS_HQ_LIGHTING, String(hqLighting));
+  updateLightingSettings();
+});
+shadowQualitySlider.addEventListener('input', () => {
+  shadowQuality = parseInt(shadowQualitySlider.value, 10);
+  shadowQualityValue.textContent = SHADOW_QUALITY_LABELS[shadowQuality]; // Update text immediately
+  LS.setItem(LS_SHADOW_QUALITY, shadowQuality);
+  updateLightingSettings();
+});
+
 function toggleDebug(){ debugVisible = !debugVisible; debugEl.style.display = debugVisible?'block':'none'; LS.setItem(LS_DEBUG_VISIBLE, debugVisible); }
 function log(...args){ console.log(...args); if(!debugVisible) return; debugEl.textContent += args.join(' ')+'\n'; debugEl.scrollTop = debugEl.scrollHeight; }
 const base = (url)=> (url||'').split('/').pop();
 
-// Renderer/Scene/Camera
+// --- Renderer/Scene/Camera ---
 const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-
-// Realistic pipeline + global exposure knob
 renderer.physicallyCorrectLights = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = exposure;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = true; // Will be managed by new settings function
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 function applyExposure(){ renderer.toneMappingExposure = exposure; }
@@ -85,43 +114,36 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0f14);
 const camera = new THREE.PerspectiveCamera(75, 2, 0.05, 5000);
 
-// Default lights (used only if no Blender lights are present)
 const hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 0.5); hemi.name = 'DefaultHemi';
 const dir  = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(10,15,10); dir.name='DefaultDir';
-dir.castShadow = true; dir.shadow.mapSize.set(2048,2048); dir.shadow.bias = -0.0005; dir.shadow.normalBias = 0.02;
+// Shadow properties like castShadow and mapSize are now managed by updateLightingSettings()
+dir.shadow.bias = -0.0005; dir.shadow.normalBias = 0.02;
 scene.add(hemi, dir);
 
-// Helpers
 scene.add(new THREE.AxesHelper(1.0));
 const grid = new THREE.GridHelper(200,200,0x334455,0x223344); grid.material.opacity=0.15; grid.material.transparent=true; grid.position.y=-0.001; scene.add(grid);
 
-// Pointer lock
 const controls = new PointerLockControls(camera, document.body);
 document.addEventListener('click', () => { if (document.pointerLockElement !== document.body) controls.lock(); });
 
-// Physics
+// --- Physics ---
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
 world.broadphase = new CANNON.SAPBroadphase(world);
 world.allowSleep = true;
-
 const worldMat  = new CANNON.Material('world');
 const playerMat = new CANNON.Material('player');
 world.addContactMaterial(new CANNON.ContactMaterial(worldMat, playerMat, { friction: 0.0, restitution: 0.0 }));
-
 const PLAYER_RADIUS = 0.35;
 const PLAYER_HEIGHT = 1.6;
 const HALF = (PLAYER_HEIGHT/2) - PLAYER_RADIUS;
-
-const playerBody = new CANNON.Body({
-  mass: 70, material: playerMat, linearDamping: 0.05, allowSleep:false, fixedRotation:true
-});
+const playerBody = new CANNON.Body({ mass: 70, material: playerMat, linearDamping: 0.05, allowSleep:false, fixedRotation:true });
 playerBody.addShape(new CANNON.Sphere(PLAYER_RADIUS), new CANNON.Vec3(0, +HALF, 0));
 playerBody.addShape(new CANNON.Sphere(PLAYER_RADIUS), new CANNON.Vec3(0, -HALF, 0));
 playerBody.updateMassProperties();
 playerBody.position.set(0,20,0);
 world.addBody(playerBody);
 
-// Input
+// --- Input ---
 const keys = { w:false,a:false,s:false,d:false, space:false, shift:false, q:false,e:false, ctrl:false };
 addEventListener('keydown', (e) => {
   setKey(e.code, true);
@@ -139,41 +161,69 @@ function setKey(code, v){
 }
 function respawnAtOrigin(){ playerBody.position.set(0,20,0); playerBody.velocity.set(0,0,0); }
 
-// Loading manager
+// --- Loading ---
 const manager = new THREE.LoadingManager();
 manager.onStart = (url,l,t)=>{ statusEl.textContent = `Starting: ${base(url)} (0/${t})`; log('onStart', base(url), l, t); };
 manager.onProgress=(url,l,t)=>{ const p=t?Math.round(l/t*100):0; statusEl.textContent=`Loading ${l}/${t} – ${base(url)} (${p}%)`; };
 manager.onError  = (url)=>{ statusEl.textContent=`Error: ${base(url)}`; log('onError', url); };
 manager.onLoad   = ()=>log('All assets loaded.');
-
 const loader = new GLTFLoader(manager);
 const draco = new DRACOLoader(); draco.setDecoderPath('https://unpkg.com/three@0.159.0/examples/jsm/libs/draco/'); loader.setDRACOLoader(draco);
 loader.setMeshoptDecoder(MeshoptDecoder);
 
-// UI toggles
+// --- UI Toggles ---
 let collisionSceneGroup = null;
 function setCollisionVisible(on){ if (collisionSceneGroup) collisionSceneGroup.visible = on; if (toggleCollisionEl) toggleCollisionEl.checked = !!on; log('Collision render', on?'ON':'OFF'); }
 function toggleCollision(){ const on = !(collisionSceneGroup && collisionSceneGroup.visible); setCollisionVisible(on); }
 toggleCollisionEl?.addEventListener('change', e => setCollisionVisible(e.target.checked));
-
 let flyMode=false;
 function setFly(on){ flyMode=on; toggleFlyEl && (toggleFlyEl.checked=on); world.gravity.set(0,on?0:-9.82,0); if(on) playerBody.velocity.y=0; log('Fly', on?'ON':'OFF'); }
 function toggleFly(){ setFly(!flyMode); }
 toggleFlyEl?.addEventListener('change', e => setFly(e.target.checked));
-
-// HDR environment (optional) with fallback
 async function loadHDRWithFallback(localPath, fallbackUrl){
-  return new Promise((resolve)=>{
-    new RGBELoader().load(localPath, t=>resolve(t), undefined, ()=>{
-      new RGBELoader().load(fallbackUrl, t=>resolve(t));
-    });
-  });
+  return new Promise((resolve)=>{ new RGBELoader().load(localPath, t=>resolve(t), undefined, ()=>{ new RGBELoader().load(fallbackUrl, t=>resolve(t)); }); });
 }
 
-// Lights scaling
+// --- Lighting Control ---
 const importedLights = [];
 const defaultLights = [hemi, dir];
-const allLights = []; // will be filled after load (imported or default or both)
+const allLights = [];
+// --- New Lighting Quality state and functions ---
+let storedEnvMap = null;
+let ambientFallback = null;
+const SHADOW_MAP_SIZES = [0, 512, 1024, 2048];
+
+function updateLightingSettings() {
+  // 1. Handle High Quality Lighting toggle (IBL, fallback ambient)
+  if (hqLighting) {
+    scene.environment = storedEnvMap;
+    if (ambientFallback) scene.remove(ambientFallback);
+  } else {
+    scene.environment = null;
+    if (!ambientFallback) ambientFallback = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientFallback);
+  }
+
+  // 2. Handle Shadows based on quality slider
+  const shadowSize = SHADOW_MAP_SIZES[shadowQuality];
+  const shadowsEnabled = hqLighting && shadowSize > 0;
+  renderer.shadowMap.enabled = shadowsEnabled;
+
+  for (const light of allLights) {
+    if (light.shadow) {
+      light.castShadow = shadowsEnabled;
+      if (shadowsEnabled && light.shadow.mapSize.width !== shadowSize) {
+        light.shadow.mapSize.set(shadowSize, shadowSize);
+        if (light.shadow.map) {
+          light.shadow.map.dispose();
+          light.shadow.map = null;
+        }
+      }
+    }
+  }
+  if (shadowQualityValue) shadowQualityValue.textContent = SHADOW_QUALITY_LABELS[shadowQuality];
+}
+
 function applyLightScale(){
   for (const l of allLights){
     if (l._baseIntensity === undefined) l._baseIntensity = l.intensity;
@@ -181,17 +231,14 @@ function applyLightScale(){
   }
 }
 
-// Load scenes + lights
+// --- Load Scene Assets ---
 async function loadScenes(){
   try{
-    const hdrTex = await loadHDRWithFallback(
-      './assets/env/venice_sunset_1k.hdr',
-      'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr'
-    );
+    const hdrTex = await loadHDRWithFallback( './assets/env/venice_sunset_1k.hdr', 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/venice_sunset_1k.hdr' );
     hdrTex.mapping = THREE.EquirectangularReflectionMapping;
     const pmrem = new THREE.PMREMGenerator(renderer);
     const envMap = pmrem.fromEquirectangular(hdrTex).texture;
-    scene.environment = envMap; // comment out if you don't want IBL
+    storedEnvMap = envMap; // Store for quality toggling
     hdrTex.dispose(); pmrem.dispose();
 
     const visualGLTF    = await loader.loadAsync('./assets/models/Visual_Scene.glb');
@@ -199,22 +246,17 @@ async function loadScenes(){
 
     const visualRoot = visualGLTF.scene || visualGLTF.scenes?.[0];
     scene.add(visualRoot);
-
-    // shadows
     visualRoot.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
 
-    // Blender lights (KHR_lights_punctual)
     visualRoot.traverse(o=>{
       if (o.isLight){
         importedLights.push(o);
-        o.castShadow = true;
-        if (o.shadow){ o.shadow.mapSize.set(1024,1024); o.shadow.bias=-0.0005; o.shadow.normalBias=0.02; }
+        // castShadow and mapSize now managed by updateLightingSettings()
+        if (o.shadow){ o.shadow.bias=-0.0005; o.shadow.normalBias=0.02; }
       }
     });
 
-    // Decide which lights to scale/control: imported if present, otherwise defaults
     if (importedLights.length > 0){
-      // Prefer Blender lights; remove defaults so you don't double light
       scene.remove(hemi); scene.remove(dir);
       allLights.push(...importedLights);
       log('Imported lights:', importedLights.length);
@@ -223,11 +265,11 @@ async function loadScenes(){
       log('No Blender lights found. Using default lights + HDRI.');
     }
 
-    // Apply initial scales
+    // Apply initial scales and quality settings from UI
     applyExposure();
     applyLightScale();
+    updateLightingSettings(); // Key call to apply initial settings
 
-    // Collision wire & physics
     const colRoot = collisionGLTF.scene || collisionGLTF.scenes?.[0];
     collisionSceneGroup = colRoot.clone(true);
     collisionSceneGroup.traverse(o => { if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ color:0xff0077, wireframe:true, transparent:true, opacity:0.35 }); });
@@ -259,7 +301,7 @@ function buildPhysicsFromCollision(root){
   log(`Physics: added ${bodies} static bodies from Collision_Scene.glb`);
 }
 
-// Simulation + FPS counter
+// --- Main Loop ---
 const clock = new THREE.Clock(); let accum=0; const FIXED=1/60;
 let lastTime = performance.now();
 const fpsSamples = []; const FPS_N = 60;
@@ -275,7 +317,6 @@ function animate(){
   camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
   renderer.render(scene, camera);
 
-  // FPS
   const now = performance.now();
   const instFps = 1000 / (now - lastTime);
   lastTime = now;
@@ -284,7 +325,6 @@ function animate(){
   const avgFps = fpsSamples.reduce((a,b)=>a+b,0) / fpsSamples.length;
   fpsEl.textContent = avgFps.toFixed(0);
 
-  // Status line
   const p = playerBody.position, vel = playerBody.velocity;
   const pressed = Object.entries(keys).filter(([k,v])=>v).map(([k])=>k).join(',') || '—';
   statusEl.textContent = `Exposure ${renderer.toneMappingExposure.toFixed(2)}  |  LightScale ${lightScale.toFixed(4)}  |  pos(${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)})  vel(${vel.x.toFixed(2)}, ${vel.y.toFixed(2)}, ${vel.z.toFixed(2)})  keys[${pressed}]  fly:${flyMode?'on':'off'}`;
@@ -312,16 +352,12 @@ function step(dt){
   if (keys.a){ vx-=right.x;   vz-=right.z; }
   if (flyMode){ if (keys.e||keys.space) vy+=1; if (keys.q||keys.ctrl) vy-=1; }
 
-  // ✅ Correct normalization in fly mode (bug fix)
   if (flyMode){
     const len=Math.hypot(vx,vy,vz)||1;
-    vx = vx/len*moveSpeed;
-    vy = vy/len*moveSpeed;
-    vz = vz/len*moveSpeed;
+    vx = vx/len*moveSpeed; vy = vy/len*moveSpeed; vz = vz/len*moveSpeed;
   } else {
     const len=Math.hypot(vx,vz)||1;
-    vx = vx/len*moveSpeed;
-    vz = vz/len*moveSpeed;
+    vx = vx/len*moveSpeed; vz = vz/len*moveSpeed;
   }
 
   playerBody.wakeUp();
