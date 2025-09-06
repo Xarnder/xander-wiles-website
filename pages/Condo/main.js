@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
@@ -6,6 +5,9 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import * as CANNON from 'cannon-es';
+
+// --- Touch Detection ---
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 // --- Scene Configuration ---
 const SCENES = [
@@ -138,8 +140,19 @@ const dir  = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(10,15,1
 dir.shadow.bias = -0.0005; dir.shadow.normalBias = 0.02; // Default lights are not added to scene initially
 scene.add(new THREE.AxesHelper(1.0));
 const grid = new THREE.GridHelper(200,200,0x334455,0x223344); grid.material.opacity=0.15; grid.material.transparent=true; grid.position.y=-0.001; scene.add(grid);
-const controls = new PointerLockControls(camera, document.body);
-document.addEventListener('click', () => { if (document.pointerLockElement !== document.body) controls.lock(); });
+
+// --- Controls (Desktop vs Touch) ---
+let controls;
+const euler = new THREE.Euler(0, 0, 0, 'YXZ'); // For touch camera control
+const touchState = {
+    look: { id: -1, active: false, startX: 0, startY: 0, currentX: 0, currentY: 0 },
+    joystick: { id: -1, active: false, startX: 0, startY: 0, currentX: 0, currentY: 0 }
+};
+
+if (!isTouchDevice) {
+    controls = new PointerLockControls(camera, document.body);
+    document.addEventListener('click', () => { if (document.pointerLockElement !== document.body) controls.lock(); });
+}
 
 // --- Physics ---
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
@@ -211,7 +224,19 @@ function setCollisionVisible(on){ if (collisionSceneGroup) collisionSceneGroup.v
 function toggleCollision(){ const on = !(collisionSceneGroup && collisionSceneGroup.visible); setCollisionVisible(on); }
 toggleCollisionEl?.addEventListener('change', e => setCollisionVisible(e.target.checked));
 let flyMode=false;
-function setFly(on){ flyMode=on; toggleFlyEl && (toggleFlyEl.checked=on); world.gravity.set(0,on?0:-9.82,0); if(on) playerBody.velocity.y=0; log('Fly', on?'ON':'OFF'); }
+function setFly(on){ 
+    flyMode=on; 
+    toggleFlyEl && (toggleFlyEl.checked=on); 
+    world.gravity.set(0,on?0:-9.82,0); 
+    if(on) playerBody.velocity.y=0; 
+    log('Fly', on?'ON':'OFF');
+    if (isTouchDevice) {
+        const up = document.getElementById('touch-up');
+        const down = document.getElementById('touch-down');
+        if (up) up.style.display = on ? 'flex' : 'none';
+        if (down) down.style.display = on ? 'flex' : 'none';
+    }
+}
 function toggleFly(){ setFly(!flyMode); }
 toggleFlyEl?.addEventListener('change', e => setFly(e.target.checked));
 async function loadHDRWithFallback(localPath, fallbackUrl){ return new Promise((resolve)=>{ new RGBELoader().load(localPath, t=>resolve(t), undefined, ()=>{ new RGBELoader().load(fallbackUrl, t=>resolve(t)); }); }); }
@@ -376,6 +401,22 @@ let lastTime = performance.now();
 const fpsSamples = []; const FPS_N = 60;
 function animate(){
   requestAnimationFrame(animate);
+
+  if (isTouchDevice && touchState.look.active) {
+    const LOOK_SENSITIVITY = 0.003;
+    const dx = touchState.look.currentX - touchState.look.startX;
+    const dy = touchState.look.currentY - touchState.look.startY;
+    
+    euler.setFromQuaternion(camera.quaternion);
+    euler.y -= dx * LOOK_SENSITIVITY;
+    euler.x -= dy * LOOK_SENSITIVITY;
+    euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
+    camera.quaternion.setFromEuler(euler);
+
+    touchState.look.startX = touchState.look.currentX;
+    touchState.look.startY = touchState.look.currentY;
+  }
+  
   const dt=Math.min(0.05, clock.getDelta()); accum+=dt; while(accum>=FIXED){ step(FIXED); accum-=FIXED; }
   const eye = new THREE.Vector3(0, HALF + PLAYER_RADIUS, 0);
   camera.position.set(playerBody.position.x+eye.x, playerBody.position.y+eye.y, playerBody.position.z+eye.z);
@@ -391,6 +432,7 @@ function animate(){
   statusEl.textContent = `pos(${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}) vel(${vel.x.toFixed(1)}, ${vel.y.toFixed(1)}, ${vel.z.toFixed(1)}) keys[${pressed}] fly:${flyMode?'on':'off'}`;
 }
 animate();
+
 function step(dt){
   if (flyMode && world.gravity.y !== 0) world.gravity.set(0,0,0); if (!flyMode && world.gravity.y !== -9.82) world.gravity.set(0,-9.82,0);
   const grounded = flyMode ? false : isGrounded();
@@ -423,3 +465,130 @@ function isGrounded(){
   world.raycastClosest(from, to, { skipBackfaces:true, collisionFilterMask:-1 }, res);
   return res.hasHit;
 }
+
+// --- Touch Controls Initialization ---
+function initTouchControls() {
+    if (!isTouchDevice) return;
+
+    const controlsHTML = `
+        <div id="touch-controls" style="display: block;">
+            <div class="touch-joystick-base">
+                <div class="touch-joystick-stick"></div>
+            </div>
+            <div class="touch-buttons">
+                <div id="touch-up" class="touch-button" style="display: none;">E</div>
+                <div id="touch-down" class="touch-button" style="display: none;">Q</div>
+                <div id="touch-jump" class="touch-button">⇪</div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', controlsHTML);
+    
+    const joystickBase = document.querySelector('.touch-joystick-base');
+    const joystickStick = document.querySelector('.touch-joystick-stick');
+    const baseRadius = joystickBase.offsetWidth / 2;
+    const stickRadius = joystickStick.offsetWidth / 2;
+    const maxDelta = baseRadius - stickRadius;
+    const buttons = {
+      jump: document.getElementById('touch-jump'),
+      up: document.getElementById('touch-up'),
+      down: document.getElementById('touch-down'),
+    };
+    
+    function handleTouchStart(e) {
+      e.preventDefault();
+      for (const touch of e.changedTouches) {
+        // Check Buttons
+        const targetButton = e.target.closest('.touch-button');
+        if (targetButton) {
+          targetButton.classList.add('active');
+          if (targetButton.id === 'touch-jump') keys.space = true;
+          if (targetButton.id === 'touch-up') keys.e = true;
+          if (targetButton.id === 'touch-down') keys.q = true;
+          playerBody.wakeUp();
+          continue;
+        }
+
+        // Check Joystick
+        if (touch.clientX < window.innerWidth / 2 && !touchState.joystick.active) {
+            touchState.joystick.id = touch.identifier;
+            touchState.joystick.active = true;
+            touchState.joystick.startX = touch.clientX;
+            touchState.joystick.startY = touch.clientY;
+            joystickBase.style.left = `${touch.clientX}px`;
+            joystickBase.style.top = `${touch.clientY}px`;
+            joystickBase.style.transform = `translate(-50%, -50%)`;
+        }
+        // Check Look
+        else if (touch.clientX >= window.innerWidth / 2 && !touchState.look.active) {
+            touchState.look.id = touch.identifier;
+            touchState.look.active = true;
+            touchState.look.startX = touch.clientX;
+            touchState.look.startY = touch.clientY;
+            touchState.look.currentX = touch.clientX;
+            touchState.look.currentY = touch.clientY;
+        }
+      }
+    }
+
+    function handleTouchMove(e) {
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+            if (touch.identifier === touchState.joystick.id) {
+                const dx = touch.clientX - touchState.joystick.startX;
+                const dy = touch.clientY - touchState.joystick.startY;
+                const angle = Math.atan2(dy, dx);
+                const distance = Math.min(maxDelta, Math.hypot(dx, dy));
+                
+                joystickStick.style.transform = `translate(${Math.cos(angle) * distance}px, ${Math.sin(angle) * distance}px)`;
+
+                const normalizedX = (Math.cos(angle) * distance) / maxDelta;
+                const normalizedY = (Math.sin(angle) * distance) / maxDelta;
+
+                keys.w = normalizedY < -0.2;
+                keys.s = normalizedY > 0.2;
+                keys.a = normalizedX < -0.2;
+                keys.d = normalizedX > 0.2;
+                playerBody.wakeUp();
+            } else if (touch.identifier === touchState.look.id) {
+                touchState.look.currentX = touch.clientX;
+                touchState.look.currentY = touch.clientY;
+            }
+        }
+    }
+
+    function handleTouchEnd(e) {
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+            // Deactivate buttons
+            const activeButtons = document.querySelectorAll('.touch-button.active');
+            activeButtons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.id === 'touch-jump') keys.space = false;
+                if (btn.id === 'touch-up') keys.e = false;
+                if (btn.id === 'touch-down') keys.q = false;
+            });
+
+            if (touch.identifier === touchState.joystick.id) {
+                touchState.joystick.active = false;
+                touchState.joystick.id = -1;
+                joystickStick.style.transform = `translate(0, 0)`;
+                joystickBase.style.left = `12vw`;
+                joystickBase.style.bottom = `12vw`;
+                joystickBase.style.top = 'auto';
+                joystickBase.style.transform = `translate(-50%, 50%)`;
+                keys.w = keys.a = keys.s = keys.d = false;
+            } else if (touch.identifier === touchState.look.id) {
+                touchState.look.active = false;
+                touchState.look.id = -1;
+            }
+        }
+    }
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: false });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+}
+
+initTouchControls();

@@ -1,6 +1,9 @@
 html, body {
   margin: 0; padding: 0; height: 100%; overflow: hidden;
   background: #0b0f14; color: #e6eef8; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  /* Prevent pull-to-refresh and double-tap zoom on mobile */
+  overscroll-behavior: none;
+  touch-action: none;
 }
 #c { display: block; width: 100vw; height: 100vh; }
 
@@ -45,4 +48,81 @@ select {
   border-radius: 10px; padding: 8px 10px; margin: 0;
   font: 12px/1.35 ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   color: #e6eef8; white-space: pre-wrap;
+}
+
+
+/* --- Touch Controls --- */
+#touch-controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5; /* Below UI panel */
+  pointer-events: none; /* Allows clicks to pass through to canvas */
+  display: none; /* Hidden by default, enabled by JS */
+}
+
+.touch-joystick-base {
+  position: absolute;
+  bottom: 12vw;
+  left: 12vw;
+  width: 28vw;
+  height: 28vw;
+  max-width: 150px;
+  max-height: 150px;
+  background: rgba(255,255,255,0.1);
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  transform: translate(-50%, 50%);
+  pointer-events: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.touch-joystick-stick {
+  width: 14vw;
+  height: 14vw;
+  max-width: 75px;
+  max-height: 75px;
+  background: rgba(255,255,255,0.25);
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: 50%;
+  pointer-events: none; /* Stick doesn't need to capture events */
+}
+
+.touch-buttons {
+  position: absolute;
+  bottom: 12vw;
+  right: 12vw;
+  transform: translate(50%, 50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.touch-button {
+  width: 16vw;
+  height: 16vw;
+  max-width: 80px;
+  max-height: 80px;
+  background: rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.25);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 4vw;
+  font-weight: bold;
+  color: rgba(255,255,255,0.8);
+  user-select: none;
+  -webkit-user-select: none; /* For Safari */
+}
+
+.touch-button.active {
+  background: rgba(255,255,255,0.3);
+  transform: scale(0.95);
 }
