@@ -8,6 +8,7 @@ import * as CANNON from 'cannon-es';
 
 // --- Touch Detection ---
 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+let isMenuOpen = false; // State for touch menu modal
 
 // --- Scene Configuration ---
 const SCENES = [
@@ -23,6 +24,7 @@ const debugEl  = document.getElementById('debug');
 const fpsEl = document.getElementById('fps');
 const uiPanel = document.getElementById('ui');
 const btnCollapse = document.getElementById('btnCollapse');
+const btnCloseMenu = document.getElementById('btnCloseMenu'); // New close button
 const btnDebug = document.getElementById('btnDebug');
 const toggleCollisionEl = document.getElementById('toggleCollision');
 const toggleFlyEl = document.getElementById('toggleFly');
@@ -66,7 +68,7 @@ const LS_PLAYER_HEIGHT = 'fps.playerHeight';
 const LS_PLAYER_WIDTH = 'fps.playerWidth';
 
 // --- Load Settings ---
-if (LS.getItem(LS_UI_COLLAPSED) === 'true') uiPanel.classList.add('collapsed');
+if (LS.getItem(LS_UI_COLLAPSED) === 'true' && !isTouchDevice) uiPanel.classList.add('collapsed');
 let debugVisible = LS.getItem(LS_DEBUG_VISIBLE) !== 'false';
 debugEl.style.display = debugVisible ? 'block' : 'none';
 
@@ -402,7 +404,7 @@ const fpsSamples = []; const FPS_N = 60;
 function animate(){
   requestAnimationFrame(animate);
 
-  if (isTouchDevice && touchState.look.active) {
+  if (isTouchDevice && touchState.look.active && !isMenuOpen) {
     const LOOK_SENSITIVITY = 0.003;
     const dx = touchState.look.currentX - touchState.look.startX;
     const dy = touchState.look.currentY - touchState.look.startY;
@@ -470,8 +472,28 @@ function isGrounded(){
 function initTouchControls() {
     if (!isTouchDevice) return;
 
+    // --- NEW LOGIC: Setup Menu/Gameplay mode ---
+    uiPanel.classList.add('collapsed'); // Start with menu closed on mobile
+    btnCollapse.style.display = 'none'; // Hide desktop collapse button
+    btnCloseMenu.style.display = 'block'; // Show new mobile close button
+
+    function openMenu() {
+        isMenuOpen = true;
+        uiPanel.classList.remove('collapsed');
+    }
+    function closeMenu() {
+        isMenuOpen = false;
+        uiPanel.classList.add('collapsed');
+    }
+
+    btnCloseMenu.addEventListener('click', closeMenu);
+    // --- END NEW LOGIC ---
+
     const controlsHTML = `
         <div id="touch-controls" style="display: block;">
+            <div id="touch-menu-button" title="Open Menu">
+              <span></span><span></span><span></span>
+            </div>
             <div class="touch-joystick-base">
                 <div class="touch-joystick-stick"></div>
             </div>
@@ -489,49 +511,56 @@ function initTouchControls() {
     const baseRadius = joystickBase.offsetWidth / 2;
     const stickRadius = joystickStick.offsetWidth / 2;
     const maxDelta = baseRadius - stickRadius;
-    const buttons = {
-      jump: document.getElementById('touch-jump'),
-      up: document.getElementById('touch-up'),
-      down: document.getElementById('touch-down'),
-    };
+
+    // --- NEW: Add listener for on-screen menu button ---
+    const menuButton = document.getElementById('touch-menu-button');
+    menuButton.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        menuButton.classList.add('active');
+    });
+    menuButton.addEventListener('touchend', (e) => {
+        menuButton.classList.remove('active');
+        openMenu();
+    });
     
     function handleTouchStart(e) {
-      e.preventDefault();
-      for (const touch of e.changedTouches) {
-        // Check Buttons
-        const targetButton = e.target.closest('.touch-button');
-        if (targetButton) {
-          targetButton.classList.add('active');
-          if (targetButton.id === 'touch-jump') keys.space = true;
-          if (targetButton.id === 'touch-up') keys.e = true;
-          if (targetButton.id === 'touch-down') keys.q = true;
-          playerBody.wakeUp();
-          continue;
-        }
+        if (isMenuOpen) return; // If menu is open, do nothing for gameplay
+        e.preventDefault();
 
-        // Check Joystick
-        if (touch.clientX < window.innerWidth / 2 && !touchState.joystick.active) {
-            touchState.joystick.id = touch.identifier;
-            touchState.joystick.active = true;
-            touchState.joystick.startX = touch.clientX;
-            touchState.joystick.startY = touch.clientY;
-            joystickBase.style.left = `${touch.clientX}px`;
-            joystickBase.style.top = `${touch.clientY}px`;
-            joystickBase.style.transform = `translate(-50%, -50%)`;
+        for (const touch of e.changedTouches) {
+            const targetButton = e.target.closest('.touch-button');
+            if (targetButton) {
+                targetButton.classList.add('active');
+                if (targetButton.id === 'touch-jump') keys.space = true;
+                if (targetButton.id === 'touch-up') keys.e = true;
+                if (targetButton.id === 'touch-down') keys.q = true;
+                playerBody.wakeUp();
+                continue;
+            }
+
+            if (touch.clientX < window.innerWidth / 2 && !touchState.joystick.active) {
+                touchState.joystick.id = touch.identifier;
+                touchState.joystick.active = true;
+                touchState.joystick.startX = touch.clientX;
+                touchState.joystick.startY = touch.clientY;
+                joystickBase.style.left = `${touch.clientX}px`;
+                joystickBase.style.top = `${touch.clientY}px`;
+                joystickBase.style.transform = `translate(-50%, -50%)`;
+            }
+            else if (touch.clientX >= window.innerWidth / 2 && !touchState.look.active) {
+                touchState.look.id = touch.identifier;
+                touchState.look.active = true;
+                touchState.look.startX = touch.clientX;
+                touchState.look.startY = touch.clientY;
+                touchState.look.currentX = touch.clientX;
+                touchState.look.currentY = touch.clientY;
+            }
         }
-        // Check Look
-        else if (touch.clientX >= window.innerWidth / 2 && !touchState.look.active) {
-            touchState.look.id = touch.identifier;
-            touchState.look.active = true;
-            touchState.look.startX = touch.clientX;
-            touchState.look.startY = touch.clientY;
-            touchState.look.currentX = touch.clientX;
-            touchState.look.currentY = touch.clientY;
-        }
-      }
     }
 
     function handleTouchMove(e) {
+        if (isMenuOpen) return; // If menu is open, do nothing for gameplay
         e.preventDefault();
         for (const touch of e.changedTouches) {
             if (touch.identifier === touchState.joystick.id) {
@@ -558,9 +587,9 @@ function initTouchControls() {
     }
 
     function handleTouchEnd(e) {
+        if (isMenuOpen) return; // If menu is open, do nothing for gameplay
         e.preventDefault();
         for (const touch of e.changedTouches) {
-            // Deactivate buttons
             const activeButtons = document.querySelectorAll('.touch-button.active');
             activeButtons.forEach(btn => {
                 btn.classList.remove('active');
