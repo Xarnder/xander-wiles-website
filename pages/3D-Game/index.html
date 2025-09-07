@@ -11,7 +11,7 @@
   <div id="ui" class="">
     <div class="header">
       <button id="btnCollapse" title="Collapse/expand menu (M)">▾</button>
-      <button id="btnCloseMenu" title="Close Menu">×</button> <!-- ADD THIS LINE -->
+      <button id="btnCloseMenu" title="Close Menu">×</button>
       <strong>Controls</strong>
       <div class="spacer"></div>
       <div class="fps">FPS: <span id="fps">--</span></div>
@@ -28,6 +28,9 @@
       </details>
       
       <!-- Main Toggles -->
+      <div class="row">
+        <label><input id="toggleSplitScreen" type="checkbox" /> Split Screen Mode (Use external controller to control player 2)</label>
+      </div>
       <div class="row">
         <label><input id="toggleCollision" type="checkbox" /> Show collision scene <span class="small"> (H)</span></label>
       </div>
@@ -58,6 +61,13 @@
           <input id="playerWidth" type="range" min="0.2" max="1.0" step="0.01" value="0.35" />
           <span id="playerWidthValue" class="small">0.35 m</span>
         </div>
+        <!-- ADD THIS SECTION -->
+        <div class="row" id="gamepad-settings" style="display: none;">
+          <label for="gamepadSens">Gamepad Look Sensitivity</label><br/>
+          <input id="gamepadSens" type="range" min="0.5" max="5.0" step="0.1" value="1.8" />
+          <span id="gamepadSensValue" class="small">1.8</span>
+        </div>
+        <!-- END ADDED SECTION -->
       </details>
       
       <!-- Visual Settings Sub-menu -->
@@ -95,7 +105,7 @@
       </details>
 
       <div class="row small">
-        Click canvas • WASD move • Space jump • Shift sprint • E/Q up/down in fly • R respawn • M menu • ` debug
+        P1: WASD • P2: Arrows or Gamepad • R respawn • M menu • ` debug
       </div>
       <div class="row small">
         <span id="status">Initializing...</span>
