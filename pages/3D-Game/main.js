@@ -18,6 +18,7 @@ let isMenuOpen = false;
 const SCENES = [
   { name: 'Condo', path: './assets/scenes/Condo/', spawnPoint: { x: -8, y: 2, z: 12 } },
   { name: 'Bedroom', path: './assets/scenes/Bedroom/', spawnPoint: { x: 2, y: 1.5, z: 4 } },
+  { name: 'House', path: './assets/scenes/House/', spawnPoint: { x: 30, y: 2, z: 0 } },
 ];
 let currentSceneConfig = null;
 
