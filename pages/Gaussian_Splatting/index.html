@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gaussian Splatting Trainer</title>
+
+  <!-- Placeholder favicons (replace anytime with real assets) -->
+  <!-- SVG favicon (works in most browsers) -->
+  <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml;utf8,
+        <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+          <defs>
+            <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
+              <stop stop-color='%237aa2ff'/>
+              <stop offset='1' stop-color='%236be3cf'/>
+            </linearGradient>
+          </defs>
+          <rect width='100' height='100' fill='%230b0f14'/>
+          <circle cx='50' cy='50' r='35' fill='url(%23g)'/>
+        </svg>">
+
+  <!-- Safari pinned tab (placeholder) -->
+  <link rel="mask-icon"
+        color="#7aa2ff"
+        href="data:image/svg+xml;utf8,
+        <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+          <path d='M50 10a40 40 0 1 0 0 80a40 40 0 0 0 0-80z'/>
+        </svg>">
+
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="dot"></div>
+        <h1>Gaussian Splatting Trainer</h1>
+        <span class="subtitle">Guess • Target • Overlay · Heatmap · Auto Optimise</span>
+      </div>
+
+      <div class="actions">
+        <button id="newLevelBtn" class="btn">New Level (R)</button>
+        <button id="trainOneBtn" class="btn">Nudge 10% (T)</button>
+        <button id="trainTenBtn" class="btn">Nudge 60%</button>
+
+        <label class="switch">
+          <input type="checkbox" id="autoTrainChk">
+          <span class="slider"></span>
+          <span class="switch-label">Auto Optimise</span>
+        </label>
+
+        <div class="select-wrap">
+          <label for="viewMode">View</label>
+          <select id="viewMode" class="select">
+            <option value="guess">Guess</option>
+            <option value="target">Target</option>
+            <option value="overlay">Overlay</option>
+          </select>
+        </div>
+
+        <label class="switch">
+          <input type="checkbox" id="heatmapChk">
+          <span class="slider"></span>
+          <span class="switch-label">Heatmap (H)</span>
+        </label>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel controls">
+        <h2>Controls</h2>
+
+        <div class="control">
+          <label for="posX">Position X</label>
+          <input type="range" id="posX" min="0" max="1" step="0.001">
+          <div class="val" id="posXVal"></div>
+        </div>
+        <div class="control">
+          <label for="posY">Position Y</label>
+          <input type="range" id="posY" min="0" max="1" step="0.001">
+          <div class="val" id="posYVal"></div>
+        </div>
+
+        <div class="control">
+          <label for="scale">Scale (σ)</label>
+          <input type="range" id="scale" min="0.01" max="0.5" step="0.001">
+          <div class="val" id="scaleVal"></div>
+        </div>
+
+        <div class="control">
+          <label class="checkbox">
+            <input type="checkbox" id="anisotropyChk"> Unlock anisotropy (σx/σy)
+          </label>
+        </div>
+        <div class="control aniso-group">
+          <label for="scaleX">Scale X (σx)</label>
+          <input type="range" id="scaleX" min="0.01" max="0.7" step="0.001" disabled>
+          <div class="val" id="scaleXVal"></div>
+        </div>
+        <div class="control aniso-group">
+          <label for="scaleY">Scale Y (σy)</label>
+          <input type="range" id="scaleY" min="0.01" max="0.7" step="0.001" disabled>
+          <div class="val" id="scaleYVal"></div>
+        </div>
+
+        <div class="control">
+          <label for="rotation">Rotation (°)</label>
+          <input type="range" id="rotation" min="0" max="180" step="0.5">
+          <div class="val" id="rotationVal"></div>
+        </div>
+
+        <div class="control">
+          <label for="opacity">Opacity</label>
+          <input type="range" id="opacity" min="0" max="1" step="0.001">
+          <div class="val" id="opacityVal"></div>
+        </div>
+        <div class="control">
+          <label for="color">Colour</label>
+          <input type="color" id="color">
+          <div class="val small" id="colorVal"></div>
+        </div>
+
+        <div class="help">
+          <h3>How this relates to 3DGS</h3>
+          <ul>
+            <li><b>Position</b> → mean μ</li>
+            <li><b>Scale/Anisotropy/Rotation</b> → covariance Σ</li>
+            <li><b>Opacity</b> & <b>Colour</b> → appearance</li>
+          </ul>
+          <p>Use <b>View: Target</b> to study the goal, <b>Guess</b> to adjust,
+             or <b>Overlay</b> to compare. Heatmap shows per-pixel error.</p>
+        </div>
+      </aside>
+
+      <section class="stage">
+        <canvas id="canvas"></canvas>
+
+        <div class="hud">
+          <div class="card">
+            <div class="metric">
+              <span class="label">Pixel Loss (MSE):</span>
+              <span class="value" id="lossVal">—</span>
+            </div>
+            <div class="metric">
+              <span class="label">Param Error:</span>
+              <span class="value" id="paramErrVal">—</span>
+            </div>
+            <div class="metric">
+              <span class="label">Score:</span>
+              <span class="value" id="scoreVal">—</span>
+            </div>
+          </div>
+          <!-- START: DEBUG PANEL -->
+          <div class="card debug-panel">
+            <div class="metric">
+              <span class="label">Canvas:</span>
+              <span class="value" id="debugCanvasSizeVal">?</span>
+            </div>
+             <div class="metric">
+              <span class="label">Target [x,y]:</span>
+              <span class="value" id="debugTargetCoordsVal">?</span>
+            </div>
+             <div class="metric">
+              <span class="label">Guess [x,y]:</span>
+              <span class="value" id="debugGuessCoordsVal">?</span>
+            </div>
+          </div>
+          <!-- END: DEBUG PANEL -->
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Keys: <b>R</b> new level · <b>H</b> heatmap · <b>1</b>=Guess <b>2</b>=Target <b>3</b>=Overlay · <b>T</b> nudge 10%.</p>
+    </footer>
+  </div>
+
+  <script src="./main.js"></script>
+</body>
+</html>
