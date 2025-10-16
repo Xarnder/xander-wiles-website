@@ -15,51 +15,56 @@
     <link rel="icon" type="image/png" sizes="16x16" href="assets/images/icon16.png">
 </head>
 <body>
-    <!-- (Background elements are unchanged) -->
+    <!-- (Background & Header are unchanged) -->
     <div class="background-overlay"></div>
     <div class="floating-shapes"><div class="shape shape-1"></div><div class="shape shape-2"></div></div>
-
     <header class="site-header">
-        <!-- (Header is unchanged) -->
         <div class="header-content">
             <a href="#" class="logo">ImageCompare</a>
-            <nav class="main-nav" id="main-nav">
-                <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation"><span class="hamburger"></span><span class="hamburger"></span><span class="hamburger"></span></button>
-                <ul class="nav-links">
-                    <li><a href="#" class="nav-link active" data-view="split-view">Split View</a></li>
-                    <li><a href="#" class="nav-link" data-view="magnify-view">Magnify</a></li>
-                    <li><a href="#" class="nav-link" data-view="fade-view">Fade Overlay</a></li>
-                    <li><a href="#" class="nav-link" data-view="heatmap-view">Heatmap</a></li>
-                </ul>
-            </nav>
+            <nav class="main-nav" id="main-nav"><button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation"><span class="hamburger"></span><span class="hamburger"></span><span class="hamburger"></span></button><ul class="nav-links"><li><a href="#" class="nav-link active" data-view="split-view">Split View</a></li><li><a href="#" class="nav-link" data-view="magnify-view">Magnify</a></li><li><a href="#" class="nav-link" data-view="fade-view">Fade Overlay</a></li><li><a href="#" class="nav-link" data-view="heatmap-view">Heatmap</a></li><li><a href="#" class="nav-link" data-view="export-view">Export</a></li></ul></nav>
         </div>
     </header>
 
     <main class="app-container">
-        <!-- *** MODIFIED: Setup and Upload Card *** -->
+        <!-- (Setup Card is unchanged) -->
         <section class="glass-card">
             <h2>1. Choose Your Workflow</h2>
-            <div class="setup-options">
-                <div class="setup-manual">
-                    <label for="image-count">Compare</label>
-                    <input type="number" id="image-count" value="2" min="2" max="5">
-                    <label>images</label>
-                    <button id="setup-btn">Set Up Manually</button>
-                </div>
-                <div class="setup-directory">
-                    <label for="directory-upload" class="directory-btn">Upload Directory</label>
-                    <input type="file" id="directory-upload" webkitdirectory directory multiple style="display: none;">
-                </div>
-            </div>
+            <div class="setup-options"><div class="setup-manual"><label for="image-count">Compare</label><input type="number" id="image-count" value="2" min="2" max="5"><label>images</label><button id="setup-btn">Set Up Manually</button></div><div class="setup-directory"><label for="directory-upload" class="directory-btn">Upload Directory</label><input type="file" id="directory-upload" webkitdirectory directory multiple style="display: none;"></div></div>
             <div id="upload-area-dynamic" class="upload-area"></div>
         </section>
 
-        <!-- (Comparison Tools Container and its contents are unchanged) -->
         <section id="comparison-container" class="glass-card hidden">
+            <!-- (Split, Magnify, Fade, Heatmap views are unchanged) -->
             <div id="split-view" class="view active"><div class="comparison-tool split-view-tool"><div id="split-view-container" class="img-container"></div></div></div>
-            <div id="magnify-view" class="view hidden"><div class="comparison-tool magnify-view-tool"><div class="magnify-container" id="magnify-source"></div><div class="magnify-preview-wrapper"><div id="magnify-preview-container" class="magnify-preview"></div><div class="controls"><label for="zoom-level">Zoom: <span id="zoom-value">2</span>x</label><input type="range" id="zoom-level" min="1.5" max="10" value="2" step="0.1"></div></div></div></div>
+            <div id="magnify-view" class="view hidden"><div class="comparison-tool magnify-view-tool"><div class="magnify-container" id="magnify-source"></div><div class="magnify-preview-wrapper"><div id="magnify-preview-container" class="magnify-preview"></div><div class="controls magnify-controls"><div class="aspect-ratio-control"><label for="magnify-aspect-ratio">Aspect Ratio:</label><select id="magnify-aspect-ratio"></select></div><div class="zoom-control"><label for="zoom-level">Zoom: <span id="zoom-value">2</span>x</label><input type="range" id="zoom-level" min="1.5" max="10" value="2" step="0.1"></div></div></div></div></div>
             <div id="fade-view" class="view hidden"><div class="comparison-tool fade-view-tool"><div id="fade-container" class="img-container fade-container"></div><div class="controls fade-controls"><div class="fade-selectors"><select id="fade-select-1"></select><span>Fade To</span><select id="fade-select-2"></select></div><div class="blend-mode-control"><label for="blend-mode-select">Blend Mode:</label><select id="blend-mode-select"></select></div><input type="range" id="fade-level" min="0" max="1" value="0.5" step="0.01"></div></div></div>
             <div id="heatmap-view" class="view hidden"><div class="comparison-tool heatmap-tool"><div class="controls heatmap-controls"><div class="heatmap-selectors"><label>Compare</label><select id="heatmap-select-1"></select><label>with</label><select id="heatmap-select-2"></select></div><button id="generate-heatmap-btn">Generate Heatmap</button></div><p id="heatmap-status" class="status-message hidden"></p><div id="heatmap-result-container" class="img-container"><canvas id="heatmap-canvas"></canvas></div></div></div>
+
+            <!-- *** MODIFIED: Export View *** -->
+            <div id="export-view" class="view hidden">
+                <div class="comparison-tool export-tool">
+                    <div class="controls export-controls">
+                        <div class="control-group"><label for="export-layout-select">Layout</label><select id="export-layout-select"></select></div>
+                        <div class="control-group"><label for="export-format-select">Format</label><select id="export-format-select"><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option></select></div>
+                        <div class="control-group" id="quality-control-group"><label for="export-quality-slider">Quality: <span id="quality-value">92</span>%</label><input type="range" id="export-quality-slider" min="10" max="100" value="92" step="1"></div>
+                        <div class="control-group-divider"></div>
+                        <div class="control-group"><label for="export-show-filenames" class="checkbox-label"><input type="checkbox" id="export-show-filenames"> Show Filenames</label></div>
+                        <div class="control-group-sub hidden" id="filename-options">
+                             <div class="control-group"><label>Position</label><div class="radio-group"><label><input type="radio" name="filename-position" value="top" checked> Top</label><label><input type="radio" name="filename-position" value="bottom"> Bottom</label></div></div>
+                             <div class="control-group"><label for="export-label-bg-color">Label BG</label><input type="color" id="export-label-bg-color" value="#111115"></div>
+                             <div class="control-group"><label for="export-text-color">Text Color</label><input type="color" id="export-text-color" value="#a1a1aa"></div>
+                             <!-- *** MODIFIED: Font Size Slider to be percentage-based *** -->
+                             <div class="control-group"><label for="export-font-size-slider">Font Size: <span id="font-size-value">50</span>%</label><input type="range" id="export-font-size-slider" min="10" max="80" value="50" step="1"></div>
+                        </div>
+                        <div class="control-group-divider"></div>
+                        <button id="export-btn">Download Image</button>
+                    </div>
+                    <p id="export-status" class="status-message hidden"></p>
+                    <div id="export-preview-container" class="img-container">
+                        <canvas id="export-preview-canvas"></canvas>
+                    </div>
+                </div>
+            </div>
         </section>
     </main>
     
