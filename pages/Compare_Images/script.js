@@ -1,3 +1,5 @@
+// script.js — full drop-in file
+
 document.addEventListener('DOMContentLoaded', () => {
   // --- GLOBAL STATE ---
   let numImages = 2, imagesData = [], activeSlider = null, lastMagnifyEvent = null;
@@ -85,6 +87,51 @@ document.addEventListener('DOMContentLoaded', () => {
     selectBase: svgPlaceholder(800, 600, '#555', '#FFF', 'Select Base'),
     selectOverlay: svgPlaceholder(800, 600, '#888', '#FFF', 'Select Overlay')
   };
+
+  // --- iOS/Download helpers (for Export) ---
+  const isIOS = (() => {
+    const ua = navigator.userAgent || "";
+    const platform = navigator.platform || "";
+    return /iPhone|iPad|iPod/.test(ua) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  })();
+
+  const supportsDownloadAttribute = (() => 'download' in HTMLAnchorElement.prototype)();
+
+  function canvasToBlob(canvas, type = 'image/png', quality = 0.92) {
+    return new Promise((resolve) => {
+      if (canvas.toBlob) {
+        canvas.toBlob((blob) => resolve(blob), type, quality);
+      } else {
+        // Fallback: toDataURL → fetch → blob
+        const dataUrl = canvas.toDataURL(type, quality);
+        fetch(dataUrl).then(r => r.blob()).then(resolve);
+      }
+    });
+  }
+
+  async function tryWebShare(file, title = 'Image export') {
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title });
+        return true;
+      }
+    } catch (_) { /* canceled or failed */ }
+    return false;
+  }
+
+  function downloadViaAnchor(url, filename) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener';
+    if (supportsDownloadAttribute) a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function openInNewTab(url) {
+    window.open(url, '_blank', 'noopener');
+  }
 
   // --- SETUP UI ---
   const setupUI = () => {
@@ -626,7 +673,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  const exportImage = () => {
+  // iOS/Chrome-safe export with multiple fallbacks
+  const exportImage = async () => {
     const loadedImages = imagesData.filter(Boolean);
     if (loadedImages.length === 0) {
       showErrorPopup("Export Error", "Please upload at least one image to export.");
@@ -635,18 +683,49 @@ document.addEventListener('DOMContentLoaded', () => {
     exportStatus.textContent = "Generating image...";
     exportStatus.classList.remove('hidden');
 
-    setTimeout(() => {
-      updateExportPreview();
-      const format = exportFormatSelect.value;
-      const quality = parseInt(exportQualitySlider.value) / 100;
-      const ext = format === 'image/jpeg' ? 'jpg' : 'png';
-      const dataUrl = exportPreviewCanvas.toDataURL(format, quality);
-      const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = `comparison-${Date.now()}.${ext}`;
-      link.click();
+    // Ensure preview is up-to-date, then export that canvas
+    updateExportPreview();
+
+    const mime = exportFormatSelect.value; // 'image/jpeg' or 'image/png'
+    const quality = parseInt(exportQualitySlider.value) / 100;
+    const ext = mime === 'image/jpeg' ? 'jpg' : 'png';
+    const filename = `comparison-${Date.now()}.${ext}`;
+
+    try {
+      const blob = await canvasToBlob(exportPreviewCanvas, mime, quality);
+
+      // Best UX on iOS: Web Share
+      if (isIOS) {
+        const file = new File([blob], filename, { type: mime });
+        const shared = await tryWebShare(file, 'Image Compare Export');
+        if (shared) {
+          exportStatus.classList.add('hidden');
+          return;
+        }
+      }
+
+      // Blob URL download / open
+      const url = URL.createObjectURL(blob);
+      downloadViaAnchor(url, filename);
+
+      // Some iOS builds ignore download; offer open-in-new-tab too
+      if (isIOS && !supportsDownloadAttribute) {
+        setTimeout(() => openInNewTab(url), 300);
+      }
+
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (e) {
+      console.error(e);
+      // Last resort: data URL
+      const dataUrl = exportPreviewCanvas.toDataURL(mime, quality);
+      if (isIOS) {
+        openInNewTab(dataUrl);
+      } else {
+        downloadViaAnchor(dataUrl, filename);
+      }
+    } finally {
       exportStatus.classList.add('hidden');
-    }, 50);
+    }
   };
 
   // --- EVENT LISTENERS & INITIALIZATION ---
