@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- GLOBAL STATE & CONSTANTS ---
+    // --- GLOBAL STATE ---
     let numImages = 2, imagesData = [], activeSlider = null, lastMagnifyEvent = null;
     const BLEND_MODES = [ 'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity' ];
     const VALID_IMG_REGEX = /\.(jpe?g|png|gif|webp|heic|heif)$/i;
@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const comparisonContainer = document.getElementById('comparison-container');
     const navLinks = document.querySelectorAll('.nav-link');
     const views = document.querySelectorAll('.view');
+    const navToggle = document.getElementById('nav-toggle');
+    const mainNav = document.getElementById('main-nav');
     const splitViewContainer = document.getElementById('split-view-container');
     const magnifySourceContainer = document.getElementById('magnify-source');
     const magnifyPreviewContainer = document.getElementById('magnify-preview-container');
@@ -83,71 +85,23 @@ document.addEventListener('DOMContentLoaded', () => {
         resetSliders('split'); resetSliders('magnify');
         initSliders();
     };
+
+    // --- UPLOAD HANDLERS ---
     const handleDirectoryUpload = (event) => { const files = Array.from(event.target.files); const imageFiles = files.filter(file => VALID_IMG_REGEX.test(file.name)); if (imageFiles.length < 2 || imageFiles.length > 5) { showErrorPopup("Invalid Number of Images", `Directories must contain between 2 and 5 images. You selected a directory with ${imageFiles.length} valid images.`); return; } imageCountInput.value = imageFiles.length; setupUI(); imageFiles.forEach((file, index) => { processAndLoadImage(file, index); }); };
     const handleIndividualImageUpload = (event) => { const index = parseInt(event.target.dataset.index); const file = event.target.files[0]; if (file) { processAndLoadImage(file, index); } };
     const processAndLoadImage = (file, index) => { const label = document.querySelector(`label[for="img-upload-${index}"]`); const processFileBlob = (fileBlob) => { const reader = new FileReader(); reader.onload = (e) => { const imageUrl = e.target.result; const tempImg = new Image(); tempImg.onload = () => { imagesData[index] = { src: imageUrl, naturalWidth: tempImg.naturalWidth, naturalHeight: tempImg.naturalHeight, element: tempImg, filename: file.name }; label.textContent = `✓ ${file.name.substring(0,10)}...`; label.classList.add('uploaded'); document.getElementById(`split-img-${index}`).src = imageUrl; document.getElementById(`magnify-wrapper-${index}`).style.backgroundImage = `url(${imageUrl})`; if (index === 0) document.getElementById('magnify-img-base').src = imageUrl; comparisonContainer.classList.remove('hidden'); const loadedImages = imagesData.filter(Boolean); if (loadedImages.length >= 2) { updateFadeSelectors(); updateHeatmapSelectors(); checkForAspectRatioMismatch(); updateExportPreview(); } }; tempImg.src = imageUrl; }; reader.readAsDataURL(fileBlob); }; const fileType = file.type.toLowerCase() || file.name.split('.').pop().toLowerCase(); if (fileType === 'heic' || fileType === 'heif') { label.textContent = 'Converting HEIC...'; heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 }).then(conversionResult => { processFileBlob(conversionResult); }).catch(err => { console.error("HEIC Conversion Error:", err); label.textContent = 'Conversion Failed!'; showErrorPopup('HEIC Conversion Failed', 'There was an error converting the HEIC file. It may be corrupted or in an unsupported format.'); }); } else { processFileBlob(file); } };
+    
+    // --- POPUP LOGIC ---
     const showErrorPopup = (title, message) => { closePopup(); const overlay = document.createElement('div'); overlay.className = 'popup-overlay'; overlay.innerHTML = `<div class="popup-card glass-card"><button class="popup-close-btn">&times;</button><h3>${title}</h3><p>${message}</p></div>`; document.body.appendChild(overlay); document.body.classList.add('popup-open'); overlay.querySelector('.popup-close-btn').addEventListener('click', closePopup); };
     const checkForAspectRatioMismatch = () => { const loadedImages = imagesData.map((data, index) => ({ ...data, index })).filter(data => data && data.naturalWidth); if (loadedImages.length < 2) return; const groups = {}; loadedImages.forEach(img => { const ratio = (img.naturalWidth / img.naturalHeight).toFixed(3); if (!groups[ratio]) { groups[ratio] = []; } groups[ratio].push(`Image ${img.index + 1}`); }); if (Object.keys(groups).length > 1) { showAspectRatioWarning(groups); } };
     const showAspectRatioWarning = (groups) => { closePopup(); const overlay = document.createElement('div'); overlay.className = 'popup-overlay'; let listHtml = '<ul>'; for (const ratio in groups) { listHtml += `<li><strong>Group (Ratio ~${ratio}):</strong> ${groups[ratio].join(', ')}</li>`; } listHtml += '</ul>'; overlay.innerHTML = `<div class="popup-card glass-card"><button class="popup-close-btn">&times;</button><h3>Aspect Ratio Mismatch</h3><p>The following images have different aspect ratios. Comparison tools will still work, but results may not be perfectly aligned for pixel-level analysis like Heatmap.</p>${listHtml}</div>`; document.body.appendChild(overlay); document.body.classList.add('popup-open'); overlay.querySelector('.popup-close-btn').addEventListener('click', closePopup); };
     const closePopup = () => { const overlay = document.querySelector('.popup-overlay'); if (overlay) { overlay.remove(); } document.body.classList.remove('popup-open'); };
     
-    // --- *** MODIFIED: SLIDER LOGIC with TOUCH SUPPORT *** ---
-    const resetSliders = (type) => {
-        const numSliders = numImages - 1; if (numSliders <= 0) return;
-        for (let i = 0; i < numSliders; i++) {
-            const defaultLeft = (100 / numImages) * (i + 1);
-            const slider = document.getElementById(`${type}-slider-${i}`);
-            const wrapper = document.getElementById(`${type}-wrapper-${i + 1}`);
-            if (slider) slider.style.left = `${defaultLeft}%`;
-            if (wrapper) wrapper.style.clipPath = `inset(0 0 0 ${defaultLeft}%)`;
-        }
-    };
-    
-    const initSliders = () => {
-        document.querySelectorAll('.slider-handle-dynamic').forEach(slider => {
-            const startDrag = (e) => {
-                const index = parseInt(e.currentTarget.dataset.index);
-                activeSlider = { element: e.currentTarget, type: e.currentTarget.id.split('-')[0] };
-            };
-            slider.addEventListener('mousedown', startDrag);
-            slider.addEventListener('touchstart', startDrag);
-        });
-    };
-
-    const handleSliderMove = (e) => {
-        if (!activeSlider) return;
-        
-        // Prevent page scroll on touch devices
-        if (e.touches) e.preventDefault();
-
-        const container = activeSlider.element.parentElement;
-        const rect = container.getBoundingClientRect();
-        
-        // Get coordinate from either mouse or touch event
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        let x = clientX - rect.left;
-        
-        const index = parseInt(activeSlider.element.dataset.index);
-        const prevSlider = document.getElementById(`${activeSlider.type}-slider-${index - 1}`);
-        const nextSlider = document.getElementById(`${activeSlider.type}-slider-${index + 1}`);
-        const minX = prevSlider ? prevSlider.offsetLeft : 0;
-        const maxX = nextSlider ? nextSlider.offsetLeft : rect.width;
-        x = Math.max(minX, Math.min(x, maxX));
-        
-        const percent = (x / rect.width) * 100;
-        
-        // Sync both split and magnify sliders
-        document.getElementById(`split-slider-${index}`).style.left = `${percent}%`;
-        document.getElementById(`magnify-slider-${index}`).style.left = `${percent}%`;
-        
-        // Update clip-paths for both views
-        document.getElementById(`split-wrapper-${index + 1}`).style.clipPath = `inset(0 0 0 ${percent}%)`;
-        document.getElementById(`magnify-wrapper-${index + 1}`).style.clipPath = `inset(0 0 0 ${percent}%)`;
-    };
-
-    const endSliderDrag = () => {
-        activeSlider = null;
-    };
+    // --- SLIDER LOGIC ---
+    const resetSliders = (type) => { const numSliders = numImages - 1; if (numSliders <= 0) return; for (let i = 0; i < numSliders; i++) { const defaultLeft = (100 / numImages) * (i + 1); const slider = document.getElementById(`${type}-slider-${i}`); const wrapper = document.getElementById(`${type}-wrapper-${i + 1}`); if (slider) slider.style.left = `${defaultLeft}%`; if (wrapper) wrapper.style.clipPath = `inset(0 0 0 ${defaultLeft}%)`; } };
+    const initSliders = () => { document.querySelectorAll('.slider-handle-dynamic').forEach(slider => { const startDrag = (e) => { activeSlider = { element: e.currentTarget, type: e.currentTarget.id.split('-')[0] }; }; slider.addEventListener('mousedown', startDrag); slider.addEventListener('touchstart', startDrag); }); };
+    const handleSliderMove = (e) => { if (!activeSlider) return; if (e.touches) e.preventDefault(); const container = activeSlider.element.parentElement; const rect = container.getBoundingClientRect(); const clientX = e.touches ? e.touches[0].clientX : e.clientX; let x = clientX - rect.left; const index = parseInt(activeSlider.element.dataset.index); const prevSlider = document.getElementById(`${activeSlider.type}-slider-${index - 1}`); const nextSlider = document.getElementById(`${activeSlider.type}-slider-${index + 1}`); const minX = prevSlider ? prevSlider.offsetLeft : 0; const maxX = nextSlider ? nextSlider.offsetLeft : rect.width; x = Math.max(minX, Math.min(x, maxX)); const percent = (x / rect.width) * 100; document.getElementById(`split-slider-${index}`).style.left = `${percent}%`; document.getElementById(`magnify-slider-${index}`).style.left = `${percent}%`; document.getElementById(`split-wrapper-${index + 1}`).style.clipPath = `inset(0 0 0 ${percent}%)`; document.getElementById(`magnify-wrapper-${index + 1}`).style.clipPath = `inset(0 0 0 ${percent}%)`; };
+    const endSliderDrag = () => { activeSlider = null; };
     
     // --- MAGNIFY LOGIC ---
     const updateMagnifier = (e) => { if (e) lastMagnifyEvent = e; const eventForCalc = e || lastMagnifyEvent; const baseImage = imagesData[0]; if (!baseImage || !eventForCalc) return; const sourceRect = magnifySourceContainer.getBoundingClientRect(); const previewRect = magnifyPreviewContainer.getBoundingClientRect(); const containerW = sourceRect.width, containerH = sourceRect.height; const imageW = baseImage.naturalWidth, imageH = baseImage.naturalHeight; const containerRatio = containerW / containerH, imageRatio = imageW / imageH; let renderedW, renderedH, offsetX, offsetY; if (imageRatio > containerRatio) { renderedW = containerW; renderedH = containerW / imageRatio; offsetX = 0; offsetY = (containerH - renderedH) / 2; } else { renderedH = containerH; renderedW = containerH * imageRatio; offsetY = 0; offsetX = (containerW - renderedW) / 2; } const rawX = eventForCalc.clientX - sourceRect.left, rawY = eventForCalc.clientY - sourceRect.top; const correctedX = rawX - offsetX, correctedY = rawY - offsetY; let fracX = Math.max(0, Math.min(1, correctedX / renderedW)), fracY = Math.max(0, Math.min(1, correctedY / renderedH)); const loupe = document.getElementById('magnify-loupe'); loupe.style.left = `${rawX - loupe.offsetWidth / 2}px`; loupe.style.top = `${rawY - loupe.offsetHeight / 2}px`; const zoom = parseFloat(zoomLevelSlider.value); const bgWidth = renderedW * zoom, bgHeight = renderedH * zoom; const bgX = -(fracX * (bgWidth - previewRect.width)), bgY = -(fracY * (bgHeight - previewRect.height)); for (let i = 0; i < numImages; i++) { if (imagesData[i]) { const wrapper = document.getElementById(`magnify-wrapper-${i}`); wrapper.style.backgroundSize = `${bgWidth}px ${bgHeight}px`; wrapper.style.backgroundPosition = `${bgX}px ${bgY}px`; } } };
@@ -168,15 +122,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- EVENT LISTENERS & INITIALIZATION ---
     setupBtn.addEventListener('click', setupUI);
     directoryUploadInput.addEventListener('change', handleDirectoryUpload);
-    navLinks.forEach(link => { link.addEventListener('click', (e) => { e.preventDefault(); const targetView = e.target.dataset.view; if (targetView === 'export-view' && imagesData.some(d => d)) { updateExportPreview(); } navLinks.forEach(l => l.classList.remove('active')); e.target.classList.add('active'); views.forEach(view => view.classList.toggle('hidden', view.id !== targetView)); }); });
     
-    // Slider Drag Events
+    navToggle.addEventListener('click', () => {
+        mainNav.classList.toggle('active');
+        document.body.classList.toggle('popup-open');
+    });
+
+    navLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const targetView = e.target.dataset.view;
+            if (targetView === 'export-view' && imagesData.some(d => d)) { updateExportPreview(); }
+            navLinks.forEach(l => l.classList.remove('active'));
+            e.target.classList.add('active');
+            views.forEach(view => view.classList.toggle('hidden', view.id !== targetView));
+            if (mainNav.classList.contains('active')) { mainNav.classList.remove('active'); document.body.classList.remove('popup-open'); }
+        });
+    });
+    
     document.addEventListener('mouseup', endSliderDrag);
     document.addEventListener('touchend', endSliderDrag);
     document.addEventListener('mousemove', handleSliderMove);
     document.addEventListener('touchmove', handleSliderMove, { passive: false });
     
-    // Tool Control Events
     magnifySourceContainer.addEventListener('mousemove', updateMagnifier);
     magnifySourceContainer.addEventListener('mouseenter', () => document.getElementById('magnify-loupe').style.display = 'block');
     magnifySourceContainer.addEventListener('mouseleave', () => document.getElementById('magnify-loupe').style.display = 'none');
