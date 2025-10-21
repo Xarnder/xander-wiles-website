@@ -98,38 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function colorDifference(rgb1, rgb2) { const rDiff = rgb1.r - rgb2.r, gDiff = rgb1.g - rgb2.g, bDiff = rgb1.b - rgb2.b; return Math.sqrt(rDiff * rDiff + gDiff * gDiff + bDiff * bDiff); }
     function rgbToHsl(r, g, b) { r /= 255; g /= 255; b /= 255; const max = Math.max(r, g, b), min = Math.min(r, g, b); let h, s, l = (max + min) / 2; if (max === min) { h = s = 0; } else { const d = max - min; s = l > 0.5 ? d / (2 - max - min) : d / (max + min); switch (max) { case r: h = (g - b) / d + (g < b ? 6 : 0); break; case g: h = (b - r) / d + 2; break; case b: h = (r - g) / d + 4; break; } h /= 6; } return { h, s, l }; }
     function hslToRgb(h, s, l) { let r, g, b; if (s === 0) { r = g = b = l; } else { const hue2rgb = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < 1 / 2) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; }; const q = l < 0.5 ? l * (1 + s) : l + s - l * s; const p = 2 * l - q; r = hue2rgb(p, q, h + 1 / 3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1 / 3); } return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) }; }
-    
-    // ==========================================================
-    // --- THIS IS THE MODIFIED FUNCTION ---
-    // ==========================================================
-    function isSkinTone({ h, s, l }) {
-        const hue = h * 360;
-        // WIDER Hue range (reds through orange-yellows)
-        // WIDER Saturation range (allows for paler tones)
-        // WIDER Lightness range (allows for highlights and darker tones)
-        return (hue >= 0 && hue <= 50) && (s >= 0.15 && s <= 0.95) && (l >= 0.2 && l <= 0.95);
-    }
-    
+    function isSkinTone({ h, s, l }) { const hue = h * 360; return (hue >= 0 && hue <= 50) && (s >= 0.15 && s <= 0.95) && (l >= 0.2 && l <= 0.95); }
     function isGrayscale({ s }) { return s < 0.10; }
-
-    function createDarkModeColor(r, g, b) {
-        const hsl = rgbToHsl(r, g, b);
-        if (isSkinTone(hsl)) { return `rgb(${r},${g},${b})`; }
-        if (isGrayscale(hsl)) { const invertedL = 1.0 - hsl.l; const { r: newR, g: newG, b: newB } = hslToRgb(hsl.h, hsl.s, invertedL); return `rgb(${newR},${newG},${newB})`; }
-        const newL = Math.max(0.75, hsl.l + 0.2);
-        const { r: newR, g: newG, b: newB } = hslToRgb(hsl.h, hsl.s, Math.min(newL, 0.95));
-        return `rgb(${newR},${newG},${newB})`;
-    }
-    
-    function generateDarkSvgFromLight(lightSvgString) {
-        if (!lightSvgString) return null;
-        const colorRegex = /fill="rgb\((\d{1,3}),(\d{1,3}),(\d{1,3})\)"/g;
-        return lightSvgString.replace(colorRegex, (match, r, g, b) => {
-            const newColor = createDarkModeColor(parseInt(r), parseInt(g), parseInt(b));
-            return `fill="${newColor}"`;
-        });
-    }
-
+    function createDarkModeColor(r, g, b) { const hsl = rgbToHsl(r, g, b); if (isSkinTone(hsl)) { return `rgb(${r},${g},${b})`; } if (isGrayscale(hsl)) { const invertedL = 1.0 - hsl.l; const { r: newR, g: newG, b: newB } = hslToRgb(hsl.h, hsl.s, invertedL); return `rgb(${newR},${newG},${newB})`; } const newL = Math.max(0.75, hsl.l + 0.2); const { r: newR, g: newG, b: newB } = hslToRgb(hsl.h, hsl.s, Math.min(newL, 0.95)); return `rgb(${newR},${newG},${newB})`; }
+    function generateDarkSvgFromLight(lightSvgString) { if (!lightSvgString) return null; const colorRegex = /fill="rgb\((\d{1,3}),(\d{1,3}),(\d{1,3})\)"/g; return lightSvgString.replace(colorRegex, (match, r, g, b) => { const newColor = createDarkModeColor(parseInt(r), parseInt(g), parseInt(b)); return `fill="${newColor}"`; }); }
     async function getSmartPalette(imgSrc, targetColorCount) { return new Promise((resolve, reject) => { const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { const colorThief = new ColorThief(); const largePalette = colorThief.getPalette(img, 32); const uniqueColors = []; const similarityThreshold = 30; for (const color of largePalette) { const rgb = { r: color[0], g: color[1], b: color[2] }; let isUnique = true; for (const uniqueColor of uniqueColors) { if (colorDifference(rgb, uniqueColor) < similarityThreshold) { isUnique = false; break; } } if (isUnique) uniqueColors.push(rgb); } uniqueColors.sort((a, b) => { const aHsl = rgbToHsl(a.r, a.g, a.b); const bHsl = rgbToHsl(b.r, b.g, b.b); const aScore = aHsl.s + (aHsl.l > 0.05 && aHsl.l < 0.95 ? 0.1 : 0); const bScore = bHsl.s + (bHsl.l > 0.05 && bHsl.l < 0.95 ? 0.1 : 0); return bScore - aScore; }); const finalPalette = uniqueColors.slice(0, targetColorCount).map(c => ({ r: c.r, g: c.g, b: c.b, a: 255 })); resolve(finalPalette); }; img.onerror = reject; img.src = imgSrc; }); }
 
     // --- Final Generation & Output ---
@@ -162,19 +134,23 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally { generateBtn.disabled = false; generateBtn.textContent = 'Generate All Files'; }
     }
 
+    // ==========================================================
+    // --- THIS IS THE MODIFIED FUNCTION ---
+    // ==========================================================
     function generateResultsCode(hasCustomSvg) {
+        // NOTE: All href paths are now RELATIVE (no leading slash)
         const pngCode = `&lt;!-- Fallback PNG icons --&gt;
-&lt;link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"&gt;
-&lt;link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png"&gt;
-&lt;link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png"&gt;`;
+&lt;link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png"&gt;
+&lt;link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png"&gt;
+&lt;link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png"&gt;`;
 
         const svgCode = hasCustomSvg ? `&lt;!-- Theme-aware SVG icons (modern browsers) --&gt;
-&lt;link rel="icon" href="/favicon.ico" sizes="any"&gt; &lt;!-- Fallback for older browsers --&gt;
-&lt;link rel="icon" href="/favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)"&gt;
-&lt;link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)"&gt;` : '&lt;link rel="icon" href="/favicon.ico" sizes="any"&gt;';
+&lt;link rel="icon" href="favicon.ico" sizes="any"&gt; &lt;!-- Fallback for older browsers --&gt;
+&lt;link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)"&gt;
+&lt;link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)"&gt;` : '&lt;link rel="icon" href="favicon.ico" sizes="any"&gt;';
 
         const manifestCode = `&lt;!-- Other essential links --&gt;
-&lt;link rel="manifest" href="/site.webmanifest"&gt;
+&lt;link rel="manifest" href="site.webmanifest"&gt;
 &lt;meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"&gt;
 &lt;meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)"&gt;`;
 
