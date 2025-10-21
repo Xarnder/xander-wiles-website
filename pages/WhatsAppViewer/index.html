@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Securely view, read, and search your exported WhatsApp chat .txt files directly in your browser. No uploads, 100% offline and private WhatsApp chat viewer.">
+    <title>WhatsApp Chat Viewer Free - View & Search TXT Exports Locally</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!-- START: Added Icons -->
+    <!-- Favicon Links (Example using PNGs) -->
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="64x64" href="favicon-64x64.png">
+    <!-- Or provide a single higher-res PNG or an ICO -->
+    <link rel="icon" type="image/png" sizes="192x192" href="favicon.png">
+    <!-- <link rel="icon" href="favicon.ico"> -->
+
+    <!-- Apple Touch Icon (iOS Home Screen) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+    <!-- Optional: Link for Android/Chrome Theme Color -->
+    <meta name="theme-color" content="#128C7E"> <!-- Match light mode header -->
+    <!-- END: Added Icons -->
+
+</head>
+<body data-theme="light"> <!-- Add data-theme attribute -->
+    <div class="app-container">
+        <div class="header-controls">
+             <h1>WhatsApp Chat Viewer</h1>
+             <div class="top-right-controls">
+                 <!-- START: Buy Me a Coffee Button -->
+                 <a href="https://buymeacoffee.com/xarnder" target="_blank" rel="noopener noreferrer" class="bmc-button">
+                    ☕ Buy Me a Coffee
+                </a>
+                <!-- END: Buy Me a Coffee Button -->
+                 <!-- Dark Mode Toggle -->
+                 <div class="theme-switch-wrapper">
+                    <label class="theme-switch" for="themeCheckbox">
+                        <input type="checkbox" id="themeCheckbox" />
+                        <div class="slider round"></div>
+                    </label>
+                    <span>Dark Mode</span>
+                 </div>
+                 <!-- Size Controls -->
+                 <div class="size-controls">
+                    <span>Size:</span>
+                    <button id="decreaseSize" title="Decrease Size">-</button>
+                    <button id="increaseSize" title="Increase Size">+</button>
+                 </div>
+             </div>
+        </div>
+
+        <div class="upload-section">
+            <label for="chatFile" class="upload-button">Upload Chat TXT File</label>
+            <input type="file" id="chatFile" accept=".txt">
+            <span id="fileName">No file selected</span>
+        </div>
+
+        <!-- Search Section -->
+        <div class="search-section">
+            <input type="search" id="searchInput" placeholder="Search chat...">
+            <button id="searchPrev" title="Previous Match"><</button>
+            <button id="searchNext" title="Next Match">></button>
+            <span id="searchResultCount"></span>
+        </div>
+        <!-- End Search Section -->
+
+        <div id="chat-display-area">
+            <div id="chat-container">
+                <!-- Chat messages will be loaded here -->
+                <p class="placeholder">Upload a WhatsApp chat export (.txt) file to view the messages.</p>
+            </div>
+        </div>
+         <div class="legend">
+            <p>Sender Colors & Options:</p> <!-- Updated Legend Title -->
+            <div id="sender-legend">
+                <!-- Legend items will be added here via JS -->
+            </div>
+        </div>
+
+        <!-- START: Added Sections -->
+        <div id="instructions-section" class="info-section">
+            <h3>How to Export Your WhatsApp Chat (.txt)</h3>
+            <ol>
+                <li>Open the individual or group chat you want to export.</li>
+                <li>
+                    Tap the options menu (three dots) or the contact/group name at the top.
+                    <ul>
+                        <li><strong>Android:</strong> Tap `More` > `Export chat`.</li>
+                        <li><strong>iOS:</strong> Tap `Contact Name` / `Group Name` > Scroll down to `Export Chat`.</li>
+                        <li><strong>Altarnitve export method:</strong> Tap `Settings` > `Chats` >  `Export chat` and then select a chat to export</li>
+                    </ul>
+                </li>
+                <li>
+                    When prompted, choose <strong>WITHOUT MEDIA</strong>. This tool only processes the text (.txt) file.
+                </li>
+                <li>
+                    Select how you want to save or send the file (e.g., Save to Files, Email to yourself, Google Drive).
+                </li>
+                <li>
+                    In your file storage, <strong>Unzip</strong> to your directory of choice.
+                </li>
+                <li>Upload the exported `.txt` file using the button above.</li>
+            </ol>
+        </div>
+        <div id="disclaimer-section" class="info-section">
+            <h3>Disclaimer & Privacy</h3>
+            <p>
+                Your privacy is important. This WhatsApp Chat Viewer processes your chat file <strong>entirely within your web browser</strong>.
+            </p>
+            <p>
+                Your chat data is <strong>never uploaded, sent, or stored</strong> on any server. All parsing and display happens locally on your computer. Once you close this browser tab, the data is gone.
+            </p>
+        </div>
+        <!-- END: Added Sections -->
+
+    </div> <!-- Closes app-container -->
+
+    <!-- Include the Mark.js library for highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/mark.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

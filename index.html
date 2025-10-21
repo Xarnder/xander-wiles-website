@@ -43,7 +43,7 @@
                     <li><a href="/">Home</a></li>
                     <li><a href="/games/rocket-lander/">Rocket Lander</a></li>
                     <li><a href="/pages/Compare_Images/">Compare Images Tool</a></li>
-                    <li><a href="https://www.whatsappchatviewer.com/">WhatsApp Chat Viewer</a></li>
+                    <li><a href="/pages/WhatsAppViewer/">WhatsApp Chat Viewer</a></li>
                 </ul>
             </nav>
         </div>
@@ -51,11 +51,22 @@
 
     <main class="app-container">
         <div class="hero-card glass-card">
-            <img 
-                src="assets/images/Xander_low_res.png" 
-                data-src="assets/images/Xander Corrected Edited.png"
-                alt="A profile picture of Xander Wiles" 
-                class="profile-picture">
+    <picture>
+        <!-- The browser tries to load this AVIF file first -->
+        <source srcset="assets/images/xander_Correted_Edited.avif" type="image/avif">
+        
+        <!-- If it can't, it tries this WebP file next -->
+        <source srcset="assets/images/Xander_Corrected_Edited.webp" type="image/webp">
+        
+        <!-- This is the final fallback for older browsers. It also provides the alt text. -->
+        <img 
+            src="assets/images/Xander Corrected Edited.png" 
+            alt="A profile picture of Xander Wiles" 
+            class="profile-picture"
+            width="300" 
+            height="300"
+            loading="lazy">
+    </picture>
             <h1>Welcome</h1>
             <p>Select a game or page from the navigation menu below to get started. All projects are built with passion and a lot of JavaScript.</p>
         </div>
@@ -77,7 +88,7 @@
                 <h3>Original Rocket Lander (2012)</h3>
                 <p>The Original Rocket Lander game made at age 10</p>
             </a>
-            <a href="https://www.whatsappchatviewer.com/" class="page-card glass-card">
+            <a href="/pages/WhatsAppViewer/" class="page-card glass-card">
                 <h3>WhatsApp Chat Viewer</h3>
                 <p>A Simple WhatsApp Chat Viewer</p>
             </a>
@@ -96,6 +107,10 @@
             <a href="/pages/Siewli/" class="page-card glass-card">
                 <h3>Siewli Kok Memorial</h3>
                 <p>A tribute page for Siewli Kok</p>
+            </a>
+            <a href="/pages/Favicon_Maker/" class="page-card glass-card">
+                <h3>Favicon Maker</h3>
+                <p>A tool for generating favicons from images.</p>
             </a>
             <a href="/pages/Gaussian_Splatting/" class="page-card glass-card">
                 <h3>Gaussian Splatting Explainer</h3>
