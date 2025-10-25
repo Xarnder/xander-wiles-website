@@ -83,7 +83,7 @@ body.popup-open { overflow: hidden; }
 .export-controls { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1.5rem; }
 .control-group { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
 .control-group label { margin-bottom: 0; font-weight: 600; color: var(--text-secondary); }
-.control-group-sub { display: flex; align-items: center; gap: 1.5rem; padding: 1rem; border: 1px solid var(--glass-border); border-radius: var(--radius-lg); background: rgba(0,0,0,0.1); }
+.control-group-sub { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 1.5rem; padding: 1rem; border: 1px solid var(--glass-border); border-radius: var(--radius-lg); background: rgba(0,0,0,0.1); }
 .control-group-divider { width: 1px; height: 40px; background: var(--glass-border); align-self: center; }
 .checkbox-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
 .radio-group { display: flex; gap: 1rem; }

@@ -79,20 +79,30 @@
                     <!-- Text & BG Controls -->
                     <div id="title-options-wrapper" class="control-group-sub">
                         <div class="control-group">
+                            <label for="title-mode-select">Title Mode</label>
+                            <select id="title-mode-select">
+                                <option value="bleed" selected>Bleed</option>
+                                <option value="overlay">Overlay</option>
+                                <option value="add-space">Add Space</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
                             <label for="font-size-slider">Font Size: <span id="font-size-value">40</span>px</label>
-                            <input type="range" id="font-size-slider" min="10" max="100" value="40" step="1" />
+                            <input type="range" id="font-size-slider" min="10" max="400" value="40" step="1" />
                         </div>
                         <div class="control-group">
                             <label for="text-color-picker">Text Color</label>
-                            <input type="color" id="text-color-picker" value="#111115" />
+                            <input type="color" id="text-color-picker" value="#FFFFFF" />
                         </div>
+                        
+                        <!-- "Add Space" & "Bleed" Controls -->
                         <div class="control-group">
-                            <label for="header-height-slider">Area Height: <span id="header-height-value">80</span>px</label>
-                            <input type="range" id="header-height-slider" min="20" max="200" value="80" step="1" />
+                            <label for="header-height-slider">Area Height: <span id="header-height-value">60</span>px</label>
+                            <input type="range" id="header-height-slider" min="20" max="200" value="60" step="1" />
                         </div>
                          <div class="control-group">
                             <label for="bg-color-picker">BG Color</label>
-                            <input type="color" id="bg-color-picker" value="#ffffff" />
+                            <input type="color" id="bg-color-picker" value="#111115" />
                         </div>
                          <div class="control-group">
                             <label for="position-toggle" class="checkbox-label toggle-switch">
@@ -100,6 +110,18 @@
                                 <span class="toggle-knob"></span>
                                 Title Below
                             </label>
+                        </div>
+                        
+                        <!-- "Overlay" Control -->
+                        <div class="control-group hidden">
+                            <label for="text-position-slider">Vertical Position: <span id="text-position-value">90</span>%</label>
+                            <input type="range" id="text-position-slider" min="0" max="100" value="90" step="1" />
+                        </div>
+
+                        <!-- "Bleed" Control -->
+                        <div class="control-group">
+                            <label for="text-offset-slider">Text Offset: <span id="text-offset-value">0</span>px</label>
+                            <input type="range" id="text-offset-slider" min="-50" max="50" value="0" step="1" />
                         </div>
                     </div>
                     <div class="control-group-divider"></div>

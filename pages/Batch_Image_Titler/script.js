@@ -13,13 +13,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const addTitleToggle = document.getElementById('add-title-toggle');
     const underscoreToggle = document.getElementById('underscore-toggle');
     const titleOptionsWrapper = document.getElementById('title-options-wrapper');
+    const titleModeSelect = document.getElementById('title-mode-select');
     const fontSizeSlider = document.getElementById('font-size-slider');
     const fontSizeValueSpan = document.getElementById('font-size-value');
+    const textColorPicker = document.getElementById('text-color-picker');
+
+    // "Add Space" & "Bleed" Controls
     const headerHeightSlider = document.getElementById('header-height-slider');
     const headerHeightValueSpan = document.getElementById('header-height-value');
-    const textColorPicker = document.getElementById('text-color-picker');
     const bgColorPicker = document.getElementById('bg-color-picker');
     const positionToggle = document.getElementById('position-toggle');
+
+    // "Overlay" Mode Control
+    const textPositionSlider = document.getElementById('text-position-slider');
+    const textPositionValueSpan = document.getElementById('text-position-value');
+    
+    // "Bleed" Mode Control
+    const textOffsetSlider = document.getElementById('text-offset-slider');
+    const textOffsetValueSpan = document.getElementById('text-offset-value');
 
     // Navigation and Renaming Controls
     const previewControls = document.getElementById('preview-controls');
@@ -44,8 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     directoryUploadInput.addEventListener('change', handleDirectoryUpload);
     exportBtn.addEventListener('click', handleExport);
     
-    // Listen to all controls that should trigger a preview re-render
-    [fontSizeSlider, headerHeightSlider, textColorPicker, bgColorPicker, positionToggle, addTitleToggle].forEach(el => {
+    [titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker, bgColorPicker, positionToggle, addTitleToggle, textPositionSlider, textOffsetSlider].forEach(el => {
         el.addEventListener('input', handleControlsChange);
     });
 
@@ -60,17 +70,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Functions ---
 
     function handleDirectoryUpload(e) {
-        console.log('Directory selected. Processing files...');
         const files = Array.from(e.target.files);
         
-        // Reset all state
         imageFiles = []; imageTitles = []; imageFolders = [];
         availableFolders = ["(Root)"]; currentIndex = 0;
 
         imageFiles = files.filter(file => file.type.startsWith('image/'));
         
         if (imageFiles.length === 0) {
-            console.error('No valid image files found.');
             showStatus(uploadStatus, 'No valid image files (.jpg, .png, etc.) were found.', true);
             return;
         }
@@ -80,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
             imageFolders.push("(Root)");
         });
 
-        console.log(`Found ${imageFiles.length} images.`);
         showStatus(uploadStatus, `Successfully loaded ${imageFiles.length} images.`, false);
 
         uploadSection.classList.add('hidden');
@@ -88,15 +94,40 @@ document.addEventListener('DOMContentLoaded', () => {
         previewControls.classList.remove('hidden');
 
         updateFolderDropdown();
-        updateTitleControlState(); // Set initial state of title controls
+        handleControlsChange(); // Set initial control state and render preview
         updateUIForCurrentIndex();
     }
 
     function handleControlsChange() {
+        // Update slider value displays
         fontSizeValueSpan.textContent = fontSizeSlider.value;
         headerHeightValueSpan.textContent = headerHeightSlider.value;
+        textPositionValueSpan.textContent = textPositionSlider.value;
+        textOffsetValueSpan.textContent = textOffsetSlider.value;
+        
         updateTitleControlState();
+        updateControlVisibility();
         renderPreview();
+    }
+    
+    function updateControlVisibility() {
+        const mode = titleModeSelect.value;
+
+        // Helper to toggle visibility of a control's parent '.control-group'
+        const setVisible = (element, isVisible) => {
+            element.closest('.control-group').classList.toggle('hidden', !isVisible);
+        };
+
+        // "Add Space" & "Bleed" use these
+        setVisible(headerHeightSlider, mode === 'add-space' || mode === 'bleed');
+        setVisible(bgColorPicker, mode === 'add-space' || mode === 'bleed');
+        setVisible(positionToggle, mode === 'add-space' || mode === 'bleed');
+
+        // "Overlay" only
+        setVisible(textPositionSlider, mode === 'overlay');
+        
+        // "Bleed" only
+        setVisible(textOffsetSlider, mode === 'bleed');
     }
 
     function handleTitleChange() {
@@ -106,16 +137,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    /**
-     * Toggles the disabled state of title-related options based on the main toggle.
-     */
     function updateTitleControlState() {
         const enabled = addTitleToggle.checked;
-        if (enabled) {
-            titleOptionsWrapper.classList.remove('disabled');
-        } else {
-            titleOptionsWrapper.classList.add('disabled');
-        }
+        titleOptionsWrapper.classList.toggle('disabled', !enabled);
     }
 
     function formatTitle(filename) {
@@ -124,45 +148,93 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function drawImageWithTitle(ctx, imageFile, title, options) {
-        const { addTitle, fontSize, headerHeight, bgColor, textColor, position } = options;
+        const { addTitle, mode, fontSize, textColor } = options;
 
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
-                // If title is disabled, just draw the original image and exit
+                // If title is disabled, just draw the original image
                 if (!addTitle) {
                     ctx.canvas.width = img.width;
                     ctx.canvas.height = img.height;
                     ctx.drawImage(img, 0, 0);
-                    resolve();
-                    return;
+                    return resolve();
+                }
+                
+                // --- Mode-specific drawing ---
+                switch(mode) {
+                    case 'overlay': {
+                        const { textYPercent } = options;
+                        // **FIX**: Set canvas size first, which resets the context state
+                        ctx.canvas.width = img.width;
+                        ctx.canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // **FIX**: Apply all text styles *after* resizing and *before* drawing
+                        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+                        ctx.fillStyle = textColor;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                        ctx.shadowBlur = 8;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 0;
+                        
+                        const textYOverlay = ctx.canvas.height * (textYPercent / 100);
+                        ctx.fillText(title, ctx.canvas.width / 2, textYOverlay);
+                        break;
+                    }
+                    
+                    case 'add-space':
+                    case 'bleed': {
+                        const { headerHeight, bgColor, position, textOffset } = options;
+                         // **FIX**: Set canvas size first, which resets the context state
+                        ctx.canvas.width = img.width;
+                        ctx.canvas.height = img.height + headerHeight;
+
+                        const isBelow = position === 'below';
+                        const imageY = isBelow ? 0 : headerHeight;
+                        const headerY = isBelow ? img.height : 0;
+                        
+                        // Draw background and image
+                        ctx.fillStyle = bgColor;
+                        ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
+                        ctx.drawImage(img, 0, imageY);
+                        
+                        let textY;
+                        if (mode === 'add-space') {
+                            textY = headerY + (headerHeight / 2);
+                        } else { // 'bleed' mode
+                            const boundaryY = isBelow ? img.height : headerHeight;
+                            textY = boundaryY + textOffset;
+                        }
+                        
+                        // **FIX**: Apply all text styles *after* resizing and *before* drawing
+                        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+                        ctx.fillStyle = textColor;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        if (mode === 'bleed') {
+                           ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                           ctx.shadowBlur = 8;
+                           ctx.shadowOffsetX = 0;
+                           ctx.shadowOffsetY = 0;
+                        }
+
+                        ctx.fillText(title, ctx.canvas.width / 2, textY);
+                        break;
+                    }
                 }
 
-                // --- Logic for adding title ---
-                ctx.canvas.width = img.width;
-                ctx.canvas.height = img.height + headerHeight;
+                // Reset shadow for subsequent draws to be safe
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
 
-                const isBelow = position === 'below';
-                const imageY = isBelow ? 0 : headerHeight;
-                const headerY = isBelow ? img.height : 0;
-                const textY = headerY + (headerHeight / 2);
-
-                ctx.fillStyle = bgColor;
-                ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
-
-                ctx.fillStyle = textColor;
-                ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(title, ctx.canvas.width / 2, textY);
-                
-                ctx.drawImage(img, 0, imageY);
                 resolve();
             };
-            img.onerror = () => {
-                console.error(`Error loading image: ${imageFile.name}`);
-                reject(new Error(`Could not load image: ${imageFile.name}`));
-            };
+            img.onerror = () => reject(new Error(`Could not load image: ${imageFile.name}`));
             img.src = URL.createObjectURL(imageFile);
         });
     }
@@ -180,11 +252,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const options = {
             addTitle: addTitleToggle.checked,
+            mode: titleModeSelect.value,
             fontSize: parseInt(fontSizeSlider.value, 10),
+            textColor: textColorPicker.value,
             headerHeight: parseInt(headerHeightSlider.value, 10),
             bgColor: bgColorPicker.value,
-            textColor: textColorPicker.value,
-            position: positionToggle.checked ? 'below' : 'above'
+            position: positionToggle.checked ? 'below' : 'above',
+            textYPercent: parseInt(textPositionSlider.value, 10),
+            textOffset: parseInt(textOffsetSlider.value, 10),
         };
 
         try {
@@ -205,11 +280,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const zip = new JSZip();
         const options = {
             addTitle: addTitleToggle.checked,
+            mode: titleModeSelect.value,
             fontSize: parseInt(fontSizeSlider.value, 10),
+            textColor: textColorPicker.value,
             headerHeight: parseInt(headerHeightSlider.value, 10),
             bgColor: bgColorPicker.value,
-            textColor: textColorPicker.value,
-            position: positionToggle.checked ? 'below' : 'above'
+            position: positionToggle.checked ? 'below' : 'above',
+            textYPercent: parseInt(textPositionSlider.value, 10),
+            textOffset: parseInt(textOffsetSlider.value, 10),
         };
         
         const processCanvas = document.createElement('canvas');
@@ -223,9 +301,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 showStatus(exportStatus, `Processing ${i + 1}/${imageFiles.length}: ${title}`, false);
                 
                 await drawImageWithTitle(processCtx, file, title, options);
-                
-                // For 'addTitle: false', this will be a PNG of the original.
-                // For 'addTitle: true', it will be a PNG of the modified image.
                 const blob = await new Promise(resolve => processCanvas.toBlob(resolve, 'image/png'));
                 
                 let filename = title;
@@ -233,8 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     filename = title.replace(/ /g, '_');
                 }
                 
-                const extension = file.name.slice(file.name.lastIndexOf('.'));
-                const newFilename = `${filename}${extension}`;
+                const newFilename = `${filename}.png`;
 
                 if (folderName !== "(Root)") {
                     zip.folder(folderName).file(newFilename, blob);
@@ -262,7 +336,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Subfolder & Navigation Functions (Unchanged from previous version)
     function handleAddFolder() {
         const newFolderName = newFolderInput.value.trim();
         if (newFolderName && !availableFolders.includes(newFolderName)) {
