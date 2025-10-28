@@ -30,10 +30,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Feature 2: Active Navigation Link on Scroll ---
+    // Define navigation elements once for both features
     const navLinks = document.querySelectorAll('.sidebar-nav a');
     const sections = document.querySelectorAll('.content section');
-    
+
+    // --- Feature 2: Active Navigation Link on Scroll ---
     const observer = new IntersectionObserver((entries) => {
         let lastVisibleSectionId = null;
 
@@ -60,6 +61,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Observe each section
     sections.forEach(section => {
         observer.observe(section);
+    });
+    
+    // --- NEW: Feature 3: Active Navigation Link on Click ---
+    // This provides immediate feedback when a user clicks a link.
+    navLinks.forEach(link => {
+        link.addEventListener('click', function() {
+            // Remove the 'active' class from all navigation links
+            navLinks.forEach(navLink => navLink.classList.remove('active'));
+            
+            // Add the 'active' class to the link that was just clicked
+            this.classList.add('active');
+        });
     });
 
 });

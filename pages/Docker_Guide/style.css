@@ -97,8 +97,10 @@ body {
     color: var(--text-secondary);
     text-decoration: none;
     border-radius: var(--radius-md);
-    transition: background-color 0.2s ease, color 0.2s ease;
-    border-left: 2px solid transparent;
+    /* UPDATED: Added box-shadow to the transition for the glow effect */
+    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.3s ease;
+    border: 2px solid transparent; /* Added to prevent layout shift */
+    margin: 0.25rem 0; /* Added for better spacing */
 }
 
 .sidebar-nav a:hover {
@@ -109,7 +111,10 @@ body {
 .sidebar-nav a.active {
     color: var(--text-primary);
     font-weight: 600;
-    border-left: 2px solid var(--accent-cyan);
+    /* UPDATED: Replaced border-left with a glowing box-shadow */
+    box-shadow: 0 0 12px -2px var(--accent-cyan);
+    border-color: var(--glass-border); /* Give it a subtle border to contain the glow */
+    background-color: var(--bg-secondary);
 }
 
 /* --- Main Content Area --- */
@@ -219,13 +224,16 @@ pre.file-structure {
         gap: 0.5rem;
     }
     .sidebar-nav a {
-        border-left: none;
+        border-left: none; /* Mobile doesn't use the border */
+        border: none; /* Reset border for mobile view */
         background-color: var(--bg-secondary);
     }
     .sidebar-nav a.active {
+        /* Mobile version uses a gradient background, not the glow */
         background: var(--gradient-primary);
         font-weight: 600;
         color: var(--text-primary);
+        box-shadow: none; /* Ensure no glow on mobile */
     }
 }
 
