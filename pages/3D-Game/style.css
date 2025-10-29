@@ -165,3 +165,17 @@ select {
   background: rgba(255,255,255,0.8);
   border-radius: 2px;
 }
+
+/* --- ADDED/MODIFIED FOR CONTROL SWITCHER --- */
+#btnSwitchControls {
+  background: rgba(100, 150, 255, 0.75);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #fff;
+  font-weight: 500;
+  white-space: nowrap; /* Prevent text from wrapping */
+  padding: 6px 12px; /* A bit more horizontal padding for clarity */
+}
+
+#btnSwitchControls:hover {
+  background: rgba(120, 170, 255, 0.9);
+}

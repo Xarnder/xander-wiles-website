@@ -10,8 +10,6 @@ import * as CANNON from 'cannon-es';
 const P1_LAYER = 1;
 const P2_LAYER = 2;
 
-// --- Touch Detection ---
-const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 let isMenuOpen = false;
 
 // --- Scene Configuration ---
@@ -73,6 +71,24 @@ const LS_JUMP_HEIGHT = 'fps.jumpHeight';
 const LS_PLAYER_HEIGHT = 'fps.playerHeight';
 const LS_PLAYER_WIDTH = 'fps.playerWidth';
 const LS_GAMEPAD_SENSITIVITY = 'fps.gamepadSensitivity'; // --- SENSITIVITY SLIDER ---
+const LS_CONTROL_MODE = 'fps.controlMode'; // For manual override of touch/desktop controls
+
+// --- Control Mode Detection & Switching ---
+let preferredControlMode = LS.getItem(LS_CONTROL_MODE); // Can be 'desktop', 'touch', or null
+
+// Auto-detect if no preference is set. window.matchMedia is more reliable for detecting primary input.
+// This helps prevent desktops with touchscreens from defaulting to touch controls.
+const isLikelyTouch = window.matchMedia("(pointer: coarse)").matches;
+
+let effectiveControlMode;
+if (preferredControlMode === 'desktop' || preferredControlMode === 'touch') {
+    effectiveControlMode = preferredControlMode;
+} else {
+    // No user preference saved, so auto-detect
+    effectiveControlMode = isLikelyTouch ? 'touch' : 'desktop';
+}
+const isTouchDevice = effectiveControlMode === 'touch';
+
 
 // --- Load Settings ---
 if (LS.getItem(LS_UI_COLLAPSED) === 'true' && !isTouchDevice) uiPanel.classList.add('collapsed');
@@ -631,4 +647,32 @@ function initTouchControls() {
     window.addEventListener('touchend', handleTouchEnd, { passive: false });
     window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 }
+
+// --- MODIFIED: Control Mode Switcher UI ---
+function setupControlSwitcher() {
+    // The button is now part of the main HTML, so we just find it.
+    const btn = document.getElementById('btnSwitchControls');
+    if (!btn) {
+        console.error("Switch Controls button not found in UI panel.");
+        return;
+    };
+
+    if (isTouchDevice) {
+        btn.textContent = 'Use Mouse/KB';
+        btn.title = 'Switch to Mouse and Keyboard controls';
+        btn.onclick = () => {
+            LS.setItem(LS_CONTROL_MODE, 'desktop');
+            window.location.reload();
+        };
+    } else {
+        btn.textContent = 'Use Touch';
+        btn.title = 'Switch to Touch controls';
+        btn.onclick = () => {
+            LS.setItem(LS_CONTROL_MODE, 'touch');
+            window.location.reload();
+        };
+    }
+}
+
 initTouchControls();
+setupControlSwitcher();
