@@ -44,18 +44,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const addFolderBtn = document.getElementById('add-folder-btn');
     const folderSelect = document.getElementById('folder-select');
 
+    // --- NEW: Grid Feature DOM Elements ---
+    const openGridModalBtn = document.getElementById('open-grid-modal-btn');
+    const gridPopup = document.getElementById('grid-popup');
+    const closeGridPopupBtn = gridPopup.querySelector('.popup-close-btn');
+    const gridSourceSelect = document.getElementById('grid-source-select');
+    const gridColumnsInput = document.getElementById('grid-columns-input');
+    const gridWarningBox = document.getElementById('grid-warning-box');
+    const gridDownscaleToggle = document.getElementById('grid-downscale-toggle');
+    const gridOutputSize = document.getElementById('grid-output-size');
+    const gridOutputMegapixels = document.getElementById('grid-output-megapixels');
+    const gridPreviewCanvas = document.getElementById('grid-preview-canvas');
+    const gridPreviewCtx = gridPreviewCanvas.getContext('2d');
+    const generateGridBtn = document.getElementById('generate-grid-btn');
+    const gridStatus = document.getElementById('grid-status');
+    
     // --- State ---
     let imageFiles = [];
     let imageTitles = [];
     let imageFolders = [];
     let availableFolders = ["(Root)"];
     let currentIndex = 0;
+    const MEGAPixel_limit = 24 * 1000 * 1000; // 24 million pixels
 
     // --- Event Listeners ---
     directoryUploadInput.addEventListener('change', handleDirectoryUpload);
     exportBtn.addEventListener('click', handleExport);
     
-    [titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker, bgColorPicker, positionToggle, addTitleToggle, textPositionSlider, textOffsetSlider].forEach(el => {
+    [titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker, bgColorPicker, positionToggle, addTitleToggle, underscoreToggle, textPositionSlider, textOffsetSlider].forEach(el => {
         el.addEventListener('input', handleControlsChange);
     });
 
@@ -67,13 +83,21 @@ document.addEventListener('DOMContentLoaded', () => {
     addFolderBtn.addEventListener('click', handleAddFolder);
     folderSelect.addEventListener('change', handleFolderAssignment);
 
+    // --- NEW: Grid Feature Event Listeners ---
+    openGridModalBtn.addEventListener('click', openGridModal);
+    closeGridPopupBtn.addEventListener('click', closeGridModal);
+    gridPopup.addEventListener('click', (e) => { if (e.target === gridPopup) closeGridModal(); });
+    gridSourceSelect.addEventListener('change', updateGridPreview);
+    gridColumnsInput.addEventListener('input', updateGridPreview);
+    generateGridBtn.addEventListener('click', handleGenerateGrid);
+
     // --- Functions ---
 
     function handleDirectoryUpload(e) {
         const files = Array.from(e.target.files);
         
         imageFiles = []; imageTitles = []; imageFolders = [];
-        availableFolders = ["(Root)"]; currentIndex = 0;
+        availableFolders = ["(Root)", "All Images"]; currentIndex = 0;
 
         imageFiles = files.filter(file => file.type.startsWith('image/'));
         
@@ -112,21 +136,13 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function updateControlVisibility() {
         const mode = titleModeSelect.value;
-
-        // Helper to toggle visibility of a control's parent '.control-group'
         const setVisible = (element, isVisible) => {
             element.closest('.control-group').classList.toggle('hidden', !isVisible);
         };
-
-        // "Add Space" & "Bleed" use these
         setVisible(headerHeightSlider, mode === 'add-space' || mode === 'bleed');
         setVisible(bgColorPicker, mode === 'add-space' || mode === 'bleed');
         setVisible(positionToggle, mode === 'add-space' || mode === 'bleed');
-
-        // "Overlay" only
         setVisible(textPositionSlider, mode === 'overlay');
-        
-        // "Bleed" only
         setVisible(textOffsetSlider, mode === 'bleed');
     }
 
@@ -144,72 +160,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function formatTitle(filename) {
         const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
-        return nameWithoutExt.replace(/_/g, ' ');
+        return nameWithoutExt.replace(/_/g, ' ').replace(/-/g, ' ');
     }
 
     async function drawImageWithTitle(ctx, imageFile, title, options) {
         const { addTitle, mode, fontSize, textColor } = options;
-
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
-                // If title is disabled, just draw the original image
                 if (!addTitle) {
                     ctx.canvas.width = img.width;
                     ctx.canvas.height = img.height;
                     ctx.drawImage(img, 0, 0);
                     return resolve();
                 }
-                
-                // --- Mode-specific drawing ---
                 switch(mode) {
                     case 'overlay': {
                         const { textYPercent } = options;
-                        // **FIX**: Set canvas size first, which resets the context state
                         ctx.canvas.width = img.width;
                         ctx.canvas.height = img.height;
                         ctx.drawImage(img, 0, 0);
-                        
-                        // **FIX**: Apply all text styles *after* resizing and *before* drawing
                         ctx.font = `bold ${fontSize}px Inter, sans-serif`;
                         ctx.fillStyle = textColor;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
                         ctx.shadowBlur = 8;
-                        ctx.shadowOffsetX = 0;
-                        ctx.shadowOffsetY = 0;
-                        
                         const textYOverlay = ctx.canvas.height * (textYPercent / 100);
                         ctx.fillText(title, ctx.canvas.width / 2, textYOverlay);
                         break;
                     }
-                    
                     case 'add-space':
                     case 'bleed': {
                         const { headerHeight, bgColor, position, textOffset } = options;
-                         // **FIX**: Set canvas size first, which resets the context state
                         ctx.canvas.width = img.width;
                         ctx.canvas.height = img.height + headerHeight;
-
                         const isBelow = position === 'below';
                         const imageY = isBelow ? 0 : headerHeight;
                         const headerY = isBelow ? img.height : 0;
-                        
-                        // Draw background and image
                         ctx.fillStyle = bgColor;
                         ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
                         ctx.drawImage(img, 0, imageY);
-                        
                         let textY;
                         if (mode === 'add-space') {
                             textY = headerY + (headerHeight / 2);
-                        } else { // 'bleed' mode
+                        } else {
                             const boundaryY = isBelow ? img.height : headerHeight;
                             textY = boundaryY + textOffset;
                         }
-                        
-                        // **FIX**: Apply all text styles *after* resizing and *before* drawing
                         ctx.font = `bold ${fontSize}px Inter, sans-serif`;
                         ctx.fillStyle = textColor;
                         ctx.textAlign = 'center';
@@ -217,21 +215,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (mode === 'bleed') {
                            ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
                            ctx.shadowBlur = 8;
-                           ctx.shadowOffsetX = 0;
-                           ctx.shadowOffsetY = 0;
                         }
-
                         ctx.fillText(title, ctx.canvas.width / 2, textY);
                         break;
                     }
                 }
-
-                // Reset shadow for subsequent draws to be safe
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
-                ctx.shadowOffsetX = 0;
-                ctx.shadowOffsetY = 0;
-
                 resolve();
             };
             img.onerror = () => reject(new Error(`Could not load image: ${imageFile.name}`));
@@ -249,19 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function renderPreview() {
         if (imageFiles.length === 0) return;
-        
-        const options = {
-            addTitle: addTitleToggle.checked,
-            mode: titleModeSelect.value,
-            fontSize: parseInt(fontSizeSlider.value, 10),
-            textColor: textColorPicker.value,
-            headerHeight: parseInt(headerHeightSlider.value, 10),
-            bgColor: bgColorPicker.value,
-            position: positionToggle.checked ? 'below' : 'above',
-            textYPercent: parseInt(textPositionSlider.value, 10),
-            textOffset: parseInt(textOffsetSlider.value, 10),
-        };
-
+        const options = { addTitle: addTitleToggle.checked, mode: titleModeSelect.value, fontSize: parseInt(fontSizeSlider.value, 10), textColor: textColorPicker.value, headerHeight: parseInt(headerHeightSlider.value, 10), bgColor: bgColorPicker.value, position: positionToggle.checked ? 'below' : 'above', textYPercent: parseInt(textPositionSlider.value, 10), textOffset: parseInt(textOffsetSlider.value, 10), };
         try {
             await drawImageWithTitle(previewCtx, imageFiles[currentIndex], imageTitles[currentIndex], options);
         } catch (error) {
@@ -272,51 +250,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleExport() {
         if (imageFiles.length === 0) return;
-        
         exportBtn.disabled = true;
         exportBtn.textContent = 'Processing...';
         showStatus(exportStatus, `Processing ${imageFiles.length} images...`, false);
-        
         const zip = new JSZip();
-        const options = {
-            addTitle: addTitleToggle.checked,
-            mode: titleModeSelect.value,
-            fontSize: parseInt(fontSizeSlider.value, 10),
-            textColor: textColorPicker.value,
-            headerHeight: parseInt(headerHeightSlider.value, 10),
-            bgColor: bgColorPicker.value,
-            position: positionToggle.checked ? 'below' : 'above',
-            textYPercent: parseInt(textPositionSlider.value, 10),
-            textOffset: parseInt(textOffsetSlider.value, 10),
-        };
-        
+        const options = { addTitle: addTitleToggle.checked, mode: titleModeSelect.value, fontSize: parseInt(fontSizeSlider.value, 10), textColor: textColorPicker.value, headerHeight: parseInt(headerHeightSlider.value, 10), bgColor: bgColorPicker.value, position: positionToggle.checked ? 'below' : 'above', textYPercent: parseInt(textPositionSlider.value, 10), textOffset: parseInt(textOffsetSlider.value, 10), };
         const processCanvas = document.createElement('canvas');
         const processCtx = processCanvas.getContext('2d');
-
         try {
             for (let i = 0; i < imageFiles.length; i++) {
                 const file = imageFiles[i];
                 const title = imageTitles[i];
                 const folderName = imageFolders[i];
                 showStatus(exportStatus, `Processing ${i + 1}/${imageFiles.length}: ${title}`, false);
-                
                 await drawImageWithTitle(processCtx, file, title, options);
                 const blob = await new Promise(resolve => processCanvas.toBlob(resolve, 'image/png'));
-                
-                let filename = title;
-                if (underscoreToggle.checked) {
-                    filename = title.replace(/ /g, '_');
-                }
-                
+                let filename = underscoreToggle.checked ? title.replace(/ /g, '_') : title;
                 const newFilename = `${filename}.png`;
-
                 if (folderName !== "(Root)") {
                     zip.folder(folderName).file(newFilename, blob);
                 } else {
                     zip.file(newFilename, blob);
                 }
             }
-
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(zipBlob);
@@ -324,9 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
             showStatus(exportStatus, `Success! Your ZIP file is downloading.`, false);
-
         } catch (error) {
             console.error('An error occurred during export:', error);
             showStatus(exportStatus, `An error occurred: ${error.message}`, true);
@@ -355,7 +309,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function updateFolderDropdown() {
         folderSelect.innerHTML = '';
-        availableFolders.forEach(folderName => {
+        const foldersForDropdown = availableFolders.filter(f => f !== "All Images");
+        foldersForDropdown.forEach(folderName => {
             const option = document.createElement('option');
             option.value = folderName;
             option.textContent = folderName;
@@ -376,11 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleKeyPress(e) {
-        if (editorSection.classList.contains('hidden') || 
-            document.activeElement === titleInput || 
-            document.activeElement === newFolderInput) {
-            return;
-        }
+        if (editorSection.classList.contains('hidden') || document.activeElement === titleInput || document.activeElement === newFolderInput || !gridPopup.classList.contains('hidden')) { return; }
         if (e.key === 'ArrowLeft') { e.preventDefault(); navigatePrev(); } 
         else if (e.key === 'ArrowRight') { e.preventDefault(); navigateNext(); }
     }
@@ -390,4 +341,232 @@ document.addEventListener('DOMContentLoaded', () => {
         element.style.color = isError ? 'var(--accent-orange)' : 'var(--text-secondary)';
         element.classList.remove('hidden');
     }
+
+    // =======================================================
+    // --- NEW: IMAGE GRID FEATURE ---
+    // =======================================================
+
+    function openGridModal() {
+        console.log("Debug: Opening grid modal.");
+        gridStatus.textContent = '';
+        gridStatus.classList.add('hidden');
+        
+        // Populate the source dropdown
+        gridSourceSelect.innerHTML = '';
+        const uniqueFolders = ["All Images", ...new Set(imageFolders)];
+        uniqueFolders.forEach(folder => {
+            const option = document.createElement('option');
+            option.value = folder;
+            option.textContent = folder;
+            gridSourceSelect.appendChild(option);
+        });
+
+        document.body.classList.add('popup-open');
+        gridPopup.classList.remove('hidden');
+        updateGridPreview();
+    }
+
+    function closeGridModal() {
+        console.log("Debug: Closing grid modal.");
+        document.body.classList.remove('popup-open');
+        gridPopup.classList.add('hidden');
+    }
+
+    async function updateGridPreview() {
+        const source = gridSourceSelect.value;
+        const columns = parseInt(gridColumnsInput.value, 10) || 1;
+        
+        const filteredIndices = getFilteredImageIndices(source);
+        const imagesToProcess = filteredIndices.map(i => imageFiles[i]);
+
+        if (imagesToProcess.length === 0) {
+            console.warn("Debug: No images to process for grid preview.");
+            gridPreviewCtx.clearRect(0, 0, gridPreviewCanvas.width, gridPreviewCanvas.height);
+            gridOutputSize.textContent = `Dimensions: 0 x 0 px`;
+            gridOutputMegapixels.textContent = `Total: 0.0 MP`;
+            gridWarningBox.classList.add('hidden');
+            return;
+        }
+
+        console.log(`Debug: Updating grid preview for ${imagesToProcess.length} images from source "${source}" with ${columns} columns.`);
+
+        try {
+            // Find max dimensions for uniform grid cells
+            const dimensions = await Promise.all(imagesToProcess.map(getImageDimensions));
+            const maxWidth = Math.max(...dimensions.map(d => d.width));
+            const maxHeight = Math.max(...dimensions.map(d => d.height));
+
+            const rows = Math.ceil(imagesToProcess.length / columns);
+            const totalWidth = maxWidth * columns;
+            const totalHeight = maxHeight * rows;
+            const totalPixels = totalWidth * totalHeight;
+            const megapixels = (totalPixels / 1000000).toFixed(1);
+
+            // Update info box
+            gridOutputSize.textContent = `Dimensions: ${totalWidth} x ${totalHeight} px`;
+            gridOutputMegapixels.textContent = `Total: ${megapixels} MP`;
+
+            if (totalPixels > MEGAPixel_limit) {
+                gridWarningBox.classList.remove('hidden');
+            } else {
+                gridWarningBox.classList.add('hidden');
+            }
+
+            // Render low-res preview
+            const previewWidth = gridPreviewCanvas.clientWidth;
+            const scale = previewWidth / totalWidth;
+            gridPreviewCanvas.width = previewWidth;
+            gridPreviewCanvas.height = totalHeight * scale;
+
+            gridPreviewCtx.fillStyle = 'var(--bg-primary)';
+            gridPreviewCtx.fillRect(0,0, gridPreviewCanvas.width, gridPreviewCanvas.height);
+
+            const cellWidth = maxWidth * scale;
+            const cellHeight = maxHeight * scale;
+
+            for (let i = 0; i < imagesToProcess.length; i++) {
+                const img = await loadImage(imagesToProcess[i]);
+                const row = Math.floor(i / columns);
+                const col = i % columns;
+                const x = col * cellWidth;
+                const y = row * cellHeight;
+                // Draw image centered in its cell
+                const w = img.width * scale;
+                const h = img.height * scale;
+                const dx = x + (cellWidth - w) / 2;
+                const dy = y + (cellHeight - h) / 2;
+                gridPreviewCtx.drawImage(img, dx, dy, w, h);
+            }
+
+        } catch (error) {
+            console.error("Error updating grid preview:", error);
+            showStatus(gridStatus, 'Error generating preview.', true);
+        }
+    }
+
+    async function handleGenerateGrid() {
+        console.log("Debug: Starting high-resolution grid generation.");
+        generateGridBtn.disabled = true;
+        generateGridBtn.textContent = 'Processing...';
+        showStatus(gridStatus, 'Loading images...', false);
+
+        const source = gridSourceSelect.value;
+        const columns = parseInt(gridColumnsInput.value, 10) || 1;
+        const shouldDownscale = gridDownscaleToggle.checked;
+
+        const filteredIndices = getFilteredImageIndices(source);
+        const imagesToProcess = filteredIndices.map(i => imageFiles[i]);
+
+        if (imagesToProcess.length === 0) {
+            showStatus(gridStatus, 'No images selected to generate a grid.', true);
+            generateGridBtn.disabled = false;
+            generateGridBtn.textContent = 'Generate & Download Grid';
+            return;
+        }
+
+        try {
+            showStatus(gridStatus, `Loading ${imagesToProcess.length} full-resolution images...`, false);
+            const loadedImages = await Promise.all(imagesToProcess.map(loadImage));
+
+            const maxWidth = Math.max(...loadedImages.map(img => img.width));
+            const maxHeight = Math.max(...loadedImages.map(img => img.height));
+            
+            const rows = Math.ceil(loadedImages.length / columns);
+            let finalWidth = maxWidth * columns;
+            let finalHeight = maxHeight * rows;
+            let totalPixels = finalWidth * finalHeight;
+
+            console.log(`Debug: Full resolution is ${finalWidth}x${finalHeight} (${(totalPixels/1e6).toFixed(1)}MP).`);
+
+            if (shouldDownscale && totalPixels > MEGAPixel_limit) {
+                const scaleFactor = Math.sqrt(MEGAPixel_limit / totalPixels);
+                finalWidth = Math.floor(finalWidth * scaleFactor);
+                finalHeight = Math.floor(finalHeight * scaleFactor);
+                console.log(`Debug: Downscaling to ${finalWidth}x${finalHeight} with scale factor ${scaleFactor.toFixed(3)}.`);
+                showStatus(gridStatus, 'Downscaling image...', false);
+            }
+
+            const finalCanvas = document.createElement('canvas');
+            finalCanvas.width = finalWidth;
+            finalCanvas.height = finalHeight;
+            const finalCtx = finalCanvas.getContext('2d');
+            
+            finalCtx.fillStyle = '#000000'; // Black background for the grid
+            finalCtx.fillRect(0, 0, finalWidth, finalHeight);
+
+            const cellWidth = finalWidth / columns;
+            const cellHeight = finalHeight / rows;
+
+            showStatus(gridStatus, 'Compositing final grid...', false);
+
+            for (let i = 0; i < loadedImages.length; i++) {
+                const img = loadedImages[i];
+                const row = Math.floor(i / columns);
+                const col = i % columns;
+                
+                const aspectRatio = img.width / img.height;
+                let drawWidth = cellWidth;
+                let drawHeight = cellWidth / aspectRatio;
+
+                if (drawHeight > cellHeight) {
+                    drawHeight = cellHeight;
+                    drawWidth = cellHeight * aspectRatio;
+                }
+
+                const x = col * cellWidth + (cellWidth - drawWidth) / 2;
+                const y = row * cellHeight + (cellHeight - drawHeight) / 2;
+
+                finalCtx.drawImage(img, x, y, drawWidth, drawHeight);
+            }
+
+            finalCanvas.toBlob(blob => {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `image_grid_${source.replace(/\s/g, '_')}.png`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showStatus(gridStatus, `Success! Your grid is downloading.`, false);
+            }, 'image/png');
+
+        } catch (error) {
+            console.error("Error generating final grid:", error);
+            showStatus(gridStatus, 'An error occurred during generation.', true);
+        } finally {
+            generateGridBtn.disabled = false;
+            generateGridBtn.textContent = 'Generate & Download Grid';
+        }
+    }
+
+    function getFilteredImageIndices(source) {
+        if (source === "All Images") {
+            return imageFiles.map((_, index) => index);
+        }
+        const indices = [];
+        imageFolders.forEach((folder, index) => {
+            if (folder === source) {
+                indices.push(index);
+            }
+        });
+        return indices;
+    }
+
+    function getImageDimensions(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve({ width: img.width, height: img.height });
+            img.onerror = () => reject(new Error(`Could not get dimensions for ${file.name}`));
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    function loadImage(file) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error(`Could not load image ${file.name}`));
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
 });

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Batch Image Titler</title>
+    <title>Batch Image Manager</title>
 
     <!-- Optional font; safe to remove if you want zero network deps -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,7 +36,7 @@
 
     <header class="site-header">
         <div class="header-content">
-            <a href="#" class="logo">Batch Image Manger</a>
+            <a href="#" class="logo">Batch Image Manager</a>
         </div>
     </header>
 
@@ -125,7 +125,10 @@
                         </div>
                     </div>
                     <div class="control-group-divider"></div>
-                    <button id="export-btn">Export All as .ZIP</button>
+                    <div class="final-export-buttons">
+                        <button id="export-btn">Export All as .ZIP</button>
+                        <button id="open-grid-modal-btn" class="secondary-btn">Create Image Grid</button>
+                    </div>
                 </div>
 
                 <p id="export-status" class="status-message hidden"></p>
@@ -158,6 +161,52 @@
             </div>
         </section>
     </main>
+
+    <!-- NEW: Image Grid Popup/Modal -->
+    <div id="grid-popup" class="popup-overlay hidden">
+        <div class="popup-card glass-card">
+            <button class="popup-close-btn">&times;</button>
+            <h3>Create Image Grid</h3>
+            <p>Combine multiple images into a single grid. A preview will be generated below.</p>
+            
+            <div class="grid-controls-layout">
+                <div class="grid-settings">
+                    <div class="control-group">
+                        <label for="grid-source-select">Image Source</label>
+                        <select id="grid-source-select"></select>
+                    </div>
+                    <div class="control-group">
+                        <label for="grid-columns-input">Columns</label>
+                        <input type="number" id="grid-columns-input" value="3" min="1" max="20" />
+                    </div>
+                </div>
+                
+                <div id="grid-info" class="grid-info-box">
+                    <p id="grid-output-size">Dimensions: 0 x 0 px</p>
+                    <p id="grid-output-megapixels">Total: 0.0 MP</p>
+                    <div id="grid-warning-box" class="hidden">
+                        <p class="warning-text">
+                            <span class="warn-icon">⚠️</span> High Resolution Warning!
+                        </p>
+                        <label for="grid-downscale-toggle" class="checkbox-label">
+                            <input type="checkbox" id="grid-downscale-toggle" checked>
+                            Downscale to ~24MP
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-preview-container">
+                <h4>Low-Res Preview</h4>
+                <canvas id="grid-preview-canvas"></canvas>
+            </div>
+
+            <div class="popup-actions">
+                <button id="generate-grid-btn" class="popup-generate-btn">Generate & Download Grid</button>
+                <p id="grid-status" class="status-message"></p>
+            </div>
+        </div>
+    </div>
 
     <!-- JSZip library for creating zip files in the browser -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
