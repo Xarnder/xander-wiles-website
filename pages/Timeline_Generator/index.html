@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timeline Generator</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Your requested favicon links -->
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/images/icon32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/images/icon16.png">
+</head>
+<body>
+
+  <div class="background-overlay"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="glass-card hero-card">
+      <h1>Smart Timeline Generator</h1>
+      <p>Paste your itinerary or schedule below, and we'll format it into a clean timeline.</p>
+    </header>
+
+    <!-- Main App -->
+    <main class="glass-card main-content-card">
+        <div class="input-section">
+            <h2>Your Text</h2>
+            <textarea id="text-input" rows="12" placeholder="e.g., London - Friday 7th November 2025&#10;&#10;2:00 - 2:49 train Guildford station&#10;3:49 - 3:22 Arrive at Waterloo&#10;4:00 - 5:30 Look Around British Museum..."></textarea>
+            <button id="generate-button">Generate Timeline</button>
+        </div>
+
+        <div class="output-section">
+            <h2 id="timeline-title">Your Timeline</h2>
+            <div id="timeline-output">
+                <p class="placeholder-text">Your generated timeline will appear here.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Debug/Status Footer -->
+    <footer class="glass-card debug-card">
+        <h2>Parsing Status</h2>
+        <div id="debug-output">
+            <p>Enter some text and click "Generate" to see the parsing status.</p>
+        </div>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
