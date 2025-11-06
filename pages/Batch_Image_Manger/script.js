@@ -16,7 +16,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const titleModeSelect = document.getElementById('title-mode-select');
     const fontSizeSlider = document.getElementById('font-size-slider');
     const fontSizeValueSpan = document.getElementById('font-size-value');
+    const fontSizeLabel = document.getElementById('font-size-label');
     const textColorPicker = document.getElementById('text-color-picker');
+    const autoScaleToggle = document.getElementById('auto-scale-toggle');
+    const paddingInput = document.getElementById('padding-input');
+    const paddingControlGroup = document.getElementById('padding-control-group');
+
 
     // "Add Space" & "Bleed" Controls
     const headerHeightSlider = document.getElementById('header-height-slider');
@@ -44,13 +49,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const addFolderBtn = document.getElementById('add-folder-btn');
     const folderSelect = document.getElementById('folder-select');
 
-    // --- NEW: Grid Feature DOM Elements ---
+    // Grid Feature DOM Elements
     const openGridModalBtn = document.getElementById('open-grid-modal-btn');
     const gridPopup = document.getElementById('grid-popup');
     const closeGridPopupBtn = gridPopup.querySelector('.popup-close-btn');
     const gridSourceSelect = document.getElementById('grid-source-select');
     const gridColumnsInput = document.getElementById('grid-columns-input');
-    const gridAddTitlesToggle = document.getElementById('grid-add-titles-toggle'); // New
+    const gridAddTitlesToggle = document.getElementById('grid-add-titles-toggle');
     const gridWarningBox = document.getElementById('grid-warning-box');
     const gridDownscaleToggle = document.getElementById('grid-downscale-toggle');
     const gridOutputSize = document.getElementById('grid-output-size');
@@ -66,15 +71,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let imageFolders = [];
     let availableFolders = ["(Root)"];
     let currentIndex = 0;
-    const MEGAPixel_limit = 24 * 1000 * 1000; // 24 million pixels
+    const MEGAPixel_limit = 24 * 1000 * 1000;
 
     // --- Event Listeners ---
     directoryUploadInput.addEventListener('change', handleDirectoryUpload);
     exportBtn.addEventListener('click', handleExport);
     
-    [titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker, bgColorPicker, positionToggle, addTitleToggle, underscoreToggle, textPositionSlider, textOffsetSlider].forEach(el => {
-        el.addEventListener('input', handleControlsChange);
-    });
+    const allControls = [
+        titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker, 
+        bgColorPicker, positionToggle, addTitleToggle, underscoreToggle, 
+        textPositionSlider, textOffsetSlider, autoScaleToggle, paddingInput
+    ];
+    allControls.forEach(el => el.addEventListener('input', handleControlsChange));
 
     prevBtn.addEventListener('click', navigatePrev);
     nextBtn.addEventListener('click', navigateNext);
@@ -84,38 +92,53 @@ document.addEventListener('DOMContentLoaded', () => {
     addFolderBtn.addEventListener('click', handleAddFolder);
     folderSelect.addEventListener('change', handleFolderAssignment);
 
-    // --- NEW: Grid Feature Event Listeners ---
+    // Grid Feature Event Listeners
     openGridModalBtn.addEventListener('click', openGridModal);
     closeGridPopupBtn.addEventListener('click', closeGridModal);
     gridPopup.addEventListener('click', (e) => { if (e.target === gridPopup) closeGridModal(); });
     gridSourceSelect.addEventListener('change', updateGridPreview);
     gridColumnsInput.addEventListener('input', updateGridPreview);
-    gridAddTitlesToggle.addEventListener('change', updateGridPreview); // New
+    gridAddTitlesToggle.addEventListener('change', updateGridPreview);
     generateGridBtn.addEventListener('click', handleGenerateGrid);
 
     // --- Functions ---
 
     function handleDirectoryUpload(e) {
         const files = Array.from(e.target.files);
-        imageFiles = []; imageTitles = []; imageFolders = []; availableFolders = ["(Root)"]; currentIndex = 0;
-        imageFiles = files.filter(file => file.type.startsWith('image/'));
+        console.log(`Debug: Found ${files.length} total files in directory.`);
+        
+        imageFiles = []; imageTitles = []; imageFolders = [];
+        availableFolders = ["(Root)"]; currentIndex = 0;
+
+        // --- THIS IS THE CORRECTED LINE ---
+        // It now checks the file type OR the file extension.
+        const imageRegex = /\.(jpe?g|png|gif|webp|bmp|svg)$/i;
+        imageFiles = files.filter(file => file.type.startsWith('image/') || imageRegex.test(file.name));
+        // --- END OF CORRECTION ---
+        
+        console.log(`Debug: Filtered down to ${imageFiles.length} image files.`);
+
         if (imageFiles.length === 0) {
-            showStatus(uploadStatus, 'No valid image files (.jpg, .png, etc.) were found.', true);
+            showStatus(uploadStatus, 'No valid image files (.jpg, .png, etc.) were found in the selected directory.', true);
             return;
         }
+
         imageFiles.forEach(file => {
             imageTitles.push(formatTitle(file.name));
             imageFolders.push("(Root)");
         });
+
         showStatus(uploadStatus, `Successfully loaded ${imageFiles.length} images.`, false);
+
         uploadSection.classList.add('hidden');
         editorSection.classList.remove('hidden');
         previewControls.classList.remove('hidden');
+
         updateFolderDropdown();
         handleControlsChange();
         updateUIForCurrentIndex();
     }
-
+    
     function handleControlsChange() {
         fontSizeValueSpan.textContent = fontSizeSlider.value;
         headerHeightValueSpan.textContent = headerHeightSlider.value;
@@ -123,7 +146,18 @@ document.addEventListener('DOMContentLoaded', () => {
         textOffsetValueSpan.textContent = textOffsetSlider.value;
         updateTitleControlState();
         updateControlVisibility();
+        updateAutoScaleUI();
         renderPreview();
+    }
+
+    function updateAutoScaleUI() {
+        const isAutoScale = autoScaleToggle.checked;
+        paddingControlGroup.classList.toggle('hidden', !isAutoScale);
+        if (isAutoScale) {
+            fontSizeLabel.innerHTML = `Max Font Size: <span id="font-size-value">${fontSizeSlider.value}</span>px`;
+        } else {
+            fontSizeLabel.innerHTML = `Font Size: <span id="font-size-value">${fontSizeSlider.value}</span>px`;
+        }
     }
     
     function updateControlVisibility() {
@@ -153,9 +187,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
         return nameWithoutExt.replace(/_/g, ' ').replace(/-/g, ' ');
     }
+    
+    function calculateAutoScaleFontSize(ctx, text, targetWidth, maxFontSize) {
+        let currentSize = maxFontSize;
+        const minSize = 8;
+        while (currentSize > minSize) {
+            ctx.font = `bold ${currentSize}px Inter, sans-serif`;
+            const textMetrics = ctx.measureText(text);
+            if (textMetrics.width <= targetWidth) {
+                return currentSize;
+            }
+            currentSize--;
+        }
+        return minSize;
+    }
 
     async function drawImageWithTitle(ctx, imageFile, title, options) {
-        const { addTitle, mode, fontSize, textColor } = options;
+        const { addTitle, mode, textColor } = options;
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
@@ -165,45 +213,57 @@ document.addEventListener('DOMContentLoaded', () => {
                     ctx.drawImage(img, 0, 0);
                     return resolve();
                 }
-                switch(mode) {
-                    case 'overlay': {
-                        const { textYPercent } = options;
-                        ctx.canvas.width = img.width;
-                        ctx.canvas.height = img.height;
-                        ctx.drawImage(img, 0, 0);
-                        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-                        ctx.fillStyle = textColor;
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-                        ctx.shadowBlur = 8;
-                        const textYOverlay = ctx.canvas.height * (textYPercent / 100);
-                        ctx.fillText(title, ctx.canvas.width / 2, textYOverlay);
-                        break;
-                    }
-                    case 'add-space':
-                    case 'bleed': {
-                        const { headerHeight, bgColor, position, textOffset } = options;
-                        ctx.canvas.width = img.width;
-                        ctx.canvas.height = img.height + headerHeight;
-                        const isBelow = position === 'below';
-                        const imageY = isBelow ? 0 : headerHeight;
-                        const headerY = isBelow ? img.height : 0;
-                        ctx.fillStyle = bgColor;
-                        ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
-                        ctx.drawImage(img, 0, imageY);
-                        let textY;
-                        if (mode === 'add-space') { textY = headerY + (headerHeight / 2); } 
-                        else { const boundaryY = isBelow ? img.height : headerHeight; textY = boundaryY + textOffset; }
-                        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-                        ctx.fillStyle = textColor;
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        if (mode === 'bleed') { ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'; ctx.shadowBlur = 8; }
-                        ctx.fillText(title, ctx.canvas.width / 2, textY);
-                        break;
-                    }
+
+                let headerHeight = 0;
+                if (mode === 'add-space' || mode === 'bleed') {
+                    headerHeight = options.headerHeight;
                 }
+                
+                ctx.canvas.width = img.width;
+                ctx.canvas.height = img.height + headerHeight;
+
+                if (headerHeight > 0) {
+                    const isBelow = options.position === 'below';
+                    const imageY = isBelow ? 0 : headerHeight;
+                    const headerY = isBelow ? img.height : 0;
+                    ctx.fillStyle = options.bgColor;
+                    ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
+                    ctx.drawImage(img, 0, imageY);
+                } else {
+                    ctx.drawImage(img, 0, 0);
+                }
+
+                let finalFontSize = options.fontSize;
+                if (options.autoScale) {
+                    const targetWidth = ctx.canvas.width - (options.padding * 2);
+                    finalFontSize = calculateAutoScaleFontSize(ctx, title, targetWidth, options.fontSize);
+                }
+
+                ctx.font = `bold ${finalFontSize}px Inter, sans-serif`;
+                ctx.fillStyle = textColor;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                if (mode === 'overlay' || mode === 'bleed') {
+                   ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                   ctx.shadowBlur = 8;
+                }
+
+                let textY;
+                if (mode === 'overlay') {
+                    textY = ctx.canvas.height * (options.textYPercent / 100);
+                } else if (mode === 'add-space') {
+                    const isBelow = options.position === 'below';
+                    const headerY = isBelow ? img.height : 0;
+                    textY = headerY + (headerHeight / 2);
+                } else { // bleed
+                    const isBelow = options.position === 'below';
+                    const boundaryY = isBelow ? img.height : headerHeight;
+                    textY = boundaryY + options.textOffset;
+                }
+
+                ctx.fillText(title, ctx.canvas.width / 2, textY);
+                
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
                 resolve();
@@ -311,12 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
         element.classList.remove('hidden');
     }
 
-    // =======================================================
-    // --- IMAGE GRID FEATURE ---
-    // =======================================================
-
     function openGridModal() {
-        console.log("Debug: Opening grid modal.");
         gridStatus.textContent = ''; gridStatus.classList.add('hidden');
         gridSourceSelect.innerHTML = '';
         ["All Images", ...new Set(imageFolders)].forEach(folder => {
@@ -330,7 +385,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function closeGridModal() {
-        console.log("Debug: Closing grid modal.");
         document.body.classList.remove('popup-open');
         gridPopup.classList.add('hidden');
     }
@@ -342,7 +396,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredIndices = getFilteredImageIndices(source);
 
         if (filteredIndices.length === 0) {
-            console.warn("Debug: No images to process for grid preview.");
             gridPreviewCtx.clearRect(0, 0, gridPreviewCanvas.width, gridPreviewCanvas.height);
             gridOutputSize.textContent = `Dimensions: 0 x 0 px`;
             gridOutputMegapixels.textContent = `Total: 0.0 MP`;
@@ -350,13 +403,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        console.log(`Debug: Updating grid preview. Source: "${source}", Columns: ${columns}, Add Titles: ${addTitles}`);
-
         try {
             const titleOptions = getTitleOptionsFromUI();
-            titleOptions.addTitle = addTitles; // Override with the grid's own toggle state
+            titleOptions.addTitle = addTitles;
 
-            // Process all images first (applies titles if checked) to get final dimensions
             const processedImages = await Promise.all(
                 filteredIndices.map(i => getProcessedImage(imageFiles[i], imageTitles[i], titleOptions))
             );
@@ -373,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
             gridOutputMegapixels.textContent = `Total: ${megapixels} MP`;
             gridWarningBox.classList.toggle('hidden', totalPixels <= MEGAPixel_limit);
 
-            const previewWidth = gridPreviewCanvas.clientWidth || 800; // Fallback width
+            const previewWidth = gridPreviewCanvas.clientWidth || 800;
             const scale = previewWidth / totalWidth;
             gridPreviewCanvas.width = previewWidth;
             gridPreviewCanvas.height = totalHeight * scale;
@@ -398,7 +448,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handleGenerateGrid() {
-        console.log("Debug: Starting high-resolution grid generation.");
         generateGridBtn.disabled = true; generateGridBtn.textContent = 'Processing...';
         showStatus(gridStatus, 'Preparing images...', false);
 
@@ -430,12 +479,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let finalHeight = maxHeight * rows;
             let totalPixels = finalWidth * finalHeight;
 
-            console.log(`Debug: Full resolution is ${finalWidth}x${finalHeight} (${(totalPixels/1e6).toFixed(1)}MP).`);
             if (shouldDownscale && totalPixels > MEGAPixel_limit) {
                 const scaleFactor = Math.sqrt(MEGAPixel_limit / totalPixels);
                 finalWidth = Math.floor(finalWidth * scaleFactor);
                 finalHeight = Math.floor(finalHeight * scaleFactor);
-                console.log(`Debug: Downscaling to ${finalWidth}x${finalHeight}.`);
                 showStatus(gridStatus, 'Downscaling image...', false);
             }
 
@@ -473,8 +520,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Helper Functions ---
-
     function getTitleOptionsFromUI() {
         return {
             addTitle: addTitleToggle.checked,
@@ -486,21 +531,21 @@ document.addEventListener('DOMContentLoaded', () => {
             position: positionToggle.checked ? 'below' : 'above',
             textYPercent: parseInt(textPositionSlider.value, 10),
             textOffset: parseInt(textOffsetSlider.value, 10),
+            autoScale: autoScaleToggle.checked,
+            padding: parseInt(paddingInput.value, 10) || 0,
         };
     }
 
     async function getProcessedImage(file, title, options) {
         if (!options.addTitle) {
-            return loadImage(file); // Return original image if titles are off
+            return loadImage(file);
         }
-        // If titles are on, draw to a temporary canvas and return that as an image
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
         await drawImageWithTitle(tempCtx, file, title, options);
         
         const finalImage = new Image();
-        const dataUrl = tempCanvas.toDataURL();
-        finalImage.src = dataUrl;
+        finalImage.src = tempCanvas.toDataURL();
         await new Promise((resolve, reject) => {
             finalImage.onload = resolve;
             finalImage.onerror = reject;
@@ -523,4 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
             img.src = URL.createObjectURL(file);
         });
     }
+
+    // Initialize UI on load
+    handleControlsChange();
 });
