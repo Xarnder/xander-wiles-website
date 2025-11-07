@@ -7,40 +7,64 @@
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
-  <!-- Your requested favicon links -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/images/icon32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/images/icon16.png">
 </head>
 <body>
 
   <div class="background-overlay"></div>
-
   <div class="app-container">
-    <!-- Header -->
     <header class="glass-card hero-card">
       <h1>Smart Timeline Generator</h1>
       <p>Paste your itinerary or schedule below, and we'll format it into a clean timeline.</p>
     </header>
-
-    <!-- Main App -->
     <main class="glass-card main-content-card">
         <div class="input-section">
             <h2>Your Text</h2>
-            <textarea id="text-input" rows="12" placeholder="e.g., London - Friday 7th November 2025&#10;&#10;2:00 - 2:49 train Guildford station&#10;3:49 - 3:22 Arrive at Waterloo&#10;4:00 - 5:30 Look Around British Museum..."></textarea>
+            <textarea id="text-input" rows="12" placeholder="e.g., London - Friday 7th November 2025&#10;&#10;09:00 - 10:30 Team Meeting&#10;11:00 Project Sync&#10;12:30 - 13:30 Lunch Break"></textarea>
+            <div class="settings-row">
+              <label class="toggle-switch">
+                <input type="checkbox" id="color-toggle">
+                <span class="slider"></span>
+                <span>Colorful Timeline</span>
+              </label>
+            </div>
             <button id="generate-button">Generate Timeline</button>
         </div>
-
         <div class="output-section">
             <h2 id="timeline-title">Your Timeline</h2>
-            <div id="timeline-output">
-                <p class="placeholder-text">Your generated timeline will appear here.</p>
+            <div id="timeline-output-container">
+                <div id="timeline-output">
+                    <p class="placeholder-text">Your generated timeline will appear here.</p>
+                </div>
+            </div>
+            <div id="export-controls" class="hidden">
+              <h3>Aspect Ratio</h3>
+              <div class="export-buttons aspect-ratio-buttons">
+                  <button data-ratio="auto" class="active">Auto</button>
+                  <button data-ratio="9:16">9:16</button>
+                  <button data-ratio="4:5">4:5</button>
+                  <button data-ratio="1:1">1:1</button>
+                  <div class="custom-ratio-wrapper">
+                    <input type="text" id="custom-ratio-input" placeholder="e.g., 2:3">
+                  </div>
+              </div>
+              <h3 class="export-title">Resolution</h3>
+               <div class="export-buttons resolution-buttons">
+                  <button data-multiplier="1" class="active">1x</button>
+                  <button data-multiplier="2">2x</button>
+                  <button data-multiplier="3">3x</button>
+              </div>
+              <h3 class="export-title">Export as</h3>
+              <div class="export-buttons">
+                <button id="export-png">PNG</button>
+                <button id="export-jpg">JPG</button>
+                <button id="export-svg">SVG</button>
+              </div>
             </div>
         </div>
     </main>
-
-    <!-- Debug/Status Footer -->
     <footer class="glass-card debug-card">
         <h2>Parsing Status</h2>
         <div id="debug-output">
@@ -49,6 +73,9 @@
     </footer>
   </div>
 
+  <!-- Load the library you saved -->
+  <script src="libs/dom-to-image.js"></script>
+  <!-- Then load your script -->
   <script src="script.js"></script>
 </body>
 </html>
