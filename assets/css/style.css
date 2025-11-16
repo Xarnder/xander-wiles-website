@@ -3,7 +3,7 @@
     --bg-primary: #0a0a0b;
     --bg-secondary: #111115;
     --glass-bg: rgba(26, 26, 32, 0.7);
-    --glass-bg-nav: rgba(26, 26, 32, 0.85);
+    --glass-bg-nav: rgba(26, 26, 32, 0.99);
     --glass-border: rgba(255, 255, 255, 0.12);
     --text-primary: #ffffff;
     --text-secondary: #a1a1aa;
@@ -158,7 +158,7 @@ a:hover {
     .site-header { 
         border-radius: 0; 
         position: relative; /* Lifts the header stacking context */
-        z-index: 10;      /* Ensures header is above the main content */
+        z-index: 9999;     /* Ensures header is above the main content */
     }
 
     /* 1. Show the hamburger button and fix its position */
@@ -183,8 +183,8 @@ a:hover {
         inset: 0;
         z-index: 999; /* Below the menu card but above page content */
         background: rgba(10, 10, 11, 0.5);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(40px);
+        -webkit-backdrop-filter: blur(40px);
     }
     
     /* 3. On mobile, the menu list is hidden by default */
@@ -200,7 +200,7 @@ a:hover {
         align-items: center;
         
         position: fixed;
-        z-index: 1000; /* On top of the overlay */
+       z-index: 9999; 
         
         /* === FIX STARTS HERE === */
         top: 4.5rem; /* Position from the top, leaving space for the close button */
@@ -225,6 +225,7 @@ a:hover {
         width: 100%;
         border-radius: 2px;
         position: absolute;
+        z-index: 9999; 
         left: 0;
         transition: transform 300ms, opacity: 300ms;
     }
@@ -235,4 +236,11 @@ a:hover {
     .main-nav.active .hamburger:nth-child(1) { transform: translateY(10.5px) rotate(45deg); }
     .main-nav.active .hamburger:nth-child(2) { opacity: 0; }
     .main-nav.active .hamburger:nth-child(3) { transform: translateY(-10.5px) rotate(-45deg); }
+}
+
+.main-nav .nav-links a.active {
+    color: #ffffff;
+    font-weight: bold;
+    /* Add this line for the glow effect */
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
 }

@@ -10,6 +10,8 @@
     <!-- 1. Link to SHARED CSS FIRST (for layout, nav, etc.) -->
     <!-- The ../../ goes up two directories to the root to find the assets folder -->
     <link rel="stylesheet" href="../../assets/css/style.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+
     
     <!-- 2. Link to GAME-SPECIFIC CSS SECOND (for game elements) -->
     <!-- This file is in the same folder, so the path is simple -->
@@ -26,26 +28,9 @@
         <div class="shape shape-2"></div>
     </div>
 
-    <!-- NEW: SHARED SITE-WIDE HEADER & NAVIGATION -->
-    <header class="site-header glass-card">
-        <div class="header-content">
-            <a href="/" class="logo">Rocket Lander Game</a>
-            <nav class="main-nav">
-                <!-- This is the corrected button for the mobile menu -->
-                <button class="nav-toggle" aria-label="toggle navigation" aria-expanded="false">
-                    <span class="hamburger"></span>
-                    <span class="hamburger"></span>
-                    <span class="hamburger"></span>
-                </button>
-                <ul class="nav-links">
-                    <li><a href="/">Home</a></li>
-                    <li><a href="/games/rocket-lander/">Rocket Lander</a></li>
-                    <li><a href="/games/original-rocket-lander/">Original-Rocket-Lander</a></li>
-                    <!-- <li><a href="/pages/page-2/">Page 2</a></li> -->
-                </ul>
-            </nav>
-        </div>
-    </header>
+    <div id="main-nav-placeholder"></div> 
+
+
 
     <!-- Your original game content starts here -->
     <div class="app-container">
@@ -132,5 +117,6 @@
 
     <!-- 4. Link Shared JavaScript for the navigation menu -->
     <script src="../../assets/js/main.js"></script>
+    <script src="/assets/js/nav-loader.js"></script> 
 </body>
 </html>

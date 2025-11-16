@@ -121,3 +121,4 @@ select, input[type="number"] { background: var(--bg-secondary); border: 1px soli
 @media (max-width: 640px) {
     .final-export-buttons { flex-direction: column; align-items: stretch; }
 }
+

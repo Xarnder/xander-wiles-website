@@ -1,28 +1,16 @@
-// assets/js/main.js
+// --- UPDATED: assets/js/main.js ---
+// This file now handles scripts specific to the HOME PAGE, like the profile picture effect.
+// The mobile navigation logic has been moved to nav-loader.js to ensure it runs AFTER the navigation is loaded.
+
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- 1. Mobile Navigation Menu ---
-    const navToggle = document.querySelector('.nav-toggle');
-    const mainNav = document.querySelector('.main-nav');
-
-    if (navToggle && mainNav) {
-        navToggle.addEventListener('click', (e) => {
-            e.stopPropagation(); 
-            mainNav.classList.toggle('active');
-            document.body.classList.toggle('nav-open');
-            const isActive = mainNav.classList.contains('active');
-            navToggle.setAttribute('aria-expanded', isActive);
-        });
-    }
-
- // --- 2. Unblur Profile Picture After Load ---
+    // --- Unblur Profile Picture After Load (for homepage) ---
     const profilePic = document.querySelector('.profile-picture');
 
     // This function adds the 'loaded' class to unblur the image.
     const unblurImage = () => {
         if (profilePic) {
             profilePic.classList.add('loaded');
-            console.log('DEBUG: Profile picture is loaded, applying unblur effect.');
         }
     };
 

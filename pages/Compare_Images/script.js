@@ -1,4 +1,4 @@
-// script.js — full drop-in file
+// --- CORRECTED script.js ---
 
 document.addEventListener('DOMContentLoaded', () => {
   // --- GLOBAL STATE ---
@@ -30,10 +30,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const directoryUploadInput = document.getElementById('directory-upload');
   const uploadArea = document.getElementById('upload-area-dynamic');
   const comparisonContainer = document.getElementById('comparison-container');
-  const navLinks = document.querySelectorAll('.nav-link');
+  
+  // Selects the links ONLY from the tool's navigation bar
+  const navLinks = document.querySelectorAll('.tool-nav .nav-link'); 
   const views = document.querySelectorAll('.view');
-  const navToggle = document.getElementById('nav-toggle');
-  const mainNav = document.getElementById('main-nav');
+
+  // ===== FIX: REMOVED the old, conflicting navToggle and mainNav selectors =====
+  // const navToggle = document.getElementById('nav-toggle');
+  // const mainNav = document.getElementById('main-nav');
 
   const splitViewContainer = document.getElementById('split-view-container');
   const magnifySourceContainer = document.getElementById('magnify-source');
@@ -732,24 +736,25 @@ document.addEventListener('DOMContentLoaded', () => {
   setupBtn.addEventListener('click', setupUI);
   directoryUploadInput.addEventListener('change', handleDirectoryUpload);
 
-  navToggle.addEventListener('click', () => {
-    mainNav.classList.toggle('active');
-    document.body.classList.toggle('popup-open');
-  });
+  // ===== FIX: REMOVED the entire conflicting navToggle click listener =====
+  // navToggle.addEventListener('click', () => { ... });
 
+  // ===== FIX: SIMPLIFIED the navLinks listener to ONLY handle the tool's views =====
   navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
       const targetView = e.target.dataset.view;
-      if (targetView === 'export-view' && imagesData.some(Boolean)) updateExportPreview();
 
+      // Update the active state for the tool's nav links
       navLinks.forEach(l => l.classList.remove('active'));
       e.target.classList.add('active');
+
+      // Show the correct view based on the clicked link
       views.forEach(view => view.classList.toggle('hidden', view.id !== targetView));
 
-      if (mainNav.classList.contains('active')) {
-        mainNav.classList.remove('active');
-        document.body.classList.remove('popup-open');
+      // Refresh the export preview if that tab is selected
+      if (targetView === 'export-view' && imagesData.some(Boolean)) {
+        updateExportPreview();
       }
     });
   });
