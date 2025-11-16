@@ -31,6 +31,7 @@ body.popup-open { overflow: hidden; }
 .export-controls { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1.5rem; }
 .control-group { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
 .control-group label { margin-bottom: 0; font-weight: 600; color: var(--text-secondary); }
+.control-group small { color: var(--text-muted); font-size: 0.8rem; }
 .control-group-sub { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 1.5rem; padding: 1rem; border: 1px solid var(--glass-border); border-radius: var(--radius-lg); background: rgba(0,0,0,0.1); }
 .control-group-divider { width: 1px; height: 40px; background: var(--glass-border); align-self: center; }
 .checkbox-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
@@ -97,6 +98,12 @@ select, input[type="number"] { background: var(--bg-secondary); border: 1px soli
 .popup-generate-btn { background: var(--gradient-primary); color: var(--text-primary); border: none; border-radius: var(--radius-md); padding: 0.8rem 1.5rem; font-weight: 700; cursor: pointer; transition: all 0.2s; font-size: 1rem; }
 .popup-generate-btn:hover { transform: scale(1.05); }
 .popup-generate-btn:disabled { background: var(--text-muted); cursor: not-allowed; transform: none; }
+
+/* --- Downscale Popup Styles --- */
+.popup-main-content { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; margin-bottom: 1.5rem; }
+.inline-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 1.5rem; }
+#downscale-dimensions-controls, #downscale-mp-controls { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; }
+#downscale-fit-controls { margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--glass-border); }
 
 /* --- Responsive Styles --- */
 @media (max-width: 900px) { 

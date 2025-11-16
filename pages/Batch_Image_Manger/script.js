@@ -65,6 +65,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const generateGridBtn = document.getElementById('generate-grid-btn');
     const gridStatus = document.getElementById('grid-status');
     
+    // --- NEW: Downscale Feature DOM Elements ---
+    const openDownscaleModalBtn = document.getElementById('open-downscale-modal-btn');
+    const downscalePopup = document.getElementById('downscale-popup');
+    const closeDownscalePopupBtn = downscalePopup.querySelector('.popup-close-btn');
+    const downscaleModeSelect = document.getElementById('downscale-mode-select');
+    const downscaleDimensionsControls = document.getElementById('downscale-dimensions-controls');
+    const downscaleMpControls = document.getElementById('downscale-mp-controls');
+    const downscaleAspectLockToggle = document.getElementById('downscale-aspect-lock-toggle');
+    const downscaleWidthInput = document.getElementById('downscale-width-input');
+    const downscaleHeightInput = document.getElementById('downscale-height-input');
+    const downscaleFitControls = document.getElementById('downscale-fit-controls');
+    const downscaleFitSelect = document.getElementById('downscale-fit-select');
+    const downscalePadColorWrapper = document.getElementById('downscale-pad-color-wrapper');
+    const downscaleMpInput = document.getElementById('downscale-mp-input');
+    const downscaleFormatSelect = document.getElementById('downscale-format-select');
+    const downscaleQualityWrapper = document.getElementById('downscale-quality-wrapper');
+    const downscaleQualitySlider = document.getElementById('downscale-quality-slider');
+    const downscaleQualityValue = document.getElementById('downscale-quality-value');
+    const downscaleGenerateBtn = document.getElementById('downscale-generate-btn');
+    const downscaleStatus = document.getElementById('downscale-status');
+    const downscaleErrorMessage = document.getElementById('downscale-error-message');
+
+
     // --- State ---
     let imageFiles = [];
     let imageTitles = [];
@@ -100,6 +123,22 @@ document.addEventListener('DOMContentLoaded', () => {
     gridColumnsInput.addEventListener('input', updateGridPreview);
     gridAddTitlesToggle.addEventListener('change', updateGridPreview);
     generateGridBtn.addEventListener('click', handleGenerateGrid);
+
+    // --- NEW: Downscale Feature Event Listeners ---
+    openDownscaleModalBtn.addEventListener('click', openDownscaleModal);
+    closeDownscalePopupBtn.addEventListener('click', closeDownscaleModal);
+    downscalePopup.addEventListener('click', (e) => { if (e.target === downscalePopup) closeDownscaleModal(); });
+    downscaleModeSelect.addEventListener('input', updateDownscaleUI);
+    downscaleAspectLockToggle.addEventListener('input', handleAspectRatioInputChange);
+    downscaleWidthInput.addEventListener('input', () => handleAspectRatioInputChange('width'));
+    downscaleHeightInput.addEventListener('input', () => handleAspectRatioInputChange('height'));
+    downscaleFitSelect.addEventListener('input', updateDownscaleUI);
+    downscaleFormatSelect.addEventListener('input', updateDownscaleUI);
+    downscaleQualitySlider.addEventListener('input', () => {
+        downscaleQualityValue.textContent = downscaleQualitySlider.value;
+    });
+    downscaleGenerateBtn.addEventListener('click', handleDownscaleGeneration);
+
 
     // --- Functions ---
 
@@ -360,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleKeyPress(e) {
-        if (editorSection.classList.contains('hidden') || document.activeElement === titleInput || document.activeElement === newFolderInput || !gridPopup.classList.contains('hidden')) { return; }
+        if (editorSection.classList.contains('hidden') || document.activeElement === titleInput || document.activeElement === newFolderInput || !gridPopup.classList.contains('hidden') || !downscalePopup.classList.contains('hidden')) { return; }
         if (e.key === 'ArrowLeft') { e.preventDefault(); navigatePrev(); } 
         else if (e.key === 'ArrowRight') { e.preventDefault(); navigateNext(); }
     }
@@ -519,6 +558,155 @@ document.addEventListener('DOMContentLoaded', () => {
             generateGridBtn.disabled = false; generateGridBtn.textContent = 'Generate & Download Grid';
         }
     }
+
+    // --- NEW: Downscale Feature Functions ---
+
+    function openDownscaleModal() {
+        downscaleStatus.textContent = '';
+        downscaleErrorMessage.textContent = '';
+        document.body.classList.add('popup-open');
+        downscalePopup.classList.remove('hidden');
+        updateDownscaleUI();
+        handleAspectRatioInputChange(); // Initialize values
+    }
+
+    function closeDownscaleModal() {
+        document.body.classList.remove('popup-open');
+        downscalePopup.classList.add('hidden');
+    }
+
+    function updateDownscaleUI() {
+        const mode = downscaleModeSelect.value;
+        const isDimensions = mode === 'dimensions';
+        downscaleDimensionsControls.classList.toggle('hidden', !isDimensions);
+        downscaleMpControls.classList.toggle('hidden', isDimensions);
+
+        const isLocked = downscaleAspectLockToggle.checked;
+        downscaleFitControls.classList.toggle('hidden', isLocked || !isDimensions);
+
+        const isPad = downscaleFitSelect.value === 'pad';
+        downscalePadColorWrapper.classList.toggle('hidden', !isPad || isLocked || !isDimensions);
+        
+        const format = downscaleFormatSelect.value;
+        downscaleQualityWrapper.classList.toggle('hidden', format !== 'image/jpeg');
+        downscaleQualityValue.textContent = downscaleQualitySlider.value;
+    }
+
+    async function handleAspectRatioInputChange(source) {
+        if (!downscaleAspectLockToggle.checked || imageFiles.length === 0) return;
+
+        const img = await loadImage(imageFiles[currentIndex]);
+        const aspectRatio = img.width / img.height;
+        
+        const width = parseInt(downscaleWidthInput.value, 10);
+        const height = parseInt(downscaleHeightInput.value, 10);
+
+        if (source === 'width' && width > 0) {
+            downscaleHeightInput.value = Math.round(width / aspectRatio);
+        } else if (source === 'height' && height > 0) {
+            downscaleWidthInput.value = Math.round(height * aspectRatio);
+        } else if (width > 0) { // Default on open
+             downscaleHeightInput.value = Math.round(width / aspectRatio);
+        }
+    }
+
+    async function handleDownscaleGeneration() {
+        if (imageFiles.length === 0) return;
+
+        downscaleGenerateBtn.disabled = true;
+        downscaleGenerateBtn.textContent = 'Processing...';
+        showStatus(downscaleStatus, `Preparing ${imageFiles.length} images...`, false);
+        downscaleErrorMessage.textContent = '';
+
+        const zip = new JSZip();
+        const processCanvas = document.createElement('canvas');
+        const processCtx = processCanvas.getContext('2d');
+        const mode = downscaleModeSelect.value;
+        const format = downscaleFormatSelect.value;
+        const quality = parseInt(downscaleQualitySlider.value, 10) / 100;
+        const fileExtension = format === 'image/jpeg' ? 'jpg' : 'png';
+
+        try {
+            for (let i = 0; i < imageFiles.length; i++) {
+                showStatus(downscaleStatus, `Processing ${i + 1}/${imageFiles.length}: ${imageTitles[i]}`, false);
+                const img = await loadImage(imageFiles[i]);
+                
+                let targetWidth, targetHeight;
+
+                if (mode === 'megapixels') {
+                    const targetMP = parseFloat(downscaleMpInput.value) * 1000000;
+                    if (targetMP > (img.width * img.height)) {
+                        throw new Error(`Target megapixels for "${imageTitles[i]}" is larger than its original size. Upscaling is not supported.`);
+                    }
+                    const aspectRatio = img.width / img.height;
+                    targetHeight = Math.sqrt(targetMP / aspectRatio);
+                    targetWidth = targetHeight * aspectRatio;
+                } else { // Dimensions
+                    targetWidth = parseInt(downscaleWidthInput.value, 10);
+                    targetHeight = parseInt(downscaleHeightInput.value, 10);
+                    if ((targetWidth * targetHeight) > (img.width * img.height)) {
+                        throw new Error(`Target dimensions for "${imageTitles[i]}" are larger than its original size. Upscaling is not supported.`);
+                    }
+                }
+
+                processCanvas.width = Math.round(targetWidth);
+                processCanvas.height = Math.round(targetHeight);
+
+                const fitMode = downscaleAspectLockToggle.checked ? 'stretch' : downscaleFitSelect.value;
+                
+                if (fitMode === 'pad') {
+                    const padColor = document.getElementById('downscale-pad-color-picker').value;
+                    processCtx.fillStyle = padColor;
+                    processCtx.fillRect(0, 0, processCanvas.width, processCanvas.height);
+                }
+
+                const imgAspectRatio = img.width / img.height;
+                const canvasAspectRatio = processCanvas.width / processCanvas.height;
+                let drawWidth, drawHeight, offsetX, offsetY;
+                
+                if (fitMode === 'stretch') {
+                    drawWidth = processCanvas.width;
+                    drawHeight = processCanvas.height;
+                    offsetX = 0;
+                    offsetY = 0;
+                } else { // Pad
+                    if (imgAspectRatio > canvasAspectRatio) {
+                        drawWidth = processCanvas.width;
+                        drawHeight = drawWidth / imgAspectRatio;
+                    } else {
+                        drawHeight = processCanvas.height;
+                        drawWidth = drawHeight * imgAspectRatio;
+                    }
+                    offsetX = (processCanvas.width - drawWidth) / 2;
+                    offsetY = (processCanvas.height - drawHeight) / 2;
+                }
+
+                processCtx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+
+                const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
+                const filename = `${imageTitles[i]}.${fileExtension}`;
+                zip.file(filename, blob);
+            }
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(zipBlob);
+            link.download = 'downscaled_images.zip';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showStatus(downscaleStatus, `Success! Your ZIP file is downloading.`, false);
+
+        } catch (error) {
+            console.error('An error occurred during downscale export:', error);
+            showStatus(downscaleErrorMessage, error.message, true);
+            showStatus(downscaleStatus, `An error occurred. Please check the message above.`, true);
+        } finally {
+            downscaleGenerateBtn.disabled = false;
+            downscaleGenerateBtn.textContent = 'Generate & Download ZIP';
+        }
+    }
+
 
     function getTitleOptionsFromUI() {
         return {
