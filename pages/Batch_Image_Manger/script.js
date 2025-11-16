@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const generateGridBtn = document.getElementById('generate-grid-btn');
     const gridStatus = document.getElementById('grid-status');
     
-    // --- NEW: Downscale Feature DOM Elements ---
+    // Downscale Feature DOM Elements
     const openDownscaleModalBtn = document.getElementById('open-downscale-modal-btn');
     const downscalePopup = document.getElementById('downscale-popup');
     const closeDownscalePopupBtn = downscalePopup.querySelector('.popup-close-btn');
@@ -86,6 +86,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const downscaleGenerateBtn = document.getElementById('downscale-generate-btn');
     const downscaleStatus = document.getElementById('downscale-status');
     const downscaleErrorMessage = document.getElementById('downscale-error-message');
+    const downscaleOriginalResolution = document.getElementById('downscale-original-resolution');
+    const downscaleApplyTitlesToggle = document.getElementById('downscale-apply-titles-toggle');
+    const downscaleUseSubfoldersToggle = document.getElementById('downscale-use-subfolders-toggle');
 
 
     // --- State ---
@@ -124,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gridAddTitlesToggle.addEventListener('change', updateGridPreview);
     generateGridBtn.addEventListener('click', handleGenerateGrid);
 
-    // --- NEW: Downscale Feature Event Listeners ---
+    // Downscale Feature Event Listeners
     openDownscaleModalBtn.addEventListener('click', openDownscaleModal);
     closeDownscalePopupBtn.addEventListener('click', closeDownscaleModal);
     downscalePopup.addEventListener('click', (e) => { if (e.target === downscalePopup) closeDownscaleModal(); });
@@ -149,11 +152,8 @@ document.addEventListener('DOMContentLoaded', () => {
         imageFiles = []; imageTitles = []; imageFolders = [];
         availableFolders = ["(Root)"]; currentIndex = 0;
 
-        // --- THIS IS THE CORRECTED LINE ---
-        // It now checks the file type OR the file extension.
         const imageRegex = /\.(jpe?g|png|gif|webp|bmp|svg)$/i;
         imageFiles = files.filter(file => file.type.startsWith('image/') || imageRegex.test(file.name));
-        // --- END OF CORRECTION ---
         
         console.log(`Debug: Filtered down to ${imageFiles.length} image files.`);
 
@@ -559,15 +559,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- NEW: Downscale Feature Functions ---
+    // --- Downscale Feature Functions ---
 
-    function openDownscaleModal() {
+    async function openDownscaleModal() {
         downscaleStatus.textContent = '';
         downscaleErrorMessage.textContent = '';
+
+        if (imageFiles.length > 0) {
+            const img = await loadImage(imageFiles[currentIndex]);
+            downscaleOriginalResolution.textContent = `Original Resolution (for reference): ${img.width} x ${img.height} px`;
+        } else {
+            downscaleOriginalResolution.textContent = 'No image loaded.';
+        }
+
         document.body.classList.add('popup-open');
         downscalePopup.classList.remove('hidden');
         updateDownscaleUI();
-        handleAspectRatioInputChange(); // Initialize values
+        handleAspectRatioInputChange();
     }
 
     function closeDownscaleModal() {
@@ -605,7 +613,7 @@ document.addEventListener('DOMContentLoaded', () => {
             downscaleHeightInput.value = Math.round(width / aspectRatio);
         } else if (source === 'height' && height > 0) {
             downscaleWidthInput.value = Math.round(height * aspectRatio);
-        } else if (width > 0) { // Default on open
+        } else if (width > 0) {
              downscaleHeightInput.value = Math.round(width / aspectRatio);
         }
     }
@@ -621,37 +629,47 @@ document.addEventListener('DOMContentLoaded', () => {
         const zip = new JSZip();
         const processCanvas = document.createElement('canvas');
         const processCtx = processCanvas.getContext('2d');
-        const mode = downscaleModeSelect.value;
-        const format = downscaleFormatSelect.value;
-        const quality = parseInt(downscaleQualitySlider.value, 10) / 100;
-        const fileExtension = format === 'image/jpeg' ? 'jpg' : 'png';
+        
+        const options = {
+            mode: downscaleModeSelect.value,
+            format: downscaleFormatSelect.value,
+            quality: parseInt(downscaleQualitySlider.value, 10) / 100,
+            applyTitles: downscaleApplyTitlesToggle.checked,
+            useSubfolders: downscaleUseSubfoldersToggle.checked,
+            fileExtension: downscaleFormatSelect.value === 'image/jpeg' ? 'jpg' : 'png',
+        };
 
         try {
+            // --- CLARIFICATION ---
+            // This loop iterates from the first to the last image in the `imageFiles` array.
+            // It does not use any filters. It processes ALL uploaded images.
             for (let i = 0; i < imageFiles.length; i++) {
                 showStatus(downscaleStatus, `Processing ${i + 1}/${imageFiles.length}: ${imageTitles[i]}`, false);
-                const img = await loadImage(imageFiles[i]);
+                
+                const sourceImage = options.applyTitles 
+                    ? await getProcessedImage(imageFiles[i], imageTitles[i], getTitleOptionsFromUI())
+                    : await loadImage(imageFiles[i]);
                 
                 let targetWidth, targetHeight;
 
-                if (mode === 'megapixels') {
+                if (options.mode === 'megapixels') {
                     const targetMP = parseFloat(downscaleMpInput.value) * 1000000;
-                    if (targetMP > (img.width * img.height)) {
-                        throw new Error(`Target megapixels for "${imageTitles[i]}" is larger than its original size. Upscaling is not supported.`);
+                    if (targetMP > (sourceImage.width * sourceImage.height)) {
+                        throw new Error(`Target megapixels for "${imageTitles[i]}" is larger than its original. Upscaling is not supported.`);
                     }
-                    const aspectRatio = img.width / img.height;
+                    const aspectRatio = sourceImage.width / sourceImage.height;
                     targetHeight = Math.sqrt(targetMP / aspectRatio);
                     targetWidth = targetHeight * aspectRatio;
                 } else { // Dimensions
                     targetWidth = parseInt(downscaleWidthInput.value, 10);
                     targetHeight = parseInt(downscaleHeightInput.value, 10);
-                    if ((targetWidth * targetHeight) > (img.width * img.height)) {
-                        throw new Error(`Target dimensions for "${imageTitles[i]}" are larger than its original size. Upscaling is not supported.`);
+                    if ((targetWidth * targetHeight) > (sourceImage.width * sourceImage.height)) {
+                        throw new Error(`Target dimensions for "${imageTitles[i]}" are larger than its original. Upscaling is not supported.`);
                     }
                 }
 
                 processCanvas.width = Math.round(targetWidth);
                 processCanvas.height = Math.round(targetHeight);
-
                 const fitMode = downscaleAspectLockToggle.checked ? 'stretch' : downscaleFitSelect.value;
                 
                 if (fitMode === 'pad') {
@@ -660,7 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     processCtx.fillRect(0, 0, processCanvas.width, processCanvas.height);
                 }
 
-                const imgAspectRatio = img.width / img.height;
+                const imgAspectRatio = sourceImage.width / sourceImage.height;
                 const canvasAspectRatio = processCanvas.width / processCanvas.height;
                 let drawWidth, drawHeight, offsetX, offsetY;
                 
@@ -681,11 +699,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     offsetY = (processCanvas.height - drawHeight) / 2;
                 }
 
-                processCtx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+                processCtx.drawImage(sourceImage, offsetX, offsetY, drawWidth, drawHeight);
 
-                const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
-                const filename = `${imageTitles[i]}.${fileExtension}`;
-                zip.file(filename, blob);
+                const blob = await new Promise(resolve => processCanvas.toBlob(resolve, options.format, options.quality));
+                let filename = underscoreToggle.checked ? imageTitles[i].replace(/ /g, '_') : imageTitles[i];
+                filename += `.${options.fileExtension}`;
+
+                // --- CLARIFICATION ---
+                // This logic checks the subfolder assignment for the *current image* (at index `i`).
+                // If "Use Subfolders" is checked, it places this image into its assigned folder.
+                // If not, or if the folder is "(Root)", it goes into the top level of the ZIP.
+                // This correctly builds the full folder structure for all images.
+                if (options.useSubfolders && imageFolders[i] !== "(Root)") {
+                    zip.folder(imageFolders[i]).file(filename, blob);
+                } else {
+                    zip.file(filename, blob);
+                }
             }
 
             const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -725,12 +754,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function getProcessedImage(file, title, options) {
-        if (!options.addTitle) {
-            return loadImage(file);
-        }
+        const processingOptions = { ...options, addTitle: true };
+
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
-        await drawImageWithTitle(tempCtx, file, title, options);
+        await drawImageWithTitle(tempCtx, file, title, processingOptions);
         
         const finalImage = new Image();
         finalImage.src = tempCanvas.toDataURL();

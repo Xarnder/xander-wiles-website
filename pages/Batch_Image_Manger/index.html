@@ -238,6 +238,7 @@
             <p>Resize all uploaded images to a new resolution and download them as a ZIP file.</p>
             
             <div class="popup-main-content">
+                <p id="downscale-original-resolution" class="status-message" style="margin: -1rem 0 1rem 0;"></p>
                 <div class="control-group">
                     <label for="downscale-mode-select">Resize By</label>
                     <select id="downscale-mode-select">
@@ -288,6 +289,25 @@
                 </div>
 
                 <div class="control-group-divider" style="width: 100%; height: 1px; margin: 1.5rem 0;"></div>
+
+                <!-- Content and Folder Options -->
+                <div class="inline-controls">
+                    <div class="control-group">
+                        <label for="downscale-apply-titles-toggle" class="checkbox-label toggle-switch">
+                            <input type="checkbox" id="downscale-apply-titles-toggle" checked />
+                            <span class="toggle-knob"></span>
+                            Apply Titles
+                        </label>
+                    </div>
+                     <div class="control-group">
+                        <label for="downscale-use-subfolders-toggle" class="checkbox-label toggle-switch">
+                            <input type="checkbox" id="downscale-use-subfolders-toggle" checked />
+                            <span class="toggle-knob"></span>
+                            Use Subfolders
+                        </label>
+                    </div>
+                </div>
+
 
                 <!-- Output Controls -->
                 <div class="inline-controls">
