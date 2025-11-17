@@ -114,6 +114,7 @@ body {
     display: inline-block;
     background: var(--gradient-primary);
     color: var(--text-primary);
+    text-decoration: none;
     border: none;
     border-radius: var(--radius-md);
     padding: 0.8rem 1.5rem;
@@ -233,7 +234,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 .final-export { margin-top: 1.5rem; }
 
-/* --- NEW: Preview Section Styles --- */
+/* --- Preview Section Styles --- */
 .preview-container {
     display: flex;
     flex-wrap: wrap;
@@ -243,7 +244,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 .preview-box {
     flex: 1;
-    min-width: 250px; /* Ensures boxes wrap on smaller screens */
+    min-width: 250px;
     text-align: center;
 }
 .preview-box h3 {
@@ -251,9 +252,12 @@ input[type="range"]::-webkit-slider-thumb {
     margin-bottom: 0.5rem;
     font-weight: 600;
 }
-/* The canvas container in the preview has a different top margin */
 .preview-box .canvas-container {
     margin-top: 0;
+}
+/* NEW: Style for the second download button */
+.preview-box .action-btn {
+    margin-top: 1rem;
 }
 
 

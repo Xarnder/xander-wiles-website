@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const brushSoftnessValue = document.getElementById('brush-softness-value');
     const showMaskToggle = document.getElementById('show-mask-toggle');
     const touchModeToggle = document.getElementById('touch-mode-toggle');
+    const downloadCropAgainBtn = document.getElementById('download-crop-again-btn'); // NEW
 
     console.log('DEBUG: Script loaded and DOM is ready.');
 
@@ -64,8 +65,8 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please select an area to crop first.');
             return;
         }
-        exportCroppedImage();
-        setupStep3Previews(); // NEW: Call the preview generator
+        exportCroppedImage(); // This attempts the first download
+        setupStep3Previews(); // This sets up the previews and the second download button
         cropStep.classList.add('hidden');
         reUploadStep.classList.remove('hidden');
     });
@@ -211,7 +212,6 @@ document.addEventListener('DOMContentLoaded', () => {
         link.click();
     }
 
-    // --- NEW: Function to set up the previews in Step 3 ---
     function setupStep3Previews() {
         const originalPreviewCanvas = document.getElementById('original-preview-canvas');
         const croppedPreviewCanvas = document.getElementById('cropped-preview-canvas');
@@ -220,15 +220,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const { originalImage, cropRect } = state;
 
-        // Draw original image with crop box
         originalPreviewCanvas.width = originalImage.width;
         originalPreviewCanvas.height = originalImage.height;
         originalPreviewCtx.drawImage(originalImage, 0, 0);
         originalPreviewCtx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
-        originalPreviewCtx.lineWidth = Math.max(8, originalImage.width * 0.005); // Line width scales slightly
+        originalPreviewCtx.lineWidth = Math.max(8, originalImage.width * 0.005);
         originalPreviewCtx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
 
-        // Draw the extracted cropped image
         croppedPreviewCanvas.width = cropRect.width;
         croppedPreviewCanvas.height = cropRect.height;
         croppedPreviewCtx.drawImage(
@@ -236,6 +234,9 @@ document.addEventListener('DOMContentLoaded', () => {
             cropRect.x, cropRect.y, cropRect.width, cropRect.height,
             0, 0, cropRect.width, cropRect.height
         );
+        
+        // NEW: Set the href for the manual download button
+        downloadCropAgainBtn.href = croppedPreviewCanvas.toDataURL('image/png');
     }
 
     function setupMasking() {

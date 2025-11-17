@@ -37,7 +37,6 @@
     <header class="site-header">
         <div class="header-content">
             <a href="#" class="logo">In-Browser Image Editor</a>
-            <!-- NEW: Touch Mode Toggle -->
             <label class="toggle-switch header-toggle">
                 Touch Mode
                 <input type="checkbox" id="touch-mode-toggle" />
@@ -87,7 +86,6 @@
         <section id="re-upload-step" class="glass-card hidden">
             <h2>Step 3: Import Your Edited Image</h2>
             
-            <!-- NEW: Preview Section -->
             <div class="preview-container">
                 <div class="preview-box">
                     <h3>Original with Crop Area</h3>
@@ -100,6 +98,8 @@
                     <div class="canvas-container">
                         <canvas id="cropped-preview-canvas"></canvas>
                     </div>
+                    <!-- NEW: Manual Download Button -->
+                    <a id="download-crop-again-btn" class="action-btn" download="cropped-area.png">Download Again</a>
                 </div>
             </div>
             
