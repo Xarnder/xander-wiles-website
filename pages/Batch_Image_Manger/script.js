@@ -754,11 +754,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function getProcessedImage(file, title, options) {
-        const processingOptions = { ...options, addTitle: true };
+        // The original line below was the source of the bug.
+        // It has been removed to ensure the 'addTitle' option from the UI is respected.
+        // const processingOptions = { ...options, addTitle: true };
 
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
-        await drawImageWithTitle(tempCtx, file, title, processingOptions);
+        // Pass the original, unmodified options to the drawing function.
+        await drawImageWithTitle(tempCtx, file, title, options);
         
         const finalImage = new Image();
         finalImage.src = tempCanvas.toDataURL();
