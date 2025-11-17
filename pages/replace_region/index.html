@@ -30,13 +30,19 @@
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 </head>
-<div id="main-nav-placeholder"></div> 
+<div id="main-nav-placeholder"></div>
 <body>
     <div class="background-overlay"></div>
 
     <header class="site-header">
         <div class="header-content">
             <a href="#" class="logo">In-Browser Image Editor</a>
+            <!-- NEW: Touch Mode Toggle -->
+            <label class="toggle-switch header-toggle">
+                Touch Mode
+                <input type="checkbox" id="touch-mode-toggle" />
+                <span class="toggle-knob"></span>
+            </label>
         </div>
     </header>
 
@@ -122,6 +128,6 @@
     </main>
 
     <script src="script.js"></script>
-    <script src="/assets/js/nav-loader.js"></script> 
+    <script src="/assets/js/nav-loader.js"></script>
 </body>
 </html>
