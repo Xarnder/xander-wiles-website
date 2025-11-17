@@ -66,7 +66,6 @@
                 <canvas id="crop-canvas"></canvas>
             </div>
             <div class="controls-bar">
-                <!-- NEW: Aspect Ratio Selector -->
                 <div class="control-group">
                     <label for="aspect-ratio-select">Aspect Ratio</label>
                     <select id="aspect-ratio-select">
@@ -87,6 +86,23 @@
         <!-- Step 3: Upload Edited Crop -->
         <section id="re-upload-step" class="glass-card hidden">
             <h2>Step 3: Import Your Edited Image</h2>
+            
+            <!-- NEW: Preview Section -->
+            <div class="preview-container">
+                <div class="preview-box">
+                    <h3>Original with Crop Area</h3>
+                    <div class="canvas-container">
+                        <canvas id="original-preview-canvas"></canvas>
+                    </div>
+                </div>
+                <div class="preview-box">
+                    <h3>Your Cropped Image</h3>
+                    <div class="canvas-container">
+                        <canvas id="cropped-preview-canvas"></canvas>
+                    </div>
+                </div>
+            </div>
+            
             <p>Upload the modified cropped image. It must be the same size as the area you exported.</p>
              <div class="centered-content">
                 <label for="edited-upload" class="action-btn">Upload Edited Crop</label>

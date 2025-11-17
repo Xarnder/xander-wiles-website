@@ -84,7 +84,6 @@ body {
     margin: 0 auto;
 }
 
-/* NEW: Flexbox for header content */
 .site-header .header-content {
     display: flex;
     justify-content: space-between;
@@ -98,11 +97,10 @@ body {
     font-weight: 700;
     color: var(--text-primary);
     text-decoration: none;
-    flex-grow: 1; /* Allow logo to take available space */
+    flex-grow: 1;
     text-align: center;
 }
 
-/* NEW: Making the logo centered on small screens when toggle wraps */
 @media (min-width: 480px) {
     .site-header .logo {
         text-align: left;
@@ -234,6 +232,30 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .final-export { margin-top: 1.5rem; }
+
+/* --- NEW: Preview Section Styles --- */
+.preview-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    align-items: flex-start;
+}
+.preview-box {
+    flex: 1;
+    min-width: 250px; /* Ensures boxes wrap on smaller screens */
+    text-align: center;
+}
+.preview-box h3 {
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+/* The canvas container in the preview has a different top margin */
+.preview-box .canvas-container {
+    margin-top: 0;
+}
+
 
 /* Toggle Switch Style */
 .toggle-switch { display: inline-flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600; color: var(--text-secondary); }

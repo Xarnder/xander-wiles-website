@@ -4,14 +4,14 @@ document.addEventListener('DOMContentLoaded', () => {
         originalImage: null,
         editedImage: null,
         cropRect: null, // { x, y, width, height }
-        maskCanvas: null, // In-memory canvas for the mask data (transparent with white strokes)
+        maskCanvas: null, // In-memory canvas for the mask data
         maskCtx: null,
         currentTool: 'brush', // 'brush' or 'eraser'
         brushSize: 50,
         brushSoftness: 25, // 0-100
         isDrawing: false,
         showMaskOverlay: false,
-        isTouchMode: false // NEW: Flag for touch interaction
+        isTouchMode: false
     };
 
     // --- DOM ELEMENT SELECTORS ---
@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const editedUploadInput = document.getElementById('edited-upload');
     const exportCropBtn = document.getElementById('export-crop-btn');
     const saveFinalBtn = document.getElementById('save-final-btn');
-
+    
     const cropCanvas = document.getElementById('crop-canvas');
     const cropCtx = cropCanvas.getContext('2d');
     const aspectRatioSelect = document.getElementById('aspect-ratio-select');
@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const brushSizeValue = document.getElementById('brush-size-value');
     const brushSoftnessValue = document.getElementById('brush-softness-value');
     const showMaskToggle = document.getElementById('show-mask-toggle');
-    const touchModeToggle = document.getElementById('touch-mode-toggle'); // NEW
+    const touchModeToggle = document.getElementById('touch-mode-toggle');
 
     console.log('DEBUG: Script loaded and DOM is ready.');
 
@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         exportCroppedImage();
+        setupStep3Previews(); // NEW: Call the preview generator
         cropStep.classList.add('hidden');
         reUploadStep.classList.remove('hidden');
     });
@@ -77,14 +78,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const img = new Image();
             img.onload = () => {
                 if (img.width !== state.cropRect.width || img.height !== state.cropRect.height) {
-                    console.warn(`DEBUG: Edited image size mismatch detected. Auto-resizing from ${img.width}x${img.height} to target ${state.cropRect.width}x${state.cropRect.height}.`);
+                    console.warn(`DEBUG: Edited image size mismatch. Auto-resizing from ${img.width}x${img.height} to ${state.cropRect.width}x${state.cropRect.height}.`);
                     const resizeCanvas = document.createElement('canvas');
                     resizeCanvas.width = state.cropRect.width;
                     resizeCanvas.height = state.cropRect.height;
                     const resizeCtx = resizeCanvas.getContext('2d');
                     resizeCtx.drawImage(img, 0, 0, state.cropRect.width, state.cropRect.height);
                     state.editedImage = resizeCanvas;
-                    console.log('DEBUG: Edited image successfully resized.');
                 } else {
                     console.log('DEBUG: Edited image loaded. Dimensions match.');
                     state.editedImage = img;
@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         reader.readAsDataURL(file);
     });
-
+    
     brushBtn.addEventListener('click', () => setTool('brush'));
     eraserBtn.addEventListener('click', () => setTool('eraser'));
     brushSizeSlider.addEventListener('input', (e) => {
@@ -111,10 +111,8 @@ document.addEventListener('DOMContentLoaded', () => {
         drawMaskComposite();
     });
 
-    // NEW: Touch mode toggle listener
     touchModeToggle.addEventListener('change', (e) => {
         state.isTouchMode = e.target.checked;
-        console.log(`Touch mode is now ${state.isTouchMode ? 'ON' : 'OFF'}`);
     });
 
     saveFinalBtn.addEventListener('click', saveFinalImage);
@@ -161,14 +159,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (ratio > 0) {
                 height = (width / ratio) * Math.sign(height || 1) * Math.sign(width || 1);
             }
-
+            
             tempRect = {
                 x: width > 0 ? startX : startX + width,
                 y: height > 0 ? startY : startY + height,
                 width: Math.abs(width),
                 height: Math.abs(height)
             };
-
+            
             cropCtx.drawImage(state.originalImage, 0, 0);
             cropCtx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
             cropCtx.lineWidth = 4;
@@ -185,19 +183,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     width: Math.round(tempRect.width),
                     height: Math.round(tempRect.height)
                 };
-                if (state.cropRect.width > 0 && state.cropRect.height > 0) {
+                if(state.cropRect.width > 0 && state.cropRect.height > 0) {
                     exportCropBtn.disabled = false;
                 }
             }
         };
-        
-        // Mouse Events
+
         cropCanvas.onmousedown = startDrag;
         cropCanvas.onmousemove = drag;
         cropCanvas.onmouseup = endDrag;
         cropCanvas.onmouseleave = endDrag;
-
-        // Touch Events
         cropCanvas.ontouchstart = startDrag;
         cropCanvas.ontouchmove = drag;
         cropCanvas.ontouchend = endDrag;
@@ -216,6 +211,33 @@ document.addEventListener('DOMContentLoaded', () => {
         link.click();
     }
 
+    // --- NEW: Function to set up the previews in Step 3 ---
+    function setupStep3Previews() {
+        const originalPreviewCanvas = document.getElementById('original-preview-canvas');
+        const croppedPreviewCanvas = document.getElementById('cropped-preview-canvas');
+        const originalPreviewCtx = originalPreviewCanvas.getContext('2d');
+        const croppedPreviewCtx = croppedPreviewCanvas.getContext('2d');
+
+        const { originalImage, cropRect } = state;
+
+        // Draw original image with crop box
+        originalPreviewCanvas.width = originalImage.width;
+        originalPreviewCanvas.height = originalImage.height;
+        originalPreviewCtx.drawImage(originalImage, 0, 0);
+        originalPreviewCtx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
+        originalPreviewCtx.lineWidth = Math.max(8, originalImage.width * 0.005); // Line width scales slightly
+        originalPreviewCtx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
+
+        // Draw the extracted cropped image
+        croppedPreviewCanvas.width = cropRect.width;
+        croppedPreviewCanvas.height = cropRect.height;
+        croppedPreviewCtx.drawImage(
+            originalImage,
+            cropRect.x, cropRect.y, cropRect.width, cropRect.height,
+            0, 0, cropRect.width, cropRect.height
+        );
+    }
+
     function setupMasking() {
         reUploadStep.classList.add('hidden');
         maskStep.classList.remove('hidden');
@@ -227,9 +249,9 @@ document.addEventListener('DOMContentLoaded', () => {
         state.maskCanvas.width = state.originalImage.width;
         state.maskCanvas.height = state.originalImage.height;
         state.maskCtx = state.maskCanvas.getContext('2d');
-
+        
         state.maskCtx.clearRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
-
+        
         drawMaskComposite();
 
         const getPos = (e) => {
@@ -260,22 +282,20 @@ document.addEventListener('DOMContentLoaded', () => {
             state.isDrawing = false;
         };
 
-        // Mouse Events
         maskCanvas.onmousedown = startPaint;
         maskCanvas.onmousemove = doPaint;
         maskCanvas.onmouseup = stopPaint;
         maskCanvas.onmouseleave = stopPaint;
-
-        // Touch Events
         maskCanvas.ontouchstart = startPaint;
         maskCanvas.ontouchmove = doPaint;
         maskCanvas.ontouchend = stopPaint;
     }
-
+    
     function drawMaskComposite() {
-        const ctx = maskCtx; // The context of the VISIBLE canvas.
+        const ctx = maskCtx;
         ctx.globalCompositeOperation = 'source-over';
         ctx.drawImage(state.originalImage, 0, 0);
+
         const revealedEditCanvas = document.createElement('canvas');
         revealedEditCanvas.width = ctx.canvas.width;
         revealedEditCanvas.height = ctx.canvas.height;
@@ -284,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         revealedEditCtx.globalCompositeOperation = 'destination-in';
         revealedEditCtx.drawImage(state.maskCanvas, 0, 0);
         ctx.drawImage(revealedEditCanvas, 0, 0);
-
+        
         if (state.showMaskOverlay) {
             const overlayCanvas = document.createElement('canvas');
             overlayCanvas.width = ctx.canvas.width;
@@ -297,6 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.globalCompositeOperation = 'source-over';
             ctx.drawImage(overlayCanvas, 0, 0);
         }
+
         ctx.globalCompositeOperation = 'source-over';
     }
 
@@ -305,8 +326,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const softness = state.brushSoftness / 100;
         const radius = state.brushSize / 2;
         const innerRadius = radius * (1 - softness);
+        
         const gradient = ctx.createRadialGradient(x, y, innerRadius, x, y, radius);
-
+        
         if (state.currentTool === 'brush') {
             ctx.globalCompositeOperation = 'source-over';
             gradient.addColorStop(0, 'white');
@@ -323,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.fill();
         drawMaskComposite();
     }
-
+    
     function setTool(tool) {
         state.currentTool = tool;
         brushBtn.classList.toggle('active', tool === 'brush');
@@ -340,7 +362,6 @@ document.addEventListener('DOMContentLoaded', () => {
         link.download = 'final-image.png';
         link.href = maskCanvas.toDataURL('image/png');
         link.click();
-
         if (showMaskState) {
             state.showMaskOverlay = true;
             drawMaskComposite();
