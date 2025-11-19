@@ -2,6 +2,9 @@
 function createImageFallback(imageElement, isListThumb = false) {
     const altText = imageElement.alt;
     
+    // prevent infinite loop if fallback generation fails
+    imageElement.onerror = null;
+
     if (isListThumb) {
         const fallback = document.createElement('div');
         fallback.className = 'list-item-thumb';
@@ -59,20 +62,18 @@ document.addEventListener('DOMContentLoaded', () => {
     let checkedItems = new Set();
     let currentIndex = 0; 
 
-    // --- Theme Management (Updated to use documentElement) ---
+    // --- Theme Management ---
     function toggleTheme() {
-        // Target the HTML tag, not body, for better specificity
-        const root = document.documentElement;
-        const isLight = root.getAttribute('data-theme') === 'light';
+        const body = document.body;
+        const isLight = body.getAttribute('data-theme') === 'light';
         const newTheme = isLight ? 'dark' : 'light';
-        root.setAttribute('data-theme', newTheme);
+        body.setAttribute('data-theme', newTheme);
         localStorage.setItem('theme', newTheme);
     }
 
     function loadTheme() {
         const savedTheme = localStorage.getItem('theme') || 'dark';
-        // Apply to HTML tag
-        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.body.setAttribute('data-theme', savedTheme);
     }
 
     // --- Data Fetching ---
@@ -85,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
             allItems = parseCSV(csvText);
             loadState(); 
             
-            // Render immediately (might show broken images briefly)
+            // Render immediately (might show broken images briefly before verify finishes)
             updateAndRenderAll();
             
             // Check images in background then re-render
@@ -123,7 +124,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const checkPromises = items.map(item => {
             return new Promise((resolve) => {
                 const img = new Image();
-                img.src = `assets/images/${item.name}.png`;
+                // UPDATED: Pointing to WebP folder
+                img.src = `assets/objects_webp/${item.name}.webp`;
                 img.onload = () => {
                     item.imageVerified = true;
                     resolve();
@@ -200,12 +202,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const item = itemsToRender[currentIndex];
         const isChecked = checkedItems.has(item.id);
         
-        const pngPath = `assets/images/${item.name}.png`;
-        const jpgPath = `assets/images/${item.name}.jpg`;
+        // UPDATED: Pointing to WebP folder
+        const webpPath = `assets/objects_webp/${item.name}.webp`;
 
         carouselView.innerHTML = `
-            <img src="${pngPath}" class="carousel-item-image" alt="${item.name}" 
-                onerror="this.onerror=() => createImageFallback(this); this.src='${jpgPath}';">
+            <img src="${webpPath}" class="carousel-item-image" alt="${item.name}" 
+                onerror="createImageFallback(this);">
             <h2 class="carousel-item-title">${item.name}</h2>
             <p class="carousel-item-category">${item.category}</p>
             <label class="carousel-item-checkbox-label">
@@ -229,12 +231,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const isChecked = checkedItems.has(item.id);
         if (isChecked) div.classList.add('checked');
 
-        const pngPath = `assets/images/${item.name}.png`;
-        const jpgPath = `assets/images/${item.name}.jpg`;
+        // UPDATED: Pointing to WebP folder
+        const webpPath = `assets/objects_webp/${item.name}.webp`;
 
         div.innerHTML = `
-            <img src="${pngPath}" class="list-item-thumb" alt="${item.name}" loading="lazy"
-                 onerror="this.onerror=() => createImageFallback(this, true); this.src='${jpgPath}';">
+            <img src="${webpPath}" class="list-item-thumb" alt="${item.name}" loading="lazy"
+                 onerror="createImageFallback(this, true);">
             <div class="item-details">
                 <h3>${item.name}</h3>
                 <p>${item.category}</p>
