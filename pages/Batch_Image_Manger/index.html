@@ -5,28 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Batch Image Manager</title>
 
-    <!-- Optional font; safe to remove if you want zero network deps -->
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
+    <!-- Styles -->
     <link rel="stylesheet" href="style.css" />
+    <!-- Keeping your external nav styles as requested -->
     <link rel="stylesheet" href="/assets/css/style.css">
 
-   <!-- Theme-aware SVG icons (modern browsers) -->
-    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
-    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
-    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
-
-    <!-- Fallback PNG icons -->
-    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-
-    <!-- Other essential links -->
-    <link rel="manifest" href="site.webmanifest">
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+    <!-- Favicons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
 </head>
 
 <div id="main-nav-placeholder"></div>
@@ -45,10 +35,11 @@
     </header>
 
     <main class="app-container">
+        <!-- 1. Upload Section -->
         <section id="upload-section" class="glass-card">
             <h2>1. Upload Your Image Folder</h2>
             <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                Select a folder containing the images you want to rename and organize.
+                Select a folder containing the images you want to rename, title, or convert.
             </p>
             <div class="setup-options">
                 <div class="setup-directory">
@@ -59,115 +50,134 @@
             <p id="upload-status" class="status-message hidden"></p>
         </section>
 
+        <!-- 2. Editor Section -->
         <section id="editor-section" class="glass-card hidden">
             <h2>2. Customize & Export</h2>
             <div class="comparison-tool">
                 <div class="controls export-controls">
-                     <!-- Main Toggles -->
-                    <div class="control-group">
-                        <label for="add-title-toggle" class="checkbox-label toggle-switch">
-                            <input type="checkbox" id="add-title-toggle" checked />
-                            <span class="toggle-knob"></span>
-                            Add Title to Image
-                        </label>
-                    </div>
-                    <div class="control-group">
-                        <label for="underscore-toggle" class="checkbox-label toggle-switch">
-                            <input type="checkbox" id="underscore-toggle" />
-                            <span class="toggle-knob"></span>
-                            Use_Underscores
-                        </label>
-                    </div>
-                    <div class="control-group-divider"></div>
                     
-                    <!-- Text & BG Controls -->
-                    <div id="title-options-wrapper" class="control-group-sub">
+                    <!-- Group 1: Text & Visuals -->
+                    <div class="control-group-sub">
                         <div class="control-group">
-                            <label for="title-mode-select">Title Mode</label>
-                            <select id="title-mode-select">
-                                <option value="bleed" selected>Bleed</option>
-                                <option value="overlay">Overlay</option>
-                                <option value="add-space">Add Space</option>
+                            <label for="add-title-toggle" class="checkbox-label toggle-switch">
+                                <input type="checkbox" id="add-title-toggle" checked />
+                                <span class="toggle-knob"></span>
+                                Add Title
+                            </label>
+                        </div>
+                        
+                        <div id="title-options-wrapper">
+                            <div class="control-group">
+                                <label for="title-mode-select">Mode</label>
+                                <select id="title-mode-select">
+                                    <option value="bleed" selected>Bleed</option>
+                                    <option value="overlay">Overlay</option>
+                                    <option value="add-space">Add Space</option>
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label for="font-size-slider">Size: <span id="font-size-value">40</span>px</label>
+                                <input type="range" id="font-size-slider" min="10" max="400" value="40" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <label for="text-color-picker">Text</label>
+                                <input type="color" id="text-color-picker" value="#FFFFFF" />
+                            </div>
+                            <div class="control-group" id="bg-color-group">
+                                <label for="bg-color-picker">Background</label>
+                                <input type="color" id="bg-color-picker" value="#111115" />
+                            </div>
+                             <!-- Height/Pos Controls -->
+                             <div class="control-group" id="header-height-group">
+                                <label for="header-height-slider">Area: <span id="header-height-value">60</span>px</label>
+                                <input type="range" id="header-height-slider" min="20" max="200" value="60" step="1" />
+                            </div>
+                            <div class="control-group" id="text-offset-group">
+                                <label for="text-offset-slider">Offset: <span id="text-offset-value">0</span>px</label>
+                                <input type="range" id="text-offset-slider" min="-50" max="50" value="0" step="1" />
+                            </div>
+                             <div class="control-group hidden" id="text-pos-group">
+                                <label for="text-position-slider">Pos: <span id="text-position-value">90</span>%</label>
+                                <input type="range" id="text-position-slider" min="0" max="100" value="90" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <label for="position-toggle" class="checkbox-label toggle-switch">
+                                    <input type="checkbox" id="position-toggle" />
+                                    <span class="toggle-knob"></span>
+                                    Bottom
+                                </label>
+                            </div>
+                            <div class="control-group">
+                                <label for="auto-scale-toggle" class="checkbox-label toggle-switch">
+                                    <input type="checkbox" id="auto-scale-toggle" checked />
+                                    <span class="toggle-knob"></span>
+                                    Auto-Fit
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group-divider"></div>
+
+                    <!-- Group 2: File Naming & Format -->
+                    <div class="control-group-sub">
+                        <div class="control-group">
+                             <label>Filename Format</label>
+                             <div class="filename-inputs">
+                                <input type="text" id="filename-prefix" placeholder="Prefix_" title="Prefix" />
+                                <span style="color:var(--text-muted)">+ Name +</span>
+                                <input type="text" id="filename-suffix" placeholder="_Suffix" title="Suffix" />
+                             </div>
+                        </div>
+                        <div class="control-group">
+                            <label for="underscore-toggle" class="checkbox-label toggle-switch">
+                                <input type="checkbox" id="underscore-toggle" />
+                                <span class="toggle-knob"></span>
+                                Use_Underscores
+                            </label>
+                        </div>
+                        <div class="control-group">
+                            <label for="export-format-select">Export Format</label>
+                            <select id="export-format-select">
+                                <option value="image/png" selected>PNG</option>
+                                <option value="image/jpeg">JPG</option>
+                                <option value="image/webp">WebP</option>
+                                <option value="image/avif">AVIF</option>
                             </select>
                         </div>
-
-                        <!-- NEW FONT SCALING CONTROLS -->
-                         <div class="control-group">
-                            <label for="auto-scale-toggle" class="checkbox-label toggle-switch">
-                                <input type="checkbox" id="auto-scale-toggle" checked />
-                                <span class="toggle-knob"></span>
-                                Auto-Scale Font
-                            </label>
-                        </div>
-                        <div class="control-group">
-                            <label for="font-size-slider" id="font-size-label">Max Font Size: <span id="font-size-value">40</span>px</label>
-                            <input type="range" id="font-size-slider" min="10" max="400" value="40" step="1" />
-                        </div>
-                        <div id="padding-control-group" class="control-group">
-                            <label for="padding-input">Horiz. Padding</label>
-                            <input type="number" id="padding-input" value="50" min="0" step="5" style="width: 80px;" />
-                        </div>
-                        
-                        <div class="control-group">
-                            <label for="text-color-picker">Text Color</label>
-                            <input type="color" id="text-color-picker" value="#FFFFFF" />
-                        </div>
-                        
-                        <!-- "Add Space" & "Bleed" Controls -->
-                        <div class="control-group">
-                            <label for="header-height-slider">Area Height: <span id="header-height-value">60</span>px</label>
-                            <input type="range" id="header-height-slider" min="20" max="200" value="60" step="1" />
-                        </div>
-                         <div class="control-group">
-                            <label for="bg-color-picker">BG Color</label>
-                            <input type="color" id="bg-color-picker" value="#111115" />
-                        </div>
-                         <div class="control-group">
-                            <label for="position-toggle" class="checkbox-label toggle-switch">
-                                <input type="checkbox" id="position-toggle" />
-                                <span class="toggle-knob"></span>
-                                Title Below
-                            </label>
-                        </div>
-                        
-                        <!-- "Overlay" Control -->
-                        <div class="control-group hidden">
-                            <label for="text-position-slider">Vertical Position: <span id="text-position-value">90</span>%</label>
-                            <input type="range" id="text-position-slider" min="0" max="100" value="90" step="1" />
-                        </div>
-
-                        <!-- "Bleed" Control -->
-                        <div class="control-group">
-                            <label for="text-offset-slider">Text Offset: <span id="text-offset-value">0</span>px</label>
-                            <input type="range" id="text-offset-slider" min="-50" max="50" value="0" step="1" />
+                        <div class="control-group hidden" id="main-quality-wrapper">
+                             <label for="main-quality-slider">Quality: <span id="main-quality-value">90</span>%</label>
+                             <input type="range" id="main-quality-slider" min="1" max="100" value="90" step="1" />
                         </div>
                     </div>
+
                     <div class="control-group-divider"></div>
+
+                    <!-- Action Buttons -->
                     <div class="final-export-buttons">
                         <button id="export-btn">Export All as .ZIP</button>
-                        <button id="open-grid-modal-btn" class="secondary-btn">Create Image Grid</button>
+                        <button id="open-grid-modal-btn" class="secondary-btn">Create Grid</button>
                         <button id="open-downscale-modal-btn" class="secondary-btn">Batch Downscale</button>
                     </div>
                 </div>
 
                 <p id="export-status" class="status-message hidden"></p>
 
+                <!-- Preview Area -->
                 <div class="img-container">
                     <h3>Live Preview</h3>
                     <div id="preview-controls" class="preview-controls hidden">
                         <button id="prev-btn" class="nav-btn">&larr;</button>
                         <div class="editor-main">
                             <div class="title-control">
-                                 <label for="title-input">Title / Filename</label>
-                                 <input type="text" id="title-input" />
+                                 <input type="text" id="title-input" placeholder="Image Title" />
                             </div>
                             <div class="subfolder-controls">
                                 <div class="subfolder-assign">
-                                    <label for="folder-select">Subfolder</label>
                                     <select id="folder-select"></select>
                                 </div>
                                 <div class="subfolder-create">
-                                    <input type="text" id="new-folder-input" placeholder="Create new subfolder..." />
+                                    <input type="text" id="new-folder-input" placeholder="New Folder..." />
                                     <button id="add-folder-btn">+</button>
                                 </div>
                             </div>
@@ -181,21 +191,19 @@
         </section>
     </main>
 
-    <!-- Image Grid Popup/Modal -->
+    <!-- Image Grid Popup -->
     <div id="grid-popup" class="popup-overlay hidden">
         <div class="popup-card glass-card">
             <button class="popup-close-btn">&times;</button>
             <h3>Create Image Grid</h3>
-            <p>Combine multiple images into a single grid. A preview will be generated below.</p>
-            
             <div class="grid-controls-layout">
                 <div class="grid-settings">
                     <div class="control-group">
-                        <label for="grid-source-select">Image Source</label>
+                        <label for="grid-source-select">Source</label>
                         <select id="grid-source-select"></select>
                     </div>
                     <div class="control-group">
-                        <label for="grid-columns-input">Columns</label>
+                        <label for="grid-columns-input">Cols</label>
                         <input type="number" id="grid-columns-input" value="3" min="1" max="20" />
                     </div>
                     <div class="control-group">
@@ -206,96 +214,119 @@
                         </label>
                     </div>
                 </div>
-                
                 <div id="grid-info" class="grid-info-box">
-                    <p id="grid-output-size">Dimensions: 0 x 0 px</p>
-                    <p id="grid-output-megapixels">Total: 0.0 MP</p>
+                    <p id="grid-output-size">0 x 0 px</p>
+                    <p id="grid-output-megapixels">0.0 MP</p>
                     <div id="grid-warning-box" class="hidden">
-                        <p class="warning-text">
-                            <span class="warn-icon">⚠️</span> High Resolution Warning!
-                        </p>
+                        <p class="warning-text">⚠️ Large Image</p>
                         <label for="grid-downscale-toggle" class="checkbox-label">
                             <input type="checkbox" id="grid-downscale-toggle" checked>
-                            Downscale to ~24MP
+                            Auto-Resize to 24MP
                         </label>
                     </div>
                 </div>
             </div>
-
             <div class="grid-preview-container">
-                <h4>Low-Res Preview</h4>
                 <canvas id="grid-preview-canvas"></canvas>
             </div>
-
             <div class="popup-actions">
-                <button id="generate-grid-btn" class="popup-generate-btn">Generate & Download Grid</button>
+                <button id="generate-grid-btn" class="popup-generate-btn">Download Grid (PNG)</button>
                 <p id="grid-status" class="status-message"></p>
             </div>
         </div>
     </div>
     
-    <!-- Batch Downscale Popup/Modal -->
+    <!-- Batch Downscale Popup -->
     <div id="downscale-popup" class="popup-overlay hidden">
         <div class="popup-card glass-card">
             <button class="popup-close-btn">&times;</button>
-            <h3>Batch Downscale</h3>
-            <p>Resize all uploaded images to a new resolution and download them as a ZIP file.</p>
+            <h3>Batch Downscale & Convert</h3>
             
             <div class="popup-main-content">
                 <p id="downscale-original-resolution" class="status-message" style="margin: -1rem 0 1rem 0;"></p>
-                <div class="control-group">
-                    <label for="downscale-mode-select">Resize By</label>
-                    <select id="downscale-mode-select">
-                        <option value="dimensions" selected>Dimensions (Width/Height)</option>
-                        <option value="megapixels">Megapixels</option>
-                    </select>
-                </div>
-
-                <!-- Dimensions Controls -->
-                <div id="downscale-dimensions-controls">
+                
+                <div class="inline-controls">
                     <div class="control-group">
-                        <label for="downscale-aspect-lock-toggle" class="checkbox-label toggle-switch">
-                            <input type="checkbox" id="downscale-aspect-lock-toggle" checked />
-                            <span class="toggle-knob"></span>
-                            Lock Aspect Ratio
-                        </label>
+                        <label for="downscale-mode-select">Resize By</label>
+                        <select id="downscale-mode-select">
+                            <option value="dimensions" selected>Dimensions (Px)</option>
+                            <option value="megapixels">Megapixels (MP)</option>
+                        </select>
                     </div>
-                    <div class="inline-controls">
-                         <div class="control-group">
-                            <label for="downscale-width-input">Width (px)</label>
+                    
+                    <!-- Dimensions -->
+                    <div id="downscale-dimensions-controls" class="inline-controls" style="gap: 0.5rem;">
+                        <div class="control-group">
+                            <label>W</label>
                             <input type="number" id="downscale-width-input" min="1" value="1920" />
                         </div>
                         <div class="control-group">
-                            <label for="downscale-height-input">Height (px)</label>
+                            <label>H</label>
                             <input type="number" id="downscale-height-input" min="1" value="1080" />
                         </div>
+                         <div class="control-group">
+                            <label for="downscale-aspect-lock-toggle" class="checkbox-label toggle-switch" title="Lock Aspect Ratio">
+                                <input type="checkbox" id="downscale-aspect-lock-toggle" checked />
+                                <span class="toggle-knob"></span>
+                                Lock
+                            </label>
+                        </div>
                     </div>
-                    <div id="downscale-fit-controls" class="control-group hidden">
-                        <label for="downscale-fit-select">Image Fit</label>
-                        <select id="downscale-fit-select">
-                            <option value="pad" selected>Pad (Fill empty space)</option>
-                            <option value="stretch">Stretch (Distort image)</option>
-                        </select>
-                         <div id="downscale-pad-color-wrapper" class="control-group">
-                            <label for="downscale-pad-color-picker">Pad Color</label>
-                            <input type="color" id="downscale-pad-color-picker" value="#000000" />
+
+                    <!-- MP -->
+                    <div id="downscale-mp-controls" class="hidden">
+                        <div class="control-group">
+                            <label for="downscale-mp-input">Target MP</label>
+                            <input type="number" id="downscale-mp-input" min="0.1" step="0.1" value="2.1" />
                         </div>
                     </div>
                 </div>
 
-                <!-- Megapixels Controls -->
-                <div id="downscale-mp-controls" class="hidden">
-                    <div class="control-group">
-                        <label for="downscale-mp-input">Target Megapixels</label>
-                        <input type="number" id="downscale-mp-input" min="0.1" step="0.1" value="2.1" />
-                        <small>(e.g., 2.1 for 1920x1080)</small>
-                    </div>
+                <div id="downscale-fit-controls" class="control-group hidden" style="width:100%; justify-content: center; margin-top: 1rem;">
+                     <div class="inline-controls">
+                        <div class="control-group">
+                            <label for="downscale-fit-select">Fit Mode</label>
+                            <select id="downscale-fit-select">
+                                <option value="pad" selected>Pad (Black Bars)</option>
+                                <option value="stretch">Stretch</option>
+                            </select>
+                        </div>
+                        <div id="downscale-pad-color-wrapper" class="control-group">
+                            <label for="downscale-pad-color-picker">Pad Color</label>
+                            <input type="color" id="downscale-pad-color-picker" value="#000000" />
+                        </div>
+                     </div>
                 </div>
 
                 <div class="control-group-divider" style="width: 100%; height: 1px; margin: 1.5rem 0;"></div>
 
-                <!-- Content and Folder Options -->
+                <!-- Output Controls -->
                 <div class="inline-controls">
+                     <!-- Filename Modifiers for Downscale -->
+                     <div class="control-group">
+                        <label>Prefix / Suffix</label>
+                        <div class="filename-inputs">
+                           <input type="text" id="downscale-prefix" placeholder="Prefix_" style="width: 80px;" />
+                           <input type="text" id="downscale-suffix" placeholder="_Suffix" style="width: 80px;" />
+                        </div>
+                   </div>
+
+                    <div class="control-group">
+                        <label for="downscale-format-select">Format</label>
+                        <select id="downscale-format-select">
+                            <option value="image/png" selected>PNG</option>
+                            <option value="image/jpeg">JPG</option>
+                            <option value="image/webp">WebP</option>
+                            <option value="image/avif">AVIF</option>
+                        </select>
+                    </div>
+                    <div id="downscale-quality-wrapper" class="control-group hidden">
+                        <label for="downscale-quality-slider">Quality: <span id="downscale-quality-value">92</span>%</label>
+                        <input type="range" id="downscale-quality-slider" min="1" max="100" value="92" step="1" />
+                    </div>
+                </div>
+                
+                 <div class="inline-controls" style="margin-top: 1rem;">
                     <div class="control-group">
                         <label for="downscale-apply-titles-toggle" class="checkbox-label toggle-switch">
                             <input type="checkbox" id="downscale-apply-titles-toggle" checked />
@@ -307,24 +338,8 @@
                         <label for="downscale-use-subfolders-toggle" class="checkbox-label toggle-switch">
                             <input type="checkbox" id="downscale-use-subfolders-toggle" checked />
                             <span class="toggle-knob"></span>
-                            Use Subfolders
+                            Keep Folders
                         </label>
-                    </div>
-                </div>
-
-
-                <!-- Output Controls -->
-                <div class="inline-controls">
-                    <div class="control-group">
-                        <label for="downscale-format-select">Output Format</label>
-                        <select id="downscale-format-select">
-                            <option value="image/png" selected>PNG</option>
-                            <option value="image/jpeg">JPG</option>
-                        </select>
-                    </div>
-                    <div id="downscale-quality-wrapper" class="control-group hidden">
-                        <label for="downscale-quality-slider">JPG Quality: <span id="downscale-quality-value">92</span>%</label>
-                        <input type="range" id="downscale-quality-slider" min="1" max="100" value="92" step="1" />
                     </div>
                 </div>
             </div>
@@ -338,9 +353,9 @@
         </div>
     </div>
 
-    <!-- JSZip library for creating zip files in the browser -->
+    <!-- Libs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="script.js" defer></script>
-    <script src="/assets/js/nav-loader.js"></script> <!-- ADD THIS LINE -->
+    <script src="/assets/js/nav-loader.js"></script>
 </body>
 </html>

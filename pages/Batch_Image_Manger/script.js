@@ -1,4 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("DEBUG: App Initialized");
+
     // --- DOM Elements ---
     const directoryUploadInput = document.getElementById('directory-upload');
     const uploadSection = document.getElementById('upload-section');
@@ -9,47 +11,51 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportStatus = document.getElementById('export-status');
     const previewCtx = previewCanvas.getContext('2d');
 
-    // Customization Controls
+    // Main Customization Controls
     const addTitleToggle = document.getElementById('add-title-toggle');
     const underscoreToggle = document.getElementById('underscore-toggle');
     const titleOptionsWrapper = document.getElementById('title-options-wrapper');
     const titleModeSelect = document.getElementById('title-mode-select');
     const fontSizeSlider = document.getElementById('font-size-slider');
     const fontSizeValueSpan = document.getElementById('font-size-value');
-    const fontSizeLabel = document.getElementById('font-size-label');
     const textColorPicker = document.getElementById('text-color-picker');
     const autoScaleToggle = document.getElementById('auto-scale-toggle');
-    const paddingInput = document.getElementById('padding-input');
-    const paddingControlGroup = document.getElementById('padding-control-group');
+    
+    // New Main Export Controls (Format, Quality, Prefix/Suffix)
+    const exportFormatSelect = document.getElementById('export-format-select');
+    const mainQualityWrapper = document.getElementById('main-quality-wrapper');
+    const mainQualitySlider = document.getElementById('main-quality-slider');
+    const mainQualityValue = document.getElementById('main-quality-value');
+    const filenamePrefixInput = document.getElementById('filename-prefix');
+    const filenameSuffixInput = document.getElementById('filename-suffix');
 
-
-    // "Add Space" & "Bleed" Controls
+    // Height/Pos Controls
     const headerHeightSlider = document.getElementById('header-height-slider');
     const headerHeightValueSpan = document.getElementById('header-height-value');
     const bgColorPicker = document.getElementById('bg-color-picker');
-    const positionToggle = document.getElementById('position-toggle');
-
-    // "Overlay" Mode Control
-    const textPositionSlider = document.getElementById('text-position-slider');
+    const positionToggle = document.getElementById('position-toggle'); // Bottom toggle
+    const textPositionSlider = document.getElementById('text-position-slider'); // Overlay Y
     const textPositionValueSpan = document.getElementById('text-position-value');
-    
-    // "Bleed" Mode Control
-    const textOffsetSlider = document.getElementById('text-offset-slider');
+    const textOffsetSlider = document.getElementById('text-offset-slider'); // Bleed offset
     const textOffsetValueSpan = document.getElementById('text-offset-value');
 
-    // Navigation and Renaming Controls
+    // Groups for visibility toggling
+    const headerHeightGroup = document.getElementById('header-height-group');
+    const textOffsetGroup = document.getElementById('text-offset-group');
+    const textPosGroup = document.getElementById('text-pos-group');
+    const bgColorGroup = document.getElementById('bg-color-group');
+
+    // Nav Controls
     const previewControls = document.getElementById('preview-controls');
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
     const titleInput = document.getElementById('title-input');
     const imageCounter = document.getElementById('image-counter');
-
-    // Subfolder Controls
     const newFolderInput = document.getElementById('new-folder-input');
     const addFolderBtn = document.getElementById('add-folder-btn');
     const folderSelect = document.getElementById('folder-select');
 
-    // Grid Feature DOM Elements
+    // Grid DOM
     const openGridModalBtn = document.getElementById('open-grid-modal-btn');
     const gridPopup = document.getElementById('grid-popup');
     const closeGridPopupBtn = gridPopup.querySelector('.popup-close-btn');
@@ -64,8 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const gridPreviewCtx = gridPreviewCanvas.getContext('2d');
     const generateGridBtn = document.getElementById('generate-grid-btn');
     const gridStatus = document.getElementById('grid-status');
-    
-    // Downscale Feature DOM Elements
+
+    // Downscale DOM
     const openDownscaleModalBtn = document.getElementById('open-downscale-modal-btn');
     const downscalePopup = document.getElementById('downscale-popup');
     const closeDownscalePopupBtn = downscalePopup.querySelector('.popup-close-btn');
@@ -83,13 +89,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const downscaleQualityWrapper = document.getElementById('downscale-quality-wrapper');
     const downscaleQualitySlider = document.getElementById('downscale-quality-slider');
     const downscaleQualityValue = document.getElementById('downscale-quality-value');
+    const downscalePrefixInput = document.getElementById('downscale-prefix');
+    const downscaleSuffixInput = document.getElementById('downscale-suffix');
     const downscaleGenerateBtn = document.getElementById('downscale-generate-btn');
     const downscaleStatus = document.getElementById('downscale-status');
     const downscaleErrorMessage = document.getElementById('downscale-error-message');
     const downscaleOriginalResolution = document.getElementById('downscale-original-resolution');
     const downscaleApplyTitlesToggle = document.getElementById('downscale-apply-titles-toggle');
     const downscaleUseSubfoldersToggle = document.getElementById('downscale-use-subfolders-toggle');
-
 
     // --- State ---
     let imageFiles = [];
@@ -102,23 +109,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners ---
     directoryUploadInput.addEventListener('change', handleDirectoryUpload);
     exportBtn.addEventListener('click', handleExport);
-    
+
+    // Main Control Listeners
     const allControls = [
         titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker, 
         bgColorPicker, positionToggle, addTitleToggle, underscoreToggle, 
-        textPositionSlider, textOffsetSlider, autoScaleToggle, paddingInput
+        textPositionSlider, textOffsetSlider, autoScaleToggle
     ];
     allControls.forEach(el => el.addEventListener('input', handleControlsChange));
 
+    // New Format Listeners
+    exportFormatSelect.addEventListener('change', () => {
+        const isPng = exportFormatSelect.value === 'image/png';
+        mainQualityWrapper.classList.toggle('hidden', isPng);
+    });
+    mainQualitySlider.addEventListener('input', () => {
+        mainQualityValue.textContent = mainQualitySlider.value;
+    });
+
+    // Navigation
     prevBtn.addEventListener('click', navigatePrev);
     nextBtn.addEventListener('click', navigateNext);
     titleInput.addEventListener('input', handleTitleChange);
     document.addEventListener('keydown', handleKeyPress);
     
+    // Folders
     addFolderBtn.addEventListener('click', handleAddFolder);
     folderSelect.addEventListener('change', handleFolderAssignment);
 
-    // Grid Feature Event Listeners
+    // Grid Listeners
     openGridModalBtn.addEventListener('click', openGridModal);
     closeGridPopupBtn.addEventListener('click', closeGridModal);
     gridPopup.addEventListener('click', (e) => { if (e.target === gridPopup) closeGridModal(); });
@@ -127,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gridAddTitlesToggle.addEventListener('change', updateGridPreview);
     generateGridBtn.addEventListener('click', handleGenerateGrid);
 
-    // Downscale Feature Event Listeners
+    // Downscale Listeners
     openDownscaleModalBtn.addEventListener('click', openDownscaleModal);
     closeDownscalePopupBtn.addEventListener('click', closeDownscaleModal);
     downscalePopup.addEventListener('click', (e) => { if (e.target === downscalePopup) closeDownscaleModal(); });
@@ -142,32 +161,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     downscaleGenerateBtn.addEventListener('click', handleDownscaleGeneration);
 
-
     // --- Functions ---
 
     function handleDirectoryUpload(e) {
         const files = Array.from(e.target.files);
-        console.log(`Debug: Found ${files.length} total files in directory.`);
+        console.log(`DEBUG: Upload started. Found ${files.length} files.`);
         
         imageFiles = []; imageTitles = []; imageFolders = [];
         availableFolders = ["(Root)"]; currentIndex = 0;
 
-        const imageRegex = /\.(jpe?g|png|gif|webp|bmp|svg)$/i;
+        const imageRegex = /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i;
         imageFiles = files.filter(file => file.type.startsWith('image/') || imageRegex.test(file.name));
         
-        console.log(`Debug: Filtered down to ${imageFiles.length} image files.`);
+        console.log(`DEBUG: Filtered to ${imageFiles.length} images.`);
 
         if (imageFiles.length === 0) {
-            showStatus(uploadStatus, 'No valid image files (.jpg, .png, etc.) were found in the selected directory.', true);
+            showStatus(uploadStatus, 'No valid image files found.', true);
             return;
         }
+
+        imageFiles.sort((a, b) => a.name.localeCompare(b.name));
 
         imageFiles.forEach(file => {
             imageTitles.push(formatTitle(file.name));
             imageFolders.push("(Root)");
         });
 
-        showStatus(uploadStatus, `Successfully loaded ${imageFiles.length} images.`, false);
+        showStatus(uploadStatus, `Loaded ${imageFiles.length} images.`, false);
 
         uploadSection.classList.add('hidden');
         editorSection.classList.remove('hidden');
@@ -177,38 +197,24 @@ document.addEventListener('DOMContentLoaded', () => {
         handleControlsChange();
         updateUIForCurrentIndex();
     }
-    
+
     function handleControlsChange() {
         fontSizeValueSpan.textContent = fontSizeSlider.value;
         headerHeightValueSpan.textContent = headerHeightSlider.value;
         textPositionValueSpan.textContent = textPositionSlider.value;
         textOffsetValueSpan.textContent = textOffsetSlider.value;
-        updateTitleControlState();
-        updateControlVisibility();
-        updateAutoScaleUI();
-        renderPreview();
-    }
 
-    function updateAutoScaleUI() {
-        const isAutoScale = autoScaleToggle.checked;
-        paddingControlGroup.classList.toggle('hidden', !isAutoScale);
-        if (isAutoScale) {
-            fontSizeLabel.innerHTML = `Max Font Size: <span id="font-size-value">${fontSizeSlider.value}</span>px`;
-        } else {
-            fontSizeLabel.innerHTML = `Font Size: <span id="font-size-value">${fontSizeSlider.value}</span>px`;
-        }
+        updateControlVisibility();
+        updateTitleControlState();
+        renderPreview();
     }
     
     function updateControlVisibility() {
         const mode = titleModeSelect.value;
-        const setVisible = (element, isVisible) => {
-            element.closest('.control-group').classList.toggle('hidden', !isVisible);
-        };
-        setVisible(headerHeightSlider, mode === 'add-space' || mode === 'bleed');
-        setVisible(bgColorPicker, mode === 'add-space' || mode === 'bleed');
-        setVisible(positionToggle, mode === 'add-space' || mode === 'bleed');
-        setVisible(textPositionSlider, mode === 'overlay');
-        setVisible(textOffsetSlider, mode === 'bleed');
+        headerHeightGroup.classList.toggle('hidden', mode === 'overlay');
+        bgColorGroup.classList.toggle('hidden', mode === 'overlay');
+        textPosGroup.classList.toggle('hidden', mode !== 'overlay');
+        textOffsetGroup.classList.toggle('hidden', mode !== 'bleed');
     }
 
     function handleTitleChange() {
@@ -226,27 +232,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const nameWithoutExt = filename.substring(0, filename.lastIndexOf('.')) || filename;
         return nameWithoutExt.replace(/_/g, ' ').replace(/-/g, ' ');
     }
-    
-    function calculateAutoScaleFontSize(ctx, text, targetWidth, maxFontSize) {
-        let currentSize = maxFontSize;
-        const minSize = 8;
-        while (currentSize > minSize) {
-            ctx.font = `bold ${currentSize}px Inter, sans-serif`;
-            const textMetrics = ctx.measureText(text);
-            if (textMetrics.width <= targetWidth) {
-                return currentSize;
-            }
-            currentSize--;
+
+    function getFileExtension(mimeType) {
+        switch(mimeType) {
+            case 'image/jpeg': return '.jpg';
+            case 'image/webp': return '.webp';
+            case 'image/avif': return '.avif';
+            default: return '.png';
         }
-        return minSize;
     }
 
     async function drawImageWithTitle(ctx, imageFile, title, options) {
-        const { addTitle, mode, textColor } = options;
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => {
-                if (!addTitle) {
+                if (!options.addTitle) {
                     ctx.canvas.width = img.width;
                     ctx.canvas.height = img.height;
                     ctx.drawImage(img, 0, 0);
@@ -254,51 +254,71 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 let headerHeight = 0;
-                if (mode === 'add-space' || mode === 'bleed') {
+                if (options.mode === 'add-space' || options.mode === 'bleed') {
                     headerHeight = options.headerHeight;
                 }
                 
+                // Canvas resizing logic
                 ctx.canvas.width = img.width;
-                ctx.canvas.height = img.height + headerHeight;
+                ctx.canvas.height = (options.mode === 'add-space') ? img.height + headerHeight : img.height;
 
-                if (headerHeight > 0) {
+                if (options.mode === 'add-space') {
                     const isBelow = options.position === 'below';
                     const imageY = isBelow ? 0 : headerHeight;
                     const headerY = isBelow ? img.height : 0;
+                    
+                    // Draw BG
                     ctx.fillStyle = options.bgColor;
                     ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
+                    // Draw Img
                     ctx.drawImage(img, 0, imageY);
                 } else {
+                    // Draw Img first
                     ctx.drawImage(img, 0, 0);
+                    // Draw BG for bleed
+                    if (options.mode === 'bleed') {
+                         const isBelow = options.position === 'below';
+                         const rectY = isBelow ? img.height - headerHeight : 0;
+                         ctx.fillStyle = options.bgColor;
+                         ctx.fillRect(0, rectY, ctx.canvas.width, headerHeight);
+                    }
                 }
 
+                // Font Scaling
                 let finalFontSize = options.fontSize;
                 if (options.autoScale) {
-                    const targetWidth = ctx.canvas.width - (options.padding * 2);
-                    finalFontSize = calculateAutoScaleFontSize(ctx, title, targetWidth, options.fontSize);
+                    // Simple heuristic for auto-scale: max 90% width
+                    const maxW = ctx.canvas.width * 0.9;
+                    let testSize = options.fontSize;
+                    ctx.font = `bold ${testSize}px Inter, sans-serif`;
+                    while (ctx.measureText(title).width > maxW && testSize > 10) {
+                        testSize -= 2;
+                        ctx.font = `bold ${testSize}px Inter, sans-serif`;
+                    }
+                    finalFontSize = testSize;
                 }
 
                 ctx.font = `bold ${finalFontSize}px Inter, sans-serif`;
-                ctx.fillStyle = textColor;
+                ctx.fillStyle = options.textColor;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
 
-                if (mode === 'overlay' || mode === 'bleed') {
+                if (options.mode === 'overlay') {
                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
                    ctx.shadowBlur = 8;
                 }
 
                 let textY;
-                if (mode === 'overlay') {
+                if (options.mode === 'overlay') {
                     textY = ctx.canvas.height * (options.textYPercent / 100);
-                } else if (mode === 'add-space') {
+                } else if (options.mode === 'add-space') {
                     const isBelow = options.position === 'below';
                     const headerY = isBelow ? img.height : 0;
                     textY = headerY + (headerHeight / 2);
                 } else { // bleed
                     const isBelow = options.position === 'below';
-                    const boundaryY = isBelow ? img.height : headerHeight;
-                    textY = boundaryY + options.textOffset;
+                    const rectY = isBelow ? img.height - headerHeight : 0;
+                    textY = rectY + (headerHeight / 2) + options.textOffset;
                 }
 
                 ctx.fillText(title, ctx.canvas.width / 2, textY);
@@ -307,14 +327,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.shadowBlur = 0;
                 resolve();
             };
-            img.onerror = () => reject(new Error(`Could not load image: ${imageFile.name}`));
+            img.onerror = (e) => {
+                console.error("DEBUG: Image load failed", e);
+                reject(new Error(`Could not load image: ${imageFile.name}`));
+            };
             img.src = URL.createObjectURL(imageFile);
         });
     }
 
     function updateUIForCurrentIndex() {
         if (imageFiles.length === 0) return;
-        imageCounter.textContent = `Image ${currentIndex + 1} / ${imageFiles.length}`;
+        imageCounter.textContent = `${currentIndex + 1} / ${imageFiles.length}`;
         titleInput.value = imageTitles[currentIndex];
         folderSelect.value = imageFolders[currentIndex];
         renderPreview();
@@ -325,42 +348,76 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await drawImageWithTitle(previewCtx, imageFiles[currentIndex], imageTitles[currentIndex], getTitleOptionsFromUI());
         } catch (error) {
-            console.error('Failed to render preview:', error);
-            showStatus(exportStatus, `Error rendering preview: ${error.message}`, true);
+            showStatus(exportStatus, `Error: ${error.message}`, true);
         }
     }
 
+    // --- Main Export Function ---
     async function handleExport() {
         if (imageFiles.length === 0) return;
-        exportBtn.disabled = true; exportBtn.textContent = 'Processing...';
+        
+        exportBtn.disabled = true; 
+        exportBtn.textContent = 'Processing...';
         showStatus(exportStatus, `Processing ${imageFiles.length} images...`, false);
+
         const zip = new JSZip();
         const options = getTitleOptionsFromUI();
         const processCanvas = document.createElement('canvas');
         const processCtx = processCanvas.getContext('2d');
+
+        // Format Settings
+        const format = exportFormatSelect.value; // e.g., image/png
+        const quality = parseInt(mainQualitySlider.value, 10) / 100;
+        const ext = getFileExtension(format);
+        const prefix = filenamePrefixInput.value || "";
+        const suffix = filenameSuffixInput.value || "";
+
+        console.log(`DEBUG: Starting Export. Format: ${format}, Quality: ${quality}, Ext: ${ext}`);
+
         try {
             for (let i = 0; i < imageFiles.length; i++) {
-                showStatus(exportStatus, `Processing ${i + 1}/${imageFiles.length}: ${imageTitles[i]}`, false);
+                showStatus(exportStatus, `Processing ${i + 1}/${imageFiles.length}...`, false);
+                
+                // Draw to canvas
                 await drawImageWithTitle(processCtx, imageFiles[i], imageTitles[i], options);
-                const blob = await new Promise(resolve => processCanvas.toBlob(resolve, 'image/png'));
-                let filename = underscoreToggle.checked ? imageTitles[i].replace(/ /g, '_') : imageTitles[i];
-                if (imageFolders[i] !== "(Root)") { zip.folder(imageFolders[i]).file(`${filename}.png`, blob); } 
-                else { zip.file(`${filename}.png`, blob); }
+                
+                // Create Blob with correct format
+                const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
+                
+                if (!blob) throw new Error(`Failed to create blob for image ${i}`);
+
+                // Build Filename
+                let baseName = imageTitles[i];
+                if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
+                const finalName = `${prefix}${baseName}${suffix}${ext}`;
+
+                // Add to Zip
+                if (imageFolders[i] !== "(Root)") { 
+                    zip.folder(imageFolders[i]).file(finalName, blob); 
+                } else { 
+                    zip.file(finalName, blob); 
+                }
             }
+
+            console.log("DEBUG: Zipping files...");
             const zipBlob = await zip.generateAsync({ type: 'blob' });
+            
             const link = document.createElement('a');
             link.href = URL.createObjectURL(zipBlob);
-            link.download = 'titled_images.zip';
+            link.download = 'processed_images.zip';
             document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            showStatus(exportStatus, `Success! Your ZIP file is downloading.`, false);
+            
+            showStatus(exportStatus, `Download Started!`, false);
         } catch (error) {
-            console.error('An error occurred during export:', error);
-            showStatus(exportStatus, `An error occurred: ${error.message}`, true);
+            console.error("DEBUG: Export Error", error);
+            showStatus(exportStatus, `Error: ${error.message}`, true);
         } finally {
-            exportBtn.disabled = false; exportBtn.textContent = 'Export All as .ZIP';
+            exportBtn.disabled = false; 
+            exportBtn.textContent = 'Export All as .ZIP';
         }
     }
 
+    // --- Subfolder Logic ---
     function handleAddFolder() {
         const newFolderName = newFolderInput.value.trim();
         if (newFolderName && !availableFolders.includes(newFolderName)) {
@@ -378,8 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function updateFolderDropdown() {
         folderSelect.innerHTML = '';
-        const foldersForDropdown = availableFolders.filter(f => f !== "All Images");
-        foldersForDropdown.forEach(folderName => {
+        availableFolders.forEach(folderName => {
             const option = document.createElement('option');
             option.value = folderName; option.textContent = folderName;
             folderSelect.appendChild(option);
@@ -399,7 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleKeyPress(e) {
-        if (editorSection.classList.contains('hidden') || document.activeElement === titleInput || document.activeElement === newFolderInput || !gridPopup.classList.contains('hidden') || !downscalePopup.classList.contains('hidden')) { return; }
+        if (editorSection.classList.contains('hidden') || document.activeElement.tagName === 'INPUT' || !gridPopup.classList.contains('hidden') || !downscalePopup.classList.contains('hidden')) { return; }
         if (e.key === 'ArrowLeft') { e.preventDefault(); navigatePrev(); } 
         else if (e.key === 'ArrowRight') { e.preventDefault(); navigateNext(); }
     }
@@ -410,6 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
         element.classList.remove('hidden');
     }
 
+    // --- Grid Feature ---
     function openGridModal() {
         gridStatus.textContent = ''; gridStatus.classList.add('hidden');
         gridSourceSelect.innerHTML = '';
@@ -434,13 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const addTitles = gridAddTitlesToggle.checked;
         const filteredIndices = getFilteredImageIndices(source);
 
-        if (filteredIndices.length === 0) {
-            gridPreviewCtx.clearRect(0, 0, gridPreviewCanvas.width, gridPreviewCanvas.height);
-            gridOutputSize.textContent = `Dimensions: 0 x 0 px`;
-            gridOutputMegapixels.textContent = `Total: 0.0 MP`;
-            gridWarningBox.classList.add('hidden');
-            return;
-        }
+        if (filteredIndices.length === 0) return;
 
         try {
             const titleOptions = getTitleOptionsFromUI();
@@ -450,6 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 filteredIndices.map(i => getProcessedImage(imageFiles[i], imageTitles[i], titleOptions))
             );
             
+            // Grid calc logic
             const maxWidth = Math.max(...processedImages.map(img => img.width));
             const maxHeight = Math.max(...processedImages.map(img => img.height));
             const rows = Math.ceil(processedImages.length / columns);
@@ -458,15 +510,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const totalPixels = totalWidth * totalHeight;
             const megapixels = (totalPixels / 1000000).toFixed(1);
 
-            gridOutputSize.textContent = `Dimensions: ${totalWidth} x ${totalHeight} px`;
-            gridOutputMegapixels.textContent = `Total: ${megapixels} MP`;
+            gridOutputSize.textContent = `${totalWidth} x ${totalHeight} px`;
+            gridOutputMegapixels.textContent = `${megapixels} MP`;
             gridWarningBox.classList.toggle('hidden', totalPixels <= MEGAPixel_limit);
 
+            // Render small preview
             const previewWidth = gridPreviewCanvas.clientWidth || 800;
             const scale = previewWidth / totalWidth;
             gridPreviewCanvas.width = previewWidth;
             gridPreviewCanvas.height = totalHeight * scale;
-            gridPreviewCtx.fillStyle = 'var(--bg-primary)';
+            
+            gridPreviewCtx.fillStyle = '#111115';
             gridPreviewCtx.fillRect(0,0, gridPreviewCanvas.width, gridPreviewCanvas.height);
 
             const cellWidth = maxWidth * scale;
@@ -476,19 +530,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 const row = Math.floor(i / columns);
                 const col = i % columns;
                 const x = col * cellWidth, y = row * cellHeight;
+                // Center image in cell
                 const w = img.width * scale, h = img.height * scale;
                 const dx = x + (cellWidth - w) / 2, dy = y + (cellHeight - h) / 2;
                 gridPreviewCtx.drawImage(img, dx, dy, w, h);
             });
         } catch (error) {
-            console.error("Error updating grid preview:", error);
-            showStatus(gridStatus, 'Error generating preview.', true);
+            console.error("DEBUG: Grid Preview Error", error);
         }
     }
 
     async function handleGenerateGrid() {
         generateGridBtn.disabled = true; generateGridBtn.textContent = 'Processing...';
-        showStatus(gridStatus, 'Preparing images...', false);
+        showStatus(gridStatus, 'Generating Grid...', false);
 
         const source = gridSourceSelect.value;
         const columns = parseInt(gridColumnsInput.value, 10) || 1;
@@ -496,17 +550,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const shouldDownscale = gridDownscaleToggle.checked;
         const filteredIndices = getFilteredImageIndices(source);
 
-        if (filteredIndices.length === 0) {
-            showStatus(gridStatus, 'No images selected.', true);
-            generateGridBtn.disabled = false; generateGridBtn.textContent = 'Generate & Download Grid';
-            return;
-        }
-
         try {
             const titleOptions = getTitleOptionsFromUI();
             titleOptions.addTitle = addTitles;
 
-            showStatus(gridStatus, `Processing ${filteredIndices.length} images...`, false);
             const processedImages = await Promise.all(
                 filteredIndices.map(i => getProcessedImage(imageFiles[i], imageTitles[i], titleOptions))
             );
@@ -518,11 +565,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let finalHeight = maxHeight * rows;
             let totalPixels = finalWidth * finalHeight;
 
+            let scaleFactor = 1;
             if (shouldDownscale && totalPixels > MEGAPixel_limit) {
-                const scaleFactor = Math.sqrt(MEGAPixel_limit / totalPixels);
+                scaleFactor = Math.sqrt(MEGAPixel_limit / totalPixels);
                 finalWidth = Math.floor(finalWidth * scaleFactor);
                 finalHeight = Math.floor(finalHeight * scaleFactor);
-                showStatus(gridStatus, 'Downscaling image...', false);
             }
 
             const finalCanvas = document.createElement('canvas');
@@ -530,15 +577,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const finalCtx = finalCanvas.getContext('2d');
             finalCtx.fillStyle = '#000000';
             finalCtx.fillRect(0, 0, finalWidth, finalHeight);
-            const cellWidth = finalWidth / columns, cellHeight = finalHeight / rows;
+            
+            const cellWidth = finalWidth / columns;
+            const cellHeight = finalHeight / rows;
 
-            showStatus(gridStatus, 'Compositing final grid...', false);
             processedImages.forEach((img, i) => {
                 const row = Math.floor(i / columns);
                 const col = i % columns;
                 const aspect = img.width / img.height;
+                
+                // Calculate fit dimensions
                 let dw = cellWidth, dh = cellWidth / aspect;
                 if (dh > cellHeight) { dh = cellHeight; dw = cellHeight * aspect; }
+                
                 const x = col * cellWidth + (cellWidth - dw) / 2;
                 const y = row * cellHeight + (cellHeight - dh) / 2;
                 finalCtx.drawImage(img, x, y, dw, dh);
@@ -547,19 +598,20 @@ document.addEventListener('DOMContentLoaded', () => {
             finalCanvas.toBlob(blob => {
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = `image_grid_${source.replace(/\s/g, '_')}.png`;
+                link.download = `grid_${source.replace(/\s/g, '_')}.png`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                showStatus(gridStatus, `Success! Your grid is downloading.`, false);
+                showStatus(gridStatus, `Downloaded!`, false);
             }, 'image/png');
+
         } catch (error) {
-            console.error("Error generating final grid:", error);
-            showStatus(gridStatus, 'An error occurred during generation.', true);
+            console.error("DEBUG: Grid Gen Error", error);
+            showStatus(gridStatus, 'Error occurred.', true);
         } finally {
-            generateGridBtn.disabled = false; generateGridBtn.textContent = 'Generate & Download Grid';
+            generateGridBtn.disabled = false; generateGridBtn.textContent = 'Download Grid (PNG)';
         }
     }
 
-    // --- Downscale Feature Functions ---
+    // --- Downscale Feature ---
 
     async function openDownscaleModal() {
         downscaleStatus.textContent = '';
@@ -567,9 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (imageFiles.length > 0) {
             const img = await loadImage(imageFiles[currentIndex]);
-            downscaleOriginalResolution.textContent = `Original Resolution (for reference): ${img.width} x ${img.height} px`;
-        } else {
-            downscaleOriginalResolution.textContent = 'No image loaded.';
+            downscaleOriginalResolution.textContent = `Current Image: ${img.width} x ${img.height} px`;
         }
 
         document.body.classList.add('popup-open');
@@ -596,26 +646,20 @@ document.addEventListener('DOMContentLoaded', () => {
         downscalePadColorWrapper.classList.toggle('hidden', !isPad || isLocked || !isDimensions);
         
         const format = downscaleFormatSelect.value;
-        downscaleQualityWrapper.classList.toggle('hidden', format !== 'image/jpeg');
+        downscaleQualityWrapper.classList.toggle('hidden', format === 'image/png');
         downscaleQualityValue.textContent = downscaleQualitySlider.value;
     }
 
     async function handleAspectRatioInputChange(source) {
         if (!downscaleAspectLockToggle.checked || imageFiles.length === 0) return;
-
         const img = await loadImage(imageFiles[currentIndex]);
         const aspectRatio = img.width / img.height;
-        
-        const width = parseInt(downscaleWidthInput.value, 10);
-        const height = parseInt(downscaleHeightInput.value, 10);
+        const w = parseInt(downscaleWidthInput.value, 10);
+        const h = parseInt(downscaleHeightInput.value, 10);
 
-        if (source === 'width' && width > 0) {
-            downscaleHeightInput.value = Math.round(width / aspectRatio);
-        } else if (source === 'height' && height > 0) {
-            downscaleWidthInput.value = Math.round(height * aspectRatio);
-        } else if (width > 0) {
-             downscaleHeightInput.value = Math.round(width / aspectRatio);
-        }
+        if (source === 'width' && w > 0) downscaleHeightInput.value = Math.round(w / aspectRatio);
+        else if (source === 'height' && h > 0) downscaleWidthInput.value = Math.round(h * aspectRatio);
+        else if (w > 0) downscaleHeightInput.value = Math.round(w / aspectRatio);
     }
 
     async function handleDownscaleGeneration() {
@@ -623,77 +667,69 @@ document.addEventListener('DOMContentLoaded', () => {
 
         downscaleGenerateBtn.disabled = true;
         downscaleGenerateBtn.textContent = 'Processing...';
-        showStatus(downscaleStatus, `Preparing ${imageFiles.length} images...`, false);
+        showStatus(downscaleStatus, `Starting batch process...`, false);
         downscaleErrorMessage.textContent = '';
 
         const zip = new JSZip();
         const processCanvas = document.createElement('canvas');
         const processCtx = processCanvas.getContext('2d');
         
-        const options = {
-            mode: downscaleModeSelect.value,
-            format: downscaleFormatSelect.value,
-            quality: parseInt(downscaleQualitySlider.value, 10) / 100,
-            applyTitles: downscaleApplyTitlesToggle.checked,
-            useSubfolders: downscaleUseSubfoldersToggle.checked,
-            fileExtension: downscaleFormatSelect.value === 'image/jpeg' ? 'jpg' : 'png',
-        };
+        const format = downscaleFormatSelect.value;
+        const quality = parseInt(downscaleQualitySlider.value, 10) / 100;
+        const ext = getFileExtension(format);
+        const prefix = downscalePrefixInput.value || "";
+        const suffix = downscaleSuffixInput.value || "";
+        const applyTitles = downscaleApplyTitlesToggle.checked;
+        const useSubfolders = downscaleUseSubfoldersToggle.checked;
+        const resizeMode = downscaleModeSelect.value;
+
+        console.log(`DEBUG: Downscale Start. Mode: ${resizeMode}, Format: ${format}`);
 
         try {
-            // --- CLARIFICATION ---
-            // This loop iterates from the first to the last image in the `imageFiles` array.
-            // It does not use any filters. It processes ALL uploaded images.
             for (let i = 0; i < imageFiles.length; i++) {
-                showStatus(downscaleStatus, `Processing ${i + 1}/${imageFiles.length}: ${imageTitles[i]}`, false);
+                showStatus(downscaleStatus, `Converting ${i + 1}/${imageFiles.length}...`, false);
                 
-                const sourceImage = options.applyTitles 
+                // 1. Get Source Image (with or without titles)
+                const sourceImage = applyTitles 
                     ? await getProcessedImage(imageFiles[i], imageTitles[i], getTitleOptionsFromUI())
                     : await loadImage(imageFiles[i]);
                 
+                // 2. Calculate Targets
                 let targetWidth, targetHeight;
-
-                if (options.mode === 'megapixels') {
+                if (resizeMode === 'megapixels') {
                     const targetMP = parseFloat(downscaleMpInput.value) * 1000000;
-                    if (targetMP > (sourceImage.width * sourceImage.height)) {
-                        throw new Error(`Target megapixels for "${imageTitles[i]}" is larger than its original. Upscaling is not supported.`);
-                    }
                     const aspectRatio = sourceImage.width / sourceImage.height;
                     targetHeight = Math.sqrt(targetMP / aspectRatio);
                     targetWidth = targetHeight * aspectRatio;
-                } else { // Dimensions
+                } else {
                     targetWidth = parseInt(downscaleWidthInput.value, 10);
                     targetHeight = parseInt(downscaleHeightInput.value, 10);
-                    if ((targetWidth * targetHeight) > (sourceImage.width * sourceImage.height)) {
-                        throw new Error(`Target dimensions for "${imageTitles[i]}" are larger than its original. Upscaling is not supported.`);
-                    }
                 }
 
+                // 3. Setup Canvas
                 processCanvas.width = Math.round(targetWidth);
                 processCanvas.height = Math.round(targetHeight);
                 const fitMode = downscaleAspectLockToggle.checked ? 'stretch' : downscaleFitSelect.value;
                 
+                // Fill BG if padding
                 if (fitMode === 'pad') {
-                    const padColor = document.getElementById('downscale-pad-color-picker').value;
-                    processCtx.fillStyle = padColor;
+                    processCtx.fillStyle = document.getElementById('downscale-pad-color-picker').value;
                     processCtx.fillRect(0, 0, processCanvas.width, processCanvas.height);
                 }
 
+                // 4. Draw Image
                 const imgAspectRatio = sourceImage.width / sourceImage.height;
                 const canvasAspectRatio = processCanvas.width / processCanvas.height;
                 let drawWidth, drawHeight, offsetX, offsetY;
                 
                 if (fitMode === 'stretch') {
-                    drawWidth = processCanvas.width;
-                    drawHeight = processCanvas.height;
-                    offsetX = 0;
-                    offsetY = 0;
+                    drawWidth = processCanvas.width; drawHeight = processCanvas.height;
+                    offsetX = 0; offsetY = 0;
                 } else { // Pad
                     if (imgAspectRatio > canvasAspectRatio) {
-                        drawWidth = processCanvas.width;
-                        drawHeight = drawWidth / imgAspectRatio;
+                        drawWidth = processCanvas.width; drawHeight = drawWidth / imgAspectRatio;
                     } else {
-                        drawHeight = processCanvas.height;
-                        drawWidth = drawHeight * imgAspectRatio;
+                        drawHeight = processCanvas.height; drawWidth = drawHeight * imgAspectRatio;
                     }
                     offsetX = (processCanvas.width - drawWidth) / 2;
                     offsetY = (processCanvas.height - drawHeight) / 2;
@@ -701,41 +737,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 processCtx.drawImage(sourceImage, offsetX, offsetY, drawWidth, drawHeight);
 
-                const blob = await new Promise(resolve => processCanvas.toBlob(resolve, options.format, options.quality));
-                let filename = underscoreToggle.checked ? imageTitles[i].replace(/ /g, '_') : imageTitles[i];
-                filename += `.${options.fileExtension}`;
+                // 5. Save Blob
+                const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
+                
+                // 6. Filename
+                let baseName = imageTitles[i];
+                if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
+                const finalName = `${prefix}${baseName}${suffix}${ext}`;
 
-                // --- CLARIFICATION ---
-                // This logic checks the subfolder assignment for the *current image* (at index `i`).
-                // If "Use Subfolders" is checked, it places this image into its assigned folder.
-                // If not, or if the folder is "(Root)", it goes into the top level of the ZIP.
-                // This correctly builds the full folder structure for all images.
-                if (options.useSubfolders && imageFolders[i] !== "(Root)") {
-                    zip.folder(imageFolders[i]).file(filename, blob);
+                if (useSubfolders && imageFolders[i] !== "(Root)") {
+                    zip.folder(imageFolders[i]).file(finalName, blob);
                 } else {
-                    zip.file(filename, blob);
+                    zip.file(finalName, blob);
                 }
             }
 
+            console.log("DEBUG: Downscale Zip generation...");
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(zipBlob);
-            link.download = 'downscaled_images.zip';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            showStatus(downscaleStatus, `Success! Your ZIP file is downloading.`, false);
+            link.download = 'batch_converted_images.zip';
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            showStatus(downscaleStatus, `Download Started!`, false);
 
         } catch (error) {
-            console.error('An error occurred during downscale export:', error);
+            console.error('DEBUG: Downscale Error', error);
             showStatus(downscaleErrorMessage, error.message, true);
-            showStatus(downscaleStatus, `An error occurred. Please check the message above.`, true);
         } finally {
             downscaleGenerateBtn.disabled = false;
             downscaleGenerateBtn.textContent = 'Generate & Download ZIP';
         }
     }
 
+    // --- Helpers ---
 
     function getTitleOptionsFromUI() {
         return {
@@ -748,34 +782,22 @@ document.addEventListener('DOMContentLoaded', () => {
             position: positionToggle.checked ? 'below' : 'above',
             textYPercent: parseInt(textPositionSlider.value, 10),
             textOffset: parseInt(textOffsetSlider.value, 10),
-            autoScale: autoScaleToggle.checked,
-            padding: parseInt(paddingInput.value, 10) || 0,
+            autoScale: autoScaleToggle.checked
         };
     }
 
     async function getProcessedImage(file, title, options) {
-        // The original line below was the source of the bug.
-        // It has been removed to ensure the 'addTitle' option from the UI is respected.
-        // const processingOptions = { ...options, addTitle: true };
-
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
-        // Pass the original, unmodified options to the drawing function.
         await drawImageWithTitle(tempCtx, file, title, options);
-        
         const finalImage = new Image();
         finalImage.src = tempCanvas.toDataURL();
-        await new Promise((resolve, reject) => {
-            finalImage.onload = resolve;
-            finalImage.onerror = reject;
-        });
+        await new Promise(r => finalImage.onload = r);
         return finalImage;
     }
 
     function getFilteredImageIndices(source) {
-        if (source === "All Images") {
-            return imageFiles.map((_, index) => index);
-        }
+        if (source === "All Images") return imageFiles.map((_, index) => index);
         return imageFolders.map((folder, index) => (folder === source ? index : -1)).filter(index => index !== -1);
     }
 
@@ -787,7 +809,4 @@ document.addEventListener('DOMContentLoaded', () => {
             img.src = URL.createObjectURL(file);
         });
     }
-
-    // Initialize UI on load
-    handleControlsChange();
 });
