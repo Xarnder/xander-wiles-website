@@ -1,3 +1,5 @@
+/* --- START OF FILE style.css --- */
+
 /* --- Foundational Styles & Variables --- */
 :root {
     --bg-primary: #0a0a0b;
@@ -77,7 +79,9 @@ body {
 .sidebar-nav {
     position: sticky;
     top: 2rem;
-    flex: 0 0 220px; /* Do not grow, do not shrink, base width 220px */
+    flex: 0 0 240px; /* Slightly wider to accommodate longer titles */
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
 }
 
 .sidebar-nav h3 {
@@ -97,10 +101,10 @@ body {
     color: var(--text-secondary);
     text-decoration: none;
     border-radius: var(--radius-md);
-    /* UPDATED: Added box-shadow to the transition for the glow effect */
     transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.3s ease;
-    border: 2px solid transparent; /* Added to prevent layout shift */
-    margin: 0.25rem 0; /* Added for better spacing */
+    border: 2px solid transparent;
+    margin: 0.25rem 0;
+    font-size: 0.95rem;
 }
 
 .sidebar-nav a:hover {
@@ -111,16 +115,15 @@ body {
 .sidebar-nav a.active {
     color: var(--text-primary);
     font-weight: 600;
-    /* UPDATED: Replaced border-left with a glowing box-shadow */
     box-shadow: 0 0 12px -2px var(--accent-cyan);
-    border-color: var(--glass-border); /* Give it a subtle border to contain the glow */
+    border-color: var(--glass-border);
     background-color: var(--bg-secondary);
 }
 
 /* --- Main Content Area --- */
 .content {
     flex: 1;
-    min-width: 0; /* Important for flexbox to allow content to shrink */
+    min-width: 0;
 }
 
 .glass-card {
@@ -140,7 +143,7 @@ h2, h3, h4 {
 }
 h2 { font-size: 1.8rem; margin-top: 1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.75rem; }
 h3 { font-size: 1.4rem; margin-top: 1.5rem; }
-h4 { font-size: 1.1rem; margin-top: 1.25rem; color: var(--text-secondary); }
+h4 { font-size: 1.1rem; margin-top: 1.25rem; color: var(--accent-cyan); }
 
 p, ul, ol { margin-bottom: 1rem; color: var(--text-secondary); }
 ul, ol { padding-left: 1.5rem; }
@@ -177,8 +180,8 @@ pre {
 }
 
 pre.file-structure {
-    background-color: rgba(3, 7, 18, 0.5); /* A slightly different dark blue background */
-    color: #cbd5e1; /* Lighter text for diagrams */
+    background-color: rgba(3, 7, 18, 0.5);
+    color: #cbd5e1;
     line-height: 1.5;
 }
 
@@ -193,7 +196,7 @@ pre.file-structure {
     border-radius: 6px;
     cursor: pointer;
     transition: background-color 0.2s, color 0.2s;
-    line-height: 0; /* For better icon centering */
+    line-height: 0;
 }
 
 .copy-btn:hover {
@@ -215,7 +218,8 @@ pre.file-structure {
         position: static;
         width: 100%;
         margin-bottom: 2rem;
-        flex: 1 1 auto; /* Reset flex properties */
+        max-height: none;
+        flex: 1 1 auto;
     }
     
     .sidebar-nav ul {
@@ -224,16 +228,14 @@ pre.file-structure {
         gap: 0.5rem;
     }
     .sidebar-nav a {
-        border-left: none; /* Mobile doesn't use the border */
-        border: none; /* Reset border for mobile view */
+        border: none;
         background-color: var(--bg-secondary);
     }
     .sidebar-nav a.active {
-        /* Mobile version uses a gradient background, not the glow */
         background: var(--gradient-primary);
         font-weight: 600;
         color: var(--text-primary);
-        box-shadow: none; /* Ensure no glow on mobile */
+        box-shadow: none;
     }
 }
 

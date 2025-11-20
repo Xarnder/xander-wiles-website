@@ -52,7 +52,10 @@
                 <li><a href="#docker-environment">Docker Environment</a></li>
                 <li><a href="#wsl2">WSL2</a></li>
                 <li><a href="#docker-desktop">Docker Desktop</a></li>
-                <li><a href="#setting-up-container">Setting Up Container</a></li>
+                <li><a href="#git-clone">Cloning Template</a></li>
+                <li><a href="#pycharm-concepts">PyCharm Concepts</a></li>
+                <li><a href="#pycharm-interpreter">Setting Interpreter</a></li>
+                <li><a href="#setting-up-container">Run Configuration</a></li>
                 <li><a href="#dockerfile-details">Dockerfile Details</a></li>
                 <li><a href="#using-docker">Using Docker</a></li>
                 <li><a href="#managing-data">Managing Project Data</a></li>
@@ -272,32 +275,65 @@
                     <li>Docker will automatically move all its existing data. This might take a few minutes.</li>
                 </ol>
             </section>
+
+            <section id="git-clone" class="glass-card">
+                <h2>Git Clone Docker Template</h2>
+                <p>Before starting the configuration, you need to download the project files to your local computer. This is called "Cloning".</p>
+                <p>Run the following command in your terminal (e.g., PowerShell or Git Bash) inside the folder where you want your projects to live (like <code>D:\Projects\</code>):</p>
+                <div class="code-block-wrapper">
+                    <pre><code>git clone https://github.com/Xarnder/docker-template.git</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+            </section>
             
-            <section id="setting-up-container" class="glass-card">
-                <h2>Setting Up Docker Container</h2>
-                <p>Here is an overview of setting the Python interpreter in PyCharm to use Docker.</p>
-                <img src="assets/images/setup-overview.png" alt="PyCharm Docker interpreter settings overview" class="responsive-img">
-                <p><strong>Open in PyCharm and set the Docker interpreter</strong></p>
+            <section id="pycharm-concepts" class="glass-card">
+                <h2>PyCharm: Interpreter vs. Run Configuration</h2>
+                <p>Before we proceed, it is important to understand the difference between these two settings in PyCharm. It can be confusing because they both seem to "control" Docker.</p>
+                
+                <h4>1. Python Interpreter (The Engine)</h4>
+                <p><strong>File > Settings > Project > Python Interpreter</strong></p>
+                <p>Think of this as the <strong>engine</strong> under the hood of your car. It is a global setting for the entire project. By setting the interpreter to "Docker", you are telling PyCharm: "Do not use the Python installed on Windows. Use the Python installed inside the Docker Container." This allows PyCharm to index the libraries inside the container so that features like auto-complete and syntax highlighting work correctly.</p>
+                
+                <h4>2. Run Configuration (The Dashboard)</h4>
+                <p><strong>Edit Configurations (Top Right Dropdown)</strong></p>
+                <p>Think of this as the <strong>dashboard settings</strong> for a specific road trip. While the engine (Interpreter) stays the same, you might want to drive differently today. The Run Configuration controls <em>how</em> a specific script is launched. This is where you tell Docker to turn on the GPU, mount specific folders, or clean up after itself.</p>
+            </section>
+
+            <section id="pycharm-interpreter" class="glass-card">
+                <h2>Setting the PyCharm Interpreter</h2>
+                <p>You must set your PyCharm Interpreter to the Docker container so PyCharm knows where to find your libraries.</p>
                 <ol>
-                    <li>PyCharm → Open `D:\gpu-project`.</li>
-                    <li>File → Settings → Project → Python Interpreter → Add Interpreter → On Docker.</li>
-                    <li>In the dialog:
-                        <ul>
-                            <li><strong>Server:</strong> Docker</li>
-                            <li><strong>Image:</strong> Build from Dockerfile (point to `D:\gpu-project\Dockerfile`)</li>
-                            <li><strong>Image tag:</strong> `gpu-project:latest`</li>
-                            <li>Click <strong>Modify options</strong> (top-right of that dialog) and add:
-                                <ul>
-                                    <li><strong>Run options →</strong> put: `--gpus all` (gives container full VRAM access)</li>
-                                    <li><strong>Bind mounts →</strong> (volumes; see below)</li>
-                                </ul>
-                            </li>
-                        </ul>
-                    </li>
+                    <li>Open your project in PyCharm.</li>
+                    <li>Go to <strong>File > Settings > Project > Python Interpreter</strong>.</li>
+                    <li>Click the <strong>Add Interpreter</strong> link (or the gear icon) and select <strong>On Docker...</strong></li>
+                    <li>In the dialog that appears, select "Docker" as the server.</li>
+                    <li>Select <strong>Build from Dockerfile</strong> (this ensures the environment matches your code exactly).</li>
+                    <li>Click OK. PyCharm will take a few minutes to build the image and index the files.</li>
                 </ol>
-                <p>The Bind Mounts are critical for data persistence and are explained in detail in the "Managing Project Data" section.</p>
+            </section>
+
+            <section id="setting-up-container" class="glass-card">
+                <h2>Setting Up Run Configuration (Docker Config)</h2>
+                <p>Now we need to configure the specific run options to ensure the container has access to your hardware. You do this by editing the configuration in the top-right of the PyCharm window.</p>
+                <p><strong>Docker Config Details:</strong></p>
+                <ul>
+                    <li><strong>Name:</strong> Docker (or any name you prefer)</li>
+                    <li><strong>Dockerfile:</strong> Dockerfile</li>
+                    <li><strong>Run options:</strong> You must copy and paste these exact flags into the "Run options" field (found under Modify Options):</li>
+                </ul>
+                <div class="code-block-wrapper">
+                    <pre><code>--gpus all --ipc=host --rm</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+                <p><strong>What do these flags mean?</strong></p>
+                <ul>
+                    <li><code>--gpus all</code>: This is critical. It punches a hole through the container walls to let the Linux system see and use your physical NVIDIA GPU. Without this, PyTorch will not be able to use CUDA.</li>
+                    <li><code>--ipc=host</code>: This stands for "Inter-Process Communication". Deep learning dataloaders use shared memory to speed up data transfer. The default Docker shared memory is too small, which causes PyTorch to crash unexpectedly. This flag allows the container to use the host's shared memory space, fixing that crash.</li>
+                    <li><code>--rm</code>: This stands for "Remove". It tells Docker to automatically delete the container as soon as the script finishes running. This keeps your system clean and prevents hundreds of "zombie" stopped containers from cluttering up your hard drive.</li>
+                </ul>
+                
+                <p>Don't forget to also set up your <strong>Bind Mounts</strong> (Volumes) in this same menu, which we discuss in the "Managing Project Data" section.</p>
                 <img src="assets/images/pycharm-config.png" alt="PyCharm run/debug configurations for Docker" class="responsive-img">
-                <p>Click OK to build the image. PyCharm will build and then create/run a container when you run code.</p>
             </section>
             
             <section id="dockerfile-details" class="glass-card">
@@ -309,7 +345,7 @@
                 <p>The Dockerfile is the set of instructions for preparing the phone's core operating system (like iOS or Android).</p>
                 <ul>
                     <li><code>FROM pytorch/pytorch:...</code>: This is like choosing your phone model. You've chosen an "Ubuntu Phone, PyTorch Edition." It already has the basic OS (Ubuntu), the main camera hardware driver (CUDA), and the primary Camera App (PyTorch) pre-installed by the manufacturer.</li>
-                    <li><code>RUN apt-get install -y ffmpeg</code>: This is like going into the phone's system settings and installing a system-wide service or utility. ffmpeg is not a Python library; it is a powerful, standalone program written in languages like C. It's like a core video processing service that any app on the phone can use. You are installing it using Ubuntu's "system installer," which is called apt-get.</li>
+                    <li><code>RUN apt-get install -y ffmpeg</code>: This is like going into the phone's system settings and installing a system-wide service or utility. ffmpeg is not a powerful, standalone program written in languages like C. It's like a core video processing service that any app on the phone can use. You are installing it using Ubuntu's "system installer," which is called apt-get.</li>
                 </ul>
                 <p><strong>2. The requirements.txt = Installing Apps from the App Store</strong></p>
                 <p>The requirements.txt file is your list of apps to download from the "Python App Store" (which is called PyPI). These apps run on top of the phone's operating system.</p>
