@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const gridSourceSelect = document.getElementById('grid-source-select');
     const gridColumnsInput = document.getElementById('grid-columns-input');
     const gridAddTitlesToggle = document.getElementById('grid-add-titles-toggle');
+    const gridMatchSmallestToggle = document.getElementById('grid-match-smallest-toggle'); // New
     const gridWarningBox = document.getElementById('grid-warning-box');
     const gridDownscaleToggle = document.getElementById('grid-downscale-toggle');
     const gridOutputSize = document.getElementById('grid-output-size');
@@ -144,6 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gridSourceSelect.addEventListener('change', updateGridPreview);
     gridColumnsInput.addEventListener('input', updateGridPreview);
     gridAddTitlesToggle.addEventListener('change', updateGridPreview);
+    gridMatchSmallestToggle.addEventListener('change', updateGridPreview); // New listener
     generateGridBtn.addEventListener('click', handleGenerateGrid);
 
     // Downscale Listeners
@@ -489,6 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const source = gridSourceSelect.value;
         const columns = parseInt(gridColumnsInput.value, 10) || 1;
         const addTitles = gridAddTitlesToggle.checked;
+        const matchSmallest = gridMatchSmallestToggle.checked;
         const filteredIndices = getFilteredImageIndices(source);
 
         if (filteredIndices.length === 0) return;
@@ -501,12 +504,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 filteredIndices.map(i => getProcessedImage(imageFiles[i], imageTitles[i], titleOptions))
             );
             
-            // Grid calc logic
-            const maxWidth = Math.max(...processedImages.map(img => img.width));
-            const maxHeight = Math.max(...processedImages.map(img => img.height));
+            // Grid calc logic (Updated for Match Smallest)
+            let cellWidth, cellHeight;
+            
+            if (matchSmallest) {
+                cellWidth = Math.min(...processedImages.map(img => img.width));
+                cellHeight = Math.min(...processedImages.map(img => img.height));
+            } else {
+                cellWidth = Math.max(...processedImages.map(img => img.width));
+                cellHeight = Math.max(...processedImages.map(img => img.height));
+            }
+
             const rows = Math.ceil(processedImages.length / columns);
-            const totalWidth = maxWidth * columns;
-            const totalHeight = maxHeight * rows;
+            const totalWidth = cellWidth * columns;
+            const totalHeight = cellHeight * rows;
             const totalPixels = totalWidth * totalHeight;
             const megapixels = (totalPixels / 1000000).toFixed(1);
 
@@ -523,17 +534,29 @@ document.addEventListener('DOMContentLoaded', () => {
             gridPreviewCtx.fillStyle = '#111115';
             gridPreviewCtx.fillRect(0,0, gridPreviewCanvas.width, gridPreviewCanvas.height);
 
-            const cellWidth = maxWidth * scale;
-            const cellHeight = maxHeight * scale;
+            const scaledCellW = cellWidth * scale;
+            const scaledCellH = cellHeight * scale;
 
             processedImages.forEach((img, i) => {
                 const row = Math.floor(i / columns);
                 const col = i % columns;
-                const x = col * cellWidth, y = row * cellHeight;
-                // Center image in cell
-                const w = img.width * scale, h = img.height * scale;
-                const dx = x + (cellWidth - w) / 2, dy = y + (cellHeight - h) / 2;
-                gridPreviewCtx.drawImage(img, dx, dy, w, h);
+                const x = col * scaledCellW;
+                const y = row * scaledCellH;
+                
+                // Center image in cell (Scale Logic updated)
+                const aspect = img.width / img.height;
+                let dw = scaledCellW;
+                let dh = scaledCellW / aspect;
+
+                if (dh > scaledCellH) {
+                    dh = scaledCellH;
+                    dw = scaledCellH * aspect;
+                }
+
+                const dx = x + (scaledCellW - dw) / 2;
+                const dy = y + (scaledCellH - dh) / 2;
+                
+                gridPreviewCtx.drawImage(img, dx, dy, dw, dh);
             });
         } catch (error) {
             console.error("DEBUG: Grid Preview Error", error);
@@ -547,6 +570,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const source = gridSourceSelect.value;
         const columns = parseInt(gridColumnsInput.value, 10) || 1;
         const addTitles = gridAddTitlesToggle.checked;
+        const matchSmallest = gridMatchSmallestToggle.checked;
         const shouldDownscale = gridDownscaleToggle.checked;
         const filteredIndices = getFilteredImageIndices(source);
 
@@ -558,11 +582,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 filteredIndices.map(i => getProcessedImage(imageFiles[i], imageTitles[i], titleOptions))
             );
 
-            const maxWidth = Math.max(...processedImages.map(img => img.width));
-            const maxHeight = Math.max(...processedImages.map(img => img.height));
+            // Grid dimensions (Updated for Match Smallest)
+            let cellWidth, cellHeight;
+            if (matchSmallest) {
+                cellWidth = Math.min(...processedImages.map(img => img.width));
+                cellHeight = Math.min(...processedImages.map(img => img.height));
+            } else {
+                cellWidth = Math.max(...processedImages.map(img => img.width));
+                cellHeight = Math.max(...processedImages.map(img => img.height));
+            }
+
             const rows = Math.ceil(processedImages.length / columns);
-            let finalWidth = maxWidth * columns;
-            let finalHeight = maxHeight * rows;
+            let finalWidth = cellWidth * columns;
+            let finalHeight = cellHeight * rows;
             let totalPixels = finalWidth * finalHeight;
 
             let scaleFactor = 1;
@@ -578,8 +610,9 @@ document.addEventListener('DOMContentLoaded', () => {
             finalCtx.fillStyle = '#000000';
             finalCtx.fillRect(0, 0, finalWidth, finalHeight);
             
-            const cellWidth = finalWidth / columns;
-            const cellHeight = finalHeight / rows;
+            // Recalculate cell size after potential downscaling
+            const finalCellWidth = finalWidth / columns;
+            const finalCellHeight = finalHeight / rows;
 
             processedImages.forEach((img, i) => {
                 const row = Math.floor(i / columns);
@@ -587,11 +620,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const aspect = img.width / img.height;
                 
                 // Calculate fit dimensions
-                let dw = cellWidth, dh = cellWidth / aspect;
-                if (dh > cellHeight) { dh = cellHeight; dw = cellHeight * aspect; }
+                let dw = finalCellWidth, dh = finalCellWidth / aspect;
+                if (dh > finalCellHeight) { dh = finalCellHeight; dw = finalCellHeight * aspect; }
                 
-                const x = col * cellWidth + (cellWidth - dw) / 2;
-                const y = row * cellHeight + (cellHeight - dh) / 2;
+                const x = col * finalCellWidth + (finalCellWidth - dw) / 2;
+                const y = row * finalCellHeight + (finalCellHeight - dh) / 2;
                 finalCtx.drawImage(img, x, y, dw, dh);
             });
 
