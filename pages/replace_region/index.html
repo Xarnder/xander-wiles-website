@@ -14,16 +14,10 @@
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="/assets/css/style.css">
 
-
     <!-- Theme-aware SVG icons (modern browsers) -->
-    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
-
-    <!-- Fallback PNG icons -->
-    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 
     <!-- Other essential links -->
     <link rel="manifest" href="site.webmanifest">
@@ -70,11 +64,21 @@
                     <select id="aspect-ratio-select">
                         <option value="0">Freeform</option>
                         <option value="1">1:1 (Square)</option>
-                        <option value="1.3333">4:3 (Standard)</option>
-                        <option value="1.5">3:2 (Photography)</option>
-                        <option value="1.6">16:10 (Widescreen)</option>
-                        <option value="1.7777">16:9 (HD Video)</option>
-                        <option value="2.3333">21:9 (Cinema)</option>
+                        
+                        <optgroup label="Landscape">
+                            <option value="1.3333">4:3 (Standard)</option>
+                            <option value="1.5">3:2 (Photography)</option>
+                            <option value="1.6">16:10 (Widescreen)</option>
+                            <option value="1.7777">16:9 (HD Video)</option>
+                            <option value="2.3333">21:9 (Cinema)</option>
+                        </optgroup>
+
+                        <optgroup label="Portrait">
+                            <option value="0.75">3:4 (Portrait Standard)</option>
+                            <option value="0.6666">2:3 (Portrait Photo)</option>
+                            <option value="0.625">16:10 (Portrait Wide)</option>
+                            <option value="0.5625">9:16 (Story/Reel)</option>
+                        </optgroup>
                     </select>
                 </div>
                 <button id="export-crop-btn" class="action-btn" disabled>Download Cropped Area</button>
@@ -98,7 +102,7 @@
                     <div class="canvas-container">
                         <canvas id="cropped-preview-canvas"></canvas>
                     </div>
-                    <!-- NEW: Manual Download Button -->
+                    <!-- Manual Download Button -->
                     <a id="download-crop-again-btn" class="action-btn" download="cropped-area.png">Download Again</a>
                 </div>
             </div>
@@ -137,7 +141,11 @@
                     <span class="toggle-knob"></span>
                 </label>
             </div>
-            <div class="centered-content final-export">
+            
+            <!-- Final Actions -->
+            <div class="controls-bar final-export">
+                 <!-- Back Button Added Here -->
+                 <button id="back-to-step3-btn" class="action-btn" style="background: var(--bg-secondary); border: 1px solid var(--glass-border);">Change Edited Image</button>
                  <button id="save-final-btn" class="action-btn">Download Final Image</button>
             </div>
         </section>

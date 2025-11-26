@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const editedUploadInput = document.getElementById('edited-upload');
     const exportCropBtn = document.getElementById('export-crop-btn');
     const saveFinalBtn = document.getElementById('save-final-btn');
+    const backToStep3Btn = document.getElementById('back-to-step3-btn'); // NEW BUTTON
     
     const cropCanvas = document.getElementById('crop-canvas');
     const cropCtx = cropCanvas.getContext('2d');
@@ -40,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const brushSoftnessValue = document.getElementById('brush-softness-value');
     const showMaskToggle = document.getElementById('show-mask-toggle');
     const touchModeToggle = document.getElementById('touch-mode-toggle');
-    const downloadCropAgainBtn = document.getElementById('download-crop-again-btn'); // NEW
+    const downloadCropAgainBtn = document.getElementById('download-crop-again-btn');
 
     console.log('DEBUG: Script loaded and DOM is ready.');
 
@@ -53,6 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const img = new Image();
             img.onload = () => {
                 state.originalImage = img;
+                // Important: Reset mask if loading a totally new original image
+                state.maskCanvas = null; 
                 setupCropping();
             };
             img.src = event.target.result;
@@ -95,6 +98,14 @@ document.addEventListener('DOMContentLoaded', () => {
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
+    });
+
+    // NEW: Back to Step 3 listener
+    backToStep3Btn.addEventListener('click', () => {
+        maskStep.classList.add('hidden');
+        reUploadStep.classList.remove('hidden');
+        // We do NOT clear state.maskCanvas here, so the user keeps their paint progress
+        // if they just want to swap the underlying image.
     });
     
     brushBtn.addEventListener('click', () => setTool('brush'));
@@ -158,7 +169,17 @@ document.addEventListener('DOMContentLoaded', () => {
             let height = pos.y - startY;
 
             if (ratio > 0) {
-                height = (width / ratio) * Math.sign(height || 1) * Math.sign(width || 1);
+                // Determine direction to keep drag feel natural
+                const signX = Math.sign(width || 1);
+                const signY = Math.sign(height || 1);
+                
+                // Calculate hypotenuse or primary axis dominance could be used, 
+                // but standard ratio lock usually drives height by width or vice versa.
+                // Here we drive height by width for simplicity.
+                height = (Math.abs(width) / ratio) * signY;
+                
+                // If user drags "up-left", width is negative. 
+                // We ensure the rectangle is drawn correctly.
             }
             
             tempRect = {
@@ -235,7 +256,6 @@ document.addEventListener('DOMContentLoaded', () => {
             0, 0, cropRect.width, cropRect.height
         );
         
-        // NEW: Set the href for the manual download button
         downloadCropAgainBtn.href = croppedPreviewCanvas.toDataURL('image/png');
     }
 
@@ -246,13 +266,20 @@ document.addEventListener('DOMContentLoaded', () => {
         maskCanvas.width = state.originalImage.width;
         maskCanvas.height = state.originalImage.height;
 
-        state.maskCanvas = document.createElement('canvas');
-        state.maskCanvas.width = state.originalImage.width;
-        state.maskCanvas.height = state.originalImage.height;
-        state.maskCtx = state.maskCanvas.getContext('2d');
-        
-        state.maskCtx.clearRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
-        
+        // Initialize Mask Canvas ONLY if it doesn't exist yet.
+        // This allows the user to go back, change the image, and come back
+        // without losing their painting.
+        if (!state.maskCanvas) {
+            state.maskCanvas = document.createElement('canvas');
+            state.maskCanvas.width = state.originalImage.width;
+            state.maskCanvas.height = state.originalImage.height;
+            state.maskCtx = state.maskCanvas.getContext('2d');
+            
+            // Start transparent
+            state.maskCtx.clearRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
+        }
+
+        // Always redraw the composite to show the new edited image
         drawMaskComposite();
 
         const getPos = (e) => {
@@ -294,18 +321,27 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function drawMaskComposite() {
         const ctx = maskCtx;
+        // 1. Draw Original
         ctx.globalCompositeOperation = 'source-over';
         ctx.drawImage(state.originalImage, 0, 0);
 
+        // 2. Prepare the Edited Image masked by our brush work
         const revealedEditCanvas = document.createElement('canvas');
         revealedEditCanvas.width = ctx.canvas.width;
         revealedEditCanvas.height = ctx.canvas.height;
         const revealedEditCtx = revealedEditCanvas.getContext('2d');
+        
+        // Draw the edited cropped image at the correct position
         revealedEditCtx.drawImage(state.editedImage, state.cropRect.x, state.cropRect.y);
+        
+        // Apply the user's mask (keep only where mask is drawn)
         revealedEditCtx.globalCompositeOperation = 'destination-in';
         revealedEditCtx.drawImage(state.maskCanvas, 0, 0);
+        
+        // 3. Draw the masked edit on top of the original
         ctx.drawImage(revealedEditCanvas, 0, 0);
         
+        // 4. (Optional) Draw Red Overlay for debugging/visual aid
         if (state.showMaskOverlay) {
             const overlayCanvas = document.createElement('canvas');
             overlayCanvas.width = ctx.canvas.width;
