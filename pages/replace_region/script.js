@@ -2,9 +2,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- STATE MANAGEMENT ---
     const state = {
         originalImage: null,
+        originalFilename: 'image', // Store filename here
         editedImage: null,
         cropRect: null, // { x, y, width, height }
-        maskCanvas: null, // In-memory canvas for the mask data
+        maskCanvas: null,
         maskCtx: null,
         currentTool: 'brush', // 'brush' or 'eraser'
         brushSize: 50,
@@ -19,18 +20,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const cropStep = document.getElementById('crop-step');
     const reUploadStep = document.getElementById('re-upload-step');
     const maskStep = document.getElementById('mask-step');
-
+    
+    // Step 1 specific elements
+    const initialUploadContainer = document.getElementById('initial-upload-container');
+    const step1Actions = document.getElementById('step1-actions');
+    const startNewCropBtn = document.getElementById('start-new-crop-btn');
     const imageUploadInput = document.getElementById('image-upload');
+    const jsonUploadInput = document.getElementById('json-upload');
+    
     const editedUploadInput = document.getElementById('edited-upload');
     const exportCropBtn = document.getElementById('export-crop-btn');
     const saveFinalBtn = document.getElementById('save-final-btn');
-    const backToStep3Btn = document.getElementById('back-to-step3-btn'); // NEW BUTTON
+    const backToStep3Btn = document.getElementById('back-to-step3-btn');
+    const downloadCropAgainBtn = document.getElementById('download-crop-again-btn');
     
     const cropCanvas = document.getElementById('crop-canvas');
     const cropCtx = cropCanvas.getContext('2d');
     const aspectRatioSelect = document.getElementById('aspect-ratio-select');
 
-    const maskCanvas = document.getElementById('mask-canvas'); // The visible canvas
+    const maskCanvas = document.getElementById('mask-canvas');
     const maskCtx = maskCanvas.getContext('2d');
 
     const brushBtn = document.getElementById('brush-btn');
@@ -41,39 +49,109 @@ document.addEventListener('DOMContentLoaded', () => {
     const brushSoftnessValue = document.getElementById('brush-softness-value');
     const showMaskToggle = document.getElementById('show-mask-toggle');
     const touchModeToggle = document.getElementById('touch-mode-toggle');
-    const downloadCropAgainBtn = document.getElementById('download-crop-again-btn');
 
     console.log('DEBUG: Script loaded and DOM is ready.');
 
     // --- EVENT LISTENERS ---
+
+    // 1. ORIGINAL IMAGE UPLOAD
     imageUploadInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        
+        // Save the filename for later (remove extension if possible)
+        state.originalFilename = file.name;
+
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
                 state.originalImage = img;
-                // Important: Reset mask if loading a totally new original image
-                state.maskCanvas = null; 
-                setupCropping();
+                state.maskCanvas = null; // Reset mask on new project
+                
+                // HIDE initial upload button, SHOW Next Actions
+                initialUploadContainer.classList.add('hidden');
+                step1Actions.classList.remove('hidden');
             };
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
     });
 
+    // 2. ACTION: START NEW CROP
+    startNewCropBtn.addEventListener('click', () => {
+        if (state.originalImage) {
+            setupCropping();
+        }
+    });
+
+    // 3. ACTION: JSON RESTORE UPLOAD
+    jsonUploadInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!state.originalImage) {
+            alert("Unexpected Error: Image not loaded.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = JSON.parse(event.target.result);
+                
+                // Validate JSON
+                if (data.cropRect && 
+                    typeof data.cropRect.x === 'number' && 
+                    typeof data.cropRect.y === 'number' &&
+                    typeof data.cropRect.width === 'number' &&
+                    typeof data.cropRect.height === 'number') {
+                    
+                    state.cropRect = data.cropRect;
+                    
+                    console.log('DEBUG: Project restored from JSON', state.cropRect);
+                    
+                    // Verify dimensions fit the current image
+                    if (state.cropRect.x + state.cropRect.width > state.originalImage.width ||
+                        state.cropRect.y + state.cropRect.height > state.originalImage.height) {
+                        alert("Warning: The crop area in the JSON file is larger than the uploaded image. Check if you uploaded the correct original image.");
+                    }
+
+                    // Jump straight to Step 3
+                    setupStep3Previews();
+                    uploadStep.classList.add('hidden');
+                    cropStep.classList.add('hidden');
+                    reUploadStep.classList.remove('hidden');
+                    
+                } else {
+                    alert("Invalid JSON file format.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error reading JSON file.");
+            }
+        };
+        reader.readAsText(file);
+    });
+
+    // 4. EXPORT CROP (Triggers Image AND JSON download)
     exportCropBtn.addEventListener('click', () => {
         if (!state.cropRect) {
             alert('Please select an area to crop first.');
             return;
         }
-        exportCroppedImage(); // This attempts the first download
-        setupStep3Previews(); // This sets up the previews and the second download button
+        exportCropData(); // Downloads both
+        setupStep3Previews();
         cropStep.classList.add('hidden');
         reUploadStep.classList.remove('hidden');
     });
 
+    // 5. DOWNLOAD AGAIN (Step 3)
+    downloadCropAgainBtn.addEventListener('click', () => {
+         exportCropData();
+    });
+
+    // 6. EDITED IMAGE UPLOAD
     editedUploadInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -82,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const img = new Image();
             img.onload = () => {
                 if (img.width !== state.cropRect.width || img.height !== state.cropRect.height) {
-                    console.warn(`DEBUG: Edited image size mismatch. Auto-resizing from ${img.width}x${img.height} to ${state.cropRect.width}x${state.cropRect.height}.`);
+                    console.warn(`DEBUG: Resize mismatch. Resizing.`);
                     const resizeCanvas = document.createElement('canvas');
                     resizeCanvas.width = state.cropRect.width;
                     resizeCanvas.height = state.cropRect.height;
@@ -90,7 +168,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     resizeCtx.drawImage(img, 0, 0, state.cropRect.width, state.cropRect.height);
                     state.editedImage = resizeCanvas;
                 } else {
-                    console.log('DEBUG: Edited image loaded. Dimensions match.');
                     state.editedImage = img;
                 }
                 setupMasking();
@@ -100,12 +177,9 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
     });
 
-    // NEW: Back to Step 3 listener
     backToStep3Btn.addEventListener('click', () => {
         maskStep.classList.add('hidden');
         reUploadStep.classList.remove('hidden');
-        // We do NOT clear state.maskCanvas here, so the user keeps their paint progress
-        // if they just want to swap the underlying image.
     });
     
     brushBtn.addEventListener('click', () => setTool('brush'));
@@ -122,14 +196,62 @@ document.addEventListener('DOMContentLoaded', () => {
         state.showMaskOverlay = e.target.checked;
         drawMaskComposite();
     });
-
     touchModeToggle.addEventListener('change', (e) => {
         state.isTouchMode = e.target.checked;
     });
 
     saveFinalBtn.addEventListener('click', saveFinalImage);
 
-    // --- CORE FUNCTIONS ---
+    // --- FUNCTIONS ---
+
+    function getBaseFilename() {
+        if (!state.originalFilename) return 'image';
+        const lastDot = state.originalFilename.lastIndexOf('.');
+        if (lastDot !== -1) {
+            return state.originalFilename.substring(0, lastDot);
+        }
+        return state.originalFilename;
+    }
+
+    function exportCropData() {
+        const { x, y, width, height } = state.cropRect;
+        const baseName = getBaseFilename();
+        
+        // 1. Generate Image Download
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(state.originalImage, x, y, width, height, 0, 0, width, height);
+        
+        const imgLink = document.createElement('a');
+        imgLink.download = `${baseName}-cropped.png`;
+        imgLink.href = tempCanvas.toDataURL('image/png');
+        document.body.appendChild(imgLink);
+        imgLink.click();
+        document.body.removeChild(imgLink);
+
+        // 2. Generate JSON Download
+        setTimeout(() => {
+            const projectData = {
+                cropRect: state.cropRect,
+                timestamp: new Date().toISOString(),
+                originalDimensions: {
+                    width: state.originalImage.width,
+                    height: state.originalImage.height
+                }
+            };
+            
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projectData, null, 2));
+            const jsonLink = document.createElement('a');
+            jsonLink.setAttribute("href", dataStr);
+            jsonLink.setAttribute("download", `${baseName}-project.json`);
+            document.body.appendChild(jsonLink);
+            jsonLink.click();
+            document.body.removeChild(jsonLink);
+        }, 200);
+    }
+
     function setupCropping() {
         uploadStep.classList.add('hidden');
         cropStep.classList.remove('hidden');
@@ -169,17 +291,8 @@ document.addEventListener('DOMContentLoaded', () => {
             let height = pos.y - startY;
 
             if (ratio > 0) {
-                // Determine direction to keep drag feel natural
-                const signX = Math.sign(width || 1);
                 const signY = Math.sign(height || 1);
-                
-                // Calculate hypotenuse or primary axis dominance could be used, 
-                // but standard ratio lock usually drives height by width or vice versa.
-                // Here we drive height by width for simplicity.
                 height = (Math.abs(width) / ratio) * signY;
-                
-                // If user drags "up-left", width is negative. 
-                // We ensure the rectangle is drawn correctly.
             }
             
             tempRect = {
@@ -220,19 +333,6 @@ document.addEventListener('DOMContentLoaded', () => {
         cropCanvas.ontouchend = endDrag;
     }
 
-    function exportCroppedImage() {
-        const { x, y, width, height } = state.cropRect;
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = width;
-        tempCanvas.height = height;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(state.originalImage, x, y, width, height, 0, 0, width, height);
-        const link = document.createElement('a');
-        link.download = 'cropped-area.png';
-        link.href = tempCanvas.toDataURL('image/png');
-        link.click();
-    }
-
     function setupStep3Previews() {
         const originalPreviewCanvas = document.getElementById('original-preview-canvas');
         const croppedPreviewCanvas = document.getElementById('cropped-preview-canvas');
@@ -255,8 +355,6 @@ document.addEventListener('DOMContentLoaded', () => {
             cropRect.x, cropRect.y, cropRect.width, cropRect.height,
             0, 0, cropRect.width, cropRect.height
         );
-        
-        downloadCropAgainBtn.href = croppedPreviewCanvas.toDataURL('image/png');
     }
 
     function setupMasking() {
@@ -266,20 +364,14 @@ document.addEventListener('DOMContentLoaded', () => {
         maskCanvas.width = state.originalImage.width;
         maskCanvas.height = state.originalImage.height;
 
-        // Initialize Mask Canvas ONLY if it doesn't exist yet.
-        // This allows the user to go back, change the image, and come back
-        // without losing their painting.
         if (!state.maskCanvas) {
             state.maskCanvas = document.createElement('canvas');
             state.maskCanvas.width = state.originalImage.width;
             state.maskCanvas.height = state.originalImage.height;
             state.maskCtx = state.maskCanvas.getContext('2d');
-            
-            // Start transparent
             state.maskCtx.clearRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
         }
 
-        // Always redraw the composite to show the new edited image
         drawMaskComposite();
 
         const getPos = (e) => {
@@ -321,27 +413,20 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function drawMaskComposite() {
         const ctx = maskCtx;
-        // 1. Draw Original
         ctx.globalCompositeOperation = 'source-over';
         ctx.drawImage(state.originalImage, 0, 0);
 
-        // 2. Prepare the Edited Image masked by our brush work
         const revealedEditCanvas = document.createElement('canvas');
         revealedEditCanvas.width = ctx.canvas.width;
         revealedEditCanvas.height = ctx.canvas.height;
         const revealedEditCtx = revealedEditCanvas.getContext('2d');
         
-        // Draw the edited cropped image at the correct position
         revealedEditCtx.drawImage(state.editedImage, state.cropRect.x, state.cropRect.y);
-        
-        // Apply the user's mask (keep only where mask is drawn)
         revealedEditCtx.globalCompositeOperation = 'destination-in';
         revealedEditCtx.drawImage(state.maskCanvas, 0, 0);
         
-        // 3. Draw the masked edit on top of the original
         ctx.drawImage(revealedEditCanvas, 0, 0);
         
-        // 4. (Optional) Draw Red Overlay for debugging/visual aid
         if (state.showMaskOverlay) {
             const overlayCanvas = document.createElement('canvas');
             overlayCanvas.width = ctx.canvas.width;
@@ -396,7 +481,8 @@ document.addEventListener('DOMContentLoaded', () => {
             drawMaskComposite();
         }
         const link = document.createElement('a');
-        link.download = 'final-image.png';
+        const baseName = getBaseFilename();
+        link.download = `${baseName}-final.png`;
         link.href = maskCanvas.toDataURL('image/png');
         link.click();
         if (showMaskState) {

@@ -14,12 +14,11 @@
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="/assets/css/style.css">
 
-    <!-- Theme-aware SVG icons (modern browsers) -->
+    <!-- Theme-aware SVG icons -->
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
 
-    <!-- Other essential links -->
     <link rel="manifest" href="site.webmanifest">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
@@ -42,11 +41,32 @@
     <main class="app-container">
         <!-- Step 1: Upload Original Image -->
         <section id="upload-step" class="glass-card">
-            <h2>Step 1: Start a New Project</h2>
-            <p>Select the full-size original image you want to edit.</p>
+            <h2>Step 1: Start Project</h2>
+            <p>Select the full-size original image to begin.</p>
+            
             <div class="centered-content">
-                <label for="image-upload" class="action-btn">Upload Original Image</label>
-                <input type="file" id="image-upload" accept="image/*" style="display:none;" />
+                <!-- Initial Upload Button -->
+                <div id="initial-upload-container">
+                    <label for="image-upload" class="action-btn">Upload Original Image</label>
+                    <input type="file" id="image-upload" accept="image/*" style="display:none;" />
+                </div>
+
+                <!-- Post-Upload Actions (Hidden until image is selected) -->
+                <div id="step1-actions" class="hidden" style="display: flex; flex-direction: column; gap: 1rem; align-items: center; margin-top: 1.5rem;">
+                    <p style="color: var(--accent-cyan); font-weight: 600;">Image Loaded!</p>
+                    
+                    <button id="start-new-crop-btn" class="action-btn" style="width: 100%; max-width: 250px;">
+                        Start New Crop
+                    </button>
+                    
+                    <div style="width: 100%; height: 1px; background: var(--glass-border); margin: 0.5rem 0;"></div>
+                    
+                    <p style="font-size: 0.9rem; color: var(--text-secondary);">OR Resume Project</p>
+                    <label for="json-upload" class="action-btn" style="background: var(--bg-secondary); border: 1px solid var(--glass-border); width: 100%; max-width: 250px;">
+                        Upload Project JSON
+                    </label>
+                    <input type="file" id="json-upload" accept=".json" style="display:none;" />
+                </div>
             </div>
             <p id="upload-status" class="status-message"></p>
         </section>
@@ -54,7 +74,7 @@
         <!-- Step 2: Crop Tool -->
         <section id="crop-step" class="glass-card hidden">
             <h2>Step 2: Select and Export Crop Area</h2>
-            <p>Click and drag on the image to select the area. Use the dropdown to lock the aspect ratio.</p>
+            <p>Click and drag on the image to select the area.</p>
             <div class="canvas-container">
                 <canvas id="crop-canvas"></canvas>
             </div>
@@ -81,9 +101,8 @@
                         </optgroup>
                     </select>
                 </div>
-                <button id="export-crop-btn" class="action-btn" disabled>Download Cropped Area</button>
+                <button id="export-crop-btn" class="action-btn" disabled>Download Crop & JSON</button>
             </div>
-             <p class="status-message">After downloading, edit the image in your preferred software, then proceed to the next step.</p>
         </section>
 
         <!-- Step 3: Upload Edited Crop -->
@@ -102,12 +121,11 @@
                     <div class="canvas-container">
                         <canvas id="cropped-preview-canvas"></canvas>
                     </div>
-                    <!-- Manual Download Button -->
-                    <a id="download-crop-again-btn" class="action-btn" download="cropped-area.png">Download Again</a>
+                    <button id="download-crop-again-btn" class="action-btn">Download Again</button>
                 </div>
             </div>
             
-            <p>Upload the modified cropped image. It must be the same size as the area you exported.</p>
+            <p>Upload the modified cropped image.</p>
              <div class="centered-content">
                 <label for="edited-upload" class="action-btn">Upload Edited Crop</label>
                 <input type="file" id="edited-upload" accept="image/*" style="display:none;" />
@@ -118,7 +136,7 @@
         <!-- Step 4: Masking Tool -->
         <section id="mask-step" class="glass-card hidden">
             <h2>Step 4: Blend Your Edits</h2>
-            <p>Use the brush to reveal your edited image. Use the eraser to hide it and show the original.</p>
+            <p>Brush to reveal edit, Eraser to hide.</p>
             <div class="canvas-container">
                  <canvas id="mask-canvas"></canvas>
             </div>
@@ -142,9 +160,7 @@
                 </label>
             </div>
             
-            <!-- Final Actions -->
             <div class="controls-bar final-export">
-                 <!-- Back Button Added Here -->
                  <button id="back-to-step3-btn" class="action-btn" style="background: var(--bg-secondary); border: 1px solid var(--glass-border);">Change Edited Image</button>
                  <button id="save-final-btn" class="action-btn">Download Final Image</button>
             </div>
