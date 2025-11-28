@@ -12,20 +12,18 @@
 
     <!-- Custom Stylesheet -->
     <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="/assets/css/style.css">
 
     <!-- Theme-aware SVG icons -->
     <link rel="icon" href="favicon.ico" sizes="any">
-    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
-    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
-
-    <link rel="manifest" href="site.webmanifest">
+    
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 </head>
-<div id="main-nav-placeholder"></div>
 <body>
     <div class="background-overlay"></div>
+    
+    <!-- Brush Cursor Overlay -->
+    <div id="brush-cursor" class="brush-cursor"></div>
 
     <header class="site-header">
         <div class="header-content">
@@ -137,25 +135,52 @@
         <section id="mask-step" class="glass-card hidden">
             <h2>Step 4: Blend Your Edits</h2>
             <p>Brush to reveal edit, Eraser to hide.</p>
-            <div class="canvas-container">
+            <!-- Cursor is hidden here via inline style so custom div cursor works -->
+            <div class="canvas-container" style="cursor: none;">
                  <canvas id="mask-canvas"></canvas>
             </div>
+            
             <div class="controls-bar">
                 <div class="tool-select">
                     <button id="brush-btn" class="tool-btn active">Brush</button>
                     <button id="eraser-btn" class="tool-btn">Eraser</button>
                 </div>
+                
                 <div class="control-group">
                     <label for="brush-size-slider">Brush Size: <span id="brush-size-value">50</span>px</label>
                     <input type="range" id="brush-size-slider" min="1" max="500" value="50" step="1" />
                 </div>
+                
                 <div class="control-group">
-                    <label for="brush-softness-slider">Softness: <span id="brush-softness-value">25</span>%</label>
+                    <label for="brush-softness-slider">Brush Softness: <span id="brush-softness-value">25</span>%</label>
                     <input type="range" id="brush-softness-slider" min="0" max="100" value="25" step="1" />
                 </div>
+            </div>
+
+            <!-- Feather & Fill Controls -->
+            <div class="controls-bar" style="margin-top: 10px;">
+                 <div class="control-group">
+                    <label for="feather-slider">Crop Edge Feather: <span id="feather-value">0</span>px</label>
+                    <input type="range" id="feather-slider" min="0" max="500" value="0" step="1" />
+                 </div>
+                 
+                 <div class="control-group">
+                    <button id="fill-mask-btn" class="action-btn small-btn" style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan);">Fill (Show All)</button>
+                 </div>
+                 <div class="control-group">
+                    <button id="clear-mask-btn" class="action-btn small-btn" style="background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Clear (Hide All)</button>
+                 </div>
+            </div>
+
+            <div class="controls-bar" style="margin-top: 10px;">
                  <label class="toggle-switch">
                     Show Mask
                     <input type="checkbox" id="show-mask-toggle" />
+                    <span class="toggle-knob"></span>
+                </label>
+                 <label class="toggle-switch">
+                    Show Crop Border
+                    <input type="checkbox" id="show-crop-guide-toggle" />
                     <span class="toggle-knob"></span>
                 </label>
             </div>
@@ -168,6 +193,5 @@
     </main>
 
     <script src="script.js"></script>
-    <script src="/assets/js/nav-loader.js"></script>
 </body>
 </html>

@@ -2,53 +2,76 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- STATE MANAGEMENT ---
     const state = {
         originalImage: null,
-        originalFilename: 'image', // Store filename here
+        originalFilename: 'image',
         editedImage: null,
         cropRect: null, // { x, y, width, height }
-        maskCanvas: null,
+        
+        // Layers
+        maskCanvas: null,   // The Visible DOM Canvas
         maskCtx: null,
+        
+        userPaintLayer: null, // Offscreen: Stores Brush/Eraser strokes
+        
+        // Interpolation
+        lastPoint: null, 
+        
         currentTool: 'brush', // 'brush' or 'eraser'
         brushSize: 50,
         brushSoftness: 25, // 0-100
+        cropFeather: 0,    // 0-500px
+        
+        // Toggles
         isDrawing: false,
         showMaskOverlay: false,
+        showCropGuide: false,
         isTouchMode: false
     };
 
-    // --- DOM ELEMENT SELECTORS ---
+    // --- DOM SELECTORS ---
     const uploadStep = document.getElementById('upload-step');
     const cropStep = document.getElementById('crop-step');
     const reUploadStep = document.getElementById('re-upload-step');
     const maskStep = document.getElementById('mask-step');
     
-    // Step 1 specific elements
+    // Step 1
     const initialUploadContainer = document.getElementById('initial-upload-container');
     const step1Actions = document.getElementById('step1-actions');
     const startNewCropBtn = document.getElementById('start-new-crop-btn');
     const imageUploadInput = document.getElementById('image-upload');
     const jsonUploadInput = document.getElementById('json-upload');
     
+    // Step 2 & 3
     const editedUploadInput = document.getElementById('edited-upload');
     const exportCropBtn = document.getElementById('export-crop-btn');
-    const saveFinalBtn = document.getElementById('save-final-btn');
     const backToStep3Btn = document.getElementById('back-to-step3-btn');
     const downloadCropAgainBtn = document.getElementById('download-crop-again-btn');
-    
     const cropCanvas = document.getElementById('crop-canvas');
     const cropCtx = cropCanvas.getContext('2d');
     const aspectRatioSelect = document.getElementById('aspect-ratio-select');
 
-    const maskCanvas = document.getElementById('mask-canvas');
+    // Step 4
+    const maskCanvas = document.getElementById('mask-canvas'); // GLOBAL CONST
     const maskCtx = maskCanvas.getContext('2d');
+    const saveFinalBtn = document.getElementById('save-final-btn');
 
+    // Controls
     const brushBtn = document.getElementById('brush-btn');
     const eraserBtn = document.getElementById('eraser-btn');
     const brushSizeSlider = document.getElementById('brush-size-slider');
     const brushSoftnessSlider = document.getElementById('brush-softness-slider');
+    const featherSlider = document.getElementById('feather-slider');
+    
     const brushSizeValue = document.getElementById('brush-size-value');
     const brushSoftnessValue = document.getElementById('brush-softness-value');
+    const featherValue = document.getElementById('feather-value');
+    
     const showMaskToggle = document.getElementById('show-mask-toggle');
+    const showCropGuideToggle = document.getElementById('show-crop-guide-toggle');
     const touchModeToggle = document.getElementById('touch-mode-toggle');
+    const brushCursor = document.getElementById('brush-cursor');
+
+    const fillMaskBtn = document.getElementById('fill-mask-btn');
+    const clearMaskBtn = document.getElementById('clear-mask-btn');
 
     console.log('DEBUG: Script loaded and DOM is ready.');
 
@@ -58,8 +81,6 @@ document.addEventListener('DOMContentLoaded', () => {
     imageUploadInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        
-        // Save the filename for later (remove extension if possible)
         state.originalFilename = file.name;
 
         const reader = new FileReader();
@@ -67,9 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const img = new Image();
             img.onload = () => {
                 state.originalImage = img;
-                state.maskCanvas = null; // Reset mask on new project
-                
-                // HIDE initial upload button, SHOW Next Actions
+                state.maskCanvas = null;
                 initialUploadContainer.classList.add('hidden');
                 step1Actions.classList.remove('hidden');
             };
@@ -80,49 +99,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. ACTION: START NEW CROP
     startNewCropBtn.addEventListener('click', () => {
-        if (state.originalImage) {
-            setupCropping();
-        }
+        if (state.originalImage) setupCropping();
     });
 
     // 3. ACTION: JSON RESTORE UPLOAD
     jsonUploadInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         if (!state.originalImage) {
             alert("Unexpected Error: Image not loaded.");
             return;
         }
-
         const reader = new FileReader();
         reader.onload = (event) => {
             try {
                 const data = JSON.parse(event.target.result);
-                
-                // Validate JSON
-                if (data.cropRect && 
-                    typeof data.cropRect.x === 'number' && 
-                    typeof data.cropRect.y === 'number' &&
-                    typeof data.cropRect.width === 'number' &&
-                    typeof data.cropRect.height === 'number') {
-                    
+                if (data.cropRect && typeof data.cropRect.x === 'number') {
                     state.cropRect = data.cropRect;
                     
-                    console.log('DEBUG: Project restored from JSON', state.cropRect);
-                    
-                    // Verify dimensions fit the current image
-                    if (state.cropRect.x + state.cropRect.width > state.originalImage.width ||
-                        state.cropRect.y + state.cropRect.height > state.originalImage.height) {
-                        alert("Warning: The crop area in the JSON file is larger than the uploaded image. Check if you uploaded the correct original image.");
+                    if (state.cropRect.width <= 0 || state.cropRect.height <= 0) {
+                        throw new Error("Invalid crop dimensions in JSON");
                     }
 
-                    // Jump straight to Step 3
                     setupStep3Previews();
                     uploadStep.classList.add('hidden');
                     cropStep.classList.add('hidden');
                     reUploadStep.classList.remove('hidden');
-                    
                 } else {
                     alert("Invalid JSON file format.");
                 }
@@ -134,42 +136,48 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsText(file);
     });
 
-    // 4. EXPORT CROP (Triggers Image AND JSON download)
+    // 4. EXPORT CROP
     exportCropBtn.addEventListener('click', () => {
         if (!state.cropRect) {
             alert('Please select an area to crop first.');
             return;
         }
-        exportCropData(); // Downloads both
-        setupStep3Previews();
+        
         cropStep.classList.add('hidden');
         reUploadStep.classList.remove('hidden');
+        
+        try {
+            exportCropData();
+            setupStep3Previews();
+        } catch (e) {
+            console.error("Export failed:", e);
+            alert("An error occurred generating the cropped image.");
+        }
     });
 
-    // 5. DOWNLOAD AGAIN (Step 3)
-    downloadCropAgainBtn.addEventListener('click', () => {
-         exportCropData();
-    });
+    downloadCropAgainBtn.addEventListener('click', () => exportCropData());
 
-    // 6. EDITED IMAGE UPLOAD
+    // 5. EDITED IMAGE UPLOAD
     editedUploadInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        
+        if (!state.cropRect) {
+            alert("Error: Crop area missing.");
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
-                if (img.width !== state.cropRect.width || img.height !== state.cropRect.height) {
-                    console.warn(`DEBUG: Resize mismatch. Resizing.`);
-                    const resizeCanvas = document.createElement('canvas');
-                    resizeCanvas.width = state.cropRect.width;
-                    resizeCanvas.height = state.cropRect.height;
-                    const resizeCtx = resizeCanvas.getContext('2d');
-                    resizeCtx.drawImage(img, 0, 0, state.cropRect.width, state.cropRect.height);
-                    state.editedImage = resizeCanvas;
-                } else {
-                    state.editedImage = img;
-                }
+                const resizeCanvas = document.createElement('canvas');
+                resizeCanvas.width = state.cropRect.width;
+                resizeCanvas.height = state.cropRect.height;
+                const resizeCtx = resizeCanvas.getContext('2d');
+                resizeCtx.drawImage(img, 0, 0, state.cropRect.width, state.cropRect.height);
+                state.editedImage = resizeCanvas;
+                
                 setupMasking();
             };
             img.src = event.target.result;
@@ -180,44 +188,93 @@ document.addEventListener('DOMContentLoaded', () => {
     backToStep3Btn.addEventListener('click', () => {
         maskStep.classList.add('hidden');
         reUploadStep.classList.remove('hidden');
+        brushCursor.style.opacity = '0';
     });
-    
+
+    // --- TOOL CONTROLS ---
     brushBtn.addEventListener('click', () => setTool('brush'));
     eraserBtn.addEventListener('click', () => setTool('eraser'));
+    
     brushSizeSlider.addEventListener('input', (e) => {
         state.brushSize = parseInt(e.target.value, 10);
-        brushSizeValue.textContent = `${state.brushSize}px`;
+        brushSizeValue.textContent = state.brushSize;
+        updateCursorSize();
     });
+    
     brushSoftnessSlider.addEventListener('input', (e) => {
         state.brushSoftness = parseInt(e.target.value, 10);
-        brushSoftnessValue.textContent = `${state.brushSoftness}%`;
+        brushSoftnessValue.textContent = state.brushSoftness;
     });
+
+    featherSlider.addEventListener('input', (e) => {
+        state.cropFeather = parseInt(e.target.value, 10);
+        featherValue.textContent = state.cropFeather;
+        composeMaskAndDraw();
+    });
+
     showMaskToggle.addEventListener('change', (e) => {
         state.showMaskOverlay = e.target.checked;
-        drawMaskComposite();
+        composeMaskAndDraw();
     });
+
+    showCropGuideToggle.addEventListener('change', (e) => {
+        state.showCropGuide = e.target.checked;
+        composeMaskAndDraw();
+    });
+
     touchModeToggle.addEventListener('change', (e) => {
         state.isTouchMode = e.target.checked;
     });
 
+    fillMaskBtn.addEventListener('click', () => {
+        if(!state.userPaintLayer) return;
+        if(confirm("Fill brush area (Paint entire image white)?")) {
+            const ctx = state.userPaintLayer.getContext('2d');
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
+            composeMaskAndDraw();
+        }
+    });
+
+    clearMaskBtn.addEventListener('click', () => {
+        if(!state.userPaintLayer) return;
+        if(confirm("Clear all paint (Hide edited image)?")) {
+            const ctx = state.userPaintLayer.getContext('2d');
+            ctx.clearRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
+            composeMaskAndDraw();
+        }
+    });
+
     saveFinalBtn.addEventListener('click', saveFinalImage);
 
-    // --- FUNCTIONS ---
+    // --- CURSOR TRACKING ---
+    maskCanvas.addEventListener('mouseenter', () => {
+        if (!state.isTouchMode) brushCursor.style.opacity = '1';
+        updateCursorSize(); 
+    });
+    maskCanvas.addEventListener('mouseleave', () => {
+        brushCursor.style.opacity = '0';
+    });
+    maskCanvas.addEventListener('mousemove', (e) => {
+        if (state.isTouchMode) return;
+        updateCursorPosition(e);
+    });
+
+    // --- CORE LOGIC FUNCTIONS ---
 
     function getBaseFilename() {
         if (!state.originalFilename) return 'image';
         const lastDot = state.originalFilename.lastIndexOf('.');
-        if (lastDot !== -1) {
-            return state.originalFilename.substring(0, lastDot);
-        }
-        return state.originalFilename;
+        return lastDot !== -1 ? state.originalFilename.substring(0, lastDot) : state.originalFilename;
     }
 
     function exportCropData() {
         const { x, y, width, height } = state.cropRect;
         const baseName = getBaseFilename();
         
-        // 1. Generate Image Download
+        if (width <= 0 || height <= 0) throw new Error("Invalid crop dimensions");
+
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = width;
         tempCanvas.height = height;
@@ -231,17 +288,12 @@ document.addEventListener('DOMContentLoaded', () => {
         imgLink.click();
         document.body.removeChild(imgLink);
 
-        // 2. Generate JSON Download
         setTimeout(() => {
             const projectData = {
                 cropRect: state.cropRect,
                 timestamp: new Date().toISOString(),
-                originalDimensions: {
-                    width: state.originalImage.width,
-                    height: state.originalImage.height
-                }
+                originalDimensions: { width: state.originalImage.width, height: state.originalImage.height }
             };
-            
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projectData, null, 2));
             const jsonLink = document.createElement('a');
             jsonLink.setAttribute("href", dataStr);
@@ -264,11 +316,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const getPos = (e) => {
             const rect = cropCanvas.getBoundingClientRect();
-            const clientX = e.clientX || e.touches[0].clientX;
-            const clientY = e.clientY || e.touches[0].clientY;
+            const cx = e.clientX || e.touches[0].clientX;
+            const cy = e.clientY || e.touches[0].clientY;
             return {
-                x: (clientX - rect.left) * (cropCanvas.width / rect.width),
-                y: (clientY - rect.top) * (cropCanvas.height / rect.height)
+                x: (cx - rect.left) * (cropCanvas.width / rect.width),
+                y: (cy - rect.top) * (cropCanvas.height / rect.height)
             };
         };
 
@@ -312,12 +364,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isDragging) return;
             isDragging = false;
             if (tempRect) {
-                state.cropRect = {
-                    x: Math.round(tempRect.x),
-                    y: Math.round(tempRect.y),
-                    width: Math.round(tempRect.width),
-                    height: Math.round(tempRect.height)
-                };
+                let finalX = Math.round(tempRect.x);
+                let finalY = Math.round(tempRect.y);
+                let finalW = Math.round(tempRect.width);
+                let finalH = Math.round(tempRect.height);
+
+                if (finalX < 0) finalX = 0;
+                if (finalY < 0) finalY = 0;
+                if (finalX + finalW > state.originalImage.width) finalW = state.originalImage.width - finalX;
+                if (finalY + finalH > state.originalImage.height) finalH = state.originalImage.height - finalY;
+
+                state.cropRect = { x: finalX, y: finalY, width: finalW, height: finalH };
+
                 if(state.cropRect.width > 0 && state.cropRect.height > 0) {
                     exportCropBtn.disabled = false;
                 }
@@ -336,51 +394,65 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupStep3Previews() {
         const originalPreviewCanvas = document.getElementById('original-preview-canvas');
         const croppedPreviewCanvas = document.getElementById('cropped-preview-canvas');
+        if(!originalPreviewCanvas || !croppedPreviewCanvas) return;
+        
         const originalPreviewCtx = originalPreviewCanvas.getContext('2d');
         const croppedPreviewCtx = croppedPreviewCanvas.getContext('2d');
-
         const { originalImage, cropRect } = state;
+
+        if(!originalImage || !cropRect) return;
 
         originalPreviewCanvas.width = originalImage.width;
         originalPreviewCanvas.height = originalImage.height;
-        originalPreviewCtx.drawImage(originalImage, 0, 0);
-        originalPreviewCtx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
-        originalPreviewCtx.lineWidth = Math.max(8, originalImage.width * 0.005);
-        originalPreviewCtx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
-
         croppedPreviewCanvas.width = cropRect.width;
         croppedPreviewCanvas.height = cropRect.height;
-        croppedPreviewCtx.drawImage(
-            originalImage,
-            cropRect.x, cropRect.y, cropRect.width, cropRect.height,
-            0, 0, cropRect.width, cropRect.height
-        );
+
+        originalPreviewCtx.drawImage(originalImage, 0, 0);
+        originalPreviewCtx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
+        originalPreviewCtx.lineWidth = Math.max(5, originalImage.width * 0.005);
+        originalPreviewCtx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
+
+        if(cropRect.width > 0 && cropRect.height > 0) {
+            croppedPreviewCtx.drawImage(originalImage, cropRect.x, cropRect.y, cropRect.width, cropRect.height, 0, 0, cropRect.width, cropRect.height);
+        }
     }
 
     function setupMasking() {
         reUploadStep.classList.add('hidden');
         maskStep.classList.remove('hidden');
 
-        maskCanvas.width = state.originalImage.width;
-        maskCanvas.height = state.originalImage.height;
+        state.maskCanvas = document.getElementById('mask-canvas');
+        state.maskCanvas.width = state.originalImage.width;
+        state.maskCanvas.height = state.originalImage.height;
+        state.maskCtx = state.maskCanvas.getContext('2d');
+        
+        requestAnimationFrame(updateCursorSize);
 
-        if (!state.maskCanvas) {
-            state.maskCanvas = document.createElement('canvas');
-            state.maskCanvas.width = state.originalImage.width;
-            state.maskCanvas.height = state.originalImage.height;
-            state.maskCtx = state.maskCanvas.getContext('2d');
-            state.maskCtx.clearRect(0, 0, state.maskCanvas.width, state.maskCanvas.height);
+        if (!state.cropLayer) {
+            state.cropLayer = document.createElement('canvas');
+            state.cropLayer.width = state.originalImage.width;
+            state.cropLayer.height = state.originalImage.height;
+        }
+        updateCropLayer();
+
+        if (!state.userPaintLayer) {
+            state.userPaintLayer = document.createElement('canvas');
+            state.userPaintLayer.width = state.originalImage.width;
+            state.userPaintLayer.height = state.originalImage.height;
+        } else {
+            const ctx = state.userPaintLayer.getContext('2d');
+            ctx.clearRect(0,0, state.userPaintLayer.width, state.userPaintLayer.height);
         }
 
-        drawMaskComposite();
+        composeMaskAndDraw();
 
         const getPos = (e) => {
             const rect = maskCanvas.getBoundingClientRect();
-            const clientX = e.clientX || e.touches[0].clientX;
-            const clientY = e.clientY || e.touches[0].clientY;
+            const cx = e.clientX || e.touches[0].clientX;
+            const cy = e.clientY || e.touches[0].clientY;
             return {
-                x: (clientX - rect.left) * (maskCanvas.width / rect.width),
-                y: (clientY - rect.top) * (maskCanvas.height / rect.height)
+                x: (cx - rect.left) * (maskCanvas.width / rect.width),
+                y: (cy - rect.top) * (maskCanvas.height / rect.height)
             };
         };
         
@@ -388,18 +460,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.type === 'touchstart' && !state.isTouchMode) return;
             e.preventDefault();
             state.isDrawing = true;
-            paint(getPos(e));
+            state.lastPoint = getPos(e); 
+            paint(state.lastPoint);
         };
         
         const doPaint = (e) => {
             if (!state.isDrawing) return;
             if (e.type === 'touchmove' && !state.isTouchMode) return;
             e.preventDefault();
-            paint(getPos(e));
+            const newPoint = getPos(e);
+            paint(newPoint);
+            state.lastPoint = newPoint;
         };
 
         const stopPaint = () => {
             state.isDrawing = false;
+            state.lastPoint = null;
         };
 
         maskCanvas.onmousedown = startPaint;
@@ -409,85 +485,201 @@ document.addEventListener('DOMContentLoaded', () => {
         maskCanvas.ontouchstart = startPaint;
         maskCanvas.ontouchmove = doPaint;
         maskCanvas.ontouchend = stopPaint;
+        
+        window.addEventListener('resize', updateCursorSize);
+    }
+
+    function updateCropLayer() {
+        const ctx = state.cropLayer.getContext('2d');
+        ctx.clearRect(0, 0, state.cropLayer.width, state.cropLayer.height);
+        
+        const feather = state.cropFeather;
+        ctx.save();
+        if (feather > 0) {
+            ctx.filter = `blur(${feather}px)`;
+        }
+        ctx.fillStyle = 'white';
+        ctx.fillRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
+        ctx.restore();
     }
     
-    function drawMaskComposite() {
-        const ctx = maskCtx;
+    function composeMaskAndDraw() {
+        const ctx = state.maskCtx;
+        
+        // 1. Background
         ctx.globalCompositeOperation = 'source-over';
         ctx.drawImage(state.originalImage, 0, 0);
 
+        // 2. Final Mask Calculation
+        const finalMaskCanvas = document.createElement('canvas');
+        finalMaskCanvas.width = ctx.canvas.width;
+        finalMaskCanvas.height = ctx.canvas.height;
+        const maskCtx = finalMaskCanvas.getContext('2d');
+
+        // A. User Paint
+        maskCtx.drawImage(state.userPaintLayer, 0, 0);
+
+        // B. Crop Constraint (Feathered)
+        const constraintCanvas = document.createElement('canvas');
+        constraintCanvas.width = ctx.canvas.width;
+        constraintCanvas.height = ctx.canvas.height;
+        const constraintCtx = constraintCanvas.getContext('2d');
+
+        const feather = state.cropFeather;
+        constraintCtx.save();
+        if (feather > 0) {
+            constraintCtx.filter = `blur(${feather}px)`;
+        }
+        constraintCtx.fillStyle = 'white';
+        constraintCtx.fillRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
+        constraintCtx.restore();
+
+        // CLIP: mask user paint by crop area
+        maskCtx.globalCompositeOperation = 'destination-in';
+        maskCtx.drawImage(constraintCanvas, 0, 0);
+
+        // 3. Draw Edited Image masked by Final Mask
         const revealedEditCanvas = document.createElement('canvas');
         revealedEditCanvas.width = ctx.canvas.width;
         revealedEditCanvas.height = ctx.canvas.height;
         const revealedEditCtx = revealedEditCanvas.getContext('2d');
         
-        revealedEditCtx.drawImage(state.editedImage, state.cropRect.x, state.cropRect.y);
-        revealedEditCtx.globalCompositeOperation = 'destination-in';
-        revealedEditCtx.drawImage(state.maskCanvas, 0, 0);
+        revealedEditCtx.drawImage(state.editedImage, state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
         
+        revealedEditCtx.globalCompositeOperation = 'destination-in';
+        revealedEditCtx.drawImage(finalMaskCanvas, 0, 0);
+        
+        // 4. Combine
         ctx.drawImage(revealedEditCanvas, 0, 0);
         
+        // 5. Overlays
         if (state.showMaskOverlay) {
             const overlayCanvas = document.createElement('canvas');
             overlayCanvas.width = ctx.canvas.width;
             overlayCanvas.height = ctx.canvas.height;
             const overlayCtx = overlayCanvas.getContext('2d');
-            overlayCtx.drawImage(state.maskCanvas, 0, 0);
+            overlayCtx.drawImage(finalMaskCanvas, 0, 0);
             overlayCtx.globalCompositeOperation = 'source-in';
             overlayCtx.fillStyle = 'rgba(255, 0, 0, 0.5)';
             overlayCtx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+            
             ctx.globalCompositeOperation = 'source-over';
             ctx.drawImage(overlayCanvas, 0, 0);
         }
 
-        ctx.globalCompositeOperation = 'source-over';
+        if (state.showCropGuide) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'source-over';
+            
+            // Dynamic Line Width Calculation
+            // Ensure a minimum visibility (e.g., 4px) but scale up for large images (0.3% of width)
+            const guideWidth = Math.max(4, state.originalImage.width * 0.003);
+            
+            ctx.lineWidth = guideWidth;
+            ctx.strokeStyle = '#00ff00'; // Bright Green
+            ctx.setLineDash([guideWidth * 2, guideWidth]); // Dash pattern relative to width
+            
+            // Add a hard drop shadow for contrast against white/bright backgrounds
+            ctx.shadowColor = 'rgba(0,0,0,0.8)';
+            ctx.shadowBlur = guideWidth / 2;
+            
+            ctx.strokeRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
+            ctx.restore();
+        }
     }
 
-    function paint({ x, y }) {
-        const ctx = state.maskCtx;
-        const softness = state.brushSoftness / 100;
-        const radius = state.brushSize / 2;
-        const innerRadius = radius * (1 - softness);
+    function paint(currentPoint) {
+        if (!state.lastPoint) state.lastPoint = currentPoint;
         
-        const gradient = ctx.createRadialGradient(x, y, innerRadius, x, y, radius);
+        const dist = distanceBetween(state.lastPoint, currentPoint);
+        const angle = angleBetween(state.lastPoint, currentPoint);
+        
+        const ctx = state.userPaintLayer.getContext('2d');
         
         if (state.currentTool === 'brush') {
             ctx.globalCompositeOperation = 'source-over';
-            gradient.addColorStop(0, 'white');
-            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
         } else {
             ctx.globalCompositeOperation = 'destination-out';
-            gradient.addColorStop(0, 'rgba(0,0,0,1)');
-            gradient.addColorStop(1, 'rgba(0,0,0,0)');
         }
+
+        const step = Math.min(2, state.brushSize / 8); 
+        
+        for (let i = 0; i <= dist; i += step) {
+            const x = state.lastPoint.x + (Math.sin(angle) * i);
+            const y = state.lastPoint.y + (Math.cos(angle) * i);
+            drawBrushStroke(ctx, x, y, state.brushSoftness);
+        }
+        
+        composeMaskAndDraw();
+    }
+    
+    function distanceBetween(point1, point2) {
+        return Math.sqrt(Math.pow(point2.x - point1.x, 2) + Math.pow(point2.y - point1.y, 2));
+    }
+    
+    function angleBetween(point1, point2) {
+        return Math.atan2(point2.x - point1.x, point2.y - point1.y);
+    }
+    
+    function drawBrushStroke(ctx, x, y, softnessVal) {
+        const softness = softnessVal / 100;
+        const radius = state.brushSize / 2;
+        
+        const innerRadius = radius * (1 - softness);
+        
+        const gradient = ctx.createRadialGradient(x, y, innerRadius, x, y, radius);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
 
         ctx.fillStyle = gradient;
         ctx.beginPath();
         ctx.arc(x, y, radius, 0, 2 * Math.PI);
         ctx.fill();
-        drawMaskComposite();
     }
     
     function setTool(tool) {
         state.currentTool = tool;
         brushBtn.classList.toggle('active', tool === 'brush');
         eraserBtn.classList.toggle('active', tool === 'eraser');
+        brushCursor.style.borderColor = (tool === 'brush') ? 'white' : '#ff4444';
+    }
+
+    function updateCursorPosition(e) {
+        const scale = getCanvasScale();
+        const visualSize = state.brushSize * scale;
+        brushCursor.style.left = `${e.pageX - visualSize / 2}px`;
+        brushCursor.style.top = `${e.pageY - visualSize / 2}px`;
+    }
+
+    function updateCursorSize() {
+        const scale = getCanvasScale();
+        const visualSize = state.brushSize * scale;
+        brushCursor.style.width = `${visualSize}px`;
+        brushCursor.style.height = `${visualSize}px`;
+    }
+    
+    function getCanvasScale() {
+        const canvas = document.getElementById('mask-canvas');
+        if (!canvas || canvas.width === 0) return 1;
+        const rect = canvas.getBoundingClientRect();
+        return rect.width / canvas.width;
     }
 
     function saveFinalImage() {
-        const showMaskState = state.showMaskOverlay;
-        if (showMaskState) {
-            state.showMaskOverlay = false;
-            drawMaskComposite();
-        }
+        const maskState = state.showMaskOverlay;
+        const guideState = state.showCropGuide;
+        state.showMaskOverlay = false;
+        state.showCropGuide = false;
+        composeMaskAndDraw();
+
         const link = document.createElement('a');
         const baseName = getBaseFilename();
         link.download = `${baseName}-final.png`;
         link.href = maskCanvas.toDataURL('image/png');
         link.click();
-        if (showMaskState) {
-            state.showMaskOverlay = true;
-            drawMaskComposite();
-        }
+
+        state.showMaskOverlay = maskState;
+        state.showCropGuide = guideState;
+        composeMaskAndDraw();
     }
 });

@@ -24,6 +24,20 @@ body {
     padding: 1rem;
     position: relative;
     overflow-x: hidden;
+    cursor: default;
+}
+
+/* --- Brush Cursor --- */
+.brush-cursor {
+    position: absolute;
+    border: 2px dashed white;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(0, 0);
+    mix-blend-mode: difference;
+    opacity: 0;
+    transition: width 0.1s, height 0.1s, opacity 0.2s;
 }
 
 /* --- Background Decorations --- */
@@ -124,6 +138,13 @@ body {
     font-size: 1rem;
 }
 
+.action-btn.small-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+}
+
 .action-btn:hover { transform: scale(1.05); }
 .action-btn:disabled { background: var(--text-muted); cursor: not-allowed; transform: none; }
 
@@ -140,6 +161,7 @@ body {
     border-radius: var(--radius-lg);
     border: 1px solid var(--glass-border);
     overflow: hidden;
+    position: relative; 
 }
 
 canvas {
@@ -255,11 +277,9 @@ input[type="range"]::-webkit-slider-thumb {
 .preview-box .canvas-container {
     margin-top: 0;
 }
-/* NEW: Style for the second download button */
 .preview-box .action-btn {
     margin-top: 1rem;
 }
-
 
 /* Toggle Switch Style */
 .toggle-switch { display: inline-flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600; color: var(--text-secondary); }
