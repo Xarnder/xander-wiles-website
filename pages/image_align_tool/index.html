@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Align & Blend</title>
+    
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/icon32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/images/icon16.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+</head>
+<div id="main-nav-placeholder"></div> 
+
+<body>
+    <div class="background-overlay"></div>
+    
+    <div id="brush-cursor" class="brush-cursor"></div>
+    
+    <canvas id="magnifier" class="magnifier-lens" width="200" height="200"></canvas>
+
+    <header class="site-header">
+        <div class="header-content">
+            <div class="logo">Face Align & Blend</div>
+            <div class="steps-indicator">
+                <span id="step1-ind" class="active">1. Upload</span>
+                <span class="divider">/</span>
+                <span id="step2-ind">2. Align</span>
+                <span class="divider">/</span>
+                <span id="step3-ind">3. Mask</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-container">
+        
+        <section id="step-upload" class="glass-card">
+            <h2>Start Project</h2>
+            <p>Upload the Base Image (Background) and the Face to Align (Overlay).</p>
+            
+            <div class="upload-grid">
+                <div class="upload-box">
+                    <h3>1. Base Image</h3>
+                    <input type="file" id="upload-base" accept="image/*" class="file-input">
+                    <label for="upload-base" class="action-btn secondary">Select Base</label>
+                    <span id="status-base" class="status-text">No file chosen</span>
+                </div>
+
+                <div class="upload-box">
+                    <h3>2. Face to Align</h3>
+                    <input type="file" id="upload-overlay" accept="image/*" class="file-input">
+                    <label for="upload-overlay" class="action-btn secondary">Select Face</label>
+                    <span id="status-overlay" class="status-text">No file chosen</span>
+                </div>
+            </div>
+            
+            <div class="centered-content mt-2">
+                <button id="btn-goto-align" class="action-btn" disabled>Next: Add Anchor Points</button>
+            </div>
+        </section>
+
+        <section id="step-align" class="glass-card hidden">
+            <h2>Add Anchor Points</h2>
+            <p>Click corresponding points on both images (e.g., Left Eye, Right Eye, Mouth). <br><strong>Minimum 3 points required.</strong></p>
+            
+            <div class="alignment-container">
+                <div class="canvas-wrapper">
+                    <div class="label-badge">Base Image</div>
+                    <canvas id="canvas-base"></canvas>
+                </div>
+                <div class="canvas-wrapper">
+                    <div class="label-badge">To Align</div>
+                    <canvas id="canvas-align"></canvas>
+                </div>
+            </div>
+
+            <div class="controls-bar">
+                <label class="toggle-switch">
+                    Magnify Window
+                    <input type="checkbox" id="toggle-magnifier">
+                    <span class="toggle-knob"></span>
+                </label>
+                
+                <div class="control-group">
+                    <label>Zoom Level</label>
+                    <input type="range" id="magnifier-zoom" min="1.5" max="5" step="0.5" value="2">
+                </div>
+            </div>
+
+            <div class="controls-bar" style="margin-top: 10px;">
+                <div class="point-counter">Points Added: <span id="point-count">0</span></div>
+                <button id="btn-undo-point" class="action-btn small-btn">Undo Last Point</button>
+                <button id="btn-process-align" class="action-btn" disabled>Calculate Match & Align</button>
+            </div>
+        </section>
+
+        <section id="step-mask" class="glass-card hidden">
+            <h2>Blend & Mask</h2>
+            <p>Paint white to reveal the aligned face, black (eraser) to hide it.</p>
+            
+            <div class="canvas-container relative-container">
+                <canvas id="canvas-composite"></canvas>
+            </div>
+
+            <div class="controls-bar">
+                <div class="tool-select">
+                    <button id="tool-brush" class="tool-btn active">Reveal (Brush)</button>
+                    <button id="tool-eraser" class="tool-btn">Hide (Eraser)</button>
+                </div>
+
+                <div class="control-group">
+                    <label>Size</label>
+                    <input type="range" id="brush-size" min="5" max="300" value="50">
+                </div>
+                
+                <div class="control-group">
+                    <label>Softness</label>
+                    <input type="range" id="brush-softness" min="0" max="100" value="50">
+                </div>
+                
+                <div class="control-group">
+                    <label>Opacity</label>
+                    <input type="range" id="brush-opacity" min="0" max="100" value="100">
+                </div>
+
+                <div class="control-group">
+                    <label>Image Opacity</label>
+                    <input type="range" id="overlay-opacity" min="0" max="100" value="100">
+                </div>
+            </div>
+
+            <div class="controls-bar" style="margin-top: 10px;">
+                <label class="toggle-switch">
+                    Show Mask (Red)
+                    <input type="checkbox" id="toggle-mask-overlay">
+                    <span class="toggle-knob"></span>
+                </label>
+
+                <label class="toggle-switch">
+                    Show Image Border
+                    <input type="checkbox" id="toggle-border-overlay">
+                    <span class="toggle-knob"></span>
+                </label>
+            </div>
+
+            <div class="controls-bar final-actions">
+                <button id="btn-reset-mask" class="action-btn secondary">Clear Mask</button>
+                <button id="btn-download" class="action-btn">Download Result</button>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="script.js"></script>
+    <script src="/assets/js/nav-loader.js"></script> 
+</body>
+</html>
