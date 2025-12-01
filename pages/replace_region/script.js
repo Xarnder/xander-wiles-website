@@ -564,7 +564,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.drawImage(state.originalImage, 0, 0);
 
         // 2. Prepare the Combined Mask
-        // We need a buffer that combines the User Paint + The Current Stroke (if drawing)
         const combinedMaskCanvas = document.createElement('canvas');
         combinedMaskCanvas.width = ctx.canvas.width;
         combinedMaskCanvas.height = ctx.canvas.height;
@@ -574,7 +573,6 @@ document.addEventListener('DOMContentLoaded', () => {
         maskCtx.drawImage(state.userPaintLayer, 0, 0);
 
         // B. Draw current active stroke (Live Preview)
-        // We apply the blur here to the live stroke so the user sees exactly what they will get
         if (state.isDrawing && state.tempStrokeLayer) {
             maskCtx.save();
             const blurAmount = (state.brushSize * (state.brushSoftness / 100)) / 2;
@@ -585,7 +583,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (state.currentTool === 'brush') {
                 maskCtx.globalCompositeOperation = 'source-over';
             } else {
-                // For live erasing, we need to cut out from the existing paint
                 maskCtx.globalCompositeOperation = 'destination-out';
             }
             
@@ -593,20 +590,36 @@ document.addEventListener('DOMContentLoaded', () => {
             maskCtx.restore();
         }
 
-        // C. Apply Crop Constraints (Feathered Box)
-        // This ensures paint doesn't appear outside the crop box
+        // C. Crop Constraint (Feathered Inward)
         const constraintCanvas = document.createElement('canvas');
         constraintCanvas.width = ctx.canvas.width;
         constraintCanvas.height = ctx.canvas.height;
         const constraintCtx = constraintCanvas.getContext('2d');
 
         const feather = state.cropFeather;
+        
         constraintCtx.save();
         if (feather > 0) {
-            constraintCtx.filter = `blur(${feather}px)`;
+            // INSET LOGIC:
+            // We inset the rectangle by the feather amount, then blur by half that amount.
+            // This ensures the visible pixels drop to ~0 alpha right at the original border.
+            
+            // Safety check: Don't inset more than half the dimension
+            const maxFeather = Math.min(state.cropRect.width, state.cropRect.height) / 2;
+            const effectiveFeather = Math.min(feather, maxFeather);
+            
+            constraintCtx.filter = `blur(${effectiveFeather / 2}px)`;
+            constraintCtx.fillStyle = 'white';
+            constraintCtx.fillRect(
+                state.cropRect.x + effectiveFeather, 
+                state.cropRect.y + effectiveFeather, 
+                state.cropRect.width - (effectiveFeather * 2), 
+                state.cropRect.height - (effectiveFeather * 2)
+            );
+        } else {
+            constraintCtx.fillStyle = 'white';
+            constraintCtx.fillRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
         }
-        constraintCtx.fillStyle = 'white';
-        constraintCtx.fillRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
         constraintCtx.restore();
 
         // CLIP: combined mask intersected with crop area
