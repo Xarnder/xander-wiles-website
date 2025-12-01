@@ -289,6 +289,20 @@ input[type="range"]::-webkit-slider-thumb {
 .toggle-switch input[type="checkbox"]:checked + .toggle-knob { background-color: var(--accent-cyan); }
 .toggle-switch input[type="checkbox"]:checked + .toggle-knob::before { transform: translateX(20px); background-color: white; }
 
+/* --- New Button Groups --- */
+.btn-group {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.btn-group-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+}
+
 /* --- Responsive Styles --- */
 @media (max-width: 768px) {
     body { padding: 0.5rem; }

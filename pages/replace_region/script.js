@@ -40,16 +40,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const imageUploadInput = document.getElementById('image-upload');
     const jsonUploadInput = document.getElementById('json-upload');
     
-    // Step 2 & 3
-    const editedUploadInput = document.getElementById('edited-upload');
-    const exportCropBtn = document.getElementById('export-crop-btn');
-    const backToStep3Btn = document.getElementById('back-to-step3-btn');
-    const downloadCropAgainBtn = document.getElementById('download-crop-again-btn');
+    // Step 2 Selectors
     const cropCanvas = document.getElementById('crop-canvas');
     const cropCtx = cropCanvas.getContext('2d');
     const aspectRatioSelect = document.getElementById('aspect-ratio-select');
+    // New separate buttons for Step 2
+    const step2DlImg = document.getElementById('step2-dl-img');
+    const step2DlJson = document.getElementById('step2-dl-json');
+    const step2Next = document.getElementById('step2-next');
 
-    // Step 4
+    // Step 3 Selectors
+    const editedUploadInput = document.getElementById('edited-upload');
+    const backToStep3Btn = document.getElementById('back-to-step3-btn');
+    // New separate buttons for Step 3
+    const step3DlImg = document.getElementById('step3-dl-img');
+    const step3DlJson = document.getElementById('step3-dl-json');
+
+    // Step 4 Selectors
     const maskCanvas = document.getElementById('mask-canvas'); // GLOBAL CONST
     const maskCtx = maskCanvas.getContext('2d');
     const saveFinalBtn = document.getElementById('save-final-btn');
@@ -136,26 +143,21 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsText(file);
     });
 
-    // 4. EXPORT CROP
-    exportCropBtn.addEventListener('click', () => {
-        if (!state.cropRect) {
-            alert('Please select an area to crop first.');
-            return;
-        }
-        
+    // 4. STEP 2 & 3: EXPORT BUTTONS
+    
+    // Step 2 Buttons
+    if(step2DlImg) step2DlImg.addEventListener('click', () => downloadCropImage());
+    if(step2DlJson) step2DlJson.addEventListener('click', () => downloadCropJSON());
+    if(step2Next) step2Next.addEventListener('click', () => {
+        if (!state.cropRect) return;
         cropStep.classList.add('hidden');
         reUploadStep.classList.remove('hidden');
-        
-        try {
-            exportCropData();
-            setupStep3Previews();
-        } catch (e) {
-            console.error("Export failed:", e);
-            alert("An error occurred generating the cropped image.");
-        }
+        setupStep3Previews();
     });
 
-    downloadCropAgainBtn.addEventListener('click', () => exportCropData());
+    // Step 3 Buttons
+    if(step3DlImg) step3DlImg.addEventListener('click', () => downloadCropImage());
+    if(step3DlJson) step3DlJson.addEventListener('click', () => downloadCropJSON());
 
     // 5. EDITED IMAGE UPLOAD
     editedUploadInput.addEventListener('change', (e) => {
@@ -269,11 +271,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return lastDot !== -1 ? state.originalFilename.substring(0, lastDot) : state.originalFilename;
     }
 
-    function exportCropData() {
+    // New Function: Download Only Image
+    function downloadCropImage() {
+        if (!state.cropRect) {
+            alert('No crop selected.');
+            return;
+        }
         const { x, y, width, height } = state.cropRect;
         const baseName = getBaseFilename();
         
-        if (width <= 0 || height <= 0) throw new Error("Invalid crop dimensions");
+        if (width <= 0 || height <= 0) return;
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = width;
@@ -287,21 +294,27 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(imgLink);
         imgLink.click();
         document.body.removeChild(imgLink);
+    }
 
-        setTimeout(() => {
-            const projectData = {
-                cropRect: state.cropRect,
-                timestamp: new Date().toISOString(),
-                originalDimensions: { width: state.originalImage.width, height: state.originalImage.height }
-            };
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projectData, null, 2));
-            const jsonLink = document.createElement('a');
-            jsonLink.setAttribute("href", dataStr);
-            jsonLink.setAttribute("download", `${baseName}-project.json`);
-            document.body.appendChild(jsonLink);
-            jsonLink.click();
-            document.body.removeChild(jsonLink);
-        }, 200);
+    // New Function: Download Only JSON
+    function downloadCropJSON() {
+        if (!state.cropRect) {
+            alert('No crop selected.');
+            return;
+        }
+        const baseName = getBaseFilename();
+        const projectData = {
+            cropRect: state.cropRect,
+            timestamp: new Date().toISOString(),
+            originalDimensions: { width: state.originalImage.width, height: state.originalImage.height }
+        };
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projectData, null, 2));
+        const jsonLink = document.createElement('a');
+        jsonLink.setAttribute("href", dataStr);
+        jsonLink.setAttribute("download", `${baseName}-project.json`);
+        document.body.appendChild(jsonLink);
+        jsonLink.click();
+        document.body.removeChild(jsonLink);
     }
 
     function setupCropping() {
@@ -377,7 +390,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.cropRect = { x: finalX, y: finalY, width: finalW, height: finalH };
 
                 if(state.cropRect.width > 0 && state.cropRect.height > 0) {
-                    exportCropBtn.disabled = false;
+                    // Enable the new buttons
+                    if(step2DlImg) step2DlImg.disabled = false;
+                    if(step2DlJson) step2DlJson.disabled = false;
+                    if(step2Next) step2Next.disabled = false;
                 }
             }
         };

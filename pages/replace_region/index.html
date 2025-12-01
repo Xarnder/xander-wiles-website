@@ -99,7 +99,15 @@
                         </optgroup>
                     </select>
                 </div>
-                <button id="export-crop-btn" class="action-btn" disabled>Download Crop & JSON</button>
+                
+                <!-- UPDATED BUTTON GROUP FOR SEPARATE DOWNLOADS -->
+                <div class="btn-group-vertical">
+                    <div class="btn-group">
+                        <button id="step2-dl-img" class="action-btn small-btn" disabled>1. Download Image</button>
+                        <button id="step2-dl-json" class="action-btn small-btn" disabled>2. Download JSON</button>
+                    </div>
+                    <button id="step2-next" class="action-btn" disabled>3. Continue to Next Step &rarr;</button>
+                </div>
             </div>
         </section>
 
@@ -119,7 +127,11 @@
                     <div class="canvas-container">
                         <canvas id="cropped-preview-canvas"></canvas>
                     </div>
-                    <button id="download-crop-again-btn" class="action-btn">Download Again</button>
+                    <!-- UPDATED SEPARATE DOWNLOAD BUTTONS -->
+                    <div class="btn-group">
+                        <button id="step3-dl-img" class="action-btn small-btn">Download Image</button>
+                        <button id="step3-dl-json" class="action-btn small-btn">Download JSON</button>
+                    </div>
                 </div>
             </div>
             
