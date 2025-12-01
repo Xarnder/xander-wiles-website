@@ -267,6 +267,46 @@ document.addEventListener('DOMContentLoaded', () => {
         return lastDot !== -1 ? state.originalFilename.substring(0, lastDot) : state.originalFilename;
     }
 
+    // --- DOWNLOAD / SHARE LOGIC ---
+    function handleImageExport(canvas, filename) {
+        // Convert canvas to Blob (better for large images and iOS)
+        canvas.toBlob((blob) => {
+            if (!blob) {
+                alert("Error creating image file.");
+                return;
+            }
+            
+            const file = new File([blob], filename, { type: 'image/png' });
+
+            // 1. Try Native Sharing (iOS/Android)
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                navigator.share({
+                    files: [file],
+                    title: 'Save Image',
+                    text: 'Here is your image.'
+                }).catch((err) => {
+                    console.warn("Share cancelled or failed:", err);
+                    // If share fails, fallback to download
+                    forceDownload(blob, filename);
+                });
+            } else {
+                // 2. Fallback for Desktop
+                forceDownload(blob, filename);
+            }
+        }, 'image/png');
+    }
+
+    function forceDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     function downloadCropImage() {
         if (!state.cropRect) {
             alert('No crop selected.');
@@ -283,12 +323,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(state.originalImage, x, y, width, height, 0, 0, width, height);
         
-        const imgLink = document.createElement('a');
-        imgLink.download = `${baseName}-cropped.png`;
-        imgLink.href = tempCanvas.toDataURL('image/png');
-        document.body.appendChild(imgLink);
-        imgLink.click();
-        document.body.removeChild(imgLink);
+        handleImageExport(tempCanvas, `${baseName}-cropped.png`);
+    }
+
+    function saveFinalImage() {
+        const maskState = state.showMaskOverlay;
+        const guideState = state.showCropGuide;
+        
+        // Hide overlays for final capture
+        state.showMaskOverlay = false;
+        state.showCropGuide = false;
+        composeMaskAndDraw();
+
+        const baseName = getBaseFilename();
+        handleImageExport(maskCanvas, `${baseName}-final.png`);
+
+        // Restore overlays
+        state.showMaskOverlay = maskState;
+        state.showCropGuide = guideState;
+        composeMaskAndDraw();
     }
 
     function downloadCropJSON() {
@@ -695,23 +748,5 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!canvas || canvas.width === 0) return 1;
         const rect = canvas.getBoundingClientRect();
         return rect.width / canvas.width;
-    }
-
-    function saveFinalImage() {
-        const maskState = state.showMaskOverlay;
-        const guideState = state.showCropGuide;
-        state.showMaskOverlay = false;
-        state.showCropGuide = false;
-        composeMaskAndDraw();
-
-        const link = document.createElement('a');
-        const baseName = getBaseFilename();
-        link.download = `${baseName}-final.png`;
-        link.href = maskCanvas.toDataURL('image/png');
-        link.click();
-
-        state.showMaskOverlay = maskState;
-        state.showCropGuide = guideState;
-        composeMaskAndDraw();
     }
 });
