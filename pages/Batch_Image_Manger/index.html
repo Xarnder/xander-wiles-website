@@ -12,7 +12,6 @@
 
     <!-- Styles -->
     <link rel="stylesheet" href="style.css" />
-    <!-- Keeping your external nav styles as requested -->
     <link rel="stylesheet" href="/assets/css/style.css">
 
     <!-- Favicons -->
@@ -37,14 +36,19 @@
     <main class="app-container">
         <!-- 1. Upload Section -->
         <section id="upload-section" class="glass-card">
-            <h2>1. Upload Your Image Folder</h2>
+            <h2>1. Upload Images & Data</h2>
             <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                Select a folder containing the images you want to rename, title, or convert.
+                Select a folder containing your images. Optionally, upload a CSV to auto-categorize them.
             </p>
             <div class="setup-options">
                 <div class="setup-directory">
-                    <label for="directory-upload" class="directory-btn">Upload Directory</label>
+                    <label for="directory-upload" class="directory-btn">1. Upload Image Folder</label>
                     <input type="file" id="directory-upload" webkitdirectory directory multiple style="display:none;" />
+                </div>
+                <!-- CSV UPLOAD -->
+                <div class="setup-csv">
+                    <label for="csv-upload" class="directory-btn secondary-btn-style">2. Upload CSV Map (Optional)</label>
+                    <input type="file" id="csv-upload" accept=".csv" style="display:none;" />
                 </div>
             </div>
             <p id="upload-status" class="status-message hidden"></p>
@@ -198,6 +202,17 @@
             <h3>Create Image Grid</h3>
             <div class="grid-controls-layout">
                 <div class="grid-settings">
+                    
+                    <!-- NEW SHOW PREVIEW TOGGLE -->
+                    <div class="control-group">
+                        <label for="grid-show-preview-toggle" class="checkbox-label toggle-switch" style="color: var(--accent-cyan);">
+                            <input type="checkbox" id="grid-show-preview-toggle" />
+                            <span class="toggle-knob"></span>
+                            Show Preview
+                        </label>
+                    </div>
+                    <div class="control-group-divider"></div>
+
                     <div class="control-group">
                         <label for="grid-source-select">Source</label>
                         <select id="grid-source-select"></select>
@@ -213,7 +228,6 @@
                             Add Titles
                         </label>
                     </div>
-                    <!-- NEW TOGGLE HERE -->
                     <div class="control-group">
                         <label for="grid-match-smallest-toggle" class="checkbox-label toggle-switch">
                            <input type="checkbox" id="grid-match-smallest-toggle" checked />
@@ -221,7 +235,39 @@
                            Match Smallest
                        </label>
                    </div>
+                   
+                   <div class="control-group-divider"></div>
+                   
+                   <div class="control-group">
+                        <label for="grid-group-folder-toggle" class="checkbox-label toggle-switch">
+                            <input type="checkbox" id="grid-group-folder-toggle" />
+                            <span class="toggle-knob"></span>
+                            Group by Category
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label for="grid-draw-borders-toggle" class="checkbox-label toggle-switch">
+                            <input type="checkbox" id="grid-draw-borders-toggle" />
+                            <span class="toggle-knob"></span>
+                            Outline Groups
+                        </label>
+                    </div>
+
+                    <!-- BORDER & BG CONTROLS -->
+                    <div class="control-group-divider"></div>
+                    <div class="control-group">
+                        <label>Outline Style</label>
+                        <div class="filename-inputs">
+                            <input type="number" id="grid-border-width-input" value="10" min="1" max="100" title="Width px">
+                            <input type="color" id="grid-border-color-input" value="#06b6d4" title="Border Color">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="grid-bg-color-input">Grid Background</label>
+                        <input type="color" id="grid-bg-color-input" value="#111115">
+                    </div>
                 </div>
+                
                 <div id="grid-info" class="grid-info-box">
                     <p id="grid-output-size">0 x 0 px</p>
                     <p id="grid-output-megapixels">0.0 MP</p>
@@ -237,6 +283,18 @@
             <div class="grid-preview-container">
                 <canvas id="grid-preview-canvas"></canvas>
             </div>
+            
+            <!-- PROGRESS BAR CONTAINER -->
+            <div id="grid-progress-container" class="hidden" style="width: 100%; margin-top: 1rem;">
+                <div style="display:flex; justify-content:space-between; color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.3rem;">
+                    <span>Processing images...</span>
+                    <span id="grid-progress-text">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div id="grid-progress-bar" class="progress-fill"></div>
+                </div>
+            </div>
+
             <div class="popup-actions">
                 <button id="generate-grid-btn" class="popup-generate-btn">Download Grid (PNG)</button>
                 <p id="grid-status" class="status-message"></p>

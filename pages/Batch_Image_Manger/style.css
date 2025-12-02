@@ -28,6 +28,10 @@ body.popup-open { overflow: hidden; }
 .directory-btn { background: var(--gradient-primary); color: var(--text-primary); border: none; border-radius: var(--radius-md); padding: 0.8rem 2rem; font-weight: 600; cursor: pointer; transition: transform 0.2s; text-align: center; font-size: 1.1rem; }
 .directory-btn:hover { transform: scale(1.05); }
 
+/* Secondary Upload Button Style */
+.secondary-btn-style { background: var(--bg-secondary); border: 1px solid var(--glass-border); color: var(--text-secondary); }
+.secondary-btn-style:hover { border-color: var(--accent-cyan); color: var(--text-primary); }
+
 /* --- Main Editor & Preview --- */
 .comparison-tool .img-container { position: relative; overflow: hidden; border-radius: var(--radius-lg); background-color: var(--bg-secondary); padding: 1rem; }
 #preview-canvas { display: block; width: 100%; height: auto; max-height: 60vh; object-fit: contain; user-select: none; pointer-events: none; border-radius: var(--radius-lg); border: 1px solid var(--glass-border); margin: 0 auto; }
@@ -100,6 +104,10 @@ button:disabled { background: var(--text-muted); cursor: not-allowed; transform:
 .grid-preview-container canvas { width: 100%; max-height: 300px; object-fit: contain; background: black; border-radius: var(--radius-md); }
 #grid-warning-box { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--glass-border); }
 .warning-text { color: var(--accent-orange); font-weight: bold; display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; margin-bottom: 0.5rem; }
+
+/* Progress Bar */
+.progress-track { width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; width: 0%; background: var(--accent-cyan); transition: width 0.2s ease; border-radius: 4px; }
 
 /* Responsive */
 @media (max-width: 768px) {

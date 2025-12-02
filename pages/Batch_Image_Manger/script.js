@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- DOM Elements ---
     const directoryUploadInput = document.getElementById('directory-upload');
+    const csvUploadInput = document.getElementById('csv-upload');
     const uploadSection = document.getElementById('upload-section');
     const editorSection = document.getElementById('editor-section');
     const previewCanvas = document.getElementById('preview-canvas');
@@ -62,7 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const gridSourceSelect = document.getElementById('grid-source-select');
     const gridColumnsInput = document.getElementById('grid-columns-input');
     const gridAddTitlesToggle = document.getElementById('grid-add-titles-toggle');
-    const gridMatchSmallestToggle = document.getElementById('grid-match-smallest-toggle'); // New
+    const gridMatchSmallestToggle = document.getElementById('grid-match-smallest-toggle');
+    const gridGroupFolderToggle = document.getElementById('grid-group-folder-toggle');
+    const gridDrawBordersToggle = document.getElementById('grid-draw-borders-toggle');
     const gridWarningBox = document.getElementById('grid-warning-box');
     const gridDownscaleToggle = document.getElementById('grid-downscale-toggle');
     const gridOutputSize = document.getElementById('grid-output-size');
@@ -71,6 +74,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const gridPreviewCtx = gridPreviewCanvas.getContext('2d');
     const generateGridBtn = document.getElementById('generate-grid-btn');
     const gridStatus = document.getElementById('grid-status');
+    const gridProgressContainer = document.getElementById('grid-progress-container');
+    const gridProgressBar = document.getElementById('grid-progress-bar');
+    const gridProgressText = document.getElementById('grid-progress-text');
+    
+    // Grid Visual Controls
+    const gridShowPreviewToggle = document.getElementById('grid-show-preview-toggle');
+    const gridBorderWidthInput = document.getElementById('grid-border-width-input');
+    const gridBorderColorInput = document.getElementById('grid-border-color-input');
+    const gridBgColorInput = document.getElementById('grid-bg-color-input');
 
     // Downscale DOM
     const openDownscaleModalBtn = document.getElementById('open-downscale-modal-btn');
@@ -109,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners ---
     directoryUploadInput.addEventListener('change', handleDirectoryUpload);
+    csvUploadInput.addEventListener('change', handleCSVUpload);
     exportBtn.addEventListener('click', handleExport);
 
     // Main Control Listeners
@@ -145,7 +158,16 @@ document.addEventListener('DOMContentLoaded', () => {
     gridSourceSelect.addEventListener('change', updateGridPreview);
     gridColumnsInput.addEventListener('input', updateGridPreview);
     gridAddTitlesToggle.addEventListener('change', updateGridPreview);
-    gridMatchSmallestToggle.addEventListener('change', updateGridPreview); // New listener
+    gridMatchSmallestToggle.addEventListener('change', updateGridPreview);
+    gridGroupFolderToggle.addEventListener('change', updateGridPreview);
+    gridDrawBordersToggle.addEventListener('change', updateGridPreview);
+    
+    // Grid Visual Listeners
+    gridShowPreviewToggle.addEventListener('change', updateGridPreview); // Toggle Preview Listener
+    gridBorderWidthInput.addEventListener('input', updateGridPreview);
+    gridBorderColorInput.addEventListener('input', updateGridPreview);
+    gridBgColorInput.addEventListener('input', updateGridPreview);
+    
     generateGridBtn.addEventListener('click', handleGenerateGrid);
 
     // Downscale Listeners
@@ -189,15 +211,64 @@ document.addEventListener('DOMContentLoaded', () => {
             imageFolders.push("(Root)");
         });
 
-        showStatus(uploadStatus, `Loaded ${imageFiles.length} images.`, false);
-
-        uploadSection.classList.add('hidden');
+        showStatus(uploadStatus, `Loaded ${imageFiles.length} images. You can now Upload a CSV or scroll down to customize.`, false);
         editorSection.classList.remove('hidden');
         previewControls.classList.remove('hidden');
 
         updateFolderDropdown();
         handleControlsChange();
         updateUIForCurrentIndex();
+    }
+
+    // --- CSV PARSING LOGIC ---
+    function handleCSVUpload(e) {
+        if (imageFiles.length === 0) {
+            showStatus(uploadStatus, "Please upload images first.", true);
+            e.target.value = '';
+            return;
+        }
+
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const text = event.target.result;
+            processCSV(text);
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    }
+
+    function processCSV(csvText) {
+        const lines = csvText.split(/\r\n|\n/);
+        let matchCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            const cols = line.split(',');
+            if (cols.length < 3) continue;
+
+            const itemName = cols[1].trim(); 
+            const category = cols[2].trim(); 
+
+            if (itemName && category) {
+                const index = imageTitles.findIndex(t => t.toLowerCase() === itemName.toLowerCase());
+                
+                if (index !== -1) {
+                    imageFolders[index] = category;
+                    if (!availableFolders.includes(category)) {
+                        availableFolders.push(category);
+                    }
+                    matchCount++;
+                }
+            }
+        }
+
+        updateFolderDropdown();
+        updateUIForCurrentIndex(); 
+        showStatus(uploadStatus, `CSV Map Applied! Matched ${matchCount} images to categories.`, false);
     }
 
     function handleControlsChange() {
@@ -260,7 +331,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     headerHeight = options.headerHeight;
                 }
                 
-                // Canvas resizing logic
                 ctx.canvas.width = img.width;
                 ctx.canvas.height = (options.mode === 'add-space') ? img.height + headerHeight : img.height;
 
@@ -268,16 +338,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     const isBelow = options.position === 'below';
                     const imageY = isBelow ? 0 : headerHeight;
                     const headerY = isBelow ? img.height : 0;
-                    
-                    // Draw BG
                     ctx.fillStyle = options.bgColor;
                     ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
-                    // Draw Img
                     ctx.drawImage(img, 0, imageY);
                 } else {
-                    // Draw Img first
                     ctx.drawImage(img, 0, 0);
-                    // Draw BG for bleed
                     if (options.mode === 'bleed') {
                          const isBelow = options.position === 'below';
                          const rectY = isBelow ? img.height - headerHeight : 0;
@@ -286,10 +351,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // Font Scaling
                 let finalFontSize = options.fontSize;
                 if (options.autoScale) {
-                    // Simple heuristic for auto-scale: max 90% width
                     const maxW = ctx.canvas.width * 0.9;
                     let testSize = options.fontSize;
                     ctx.font = `bold ${testSize}px Inter, sans-serif`;
@@ -324,7 +387,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 ctx.fillText(title, ctx.canvas.width / 2, textY);
-                
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
                 resolve();
@@ -354,7 +416,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Main Export Function ---
     async function handleExport() {
         if (imageFiles.length === 0) return;
         
@@ -366,49 +427,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const options = getTitleOptionsFromUI();
         const processCanvas = document.createElement('canvas');
         const processCtx = processCanvas.getContext('2d');
-
-        // Format Settings
-        const format = exportFormatSelect.value; // e.g., image/png
+        const format = exportFormatSelect.value;
         const quality = parseInt(mainQualitySlider.value, 10) / 100;
         const ext = getFileExtension(format);
         const prefix = filenamePrefixInput.value || "";
         const suffix = filenameSuffixInput.value || "";
 
-        console.log(`DEBUG: Starting Export. Format: ${format}, Quality: ${quality}, Ext: ${ext}`);
-
         try {
             for (let i = 0; i < imageFiles.length; i++) {
                 showStatus(exportStatus, `Processing ${i + 1}/${imageFiles.length}...`, false);
-                
-                // Draw to canvas
                 await drawImageWithTitle(processCtx, imageFiles[i], imageTitles[i], options);
-                
-                // Create Blob with correct format
                 const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
-                
                 if (!blob) throw new Error(`Failed to create blob for image ${i}`);
 
-                // Build Filename
                 let baseName = imageTitles[i];
                 if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
                 const finalName = `${prefix}${baseName}${suffix}${ext}`;
 
-                // Add to Zip
                 if (imageFolders[i] !== "(Root)") { 
                     zip.folder(imageFolders[i]).file(finalName, blob); 
                 } else { 
                     zip.file(finalName, blob); 
                 }
             }
-
-            console.log("DEBUG: Zipping files...");
             const zipBlob = await zip.generateAsync({ type: 'blob' });
-            
             const link = document.createElement('a');
             link.href = URL.createObjectURL(zipBlob);
             link.download = 'processed_images.zip';
             document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            
             showStatus(exportStatus, `Download Started!`, false);
         } catch (error) {
             console.error("DEBUG: Export Error", error);
@@ -419,7 +465,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Subfolder Logic ---
     function handleAddFolder() {
         const newFolderName = newFolderInput.value.trim();
         if (newFolderName && !availableFolders.includes(newFolderName)) {
@@ -471,6 +516,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Grid Feature ---
     function openGridModal() {
         gridStatus.textContent = ''; gridStatus.classList.add('hidden');
+        gridProgressContainer.classList.add('hidden'); // Hide progress bar on open
+        
+        // Ensure preview toggle is unchecked by default to prevent immediate freeze
+        gridShowPreviewToggle.checked = false;
+        
+        // Reset/Clear canvas for clean slate
+        const w = gridPreviewCanvas.clientWidth || 800;
+        gridPreviewCanvas.width = w;
+        gridPreviewCanvas.height = 300;
+        gridPreviewCtx.fillStyle = '#111115';
+        gridPreviewCtx.fillRect(0, 0, w, 300);
+        gridPreviewCtx.fillStyle = '#71717a';
+        gridPreviewCtx.textAlign = 'center';
+        gridPreviewCtx.font = '20px Inter';
+        gridPreviewCtx.fillText("Preview Paused", w/2, 150);
+
         gridSourceSelect.innerHTML = '';
         ["All Images", ...new Set(imageFolders)].forEach(folder => {
             const option = document.createElement('option');
@@ -479,7 +540,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.body.classList.add('popup-open');
         gridPopup.classList.remove('hidden');
-        updateGridPreview();
+        
+        // We do NOT call updateGridPreview() here because toggle is off. 
+        // User must toggle ON to see it.
     }
 
     function closeGridModal() {
@@ -487,117 +550,294 @@ document.addEventListener('DOMContentLoaded', () => {
         gridPopup.classList.add('hidden');
     }
 
+    // Helper: Draw borders for "Tetris" style grouping
+    function drawTetrisBorders(ctx, layoutData, columns, finalWidth, finalHeight, scale, lineWidth, color) {
+        // Create a 2D map of the grid to check neighbors
+        const gridMap = {};
+        const cellW = layoutData[0].w;
+        const cellH = layoutData[0].h;
+
+        layoutData.forEach(item => {
+            const col = Math.round(item.x / cellW);
+            const row = Math.round(item.y / cellH);
+            if (!gridMap[row]) gridMap[row] = {};
+            gridMap[row][col] = item.folder;
+        });
+
+        // 2. Draw Borders
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth * scale;
+        ctx.lineCap = 'round';
+
+        layoutData.forEach(item => {
+            const col = Math.round(item.x / cellW);
+            const row = Math.round(item.y / cellH);
+            const currentFolder = item.folder;
+
+            // Coords for this cell scaled
+            const x = item.x * scale;
+            const y = item.y * scale;
+            const w = item.w * scale;
+            const h = item.h * scale;
+
+            ctx.beginPath();
+
+            // Check Top
+            if (row === 0 || !gridMap[row - 1] || gridMap[row - 1][col] !== currentFolder) {
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + w, y);
+            }
+            // Check Bottom
+            if (!gridMap[row + 1] || gridMap[row + 1][col] !== currentFolder) {
+                ctx.moveTo(x, y + h);
+                ctx.lineTo(x + w, y + h);
+            }
+            // Check Left
+            if (col === 0 || gridMap[row][col - 1] !== currentFolder) {
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + h);
+            }
+            // Check Right
+            if (gridMap[row][col + 1] !== currentFolder) {
+                ctx.moveTo(x + w, y);
+                ctx.lineTo(x + w, y + h);
+            }
+            ctx.stroke();
+        });
+    }
+
     async function updateGridPreview() {
+        // CHECK TOGGLE FIRST
+        if (!gridShowPreviewToggle.checked) {
+            // Clear canvas to indicate paused state
+            const w = gridPreviewCanvas.clientWidth || 800;
+            gridPreviewCanvas.width = w;
+            gridPreviewCanvas.height = 300;
+            gridPreviewCtx.fillStyle = '#111115';
+            gridPreviewCtx.fillRect(0, 0, w, 300);
+            gridPreviewCtx.fillStyle = '#71717a';
+            gridPreviewCtx.textAlign = 'center';
+            gridPreviewCtx.font = '20px Inter';
+            gridPreviewCtx.fillText("Preview Paused", w/2, 150);
+            
+            gridProgressContainer.classList.add('hidden');
+            gridOutputSize.textContent = "0 x 0 px";
+            gridOutputMegapixels.textContent = "0.0 MP";
+            return;
+        }
+
         const source = gridSourceSelect.value;
         const columns = parseInt(gridColumnsInput.value, 10) || 1;
-        const addTitles = gridAddTitlesToggle.checked;
         const matchSmallest = gridMatchSmallestToggle.checked;
-        const filteredIndices = getFilteredImageIndices(source);
+        const isGrouped = gridGroupFolderToggle.checked && source === "All Images";
+        const drawBorders = gridDrawBordersToggle.checked;
+        
+        // Visuals
+        const borderWidth = parseInt(gridBorderWidthInput.value, 10) || 4;
+        const borderColor = gridBorderColorInput.value;
+        const bgColor = gridBgColorInput.value;
 
+        // Toggle visibility of group border option
+        gridDrawBordersToggle.closest('.control-group').classList.toggle('hidden', !isGrouped);
+        gridBorderWidthInput.closest('.control-group').classList.toggle('hidden', !isGrouped || !drawBorders);
+
+        let filteredIndices = getFilteredImageIndices(source);
         if (filteredIndices.length === 0) return;
+
+        // Show Progress Bar
+        gridProgressContainer.classList.remove('hidden');
+        gridProgressBar.style.width = '0%';
+        gridProgressText.textContent = '0%';
+
+        // If grouped, sort the indices by folder name
+        if (isGrouped) {
+            filteredIndices.sort((a, b) => imageFolders[a].localeCompare(imageFolders[b]));
+        }
 
         try {
             const titleOptions = getTitleOptionsFromUI();
-            titleOptions.addTitle = addTitles;
+            titleOptions.addTitle = gridAddTitlesToggle.checked;
+
+            // Prepare images
+            let completedCount = 0;
+            const totalImages = filteredIndices.length;
 
             const processedImages = await Promise.all(
-                filteredIndices.map(i => getProcessedImage(imageFiles[i], imageTitles[i], titleOptions))
+                filteredIndices.map(async i => {
+                    const img = await getProcessedImage(imageFiles[i], imageTitles[i], titleOptions);
+                    
+                    // Update Progress
+                    completedCount++;
+                    const percent = Math.round((completedCount / totalImages) * 100);
+                    gridProgressBar.style.width = `${percent}%`;
+                    gridProgressText.textContent = `${percent}%`;
+
+                    return { img, folder: imageFolders[i] };
+                })
             );
-            
-            // Grid calc logic (Updated for Match Smallest)
+
+            // 1. Determine Cell Size
             let cellWidth, cellHeight;
-            
+            const rawImgs = processedImages.map(p => p.img);
             if (matchSmallest) {
-                cellWidth = Math.min(...processedImages.map(img => img.width));
-                cellHeight = Math.min(...processedImages.map(img => img.height));
+                cellWidth = Math.min(...rawImgs.map(img => img.width));
+                cellHeight = Math.min(...rawImgs.map(img => img.height));
             } else {
-                cellWidth = Math.max(...processedImages.map(img => img.width));
-                cellHeight = Math.max(...processedImages.map(img => img.height));
+                cellWidth = Math.max(...rawImgs.map(img => img.width));
+                cellHeight = Math.max(...rawImgs.map(img => img.height));
             }
 
+            // 2. Calculate Layout (Continuous Flow)
             const rows = Math.ceil(processedImages.length / columns);
-            const totalWidth = cellWidth * columns;
-            const totalHeight = cellHeight * rows;
-            const totalPixels = totalWidth * totalHeight;
-            const megapixels = (totalPixels / 1000000).toFixed(1);
+            const finalWidth = cellWidth * columns;
+            const finalHeight = rows * cellHeight;
+            let layoutData = []; 
+            
+            processedImages.forEach((item, index) => {
+                const row = Math.floor(index / columns);
+                const col = index % columns;
+                layoutData.push({ 
+                    img: item.img, 
+                    folder: item.folder,
+                    x: col * cellWidth, 
+                    y: row * cellHeight, 
+                    w: cellWidth, 
+                    h: cellHeight 
+                });
+            });
 
-            gridOutputSize.textContent = `${totalWidth} x ${totalHeight} px`;
+            // Stats
+            const totalPixels = finalWidth * finalHeight;
+            const megapixels = (totalPixels / 1000000).toFixed(1);
+            gridOutputSize.textContent = `${finalWidth} x ${finalHeight} px`;
             gridOutputMegapixels.textContent = `${megapixels} MP`;
             gridWarningBox.classList.toggle('hidden', totalPixels <= MEGAPixel_limit);
 
-            // Render small preview
+            // Render to Preview Canvas
             const previewWidth = gridPreviewCanvas.clientWidth || 800;
-            const scale = previewWidth / totalWidth;
+            const scale = previewWidth / finalWidth;
             gridPreviewCanvas.width = previewWidth;
-            gridPreviewCanvas.height = totalHeight * scale;
+            gridPreviewCanvas.height = finalHeight * scale;
             
-            gridPreviewCtx.fillStyle = '#111115';
+            gridPreviewCtx.fillStyle = bgColor;
             gridPreviewCtx.fillRect(0,0, gridPreviewCanvas.width, gridPreviewCanvas.height);
+            
+            // Draw Images
+            layoutData.forEach(item => {
+                const aspect = item.img.width / item.img.height;
+                let dw = item.w * scale;
+                let dh = (item.w / aspect) * scale;
+                const cellH = item.h * scale;
 
-            const scaledCellW = cellWidth * scale;
-            const scaledCellH = cellHeight * scale;
-
-            processedImages.forEach((img, i) => {
-                const row = Math.floor(i / columns);
-                const col = i % columns;
-                const x = col * scaledCellW;
-                const y = row * scaledCellH;
-                
-                // Center image in cell (Scale Logic updated)
-                const aspect = img.width / img.height;
-                let dw = scaledCellW;
-                let dh = scaledCellW / aspect;
-
-                if (dh > scaledCellH) {
-                    dh = scaledCellH;
-                    dw = scaledCellH * aspect;
+                if (dh > cellH) {
+                    dh = cellH;
+                    dw = (item.h * aspect) * scale;
                 }
 
-                const dx = x + (scaledCellW - dw) / 2;
-                const dy = y + (scaledCellH - dh) / 2;
-                
-                gridPreviewCtx.drawImage(img, dx, dy, dw, dh);
+                const dx = (item.x * scale) + (item.w * scale - dw) / 2;
+                const dy = (item.y * scale) + (cellH - dh) / 2;
+
+                gridPreviewCtx.drawImage(item.img, dx, dy, dw, dh);
             });
+
+            // Draw Group Borders (Tetris Style)
+            if (isGrouped && drawBorders) {
+                drawTetrisBorders(gridPreviewCtx, layoutData, columns, finalWidth, finalHeight, scale, borderWidth, borderColor);
+            }
+
+            // Hide Progress
+            setTimeout(() => { gridProgressContainer.classList.add('hidden'); }, 500);
+
         } catch (error) {
             console.error("DEBUG: Grid Preview Error", error);
+            gridProgressContainer.classList.add('hidden');
         }
     }
 
     async function handleGenerateGrid() {
-        generateGridBtn.disabled = true; generateGridBtn.textContent = 'Processing...';
-        showStatus(gridStatus, 'Generating Grid...', false);
+        generateGridBtn.disabled = true; generateGridBtn.textContent = 'Generating...';
+        showStatus(gridStatus, 'Preparing Grid...', false);
+        
+        // Show Progress Bar
+        gridProgressContainer.classList.remove('hidden');
+        gridProgressBar.style.width = '0%';
+        gridProgressText.textContent = '0%';
 
         const source = gridSourceSelect.value;
         const columns = parseInt(gridColumnsInput.value, 10) || 1;
-        const addTitles = gridAddTitlesToggle.checked;
         const matchSmallest = gridMatchSmallestToggle.checked;
+        const isGrouped = gridGroupFolderToggle.checked && source === "All Images";
+        const drawBorders = gridDrawBordersToggle.checked;
         const shouldDownscale = gridDownscaleToggle.checked;
-        const filteredIndices = getFilteredImageIndices(source);
+        
+        // Visuals
+        const borderWidth = parseInt(gridBorderWidthInput.value, 10) || 4;
+        const borderColor = gridBorderColorInput.value;
+        const bgColor = gridBgColorInput.value;
+
+        let filteredIndices = getFilteredImageIndices(source);
+
+        if (isGrouped) {
+            filteredIndices.sort((a, b) => imageFolders[a].localeCompare(imageFolders[b]));
+        }
 
         try {
             const titleOptions = getTitleOptionsFromUI();
-            titleOptions.addTitle = addTitles;
+            titleOptions.addTitle = gridAddTitlesToggle.checked;
+
+            // PROCESS IMAGES WITH PROGRESS BAR
+            let completedCount = 0;
+            const totalImages = filteredIndices.length;
 
             const processedImages = await Promise.all(
-                filteredIndices.map(i => getProcessedImage(imageFiles[i], imageTitles[i], titleOptions))
+                filteredIndices.map(async i => {
+                    const img = await getProcessedImage(imageFiles[i], imageTitles[i], titleOptions);
+                    
+                    // Update Progress
+                    completedCount++;
+                    const percent = Math.round((completedCount / totalImages) * 100);
+                    gridProgressBar.style.width = `${percent}%`;
+                    gridProgressText.textContent = `${percent}%`;
+
+                    return { img, folder: imageFolders[i] };
+                })
             );
 
-            // Grid dimensions (Updated for Match Smallest)
+            showStatus(gridStatus, 'Assembling Layout...', false);
+
+            // 1. Determine Cell Size
             let cellWidth, cellHeight;
+            const rawImgs = processedImages.map(p => p.img);
             if (matchSmallest) {
-                cellWidth = Math.min(...processedImages.map(img => img.width));
-                cellHeight = Math.min(...processedImages.map(img => img.height));
+                cellWidth = Math.min(...rawImgs.map(img => img.width));
+                cellHeight = Math.min(...rawImgs.map(img => img.height));
             } else {
-                cellWidth = Math.max(...processedImages.map(img => img.width));
-                cellHeight = Math.max(...processedImages.map(img => img.height));
+                cellWidth = Math.max(...rawImgs.map(img => img.width));
+                cellHeight = Math.max(...rawImgs.map(img => img.height));
             }
 
+            // 2. Calculate Layout
             const rows = Math.ceil(processedImages.length / columns);
             let finalWidth = cellWidth * columns;
-            let finalHeight = cellHeight * rows;
-            let totalPixels = finalWidth * finalHeight;
+            let finalHeight = rows * cellHeight;
+            let layoutData = []; 
+            
+            processedImages.forEach((item, index) => {
+                const row = Math.floor(index / columns);
+                const col = index % columns;
+                layoutData.push({ 
+                    img: item.img, 
+                    folder: item.folder,
+                    x: col * cellWidth, 
+                    y: row * cellHeight, 
+                    w: cellWidth, 
+                    h: cellHeight 
+                });
+            });
 
+            // Check Downscale
             let scaleFactor = 1;
+            const totalPixels = finalWidth * finalHeight;
             if (shouldDownscale && totalPixels > MEGAPixel_limit) {
                 scaleFactor = Math.sqrt(MEGAPixel_limit / totalPixels);
                 finalWidth = Math.floor(finalWidth * scaleFactor);
@@ -607,26 +847,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const finalCanvas = document.createElement('canvas');
             finalCanvas.width = finalWidth; finalCanvas.height = finalHeight;
             const finalCtx = finalCanvas.getContext('2d');
-            finalCtx.fillStyle = '#000000';
+            finalCtx.fillStyle = bgColor;
             finalCtx.fillRect(0, 0, finalWidth, finalHeight);
-            
-            // Recalculate cell size after potential downscaling
-            const finalCellWidth = finalWidth / columns;
-            const finalCellHeight = finalHeight / rows;
 
-            processedImages.forEach((img, i) => {
-                const row = Math.floor(i / columns);
-                const col = i % columns;
-                const aspect = img.width / img.height;
+            // Draw Images
+            layoutData.forEach(item => {
+                const aspect = item.img.width / item.img.height;
+                const targetW = item.w * scaleFactor;
+                const targetH = item.h * scaleFactor;
+                let dw = targetW, dh = targetW / aspect;
+
+                if (dh > targetH) { dh = targetH; dw = targetH * aspect; }
                 
-                // Calculate fit dimensions
-                let dw = finalCellWidth, dh = finalCellWidth / aspect;
-                if (dh > finalCellHeight) { dh = finalCellHeight; dw = finalCellHeight * aspect; }
-                
-                const x = col * finalCellWidth + (finalCellWidth - dw) / 2;
-                const y = row * finalCellHeight + (finalCellHeight - dh) / 2;
-                finalCtx.drawImage(img, x, y, dw, dh);
+                const x = (item.x * scaleFactor) + (targetW - dw) / 2;
+                const y = (item.y * scaleFactor) + (targetH - dh) / 2;
+                finalCtx.drawImage(item.img, x, y, dw, dh);
             });
+
+            // Draw Borders
+            if (isGrouped && drawBorders) {
+                drawTetrisBorders(finalCtx, layoutData, columns, finalWidth, finalHeight, scaleFactor, borderWidth, borderColor);
+            }
 
             finalCanvas.toBlob(blob => {
                 const link = document.createElement('a');
@@ -634,11 +875,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 link.download = `grid_${source.replace(/\s/g, '_')}.png`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 showStatus(gridStatus, `Downloaded!`, false);
+                // Hide progress bar after short delay
+                setTimeout(() => { gridProgressContainer.classList.add('hidden'); }, 2000);
             }, 'image/png');
 
         } catch (error) {
             console.error("DEBUG: Grid Gen Error", error);
             showStatus(gridStatus, 'Error occurred.', true);
+            gridProgressContainer.classList.add('hidden');
         } finally {
             generateGridBtn.disabled = false; generateGridBtn.textContent = 'Download Grid (PNG)';
         }
@@ -722,12 +966,10 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let i = 0; i < imageFiles.length; i++) {
                 showStatus(downscaleStatus, `Converting ${i + 1}/${imageFiles.length}...`, false);
                 
-                // 1. Get Source Image (with or without titles)
                 const sourceImage = applyTitles 
                     ? await getProcessedImage(imageFiles[i], imageTitles[i], getTitleOptionsFromUI())
                     : await loadImage(imageFiles[i]);
                 
-                // 2. Calculate Targets
                 let targetWidth, targetHeight;
                 if (resizeMode === 'megapixels') {
                     const targetMP = parseFloat(downscaleMpInput.value) * 1000000;
@@ -739,18 +981,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     targetHeight = parseInt(downscaleHeightInput.value, 10);
                 }
 
-                // 3. Setup Canvas
                 processCanvas.width = Math.round(targetWidth);
                 processCanvas.height = Math.round(targetHeight);
                 const fitMode = downscaleAspectLockToggle.checked ? 'stretch' : downscaleFitSelect.value;
                 
-                // Fill BG if padding
                 if (fitMode === 'pad') {
                     processCtx.fillStyle = document.getElementById('downscale-pad-color-picker').value;
                     processCtx.fillRect(0, 0, processCanvas.width, processCanvas.height);
                 }
 
-                // 4. Draw Image
                 const imgAspectRatio = sourceImage.width / sourceImage.height;
                 const canvasAspectRatio = processCanvas.width / processCanvas.height;
                 let drawWidth, drawHeight, offsetX, offsetY;
@@ -770,10 +1009,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 processCtx.drawImage(sourceImage, offsetX, offsetY, drawWidth, drawHeight);
 
-                // 5. Save Blob
                 const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
                 
-                // 6. Filename
                 let baseName = imageTitles[i];
                 if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
                 const finalName = `${prefix}${baseName}${suffix}${ext}`;
@@ -785,7 +1022,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            console.log("DEBUG: Downscale Zip generation...");
             const zipBlob = await zip.generateAsync({ type: 'blob' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(zipBlob);
