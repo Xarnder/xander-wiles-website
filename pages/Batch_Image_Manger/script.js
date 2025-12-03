@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gridDrawBordersToggle.addEventListener('change', updateGridPreview);
     
     // Grid Visual Listeners
-    gridShowPreviewToggle.addEventListener('change', updateGridPreview); // Toggle Preview Listener
+    gridShowPreviewToggle.addEventListener('change', updateGridPreview); 
     gridBorderWidthInput.addEventListener('input', updateGridPreview);
     gridBorderColorInput.addEventListener('input', updateGridPreview);
     gridBgColorInput.addEventListener('input', updateGridPreview);
@@ -318,11 +318,15 @@ document.addEventListener('DOMContentLoaded', () => {
     async function drawImageWithTitle(ctx, imageFile, title, options) {
         return new Promise((resolve, reject) => {
             const img = new Image();
+            // Use object URL
+            const url = URL.createObjectURL(imageFile);
+            
             img.onload = () => {
                 if (!options.addTitle) {
                     ctx.canvas.width = img.width;
                     ctx.canvas.height = img.height;
                     ctx.drawImage(img, 0, 0);
+                    URL.revokeObjectURL(url); // Clean up
                     return resolve();
                 }
 
@@ -389,13 +393,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.fillText(title, ctx.canvas.width / 2, textY);
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
+                
+                URL.revokeObjectURL(url); // Clean up memory
                 resolve();
             };
+            
             img.onerror = (e) => {
                 console.error("DEBUG: Image load failed", e);
+                URL.revokeObjectURL(url); // Clean up memory
                 reject(new Error(`Could not load image: ${imageFile.name}`));
             };
-            img.src = URL.createObjectURL(imageFile);
+            
+            img.src = url;
         });
     }
 
@@ -423,6 +432,19 @@ document.addEventListener('DOMContentLoaded', () => {
         exportBtn.textContent = 'Processing...';
         showStatus(exportStatus, `Processing ${imageFiles.length} images...`, false);
 
+        // Show Progress Bar
+        // Re-using the grid progress container for the main export to provide feedback
+        // We move it or clone it? Let's just grab the elements.
+        const progressBarContainer = document.getElementById('grid-progress-container');
+        const progressBar = document.getElementById('grid-progress-bar');
+        const progressText = document.getElementById('grid-progress-text');
+        
+        // Use inline style to show it near the export button if we can, 
+        // or just rely on the one in the popup? 
+        // Actually, the user might not see it if it's inside the hidden grid popup.
+        // But the previous request asked to fix the grid progress.
+        // Let's rely on status text for now, but make the status updates frequent.
+        
         const zip = new JSZip();
         const options = getTitleOptionsFromUI();
         const processCanvas = document.createElement('canvas');
@@ -432,29 +454,50 @@ document.addEventListener('DOMContentLoaded', () => {
         const ext = getFileExtension(format);
         const prefix = filenamePrefixInput.value || "";
         const suffix = filenameSuffixInput.value || "";
+        
+        let successCount = 0;
 
         try {
             for (let i = 0; i < imageFiles.length; i++) {
-                showStatus(exportStatus, `Processing ${i + 1}/${imageFiles.length}...`, false);
-                await drawImageWithTitle(processCtx, imageFiles[i], imageTitles[i], options);
-                const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
-                if (!blob) throw new Error(`Failed to create blob for image ${i}`);
+                // Update status every image so user knows it's moving
+                const pct = Math.round(((i + 1) / imageFiles.length) * 100);
+                showStatus(exportStatus, `Processing ${i + 1}/${imageFiles.length} (${pct}%)`, false);
+                exportBtn.textContent = `Processing ${pct}%...`;
 
-                let baseName = imageTitles[i];
-                if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
-                const finalName = `${prefix}${baseName}${suffix}${ext}`;
+                try {
+                    // Wrapped in TRY/CATCH so one bad image doesn't kill the batch
+                    await drawImageWithTitle(processCtx, imageFiles[i], imageTitles[i], options);
+                    const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
+                    if (!blob) throw new Error(`Failed to create blob for image ${i}`);
 
-                if (imageFolders[i] !== "(Root)") { 
-                    zip.folder(imageFolders[i]).file(finalName, blob); 
-                } else { 
-                    zip.file(finalName, blob); 
+                    let baseName = imageTitles[i];
+                    if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
+                    const finalName = `${prefix}${baseName}${suffix}${ext}`;
+
+                    if (imageFolders[i] !== "(Root)") { 
+                        zip.folder(imageFolders[i]).file(finalName, blob); 
+                    } else { 
+                        zip.file(finalName, blob); 
+                    }
+                    successCount++;
+                    
+                    // Explicitly clear canvas to help memory
+                    processCtx.clearRect(0,0,processCanvas.width, processCanvas.height);
+                    
+                } catch (imgError) {
+                    console.error(`Error processing image ${imageFiles[i].name}:`, imgError);
+                    // Continue to next image
                 }
             }
+            
+            showStatus(exportStatus, `Zipping ${successCount} images...`, false);
             const zipBlob = await zip.generateAsync({ type: 'blob' });
+            
             const link = document.createElement('a');
             link.href = URL.createObjectURL(zipBlob);
             link.download = 'processed_images.zip';
             document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            
             showStatus(exportStatus, `Download Started!`, false);
         } catch (error) {
             console.error("DEBUG: Export Error", error);
