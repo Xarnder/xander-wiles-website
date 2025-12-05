@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK Tax Visualiser</title>
+    
+    
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+</head>
+
+<body>
+
+    <div class="background-blobs"></div>
+
+    <div class="container">
+        <div id="main-nav-placeholder"></div> 
+
+        <header>
+            <h1>UK Tax Visualiser</h1>
+            <p>Visualise your take-home pay as an area graph.</p>
+        </header>
+
+        <!-- Input Section -->
+        <div class="card input-card">
+            <div class="input-row">
+                <div class="input-group">
+                    <label for="incomeInput">Annual Income (£)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="incomeInput" placeholder="e.g. 45000" value="30000" min="0">
+                    </div>
+                </div>
+
+                <div class="input-group" style="max-width: 150px;">
+                    <label for="niLetter">NI Category</label>
+                    <div class="input-wrapper">
+                        <select id="niLetter">
+                            <option value="A" selected>A (Standard)</option>
+                            <option value="B">B (Reduced)</option>
+                            <option value="C">C (Pensioner)</option>
+                            <option value="H">H (Apprentice)</option>
+                            <option value="J">J (Deferred)</option>
+                            <option value="M">M (Under 21)</option>
+                            <option value="V">V (Veteran)</option>
+                            <option value="Z">Z (Deferred u21)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group" style="flex: 0;">
+                    <label>&nbsp;</label>
+                    <div class="input-wrapper">
+                        <button id="calculateBtn">Visualise</button>
+                    </div>
+                </div>
+                
+                <div class="toggle-group">
+                    <label>Graph View</label>
+                    <div class="toggle-wrapper">
+                        <span class="toggle-label">Green Bottom</span>
+                        <label class="switch">
+                            <input type="checkbox" id="viewToggle">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-label">Red Bottom</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Section -->
+        <div class="card summary-card">
+            <div class="stat">
+                <h3>Total Deductions</h3>
+                <p id="totalTaxDisplay">£0</p>
+            </div>
+            <div class="stat highlight">
+                <h3>Take Home Pay</h3>
+                <p id="takeHomeDisplay">£0</p>
+            </div>
+            <div class="stat">
+                <h3>Effective Rate</h3>
+                <p id="effectiveRateDisplay">0%</p>
+            </div>
+        </div>
+
+        <!-- Breakdown Card -->
+        <div class="card breakdown-card">
+            <h3>Deductions Breakdown</h3>
+            <div id="breakdownList"></div>
+        </div>
+
+        <!-- Formula Card -->
+        <div class="card formula-card">
+            <h3>Take Home Equation</h3>
+            <p class="formula-desc">Multipliers applied to each chunk of income (after Tax & NI):</p>
+            <div id="formulaDisplay" class="formula-box"></div>
+        </div>
+
+        <!-- Main Graph Section -->
+        <div class="card graph-card">
+            <div class="chart-header">
+                <h3>Income Visualization</h3>
+                <div class="export-buttons">
+                    <!-- CHANGED: Removed onclick, added IDs -->
+                    <button class="btn-small" id="btnDownloadPNG">Save PNG</button>
+                    <button class="btn-small" id="btnDownloadJPEG">Save JPEG</button>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="taxChart"></canvas>
+            </div>
+            <div class="legend-custom">
+                <div><span class="dot green"></span> You Keep</div>
+                <div><span class="dot orange"></span> National Insurance</div>
+                <div><span class="dot red"></span> Income Tax</div>
+            </div>
+        </div>
+
+        <!-- Comparison Line Graph -->
+        <div class="card graph-card">
+            <h3>Take Home Pay Curve</h3>
+            <p class="formula-desc">See how take-home pay grows (or slows down) as you earn more.</p>
+            <div class="chart-container">
+                <canvas id="comparisonChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script src="/assets/js/nav-loader.js"></script> 
+
+</body>
+</html>

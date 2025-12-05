@@ -1,0 +1,202 @@
+:root {
+    --bg-color: #0f172a;
+    --text-color: #f8fafc;
+    --card-bg: rgba(255, 255, 255, 0.05);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --accent: #38bdf8;
+    --highlight-green: #4ade80;
+    --highlight-red: #f87171;
+    --highlight-orange: #fb923c;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px 100px 20px;
+    overflow-x: hidden;
+}
+
+.background-blobs {
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.1), transparent 40%);
+    z-index: -1;
+    pointer-events: none;
+}
+
+.container {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+header h1 {
+    font-size: 2.5rem;
+    background: linear-gradient(90deg, #38bdf8, #818cf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+header p { color: #94a3b8; }
+
+.card {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 25px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Input Row */
+.input-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+.input-group { flex: 1; min-width: 150px; }
+.input-wrapper { display: flex; gap: 10px; margin-top: 10px; }
+
+input[type="number"], select {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--card-border);
+    color: white;
+    padding: 15px;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    outline: none;
+    transition: 0.2s;
+    width: 100%;
+}
+select option { background: #0f172a; color: white; }
+
+input[type="number"]:focus, select:focus { border-color: var(--accent); }
+
+button {
+    background: var(--accent); color: #0f172a; border: none; padding: 0 25px;
+    border-radius: 12px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: transform 0.1s;
+    height: 100%; min-height: 52px; /* Match input height */
+}
+button:hover { transform: scale(1.02); filter: brightness(1.1); }
+
+/* Toggle */
+.toggle-group { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.toggle-group label { font-size: 0.9rem; color: #94a3b8; }
+.toggle-wrapper {
+    display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.2);
+    padding: 10px 15px; border-radius: 12px; border: 1px solid var(--card-border);
+}
+.toggle-label { font-size: 0.8rem; color: #cbd5e1; }
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: var(--highlight-green); transition: .4s;
+}
+.slider:before {
+    position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px;
+    background-color: white; transition: .4s;
+}
+input:checked + .slider { background-color: var(--highlight-red); }
+input:checked + .slider:before { transform: translateX(18px); }
+.slider.round { border-radius: 34px; }
+.slider.round:before { border-radius: 50%; }
+
+/* Summary */
+.summary-card {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 20px; text-align: center;
+}
+.stat h3 { font-size: 0.9rem; color: #94a3b8; margin-bottom: 5px; }
+.stat p { font-size: 1.8rem; font-weight: bold; }
+.stat.highlight p { color: var(--highlight-green); }
+
+/* Breakdown & Formula Cards */
+.breakdown-card h3, .formula-card h3 { margin-bottom: 10px; font-size: 1.1rem; color: var(--accent); }
+.formula-desc { font-size: 0.9rem; color: #94a3b8; margin-bottom: 15px; }
+
+.breakdown-row {
+    display: flex; justify-content: space-between; padding: 15px 0;
+    border-bottom: 1px solid var(--card-border); font-size: 0.95rem;
+}
+.breakdown-row:last-child { border-bottom: none; }
+.breakdown-label { color: #cbd5e1; }
+.breakdown-val { font-weight: bold; font-size: 1.1rem; }
+.sub-text { font-size: 0.85rem; color: #94a3b8; font-weight: normal; margin-left: 5px; }
+
+.breakdown-header {
+    margin-top: 15px; margin-bottom: 5px; font-size: 0.8rem; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--accent); border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.formula-box {
+    background: rgba(0, 0, 0, 0.3); padding: 20px; border-radius: 12px;
+    font-family: 'Courier New', Courier, monospace; font-size: 1rem; line-height: 1.6;
+    color: #e2e8f0; overflow-x: auto; white-space: nowrap; border: 1px solid var(--card-border);
+}
+.math-num { color: #38bdf8; font-weight: bold; }
+.math-op { color: #cbd5e1; margin: 0 5px; }
+.math-mult { color: #4ade80; font-weight: bold; }
+.math-total { color: #4ade80; font-weight: bold; border-bottom: 2px solid #4ade80; }
+
+/* Graphs */
+.graph-card {
+    height: 550px; display: flex; flex-direction: column;
+    padding: 25px; padding-bottom: 40px;
+}
+.chart-header {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+}
+.chart-header h3 { font-size: 1.1rem; color: var(--accent); margin: 0; }
+.chart-container { flex: 1; position: relative; width: 100%; min-height: 0; margin-bottom: 10px; }
+canvas { width: 100% !important; height: 100% !important; }
+
+.legend-custom {
+    display: flex; justify-content: center; align-items: center;
+    font-size: 0.9rem; color: #cbd5e1; flex-wrap: wrap; gap: 15px;
+}
+.dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 5px; display: inline-block; }
+.dot.green { background-color: #4ade80; }
+.dot.red { background-color: #f87171; }
+.dot.orange { background-color: #fb923c; }
+
+.btn-small {
+    background: rgba(255,255,255,0.1); color: #cbd5e1; padding: 5px 12px;
+    font-size: 0.8rem; border-radius: 8px; margin-left: 5px;
+}
+.btn-small:hover { background: rgba(255,255,255,0.2); }
+
+@media (max-width: 600px) {
+    header h1 { font-size: 2rem; }
+    .input-row { flex-direction: column; align-items: stretch; }
+    button { padding: 15px; }
+    .graph-card { height: 450px; }
+    .breakdown-row { flex-direction: column; gap: 5px; }
+    .formula-box { font-size: 0.85rem; white-space: normal; }
+    .chart-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+}
