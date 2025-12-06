@@ -32,7 +32,7 @@ const debugLog = document.getElementById('debug-log');
 const renderedOverlay = document.getElementById('rendered-overlay');
 const renderedImg = document.getElementById('rendered-img');
 
-// Colors
+// Controls
 const bgColorPicker = document.getElementById('bgColorPicker');
 const textColorPicker = document.getElementById('textColorPicker');
 const titleColorPicker = document.getElementById('titleColorPicker');
@@ -59,6 +59,7 @@ const textXSlider = document.getElementById('textXSlider');
 
 const exportScaleSelect = document.getElementById('exportScale');
 const autoRenderToggle = document.getElementById('autoRenderToggle');
+const uiThemeToggle = document.getElementById('uiThemeToggle');
 
 // All Sliders List for Iteration
 const allSliders = [
@@ -74,12 +75,10 @@ function init() {
     renderPoster(); 
     setupEventListeners();
     handleResize(); 
-    updateVisuals(); // Syncs JS slider values to CSS variables immediately
+    updateVisuals();
     
-    // Ensure value displays are correct on load
     allSliders.forEach(el => updateSliderValue(el.id, el.value));
 
-    // Allow layout calculations to apply before taking the initial snapshot
     if(autoRenderToggle.checked) {
         setTimeout(() => {
             triggerAutoRender();
@@ -326,6 +325,11 @@ function generateCanvas(scale, callback) {
 
 
 function setupEventListeners() {
+    // UI Theme Toggle
+    uiThemeToggle.addEventListener('click', () => {
+        document.body.classList.toggle('light-mode');
+    });
+
     // Colors
     const colorPickers = [bgColorPicker, textColorPicker, titleColorPicker];
     colorPickers.forEach(cp => cp.addEventListener('input', (e) => {

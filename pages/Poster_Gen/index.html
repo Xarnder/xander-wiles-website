@@ -16,12 +16,27 @@
 </head>
 <body>
 
+    <!-- HEADER -->
+    <header class="site-header">
+        <div class="header-left">
+            <a href="/" class="logo">POSTER<span class="logo-highlight">GEN</span></a>
+        </div>
+        <div class="header-right">
+            <a href="/" class="nav-link">Home</a>
+            <!-- UI Theme Toggle -->
+            <button id="uiThemeToggle" class="theme-btn" title="Toggle Light/Dark UI">
+                <span class="icon-moon">🌙</span>
+                <span class="icon-sun">☀️</span>
+            </button>
+        </div>
+    </header>
+
     <div class="app-container">
         
         <aside class="controls glass-panel">
             <h2>Poster Settings</h2>
             
-            <!-- Auto-Render (Default: CHECKED) -->
+            <!-- Auto-Render -->
             <div class="control-group highlight-group" style="flex-direction: row; align-items: center; justify-content: space-between;">
                 <label for="autoRenderToggle" style="margin:0; cursor:pointer;">Auto-Render Output</label>
                 <input type="checkbox" id="autoRenderToggle" style="width: 20px; height: 20px;" checked>
@@ -65,7 +80,7 @@
             <div class="control-group">
                 <div class="label-row">
                     <label>Main Title Spacing</label>
-                    <span id="val-mainTitleSpacing" class="val-display">24</span>
+                    <span id="val-mainTitleSpacing" class="val-display">13</span>
                 </div>
                 <input type="range" id="mainTitleSpacing" min="0" max="30" value="13">
             </div>
@@ -81,14 +96,13 @@
             <div class="control-group">
                 <div class="label-row">
                     <label>Block Title Spacing</label>
-                    <span id="val-blockTitleSpacing" class="val-display">9</span>
+                    <span id="val-blockTitleSpacing" class="val-display">7</span>
                 </div>
                 <input type="range" id="blockTitleSpacing" min="0" max="20" value="7">
             </div>
-            <!-- NEW: Block Title Vertical Position -->
             <div class="control-group">
                 <div class="label-row">
-                    <label>Block Title Vertical Offset</label>
+                    <label>Block Title Offset Y</label>
                     <span id="val-blockTitleY" class="val-display">0</span>
                 </div>
                 <input type="range" id="blockTitleY" min="-50" max="50" value="0">
@@ -109,10 +123,9 @@
                 </div>
                 <input type="range" id="blockDescSpacing" min="0" max="20" value="6">
             </div>
-            <!-- NEW: Subtext Vertical Position -->
             <div class="control-group">
                 <div class="label-row">
-                    <label>Subtext Vertical Offset</label>
+                    <label>Subtext Offset Y</label>
                     <span id="val-blockDescY" class="val-display">0</span>
                 </div>
                 <input type="range" id="blockDescY" min="-50" max="50" value="0">
@@ -196,7 +209,7 @@
                 <h3>Export</h3>
                 <div class="control-group">
                     <label>Resolution Quality</label>
-                    <select id="exportScale" style="padding: 8px; border-radius: 6px; border: 1px solid #ccc;">
+                    <select id="exportScale">
                         <option value="1">1x (Draft)</option>
                         <option value="2">2x (Screen)</option>
                         <option value="4" selected>4x (Print)</option>
@@ -217,7 +230,7 @@
             <div class="poster-scaler">
                 <div id="poster" class="poster-canvas">
                     <div id="poster-title" class="poster-title" contenteditable="true">
-                        Success
+                        JOHN HOPKINS
                     </div>
                     <div id="items-container" class="items-wrapper">
                         <!-- Items injected here -->
