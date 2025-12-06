@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Poster Generator</title>
+    
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <aside class="controls glass-panel">
+            <h2>Poster Settings</h2>
+            
+            <!-- Auto-Render (Default: CHECKED) -->
+            <div class="control-group highlight-group" style="flex-direction: row; align-items: center; justify-content: space-between;">
+                <label for="autoRenderToggle" style="margin:0; cursor:pointer;">Auto-Render Output</label>
+                <input type="checkbox" id="autoRenderToggle" style="width: 20px; height: 20px;" checked>
+            </div>
+            <p class="hint-text" style="margin-top:5px;">(Pauses live edit to show exact export)</p>
+
+            <hr class="separator">
+
+            <!-- Colors -->
+            <div class="control-group">
+                <label>Background Color</label>
+                <input type="color" id="bgColorPicker" value="#EAE8E3">
+            </div>
+            <div class="control-group">
+                <label>Main Title Color</label>
+                <input type="color" id="titleColorPicker" value="#333333">
+            </div>
+            <div class="control-group">
+                <label>Block Text Color</label>
+                <input type="color" id="textColorPicker" value="#FFFFFF">
+            </div>
+
+            <div class="control-group">
+                <button id="addItemBtn" class="btn primary">Add Point +</button>
+                <button id="remItemBtn" class="btn secondary">Remove Last -</button>
+            </div>
+
+            <hr class="separator">
+
+            <!-- TYPOGRAPHY SETTINGS -->
+            <h3>Typography</h3>
+            
+            <!-- Main Title -->
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Main Title Size</label>
+                    <span id="val-mainTitleSize" class="val-display">60</span>
+                </div>
+                <input type="range" id="mainTitleSize" min="30" max="150" value="60">
+            </div>
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Main Title Spacing</label>
+                    <span id="val-mainTitleSpacing" class="val-display">24</span>
+                </div>
+                <input type="range" id="mainTitleSpacing" min="0" max="30" value="13">
+            </div>
+
+            <!-- Block Title -->
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Block Title Size</label>
+                    <span id="val-blockTitleSize" class="val-display">27</span>
+                </div>
+                <input type="range" id="blockTitleSize" min="15" max="80" value="27">
+            </div>
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Block Title Spacing</label>
+                    <span id="val-blockTitleSpacing" class="val-display">9</span>
+                </div>
+                <input type="range" id="blockTitleSpacing" min="0" max="20" value="7">
+            </div>
+            <!-- NEW: Block Title Vertical Position -->
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Block Title Vertical Offset</label>
+                    <span id="val-blockTitleY" class="val-display">0</span>
+                </div>
+                <input type="range" id="blockTitleY" min="-50" max="50" value="0">
+            </div>
+
+            <!-- Subtext -->
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Subtext Size</label>
+                    <span id="val-blockDescSize" class="val-display">16</span>
+                </div>
+                <input type="range" id="blockDescSize" min="10" max="40" value="16">
+            </div>
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Subtext Spacing</label>
+                    <span id="val-blockDescSpacing" class="val-display">6</span>
+                </div>
+                <input type="range" id="blockDescSpacing" min="0" max="20" value="6">
+            </div>
+            <!-- NEW: Subtext Vertical Position -->
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Subtext Vertical Offset</label>
+                    <span id="val-blockDescY" class="val-display">0</span>
+                </div>
+                <input type="range" id="blockDescY" min="-50" max="50" value="0">
+            </div>
+
+            <hr class="separator">
+
+            <!-- LAYOUT SPACING -->
+            <h3>Layout</h3>
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Title ↔ Block Gap</label>
+                    <span id="val-topSpacingSlider" class="val-display">38</span>
+                </div>
+                <input type="range" id="topSpacingSlider" min="0" max="300" value="38">
+            </div>
+
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Page Bottom Padding</label>
+                    <span id="val-bottomSpacingSlider" class="val-display">50</span>
+                </div>
+                <input type="range" id="bottomSpacingSlider" min="0" max="400" value="50">
+            </div>
+
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Vertical Block Gap</label>
+                    <span id="val-gapSlider" class="val-display">15</span>
+                </div>
+                <input type="range" id="gapSlider" min="0" max="100" value="15">
+            </div>
+
+            <hr class="separator">
+
+            <!-- BLOCK STYLING -->
+            <h3>Block Styling</h3>
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Block Height</label>
+                    <span id="val-heightSlider" class="val-display">91</span>
+                </div>
+                <input type="range" id="heightSlider" min="50" max="250" value="91">
+            </div>
+
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Number X-Pos</label>
+                    <span id="val-numXSlider" class="val-display">-13</span>
+                </div>
+                <input type="range" id="numXSlider" min="-100" max="100" value="-13">
+            </div>
+
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Text X-Pos</label>
+                    <span id="val-textXSlider" class="val-display">-108</span>
+                </div>
+                <input type="range" id="textXSlider" min="-250" max="150" value="-108">
+            </div>
+
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Number Thickness</label>
+                    <span id="val-outlineSlider" class="val-display">18</span>
+                </div>
+                <input type="range" id="outlineSlider" min="0" max="40" value="18">
+            </div>
+
+            <div class="control-group">
+                <div class="label-row">
+                    <label>Block Overlap</label>
+                    <span id="val-overlapSlider" class="val-display">100</span>
+                </div>
+                <input type="range" id="overlapSlider" min="0" max="200" value="100">
+            </div>
+
+            <hr class="separator">
+
+            <div class="control-group" style="margin-top: 20px;">
+                <h3>Export</h3>
+                <div class="control-group">
+                    <label>Resolution Quality</label>
+                    <select id="exportScale" style="padding: 8px; border-radius: 6px; border: 1px solid #ccc;">
+                        <option value="1">1x (Draft)</option>
+                        <option value="2">2x (Screen)</option>
+                        <option value="4" selected>4x (Print)</option>
+                        <option value="8">8x (Max)</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 5px; margin-top: 5px;">
+                    <button id="exportPngBtn" class="btn success" style="flex:1;">Download PNG</button>
+                    <button id="exportJpegBtn" class="btn success" style="flex:1;">Download JPEG</button>
+                </div>
+            </div>
+            
+            <div id="debug-log" class="debug-area">Debug: Ready...</div>
+        </aside>
+
+        <main class="preview-area">
+            <div class="poster-scaler">
+                <div id="poster" class="poster-canvas">
+                    <div id="poster-title" class="poster-title" contenteditable="true">
+                        Success
+                    </div>
+                    <div id="items-container" class="items-wrapper">
+                        <!-- Items injected here -->
+                    </div>
+                    <!-- Auto-Render Overlay -->
+                    <div id="rendered-overlay" class="render-overlay">
+                        <div class="overlay-msg">Click to Edit</div>
+                        <img id="rendered-img" src="" alt="Live Render">
+                    </div>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
