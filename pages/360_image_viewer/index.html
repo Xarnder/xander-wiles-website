@@ -2,39 +2,37 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>360° Image Viewer</title>
     
-    <!-- Requested Header Styles -->
+    <!-- Requested Header Styles (Do Not Remove) -->
     <link rel="stylesheet" href="/assets/css/style.css">
 
     <!-- Pannellum CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
     <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css">
-    <!-- Theme-aware SVG icons (modern browsers) -->
-    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    
+    <!-- Icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
-
-    <!-- Fallback PNG icons -->
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-
-    <!-- Other essential links -->
     <link rel="manifest" href="site.webmanifest">
+
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 </head>
 <body>
 
-    <!-- Site Header Wrapper -->
+    <!-- Site Header Wrapper (Do Not Remove) -->
     <div id="site-header-container" class="fade-transition">
         <div id="main-nav-placeholder"></div> 
     </div>
 
-    <!-- Nav Loader Script -->
+    <!-- Nav Loader Script (Do Not Remove) -->
     <script src="/assets/js/nav-loader.js"></script> 
 
     <!-- 360 Viewer Container -->
@@ -49,7 +47,7 @@
     <div id="galleryModal" class="gallery-modal hidden">
         <div class="gallery-header">
             <h3>Gallery <span id="galleryProgress"></span></h3>
-            <button id="closeGalleryBtn" class="close-btn">&times;</button>
+            <button id="closeGalleryBtn" class="close-btn" aria-label="Close Gallery">&times;</button>
         </div>
         <div class="gallery-grid" id="galleryGrid">
             <!-- Thumbnails injected here -->
@@ -80,6 +78,16 @@
                     <label>FOV (Zoom): <span id="fovVal">100</span></label>
                     <input type="range" id="fovSlider" min="40" max="179" value="100">
                 </div>
+            </div>
+
+            <!-- New Sensor Controls -->
+            <div class="control-group sensor-controls">
+                <button id="gyroBtn" class="sensor-btn" title="Enable Motion Control (Phone)">
+                    <span>📱 Motion</span>
+                </button>
+                <button id="vrBtn" class="sensor-btn" title="Enter VR / Fullscreen">
+                    <span>🥽 VR Mode</span>
+                </button>
             </div>
 
             <div class="control-group nav-controls">
