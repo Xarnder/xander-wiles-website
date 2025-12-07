@@ -5,24 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dynamic Poster Generator</title>
     
+    <!-- YOUR GLOBAL NAV STYLES -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    
+    <!-- APP STYLES -->
     <link rel="stylesheet" href="style.css">
 
-    <!-- Theme-aware SVG icons (modern browsers) -->
-    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <!-- Icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
-
-    <!-- Fallback PNG icons -->
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
 
-    <!-- Other essential links -->
     <link rel="manifest" href="site.webmanifest">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 
-    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
@@ -31,14 +31,14 @@
 </head>
 <body>
 
-    <!-- HEADER -->
+    <div id="main-nav-placeholder"></div> 
+    <script src="/assets/js/nav-loader.js"></script>
+
     <header class="site-header">
         <div class="header-left">
             <a href="/" class="logo">POSTER<span class="logo-highlight">GEN</span></a>
         </div>
         <div class="header-right">
-            <a href="/" class="nav-link">Home</a>
-            <!-- UI Theme Toggle -->
             <button id="uiThemeToggle" class="theme-btn" title="Toggle Light/Dark UI">
                 <span class="icon-moon">🌙</span>
                 <span class="icon-sun">☀️</span>
@@ -51,8 +51,17 @@
         <aside class="controls glass-panel">
             <h2>Poster Settings</h2>
             
-            <!-- Auto-Render -->
-            <div class="control-group highlight-group" style="flex-direction: row; align-items: center; justify-content: space-between;">
+            <!-- PROJECT MANAGEMENT -->
+            <div class="control-group highlight-group" style="margin-bottom: 15px;">
+                <label>Project File</label>
+                <div style="display: flex; gap: 5px;">
+                    <button id="saveProjectBtn" class="btn primary" style="flex:1;">Save JSON</button>
+                    <button id="loadProjectBtn" class="btn secondary" style="flex:1;">Load JSON</button>
+                    <input type="file" id="projectFileInput" accept=".json" style="display: none;">
+                </div>
+            </div>
+
+            <div class="control-group" style="flex-direction: row; align-items: center; justify-content: space-between;">
                 <label for="autoRenderToggle" style="margin:0; cursor:pointer;">Auto-Render Output</label>
                 <input type="checkbox" id="autoRenderToggle" style="width: 20px; height: 20px;" checked>
             </div>
@@ -84,65 +93,38 @@
             <!-- TYPOGRAPHY SETTINGS -->
             <h3>Typography</h3>
             
-            <!-- Main Title -->
             <div class="control-group">
-                <div class="label-row">
-                    <label>Main Title Size</label>
-                    <span id="val-mainTitleSize" class="val-display">60</span>
-                </div>
+                <div class="label-row"><label>Main Title Size</label><span id="val-mainTitleSize" class="val-display">60</span></div>
                 <input type="range" id="mainTitleSize" min="30" max="150" value="60">
             </div>
             <div class="control-group">
-                <div class="label-row">
-                    <label>Main Title Spacing</label>
-                    <span id="val-mainTitleSpacing" class="val-display">13</span>
-                </div>
+                <div class="label-row"><label>Main Title Spacing</label><span id="val-mainTitleSpacing" class="val-display">13</span></div>
                 <input type="range" id="mainTitleSpacing" min="0" max="30" value="13">
             </div>
 
-            <!-- Block Title -->
             <div class="control-group">
-                <div class="label-row">
-                    <label>Block Title Size</label>
-                    <span id="val-blockTitleSize" class="val-display">27</span>
-                </div>
+                <div class="label-row"><label>Block Title Size</label><span id="val-blockTitleSize" class="val-display">27</span></div>
                 <input type="range" id="blockTitleSize" min="15" max="80" value="27">
             </div>
             <div class="control-group">
-                <div class="label-row">
-                    <label>Block Title Spacing</label>
-                    <span id="val-blockTitleSpacing" class="val-display">7</span>
-                </div>
+                <div class="label-row"><label>Block Title Spacing</label><span id="val-blockTitleSpacing" class="val-display">7</span></div>
                 <input type="range" id="blockTitleSpacing" min="0" max="20" value="7">
             </div>
             <div class="control-group">
-                <div class="label-row">
-                    <label>Block Title Offset Y</label>
-                    <span id="val-blockTitleY" class="val-display">0</span>
-                </div>
+                <div class="label-row"><label>Block Title Offset Y</label><span id="val-blockTitleY" class="val-display">0</span></div>
                 <input type="range" id="blockTitleY" min="-50" max="50" value="0">
             </div>
 
-            <!-- Subtext -->
             <div class="control-group">
-                <div class="label-row">
-                    <label>Subtext Size</label>
-                    <span id="val-blockDescSize" class="val-display">16</span>
-                </div>
+                <div class="label-row"><label>Subtext Size</label><span id="val-blockDescSize" class="val-display">16</span></div>
                 <input type="range" id="blockDescSize" min="10" max="40" value="16">
             </div>
             <div class="control-group">
-                <div class="label-row">
-                    <label>Subtext Spacing</label>
-                    <span id="val-blockDescSpacing" class="val-display">6</span>
-                </div>
+                <div class="label-row"><label>Subtext Spacing</label><span id="val-blockDescSpacing" class="val-display">6</span></div>
                 <input type="range" id="blockDescSpacing" min="0" max="20" value="6">
             </div>
             <div class="control-group">
-                <div class="label-row">
-                    <label>Subtext Offset Y</label>
-                    <span id="val-blockDescY" class="val-display">0</span>
-                </div>
+                <div class="label-row"><label>Subtext Offset Y</label><span id="val-blockDescY" class="val-display">0</span></div>
                 <input type="range" id="blockDescY" min="-50" max="50" value="0">
             </div>
 
@@ -150,27 +132,25 @@
 
             <!-- LAYOUT SPACING -->
             <h3>Layout</h3>
+
+            <!-- NEW SLIDER HERE -->
             <div class="control-group">
-                <div class="label-row">
-                    <label>Title ↔ Block Gap</label>
-                    <span id="val-topSpacingSlider" class="val-display">38</span>
-                </div>
+                <div class="label-row"><label>Page Top Padding</label><span id="val-topPaddingSlider" class="val-display">50</span></div>
+                <input type="range" id="topPaddingSlider" min="0" max="200" value="50">
+            </div>
+
+            <div class="control-group">
+                <div class="label-row"><label>Title ↔ Block Gap</label><span id="val-topSpacingSlider" class="val-display">38</span></div>
                 <input type="range" id="topSpacingSlider" min="0" max="300" value="38">
             </div>
 
             <div class="control-group">
-                <div class="label-row">
-                    <label>Page Bottom Padding</label>
-                    <span id="val-bottomSpacingSlider" class="val-display">50</span>
-                </div>
+                <div class="label-row"><label>Page Bottom Padding</label><span id="val-bottomSpacingSlider" class="val-display">50</span></div>
                 <input type="range" id="bottomSpacingSlider" min="0" max="400" value="50">
             </div>
 
             <div class="control-group">
-                <div class="label-row">
-                    <label>Vertical Block Gap</label>
-                    <span id="val-gapSlider" class="val-display">15</span>
-                </div>
+                <div class="label-row"><label>Vertical Block Gap</label><span id="val-gapSlider" class="val-display">15</span></div>
                 <input type="range" id="gapSlider" min="0" max="100" value="15">
             </div>
 
@@ -179,42 +159,27 @@
             <!-- BLOCK STYLING -->
             <h3>Block Styling</h3>
             <div class="control-group">
-                <div class="label-row">
-                    <label>Block Height</label>
-                    <span id="val-heightSlider" class="val-display">91</span>
-                </div>
+                <div class="label-row"><label>Block Height</label><span id="val-heightSlider" class="val-display">91</span></div>
                 <input type="range" id="heightSlider" min="50" max="250" value="91">
             </div>
 
             <div class="control-group">
-                <div class="label-row">
-                    <label>Number X-Pos</label>
-                    <span id="val-numXSlider" class="val-display">-13</span>
-                </div>
+                <div class="label-row"><label>Number X-Pos</label><span id="val-numXSlider" class="val-display">-13</span></div>
                 <input type="range" id="numXSlider" min="-100" max="100" value="-13">
             </div>
 
             <div class="control-group">
-                <div class="label-row">
-                    <label>Text X-Pos</label>
-                    <span id="val-textXSlider" class="val-display">-108</span>
-                </div>
+                <div class="label-row"><label>Text X-Pos</label><span id="val-textXSlider" class="val-display">-108</span></div>
                 <input type="range" id="textXSlider" min="-250" max="150" value="-108">
             </div>
 
             <div class="control-group">
-                <div class="label-row">
-                    <label>Number Thickness</label>
-                    <span id="val-outlineSlider" class="val-display">18</span>
-                </div>
+                <div class="label-row"><label>Number Thickness</label><span id="val-outlineSlider" class="val-display">18</span></div>
                 <input type="range" id="outlineSlider" min="0" max="40" value="18">
             </div>
 
             <div class="control-group">
-                <div class="label-row">
-                    <label>Block Overlap</label>
-                    <span id="val-overlapSlider" class="val-display">100</span>
-                </div>
+                <div class="label-row"><label>Block Overlap</label><span id="val-overlapSlider" class="val-display">100</span></div>
                 <input type="range" id="overlapSlider" min="0" max="200" value="100">
             </div>
 
@@ -228,7 +193,6 @@
                         <option value="1">1x (Draft)</option>
                         <option value="2">2x (Screen)</option>
                         <option value="4" selected>4x (Print)</option>
-                        <option value="8">8x (Max)</option>
                     </select>
                 </div>
 
@@ -242,7 +206,7 @@
         </aside>
 
         <main class="preview-area">
-            <div class="poster-scaler">
+            <div id="scaler-wrapper" class="poster-scaler">
                 <div id="poster" class="poster-canvas">
                     <div id="poster-title" class="poster-title" contenteditable="true">
                         JOHN HOPKINS
@@ -250,7 +214,6 @@
                     <div id="items-container" class="items-wrapper">
                         <!-- Items injected here -->
                     </div>
-                    <!-- Auto-Render Overlay -->
                     <div id="rendered-overlay" class="render-overlay">
                         <div class="overlay-msg">Click to Edit</div>
                         <img id="rendered-img" src="" alt="Live Render">

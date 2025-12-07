@@ -49,47 +49,43 @@ function log(message, type = 'info') {
     console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
-// --- Initialization ---
+// --- Initialization: Load from Manifest ---
 window.addEventListener('DOMContentLoaded', async () => {
     log('System Initializing...');
     
-    // Attempt to load demo images
+    // The folder path
     const demoFolder = 'assets/360-images/';
+    // The manifest file that lists the images
+    const manifestFile = 'manifest.json';
+
     try {
-        const response = await fetch(demoFolder);
+        // Fetch the JSON list instead of the folder folder
+        const response = await fetch(demoFolder + manifestFile);
+        
         if (response.ok) {
-            const text = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(text, 'text/html');
-            const links = Array.from(doc.querySelectorAll('a'));
+            const fileList = await response.json();
             
-            const demoFiles = links
-                .map(link => link.getAttribute('href'))
-                .filter(href => {
-                    if (!href) return false;
-                    const lower = href.toLowerCase();
-                    return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png');
-                })
-                .map(href => {
-                    const cleanName = href.split('/').pop(); 
-                    return {
-                        name: decodeURIComponent(cleanName),
-                        path: demoFolder + cleanName,
-                        file: null 
-                    };
-                });
+            // Map the JSON list to our system format
+            const demoFiles = fileList.map(filename => {
+                return {
+                    name: filename,
+                    path: demoFolder + filename, // e.g. assets/360-images/image1.jpg
+                    file: null 
+                };
+            });
 
             if (demoFiles.length > 0) {
-                log(`Found ${demoFiles.length} demo images.`, 'success');
+                log(`Loaded ${demoFiles.length} images from manifest.`, 'success');
                 loadImagesIntoSystem(demoFiles);
             } else {
-                log('No demo images found (empty folder?)', 'info');
+                log('Manifest is empty.', 'warn');
             }
         } else {
-            log('Assets folder not readable (404).', 'info');
+            log(`Could not find ${demoFolder}${manifestFile} (404).`, 'error');
         }
     } catch (e) {
-        log('Local dev mode: Skipping auto-load.', 'info');
+        log(`Error loading manifest: ${e.message}`, 'error');
+        console.error(e);
     }
 });
 

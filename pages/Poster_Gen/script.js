@@ -1,6 +1,6 @@
 /* --- Configuration & State --- */
 const config = {
-    posterWidth: 842,
+    posterWidth: 842, 
     posterHeight: 1191,
     defaultColors: [
         "#3B6085", "#2E7D75", "#359C86", "#8CB078", "#BCC773", 
@@ -32,12 +32,14 @@ const debugLog = document.getElementById('debug-log');
 const renderedOverlay = document.getElementById('rendered-overlay');
 const renderedImg = document.getElementById('rendered-img');
 
-// Controls
+const saveProjectBtn = document.getElementById('saveProjectBtn');
+const loadProjectBtn = document.getElementById('loadProjectBtn');
+const projectFileInput = document.getElementById('projectFileInput');
+
 const bgColorPicker = document.getElementById('bgColorPicker');
 const textColorPicker = document.getElementById('textColorPicker');
 const titleColorPicker = document.getElementById('titleColorPicker');
 
-// Typography
 const mainTitleSize = document.getElementById('mainTitleSize');
 const mainTitleSpacing = document.getElementById('mainTitleSpacing');
 const blockTitleSize = document.getElementById('blockTitleSize');
@@ -47,11 +49,11 @@ const blockDescSize = document.getElementById('blockDescSize');
 const blockDescSpacing = document.getElementById('blockDescSpacing');
 const blockDescY = document.getElementById('blockDescY');
 
-// Layout
 const heightSlider = document.getElementById('heightSlider');
 const gapSlider = document.getElementById('gapSlider');
 const outlineSlider = document.getElementById('outlineSlider');
 const overlapSlider = document.getElementById('overlapSlider');
+const topPaddingSlider = document.getElementById('topPaddingSlider'); // NEW
 const topSpacingSlider = document.getElementById('topSpacingSlider');
 const bottomSpacingSlider = document.getElementById('bottomSpacingSlider');
 const numXSlider = document.getElementById('numXSlider');
@@ -61,11 +63,10 @@ const exportScaleSelect = document.getElementById('exportScale');
 const autoRenderToggle = document.getElementById('autoRenderToggle');
 const uiThemeToggle = document.getElementById('uiThemeToggle');
 
-// All Sliders List for Iteration
 const allSliders = [
     mainTitleSize, mainTitleSpacing, blockTitleSize, blockTitleSpacing, blockTitleY,
     blockDescSize, blockDescSpacing, blockDescY,
-    gapSlider, heightSlider, topSpacingSlider, bottomSpacingSlider,
+    gapSlider, heightSlider, topPaddingSlider, topSpacingSlider, bottomSpacingSlider,
     outlineSlider, overlapSlider, numXSlider, textXSlider
 ];
 
@@ -74,7 +75,7 @@ function init() {
     log("Initializing app...");
     renderPoster(); 
     setupEventListeners();
-    handleResize(); 
+    setupResizeObserver();
     updateVisuals();
     
     allSliders.forEach(el => updateSliderValue(el.id, el.value));
@@ -82,41 +83,16 @@ function init() {
     if(autoRenderToggle.checked) {
         setTimeout(() => {
             triggerAutoRender();
-        }, 300);
+        }, 500);
     }
 }
 
 /* --- Layout Engine --- */
-function calculateLayout() {
-    const gapVal = parseInt(gapSlider.value);
-    const heightVal = parseInt(heightSlider.value); 
-    const titleHeightEstimate = posterTitle.offsetHeight || 100;
-    const titleGap = parseInt(topSpacingSlider.value); 
-    const pageBotPad = parseInt(bottomSpacingSlider.value); 
-    const baseTopPad = 60; 
-    
-    const baseItemHeight = heightVal; 
-    const totalGaps = Math.max(0, items.length - 1) * gapVal;
-    
-    const totalContentHeight = baseTopPad + titleHeightEstimate + titleGap + (items.length * baseItemHeight) + totalGaps + pageBotPad;
-    
-    let scale = 1;
-    if (totalContentHeight > config.posterHeight) {
-        scale = config.posterHeight / totalContentHeight;
-    }
-    
-    scale = Math.max(scale, 0.35);
-    
-    poster.style.setProperty('--dynamic-scale', scale);
-}
-
 function updateVisuals() {
-    // Colors
     poster.style.setProperty('--poster-bg', bgColorPicker.value);
     poster.style.setProperty('--text-color', textColorPicker.value);
     poster.style.setProperty('--title-color', titleColorPicker.value);
     
-    // Typography
     poster.style.setProperty('--main-title-size', `${mainTitleSize.value}px`);
     poster.style.setProperty('--main-title-spacing', `${mainTitleSpacing.value}`);
     poster.style.setProperty('--block-title-size', `${blockTitleSize.value}px`);
@@ -126,12 +102,12 @@ function updateVisuals() {
     poster.style.setProperty('--block-desc-spacing', `${blockDescSpacing.value}`);
     poster.style.setProperty('--block-desc-y', `${blockDescY.value}px`);
     
-    // Layout
     poster.style.setProperty('--base-height', `${heightSlider.value}px`);
     poster.style.setProperty('--vertical-gap', `${gapSlider.value}px`);
     poster.style.setProperty('--outline-width', `${outlineSlider.value}px`);
     poster.style.setProperty('--block-overlap', `${overlapSlider.value}px`);
     
+    poster.style.setProperty('--page-padding-top', `${topPaddingSlider.value}px`); // NEW
     poster.style.setProperty('--title-spacing', `${topSpacingSlider.value}px`);
     poster.style.setProperty('--page-padding-bottom', `${bottomSpacingSlider.value}px`);
     
@@ -139,28 +115,21 @@ function updateVisuals() {
     poster.style.setProperty('--text-offset-x', `${textXSlider.value}px`);
 }
 
-/* --- Helper: Update Value Displays --- */
 function updateSliderValue(id, value) {
     const display = document.getElementById(`val-${id}`);
     if (display) display.textContent = value;
 }
 
-/* --- Rendering --- */
 function renderPoster() {
     itemsContainer.innerHTML = ''; 
-    
-    if (items.length >= 10) {
-        itemsContainer.classList.add('wide-layout');
-    } else {
-        itemsContainer.classList.remove('wide-layout');
-    }
+    if (items.length >= 10) itemsContainer.classList.add('wide-layout');
+    else itemsContainer.classList.remove('wide-layout');
 
     items.forEach((item, index) => {
         const row = document.createElement('div');
         row.className = 'poster-item';
         row.style.setProperty('--item-color', item.color);
 
-        // SVG Number
         const numDiv = document.createElement('div');
         numDiv.className = 'item-number';
         
@@ -183,14 +152,11 @@ function renderPoster() {
         svg.appendChild(textSvg);
         numDiv.appendChild(svg);
 
-        // Content
         const contentDiv = document.createElement('div');
         contentDiv.className = 'item-content';
         
         contentDiv.addEventListener('click', (e) => {
-            if(e.target === contentDiv) {
-                itemColorInput.click();
-            }
+            if(e.target === contentDiv) itemColorInput.click();
         });
 
         const title = document.createElement('div');
@@ -214,7 +180,6 @@ function renderPoster() {
         contentDiv.appendChild(title);
         contentDiv.appendChild(desc);
 
-        // Color Picker
         const itemColorInput = document.createElement('input');
         itemColorInput.type = 'color';
         itemColorInput.className = 'item-color-picker';
@@ -230,14 +195,10 @@ function renderPoster() {
         row.appendChild(numDiv);
         row.appendChild(contentDiv);
         row.appendChild(itemColorInput);
-
         itemsContainer.appendChild(row);
     });
-
-    calculateLayout();
 }
 
-/* --- Auto-Render Logic --- */
 function triggerAutoRender() {
     if (!autoRenderToggle.checked) return;
     if (renderTimeout) clearTimeout(renderTimeout);
@@ -260,9 +221,86 @@ function hideRenderOverlay() {
     renderedOverlay.style.display = 'none';
 }
 
-/* --- Export Logic --- */
+function saveProject() {
+    log("Saving project...");
+    const settings = {};
+    allSliders.forEach(slider => { settings[slider.id] = slider.value; });
+
+    const projectData = {
+        meta: "PosterGen",
+        timestamp: new Date().toISOString(),
+        mainTitle: posterTitle.innerText,
+        colors: {
+            bg: bgColorPicker.value,
+            title: titleColorPicker.value,
+            text: textColorPicker.value
+        },
+        settings: settings,
+        items: items
+    };
+
+    try {
+        const jsonStr = JSON.stringify(projectData, null, 2);
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `poster-project-${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        log("Project saved.");
+    } catch (e) {
+        log("Error saving: " + e.message);
+    }
+}
+
+function loadProject(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    log("Loading project...");
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        try {
+            const projectData = JSON.parse(e.target.result);
+            if(!projectData.items) throw new Error("Invalid file.");
+
+            if(projectData.mainTitle) posterTitle.innerText = projectData.mainTitle;
+
+            if(projectData.colors) {
+                if(projectData.colors.bg) bgColorPicker.value = projectData.colors.bg;
+                if(projectData.colors.title) titleColorPicker.value = projectData.colors.title;
+                if(projectData.colors.text) textColorPicker.value = projectData.colors.text;
+            }
+
+            items = projectData.items;
+
+            if(projectData.settings) {
+                for (const [id, val] of Object.entries(projectData.settings)) {
+                    const slider = document.getElementById(id);
+                    if (slider) {
+                        slider.value = val;
+                        updateSliderValue(id, val);
+                    }
+                }
+            }
+
+            renderPoster();
+            updateVisuals();
+            triggerAutoRender();
+            projectFileInput.value = '';
+            log("Loaded successfully.");
+        } catch (error) {
+            log("Error: " + error.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
 function exportPoster(format) {
-    log(`Generating ${format.toUpperCase()}...`);
+    log(`Generating ${format}...`);
     hideRenderOverlay();
     
     if (document.activeElement) document.activeElement.blur();
@@ -273,64 +311,98 @@ function exportPoster(format) {
 
     generateCanvas(resScale, (canvas) => {
         const link = document.createElement('a');
-        link.download = `poster-design-${resScale}x.${format}`;
+        link.download = `poster-export-${resScale}x.${format}`;
         link.href = canvas.toDataURL(`image/${format}`, 0.9);
         link.click();
         log("Export complete.");
+        
         editables.forEach(el => el.setAttribute('contenteditable', 'true'));
         if(autoRenderToggle.checked) performAutoRender();
     });
 }
 
-// Unified Canvas Generator
+/* --- THE SANDBOX GENERATOR (Offset Fix) --- */
 function generateCanvas(scale, callback) {
-    const currentScale = parseFloat(getComputedStyle(poster).getPropertyValue('--dynamic-scale'));
+    const sandbox = document.createElement('div');
+    sandbox.style.position = 'fixed';
     
-    html2canvas(poster, {
-        scale: scale, 
-        useCORS: true, 
-        backgroundColor: null,
+    // Strict 0,0 positioning
+    sandbox.style.top = '0'; 
+    sandbox.style.left = '0';
+    sandbox.style.margin = '0';
+    sandbox.style.padding = '0';
+    
+    // Hide behind UI
+    sandbox.style.zIndex = '-99999'; 
+    
+    // Strict dimensions matching config
+    sandbox.style.width = config.posterWidth + 'px';
+    sandbox.style.height = config.posterHeight + 'px';
+    sandbox.style.overflow = 'hidden';
+    
+    // Copy CSS vars
+    sandbox.style.cssText += poster.style.cssText;
+    document.body.appendChild(sandbox);
+
+    // Clone the poster
+    const clone = poster.cloneNode(true);
+    clone.style.transform = 'none';
+    clone.style.margin = '0';
+    clone.style.left = '0';
+    clone.style.top = '0';
+    clone.style.boxShadow = 'none';
+    clone.style.width = '100%';
+    clone.style.height = '100%';
+    
+    sandbox.appendChild(clone);
+
+    // Reset scroll to ensure no browser scroll offset affects render
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    window.scrollTo(0,0);
+
+    html2canvas(clone, {
+        scale: scale,
+        width: config.posterWidth,
+        height: config.posterHeight,
+        windowWidth: config.posterWidth,
+        windowHeight: config.posterHeight,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
+        useCORS: true,
+        backgroundColor: null, 
         onclone: (clonedDoc) => {
-            // Apply Spacing Offsets
-            const mainTitle = clonedDoc.getElementById('poster-title');
-            if(mainTitle) {
-                const sp = parseInt(mainTitleSpacing.value) * currentScale;
-                mainTitle.style.letterSpacing = `${sp}px`;
-                mainTitle.style.fontVariantLigatures = 'none';
-            }
-
-            const blockTitles = clonedDoc.querySelectorAll('.editable-title');
-            const btSpacing = parseInt(blockTitleSpacing.value) * currentScale;
-            blockTitles.forEach(el => {
-                el.style.letterSpacing = `${btSpacing}px`;
-                el.style.fontVariantLigatures = 'none';
-            });
-
-            const blockDescs = clonedDoc.querySelectorAll('.editable-desc');
-            const bdSpacing = parseInt(blockDescSpacing.value) * currentScale;
-            blockDescs.forEach(el => {
-                el.style.letterSpacing = `${bdSpacing}px`;
-                el.style.fontVariantLigatures = 'none';
-            });
-
-            // Stroke boost
-            const svgTexts = clonedDoc.querySelectorAll('.number-svg text');
-            svgTexts.forEach(el => {
+             const mt = clonedDoc.getElementById('poster-title');
+             if(mt) mt.style.letterSpacing = `${mainTitleSpacing.value}px`;
+             
+             const svgTexts = clonedDoc.querySelectorAll('.number-svg text');
+             svgTexts.forEach(el => {
                 const s = parseFloat(el.getAttribute('stroke-width')) || 0;
                 if(s > 0) el.setAttribute('stroke-width', s * 1.35);
             });
         }
-    }).then(callback).catch(e => log("Error: " + e.message));
+    }).then(canvas => {
+        document.body.removeChild(sandbox);
+        window.scrollTo(scrollLeft, scrollTop); 
+        callback(canvas);
+    }).catch(e => {
+        log("Render Error: " + e.message);
+        if(document.body.contains(sandbox)) document.body.removeChild(sandbox);
+        window.scrollTo(scrollLeft, scrollTop);
+    });
 }
 
-
 function setupEventListeners() {
-    // UI Theme Toggle
     uiThemeToggle.addEventListener('click', () => {
         document.body.classList.toggle('light-mode');
     });
 
-    // Colors
+    saveProjectBtn.addEventListener('click', saveProject);
+    loadProjectBtn.addEventListener('click', () => projectFileInput.click());
+    projectFileInput.addEventListener('change', loadProject);
+
     const colorPickers = [bgColorPicker, textColorPicker, titleColorPicker];
     colorPickers.forEach(cp => cp.addEventListener('input', (e) => {
         updateVisuals();
@@ -341,12 +413,10 @@ function setupEventListeners() {
         }
     }));
 
-    // Sliders
     allSliders.forEach(el => {
         el.addEventListener('input', () => {
             updateVisuals();
             updateSliderValue(el.id, el.value);
-            calculateLayout();
             triggerAutoRender();
             if(el.id === 'outlineSlider') {
                 const outlines = document.querySelectorAll('.number-svg text');
@@ -355,7 +425,7 @@ function setupEventListeners() {
         });
     });
     
-    posterTitle.addEventListener('input', () => { calculateLayout(); hideRenderOverlay(); });
+    posterTitle.addEventListener('input', () => { hideRenderOverlay(); });
     
     autoRenderToggle.addEventListener('change', () => {
         if(autoRenderToggle.checked) triggerAutoRender();
@@ -384,18 +454,28 @@ function setupEventListeners() {
 
     document.getElementById('exportPngBtn').addEventListener('click', () => exportPoster('png'));
     document.getElementById('exportJpegBtn').addEventListener('click', () => exportPoster('jpeg'));
-    
-    window.addEventListener('resize', handleResize);
 }
 
-function handleResize() {
-    const scaler = document.querySelector('.poster-scaler');
+/* --- RESIZE OBSERVER --- */
+function setupResizeObserver() {
+    const wrapper = document.getElementById('scaler-wrapper');
     const container = document.querySelector('.preview-area');
+    
+    const observer = new ResizeObserver(() => {
+        fitPosterToScreen(wrapper, container);
+    });
+    
+    observer.observe(container);
+    fitPosterToScreen(wrapper, container); 
+}
+
+function fitPosterToScreen(wrapper, container) {
+    if(!wrapper || !container) return;
     const padding = 40; 
-    const availableWidth = container.clientWidth - padding;
-    const availableHeight = container.clientHeight - padding;
-    const scale = Math.min(availableWidth / config.posterWidth, availableHeight / config.posterHeight, 1);
-    scaler.style.transform = `scale(${scale})`;
+    const availW = container.clientWidth - padding;
+    const availH = container.clientHeight - padding;
+    const scale = Math.min(availW / config.posterWidth, availH / config.posterHeight);
+    wrapper.style.transform = `scale(${Math.max(scale, 0.1)})`;
 }
 
 function log(msg) {
