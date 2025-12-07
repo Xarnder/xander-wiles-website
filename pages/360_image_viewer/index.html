@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360° Image Viewer</title>
+    
+    <!-- Requested Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Pannellum CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css"/>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+</head>
+<body>
+
+    <!-- Site Header Wrapper -->
+    <div id="site-header-container" class="fade-transition">
+        <div id="main-nav-placeholder"></div> 
+    </div>
+
+    <!-- Nav Loader Script -->
+    <script src="/assets/js/nav-loader.js"></script> 
+
+    <!-- 360 Viewer Container -->
+    <div id="panorama"></div>
+
+    <!-- Toggle Visibility Button -->
+    <button id="toggleUiBtn" class="floating-toggle" title="Toggle UI (Press H)">
+        👁️
+    </button>
+
+    <!-- Gallery Sidebar -->
+    <div id="galleryModal" class="gallery-modal hidden">
+        <div class="gallery-header">
+            <h3>Gallery <span id="galleryProgress"></span></h3>
+            <button id="closeGalleryBtn" class="close-btn">&times;</button>
+        </div>
+        <div class="gallery-grid" id="galleryGrid">
+            <!-- Thumbnails injected here -->
+        </div>
+    </div>
+
+    <!-- Main Controls UI -->
+    <div class="ui-container fade-transition" id="mainUi">
+        <div class="card glass-panel">
+            <div class="card-header">
+                <h2>360° Viewer</h2>
+                <div class="header-actions">
+                    <button id="clearBtn" class="icon-btn" title="Clear All & Reset" disabled>🗑️</button>
+                    <button class="close-btn" id="closeUiBtn" title="Hide Menu">&times;</button>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label for="dirInput" class="file-btn">
+                    Select Local Folder
+                    <input type="file" id="dirInput" webkitdirectory directory multiple>
+                </label>
+                <span id="fileCount">No files loaded</span>
+            </div>
+
+            <div class="control-group">
+                <div class="slider-box">
+                    <label>FOV (Zoom): <span id="fovVal">100</span></label>
+                    <input type="range" id="fovSlider" min="40" max="179" value="100">
+                </div>
+            </div>
+
+            <div class="control-group nav-controls">
+                <button id="prevBtn" disabled>&#8592;</button>
+                <button id="galleryBtn" disabled>Gallery</button>
+                <button id="nextBtn" disabled>&#8594;</button>
+            </div>
+            
+            <div class="file-info-box">
+                <span id="currentFileName">...</span>
+            </div>
+
+            <div class="debug-log" id="debugLog">
+                <div>> Ready.</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
