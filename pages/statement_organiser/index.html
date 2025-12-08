@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced PDF Table Extractor</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+
+<div class="app-container">
+    <aside class="sidebar">
+        <div class="brand">
+            <h2>Extraction Tool</h2>
+        </div>
+
+        <!-- Step 1: Template -->
+        <div class="card">
+            <h3>1. Template Setup</h3>
+            <p class="instruction">Upload a sample PDF.</p>
+            <input type="file" id="templateInput" accept="application/pdf">
+            
+            <div class="tool-group">
+                <label>Horizontal Zones (Y-Axis)</label>
+                <button id="btnHeadTop" class="btn">1. Header Top</button>
+                <button id="btnHeadBot" class="btn">2. Header Bottom</button>
+                <button id="btnTableBot" class="btn warning">3. Table Bottom</button>
+            </div>
+
+            <div class="tool-group">
+                <label>Vertical Boundaries (X-Axis)</label>
+                <button id="btnTableLeft" class="btn">4. Far Left Edge</button>
+                <button id="btnTableRight" class="btn">5. Far Right Edge</button>
+                <button id="btnColDiv" class="btn accent">6. Add Column Divider</button>
+            </div>
+
+            <button id="btnClear" class="btn danger-outline">Reset Layout</button>
+        </div>
+
+        <!-- Column Renaming -->
+        <div class="card scrollable-card">
+            <h3>Columns</h3>
+            <p class="instruction">Define vertical lines, then click below to read titles.</p>
+            <button id="btnReadHeaders" class="btn primary-outline">✨ Auto-Read Headers</button>
+            <div id="colContainer" class="column-list">
+                <em style="color:#666; font-size:0.9em;">Define Left/Right edges first.</em>
+            </div>
+        </div>
+
+        <!-- Step 2: Process -->
+        <div class="card">
+            <h3>2. Batch Process</h3>
+            <p class="instruction">Select all PDFs to extract.</p>
+            <input type="file" id="batchInput" accept="application/pdf" multiple disabled>
+            <button id="btnProcess" class="btn primary" disabled>Run Extraction</button>
+            <button id="btnExport" class="btn success hidden">Download CSV</button>
+        </div>
+
+        <!-- Console -->
+        <div class="card console-card">
+            <h3>Log</h3>
+            <div id="debugConsole" class="console-output"></div>
+        </div>
+    </aside>
+
+    <main class="workspace">
+        <div class="canvas-wrapper">
+            <canvas id="pdfCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+        </div>
+        
+        <div class="results-section hidden" id="resultsSection">
+            <div class="table-header">
+                <h3>Extracted Data</h3>
+                <span id="rowCount">0 rows found</span>
+            </div>
+            <div class="table-responsive">
+                <table id="resultTable">
+                    <thead><tr id="tableHeader"></tr></thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
