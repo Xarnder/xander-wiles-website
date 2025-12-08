@@ -1,9 +1,9 @@
 // --- Configuration ---
 const CONFIG = {
-    scale: 2.5, // Increased scale for better accuracy
+    scale: 2.5, // High resolution for OCR
     colors: {
-        header: 'rgba(210, 153, 34, 0.15)', // Orange tint
-        data: 'rgba(35, 134, 54, 0.15)',   // Green tint
+        header: 'rgba(210, 153, 34, 0.15)',
+        data: 'rgba(35, 134, 54, 0.15)',
         lineH: '#d29922',
         lineV: '#58a6ff',
         lineLimit: '#da3633'
@@ -14,14 +14,11 @@ const CONFIG = {
 let pdfDoc = null;
 let currentMode = null; 
 let layout = {
-    headTop: null,    
-    headBot: null,    
-    tableBot: null,   
-    left: null,       
-    right: null,      
-    dividers: []      
+    headTop: null, headBot: null, tableBot: null, 
+    left: null, right: null, dividers: []
 };
 let columnNames = [];
+let columnIsDate = []; // Stores boolean for each column
 let extractedData = [];
 
 // --- Elements ---
@@ -54,14 +51,9 @@ document.getElementById('btnExport').addEventListener('click', exportCSV);
 document.getElementById('btnClear').addEventListener('click', resetLayout);
 document.getElementById('btnReadHeaders').addEventListener('click', readHeaderTitles);
 
-// Mode Buttons
 const modes = {
-    'btnHeadTop': 'HEAD_TOP',
-    'btnHeadBot': 'HEAD_BOT',
-    'btnTableBot': 'TABLE_BOT',
-    'btnTableLeft': 'LEFT',
-    'btnTableRight': 'RIGHT',
-    'btnColDiv': 'DIVIDER'
+    'btnHeadTop': 'HEAD_TOP', 'btnHeadBot': 'HEAD_BOT', 'btnTableBot': 'TABLE_BOT',
+    'btnTableLeft': 'LEFT', 'btnTableRight': 'RIGHT', 'btnColDiv': 'DIVIDER'
 };
 
 Object.keys(modes).forEach(id => {
@@ -74,44 +66,35 @@ Object.keys(modes).forEach(id => {
 
 overlay.addEventListener('mousedown', handleCanvasClick);
 
-// --- PDF Handling ---
+// --- PDF Loading ---
 async function loadTemplate(e) {
     const file = e.target.files[0];
     if (!file) return;
-    
     log(`Loading template: ${file.name}`);
     try {
         const buffer = await file.arrayBuffer();
         pdfDoc = await pdfjsLib.getDocument(buffer).promise;
         await renderPage(1);
         document.getElementById('batchInput').disabled = false;
-    } catch (err) {
-        log(err.message, 'error');
-    }
+    } catch (err) { log(err.message, 'error'); }
 }
 
 async function renderPage(num) {
     const page = await pdfDoc.getPage(num);
     const viewport = page.getViewport({ scale: CONFIG.scale });
-    
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     overlay.width = viewport.width;
     overlay.height = viewport.height;
-    
     await page.render({ canvasContext: ctx, viewport }).promise;
     drawOverlay();
 }
 
 // --- Layout Logic ---
-function setMode(mode) {
-    currentMode = mode;
-    log(`Mode set: ${mode}`);
-}
+function setMode(mode) { currentMode = mode; log(`Mode: ${mode}`); }
 
 function handleCanvasClick(e) {
     if (!currentMode) return;
-
     const rect = overlay.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (overlay.width / rect.width);
     const y = (e.clientY - rect.top) * (overlay.height / rect.height);
@@ -127,7 +110,6 @@ function handleCanvasClick(e) {
             layout.dividers.sort((a,b) => a - b);
             break;
     }
-
     drawOverlay();
     updateColumns();
 }
@@ -135,11 +117,13 @@ function handleCanvasClick(e) {
 function resetLayout() {
     layout = { headTop: null, headBot: null, tableBot: null, left: null, right: null, dividers: [] };
     columnNames = [];
+    columnIsDate = [];
     document.getElementById('colContainer').innerHTML = '';
     drawOverlay();
     log('Layout reset.');
 }
 
+// --- Column UI with Date Toggles ---
 function updateColumns(autoTitles = null) {
     const container = document.getElementById('colContainer');
     container.innerHTML = '';
@@ -153,25 +137,52 @@ function updateColumns(autoTitles = null) {
     const boundaries = [layout.left, ...validDividers, layout.right];
     const colCount = boundaries.length - 1;
 
-    // Initialize array if empty
-    while(columnNames.length < colCount) columnNames.push(`Column ${columnNames.length + 1}`);
+    // Resize arrays
+    while(columnNames.length < colCount) {
+        columnNames.push(`Column ${columnNames.length + 1}`);
+        columnIsDate.push(false);
+    }
     columnNames = columnNames.slice(0, colCount);
+    columnIsDate = columnIsDate.slice(0, colCount);
 
-    // Apply auto-titles if provided
     if (autoTitles && autoTitles.length === colCount) {
         columnNames = autoTitles;
+        // Simple auto-detect: if title contains "Date", set flag
+        columnIsDate = columnNames.map(n => n.toLowerCase().includes('date'));
     }
 
     columnNames.forEach((name, i) => {
         const div = document.createElement('div');
         div.className = 'column-item';
-        div.innerHTML = `<span>${i+1}</span>`;
         
+        // Input Wrapper
+        const opts = document.createElement('div');
+        opts.className = 'column-options';
+
+        const span = document.createElement('span');
+        span.textContent = i + 1;
+
         const input = document.createElement('input');
         input.value = name;
         input.oninput = (e) => columnNames[i] = e.target.value;
+
+        // Date Toggle
+        const label = document.createElement('label');
+        label.className = 'date-toggle';
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = columnIsDate[i];
+        check.onchange = (e) => columnIsDate[i] = e.target.checked;
         
-        div.appendChild(input);
+        label.appendChild(check);
+        label.appendChild(document.createTextNode('Is Date?'));
+
+        opts.appendChild(span);
+        opts.appendChild(input);
+        
+        div.appendChild(opts);
+        div.appendChild(label); // Date toggle below or beside
+        
         container.appendChild(div);
     });
 }
@@ -186,143 +197,152 @@ function drawOverlay() {
         oCtx.fillStyle = CONFIG.colors.header;
         oCtx.fillRect(0, layout.headTop, w, layout.headBot - layout.headTop);
     }
-
     if (layout.headBot && layout.tableBot) {
         oCtx.fillStyle = CONFIG.colors.data;
         oCtx.fillRect(0, layout.headBot, w, layout.tableBot - layout.headBot);
     }
 
-    // Lines
-    const drawLine = (val, isH, color, text) => {
+    // Helper
+    const line = (val, isH, color, text) => {
         if (val === null) return;
         oCtx.beginPath();
         oCtx.strokeStyle = color;
         oCtx.lineWidth = 2;
         oCtx.setLineDash(isH ? [] : [5, 5]);
-        if (isH) {
-            oCtx.moveTo(0, val); oCtx.lineTo(w, val);
-        } else {
-            oCtx.moveTo(val, 0); oCtx.lineTo(val, h);
-        }
+        if (isH) { oCtx.moveTo(0, val); oCtx.lineTo(w, val); } 
+        else { oCtx.moveTo(val, 0); oCtx.lineTo(val, h); }
         oCtx.stroke();
-        
         oCtx.fillStyle = '#fff';
         oCtx.font = '12px sans-serif';
-        oCtx.fillText(text, isH ? 10 : val + 5, isH ? val - 5 : 20);
+        oCtx.fillText(text, isH?10:val+5, isH?val-5:20);
     };
 
-    drawLine(layout.headTop, true, CONFIG.colors.lineH, "Header Top");
-    drawLine(layout.headBot, true, CONFIG.colors.lineH, "Header Bottom");
-    drawLine(layout.tableBot, true, CONFIG.colors.lineLimit, "Table Bottom");
-    drawLine(layout.left, false, CONFIG.colors.lineV, "Left");
-    drawLine(layout.right, false, CONFIG.colors.lineV, "Right");
+    line(layout.headTop, true, CONFIG.colors.lineH, "Header Top");
+    line(layout.headBot, true, CONFIG.colors.lineH, "Header Bottom");
+    line(layout.tableBot, true, CONFIG.colors.lineLimit, "Table Bottom");
+    line(layout.left, false, CONFIG.colors.lineV, "Left");
+    line(layout.right, false, CONFIG.colors.lineV, "Right");
+    layout.dividers.forEach((x, i) => line(x, false, CONFIG.colors.lineV, `Div ${i+1}`));
+}
+
+// --- Date Processing Logic ---
+
+function getYearFromFilename(filename) {
+    // Looks for 4 digits starting with 20 (e.g. 2023, 2024)
+    const match = filename.match(/(20\d{2})/);
+    return match ? match[0] : new Date().getFullYear(); // Default to current if not found
+}
+
+function cleanAndFormatDate(rawText, year) {
+    if (!rawText || rawText.length < 3) return rawText;
+
+    // 1. Aggressive OCR Cleaning for Dates
+    let clean = rawText
+        .replace(/O|o/g, '0') // O to 0
+        .replace(/l|I|i/g, '1') // l/I to 1
+        .replace(/T/g, '1') // T often matches 1 (e.g. T7Sep -> 17Sep)
+        .replace(/S/g, '5') // S sometimes 5, but be careful with Sep
+        .replace(/\./g, '') // remove dots
+        .trim();
+
+    // 2. Fix specific month issues (Zero-ct -> Oct)
+    clean = clean.replace(/0ct/i, 'Oct').replace(/0ec/i, 'Dec');
     
-    layout.dividers.forEach((x, i) => drawLine(x, false, CONFIG.colors.lineV, `Div ${i+1}`));
-}
+    // 3. Extract Day and Month
+    // Regex looks for: 1 or 2 digits, optional space, 3 letters
+    const dateMatch = clean.match(/(\d{1,2})\s*([A-Za-z]{3})/);
 
-// --- Helper: Manual Crop ---
-// This guarantees coordinates start at 0,0 relative to the section of interest
-function getCroppedCanvas(sourceCanvas, x, y, width, height) {
-    const output = document.createElement('canvas');
-    output.width = width;
-    output.height = height;
-    const ctx = output.getContext('2d');
-    // Draw only the slice we want
-    ctx.drawImage(sourceCanvas, x, y, width, height, 0, 0, width, height);
-    return output;
-}
+    if (dateMatch) {
+        let day = dateMatch[1].padStart(2, '0'); // Ensure 01, 02
+        let monthStr = dateMatch[2].toLowerCase();
+        
+        // Month Map
+        const months = {
+            'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+            'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+        };
 
-// --- Header Auto-Read Logic ---
-
-async function readHeaderTitles() {
-    if (!layout.headTop || !layout.headBot || !layout.left || !layout.right) {
-        log('Set Header Top, Bottom, Left, and Right lines first.', 'error');
-        return;
+        const month = months[monthStr];
+        if (month) {
+            return `${day}/${month}/${year}`;
+        }
     }
 
+    // Return original if parsing failed (so we don't lose data)
+    return rawText;
+}
+
+// --- Helper: Crop ---
+function getCroppedCanvas(source, x, y, w, h) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(source, x, y, w, h, 0, 0, w, h);
+    return c;
+}
+
+// --- Header Auto-Read ---
+async function readHeaderTitles() {
+    if (!layout.headTop || !layout.headBot) { log('Set layout first.', 'error'); return; }
+    
     const btn = document.getElementById('btnReadHeaders');
-    const origText = btn.textContent;
-    btn.textContent = "Scanning...";
-    btn.disabled = true;
+    btn.textContent = "Scanning..."; btn.disabled = true;
 
     try {
-        const width = layout.right - layout.left;
-        const height = layout.headBot - layout.headTop;
-
-        // Manually crop the header strip
-        const crop = getCroppedCanvas(canvas, layout.left, layout.headTop, width, height);
-
+        const w = layout.right - layout.left;
+        const h = layout.headBot - layout.headTop;
+        const crop = getCroppedCanvas(canvas, layout.left, layout.headTop, w, h);
+        
         const worker = await Tesseract.createWorker('eng');
-        const { data: { lines } } = await worker.recognize(crop); // Send cropped image
-
-        // Boundaries are now relative to the crop (0 is Left Line)
+        const { data: { lines } } = await worker.recognize(crop);
+        
         const relativeDividers = layout.dividers
             .filter(d => d > layout.left && d < layout.right)
             .map(d => d - layout.left);
-            
-        const boundaries = [0, ...relativeDividers, width];
-        
+        const boundaries = [0, ...relativeDividers, w];
+
         let titles = new Array(boundaries.length - 1).fill('');
+        lines.forEach(l => l.words.forEach(wd => {
+            const mx = (wd.bbox.x0 + wd.bbox.x1)/2;
+            for(let i=0; i<boundaries.length-1; i++) {
+                if(mx >= boundaries[i] && mx < boundaries[i+1]) titles[i] += wd.text + ' ';
+            }
+        }));
 
-        lines.forEach(line => {
-            line.words.forEach(word => {
-                const midX = (word.bbox.x0 + word.bbox.x1) / 2;
-                for (let i = 0; i < boundaries.length - 1; i++) {
-                    if (midX >= boundaries[i] && midX < boundaries[i+1]) {
-                        titles[i] += word.text + ' ';
-                    }
-                }
-            });
-        });
-
-        titles = titles.map(t => t.trim() || "Untitled");
-        log(`Headers detected: ${titles.join(', ')}`, 'success');
-        updateColumns(titles);
+        updateColumns(titles.map(t => t.trim() || "Untitled"));
         await worker.terminate();
-
-    } catch (e) {
-        log(`Header Read Error: ${e.message}`, 'error');
-    }
-
-    btn.textContent = origText;
-    btn.disabled = false;
+        log('Headers detected.', 'success');
+    } catch(e) { log(e.message, 'error'); }
+    btn.textContent = "✨ Auto-Read Headers"; btn.disabled = false;
 }
 
-// --- Batch OCR Process ---
+// --- Batch Process ---
 async function runBatchOCR() {
-    if (!layout.headBot || !layout.tableBot || !layout.left || !layout.right) {
-        log("Missing boundaries! Please set Header Bottom, Table Bottom, Left, and Right.", "error");
-        return;
-    }
-
+    if (!layout.tableBot) { log("Set layout first.", "error"); return; }
+    
     const files = document.getElementById('batchInput').files;
     const btn = document.getElementById('btnProcess');
+    btn.disabled = true; btn.textContent = "Processing...";
     
-    btn.disabled = true;
-    btn.textContent = "Processing...";
     extractedData = [];
     document.getElementById('tableBody').innerHTML = '';
     document.getElementById('resultsSection').classList.remove('hidden');
 
-    // Build Table Header
-    const thead = document.getElementById('tableHeader');
-    thead.innerHTML = '<th>File</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
+    // Header Row
+    const tr = document.getElementById('tableHeader');
+    tr.innerHTML = '<th>File</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
 
     const worker = await Tesseract.createWorker('eng');
 
     for (let i = 0; i < files.length; i++) {
-        log(`Processing ${files[i].name} (${i+1}/${files.length})...`);
+        log(`Processing ${files[i].name}...`);
         try {
             await processFile(files[i], worker);
-        } catch (e) {
-            log(`Error in ${files[i].name}: ${e.message}`, 'error');
-        }
+        } catch (e) { log(`Error: ${e.message}`, 'error'); }
     }
 
     await worker.terminate();
-    log("Batch processing finished.", "success");
-    btn.disabled = false;
-    btn.textContent = "Run Extraction";
+    log("Done!", "success");
+    btn.disabled = false; btn.textContent = "Run Extraction";
     document.getElementById('btnExport').classList.remove('hidden');
 }
 
@@ -332,83 +352,74 @@ async function processFile(file, worker) {
     const page = await doc.getPage(1);
     const viewport = page.getViewport({ scale: CONFIG.scale });
 
-    // 1. Render Full Page to Canvas
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = viewport.width;
-    tempCanvas.height = viewport.height;
-    await page.render({ canvasContext: tempCanvas.getContext('2d'), viewport }).promise;
+    const temp = document.createElement('canvas');
+    temp.width = viewport.width; temp.height = viewport.height;
+    await page.render({ canvasContext: temp.getContext('2d'), viewport }).promise;
 
-    // 2. Prepare Calculation Variables
-    const cropWidth = layout.right - layout.left;
-    const cropHeight = layout.tableBot - layout.headBot;
+    const w = layout.right - layout.left;
+    const h = layout.tableBot - layout.headBot;
+    const crop = getCroppedCanvas(temp, layout.left, layout.headBot, w, h);
 
-    // 3. Manually Crop the Data Zone
-    // This creates a new image where X=0 is exactly your Left Line
-    const crop = getCroppedCanvas(tempCanvas, layout.left, layout.headBot, cropWidth, cropHeight);
-
-    // 4. OCR the Cropped Image
-    // Note: Do NOT use rectangle parameter here, we already cropped it.
     const { data: { lines } } = await worker.recognize(crop);
 
-    // 5. Calculate Boundaries relative to the crop
-    // (0 is Left Line, cropWidth is Right Line)
     const relativeDividers = layout.dividers
         .filter(d => d > layout.left && d < layout.right)
         .map(d => d - layout.left);
+    const boundaries = [0, ...relativeDividers, w];
 
-    const boundaries = [0, ...relativeDividers, cropWidth];
+    // Extract Year from Filename
+    const fileYear = getYearFromFilename(file.name);
 
-    // 6. Sort Text into Columns
     lines.forEach(line => {
         let rowData = new Array(columnNames.length).fill('');
         let hasContent = false;
 
         line.words.forEach(word => {
-            // word.bbox is now perfectly relative to our column boundaries
-            const midX = (word.bbox.x0 + word.bbox.x1) / 2;
-
+            const mx = (word.bbox.x0 + word.bbox.x1)/2;
             for (let c = 0; c < boundaries.length - 1; c++) {
-                if (midX >= boundaries[c] && midX < boundaries[c+1]) {
-                    // Simple concatenation, no formatting
+                if (mx >= boundaries[c] && mx < boundaries[c+1]) {
                     rowData[c] += word.text + ' ';
                     hasContent = true;
                 }
             }
         });
 
-        // 7. Filter empty rows (noise)
         if (hasContent) {
-            rowData = rowData.map(s => s.trim());
-            // Only add row if it has some substantial data (length > 0)
-            if(rowData.some(cell => cell.length > 0)) {
+            rowData = rowData.map((cell, index) => {
+                let text = cell.trim();
+                // If this column is marked as DATE, clean it
+                if (columnIsDate[index]) {
+                    return cleanAndFormatDate(text, fileYear);
+                }
+                return text;
+            });
+
+            // Filter out empty rows or pure noise
+            if(rowData.join('').length > 2) {
                 addTableRow(file.name, rowData);
             }
         }
     });
 }
 
-function addTableRow(filename, data) {
-    extractedData.push({ file: filename, data });
+function addTableRow(fname, data) {
+    extractedData.push({ file: fname, data });
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${filename}</td>` + data.map(d => `<td>${d}</td>`).join('');
+    tr.innerHTML = `<td>${fname}</td>` + data.map(d => `<td>${d}</td>`).join('');
     document.getElementById('tableBody').appendChild(tr);
-    document.getElementById('rowCount').textContent = `${extractedData.length} rows found`;
+    document.getElementById('rowCount').textContent = `${extractedData.length} rows`;
 }
 
 function exportCSV() {
     if(!extractedData.length) return;
-    
-    const csvData = extractedData.map(row => {
+    const data = extractedData.map(row => {
         let obj = { 'Source File': row.file };
-        columnNames.forEach((col, i) => obj[col] = row.data[i]);
+        columnNames.forEach((c, i) => obj[c] = row.data[i]);
         return obj;
     });
-
-    const csv = Papa.unparse(csvData);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
+    const blob = new Blob([Papa.unparse(data)], { type: 'text/csv' });
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'statement_data.csv';
+    a.href = URL.createObjectURL(blob);
+    a.download = 'extracted_statements.csv';
     a.click();
 }

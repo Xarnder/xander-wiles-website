@@ -123,3 +123,27 @@ table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 th { background: #21262d; text-align: left; padding: 10px; border: 1px solid var(--border); color: #fff; }
 td { border: 1px solid var(--border); padding: 8px; color: #c9d1d9; }
 tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+
+/* Add to style.css */
+.column-options {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.date-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.75rem;
+    color: #8b949e;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.date-toggle input {
+    width: auto;
+    margin: 0;
+    cursor: pointer;
+}
