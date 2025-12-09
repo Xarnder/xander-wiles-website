@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced PDF Table Extractor</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -11,71 +12,121 @@
 </head>
 <body>
 
-<div class="app-container">
-    <aside class="sidebar">
-        <div class="brand">
+<div id="main-nav-placeholder"></div> 
+<script src="/assets/js/nav-loader.js"></script>
+
+<div class="extractor-app-container">
+    
+    <aside class="extractor-sidebar">
+        <div class="extractor-brand">
             <h2>Extraction Tool</h2>
+            <button id="btnShowGuide" class="btn small-btn">? Help</button>
         </div>
 
-        <!-- Step 1: Template -->
-        <div class="card">
-            <h3>1. Template Setup</h3>
-            <p class="instruction">Upload a sample PDF.</p>
+        <!-- 1. Layout -->
+        <div class="extractor-card">
+            <h3>1. Table Boundaries</h3>
+            <p class="instruction">Upload PDF & set boundaries.</p>
             <input type="file" id="templateInput" accept="application/pdf">
             
             <div class="tool-group">
-                <label>Horizontal Zones (Y-Axis)</label>
                 <button id="btnHeadTop" class="btn">1. Header Top</button>
-                <button id="btnHeadBot" class="btn">2. Header Bottom</button>
-                <button id="btnTableBot" class="btn warning">3. Table Bottom</button>
+                <button id="btnHeadBot" class="btn">2. Header Bottom (Data Start)</button>
+                <button id="btnTableBot" class="btn warning">3. Table Bottom (Data End)</button>
             </div>
 
             <div class="tool-group">
-                <label>Vertical Boundaries (X-Axis)</label>
+                <label>Vertical Edges</label>
                 <button id="btnTableLeft" class="btn">4. Far Left Edge</button>
                 <button id="btnTableRight" class="btn">5. Far Right Edge</button>
                 <button id="btnColDiv" class="btn accent">6. Add Column Divider</button>
+            </div>
+        </div>
+
+        <!-- 2. Row Strategy -->
+        <div class="extractor-card">
+            <h3>2. Row Strategy</h3>
+            <div class="toggle-container">
+                <button id="btnModeAuto" class="btn-toggle active">Auto (OCR)</button>
+                <button id="btnModeFixed" class="btn-toggle">Fixed Grid</button>
+            </div>
+
+            <div id="panelAuto" class="mode-panel">
+                <p class="instruction">Detects uneven row heights automatically.</p>
+            </div>
+
+            <div id="panelFixed" class="mode-panel hidden">
+                <p class="instruction">Best for fixed-height rows.</p>
+                <div class="radio-group">
+                    <label><input type="radio" name="fixedMode" value="height" checked> By Height</label>
+                    <label><input type="radio" name="fixedMode" value="count"> By Count</label>
+                </div>
+                <div id="subPanelHeight">
+                    <button id="btnRow1" class="btn success">Set Row 1 Bottom</button>
+                </div>
+                <div id="subPanelCount" class="hidden">
+                    <label>Row Count:</label>
+                    <input type="number" id="rowCountInput" value="10" min="1" class="input-dark">
+                </div>
             </div>
 
             <button id="btnClear" class="btn danger-outline">Reset Layout</button>
         </div>
 
-        <!-- Column Renaming -->
-        <div class="card scrollable-card">
-            <h3>Columns</h3>
-            <p class="instruction">Define vertical lines, then click below to read titles.</p>
-            <button id="btnReadHeaders" class="btn primary-outline">✨ Auto-Read Headers</button>
-            <div id="colContainer" class="column-list">
-                <em style="color:#666; font-size:0.9em;">Define Left/Right edges first.</em>
+        <!-- 3. Columns -->
+        <div class="extractor-card extractor-scrollable-card">
+            <h3>3. Columns</h3>
+            <div class="flex-row">
+                <p class="instruction">Define dividers first.</p>
+                <button id="btnReadHeaders" class="btn primary-outline xs-btn">✨ Auto-Read</button>
             </div>
+            <div id="colContainer" class="column-list"></div>
         </div>
 
-        <!-- Step 2: Process -->
-        <div class="card">
-            <h3>2. Batch Process</h3>
-            <p class="instruction">Select all PDFs to extract.</p>
+        <!-- 4. Process -->
+        <div class="extractor-card">
+            <h3>4. Batch Process</h3>
+            
+            <!-- Pipe Cleaner Toggle -->
+            <div class="setting-row">
+                <label class="date-toggle" style="color:#fff;">
+                    <input type="checkbox" id="chkCleanPipes" checked> 
+                    Remove "|" Noise
+                </label>
+            </div>
+
             <input type="file" id="batchInput" accept="application/pdf" multiple disabled>
             <button id="btnProcess" class="btn primary" disabled>Run Extraction</button>
             <button id="btnExport" class="btn success hidden">Download CSV</button>
         </div>
 
-        <!-- Console -->
-        <div class="card console-card">
-            <h3>Log</h3>
-            <div id="debugConsole" class="console-output"></div>
+        <div class="extractor-card console-card">
+            <h3>Debug Log</h3>
+            <div id="debugConsole" class="console-output">Waiting for input...</div>
         </div>
     </aside>
 
-    <main class="workspace">
+    <main class="extractor-workspace">
+        <div id="guideModal" class="guide-modal hidden">
+            <div class="guide-content">
+                <h3>Layout Guide</h3>
+                <p>1. Set Header Top/Bottom & Table Bottom.</p>
+                <p>2. Set Left/Right Edges.</p>
+                <p>3. If using "Fixed Grid", set the bottom of the first row.</p>
+                <button id="btnCloseGuide" class="btn primary">Got it</button>
+            </div>
+        </div>
+
         <div class="canvas-wrapper">
             <canvas id="pdfCanvas"></canvas>
             <canvas id="overlayCanvas"></canvas>
+            <div id="loadingIndicator" class="hidden">Loading PDF...</div>
         </div>
         
         <div class="results-section hidden" id="resultsSection">
-            <div class="table-header">
+            <div class="table-header-row">
                 <h3>Extracted Data</h3>
-                <span id="rowCount">0 rows found</span>
+                <span id="rowCount" class="badge">0 rows</span>
             </div>
             <div class="table-responsive">
                 <table id="resultTable">

@@ -1,25 +1,35 @@
 // --- Configuration ---
 const CONFIG = {
-    scale: 2.5, // High resolution for OCR
+    scale: 2.5,
     colors: {
-        header: 'rgba(210, 153, 34, 0.15)',
-        data: 'rgba(35, 134, 54, 0.15)',
-        lineH: '#d29922',
-        lineV: '#58a6ff',
-        lineLimit: '#da3633'
-    }
+        header: 'rgba(245, 158, 11, 0.15)',
+        headerBorder: '#f59e0b',
+        colDividers: '#3b82f6',
+        limitLines: '#ef4444',
+        detectedRows: 'rgba(50, 205, 50, 0.8)'
+    },
+    columnTints: [
+        'rgba(59, 130, 246, 0.1)', 'rgba(236, 72, 153, 0.1)', 'rgba(34, 197, 94, 0.1)', 
+        'rgba(168, 85, 247, 0.1)', 'rgba(249, 115, 22, 0.1)'
+    ]
 };
 
 // --- State ---
 let pdfDoc = null;
-let currentMode = null; 
+let currentMode = null;
 let layout = {
     headTop: null, headBot: null, tableBot: null, 
-    left: null, right: null, dividers: []
+    left: null, right: null, dividers: [], row1Bot: null 
 };
+
+let rowStrategy = 'auto'; // 'auto' or 'fixed'
+let fixedStrategy = 'height'; // 'height' or 'count'
+let cleanPipes = true;
+
 let columnNames = [];
-let columnIsDate = []; // Stores boolean for each column
+let columnIsDate = []; 
 let extractedData = [];
+let detectedRowLines = []; 
 
 // --- Elements ---
 const canvas = document.getElementById('pdfCanvas');
@@ -28,32 +38,53 @@ const overlay = document.getElementById('overlayCanvas');
 const oCtx = overlay.getContext('2d');
 const consoleDiv = document.getElementById('debugConsole');
 
-// --- Initialization ---
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // --- Logging ---
 function log(msg, type = 'info') {
-    const color = type === 'error' ? '#ff7b72' : (type === 'success' ? '#3fb950' : '#8b949e');
+    const d = new Date();
+    const time = d.toLocaleTimeString('en-GB', { hour12: false });
+    const color = type === 'error' ? '#ff7b72' : (type === 'success' ? '#3fb950' : '#e2e8f0');
     const div = document.createElement('div');
     div.style.color = color;
-    div.textContent = `> ${msg}`;
+    div.style.borderBottom = "1px solid rgba(255,255,255,0.1)";
+    div.style.padding = "4px 0";
+    div.textContent = `[${time}] ${msg}`;
     consoleDiv.appendChild(div);
     consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    if(type === 'error') console.error(msg);
 }
 
 // --- Event Listeners ---
 document.getElementById('templateInput').addEventListener('change', loadTemplate);
 document.getElementById('batchInput').addEventListener('change', (e) => {
-    if(e.target.files.length) document.getElementById('btnProcess').disabled = false;
+    if(e.target.files.length) { document.getElementById('btnProcess').disabled = false; log(`Selected ${e.target.files.length} files.`); }
 });
 document.getElementById('btnProcess').addEventListener('click', runBatchOCR);
 document.getElementById('btnExport').addEventListener('click', exportCSV);
 document.getElementById('btnClear').addEventListener('click', resetLayout);
 document.getElementById('btnReadHeaders').addEventListener('click', readHeaderTitles);
+document.getElementById('btnShowGuide').addEventListener('click', () => document.getElementById('guideModal').classList.remove('hidden'));
+document.getElementById('btnCloseGuide').addEventListener('click', () => document.getElementById('guideModal').classList.add('hidden'));
+document.getElementById('chkCleanPipes').addEventListener('change', (e) => { cleanPipes = e.target.checked; log(`Pipe cleaning: ${cleanPipes}`); });
+
+// Mode Toggles
+document.getElementById('btnModeAuto').addEventListener('click', () => setRowStrategy('auto'));
+document.getElementById('btnModeFixed').addEventListener('click', () => setRowStrategy('fixed'));
+
+document.querySelectorAll('input[name="fixedMode"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        fixedStrategy = e.target.value;
+        updateFixedUI();
+        drawOverlay();
+    });
+});
+document.getElementById('rowCountInput').addEventListener('input', drawOverlay);
 
 const modes = {
     'btnHeadTop': 'HEAD_TOP', 'btnHeadBot': 'HEAD_BOT', 'btnTableBot': 'TABLE_BOT',
-    'btnTableLeft': 'LEFT', 'btnTableRight': 'RIGHT', 'btnColDiv': 'DIVIDER'
+    'btnTableLeft': 'LEFT', 'btnTableRight': 'RIGHT', 'btnColDiv': 'DIVIDER',
+    'btnRow1': 'ROW_1_BOT'
 };
 
 Object.keys(modes).forEach(id => {
@@ -66,32 +97,23 @@ Object.keys(modes).forEach(id => {
 
 overlay.addEventListener('mousedown', handleCanvasClick);
 
-// --- PDF Loading ---
-async function loadTemplate(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    log(`Loading template: ${file.name}`);
-    try {
-        const buffer = await file.arrayBuffer();
-        pdfDoc = await pdfjsLib.getDocument(buffer).promise;
-        await renderPage(1);
-        document.getElementById('batchInput').disabled = false;
-    } catch (err) { log(err.message, 'error'); }
-}
+// --- Logic ---
 
-async function renderPage(num) {
-    const page = await pdfDoc.getPage(num);
-    const viewport = page.getViewport({ scale: CONFIG.scale });
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    overlay.width = viewport.width;
-    overlay.height = viewport.height;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+function setRowStrategy(strat) {
+    rowStrategy = strat;
+    document.getElementById('btnModeAuto').classList.toggle('active', strat === 'auto');
+    document.getElementById('btnModeFixed').classList.toggle('active', strat === 'fixed');
+    document.getElementById('panelAuto').classList.toggle('hidden', strat !== 'auto');
+    document.getElementById('panelFixed').classList.toggle('hidden', strat !== 'fixed');
     drawOverlay();
 }
 
-// --- Layout Logic ---
-function setMode(mode) { currentMode = mode; log(`Mode: ${mode}`); }
+function updateFixedUI() {
+    document.getElementById('subPanelHeight').classList.toggle('hidden', fixedStrategy !== 'height');
+    document.getElementById('subPanelCount').classList.toggle('hidden', fixedStrategy !== 'count');
+}
+
+function setMode(mode) { currentMode = mode; log(`Tool: ${mode}`); }
 
 function handleCanvasClick(e) {
     if (!currentMode) return;
@@ -105,321 +127,429 @@ function handleCanvasClick(e) {
         case 'TABLE_BOT': layout.tableBot = y; break;
         case 'LEFT': layout.left = x; break;
         case 'RIGHT': layout.right = x; break;
+        case 'ROW_1_BOT': layout.row1Bot = y; break;
         case 'DIVIDER': 
+            if(layout.left !== null && x < layout.left) return log("Divider must be inside Left Edge", "error");
+            if(layout.right !== null && x > layout.right) return log("Divider must be inside Right Edge", "error");
             layout.dividers.push(x); 
             layout.dividers.sort((a,b) => a - b);
             break;
     }
+    
+    if(rowStrategy === 'auto') detectedRowLines = []; 
     drawOverlay();
     updateColumns();
 }
 
 function resetLayout() {
-    layout = { headTop: null, headBot: null, tableBot: null, left: null, right: null, dividers: [] };
-    columnNames = [];
-    columnIsDate = [];
+    layout = { headTop: null, headBot: null, tableBot: null, left: null, right: null, dividers: [], row1Bot: null };
+    columnNames = []; columnIsDate = []; detectedRowLines = [];
     document.getElementById('colContainer').innerHTML = '';
     drawOverlay();
-    log('Layout reset.');
 }
 
-// --- Column UI with Date Toggles ---
-function updateColumns(autoTitles = null) {
-    const container = document.getElementById('colContainer');
-    container.innerHTML = '';
-
-    if (layout.left === null || layout.right === null) {
-        container.innerHTML = '<em style="color:#666">Set Left and Right edges first.</em>';
-        return;
+// --- Grid Calculation ---
+function calculateFixedGrid() {
+    if (!layout.headBot || !layout.tableBot) return [];
+    const lines = [];
+    const totalH = layout.tableBot - layout.headBot;
+    
+    if (fixedStrategy === 'height') {
+        if (!layout.row1Bot) return [];
+        const rowH = layout.row1Bot - layout.headBot;
+        if (rowH <= 0) return [];
+        let currentY = layout.headBot + rowH;
+        while (currentY <= layout.tableBot + 5) {
+            lines.push(currentY);
+            currentY += rowH;
+        }
+    } else {
+        const count = parseInt(document.getElementById('rowCountInput').value) || 10;
+        const rowH = totalH / count;
+        for (let i = 1; i <= count; i++) {
+            lines.push(layout.headBot + (rowH * i));
+        }
     }
-
-    const validDividers = layout.dividers.filter(d => d > layout.left && d < layout.right);
-    const boundaries = [layout.left, ...validDividers, layout.right];
-    const colCount = boundaries.length - 1;
-
-    // Resize arrays
-    while(columnNames.length < colCount) {
-        columnNames.push(`Column ${columnNames.length + 1}`);
-        columnIsDate.push(false);
-    }
-    columnNames = columnNames.slice(0, colCount);
-    columnIsDate = columnIsDate.slice(0, colCount);
-
-    if (autoTitles && autoTitles.length === colCount) {
-        columnNames = autoTitles;
-        // Simple auto-detect: if title contains "Date", set flag
-        columnIsDate = columnNames.map(n => n.toLowerCase().includes('date'));
-    }
-
-    columnNames.forEach((name, i) => {
-        const div = document.createElement('div');
-        div.className = 'column-item';
-        
-        // Input Wrapper
-        const opts = document.createElement('div');
-        opts.className = 'column-options';
-
-        const span = document.createElement('span');
-        span.textContent = i + 1;
-
-        const input = document.createElement('input');
-        input.value = name;
-        input.oninput = (e) => columnNames[i] = e.target.value;
-
-        // Date Toggle
-        const label = document.createElement('label');
-        label.className = 'date-toggle';
-        const check = document.createElement('input');
-        check.type = 'checkbox';
-        check.checked = columnIsDate[i];
-        check.onchange = (e) => columnIsDate[i] = e.target.checked;
-        
-        label.appendChild(check);
-        label.appendChild(document.createTextNode('Is Date?'));
-
-        opts.appendChild(span);
-        opts.appendChild(input);
-        
-        div.appendChild(opts);
-        div.appendChild(label); // Date toggle below or beside
-        
-        container.appendChild(div);
-    });
+    return lines;
 }
 
+// --- Visual Overlay ---
 function drawOverlay() {
     oCtx.clearRect(0, 0, overlay.width, overlay.height);
-    const w = overlay.width;
-    const h = overlay.height;
 
-    // Zones
-    if (layout.headTop && layout.headBot) {
-        oCtx.fillStyle = CONFIG.colors.header;
-        oCtx.fillRect(0, layout.headTop, w, layout.headBot - layout.headTop);
-    }
-    if (layout.headBot && layout.tableBot) {
-        oCtx.fillStyle = CONFIG.colors.data;
-        oCtx.fillRect(0, layout.headBot, w, layout.tableBot - layout.headBot);
-    }
+    // 1. Columns
+    if (layout.headBot && layout.tableBot && layout.left && layout.right) {
+        const validDividers = layout.dividers.filter(d => d > layout.left && d < layout.right);
+        const boundaries = [layout.left, ...validDividers, layout.right];
+        const topY = layout.headBot;
+        const height = layout.tableBot - layout.headBot;
 
-    // Helper
-    const line = (val, isH, color, text) => {
-        if (val === null) return;
-        oCtx.beginPath();
-        oCtx.strokeStyle = color;
-        oCtx.lineWidth = 2;
-        oCtx.setLineDash(isH ? [] : [5, 5]);
-        if (isH) { oCtx.moveTo(0, val); oCtx.lineTo(w, val); } 
-        else { oCtx.moveTo(val, 0); oCtx.lineTo(val, h); }
-        oCtx.stroke();
-        oCtx.fillStyle = '#fff';
-        oCtx.font = '12px sans-serif';
-        oCtx.fillText(text, isH?10:val+5, isH?val-5:20);
-    };
-
-    line(layout.headTop, true, CONFIG.colors.lineH, "Header Top");
-    line(layout.headBot, true, CONFIG.colors.lineH, "Header Bottom");
-    line(layout.tableBot, true, CONFIG.colors.lineLimit, "Table Bottom");
-    line(layout.left, false, CONFIG.colors.lineV, "Left");
-    line(layout.right, false, CONFIG.colors.lineV, "Right");
-    layout.dividers.forEach((x, i) => line(x, false, CONFIG.colors.lineV, `Div ${i+1}`));
-}
-
-// --- Date Processing Logic ---
-
-function getYearFromFilename(filename) {
-    // Looks for 4 digits starting with 20 (e.g. 2023, 2024)
-    const match = filename.match(/(20\d{2})/);
-    return match ? match[0] : new Date().getFullYear(); // Default to current if not found
-}
-
-function cleanAndFormatDate(rawText, year) {
-    if (!rawText || rawText.length < 3) return rawText;
-
-    // 1. Aggressive OCR Cleaning for Dates
-    let clean = rawText
-        .replace(/O|o/g, '0') // O to 0
-        .replace(/l|I|i/g, '1') // l/I to 1
-        .replace(/T/g, '1') // T often matches 1 (e.g. T7Sep -> 17Sep)
-        .replace(/S/g, '5') // S sometimes 5, but be careful with Sep
-        .replace(/\./g, '') // remove dots
-        .trim();
-
-    // 2. Fix specific month issues (Zero-ct -> Oct)
-    clean = clean.replace(/0ct/i, 'Oct').replace(/0ec/i, 'Dec');
-    
-    // 3. Extract Day and Month
-    // Regex looks for: 1 or 2 digits, optional space, 3 letters
-    const dateMatch = clean.match(/(\d{1,2})\s*([A-Za-z]{3})/);
-
-    if (dateMatch) {
-        let day = dateMatch[1].padStart(2, '0'); // Ensure 01, 02
-        let monthStr = dateMatch[2].toLowerCase();
-        
-        // Month Map
-        const months = {
-            'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
-            'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
-        };
-
-        const month = months[monthStr];
-        if (month) {
-            return `${day}/${month}/${year}`;
+        for (let i = 0; i < boundaries.length - 1; i++) {
+            const startX = boundaries[i];
+            const width = boundaries[i+1] - startX;
+            oCtx.fillStyle = CONFIG.columnTints[i % CONFIG.columnTints.length];
+            oCtx.fillRect(startX, topY, width, height);
+            if(i > 0) drawLine(boundaries[i], false, CONFIG.colors.colDividers, false);
         }
     }
 
-    // Return original if parsing failed (so we don't lose data)
-    return rawText;
-}
+    // 2. Header
+    if (layout.headTop && layout.headBot && layout.left && layout.right) {
+        oCtx.fillStyle = CONFIG.colors.header;
+        oCtx.fillRect(layout.left, layout.headTop, (layout.right - layout.left), (layout.headBot - layout.headTop));
+    }
 
-// --- Helper: Crop ---
-function getCroppedCanvas(source, x, y, w, h) {
-    const c = document.createElement('canvas');
-    c.width = w; c.height = h;
-    c.getContext('2d').drawImage(source, x, y, w, h, 0, 0, w, h);
-    return c;
-}
+    // 3. Row Lines (Fixed or Auto) + Numbers
+    let linesToDraw = [];
+    if (rowStrategy === 'fixed') {
+        linesToDraw = calculateFixedGrid();
+    } else if (detectedRowLines.length > 0) {
+        linesToDraw = detectedRowLines;
+    }
 
-// --- Header Auto-Read ---
-async function readHeaderTitles() {
-    if (!layout.headTop || !layout.headBot) { log('Set layout first.', 'error'); return; }
-    
-    const btn = document.getElementById('btnReadHeaders');
-    btn.textContent = "Scanning..."; btn.disabled = true;
-
-    try {
-        const w = layout.right - layout.left;
-        const h = layout.headBot - layout.headTop;
-        const crop = getCroppedCanvas(canvas, layout.left, layout.headTop, w, h);
+    if (linesToDraw.length > 0) {
+        oCtx.beginPath();
+        oCtx.strokeStyle = CONFIG.colors.detectedRows;
+        oCtx.lineWidth = 1;
+        oCtx.font = "bold 10px sans-serif";
         
-        const worker = await Tesseract.createWorker('eng');
-        const { data: { lines } } = await worker.recognize(crop);
-        
-        const relativeDividers = layout.dividers
-            .filter(d => d > layout.left && d < layout.right)
-            .map(d => d - layout.left);
-        const boundaries = [0, ...relativeDividers, w];
+        linesToDraw.forEach((y, index) => {
+            // Draw Line
+            oCtx.moveTo(layout.left, y);
+            oCtx.lineTo(layout.right, y);
+            
+            // Draw Number Label
+            // We draw the label slightly above the line on the left
+            const rowHeightEstimate = index === 0 ? (y - layout.headBot) : (y - linesToDraw[index-1]);
+            const labelY = y - (rowHeightEstimate / 2) + 4; // Centered vertically in row
+            
+            oCtx.fillStyle = "#22c55e"; // Green text
+            oCtx.fillText(`#${index + 1}`, layout.left - 25, labelY);
+        });
+        oCtx.stroke();
+    }
 
-        let titles = new Array(boundaries.length - 1).fill('');
-        lines.forEach(l => l.words.forEach(wd => {
-            const mx = (wd.bbox.x0 + wd.bbox.x1)/2;
-            for(let i=0; i<boundaries.length-1; i++) {
-                if(mx >= boundaries[i] && mx < boundaries[i+1]) titles[i] += wd.text + ' ';
-            }
-        }));
-
-        updateColumns(titles.map(t => t.trim() || "Untitled"));
-        await worker.terminate();
-        log('Headers detected.', 'success');
-    } catch(e) { log(e.message, 'error'); }
-    btn.textContent = "✨ Auto-Read Headers"; btn.disabled = false;
+    // 4. Layout Boundaries
+    drawLine(layout.headTop, true, CONFIG.colors.headerBorder, "1. Head Top");
+    drawLine(layout.headBot, true, CONFIG.colors.headerBorder, "2. Head Bot");
+    drawLine(layout.tableBot, true, CONFIG.colors.limitLines, "3. Table Bot");
+    drawLine(layout.left, false, CONFIG.colors.limitLines, "4. Left");
+    drawLine(layout.right, false, CONFIG.colors.limitLines, "5. Right");
+    if(rowStrategy === 'fixed' && fixedStrategy === 'height') {
+        drawLine(layout.row1Bot, true, CONFIG.colors.detectedRows, "Row 1 Bot");
+    }
 }
 
-// --- Batch Process ---
+function drawLine(val, isH, color, text) {
+    if (val === null || val === undefined) return;
+    oCtx.beginPath();
+    oCtx.strokeStyle = color;
+    oCtx.lineWidth = 2;
+    oCtx.setLineDash(isH ? [] : [5, 5]);
+    if (isH) { oCtx.moveTo(0, val); oCtx.lineTo(overlay.width, val); } 
+    else { oCtx.moveTo(val, 0); oCtx.lineTo(val, overlay.height); }
+    oCtx.stroke();
+    if (text) {
+        oCtx.fillStyle = color; oCtx.font = 'bold 12px sans-serif';
+        oCtx.fillText(text, isH?10:val+5, isH?val-5:20);
+    }
+}
+
+// --- Data Cleaning ---
+
+function cleanPipeNoise(text) {
+    if (!cleanPipes) return text;
+    // Removes leading/trailing pipes and spaces
+    // e.g. "| 200.00 |" -> "200.00"
+    return text.replace(/^[\s|]+|[\s|]+$/g, '');
+}
+
+function getYearFromFilename(fn) { 
+    const m = fn.match(/(20\d{2})/); 
+    return m ? m[0] : new Date().getFullYear(); 
+}
+
+function cleanAndFormatDate(txt, yr) {
+    if (!txt || txt.length < 3) return txt;
+
+    // 1. Initial aggressive cleanup
+    let clean = cleanPipeNoise(txt)
+        .replace(/\./g, ' ')
+        .trim();
+
+    // 2. Specific Typos for Months (Numbers as letters)
+    // 0ct -> Oct, 0ec -> Dec, 1an -> Jan, etc
+    clean = clean
+        .replace(/0ct/i, 'Oct')
+        .replace(/0ec/i, 'Dec')
+        .replace(/1an/i, 'Jan')
+        .replace(/5ep/i, 'Sep')
+        .replace(/Au9/i, 'Aug');
+
+    // 3. Regex Match
+    // Matches: "31", "31 ", "31-" followed by "Oct", "0ct" (handled above), "Nov"
+    // Also captures attached strings like "30Oct"
+    const regex = /(\d{1,2})[\s\-]*([A-Za-z]{3})/i;
+    const match = clean.match(regex);
+
+    if (match) {
+        const day = match[1].padStart(2, '0'); 
+        let monthStr = match[2].toLowerCase();
+
+        const map = { 
+            'jan':'01','feb':'02','mar':'03','apr':'04','may':'05','jun':'06',
+            'jul':'07','aug':'08','sep':'09','oct':'10','nov':'11','dec':'12',
+            // Residual typo map if regex caught them
+            'ju1':'07', 'jui':'07', 'n0v':'11'
+        };
+
+        let mm = map[monthStr];
+        if (!mm && map[monthStr.substring(0,3)]) mm = map[monthStr.substring(0,3)];
+
+        if (mm) {
+            // Optional: You could check here if 'day' > 31 and try to fix "77" -> "17"
+            // but that risks corrupting data. Better to output "77/11/2025" and let user fix.
+            return `${day}/${mm}/${yr}`;
+        }
+    }
+    return clean;
+}
+
+// --- Processing ---
+
 async function runBatchOCR() {
-    if (!layout.tableBot) { log("Set layout first.", "error"); return; }
-    
+    if (!layout.tableBot) return log("Set Table Bottom line first.", "error");
     const files = document.getElementById('batchInput').files;
     const btn = document.getElementById('btnProcess');
     btn.disabled = true; btn.textContent = "Processing...";
     
-    extractedData = [];
+    extractedData = []; 
     document.getElementById('tableBody').innerHTML = '';
     document.getElementById('resultsSection').classList.remove('hidden');
-
-    // Header Row
-    const tr = document.getElementById('tableHeader');
-    tr.innerHTML = '<th>File</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
+    
+    // Header with # column
+    document.getElementById('tableHeader').innerHTML = '<th>File</th><th>#</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
 
     const worker = await Tesseract.createWorker('eng');
 
     for (let i = 0; i < files.length; i++) {
         log(`Processing ${files[i].name}...`);
         try {
-            await processFile(files[i], worker);
+            if (rowStrategy === 'fixed') {
+                await processFileFixed(files[i], worker);
+            } else {
+                await processFileAuto(files[i], worker, i === 0);
+            }
         } catch (e) { log(`Error: ${e.message}`, 'error'); }
     }
 
     await worker.terminate();
-    log("Done!", "success");
+    drawOverlay(); // Redraw to show final numbering
+    log("Batch finished.", "success");
     btn.disabled = false; btn.textContent = "Run Extraction";
     document.getElementById('btnExport').classList.remove('hidden');
 }
 
-async function processFile(file, worker) {
-    const buffer = await file.arrayBuffer();
-    const doc = await pdfjsLib.getDocument(buffer).promise;
-    const page = await doc.getPage(1);
-    const viewport = page.getViewport({ scale: CONFIG.scale });
-
-    const temp = document.createElement('canvas');
-    temp.width = viewport.width; temp.height = viewport.height;
-    await page.render({ canvasContext: temp.getContext('2d'), viewport }).promise;
-
-    const w = layout.right - layout.left;
-    const h = layout.tableBot - layout.headBot;
-    const crop = getCroppedCanvas(temp, layout.left, layout.headBot, w, h);
-
-    const { data: { lines } } = await worker.recognize(crop);
-
-    const relativeDividers = layout.dividers
-        .filter(d => d > layout.left && d < layout.right)
-        .map(d => d - layout.left);
-    const boundaries = [0, ...relativeDividers, w];
-
-    // Extract Year from Filename
-    const fileYear = getYearFromFilename(file.name);
+// AUTO MODE
+async function processFileAuto(file, worker, captureRows) {
+    const { cropC, cropY, fileYear } = await prepareCanvas(file);
+    const { data: { lines } } = await worker.recognize(cropC);
+    
+    const bounds = [0, ...layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left), cropC.width];
+    
+    if (captureRows) detectedRowLines = [];
 
     lines.forEach(line => {
         let rowData = new Array(columnNames.length).fill('');
         let hasContent = false;
-
+        
         line.words.forEach(word => {
             const mx = (word.bbox.x0 + word.bbox.x1)/2;
-            for (let c = 0; c < boundaries.length - 1; c++) {
-                if (mx >= boundaries[c] && mx < boundaries[c+1]) {
+            for (let c = 0; c < bounds.length - 1; c++) {
+                if (mx >= bounds[c] && mx < bounds[c+1]) {
                     rowData[c] += word.text + ' ';
                     hasContent = true;
                 }
             }
         });
 
-        if (hasContent) {
-            rowData = rowData.map((cell, index) => {
-                let text = cell.trim();
-                // If this column is marked as DATE, clean it
-                if (columnIsDate[index]) {
-                    return cleanAndFormatDate(text, fileYear);
-                }
-                return text;
+        if (hasContent && rowData.join('').length > 3) {
+            rowData = rowData.map((t, i) => {
+                let txt = cleanPipeNoise(t.trim());
+                return columnIsDate[i] ? cleanAndFormatDate(txt, fileYear) : txt;
             });
-
-            // Filter out empty rows or pure noise
-            if(rowData.join('').length > 2) {
-                addTableRow(file.name, rowData);
-            }
+            // rowId is extractedData.length + 1
+            addTableRow(file.name, rowData, extractedData.length + 1);
+            if(captureRows) detectedRowLines.push(line.bbox.y1 + cropY);
         }
     });
 }
 
-function addTableRow(fname, data) {
-    extractedData.push({ file: fname, data });
+// FIXED MODE
+async function processFileFixed(file, worker) {
+    const { cropC, cropY, fileYear } = await prepareCanvas(file);
+    const gridY = calculateFixedGrid();
+    if(gridY.length === 0) throw new Error("Grid undefined");
+
+    const bounds = [0, ...layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left), cropC.width];
+    let rowTop = 0; 
+    
+    for(let i=0; i < gridY.length; i++) {
+        const rowBot = gridY[i] - cropY;
+        const rowH = rowBot - rowTop;
+        
+        if (rowH > 5) {
+            const strip = document.createElement('canvas');
+            strip.width = cropC.width; strip.height = rowH;
+            strip.getContext('2d').drawImage(cropC, 0, rowTop, cropC.width, rowH, 0, 0, cropC.width, rowH);
+
+            await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK });
+            const { data: { words } } = await worker.recognize(strip);
+
+            let rowData = new Array(columnNames.length).fill('');
+            let hasContent = false;
+
+            words.forEach(wd => {
+                const mx = (wd.bbox.x0 + wd.bbox.x1)/2;
+                for (let c = 0; c < bounds.length - 1; c++) {
+                    if (mx >= bounds[c] && mx < bounds[c+1]) {
+                        rowData[c] += wd.text + ' ';
+                        hasContent = true;
+                    }
+                }
+            });
+
+            if(hasContent && rowData.join('').length > 2) {
+                rowData = rowData.map((t, i) => {
+                    let txt = cleanPipeNoise(t.trim());
+                    return columnIsDate[i] ? cleanAndFormatDate(txt, fileYear) : txt;
+                });
+                addTableRow(file.name, rowData, extractedData.length + 1);
+            }
+        }
+        rowTop = rowBot;
+    }
+}
+
+// Helpers
+async function prepareCanvas(file) {
+    const buffer = await file.arrayBuffer();
+    const doc = await pdfjsLib.getDocument(buffer).promise;
+    const page = await doc.getPage(1);
+    const viewport = page.getViewport({ scale: CONFIG.scale });
+    const temp = document.createElement('canvas');
+    temp.width = viewport.width; temp.height = viewport.height;
+    await page.render({ canvasContext: temp.getContext('2d'), viewport }).promise;
+
+    const cropX = layout.left;
+    const cropY = layout.headBot;
+    const cropW = layout.right - layout.left;
+    const cropH = layout.tableBot - layout.headBot;
+    
+    const cropC = document.createElement('canvas');
+    cropC.width = cropW; cropC.height = cropH;
+    cropC.getContext('2d').drawImage(temp, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    return { cropC, cropY, fileYear: getYearFromFilename(file.name) };
+}
+
+function addTableRow(fname, data, rowIndex) {
+    extractedData.push({ file: fname, data, rowIndex });
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${fname}</td>` + data.map(d => `<td>${d}</td>`).join('');
+    
+    // File Name
+    tr.innerHTML = `<td style="color:#888;font-size:0.75em">${fname}</td>`;
+    
+    // Row Index (The new column)
+    tr.innerHTML += `<td style="color:#22c55e;font-weight:bold;">${rowIndex}</td>`;
+    
+    // Data
+    tr.innerHTML += data.map(d => `<td>${d}</td>`).join('');
+    
     document.getElementById('tableBody').appendChild(tr);
-    document.getElementById('rowCount').textContent = `${extractedData.length} rows`;
+    document.getElementById('rowCount').textContent = `${extractedData.length} rows found`;
 }
 
 function exportCSV() {
     if(!extractedData.length) return;
     const data = extractedData.map(row => {
-        let obj = { 'Source File': row.file };
+        let obj = { 'Source File': row.file, 'Row #': row.rowIndex };
         columnNames.forEach((c, i) => obj[c] = row.data[i]);
         return obj;
     });
     const blob = new Blob([Papa.unparse(data)], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'extracted_statements.csv';
+    a.download = `extraction.csv`;
     a.click();
+}
+
+// Initial functions
+async function loadTemplate(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    log(`Loading: ${file.name}`);
+    document.getElementById('loadingIndicator').classList.remove('hidden');
+    try {
+        const buffer = await file.arrayBuffer();
+        pdfDoc = await pdfjsLib.getDocument(buffer).promise;
+        await renderPage(1);
+        document.getElementById('batchInput').disabled = false;
+        document.getElementById('loadingIndicator').classList.add('hidden');
+        log('Template loaded.', 'success');
+    } catch (err) { log(err.message, 'error'); document.getElementById('loadingIndicator').classList.add('hidden'); }
+}
+
+async function renderPage(num) {
+    const page = await pdfDoc.getPage(num);
+    const viewport = page.getViewport({ scale: CONFIG.scale });
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    overlay.width = viewport.width; overlay.height = viewport.height;
+    canvas.style.width = '100%'; canvas.style.height = 'auto';
+    overlay.style.width = '100%'; overlay.style.height = 'auto';
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    drawOverlay();
+}
+
+function updateColumns(autoTitles = null) {
+    const container = document.getElementById('colContainer');
+    container.innerHTML = '';
+    if (layout.left === null || layout.right === null) return;
+    const validDividers = layout.dividers.filter(d => d > layout.left && d < layout.right);
+    const boundaries = [layout.left, ...validDividers, layout.right];
+    const colCount = boundaries.length - 1;
+    while(columnNames.length < colCount) { columnNames.push(`Col ${columnNames.length + 1}`); columnIsDate.push(false); }
+    columnNames = columnNames.slice(0, colCount); columnIsDate = columnIsDate.slice(0, colCount);
+    if (autoTitles && autoTitles.length === colCount) { columnNames = autoTitles; columnIsDate = columnNames.map(n => /date|time/i.test(n)); }
+    columnNames.forEach((name, i) => {
+        const div = document.createElement('div'); div.className = 'column-item';
+        div.style.borderLeftColor = CONFIG.columnTints[i % CONFIG.columnTints.length].replace('0.1', '1.0');
+        div.innerHTML = `<div class="column-options"><span>#${i+1}</span><input type="text" value="${name}" oninput="columnNames[${i}]=this.value"></div>`;
+        const lbl = document.createElement('label'); lbl.className = 'date-toggle';
+        lbl.innerHTML = `<input type="checkbox" ${columnIsDate[i] ? 'checked' : ''} onchange="columnIsDate[${i}]=this.checked"> Is Date?`;
+        div.appendChild(lbl); container.appendChild(div);
+    });
+}
+
+async function readHeaderTitles() {
+    if (!layout.headTop || !layout.headBot || !layout.left || !layout.right) return log('Set boundaries first.', 'error');
+    const btn = document.getElementById('btnReadHeaders');
+    const old = btn.textContent; btn.textContent = "Scanning..."; btn.disabled = true;
+    try {
+        const w = layout.right - layout.left; const h = layout.headBot - layout.headTop;
+        const temp = document.createElement('canvas'); temp.width = w; temp.height = h;
+        temp.getContext('2d').drawImage(canvas, layout.left, layout.headTop, w, h, 0, 0, w, h);
+        const worker = await Tesseract.createWorker('eng');
+        const { data: { words } } = await worker.recognize(temp);
+        const relDivs = layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left);
+        const bounds = [0, ...relDivs, w];
+        let titles = new Array(bounds.length - 1).fill('');
+        words.forEach(wd => {
+            const mx = (wd.bbox.x0 + wd.bbox.x1) / 2;
+            for(let i=0; i<bounds.length-1; i++) if (mx >= bounds[i] && mx < bounds[i+1]) titles[i] += wd.text + ' ';
+        });
+        updateColumns(titles.map(t => t.trim().replace(/\s+/g,' ') || "Untitled"));
+        log("Headers updated.", "success");
+        await worker.terminate();
+    } catch (e) { log(e.message, 'error'); }
+    btn.textContent = old; btn.disabled = false;
 }
