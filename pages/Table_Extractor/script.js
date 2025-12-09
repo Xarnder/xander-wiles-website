@@ -25,13 +25,12 @@ let layout = {
 let rowStrategy = 'auto'; 
 let fixedStrategy = 'height';
 let cleanPipes = true;
+let inferDates = true; // NEW STATE
 
 let columnNames = [];
 let columnIsDate = []; 
 let extractedData = [];
 let detectedRowLines = []; 
-
-// New: Zip Object
 let debugZip = null; 
 
 // --- Elements ---
@@ -70,9 +69,11 @@ document.getElementById('btnClear').addEventListener('click', resetLayout);
 document.getElementById('btnReadHeaders').addEventListener('click', readHeaderTitles);
 document.getElementById('btnShowGuide').addEventListener('click', () => document.getElementById('guideModal').classList.remove('hidden'));
 document.getElementById('btnCloseGuide').addEventListener('click', () => document.getElementById('guideModal').classList.add('hidden'));
-document.getElementById('chkCleanPipes').addEventListener('change', (e) => { cleanPipes = e.target.checked; log(`Pipe cleaning: ${cleanPipes}`); });
 
-// Mode Toggles
+// Toggles
+document.getElementById('chkCleanPipes').addEventListener('change', (e) => { cleanPipes = e.target.checked; log(`Pipe cleaning: ${cleanPipes}`); });
+document.getElementById('chkInferDates').addEventListener('change', (e) => { inferDates = e.target.checked; log(`Infer Missing Dates: ${inferDates}`); });
+
 document.getElementById('btnModeAuto').addEventListener('click', () => setRowStrategy('auto'));
 document.getElementById('btnModeFixed').addEventListener('click', () => setRowStrategy('fixed'));
 
@@ -152,7 +153,6 @@ function resetLayout() {
     drawOverlay();
 }
 
-// --- Grid Calculation ---
 function calculateFixedGrid() {
     if (!layout.headBot || !layout.tableBot) return [];
     const lines = [];
@@ -177,16 +177,13 @@ function calculateFixedGrid() {
     return lines;
 }
 
-// --- SHARED DRAWING LOGIC (For Overlay & Export) ---
-// This function paints the grid, columns, numbers onto ANY context
+// --- Visuals ---
 function paintVisuals(ctx, width, height, rowLines) {
-    // 1. Columns
     if (layout.headBot && layout.tableBot && layout.left && layout.right) {
         const validDividers = layout.dividers.filter(d => d > layout.left && d < layout.right);
         const boundaries = [layout.left, ...validDividers, layout.right];
         const topY = layout.headBot;
         const h = layout.tableBot - layout.headBot;
-
         for (let i = 0; i < boundaries.length - 1; i++) {
             const startX = boundaries[i];
             const w = boundaries[i+1] - startX;
@@ -195,40 +192,21 @@ function paintVisuals(ctx, width, height, rowLines) {
             if(i > 0) paintLine(ctx, width, height, boundaries[i], false, CONFIG.colors.colDividers, false);
         }
     }
-
-    // 2. Header
     if (layout.headTop && layout.headBot && layout.left && layout.right) {
         ctx.fillStyle = CONFIG.colors.header;
         ctx.fillRect(layout.left, layout.headTop, (layout.right - layout.left), (layout.headBot - layout.headTop));
     }
-
-    // 3. Row Lines + Numbers
     if (rowLines && rowLines.length > 0) {
-        ctx.beginPath();
-        ctx.strokeStyle = CONFIG.colors.detectedRows;
-        ctx.lineWidth = 1;
-        ctx.font = "bold 12px sans-serif";
-        
+        ctx.beginPath(); ctx.strokeStyle = CONFIG.colors.detectedRows; ctx.lineWidth = 1; ctx.font = "bold 12px sans-serif";
         rowLines.forEach((y, index) => {
-            // Line
-            ctx.moveTo(layout.left, y);
-            ctx.lineTo(layout.right, y);
-            
-            // Number
+            ctx.moveTo(layout.left, y); ctx.lineTo(layout.right, y);
             const rowHeightEstimate = index === 0 ? (y - layout.headBot) : (y - rowLines[index-1]);
             const labelY = y - (rowHeightEstimate / 2) + 4;
-            
-            ctx.fillStyle = "#006400"; // Dark green for contrast on export
-            ctx.fillText(`#${index + 1}`, layout.left - 30, labelY);
-            // Also draw white outline for readability
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = 0.5;
-            ctx.strokeText(`#${index + 1}`, layout.left - 30, labelY);
+            ctx.fillStyle = "#006400"; ctx.fillText(`#${index + 1}`, layout.left - 30, labelY);
+            ctx.strokeStyle = "white"; ctx.lineWidth = 0.5; ctx.strokeText(`#${index + 1}`, layout.left - 30, labelY);
         });
         ctx.stroke();
     }
-
-    // 4. Layout Boundaries
     paintLine(ctx, width, height, layout.headTop, true, CONFIG.colors.headerBorder, "Head Top");
     paintLine(ctx, width, height, layout.headBot, true, CONFIG.colors.headerBorder, "Head Bot");
     paintLine(ctx, width, height, layout.tableBot, true, CONFIG.colors.limitLines, "Table Bot");
@@ -238,28 +216,17 @@ function paintVisuals(ctx, width, height, rowLines) {
 
 function paintLine(ctx, w, h, val, isH, color, text) {
     if (val === null || val === undefined) return;
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.setLineDash(isH ? [] : [5, 5]);
-    if (isH) { ctx.moveTo(0, val); ctx.lineTo(w, val); } 
-    else { ctx.moveTo(val, 0); ctx.lineTo(val, h); }
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash(isH ? [] : [5, 5]);
+    if (isH) { ctx.moveTo(0, val); ctx.lineTo(w, val); } else { ctx.moveTo(val, 0); ctx.lineTo(val, h); }
     ctx.stroke();
-    if (text) {
-        ctx.fillStyle = color; ctx.font = 'bold 12px sans-serif';
-        ctx.fillText(text, isH?10:val+5, isH?val-5:20);
-    }
+    if (text) { ctx.fillStyle = color; ctx.font = 'bold 12px sans-serif'; ctx.fillText(text, isH?10:val+5, isH?val-5:20); }
 }
 
-// --- Main Overlay Wrapper ---
 function drawOverlay() {
     oCtx.clearRect(0, 0, overlay.width, overlay.height);
-    
-    // Determine which lines to draw
     let lines = [];
     if (rowStrategy === 'fixed') lines = calculateFixedGrid();
     else if (detectedRowLines.length > 0) lines = detectedRowLines;
-
     paintVisuals(oCtx, overlay.width, overlay.height, lines);
 }
 
@@ -272,14 +239,13 @@ async function runBatchOCR() {
     btn.disabled = true; btn.textContent = "Processing...";
     
     extractedData = []; 
-    // Reset Zip
     debugZip = new JSZip();
 
     document.getElementById('tableBody').innerHTML = '';
     document.getElementById('resultsSection').classList.remove('hidden');
     
-    // Header with Dual #
-    document.getElementById('tableHeader').innerHTML = '<th>File</th><th>Global #</th><th>Doc #</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
+    // NEW: Added "Date Source" column
+    document.getElementById('tableHeader').innerHTML = '<th>File</th><th>Global #</th><th>Doc #</th><th>Date Source</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
 
     const worker = await Tesseract.createWorker('eng');
 
@@ -302,6 +268,42 @@ async function runBatchOCR() {
     document.getElementById('btnExportZip').classList.remove('hidden');
 }
 
+// --- Helper: Date Inference & Cleaning Logic ---
+// Returns: { processedRow: [], status: "Extracted" | "Inferred" | "-" }
+function inferRowDates(rowData, fileYear, lastValidDate) {
+    let dateStatus = "-";
+    let foundDateInRow = false;
+
+    const processedRow = rowData.map((t, i) => {
+        let txt = cleanPipeNoise(t.trim()); // Apply pipe clean
+        
+        if (columnIsDate[i]) {
+            // Try to extract date
+            let fmtDate = cleanAndFormatDate(txt, fileYear);
+            
+            // Check if it's a valid date string (simple check: contains / or is long enough)
+            if (fmtDate.length >= 8 && fmtDate.includes('/')) {
+                lastValidDate = fmtDate; // Update memory
+                dateStatus = "Extracted";
+                foundDateInRow = true;
+                return fmtDate;
+            } 
+            else if (inferDates && lastValidDate) {
+                // No date found, but we have memory -> Infer it
+                return lastValidDate;
+            }
+        }
+        return txt;
+    });
+
+    // If we inserted a date from memory, and didn't find a new one
+    if (!foundDateInRow && inferDates && lastValidDate) {
+        dateStatus = "Inferred";
+    }
+
+    return { processedRow, lastValidDate, dateStatus };
+}
+
 // AUTO MODE
 async function processFileAuto(file, worker, captureRows) {
     const { cropC, cropY, fileYear, fullCanvas } = await prepareCanvas(file);
@@ -309,9 +311,9 @@ async function processFileAuto(file, worker, captureRows) {
     
     const bounds = [0, ...layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left), cropC.width];
     
-    // Local rows for this file
     let localRows = [];
     let localLinesY = [];
+    let lastValidDate = null; // Reset per file
 
     lines.forEach(line => {
         let rowData = new Array(columnNames.length).fill('');
@@ -328,28 +330,20 @@ async function processFileAuto(file, worker, captureRows) {
         });
 
         if (hasContent && rowData.join('').length > 3) {
-            rowData = rowData.map((t, i) => {
-                let txt = cleanPipeNoise(t.trim());
-                return columnIsDate[i] ? cleanAndFormatDate(txt, fileYear) : txt;
-            });
-            
-            // Add to Table
-            // Global Index = extractedData.length + 1
-            // Local Index = localRows.length + 1
-            localRows.push(rowData);
+            // Process dates
+            const result = inferRowDates(rowData, fileYear, lastValidDate);
+            lastValidDate = result.lastValidDate;
+
+            localRows.push(result.processedRow);
             const localIdx = localRows.length;
             const globalIdx = extractedData.length + 1;
             
-            addTableRow(file.name, rowData, globalIdx, localIdx);
-            
-            // Track line Y for visuals
+            addTableRow(file.name, result.processedRow, globalIdx, localIdx, result.dateStatus);
             localLinesY.push(line.bbox.y1 + cropY);
         }
     });
 
     if(captureRows) detectedRowLines = localLinesY;
-
-    // Export Debug Image
     await generateDebugImage(fullCanvas, file.name, localLinesY);
 }
 
@@ -362,6 +356,7 @@ async function processFileFixed(file, worker) {
     const bounds = [0, ...layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left), cropC.width];
     let rowTop = 0; 
     let localRows = 0;
+    let lastValidDate = null; // Reset per file
     
     for(let i=0; i < gridY.length; i++) {
         const rowBot = gridY[i] - cropY;
@@ -389,36 +384,29 @@ async function processFileFixed(file, worker) {
             });
 
             if(hasContent && rowData.join('').length > 2) {
-                rowData = rowData.map((t, i) => {
-                    let txt = cleanPipeNoise(t.trim());
-                    return columnIsDate[i] ? cleanAndFormatDate(txt, fileYear) : txt;
-                });
-                
+                // Process dates
+                const result = inferRowDates(rowData, fileYear, lastValidDate);
+                lastValidDate = result.lastValidDate;
+
                 localRows++;
                 const globalIdx = extractedData.length + 1;
-                addTableRow(file.name, rowData, globalIdx, localRows);
+                addTableRow(file.name, result.processedRow, globalIdx, localRows, result.dateStatus);
             }
         }
         rowTop = rowBot;
     }
 
-    // Export Debug Image
     await generateDebugImage(fullCanvas, file.name, gridY);
 }
 
 // --- Image Export Logic ---
 async function generateDebugImage(canvasRef, filename, rowLines) {
     if(!debugZip) return;
-    
-    // 1. Paint visuals onto the Full Canvas
     const ctx = canvasRef.getContext('2d');
     paintVisuals(ctx, canvasRef.width, canvasRef.height, rowLines);
-    
-    // 2. Convert to Blob
     return new Promise((resolve) => {
         canvasRef.toBlob((blob) => {
             if(blob) {
-                // Remove .pdf ext, add .jpg
                 const imgName = filename.replace(/\.pdf$/i, '') + "_debug.jpg";
                 debugZip.file(imgName, blob);
             }
@@ -431,7 +419,6 @@ function exportZip() {
     if(!debugZip) return;
     const btn = document.getElementById('btnExportZip');
     btn.textContent = "Zipping...";
-    
     debugZip.generateAsync({type:"blob"}).then(function(content) {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(content);
@@ -459,16 +446,21 @@ async function prepareCanvas(file) {
     const cropC = document.createElement('canvas');
     cropC.width = cropW; cropC.height = cropH;
     cropC.getContext('2d').drawImage(temp, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-    
     return { cropC, cropY, fileYear: getYearFromFilename(file.name), fullCanvas: temp };
 }
 
-function addTableRow(fname, data, globalIdx, localIdx) {
-    extractedData.push({ file: fname, data, globalIdx, localIdx });
+function addTableRow(fname, data, globalIdx, localIdx, dateStatus) {
+    // Add dateStatus to stored data for CSV export
+    extractedData.push({ file: fname, data, globalIdx, localIdx, dateStatus });
     const tr = document.createElement('tr');
     tr.innerHTML = `<td style="color:#888;font-size:0.75em">${fname}</td>`;
-    tr.innerHTML += `<td>${globalIdx}</td>`; // Global #
-    tr.innerHTML += `<td style="color:#22c55e;font-weight:bold;">${localIdx}</td>`; // Doc #
+    tr.innerHTML += `<td>${globalIdx}</td>`; 
+    tr.innerHTML += `<td style="color:#22c55e;font-weight:bold;">${localIdx}</td>`; 
+    
+    // Status Badge
+    let statusColor = dateStatus === "Extracted" ? "#3b82f6" : (dateStatus === "Inferred" ? "#f59e0b" : "#64748b");
+    tr.innerHTML += `<td style="color:${statusColor}; font-size:0.8em;">${dateStatus}</td>`;
+
     tr.innerHTML += data.map(d => `<td>${d}</td>`).join('');
     document.getElementById('tableBody').appendChild(tr);
     document.getElementById('rowCount').textContent = `${extractedData.length} rows found`;
@@ -477,7 +469,12 @@ function addTableRow(fname, data, globalIdx, localIdx) {
 function exportCSV() {
     if(!extractedData.length) return;
     const data = extractedData.map(row => {
-        let obj = { 'Source File': row.file, 'Global #': row.globalIdx, 'Doc #': row.localIdx };
+        let obj = { 
+            'Source File': row.file, 
+            'Global #': row.globalIdx, 
+            'Doc #': row.localIdx,
+            'Date Source': row.dateStatus 
+        };
         columnNames.forEach((c, i) => obj[c] = row.data[i]);
         return obj;
     });
@@ -488,10 +485,11 @@ function exportCSV() {
     a.click();
 }
 
-// Data Cleaning / Init functions (Same as before)
+// Data Cleaning
 function cleanPipeNoise(text) {
     if (!cleanPipes) return text;
-    return text.replace(/^[\s|]+|[\s|]+$/g, '');
+    // Remove leading/trailing pipes, spaces, and OCR noise like 'I' if it looks like a pipe
+    return text.replace(/^[\s|I]+|[\s|I]+$/g, '');
 }
 
 function getYearFromFilename(fn) { const m = fn.match(/(20\d{2})/); return m ? m[0] : new Date().getFullYear(); }
@@ -508,7 +506,7 @@ function cleanAndFormatDate(txt, yr) {
         let mm = map[monthStr] || map[monthStr.substring(0,3)];
         if (mm) return `${day}/${mm}/${yr}`;
     }
-    return clean;
+    return ""; // Return empty if not a valid date, allows inference logic to work
 }
 
 // Standard Loaders
@@ -562,7 +560,8 @@ async function readHeaderTitles() {
             const mx = (wd.bbox.x0 + wd.bbox.x1) / 2;
             for(let i=0; i<bounds.length-1; i++) if (mx >= bounds[i] && mx < bounds[i+1]) titles[i] += wd.text + ' ';
         });
-        updateColumns(titles.map(t => t.trim().replace(/\s+/g,' ') || "Untitled"));
+        // Added pipe cleaning to headers
+        updateColumns(titles.map(t => cleanPipeNoise(t).trim().replace(/\s+/g,' ') || "Untitled"));
         log("Headers updated.", "success"); await worker.terminate();
     } catch (e) { log(e.message, 'error'); }
     btn.textContent = old; btn.disabled = false;

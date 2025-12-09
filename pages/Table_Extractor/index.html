@@ -11,7 +11,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <!-- NEW: JSZip for zipping images -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
@@ -91,10 +90,15 @@
         <div class="extractor-card">
             <h3>4. Batch Process</h3>
             
+            <!-- Cleaning Toggles -->
             <div class="setting-row">
-                <label class="date-toggle" style="color:#fff;">
+                <label class="date-toggle" style="color:#fff; margin-bottom:5px; display:block;">
                     <input type="checkbox" id="chkCleanPipes" checked> 
                     Remove "|" Noise
+                </label>
+                <label class="date-toggle" style="color:#fff; display:block;">
+                    <input type="checkbox" id="chkInferDates" checked> 
+                    Infer Missing Dates
                 </label>
             </div>
 
@@ -102,7 +106,6 @@
             <button id="btnProcess" class="btn primary" disabled>Run Extraction</button>
             <div class="flex-row" style="gap:5px; margin-top:8px;">
                 <button id="btnExport" class="btn success hidden">CSV</button>
-                <!-- NEW BUTTON -->
                 <button id="btnExportZip" class="btn primary-outline hidden">Debug ZIP</button>
             </div>
         </div>
