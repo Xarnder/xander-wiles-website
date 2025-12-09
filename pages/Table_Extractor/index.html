@@ -6,9 +6,13 @@
     <title>Advanced PDF Table Extractor</title>
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="style.css">
+    
+    <!-- Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- NEW: JSZip for zipping images -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 
@@ -87,7 +91,6 @@
         <div class="extractor-card">
             <h3>4. Batch Process</h3>
             
-            <!-- Pipe Cleaner Toggle -->
             <div class="setting-row">
                 <label class="date-toggle" style="color:#fff;">
                     <input type="checkbox" id="chkCleanPipes" checked> 
@@ -97,7 +100,11 @@
 
             <input type="file" id="batchInput" accept="application/pdf" multiple disabled>
             <button id="btnProcess" class="btn primary" disabled>Run Extraction</button>
-            <button id="btnExport" class="btn success hidden">Download CSV</button>
+            <div class="flex-row" style="gap:5px; margin-top:8px;">
+                <button id="btnExport" class="btn success hidden">CSV</button>
+                <!-- NEW BUTTON -->
+                <button id="btnExportZip" class="btn primary-outline hidden">Debug ZIP</button>
+            </div>
         </div>
 
         <div class="extractor-card console-card">

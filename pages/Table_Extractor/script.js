@@ -9,8 +9,8 @@ const CONFIG = {
         detectedRows: 'rgba(50, 205, 50, 0.8)'
     },
     columnTints: [
-        'rgba(59, 130, 246, 0.1)', 'rgba(236, 72, 153, 0.1)', 'rgba(34, 197, 94, 0.1)', 
-        'rgba(168, 85, 247, 0.1)', 'rgba(249, 115, 22, 0.1)'
+        'rgba(59, 130, 246, 0.15)', 'rgba(236, 72, 153, 0.15)', 'rgba(34, 197, 94, 0.15)', 
+        'rgba(168, 85, 247, 0.15)', 'rgba(249, 115, 22, 0.15)'
     ]
 };
 
@@ -22,14 +22,17 @@ let layout = {
     left: null, right: null, dividers: [], row1Bot: null 
 };
 
-let rowStrategy = 'auto'; // 'auto' or 'fixed'
-let fixedStrategy = 'height'; // 'height' or 'count'
+let rowStrategy = 'auto'; 
+let fixedStrategy = 'height';
 let cleanPipes = true;
 
 let columnNames = [];
 let columnIsDate = []; 
 let extractedData = [];
 let detectedRowLines = []; 
+
+// New: Zip Object
+let debugZip = null; 
 
 // --- Elements ---
 const canvas = document.getElementById('pdfCanvas');
@@ -62,6 +65,7 @@ document.getElementById('batchInput').addEventListener('change', (e) => {
 });
 document.getElementById('btnProcess').addEventListener('click', runBatchOCR);
 document.getElementById('btnExport').addEventListener('click', exportCSV);
+document.getElementById('btnExportZip').addEventListener('click', exportZip);
 document.getElementById('btnClear').addEventListener('click', resetLayout);
 document.getElementById('btnReadHeaders').addEventListener('click', readHeaderTitles);
 document.getElementById('btnShowGuide').addEventListener('click', () => document.getElementById('guideModal').classList.remove('hidden'));
@@ -129,8 +133,8 @@ function handleCanvasClick(e) {
         case 'RIGHT': layout.right = x; break;
         case 'ROW_1_BOT': layout.row1Bot = y; break;
         case 'DIVIDER': 
-            if(layout.left !== null && x < layout.left) return log("Divider must be inside Left Edge", "error");
-            if(layout.right !== null && x > layout.right) return log("Divider must be inside Right Edge", "error");
+            if(layout.left !== null && x < layout.left) return log("Error: Divider outside bounds", "error");
+            if(layout.right !== null && x > layout.right) return log("Error: Divider outside bounds", "error");
             layout.dividers.push(x); 
             layout.dividers.sort((a,b) => a - b);
             break;
@@ -173,146 +177,90 @@ function calculateFixedGrid() {
     return lines;
 }
 
-// --- Visual Overlay ---
-function drawOverlay() {
-    oCtx.clearRect(0, 0, overlay.width, overlay.height);
-
+// --- SHARED DRAWING LOGIC (For Overlay & Export) ---
+// This function paints the grid, columns, numbers onto ANY context
+function paintVisuals(ctx, width, height, rowLines) {
     // 1. Columns
     if (layout.headBot && layout.tableBot && layout.left && layout.right) {
         const validDividers = layout.dividers.filter(d => d > layout.left && d < layout.right);
         const boundaries = [layout.left, ...validDividers, layout.right];
         const topY = layout.headBot;
-        const height = layout.tableBot - layout.headBot;
+        const h = layout.tableBot - layout.headBot;
 
         for (let i = 0; i < boundaries.length - 1; i++) {
             const startX = boundaries[i];
-            const width = boundaries[i+1] - startX;
-            oCtx.fillStyle = CONFIG.columnTints[i % CONFIG.columnTints.length];
-            oCtx.fillRect(startX, topY, width, height);
-            if(i > 0) drawLine(boundaries[i], false, CONFIG.colors.colDividers, false);
+            const w = boundaries[i+1] - startX;
+            ctx.fillStyle = CONFIG.columnTints[i % CONFIG.columnTints.length];
+            ctx.fillRect(startX, topY, w, h);
+            if(i > 0) paintLine(ctx, width, height, boundaries[i], false, CONFIG.colors.colDividers, false);
         }
     }
 
     // 2. Header
     if (layout.headTop && layout.headBot && layout.left && layout.right) {
-        oCtx.fillStyle = CONFIG.colors.header;
-        oCtx.fillRect(layout.left, layout.headTop, (layout.right - layout.left), (layout.headBot - layout.headTop));
+        ctx.fillStyle = CONFIG.colors.header;
+        ctx.fillRect(layout.left, layout.headTop, (layout.right - layout.left), (layout.headBot - layout.headTop));
     }
 
-    // 3. Row Lines (Fixed or Auto) + Numbers
-    let linesToDraw = [];
-    if (rowStrategy === 'fixed') {
-        linesToDraw = calculateFixedGrid();
-    } else if (detectedRowLines.length > 0) {
-        linesToDraw = detectedRowLines;
-    }
-
-    if (linesToDraw.length > 0) {
-        oCtx.beginPath();
-        oCtx.strokeStyle = CONFIG.colors.detectedRows;
-        oCtx.lineWidth = 1;
-        oCtx.font = "bold 10px sans-serif";
+    // 3. Row Lines + Numbers
+    if (rowLines && rowLines.length > 0) {
+        ctx.beginPath();
+        ctx.strokeStyle = CONFIG.colors.detectedRows;
+        ctx.lineWidth = 1;
+        ctx.font = "bold 12px sans-serif";
         
-        linesToDraw.forEach((y, index) => {
-            // Draw Line
-            oCtx.moveTo(layout.left, y);
-            oCtx.lineTo(layout.right, y);
+        rowLines.forEach((y, index) => {
+            // Line
+            ctx.moveTo(layout.left, y);
+            ctx.lineTo(layout.right, y);
             
-            // Draw Number Label
-            // We draw the label slightly above the line on the left
-            const rowHeightEstimate = index === 0 ? (y - layout.headBot) : (y - linesToDraw[index-1]);
-            const labelY = y - (rowHeightEstimate / 2) + 4; // Centered vertically in row
+            // Number
+            const rowHeightEstimate = index === 0 ? (y - layout.headBot) : (y - rowLines[index-1]);
+            const labelY = y - (rowHeightEstimate / 2) + 4;
             
-            oCtx.fillStyle = "#22c55e"; // Green text
-            oCtx.fillText(`#${index + 1}`, layout.left - 25, labelY);
+            ctx.fillStyle = "#006400"; // Dark green for contrast on export
+            ctx.fillText(`#${index + 1}`, layout.left - 30, labelY);
+            // Also draw white outline for readability
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 0.5;
+            ctx.strokeText(`#${index + 1}`, layout.left - 30, labelY);
         });
-        oCtx.stroke();
+        ctx.stroke();
     }
 
     // 4. Layout Boundaries
-    drawLine(layout.headTop, true, CONFIG.colors.headerBorder, "1. Head Top");
-    drawLine(layout.headBot, true, CONFIG.colors.headerBorder, "2. Head Bot");
-    drawLine(layout.tableBot, true, CONFIG.colors.limitLines, "3. Table Bot");
-    drawLine(layout.left, false, CONFIG.colors.limitLines, "4. Left");
-    drawLine(layout.right, false, CONFIG.colors.limitLines, "5. Right");
-    if(rowStrategy === 'fixed' && fixedStrategy === 'height') {
-        drawLine(layout.row1Bot, true, CONFIG.colors.detectedRows, "Row 1 Bot");
-    }
+    paintLine(ctx, width, height, layout.headTop, true, CONFIG.colors.headerBorder, "Head Top");
+    paintLine(ctx, width, height, layout.headBot, true, CONFIG.colors.headerBorder, "Head Bot");
+    paintLine(ctx, width, height, layout.tableBot, true, CONFIG.colors.limitLines, "Table Bot");
+    paintLine(ctx, width, height, layout.left, false, CONFIG.colors.limitLines, "Left");
+    paintLine(ctx, width, height, layout.right, false, CONFIG.colors.limitLines, "Right");
 }
 
-function drawLine(val, isH, color, text) {
+function paintLine(ctx, w, h, val, isH, color, text) {
     if (val === null || val === undefined) return;
-    oCtx.beginPath();
-    oCtx.strokeStyle = color;
-    oCtx.lineWidth = 2;
-    oCtx.setLineDash(isH ? [] : [5, 5]);
-    if (isH) { oCtx.moveTo(0, val); oCtx.lineTo(overlay.width, val); } 
-    else { oCtx.moveTo(val, 0); oCtx.lineTo(val, overlay.height); }
-    oCtx.stroke();
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.setLineDash(isH ? [] : [5, 5]);
+    if (isH) { ctx.moveTo(0, val); ctx.lineTo(w, val); } 
+    else { ctx.moveTo(val, 0); ctx.lineTo(val, h); }
+    ctx.stroke();
     if (text) {
-        oCtx.fillStyle = color; oCtx.font = 'bold 12px sans-serif';
-        oCtx.fillText(text, isH?10:val+5, isH?val-5:20);
+        ctx.fillStyle = color; ctx.font = 'bold 12px sans-serif';
+        ctx.fillText(text, isH?10:val+5, isH?val-5:20);
     }
 }
 
-// --- Data Cleaning ---
+// --- Main Overlay Wrapper ---
+function drawOverlay() {
+    oCtx.clearRect(0, 0, overlay.width, overlay.height);
+    
+    // Determine which lines to draw
+    let lines = [];
+    if (rowStrategy === 'fixed') lines = calculateFixedGrid();
+    else if (detectedRowLines.length > 0) lines = detectedRowLines;
 
-function cleanPipeNoise(text) {
-    if (!cleanPipes) return text;
-    // Removes leading/trailing pipes and spaces
-    // e.g. "| 200.00 |" -> "200.00"
-    return text.replace(/^[\s|]+|[\s|]+$/g, '');
-}
-
-function getYearFromFilename(fn) { 
-    const m = fn.match(/(20\d{2})/); 
-    return m ? m[0] : new Date().getFullYear(); 
-}
-
-function cleanAndFormatDate(txt, yr) {
-    if (!txt || txt.length < 3) return txt;
-
-    // 1. Initial aggressive cleanup
-    let clean = cleanPipeNoise(txt)
-        .replace(/\./g, ' ')
-        .trim();
-
-    // 2. Specific Typos for Months (Numbers as letters)
-    // 0ct -> Oct, 0ec -> Dec, 1an -> Jan, etc
-    clean = clean
-        .replace(/0ct/i, 'Oct')
-        .replace(/0ec/i, 'Dec')
-        .replace(/1an/i, 'Jan')
-        .replace(/5ep/i, 'Sep')
-        .replace(/Au9/i, 'Aug');
-
-    // 3. Regex Match
-    // Matches: "31", "31 ", "31-" followed by "Oct", "0ct" (handled above), "Nov"
-    // Also captures attached strings like "30Oct"
-    const regex = /(\d{1,2})[\s\-]*([A-Za-z]{3})/i;
-    const match = clean.match(regex);
-
-    if (match) {
-        const day = match[1].padStart(2, '0'); 
-        let monthStr = match[2].toLowerCase();
-
-        const map = { 
-            'jan':'01','feb':'02','mar':'03','apr':'04','may':'05','jun':'06',
-            'jul':'07','aug':'08','sep':'09','oct':'10','nov':'11','dec':'12',
-            // Residual typo map if regex caught them
-            'ju1':'07', 'jui':'07', 'n0v':'11'
-        };
-
-        let mm = map[monthStr];
-        if (!mm && map[monthStr.substring(0,3)]) mm = map[monthStr.substring(0,3)];
-
-        if (mm) {
-            // Optional: You could check here if 'day' > 31 and try to fix "77" -> "17"
-            // but that risks corrupting data. Better to output "77/11/2025" and let user fix.
-            return `${day}/${mm}/${yr}`;
-        }
-    }
-    return clean;
+    paintVisuals(oCtx, overlay.width, overlay.height, lines);
 }
 
 // --- Processing ---
@@ -324,11 +272,14 @@ async function runBatchOCR() {
     btn.disabled = true; btn.textContent = "Processing...";
     
     extractedData = []; 
+    // Reset Zip
+    debugZip = new JSZip();
+
     document.getElementById('tableBody').innerHTML = '';
     document.getElementById('resultsSection').classList.remove('hidden');
     
-    // Header with # column
-    document.getElementById('tableHeader').innerHTML = '<th>File</th><th>#</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
+    // Header with Dual #
+    document.getElementById('tableHeader').innerHTML = '<th>File</th><th>Global #</th><th>Doc #</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
 
     const worker = await Tesseract.createWorker('eng');
 
@@ -344,20 +295,23 @@ async function runBatchOCR() {
     }
 
     await worker.terminate();
-    drawOverlay(); // Redraw to show final numbering
+    drawOverlay(); 
     log("Batch finished.", "success");
     btn.disabled = false; btn.textContent = "Run Extraction";
     document.getElementById('btnExport').classList.remove('hidden');
+    document.getElementById('btnExportZip').classList.remove('hidden');
 }
 
 // AUTO MODE
 async function processFileAuto(file, worker, captureRows) {
-    const { cropC, cropY, fileYear } = await prepareCanvas(file);
+    const { cropC, cropY, fileYear, fullCanvas } = await prepareCanvas(file);
     const { data: { lines } } = await worker.recognize(cropC);
     
     const bounds = [0, ...layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left), cropC.width];
     
-    if (captureRows) detectedRowLines = [];
+    // Local rows for this file
+    let localRows = [];
+    let localLinesY = [];
 
     lines.forEach(line => {
         let rowData = new Array(columnNames.length).fill('');
@@ -378,21 +332,36 @@ async function processFileAuto(file, worker, captureRows) {
                 let txt = cleanPipeNoise(t.trim());
                 return columnIsDate[i] ? cleanAndFormatDate(txt, fileYear) : txt;
             });
-            // rowId is extractedData.length + 1
-            addTableRow(file.name, rowData, extractedData.length + 1);
-            if(captureRows) detectedRowLines.push(line.bbox.y1 + cropY);
+            
+            // Add to Table
+            // Global Index = extractedData.length + 1
+            // Local Index = localRows.length + 1
+            localRows.push(rowData);
+            const localIdx = localRows.length;
+            const globalIdx = extractedData.length + 1;
+            
+            addTableRow(file.name, rowData, globalIdx, localIdx);
+            
+            // Track line Y for visuals
+            localLinesY.push(line.bbox.y1 + cropY);
         }
     });
+
+    if(captureRows) detectedRowLines = localLinesY;
+
+    // Export Debug Image
+    await generateDebugImage(fullCanvas, file.name, localLinesY);
 }
 
 // FIXED MODE
 async function processFileFixed(file, worker) {
-    const { cropC, cropY, fileYear } = await prepareCanvas(file);
+    const { cropC, cropY, fileYear, fullCanvas } = await prepareCanvas(file);
     const gridY = calculateFixedGrid();
     if(gridY.length === 0) throw new Error("Grid undefined");
 
     const bounds = [0, ...layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left), cropC.width];
     let rowTop = 0; 
+    let localRows = 0;
     
     for(let i=0; i < gridY.length; i++) {
         const rowBot = gridY[i] - cropY;
@@ -424,14 +393,55 @@ async function processFileFixed(file, worker) {
                     let txt = cleanPipeNoise(t.trim());
                     return columnIsDate[i] ? cleanAndFormatDate(txt, fileYear) : txt;
                 });
-                addTableRow(file.name, rowData, extractedData.length + 1);
+                
+                localRows++;
+                const globalIdx = extractedData.length + 1;
+                addTableRow(file.name, rowData, globalIdx, localRows);
             }
         }
         rowTop = rowBot;
     }
+
+    // Export Debug Image
+    await generateDebugImage(fullCanvas, file.name, gridY);
 }
 
-// Helpers
+// --- Image Export Logic ---
+async function generateDebugImage(canvasRef, filename, rowLines) {
+    if(!debugZip) return;
+    
+    // 1. Paint visuals onto the Full Canvas
+    const ctx = canvasRef.getContext('2d');
+    paintVisuals(ctx, canvasRef.width, canvasRef.height, rowLines);
+    
+    // 2. Convert to Blob
+    return new Promise((resolve) => {
+        canvasRef.toBlob((blob) => {
+            if(blob) {
+                // Remove .pdf ext, add .jpg
+                const imgName = filename.replace(/\.pdf$/i, '') + "_debug.jpg";
+                debugZip.file(imgName, blob);
+            }
+            resolve();
+        }, 'image/jpeg', 0.8);
+    });
+}
+
+function exportZip() {
+    if(!debugZip) return;
+    const btn = document.getElementById('btnExportZip');
+    btn.textContent = "Zipping...";
+    
+    debugZip.generateAsync({type:"blob"}).then(function(content) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content);
+        a.download = "debug_images.zip";
+        a.click();
+        btn.textContent = "Debug ZIP";
+    });
+}
+
+// --- Helpers ---
 async function prepareCanvas(file) {
     const buffer = await file.arrayBuffer();
     const doc = await pdfjsLib.getDocument(buffer).promise;
@@ -449,22 +459,17 @@ async function prepareCanvas(file) {
     const cropC = document.createElement('canvas');
     cropC.width = cropW; cropC.height = cropH;
     cropC.getContext('2d').drawImage(temp, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-    return { cropC, cropY, fileYear: getYearFromFilename(file.name) };
+    
+    return { cropC, cropY, fileYear: getYearFromFilename(file.name), fullCanvas: temp };
 }
 
-function addTableRow(fname, data, rowIndex) {
-    extractedData.push({ file: fname, data, rowIndex });
+function addTableRow(fname, data, globalIdx, localIdx) {
+    extractedData.push({ file: fname, data, globalIdx, localIdx });
     const tr = document.createElement('tr');
-    
-    // File Name
     tr.innerHTML = `<td style="color:#888;font-size:0.75em">${fname}</td>`;
-    
-    // Row Index (The new column)
-    tr.innerHTML += `<td style="color:#22c55e;font-weight:bold;">${rowIndex}</td>`;
-    
-    // Data
+    tr.innerHTML += `<td>${globalIdx}</td>`; // Global #
+    tr.innerHTML += `<td style="color:#22c55e;font-weight:bold;">${localIdx}</td>`; // Doc #
     tr.innerHTML += data.map(d => `<td>${d}</td>`).join('');
-    
     document.getElementById('tableBody').appendChild(tr);
     document.getElementById('rowCount').textContent = `${extractedData.length} rows found`;
 }
@@ -472,7 +477,7 @@ function addTableRow(fname, data, rowIndex) {
 function exportCSV() {
     if(!extractedData.length) return;
     const data = extractedData.map(row => {
-        let obj = { 'Source File': row.file, 'Row #': row.rowIndex };
+        let obj = { 'Source File': row.file, 'Global #': row.globalIdx, 'Doc #': row.localIdx };
         columnNames.forEach((c, i) => obj[c] = row.data[i]);
         return obj;
     });
@@ -483,36 +488,49 @@ function exportCSV() {
     a.click();
 }
 
-// Initial functions
-async function loadTemplate(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    log(`Loading: ${file.name}`);
-    document.getElementById('loadingIndicator').classList.remove('hidden');
-    try {
-        const buffer = await file.arrayBuffer();
-        pdfDoc = await pdfjsLib.getDocument(buffer).promise;
-        await renderPage(1);
-        document.getElementById('batchInput').disabled = false;
-        document.getElementById('loadingIndicator').classList.add('hidden');
-        log('Template loaded.', 'success');
-    } catch (err) { log(err.message, 'error'); document.getElementById('loadingIndicator').classList.add('hidden'); }
+// Data Cleaning / Init functions (Same as before)
+function cleanPipeNoise(text) {
+    if (!cleanPipes) return text;
+    return text.replace(/^[\s|]+|[\s|]+$/g, '');
 }
 
+function getYearFromFilename(fn) { const m = fn.match(/(20\d{2})/); return m ? m[0] : new Date().getFullYear(); }
+
+function cleanAndFormatDate(txt, yr) {
+    if (!txt || txt.length < 3) return txt;
+    let clean = cleanPipeNoise(txt).replace(/\./g, ' ').trim();
+    clean = clean.replace(/0ct/i, 'Oct').replace(/0ec/i, 'Dec').replace(/1an/i, 'Jan').replace(/5ep/i, 'Sep').replace(/Au9/i, 'Aug');
+    const regex = /(\d{1,2})[\s\-]*([A-Za-z]{3})/i;
+    const match = clean.match(regex);
+    if (match) {
+        const day = match[1].padStart(2, '0'); let monthStr = match[2].toLowerCase();
+        const map = { 'jan':'01','feb':'02','mar':'03','apr':'04','may':'05','jun':'06','jul':'07','aug':'08','sep':'09','oct':'10','nov':'11','dec':'12','ju1':'07', 'jui':'07', 'n0v':'11'};
+        let mm = map[monthStr] || map[monthStr.substring(0,3)];
+        if (mm) return `${day}/${mm}/${yr}`;
+    }
+    return clean;
+}
+
+// Standard Loaders
+async function loadTemplate(e) {
+    const file = e.target.files[0]; if (!file) return;
+    log(`Loading: ${file.name}`); document.getElementById('loadingIndicator').classList.remove('hidden');
+    try {
+        const buffer = await file.arrayBuffer(); pdfDoc = await pdfjsLib.getDocument(buffer).promise;
+        await renderPage(1); document.getElementById('batchInput').disabled = false;
+        document.getElementById('loadingIndicator').classList.add('hidden'); log('Template loaded.', 'success');
+    } catch (err) { log(err.message, 'error'); document.getElementById('loadingIndicator').classList.add('hidden'); }
+}
 async function renderPage(num) {
-    const page = await pdfDoc.getPage(num);
-    const viewport = page.getViewport({ scale: CONFIG.scale });
+    const page = await pdfDoc.getPage(num); const viewport = page.getViewport({ scale: CONFIG.scale });
     canvas.width = viewport.width; canvas.height = viewport.height;
     overlay.width = viewport.width; overlay.height = viewport.height;
     canvas.style.width = '100%'; canvas.style.height = 'auto';
     overlay.style.width = '100%'; overlay.style.height = 'auto';
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    drawOverlay();
+    await page.render({ canvasContext: ctx, viewport }).promise; drawOverlay();
 }
-
 function updateColumns(autoTitles = null) {
-    const container = document.getElementById('colContainer');
-    container.innerHTML = '';
+    const container = document.getElementById('colContainer'); container.innerHTML = '';
     if (layout.left === null || layout.right === null) return;
     const validDividers = layout.dividers.filter(d => d > layout.left && d < layout.right);
     const boundaries = [layout.left, ...validDividers, layout.right];
@@ -522,18 +540,16 @@ function updateColumns(autoTitles = null) {
     if (autoTitles && autoTitles.length === colCount) { columnNames = autoTitles; columnIsDate = columnNames.map(n => /date|time/i.test(n)); }
     columnNames.forEach((name, i) => {
         const div = document.createElement('div'); div.className = 'column-item';
-        div.style.borderLeftColor = CONFIG.columnTints[i % CONFIG.columnTints.length].replace('0.1', '1.0');
+        div.style.borderLeftColor = CONFIG.columnTints[i % CONFIG.columnTints.length].replace('0.15', '1.0');
         div.innerHTML = `<div class="column-options"><span>#${i+1}</span><input type="text" value="${name}" oninput="columnNames[${i}]=this.value"></div>`;
         const lbl = document.createElement('label'); lbl.className = 'date-toggle';
         lbl.innerHTML = `<input type="checkbox" ${columnIsDate[i] ? 'checked' : ''} onchange="columnIsDate[${i}]=this.checked"> Is Date?`;
         div.appendChild(lbl); container.appendChild(div);
     });
 }
-
 async function readHeaderTitles() {
     if (!layout.headTop || !layout.headBot || !layout.left || !layout.right) return log('Set boundaries first.', 'error');
-    const btn = document.getElementById('btnReadHeaders');
-    const old = btn.textContent; btn.textContent = "Scanning..."; btn.disabled = true;
+    const btn = document.getElementById('btnReadHeaders'); const old = btn.textContent; btn.textContent = "Scanning..."; btn.disabled = true;
     try {
         const w = layout.right - layout.left; const h = layout.headBot - layout.headTop;
         const temp = document.createElement('canvas'); temp.width = w; temp.height = h;
@@ -541,15 +557,13 @@ async function readHeaderTitles() {
         const worker = await Tesseract.createWorker('eng');
         const { data: { words } } = await worker.recognize(temp);
         const relDivs = layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left);
-        const bounds = [0, ...relDivs, w];
-        let titles = new Array(bounds.length - 1).fill('');
+        const bounds = [0, ...relDivs, w]; let titles = new Array(bounds.length - 1).fill('');
         words.forEach(wd => {
             const mx = (wd.bbox.x0 + wd.bbox.x1) / 2;
             for(let i=0; i<bounds.length-1; i++) if (mx >= bounds[i] && mx < bounds[i+1]) titles[i] += wd.text + ' ';
         });
         updateColumns(titles.map(t => t.trim().replace(/\s+/g,' ') || "Untitled"));
-        log("Headers updated.", "success");
-        await worker.terminate();
+        log("Headers updated.", "success"); await worker.terminate();
     } catch (e) { log(e.message, 'error'); }
     btn.textContent = old; btn.disabled = false;
 }
