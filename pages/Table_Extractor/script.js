@@ -6,7 +6,7 @@ const CONFIG = {
         headerBorder: '#f59e0b',
         colDividers: '#3b82f6',
         limitLines: '#ef4444',
-        detectedRows: 'rgba(50, 205, 50, 0.8)'
+        detectedRows: 'rgba(0, 150, 0, 1.0)' 
     },
     columnTints: [
         'rgba(59, 130, 246, 0.15)', 'rgba(236, 72, 153, 0.15)', 'rgba(34, 197, 94, 0.15)', 
@@ -16,100 +16,167 @@ const CONFIG = {
 
 // --- State ---
 let pdfDoc = null;
+let currentTemplatePage = 1;
+let templateEffectiveEnd = 0;
 let currentMode = null;
-let layout = {
-    headTop: null, headBot: null, tableBot: null, 
-    left: null, right: null, dividers: [], row1Bot: null 
-};
+let appMode = 'extraction'; 
 
+let layouts = { primary: createEmptyLayout(), secondary: createEmptyLayout() };
+let activeLayoutKey = 'primary'; 
+let useMultiPage = false;
+
+// Settings
 let rowStrategy = 'auto'; 
 let fixedStrategy = 'height';
 let cleanPipes = true;
-let inferDates = true; // NEW STATE
+let inferDates = true;
+let ignoreLastPage = false;
 
+// Data
 let columnNames = [];
 let columnIsDate = []; 
 let extractedData = [];
 let detectedRowLines = []; 
 let debugZip = null; 
 
-// --- Elements ---
-const canvas = document.getElementById('pdfCanvas');
-const ctx = canvas.getContext('2d');
-const overlay = document.getElementById('overlayCanvas');
-const oCtx = overlay.getContext('2d');
-const consoleDiv = document.getElementById('debugConsole');
+// Culling State
+let cullDoc = null;
+let cullFileBytes = null;
+let cullFileName = "";
+let cullCurrentPage = 1;
+let pagesToCull = new Set(); 
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// --- Elements (Global Refs) ---
+let canvas, ctx, overlay, oCtx, rowCountInput;
 
-// --- Logging ---
+// --- INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Initialize DOM Refs
+    canvas = document.getElementById('pdfCanvas');
+    ctx = canvas.getContext('2d');
+    overlay = document.getElementById('overlayCanvas');
+    oCtx = overlay.getContext('2d');
+    rowCountInput = document.getElementById('rowCountInput');
+
+    // 2. Initialize PDF Lib
+    if(typeof pdfjsLib !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    } else {
+        console.error("PDF.js not loaded!");
+    }
+
+    initEventListeners();
+    log("Ready. Upload a template to begin.");
+});
+
+function createEmptyLayout() {
+    return { headTop: null, headBot: null, tableBot: null, left: null, right: null, dividers: [], row1Bot: null, rowCount: 10 };
+}
+
 function log(msg, type = 'info') {
-    const d = new Date();
-    const time = d.toLocaleTimeString('en-GB', { hour12: false });
-    const color = type === 'error' ? '#ff7b72' : (type === 'success' ? '#3fb950' : '#e2e8f0');
-    const div = document.createElement('div');
-    div.style.color = color;
-    div.style.borderBottom = "1px solid rgba(255,255,255,0.1)";
-    div.style.padding = "4px 0";
-    div.textContent = `[${time}] ${msg}`;
-    consoleDiv.appendChild(div);
-    consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    const consoleDiv = document.getElementById('debugConsole');
+    if (consoleDiv) {
+        const d = new Date();
+        const time = d.toLocaleTimeString('en-GB', { hour12: false });
+        const div = document.createElement('div');
+        div.style.color = type === 'error' ? '#ff7b72' : '#e2e8f0';
+        div.textContent = `[${time}] ${msg}`;
+        consoleDiv.appendChild(div);
+        consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
     if(type === 'error') console.error(msg);
 }
 
-// --- Event Listeners ---
-document.getElementById('templateInput').addEventListener('change', loadTemplate);
-document.getElementById('batchInput').addEventListener('change', (e) => {
-    if(e.target.files.length) { document.getElementById('btnProcess').disabled = false; log(`Selected ${e.target.files.length} files.`); }
-});
-document.getElementById('btnProcess').addEventListener('click', runBatchOCR);
-document.getElementById('btnExport').addEventListener('click', exportCSV);
-document.getElementById('btnExportZip').addEventListener('click', exportZip);
-document.getElementById('btnClear').addEventListener('click', resetLayout);
-document.getElementById('btnReadHeaders').addEventListener('click', readHeaderTitles);
-document.getElementById('btnShowGuide').addEventListener('click', () => document.getElementById('guideModal').classList.remove('hidden'));
-document.getElementById('btnCloseGuide').addEventListener('click', () => document.getElementById('guideModal').classList.add('hidden'));
+function safeAddListener(id, event, handler) {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener(event, handler);
+}
 
-// Toggles
-document.getElementById('chkCleanPipes').addEventListener('change', (e) => { cleanPipes = e.target.checked; log(`Pipe cleaning: ${cleanPipes}`); });
-document.getElementById('chkInferDates').addEventListener('change', (e) => { inferDates = e.target.checked; log(`Infer Missing Dates: ${inferDates}`); });
+function initEventListeners() {
+    // Template
+    safeAddListener('templateInput', 'change', (e) => { appMode = 'extraction'; document.getElementById('cullControls').classList.add('hidden'); loadTemplate(e); });
 
-document.getElementById('btnModeAuto').addEventListener('click', () => setRowStrategy('auto'));
-document.getElementById('btnModeFixed').addEventListener('click', () => setRowStrategy('fixed'));
-
-document.querySelectorAll('input[name="fixedMode"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        fixedStrategy = e.target.value;
-        updateFixedUI();
-        drawOverlay();
+    // Navigation
+    safeAddListener('btnPrevPage', 'click', () => changeTemplatePage(-1));
+    safeAddListener('btnNextPage', 'click', () => changeTemplatePage(1));
+    safeAddListener('chkMultiPage', 'change', (e) => {
+        useMultiPage = e.target.checked;
+        document.getElementById('layoutSwitcher').classList.toggle('hidden', !useMultiPage);
+        if(useMultiPage && layouts.secondary.left === null) {
+            layouts.secondary = JSON.parse(JSON.stringify(layouts.primary));
+            updateDividerUI();
+        }
     });
-});
-document.getElementById('rowCountInput').addEventListener('input', drawOverlay);
+    safeAddListener('btnEditPage1', 'click', () => { switchLayoutView('primary'); if(currentTemplatePage!==1) changeTemplatePage(1-currentTemplatePage); });
+    safeAddListener('btnEditPage2', 'click', () => { switchLayoutView('secondary'); if(pdfDoc && pdfDoc.numPages > 1 && currentTemplatePage!==2) changeTemplatePage(2-currentTemplatePage); });
 
-const modes = {
-    'btnHeadTop': 'HEAD_TOP', 'btnHeadBot': 'HEAD_BOT', 'btnTableBot': 'TABLE_BOT',
-    'btnTableLeft': 'LEFT', 'btnTableRight': 'RIGHT', 'btnColDiv': 'DIVIDER',
-    'btnRow1': 'ROW_1_BOT'
-};
-
-Object.keys(modes).forEach(id => {
-    document.getElementById(id).addEventListener('click', (e) => {
-        setMode(modes[id]);
-        document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
+    // Row Strategy (Fixed this part)
+    safeAddListener('btnModeAuto', 'click', () => setRowStrategy('auto'));
+    safeAddListener('btnModeFixed', 'click', () => setRowStrategy('fixed'));
+    document.querySelectorAll('input[name="fixedMode"]').forEach(radio => {
+        radio.addEventListener('change', (e) => { fixedStrategy = e.target.value; updateFixedUI(); drawOverlay(); });
     });
-});
+    if(rowCountInput) {
+        rowCountInput.addEventListener('input', (e) => { layouts[activeLayoutKey].rowCount = parseInt(e.target.value)||1; drawOverlay(); });
+    }
 
-overlay.addEventListener('mousedown', handleCanvasClick);
+    // Extraction Tools
+    const modes = { 'btnHeadTop':'HEAD_TOP', 'btnHeadBot':'HEAD_BOT', 'btnTableBot':'TABLE_BOT', 'btnTableLeft':'LEFT', 'btnTableRight':'RIGHT', 'btnColDiv':'DIVIDER', 'btnDelDiv':'DEL_DIVIDER', 'btnRow1':'ROW_1_BOT' };
+    Object.keys(modes).forEach(id => {
+        safeAddListener(id, 'click', (e) => {
+            if(appMode !== 'extraction') { alert("Upload a template first."); return; }
+            currentMode = modes[id];
+            document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+        });
+    });
 
-// --- Logic ---
+    // Batch & Settings
+    safeAddListener('batchInput', 'change', (e) => { if(e.target.files.length) document.getElementById('btnProcess').disabled = false; });
+    safeAddListener('btnProcess', 'click', runBatchOCR);
+    safeAddListener('btnExport', 'click', exportCSV);
+    safeAddListener('btnExportZip', 'click', exportZip);
+    safeAddListener('btnClear', 'click', resetCurrentLayout);
+    safeAddListener('btnReadHeaders', 'click', readHeaderTitles);
+    safeAddListener('chkCleanPipes', 'change', (e) => cleanPipes = e.target.checked);
+    safeAddListener('chkInferDates', 'change', (e) => inferDates = e.target.checked);
+    safeAddListener('chkIgnoreLastPage', 'change', async (e) => {
+        ignoreLastPage = e.target.checked;
+        log(`Ignore Last Page: ${ignoreLastPage}`);
+        if(pdfDoc) {
+            templateEffectiveEnd = await calculateEffectivePageCount(pdfDoc);
+            drawOverlay();
+        }
+    });
+
+    // Utilities
+    safeAddListener('preProcessInput', 'change', (e) => { if(e.target.files.length) document.getElementById('btnRemoveLastPage').disabled = false; });
+    safeAddListener('btnRemoveLastPage', 'click', runPageRemovalBatch);
+    safeAddListener('cullInput', 'change', loadCullFile);
+    safeAddListener('btnCullPrev', 'click', () => changeCullPage(-1));
+    safeAddListener('btnCullNext', 'click', () => changeCullPage(1));
+    safeAddListener('btnToggleCull', 'click', toggleCullPageStatus);
+    safeAddListener('btnDownloadCull', 'click', downloadCulledPdf);
+
+    // Modals & Canvas
+    safeAddListener('btnShowGuide', 'click', () => document.getElementById('guideModal').classList.remove('hidden'));
+    safeAddListener('btnCloseGuide', 'click', () => document.getElementById('guideModal').classList.add('hidden'));
+    if(overlay) overlay.addEventListener('mousedown', handleCanvasClick);
+}
+
+// ==========================================
+// UI LOGIC
+// ==========================================
 
 function setRowStrategy(strat) {
     rowStrategy = strat;
+    log(`Row Mode set to: ${strat}`);
+    
     document.getElementById('btnModeAuto').classList.toggle('active', strat === 'auto');
     document.getElementById('btnModeFixed').classList.toggle('active', strat === 'fixed');
     document.getElementById('panelAuto').classList.toggle('hidden', strat !== 'auto');
     document.getElementById('panelFixed').classList.toggle('hidden', strat !== 'fixed');
+    
     drawOverlay();
 }
 
@@ -118,13 +185,26 @@ function updateFixedUI() {
     document.getElementById('subPanelCount').classList.toggle('hidden', fixedStrategy !== 'count');
 }
 
-function setMode(mode) { currentMode = mode; log(`Tool: ${mode}`); }
+function switchLayoutView(key) {
+    activeLayoutKey = key;
+    document.getElementById('btnEditPage1').classList.toggle('active', key === 'primary');
+    document.getElementById('btnEditPage2').classList.toggle('active', key === 'secondary');
+    if(rowCountInput) rowCountInput.value = layouts[key].rowCount || 10;
+    drawOverlay();
+    updateColumns();
+    updateDividerUI();
+}
 
 function handleCanvasClick(e) {
+    if(appMode !== 'extraction') return;
     if (!currentMode) return;
+    
     const rect = overlay.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (overlay.width / rect.width);
-    const y = (e.clientY - rect.top) * (overlay.height / rect.height);
+    const scaleX = overlay.width / rect.width;
+    const scaleY = overlay.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    const layout = layouts[activeLayoutKey];
 
     switch (currentMode) {
         case 'HEAD_TOP': layout.headTop = y; break;
@@ -134,106 +214,251 @@ function handleCanvasClick(e) {
         case 'RIGHT': layout.right = x; break;
         case 'ROW_1_BOT': layout.row1Bot = y; break;
         case 'DIVIDER': 
-            if(layout.left !== null && x < layout.left) return log("Error: Divider outside bounds", "error");
-            if(layout.right !== null && x > layout.right) return log("Error: Divider outside bounds", "error");
             layout.dividers.push(x); 
             layout.dividers.sort((a,b) => a - b);
+            updateDividerUI();
+            break;
+        case 'DEL_DIVIDER':
+            const matchIndex = layout.dividers.findIndex(d => Math.abs(d - x) < 15);
+            if (matchIndex !== -1) { layout.dividers.splice(matchIndex, 1); updateDividerUI(); }
             break;
     }
-    
     if(rowStrategy === 'auto') detectedRowLines = []; 
     drawOverlay();
     updateColumns();
 }
 
-function resetLayout() {
-    layout = { headTop: null, headBot: null, tableBot: null, left: null, right: null, dividers: [], row1Bot: null };
-    columnNames = []; columnIsDate = []; detectedRowLines = [];
-    document.getElementById('colContainer').innerHTML = '';
-    drawOverlay();
+function updateDividerUI() {
+    const container = document.getElementById('dividerList');
+    if(!container) return;
+    container.innerHTML = '';
+    layouts[activeLayoutKey].dividers.forEach((d, i) => {
+        const tag = document.createElement('div');
+        tag.className = 'divider-tag';
+        tag.innerHTML = `Div ${i+1} <span>×</span>`;
+        tag.onclick = () => {
+            layouts[activeLayoutKey].dividers.splice(i, 1);
+            drawOverlay(); updateColumns(); updateDividerUI();
+        };
+        container.appendChild(tag);
+    });
 }
 
-function calculateFixedGrid() {
+function updateColumns(autoTitles = null) {
+    const container = document.getElementById('colContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const layout = layouts[activeLayoutKey];
+    if (layout.left === null || layout.right === null) {
+        container.innerHTML = '<em style="color:#666; font-size:0.8rem;">Define Left/Right edges.</em>';
+        return;
+    }
+
+    const validDividers = layout.dividers.filter(d => d > layout.left && d < layout.right);
+    const boundaries = [layout.left, ...validDividers, layout.right];
+    const colCount = boundaries.length - 1;
+
+    while(columnNames.length < colCount) {
+        columnNames.push(`Column ${columnNames.length + 1}`);
+        columnIsDate.push(false);
+    }
+    columnNames = columnNames.slice(0, colCount);
+    columnIsDate = columnIsDate.slice(0, colCount);
+
+    if (autoTitles && autoTitles.length === colCount) {
+        columnNames = autoTitles;
+        columnIsDate = columnNames.map(n => /date|time/i.test(n));
+    }
+
+    columnNames.forEach((name, i) => {
+        const div = document.createElement('div');
+        div.className = 'column-item';
+        div.style.borderLeftColor = CONFIG.columnTints[i % CONFIG.columnTints.length].replace('0.15', '1.0');
+        div.innerHTML = `<div class="column-options"><span>#${i+1}</span><input type="text" value="${name}" oninput="columnNames[${i}]=this.value"></div>`;
+        const lbl = document.createElement('label');
+        lbl.className = 'date-toggle';
+        lbl.innerHTML = `<input type="checkbox" ${columnIsDate[i] ? 'checked' : ''} onchange="columnIsDate[${i}]=this.checked"> Is Date?`;
+        div.appendChild(lbl);
+        container.appendChild(div);
+    });
+}
+
+function resetCurrentLayout() {
+    layouts[activeLayoutKey] = createEmptyLayout();
+    if(rowCountInput) rowCountInput.value = 10;
+    if(activeLayoutKey === 'primary') {
+        columnNames = []; columnIsDate = []; 
+        document.getElementById('colContainer').innerHTML = '';
+    }
+    detectedRowLines = [];
+    updateDividerUI();
+    drawOverlay();
+    log(`Reset layout for ${activeLayoutKey === 'primary' ? "Page 1" : "Page 2+"}.`);
+}
+
+// --- VISUALS ---
+
+function drawOverlay() {
+    if(appMode === 'culling') return drawCullOverlay();
+    if (!overlay || overlay.width === 0 || overlay.height === 0) return;
+
+    try {
+        oCtx.clearRect(0, 0, overlay.width, overlay.height);
+        
+        if (pdfDoc && currentTemplatePage > templateEffectiveEnd && appMode === 'extraction') {
+            oCtx.fillStyle = "rgba(0, 0, 0, 0.85)";
+            oCtx.fillRect(0, 0, overlay.width, overlay.height);
+            oCtx.fillStyle = "white";
+            oCtx.textAlign = "center";
+            oCtx.font = "bold 40px sans-serif";
+            oCtx.fillText("PAGE IGNORED", overlay.width / 2, overlay.height / 2);
+            let reason = "Blank Page Detected";
+            if(ignoreLastPage && currentTemplatePage === templateEffectiveEnd + 1) reason = "Info Page Ignored (Settings)";
+            oCtx.font = "20px sans-serif";
+            oCtx.fillText(`(${reason})`, overlay.width / 2, (overlay.height / 2) + 40);
+            oCtx.textAlign = "left"; 
+            return;
+        }
+
+        const layout = layouts[activeLayoutKey];
+        
+        if (layout.headBot && layout.tableBot && layout.left && layout.right) {
+            const bounds = [layout.left, ...layout.dividers, layout.right].sort((a,b)=>a-b);
+            for (let i = 0; i < bounds.length - 1; i++) {
+                oCtx.fillStyle = CONFIG.columnTints[i % CONFIG.columnTints.length];
+                oCtx.fillRect(bounds[i], layout.headBot, bounds[i+1]-bounds[i], layout.tableBot - layout.headBot);
+            }
+        }
+        
+        if (layout.headTop) {
+            oCtx.fillStyle = CONFIG.colors.header;
+            oCtx.fillRect(layout.left || 0, layout.headTop, (layout.right || overlay.width) - (layout.left || 0), layout.headBot - layout.headTop);
+        }
+
+        let lines = [];
+        if(rowStrategy === 'fixed') lines = calculateFixedGrid(layout);
+        else if(detectedRowLines.length) lines = detectedRowLines;
+        
+        paintVisuals(oCtx, overlay.width, overlay.height, lines, layout);
+    } catch(e) {
+        console.warn("Draw error:", e);
+    }
+}
+
+function calculateFixedGrid(layout) {
     if (!layout.headBot || !layout.tableBot) return [];
     const lines = [];
-    const totalH = layout.tableBot - layout.headBot;
+    const h = layout.tableBot - layout.headBot;
+    let step = 0;
+    if(fixedStrategy === 'height' && layout.row1Bot) step = layout.row1Bot - layout.headBot;
+    else if(fixedStrategy === 'count') step = h / (layout.rowCount || 10);
     
-    if (fixedStrategy === 'height') {
-        if (!layout.row1Bot) return [];
-        const rowH = layout.row1Bot - layout.headBot;
-        if (rowH <= 0) return [];
-        let currentY = layout.headBot + rowH;
-        while (currentY <= layout.tableBot + 5) {
-            lines.push(currentY);
-            currentY += rowH;
-        }
-    } else {
-        const count = parseInt(document.getElementById('rowCountInput').value) || 10;
-        const rowH = totalH / count;
-        for (let i = 1; i <= count; i++) {
-            lines.push(layout.headBot + (rowH * i));
-        }
+    if(step > 0) {
+        for(let y = layout.headBot + step; y < layout.tableBot + 5; y += step) lines.push(y);
     }
     return lines;
 }
 
-// --- Visuals ---
-function paintVisuals(ctx, width, height, rowLines) {
-    if (layout.headBot && layout.tableBot && layout.left && layout.right) {
-        const validDividers = layout.dividers.filter(d => d > layout.left && d < layout.right);
-        const boundaries = [layout.left, ...validDividers, layout.right];
-        const topY = layout.headBot;
-        const h = layout.tableBot - layout.headBot;
-        for (let i = 0; i < boundaries.length - 1; i++) {
-            const startX = boundaries[i];
-            const w = boundaries[i+1] - startX;
-            ctx.fillStyle = CONFIG.columnTints[i % CONFIG.columnTints.length];
-            ctx.fillRect(startX, topY, w, h);
-            if(i > 0) paintLine(ctx, width, height, boundaries[i], false, CONFIG.colors.colDividers, false);
-        }
-    }
-    if (layout.headTop && layout.headBot && layout.left && layout.right) {
-        ctx.fillStyle = CONFIG.colors.header;
-        ctx.fillRect(layout.left, layout.headTop, (layout.right - layout.left), (layout.headBot - layout.headTop));
-    }
-    if (rowLines && rowLines.length > 0) {
-        ctx.beginPath(); ctx.strokeStyle = CONFIG.colors.detectedRows; ctx.lineWidth = 1; ctx.font = "bold 12px sans-serif";
-        rowLines.forEach((y, index) => {
+function paintVisuals(ctx, w, h, rowLines, layout) {
+    if (rowLines.length) {
+        ctx.beginPath(); ctx.strokeStyle = CONFIG.colors.detectedRows; ctx.lineWidth = 2;
+        rowLines.forEach((y, i) => {
             ctx.moveTo(layout.left, y); ctx.lineTo(layout.right, y);
-            const rowHeightEstimate = index === 0 ? (y - layout.headBot) : (y - rowLines[index-1]);
-            const labelY = y - (rowHeightEstimate / 2) + 4;
-            ctx.fillStyle = "#006400"; ctx.fillText(`#${index + 1}`, layout.left - 30, labelY);
-            ctx.strokeStyle = "white"; ctx.lineWidth = 0.5; ctx.strokeText(`#${index + 1}`, layout.left - 30, labelY);
+            ctx.fillStyle = "rgba(0,100,0,0.9)";
+            const ly = y - (i===0 ? (y-layout.headBot)/2 : (y-rowLines[i-1])/2);
+            ctx.fillRect(layout.left-40, ly-8, 30, 16);
+            ctx.fillStyle = "white"; ctx.font = "bold 12px sans-serif";
+            ctx.fillText(`#${i+1}`, layout.left-35, ly+4);
         });
         ctx.stroke();
     }
-    paintLine(ctx, width, height, layout.headTop, true, CONFIG.colors.headerBorder, "Head Top");
-    paintLine(ctx, width, height, layout.headBot, true, CONFIG.colors.headerBorder, "Head Bot");
-    paintLine(ctx, width, height, layout.tableBot, true, CONFIG.colors.limitLines, "Table Bot");
-    paintLine(ctx, width, height, layout.left, false, CONFIG.colors.limitLines, "Left");
-    paintLine(ctx, width, height, layout.right, false, CONFIG.colors.limitLines, "Right");
+    
+    [layout.headTop, layout.headBot, layout.tableBot].forEach(y => paintLine(ctx, w, h, y, true, CONFIG.colors.headerBorder));
+    [layout.left, layout.right, ...layout.dividers].forEach(x => paintLine(ctx, w, h, x, false, CONFIG.colors.limitLines));
 }
 
-function paintLine(ctx, w, h, val, isH, color, text) {
-    if (val === null || val === undefined) return;
-    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash(isH ? [] : [5, 5]);
-    if (isH) { ctx.moveTo(0, val); ctx.lineTo(w, val); } else { ctx.moveTo(val, 0); ctx.lineTo(val, h); }
+function paintLine(ctx, w, h, val, isH, color) {
+    if (val == null) return;
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash(isH?[0,0]:[5,5]);
+    if(isH) { ctx.moveTo(0, val); ctx.lineTo(w, val); } else { ctx.moveTo(val, 0); ctx.lineTo(val, h); }
     ctx.stroke();
-    if (text) { ctx.fillStyle = color; ctx.font = 'bold 12px sans-serif'; ctx.fillText(text, isH?10:val+5, isH?val-5:20); }
 }
 
-function drawOverlay() {
-    oCtx.clearRect(0, 0, overlay.width, overlay.height);
-    let lines = [];
-    if (rowStrategy === 'fixed') lines = calculateFixedGrid();
-    else if (detectedRowLines.length > 0) lines = detectedRowLines;
-    paintVisuals(oCtx, overlay.width, overlay.height, lines);
+// --- STANDARD LOADER ---
+async function loadTemplate(e) {
+    const file = e.target.files[0]; 
+    if (!file) return;
+    
+    log(`Loading Template: ${file.name}`); 
+    const indicator = document.getElementById('loadingIndicator');
+    if(indicator) indicator.classList.remove('hidden');
+
+    try {
+        const buffer = await file.arrayBuffer(); 
+        pdfDoc = await pdfjsLib.getDocument(buffer).promise;
+        currentTemplatePage = 1; 
+        document.getElementById('pageIndicator').textContent = "Page 1";
+        document.getElementById('btnPrevPage').disabled = true;
+        document.getElementById('btnNextPage').disabled = (pdfDoc.numPages <= 1);
+        
+        templateEffectiveEnd = await calculateEffectivePageCount(pdfDoc);
+        
+        await renderTemplatePage(); 
+        
+        // Fix: Enable batch input
+        const batchInput = document.getElementById('batchInput');
+        if(batchInput) batchInput.disabled = false;
+        
+        if(indicator) indicator.classList.add('hidden'); 
+        log('Template loaded.', 'success');
+    } catch (err) { 
+        console.error(err);
+        log(err.message, 'error'); 
+        if(indicator) indicator.classList.add('hidden'); 
+    }
 }
 
-// --- Processing ---
+async function renderTemplatePage() {
+    document.getElementById('pageIndicator').textContent = `Page ${currentTemplatePage}`;
+    const page = await pdfDoc.getPage(currentTemplatePage);
+    const viewport = page.getViewport({ scale: CONFIG.scale });
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    overlay.width = viewport.width; overlay.height = viewport.height;
+    canvas.style.width = '100%'; canvas.style.height = 'auto';
+    overlay.style.width = '100%'; overlay.style.height = 'auto';
+    await page.render({ canvasContext: ctx, viewport }).promise; drawOverlay();
+}
 
+function changeTemplatePage(d) {
+    const n = currentTemplatePage + d;
+    if(n >= 1 && n <= pdfDoc.numPages) { currentTemplatePage = n; renderTemplatePage(); }
+}
+
+async function isPageBlank(pdfProxy, pageNum) {
+    try {
+        const page = await pdfProxy.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const str = textContent.items.map(item => item.str).join('');
+        return str.trim().length < 40;
+    } catch(e) { return false; }
+}
+
+async function calculateEffectivePageCount(docProxy) {
+    let effectiveTotal = docProxy.numPages;
+    if (effectiveTotal <= 1) return 1;
+    for (let p = docProxy.numPages; p > 1; p--) {
+        const isBlank = await isPageBlank(docProxy, p);
+        if (isBlank) effectiveTotal--;
+        else break; 
+    }
+    if (ignoreLastPage && effectiveTotal > 1) effectiveTotal--;
+    return effectiveTotal;
+}
+
+// --- BATCH EXTRACTION ---
 async function runBatchOCR() {
-    if (!layout.tableBot) return log("Set Table Bottom line first.", "error");
+    if (!layouts.primary.tableBot) return log("Set Page 1 layout first.", "error");
     const files = document.getElementById('batchInput').files;
     const btn = document.getElementById('btnProcess');
     btn.disabled = true; btn.textContent = "Processing...";
@@ -243,20 +468,14 @@ async function runBatchOCR() {
 
     document.getElementById('tableBody').innerHTML = '';
     document.getElementById('resultsSection').classList.remove('hidden');
-    
-    // NEW: Added "Date Source" column
-    document.getElementById('tableHeader').innerHTML = '<th>File</th><th>Global #</th><th>Doc #</th><th>Date Source</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
+    document.getElementById('tableHeader').innerHTML = '<th>File</th><th>Page</th><th>Global #</th><th>Doc #</th><th>Date Source</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
 
     const worker = await Tesseract.createWorker('eng');
 
     for (let i = 0; i < files.length; i++) {
         log(`Processing ${files[i].name}...`);
         try {
-            if (rowStrategy === 'fixed') {
-                await processFileFixed(files[i], worker);
-            } else {
-                await processFileAuto(files[i], worker, i === 0);
-            }
+            await processFullPdf(files[i], worker);
         } catch (e) { log(`Error: ${e.message}`, 'error'); }
     }
 
@@ -268,148 +487,130 @@ async function runBatchOCR() {
     document.getElementById('btnExportZip').classList.remove('hidden');
 }
 
-// --- Helper: Date Inference & Cleaning Logic ---
-// Returns: { processedRow: [], status: "Extracted" | "Inferred" | "-" }
-function inferRowDates(rowData, fileYear, lastValidDate) {
-    let dateStatus = "-";
-    let foundDateInRow = false;
+async function processFullPdf(file, worker) {
+    const buffer = await file.arrayBuffer();
+    const doc = await pdfjsLib.getDocument(buffer).promise;
+    const fileYear = getYearFromFilename(file.name);
+    
+    const pagesToProcess = await calculateEffectivePageCount(doc);
+    if (pagesToProcess < doc.numPages) log(`  Smart Skip: Processing 1 to ${pagesToProcess}`);
+    else log(`  Processing all ${doc.numPages} pages.`);
 
-    const processedRow = rowData.map((t, i) => {
-        let txt = cleanPipeNoise(t.trim()); // Apply pipe clean
-        
-        if (columnIsDate[i]) {
-            // Try to extract date
-            let fmtDate = cleanAndFormatDate(txt, fileYear);
-            
-            // Check if it's a valid date string (simple check: contains / or is long enough)
-            if (fmtDate.length >= 8 && fmtDate.includes('/')) {
-                lastValidDate = fmtDate; // Update memory
-                dateStatus = "Extracted";
-                foundDateInRow = true;
-                return fmtDate;
-            } 
-            else if (inferDates && lastValidDate) {
-                // No date found, but we have memory -> Infer it
-                return lastValidDate;
-            }
+    let lastValidDate = null;
+    let localRowsTotal = 0;
+
+    for (let pageNum = 1; pageNum <= pagesToProcess; pageNum++) {
+        let currentLayout = layouts.primary;
+        if (useMultiPage && pageNum > 1) {
+            currentLayout = layouts.secondary;
+            if (!currentLayout.headBot || !currentLayout.tableBot) continue;
+        } 
+
+        const page = await doc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: CONFIG.scale });
+        const temp = document.createElement('canvas');
+        temp.width = viewport.width; temp.height = viewport.height;
+        await page.render({ canvasContext: temp.getContext('2d'), viewport }).promise;
+
+        let pageRows = [];
+        let pageRowLines = [];
+
+        if (rowStrategy === 'fixed') {
+            const res = await extractFixed(worker, temp, currentLayout, fileYear, lastValidDate);
+            pageRows = res.rows; pageRowLines = res.lines; lastValidDate = res.lastDate;
+        } else {
+            const res = await extractAuto(worker, temp, currentLayout, fileYear, lastValidDate);
+            pageRows = res.rows; pageRowLines = res.lines; lastValidDate = res.lastDate;
         }
-        return txt;
-    });
 
-    // If we inserted a date from memory, and didn't find a new one
-    if (!foundDateInRow && inferDates && lastValidDate) {
-        dateStatus = "Inferred";
+        pageRows.forEach(row => {
+            localRowsTotal++;
+            addTableRow(file.name, pageNum, row.data, extractedData.length + 1, localRowsTotal, row.dateStatus);
+        });
+
+        await generateDebugImage(temp, `${file.name}_p${pageNum}`, pageRowLines, currentLayout);
     }
-
-    return { processedRow, lastValidDate, dateStatus };
 }
 
-// AUTO MODE
-async function processFileAuto(file, worker, captureRows) {
-    const { cropC, cropY, fileYear, fullCanvas } = await prepareCanvas(file);
+async function extractAuto(worker, fullCanvas, layoutData, fileYear, lastDate) {
+    const { cropC, cropY } = cropCanvas(fullCanvas, layoutData);
     const { data: { lines } } = await worker.recognize(cropC);
+    const bounds = [0, ...layoutData.dividers.filter(d => d > layoutData.left && d < layoutData.right).map(d => d - layoutData.left), cropC.width];
     
-    const bounds = [0, ...layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left), cropC.width];
-    
-    let localRows = [];
-    let localLinesY = [];
-    let lastValidDate = null; // Reset per file
+    let rows = []; let lineYs = []; let currentLastDate = lastDate;
 
     lines.forEach(line => {
         let rowData = new Array(columnNames.length).fill('');
         let hasContent = false;
-        
         line.words.forEach(word => {
             const mx = (word.bbox.x0 + word.bbox.x1)/2;
             for (let c = 0; c < bounds.length - 1; c++) {
-                if (mx >= bounds[c] && mx < bounds[c+1]) {
-                    rowData[c] += word.text + ' ';
-                    hasContent = true;
-                }
+                if (mx >= bounds[c] && mx < bounds[c+1]) { rowData[c] += word.text + ' '; hasContent = true; }
             }
         });
-
         if (hasContent && rowData.join('').length > 3) {
-            // Process dates
-            const result = inferRowDates(rowData, fileYear, lastValidDate);
-            lastValidDate = result.lastValidDate;
-
-            localRows.push(result.processedRow);
-            const localIdx = localRows.length;
-            const globalIdx = extractedData.length + 1;
-            
-            addTableRow(file.name, result.processedRow, globalIdx, localIdx, result.dateStatus);
-            localLinesY.push(line.bbox.y1 + cropY);
+            const result = inferRowDates(rowData, fileYear, currentLastDate);
+            currentLastDate = result.lastValidDate;
+            rows.push({ data: result.processedRow, dateStatus: result.dateStatus });
+            lineYs.push(line.bbox.y1 + cropY);
         }
     });
-
-    if(captureRows) detectedRowLines = localLinesY;
-    await generateDebugImage(fullCanvas, file.name, localLinesY);
+    return { rows, lines: lineYs, lastDate: currentLastDate };
 }
 
-// FIXED MODE
-async function processFileFixed(file, worker) {
-    const { cropC, cropY, fileYear, fullCanvas } = await prepareCanvas(file);
-    const gridY = calculateFixedGrid();
-    if(gridY.length === 0) throw new Error("Grid undefined");
-
-    const bounds = [0, ...layout.dividers.filter(d => d > layout.left && d < layout.right).map(d => d - layout.left), cropC.width];
-    let rowTop = 0; 
-    let localRows = 0;
-    let lastValidDate = null; // Reset per file
+async function extractFixed(worker, fullCanvas, layoutData, fileYear, lastDate) {
+    const { cropC, cropY } = cropCanvas(fullCanvas, layoutData);
+    const gridY = calculateFixedGrid(layoutData);
+    const bounds = [0, ...layoutData.dividers.filter(d => d > layoutData.left && d < layoutData.right).map(d => d - layoutData.left), cropC.width];
+    
+    let rows = []; let currentLastDate = lastDate; let rowTop = 0; 
     
     for(let i=0; i < gridY.length; i++) {
         const rowBot = gridY[i] - cropY;
         const rowH = rowBot - rowTop;
-        
         if (rowH > 5) {
             const strip = document.createElement('canvas');
             strip.width = cropC.width; strip.height = rowH;
             strip.getContext('2d').drawImage(cropC, 0, rowTop, cropC.width, rowH, 0, 0, cropC.width, rowH);
-
             await worker.setParameters({ tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK });
             const { data: { words } } = await worker.recognize(strip);
 
-            let rowData = new Array(columnNames.length).fill('');
-            let hasContent = false;
-
+            let rowData = new Array(columnNames.length).fill(''); let hasContent = false;
             words.forEach(wd => {
                 const mx = (wd.bbox.x0 + wd.bbox.x1)/2;
                 for (let c = 0; c < bounds.length - 1; c++) {
-                    if (mx >= bounds[c] && mx < bounds[c+1]) {
-                        rowData[c] += wd.text + ' ';
-                        hasContent = true;
-                    }
+                    if (mx >= bounds[c] && mx < bounds[c+1]) { rowData[c] += wd.text + ' '; hasContent = true; }
                 }
             });
-
             if(hasContent && rowData.join('').length > 2) {
-                // Process dates
-                const result = inferRowDates(rowData, fileYear, lastValidDate);
-                lastValidDate = result.lastValidDate;
-
-                localRows++;
-                const globalIdx = extractedData.length + 1;
-                addTableRow(file.name, result.processedRow, globalIdx, localRows, result.dateStatus);
+                const result = inferRowDates(rowData, fileYear, currentLastDate);
+                currentLastDate = result.lastValidDate;
+                rows.push({ data: result.processedRow, dateStatus: result.dateStatus });
             }
         }
         rowTop = rowBot;
     }
-
-    await generateDebugImage(fullCanvas, file.name, gridY);
+    return { rows, lines: gridY, lastDate: currentLastDate };
 }
 
-// --- Image Export Logic ---
-async function generateDebugImage(canvasRef, filename, rowLines) {
+function cropCanvas(source, layoutData) {
+    const cropX = layoutData.left;
+    const cropY = layoutData.headBot;
+    const cropW = layoutData.right - layoutData.left;
+    const cropH = layoutData.tableBot - layoutData.headBot;
+    const cropC = document.createElement('canvas');
+    cropC.width = cropW; cropC.height = cropH;
+    cropC.getContext('2d').drawImage(source, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    return { cropC, cropY };
+}
+
+async function generateDebugImage(canvasRef, filename, rowLines, usedLayout) {
     if(!debugZip) return;
     const ctx = canvasRef.getContext('2d');
-    paintVisuals(ctx, canvasRef.width, canvasRef.height, rowLines);
+    paintVisuals(ctx, canvasRef.width, canvasRef.height, rowLines, usedLayout);
     return new Promise((resolve) => {
         canvasRef.toBlob((blob) => {
-            if(blob) {
-                const imgName = filename.replace(/\.pdf$/i, '') + "_debug.jpg";
-                debugZip.file(imgName, blob);
-            }
+            if(blob) { debugZip.file(filename.replace(/\.pdf$/i, '') + "_debug.jpg", blob); }
             resolve();
         }, 'image/jpeg', 0.8);
     });
@@ -417,51 +618,34 @@ async function generateDebugImage(canvasRef, filename, rowLines) {
 
 function exportZip() {
     if(!debugZip) return;
-    const btn = document.getElementById('btnExportZip');
-    btn.textContent = "Zipping...";
-    debugZip.generateAsync({type:"blob"}).then(function(content) {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(content);
-        a.download = "debug_images.zip";
-        a.click();
+    const btn = document.getElementById('btnExportZip'); btn.textContent = "Zipping...";
+    debugZip.generateAsync({type:"blob"}).then(c => {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(c); a.download = "debug_images.zip"; a.click();
         btn.textContent = "Debug ZIP";
     });
 }
 
-// --- Helpers ---
-async function prepareCanvas(file) {
-    const buffer = await file.arrayBuffer();
-    const doc = await pdfjsLib.getDocument(buffer).promise;
-    const page = await doc.getPage(1);
-    const viewport = page.getViewport({ scale: CONFIG.scale });
-    const temp = document.createElement('canvas');
-    temp.width = viewport.width; temp.height = viewport.height;
-    await page.render({ canvasContext: temp.getContext('2d'), viewport }).promise;
-
-    const cropX = layout.left;
-    const cropY = layout.headBot;
-    const cropW = layout.right - layout.left;
-    const cropH = layout.tableBot - layout.headBot;
-    
-    const cropC = document.createElement('canvas');
-    cropC.width = cropW; cropC.height = cropH;
-    cropC.getContext('2d').drawImage(temp, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-    return { cropC, cropY, fileYear: getYearFromFilename(file.name), fullCanvas: temp };
+function inferRowDates(rowData, fileYear, lastValidDate) {
+    let dateStatus = "-"; let foundDateInRow = false;
+    const processedRow = rowData.map((t, i) => {
+        let txt = cleanPipeNoise(t.trim()); 
+        if (columnIsDate[i]) {
+            let fmtDate = cleanAndFormatDate(txt, fileYear);
+            if (fmtDate.length >= 8 && fmtDate.includes('/')) {
+                lastValidDate = fmtDate; dateStatus = "Extracted"; foundDateInRow = true; return fmtDate;
+            } else if (inferDates && lastValidDate) { return lastValidDate; }
+        }
+        return txt;
+    });
+    if (!foundDateInRow && inferDates && lastValidDate) dateStatus = "Inferred";
+    return { processedRow, lastValidDate, dateStatus };
 }
 
-function addTableRow(fname, data, globalIdx, localIdx, dateStatus) {
-    // Add dateStatus to stored data for CSV export
-    extractedData.push({ file: fname, data, globalIdx, localIdx, dateStatus });
+function addTableRow(fname, pageNum, data, globalIdx, localIdx, dateStatus) {
+    extractedData.push({ file: fname, page: pageNum, data, globalIdx, localIdx, dateStatus });
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td style="color:#888;font-size:0.75em">${fname}</td>`;
-    tr.innerHTML += `<td>${globalIdx}</td>`; 
-    tr.innerHTML += `<td style="color:#22c55e;font-weight:bold;">${localIdx}</td>`; 
-    
-    // Status Badge
     let statusColor = dateStatus === "Extracted" ? "#3b82f6" : (dateStatus === "Inferred" ? "#f59e0b" : "#64748b");
-    tr.innerHTML += `<td style="color:${statusColor}; font-size:0.8em;">${dateStatus}</td>`;
-
-    tr.innerHTML += data.map(d => `<td>${d}</td>`).join('');
+    tr.innerHTML = `<td style="color:#888;font-size:0.75em">${fname}</td><td>${pageNum}</td><td>${globalIdx}</td><td style="color:#22c55e;font-weight:bold;">${localIdx}</td><td style="color:${statusColor}; font-size:0.8em;">${dateStatus}</td>` + data.map(d => `<td>${d}</td>`).join('');
     document.getElementById('tableBody').appendChild(tr);
     document.getElementById('rowCount').textContent = `${extractedData.length} rows found`;
 }
@@ -469,27 +653,16 @@ function addTableRow(fname, data, globalIdx, localIdx, dateStatus) {
 function exportCSV() {
     if(!extractedData.length) return;
     const data = extractedData.map(row => {
-        let obj = { 
-            'Source File': row.file, 
-            'Global #': row.globalIdx, 
-            'Doc #': row.localIdx,
-            'Date Source': row.dateStatus 
-        };
+        let obj = { 'Source File': row.file, 'Page': row.page, 'Global #': row.globalIdx, 'Doc #': row.localIdx, 'Date Source': row.dateStatus };
         columnNames.forEach((c, i) => obj[c] = row.data[i]);
         return obj;
     });
     const blob = new Blob([Papa.unparse(data)], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `extraction.csv`;
-    a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `extraction.csv`; a.click();
 }
 
-// Data Cleaning
 function cleanPipeNoise(text) {
-    if (!cleanPipes) return text;
-    // Remove leading/trailing pipes, spaces, and OCR noise like 'I' if it looks like a pipe
-    return text.replace(/^[\s|I]+|[\s|I]+$/g, '');
+    if (!cleanPipes) return text; return text.replace(/^[\s|I]+|[\s|I]+$/g, '');
 }
 
 function getYearFromFilename(fn) { const m = fn.match(/(20\d{2})/); return m ? m[0] : new Date().getFullYear(); }
@@ -506,47 +679,12 @@ function cleanAndFormatDate(txt, yr) {
         let mm = map[monthStr] || map[monthStr.substring(0,3)];
         if (mm) return `${day}/${mm}/${yr}`;
     }
-    return ""; // Return empty if not a valid date, allows inference logic to work
+    return "";
 }
 
-// Standard Loaders
-async function loadTemplate(e) {
-    const file = e.target.files[0]; if (!file) return;
-    log(`Loading: ${file.name}`); document.getElementById('loadingIndicator').classList.remove('hidden');
-    try {
-        const buffer = await file.arrayBuffer(); pdfDoc = await pdfjsLib.getDocument(buffer).promise;
-        await renderPage(1); document.getElementById('batchInput').disabled = false;
-        document.getElementById('loadingIndicator').classList.add('hidden'); log('Template loaded.', 'success');
-    } catch (err) { log(err.message, 'error'); document.getElementById('loadingIndicator').classList.add('hidden'); }
-}
-async function renderPage(num) {
-    const page = await pdfDoc.getPage(num); const viewport = page.getViewport({ scale: CONFIG.scale });
-    canvas.width = viewport.width; canvas.height = viewport.height;
-    overlay.width = viewport.width; overlay.height = viewport.height;
-    canvas.style.width = '100%'; canvas.style.height = 'auto';
-    overlay.style.width = '100%'; overlay.style.height = 'auto';
-    await page.render({ canvasContext: ctx, viewport }).promise; drawOverlay();
-}
-function updateColumns(autoTitles = null) {
-    const container = document.getElementById('colContainer'); container.innerHTML = '';
-    if (layout.left === null || layout.right === null) return;
-    const validDividers = layout.dividers.filter(d => d > layout.left && d < layout.right);
-    const boundaries = [layout.left, ...validDividers, layout.right];
-    const colCount = boundaries.length - 1;
-    while(columnNames.length < colCount) { columnNames.push(`Col ${columnNames.length + 1}`); columnIsDate.push(false); }
-    columnNames = columnNames.slice(0, colCount); columnIsDate = columnIsDate.slice(0, colCount);
-    if (autoTitles && autoTitles.length === colCount) { columnNames = autoTitles; columnIsDate = columnNames.map(n => /date|time/i.test(n)); }
-    columnNames.forEach((name, i) => {
-        const div = document.createElement('div'); div.className = 'column-item';
-        div.style.borderLeftColor = CONFIG.columnTints[i % CONFIG.columnTints.length].replace('0.15', '1.0');
-        div.innerHTML = `<div class="column-options"><span>#${i+1}</span><input type="text" value="${name}" oninput="columnNames[${i}]=this.value"></div>`;
-        const lbl = document.createElement('label'); lbl.className = 'date-toggle';
-        lbl.innerHTML = `<input type="checkbox" ${columnIsDate[i] ? 'checked' : ''} onchange="columnIsDate[${i}]=this.checked"> Is Date?`;
-        div.appendChild(lbl); container.appendChild(div);
-    });
-}
 async function readHeaderTitles() {
-    if (!layout.headTop || !layout.headBot || !layout.left || !layout.right) return log('Set boundaries first.', 'error');
+    const layout = layouts.primary;
+    if (!layout.headTop || !layout.headBot) return log('Set boundaries first.', 'error');
     const btn = document.getElementById('btnReadHeaders'); const old = btn.textContent; btn.textContent = "Scanning..."; btn.disabled = true;
     try {
         const w = layout.right - layout.left; const h = layout.headBot - layout.headTop;
@@ -560,9 +698,86 @@ async function readHeaderTitles() {
             const mx = (wd.bbox.x0 + wd.bbox.x1) / 2;
             for(let i=0; i<bounds.length-1; i++) if (mx >= bounds[i] && mx < bounds[i+1]) titles[i] += wd.text + ' ';
         });
-        // Added pipe cleaning to headers
         updateColumns(titles.map(t => cleanPipeNoise(t).trim().replace(/\s+/g,' ') || "Untitled"));
         log("Headers updated.", "success"); await worker.terminate();
     } catch (e) { log(e.message, 'error'); }
     btn.textContent = old; btn.disabled = false;
+}
+
+// ---------------------------
+// UTILITY 2: CULLING (ADDED)
+// ---------------------------
+async function loadCullFile(e) {
+    const file = e.target.files[0]; if(!file) return;
+    appMode = 'culling'; cullFileName = file.name; cullFileBytes = await file.arrayBuffer();
+    cullDoc = await pdfjsLib.getDocument(cullFileBytes.slice(0)).promise; 
+    cullCurrentPage = 1; pagesToCull.clear(); 
+    document.getElementById('cullControls').classList.remove('hidden');
+    renderCullPage(); log(`Loaded for Culling: ${file.name}`);
+}
+async function renderCullPage() {
+    if(!cullDoc) return;
+    document.getElementById('cullPageIndicator').textContent = `Pg ${cullCurrentPage} / ${cullDoc.numPages}`;
+    const page = await cullDoc.getPage(cullCurrentPage);
+    const viewport = page.getViewport({ scale: CONFIG.scale }); 
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    overlay.width = viewport.width; overlay.height = viewport.height;
+    canvas.style.width = '100%'; canvas.style.height = 'auto';
+    overlay.style.width = '100%'; overlay.style.height = 'auto';
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    drawCullOverlay();
+    const btn = document.getElementById('btnToggleCull');
+    if(pagesToCull.has(cullCurrentPage)) { btn.textContent = "Restore Page"; btn.className = "btn success"; } else { btn.textContent = "Mark for Removal"; btn.className = "btn danger-outline"; }
+}
+function drawCullOverlay() {
+    oCtx.clearRect(0, 0, overlay.width, overlay.height);
+    if(pagesToCull.has(cullCurrentPage)) {
+        oCtx.fillStyle = "rgba(239, 68, 68, 0.4)"; oCtx.fillRect(0, 0, overlay.width, overlay.height);
+        oCtx.strokeStyle = "rgba(200, 0, 0, 0.8)"; oCtx.lineWidth = 10;
+        oCtx.beginPath(); oCtx.moveTo(0, 0); oCtx.lineTo(overlay.width, overlay.height); oCtx.moveTo(overlay.width, 0); oCtx.lineTo(0, overlay.height); oCtx.stroke();
+        oCtx.fillStyle = "white"; oCtx.font = "bold 60px sans-serif"; oCtx.textAlign = "center";
+        oCtx.fillText("REMOVED", overlay.width/2, overlay.height/2); oCtx.strokeText("REMOVED", overlay.width/2, overlay.height/2); oCtx.textAlign = "left";
+    }
+}
+function changeCullPage(delta) { const newPage = cullCurrentPage + delta; if(newPage >= 1 && newPage <= cullDoc.numPages) { cullCurrentPage = newPage; renderCullPage(); } }
+function toggleCullPageStatus() { if(pagesToCull.has(cullCurrentPage)) pagesToCull.delete(cullCurrentPage); else pagesToCull.add(cullCurrentPage); renderCullPage(); }
+async function downloadCulledPdf() {
+    if(!cullFileBytes) return; const { PDFDocument } = PDFLib;
+    const srcPdf = await PDFDocument.load(cullFileBytes, { ignoreEncryption: true }); const newPdf = await PDFDocument.create();
+    const pageCount = srcPdf.getPageCount(); const keepIndices = [];
+    for(let i = 0; i < pageCount; i++) { if(!pagesToCull.has(i + 1)) keepIndices.push(i); }
+    if(keepIndices.length === 0) return alert("Cannot remove all pages!");
+    const copiedPages = await newPdf.copyPages(srcPdf, keepIndices); copiedPages.forEach(p => newPdf.addPage(p));
+    const blob = new Blob([await newPdf.save()], { type: 'application/pdf' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cullFileName.replace(".pdf", "_clean.pdf"); a.click();
+}
+
+// ---------------------------
+// UTILITY 1: BATCH REMOVAL
+// ---------------------------
+async function runPageRemovalBatch() {
+    const files = document.getElementById('preProcessInput').files;
+    const btn = document.getElementById('btnRemoveLastPage');
+    if(!files.length) return;
+    if (typeof PDFLib === 'undefined') return log("Error: PDF-Lib not loaded."); 
+    btn.disabled = true; btn.textContent = "Processing...";
+    const zip = new JSZip(); const { PDFDocument } = PDFLib;
+    for (let i = 0; i < files.length; i++) {
+        try {
+            const buffer = await files[i].arrayBuffer();
+            const srcPdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
+            const count = srcPdf.getPageCount();
+            if(count > 1) {
+                const newPdf = await PDFDocument.create();
+                const indices = Array.from({ length: count - 1 }, (_, k) => k);
+                const pages = await newPdf.copyPages(srcPdf, indices);
+                pages.forEach(p => newPdf.addPage(p));
+                zip.file(files[i].name.replace(".pdf", "_trimmed.pdf"), await newPdf.save());
+            } else { zip.file(files[i].name, buffer); }
+        } catch(e) { console.error(e); }
+    }
+    zip.generateAsync({type:"blob"}).then(c => {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(c); a.download="trimmed.zip"; a.click();
+        btn.disabled = false; btn.textContent = "Process & Download ZIP";
+    });
 }

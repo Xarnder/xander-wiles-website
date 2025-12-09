@@ -12,6 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
 <body>
 
@@ -26,12 +27,30 @@
             <button id="btnShowGuide" class="btn small-btn">? Help</button>
         </div>
 
-        <!-- 1. Layout -->
+        <!-- 1. Template -->
         <div class="extractor-card">
-            <h3>1. Table Boundaries</h3>
-            <p class="instruction">Upload PDF & set boundaries.</p>
+            <h3>1. Template & Layout</h3>
+            <p class="instruction">Upload PDF. Switch pages to configure layouts.</p>
             <input type="file" id="templateInput" accept="application/pdf">
             
+            <div class="flex-row" style="margin-bottom:10px;">
+                <button id="btnPrevPage" class="btn small-btn" disabled>◀ Prev Page</button>
+                <span id="pageIndicator" style="font-size:0.8rem; color:#fff;">Page 1</span>
+                <button id="btnNextPage" class="btn small-btn" disabled>Next Page ▶</button>
+            </div>
+
+            <div class="setting-row" style="margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+                <label class="date-toggle" style="color:#fff; font-weight:bold;">
+                    <input type="checkbox" id="chkMultiPage"> 
+                    Enable Different Layout for Page 2+
+                </label>
+            </div>
+
+            <div id="layoutSwitcher" class="toggle-container hidden">
+                <button id="btnEditPage1" class="btn-toggle active">Editing: Page 1</button>
+                <button id="btnEditPage2" class="btn-toggle">Editing: Page 2+</button>
+            </div>
+
             <div class="tool-group">
                 <button id="btnHeadTop" class="btn">1. Header Top</button>
                 <button id="btnHeadBot" class="btn">2. Header Bottom (Data Start)</button>
@@ -43,12 +62,15 @@
                 <button id="btnTableLeft" class="btn">4. Far Left Edge</button>
                 <button id="btnTableRight" class="btn">5. Far Right Edge</button>
                 <button id="btnColDiv" class="btn accent">6. Add Column Divider</button>
+                <button id="btnDelDiv" class="btn danger-outline">7. Delete Divider (Click Line)</button>
+                <div id="dividerList" class="divider-list-container"></div>
             </div>
         </div>
 
         <!-- 2. Row Strategy -->
         <div class="extractor-card">
             <h3>2. Row Strategy</h3>
+            <!-- These are the buttons you said weren't working -->
             <div class="toggle-container">
                 <button id="btnModeAuto" class="btn-toggle active">Auto (OCR)</button>
                 <button id="btnModeFixed" class="btn-toggle">Fixed Grid</button>
@@ -59,7 +81,7 @@
             </div>
 
             <div id="panelFixed" class="mode-panel hidden">
-                <p class="instruction">Best for fixed-height rows.</p>
+                <p class="instruction">Define grid for current active layout.</p>
                 <div class="radio-group">
                     <label><input type="radio" name="fixedMode" value="height" checked> By Height</label>
                     <label><input type="radio" name="fixedMode" value="count"> By Count</label>
@@ -73,7 +95,7 @@
                 </div>
             </div>
 
-            <button id="btnClear" class="btn danger-outline">Reset Layout</button>
+            <button id="btnClear" class="btn danger-outline">Reset Current Layout</button>
         </div>
 
         <!-- 3. Columns -->
@@ -86,19 +108,22 @@
             <div id="colContainer" class="column-list"></div>
         </div>
 
-        <!-- 4. Process -->
+        <!-- 4. Batch Extraction -->
         <div class="extractor-card">
-            <h3>4. Batch Process</h3>
+            <h3>4. Batch Extraction</h3>
             
-            <!-- Cleaning Toggles -->
             <div class="setting-row">
                 <label class="date-toggle" style="color:#fff; margin-bottom:5px; display:block;">
                     <input type="checkbox" id="chkCleanPipes" checked> 
                     Remove "|" Noise
                 </label>
-                <label class="date-toggle" style="color:#fff; display:block;">
+                <label class="date-toggle" style="color:#fff; margin-bottom:5px; display:block;">
                     <input type="checkbox" id="chkInferDates" checked> 
                     Infer Missing Dates
+                </label>
+                <label class="date-toggle" style="color:#fff; display:block;">
+                    <input type="checkbox" id="chkIgnoreLastPage"> 
+                    Ignore Last Page (Info/Summary)
                 </label>
             </div>
 
@@ -107,6 +132,34 @@
             <div class="flex-row" style="gap:5px; margin-top:8px;">
                 <button id="btnExport" class="btn success hidden">CSV</button>
                 <button id="btnExportZip" class="btn primary-outline hidden">Debug ZIP</button>
+            </div>
+        </div>
+
+        <!-- NEW TOOL: PDF Pre-Processor -->
+        <div class="extractor-card" style="border: 1px solid #f59e0b;">
+            <h3 style="color:#f59e0b;">Utility: Remove Last Page</h3>
+            <p class="instruction">Upload PDFs. This tool creates NEW files with the last page removed.</p>
+            
+            <input type="file" id="preProcessInput" accept="application/pdf" multiple>
+            <button id="btnRemoveLastPage" class="btn" style="background:#f59e0b; color:#000; font-weight:bold;" disabled>Process & Download ZIP</button>
+            <div id="preProcessLog" style="font-size:0.75rem; color:#ccc; margin-top:5px; white-space: pre-line;"></div>
+        </div>
+
+        <!-- Manual Culling -->
+        <div class="extractor-card" style="border: 1px solid #ef4444;">
+            <h3 style="color:#ef4444;">Util: Manual Page Culling</h3>
+            <p class="instruction">Upload 1 PDF. Flip pages. Mark to remove.</p>
+            <input type="file" id="cullInput" accept="application/pdf">
+            
+            <div id="cullControls" class="hidden">
+                <div class="flex-row">
+                    <button id="btnCullPrev" class="btn small-btn">◀</button>
+                    <span id="cullPageIndicator" style="font-size:0.8rem;">Pg 1</span>
+                    <button id="btnCullNext" class="btn small-btn">▶</button>
+                </div>
+                
+                <button id="btnToggleCull" class="btn danger-outline">Mark for Removal</button>
+                <button id="btnDownloadCull" class="btn primary">Download Clean PDF</button>
             </div>
         </div>
 
@@ -120,9 +173,10 @@
         <div id="guideModal" class="guide-modal hidden">
             <div class="guide-content">
                 <h3>Layout Guide</h3>
-                <p>1. Set Header Top/Bottom & Table Bottom.</p>
-                <p>2. Set Left/Right Edges.</p>
-                <p>3. If using "Fixed Grid", set the bottom of the first row.</p>
+                <p>1. Set Page 1 Layout.</p>
+                <p>2. Enable "Page 2+" if needed.</p>
+                <p>3. Switch to Page 2 using Prev/Next buttons.</p>
+                <p>4. Use "Delete Divider" to remove mistakes.</p>
                 <button id="btnCloseGuide" class="btn primary">Got it</button>
             </div>
         </div>
