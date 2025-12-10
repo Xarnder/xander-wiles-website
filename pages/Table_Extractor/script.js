@@ -51,14 +51,12 @@ let canvas, ctx, overlay, oCtx, rowCountInput;
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Initialize DOM Refs
     canvas = document.getElementById('pdfCanvas');
     ctx = canvas.getContext('2d');
     overlay = document.getElementById('overlayCanvas');
     oCtx = overlay.getContext('2d');
     rowCountInput = document.getElementById('rowCountInput');
 
-    // 2. Initialize PDF Lib
     if(typeof pdfjsLib !== 'undefined') {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     } else {
@@ -79,7 +77,7 @@ function log(msg, type = 'info') {
         const d = new Date();
         const time = d.toLocaleTimeString('en-GB', { hour12: false });
         const div = document.createElement('div');
-        div.style.color = type === 'error' ? '#ff7b72' : '#e2e8f0';
+        div.style.color = type === 'error' ? '#ff7b72' : (type === 'success' ? '#86efac' : '#e2e8f0');
         div.textContent = `[${time}] ${msg}`;
         consoleDiv.appendChild(div);
         consoleDiv.scrollTop = consoleDiv.scrollHeight;
@@ -110,7 +108,7 @@ function initEventListeners() {
     safeAddListener('btnEditPage1', 'click', () => { switchLayoutView('primary'); if(currentTemplatePage!==1) changeTemplatePage(1-currentTemplatePage); });
     safeAddListener('btnEditPage2', 'click', () => { switchLayoutView('secondary'); if(pdfDoc && pdfDoc.numPages > 1 && currentTemplatePage!==2) changeTemplatePage(2-currentTemplatePage); });
 
-    // Row Strategy (Fixed this part)
+    // Row Strategy 
     safeAddListener('btnModeAuto', 'click', () => setRowStrategy('auto'));
     safeAddListener('btnModeFixed', 'click', () => setRowStrategy('fixed'));
     document.querySelectorAll('input[name="fixedMode"]').forEach(radio => {
@@ -340,7 +338,8 @@ function drawOverlay() {
         if(rowStrategy === 'fixed') lines = calculateFixedGrid(layout);
         else if(detectedRowLines.length) lines = detectedRowLines;
         
-        paintVisuals(oCtx, overlay.width, overlay.height, lines, layout);
+        // Pass 0 as offset for live preview
+        paintVisuals(oCtx, overlay.width, overlay.height, lines, layout, 0); 
     } catch(e) {
         console.warn("Draw error:", e);
     }
@@ -360,7 +359,10 @@ function calculateFixedGrid(layout) {
     return lines;
 }
 
-function paintVisuals(ctx, w, h, rowLines, layout) {
+// FIX: Numbering logic in Debug Overlay
+function paintVisuals(ctx, w, h, rowLines, layout, rowOffset = 0) {
+    const safeOffset = Number(rowOffset) || 0;
+
     if (rowLines.length) {
         ctx.beginPath(); ctx.strokeStyle = CONFIG.colors.detectedRows; ctx.lineWidth = 2;
         rowLines.forEach((y, i) => {
@@ -369,7 +371,10 @@ function paintVisuals(ctx, w, h, rowLines, layout) {
             const ly = y - (i===0 ? (y-layout.headBot)/2 : (y-rowLines[i-1])/2);
             ctx.fillRect(layout.left-40, ly-8, 30, 16);
             ctx.fillStyle = "white"; ctx.font = "bold 12px sans-serif";
-            ctx.fillText(`#${i+1}`, layout.left-35, ly+4);
+            
+            // Displays: Cumulative Document Index (Offset + current index + 1)
+            const displayNum = safeOffset + i + 1;
+            ctx.fillText(`#${displayNum}`, layout.left-35, ly+4);
         });
         ctx.stroke();
     }
@@ -406,7 +411,6 @@ async function loadTemplate(e) {
         
         await renderTemplatePage(); 
         
-        // Fix: Enable batch input
         const batchInput = document.getElementById('batchInput');
         if(batchInput) batchInput.disabled = false;
         
@@ -468,7 +472,9 @@ async function runBatchOCR() {
 
     document.getElementById('tableBody').innerHTML = '';
     document.getElementById('resultsSection').classList.remove('hidden');
-    document.getElementById('tableHeader').innerHTML = '<th>File</th><th>Page</th><th>Global #</th><th>Doc #</th><th>Date Source</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
+    
+    // FIX: Explicitly adding "Pg Row #" to the Header
+    document.getElementById('tableHeader').innerHTML = '<th>File</th><th>Page</th><th>Global #</th><th>Doc Row #</th><th>Pg Row #</th><th>Date Source</th>' + columnNames.map(c => `<th>${c}</th>`).join('');
 
     const worker = await Tesseract.createWorker('eng');
 
@@ -497,7 +503,7 @@ async function processFullPdf(file, worker) {
     else log(`  Processing all ${doc.numPages} pages.`);
 
     let lastValidDate = null;
-    let localRowsTotal = 0;
+    let localRowsTotal = 0; // Counts total rows for this current PDF file
 
     for (let pageNum = 1; pageNum <= pagesToProcess; pageNum++) {
         let currentLayout = layouts.primary;
@@ -512,6 +518,9 @@ async function processFullPdf(file, worker) {
         temp.width = viewport.width; temp.height = viewport.height;
         await page.render({ canvasContext: temp.getContext('2d'), viewport }).promise;
 
+        // FIX: Capture snapshot BEFORE adding new rows for Debug Image Offset
+        const startRowOffset = Number(localRowsTotal);
+
         let pageRows = [];
         let pageRowLines = [];
 
@@ -523,12 +532,20 @@ async function processFullPdf(file, worker) {
             pageRows = res.rows; pageRowLines = res.lines; lastValidDate = res.lastDate;
         }
 
-        pageRows.forEach(row => {
+        // Add to main table
+        pageRows.forEach((row, idx) => {
             localRowsTotal++;
-            addTableRow(file.name, pageNum, row.data, extractedData.length + 1, localRowsTotal, row.dateStatus);
+            // Pass localRowsTotal (Doc #) and idx+1 (Page Row #)
+            addTableRow(file.name, pageNum, row.data, extractedData.length + 1, localRowsTotal, idx + 1, row.dateStatus);
         });
 
-        await generateDebugImage(temp, `${file.name}_p${pageNum}`, pageRowLines, currentLayout);
+        // Debug Message
+        if(pageRows.length > 0) {
+            log(`  Page ${pageNum}: Found ${pageRows.length} rows. (Doc # ${startRowOffset+1} to ${localRowsTotal})`);
+        }
+
+        // Pass the 'startRowOffset' to the debug generator
+        await generateDebugImage(temp, `${file.name}_p${pageNum}`, pageRowLines, currentLayout, startRowOffset);
     }
 }
 
@@ -563,7 +580,7 @@ async function extractFixed(worker, fullCanvas, layoutData, fileYear, lastDate) 
     const gridY = calculateFixedGrid(layoutData);
     const bounds = [0, ...layoutData.dividers.filter(d => d > layoutData.left && d < layoutData.right).map(d => d - layoutData.left), cropC.width];
     
-    let rows = []; let currentLastDate = lastDate; let rowTop = 0; 
+    let rows = []; let lineYs = []; let currentLastDate = lastDate; let rowTop = 0; 
     
     for(let i=0; i < gridY.length; i++) {
         const rowBot = gridY[i] - cropY;
@@ -586,11 +603,16 @@ async function extractFixed(worker, fullCanvas, layoutData, fileYear, lastDate) 
                 const result = inferRowDates(rowData, fileYear, currentLastDate);
                 currentLastDate = result.lastValidDate;
                 rows.push({ data: result.processedRow, dateStatus: result.dateStatus });
+                
+                // FIX: Only add the line to `lineYs` if we actually pushed data
+                // This keeps visuals in sync with extracted data
+                lineYs.push(gridY[i]); 
             }
         }
         rowTop = rowBot;
     }
-    return { rows, lines: gridY, lastDate: currentLastDate };
+    // Return lineYs (only lines with data) instead of gridY (all lines)
+    return { rows, lines: lineYs, lastDate: currentLastDate };
 }
 
 function cropCanvas(source, layoutData) {
@@ -604,10 +626,11 @@ function cropCanvas(source, layoutData) {
     return { cropC, cropY };
 }
 
-async function generateDebugImage(canvasRef, filename, rowLines, usedLayout) {
+async function generateDebugImage(canvasRef, filename, rowLines, usedLayout, rowOffset) {
     if(!debugZip) return;
     const ctx = canvasRef.getContext('2d');
-    paintVisuals(ctx, canvasRef.width, canvasRef.height, rowLines, usedLayout);
+    // Pass the offset to the visual painter
+    paintVisuals(ctx, canvasRef.width, canvasRef.height, rowLines, usedLayout, rowOffset);
     return new Promise((resolve) => {
         canvasRef.toBlob((blob) => {
             if(blob) { debugZip.file(filename.replace(/\.pdf$/i, '') + "_debug.jpg", blob); }
@@ -641,11 +664,21 @@ function inferRowDates(rowData, fileYear, lastValidDate) {
     return { processedRow, lastValidDate, dateStatus };
 }
 
-function addTableRow(fname, pageNum, data, globalIdx, localIdx, dateStatus) {
-    extractedData.push({ file: fname, page: pageNum, data, globalIdx, localIdx, dateStatus });
+// FIX: Added columns for Doc Row # and Pg Row #
+function addTableRow(fname, pageNum, data, globalIdx, docRowIdx, pageRowIdx, dateStatus) {
+    extractedData.push({ file: fname, page: pageNum, data, globalIdx, docRowIdx, pageRowIdx, dateStatus });
     const tr = document.createElement('tr');
     let statusColor = dateStatus === "Extracted" ? "#3b82f6" : (dateStatus === "Inferred" ? "#f59e0b" : "#64748b");
-    tr.innerHTML = `<td style="color:#888;font-size:0.75em">${fname}</td><td>${pageNum}</td><td>${globalIdx}</td><td style="color:#22c55e;font-weight:bold;">${localIdx}</td><td style="color:${statusColor}; font-size:0.8em;">${dateStatus}</td>` + data.map(d => `<td>${d}</td>`).join('');
+    
+    tr.innerHTML = `
+        <td style="color:#888;font-size:0.75em">${fname}</td>
+        <td>${pageNum}</td>
+        <td style="color:#888;">${globalIdx}</td>
+        <td style="color:#22c55e;font-weight:bold;">${docRowIdx}</td>
+        <td style="color:#3b82f6;font-weight:bold;">${pageRowIdx}</td>
+        <td style="color:${statusColor}; font-size:0.8em;">${dateStatus}</td>` + 
+        data.map(d => `<td>${d}</td>`).join('');
+    
     document.getElementById('tableBody').appendChild(tr);
     document.getElementById('rowCount').textContent = `${extractedData.length} rows found`;
 }
@@ -653,7 +686,14 @@ function addTableRow(fname, pageNum, data, globalIdx, localIdx, dateStatus) {
 function exportCSV() {
     if(!extractedData.length) return;
     const data = extractedData.map(row => {
-        let obj = { 'Source File': row.file, 'Page': row.page, 'Global #': row.globalIdx, 'Doc #': row.localIdx, 'Date Source': row.dateStatus };
+        let obj = { 
+            'Source File': row.file, 
+            'Page': row.page,
+            'Global #': row.globalIdx, 
+            'Doc Row #': row.docRowIdx, 
+            'Pg Row #': row.pageRowIdx, 
+            'Date Source': row.dateStatus 
+        };
         columnNames.forEach((c, i) => obj[c] = row.data[i]);
         return obj;
     });
@@ -705,7 +745,7 @@ async function readHeaderTitles() {
 }
 
 // ---------------------------
-// UTILITY 2: CULLING (ADDED)
+// UTILITY 2: CULLING
 // ---------------------------
 async function loadCullFile(e) {
     const file = e.target.files[0]; if(!file) return;

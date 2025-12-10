@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Advanced PDF Table Extractor</title>
+    
+    <!-- Global Site Styles -->
     <link rel="stylesheet" href="/assets/css/style.css">
+    <!-- Local App Styles -->
     <link rel="stylesheet" href="style.css">
     
     <!-- Libraries -->
@@ -34,9 +37,9 @@
             <input type="file" id="templateInput" accept="application/pdf">
             
             <div class="flex-row" style="margin-bottom:10px;">
-                <button id="btnPrevPage" class="btn small-btn" disabled>◀ Prev Page</button>
+                <button id="btnPrevPage" class="btn small-btn" disabled>◀ Prev</button>
                 <span id="pageIndicator" style="font-size:0.8rem; color:#fff;">Page 1</span>
-                <button id="btnNextPage" class="btn small-btn" disabled>Next Page ▶</button>
+                <button id="btnNextPage" class="btn small-btn" disabled>Next ▶</button>
             </div>
 
             <div class="setting-row" style="margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
@@ -70,7 +73,6 @@
         <!-- 2. Row Strategy -->
         <div class="extractor-card">
             <h3>2. Row Strategy</h3>
-            <!-- These are the buttons you said weren't working -->
             <div class="toggle-container">
                 <button id="btnModeAuto" class="btn-toggle active">Auto (OCR)</button>
                 <button id="btnModeFixed" class="btn-toggle">Fixed Grid</button>
@@ -135,20 +137,18 @@
             </div>
         </div>
 
-        <!-- NEW TOOL: PDF Pre-Processor -->
+        <!-- Utility: Remove Last Page -->
         <div class="extractor-card" style="border: 1px solid #f59e0b;">
             <h3 style="color:#f59e0b;">Utility: Remove Last Page</h3>
-            <p class="instruction">Upload PDFs. This tool creates NEW files with the last page removed.</p>
-            
+            <p class="instruction">Creates NEW files with the last page removed.</p>
             <input type="file" id="preProcessInput" accept="application/pdf" multiple>
             <button id="btnRemoveLastPage" class="btn" style="background:#f59e0b; color:#000; font-weight:bold;" disabled>Process & Download ZIP</button>
-            <div id="preProcessLog" style="font-size:0.75rem; color:#ccc; margin-top:5px; white-space: pre-line;"></div>
         </div>
 
-        <!-- Manual Culling -->
+        <!-- Utility: Manual Culling -->
         <div class="extractor-card" style="border: 1px solid #ef4444;">
             <h3 style="color:#ef4444;">Util: Manual Page Culling</h3>
-            <p class="instruction">Upload 1 PDF. Flip pages. Mark to remove.</p>
+            <p class="instruction">Upload 1 PDF. Mark pages to remove.</p>
             <input type="file" id="cullInput" accept="application/pdf">
             
             <div id="cullControls" class="hidden">
@@ -157,7 +157,6 @@
                     <span id="cullPageIndicator" style="font-size:0.8rem;">Pg 1</span>
                     <button id="btnCullNext" class="btn small-btn">▶</button>
                 </div>
-                
                 <button id="btnToggleCull" class="btn danger-outline">Mark for Removal</button>
                 <button id="btnDownloadCull" class="btn primary">Download Clean PDF</button>
             </div>
@@ -194,6 +193,7 @@
             </div>
             <div class="table-responsive">
                 <table id="resultTable">
+                    <!-- Header is dynamically filled by JS -->
                     <thead><tr id="tableHeader"></tr></thead>
                     <tbody id="tableBody"></tbody>
                 </table>
