@@ -13,13 +13,6 @@ let items = [
     { title: "Detach from Outcome", desc: "Focus on mastering what you can control.", color: config.defaultColors[0] },
     { title: "Clarity of Purpose", desc: "Know exactly why you're doing what you do.", color: config.defaultColors[1] },
     { title: "Find the Smarter People", desc: "Build success through hiring people who know more.", color: config.defaultColors[2] },
-    { title: "Consistency Over Goals", desc: "Small, steady actions create more lasting success.", color: config.defaultColors[3] },
-    { title: "Embrace Discomfort", desc: "Growth begins the moment you step beyond comfort.", color: config.defaultColors[4] },
-    { title: "Think Long-Term", desc: "Keep vision big but focus on the next step.", color: config.defaultColors[5] },
-    { title: "Always Open to Learn", desc: "Stay curious and humble to maintain your edge.", color: config.defaultColors[6] },
-    { title: "Invest in People", desc: "Genuine relationships multiply your impact.", color: config.defaultColors[7] },
-    { title: "Allow for Rest", desc: "True productivity comes from balanced recovery.", color: config.defaultColors[8] },
-    { title: "Reflect and Iterate", desc: "Regular reflection turns experience into wisdom.", color: config.defaultColors[9] }
 ];
 
 let renderTimeout; 
@@ -35,6 +28,10 @@ const renderedImg = document.getElementById('rendered-img');
 const saveProjectBtn = document.getElementById('saveProjectBtn');
 const loadProjectBtn = document.getElementById('loadProjectBtn');
 const projectFileInput = document.getElementById('projectFileInput');
+
+// New Markdown Elements
+const markdownInput = document.getElementById('markdownInput');
+const importMarkdownBtn = document.getElementById('importMarkdownBtn');
 
 const bgColorPicker = document.getElementById('bgColorPicker');
 const textColorPicker = document.getElementById('textColorPicker');
@@ -53,7 +50,7 @@ const heightSlider = document.getElementById('heightSlider');
 const gapSlider = document.getElementById('gapSlider');
 const outlineSlider = document.getElementById('outlineSlider');
 const overlapSlider = document.getElementById('overlapSlider');
-const topPaddingSlider = document.getElementById('topPaddingSlider'); // NEW
+const topPaddingSlider = document.getElementById('topPaddingSlider');
 const topSpacingSlider = document.getElementById('topSpacingSlider');
 const bottomSpacingSlider = document.getElementById('bottomSpacingSlider');
 const numXSlider = document.getElementById('numXSlider');
@@ -107,7 +104,7 @@ function updateVisuals() {
     poster.style.setProperty('--outline-width', `${outlineSlider.value}px`);
     poster.style.setProperty('--block-overlap', `${overlapSlider.value}px`);
     
-    poster.style.setProperty('--page-padding-top', `${topPaddingSlider.value}px`); // NEW
+    poster.style.setProperty('--page-padding-top', `${topPaddingSlider.value}px`);
     poster.style.setProperty('--title-spacing', `${topSpacingSlider.value}px`);
     poster.style.setProperty('--page-padding-bottom', `${bottomSpacingSlider.value}px`);
     
@@ -221,6 +218,53 @@ function hideRenderOverlay() {
     renderedOverlay.style.display = 'none';
 }
 
+/* --- MARKDOWN PARSER --- */
+function parseMarkdownInput() {
+    const text = markdownInput.value;
+    if (!text || text.trim() === '') {
+        log("Error: Import box is empty.");
+        return;
+    }
+
+    log("Parsing markdown...");
+    const lines = text.split('\n');
+    const newItems = [];
+    let matchCount = 0;
+
+    // Regex to match: "1. **Title** Description"
+    // Captures group 1 (Title) and group 2 (Description)
+    const regex = /^\d+\.\s*\*\*(.*?)\*\*\s*(.*)$/;
+
+    lines.forEach((line) => {
+        const match = line.match(regex);
+        if (match) {
+            matchCount++;
+            const title = match[1].trim();
+            const desc = match[2].trim();
+            
+            // Assign color cyclically based on index
+            const colorIndex = (matchCount - 1) % config.defaultColors.length;
+            
+            newItems.push({
+                title: title,
+                desc: desc,
+                color: config.defaultColors[colorIndex]
+            });
+        }
+    });
+
+    if (newItems.length > 0) {
+        items = newItems; // Replace existing items
+        renderPoster();
+        triggerAutoRender();
+        log(`Success: Imported ${newItems.length} items.`);
+        markdownInput.value = ''; // Clear box on success
+    } else {
+        log("Error: No matching items found. Ensure format is '1. **Title** Description'");
+    }
+}
+
+/* --- EXPORT & SAVE --- */
 function saveProject() {
     log("Saving project...");
     const settings = {};
@@ -321,30 +365,22 @@ function exportPoster(format) {
     });
 }
 
-/* --- THE SANDBOX GENERATOR (Offset Fix) --- */
+/* --- CANVAS GENERATOR --- */
 function generateCanvas(scale, callback) {
     const sandbox = document.createElement('div');
     sandbox.style.position = 'fixed';
-    
-    // Strict 0,0 positioning
     sandbox.style.top = '0'; 
     sandbox.style.left = '0';
     sandbox.style.margin = '0';
     sandbox.style.padding = '0';
-    
-    // Hide behind UI
     sandbox.style.zIndex = '-99999'; 
-    
-    // Strict dimensions matching config
     sandbox.style.width = config.posterWidth + 'px';
     sandbox.style.height = config.posterHeight + 'px';
     sandbox.style.overflow = 'hidden';
     
-    // Copy CSS vars
     sandbox.style.cssText += poster.style.cssText;
     document.body.appendChild(sandbox);
 
-    // Clone the poster
     const clone = poster.cloneNode(true);
     clone.style.transform = 'none';
     clone.style.margin = '0';
@@ -356,7 +392,6 @@ function generateCanvas(scale, callback) {
     
     sandbox.appendChild(clone);
 
-    // Reset scroll to ensure no browser scroll offset affects render
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
     window.scrollTo(0,0);
@@ -402,6 +437,9 @@ function setupEventListeners() {
     saveProjectBtn.addEventListener('click', saveProject);
     loadProjectBtn.addEventListener('click', () => projectFileInput.click());
     projectFileInput.addEventListener('change', loadProject);
+    
+    // Markdown Listener
+    importMarkdownBtn.addEventListener('click', parseMarkdownInput);
 
     const colorPickers = [bgColorPicker, textColorPicker, titleColorPicker];
     colorPickers.forEach(cp => cp.addEventListener('input', (e) => {

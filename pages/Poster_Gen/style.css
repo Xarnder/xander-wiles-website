@@ -25,7 +25,7 @@
     --block-desc-y: 0px;
     
     --title-spacing: 38px;       
-    --page-padding-top: 50px;    /* New Variable */
+    --page-padding-top: 50px;    
     --page-padding-bottom: 50px; 
     
     --title-color: #333333;
@@ -112,7 +112,7 @@ body.light-mode .icon-sun { display: inline; } body.light-mode .icon-moon { disp
 
 /* --- CONTROLS --- */
 .controls {
-    width: 340px; 
+    width: 360px; /* Slightly wider for the textarea */
     flex-shrink: 0;      
     height: 100%;        
     padding: 20px;
@@ -155,7 +155,6 @@ body.light-mode .icon-sun { display: inline; } body.light-mode .icon-moon { disp
     background-color: var(--poster-bg, #EAE8E3);
     display: flex;
     flex-direction: column;
-    /* Updated padding to use TOP and BOTTOM variables */
     padding: var(--page-padding-top) 50px var(--page-padding-bottom) 50px; 
     position: relative; 
     overflow: hidden;
@@ -200,6 +199,21 @@ select { background: var(--ui-input-bg); color: var(--ui-text-main); border: 1px
 .separator { border-top: 1px solid var(--ui-sep-color); margin: 5px 0; border-bottom: none; }
 .hint-text { font-size: 0.75rem; color: var(--ui-text-muted); font-style: italic; }
 .highlight-group { background: var(--ui-highlight-bg); padding: 10px; border-radius: 8px; border: 1px solid var(--ui-highlight-border); }
+
+/* Textarea for Import */
+textarea.import-box {
+    width: 100%;
+    height: 100px;
+    background: var(--ui-input-bg);
+    border: 1px solid var(--ui-input-border);
+    color: var(--ui-text-main);
+    padding: 8px;
+    border-radius: 6px;
+    resize: vertical;
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+textarea.import-box:focus { outline: 1px solid #3498db; }
 
 .btn { padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; }
 .btn:hover { opacity: 0.9; }
@@ -265,6 +279,9 @@ select { background: var(--ui-input-bg); color: var(--ui-text-main); border: 1px
     outline: none; border: 1px dashed transparent; line-height: 1.3;
     letter-spacing: calc(var(--block-desc-spacing) * 1px);
     transform: translateY(var(--block-desc-y));
+    /* Handling multiline overflow gently */
+    overflow: hidden;
+    text-overflow: ellipsis; 
 }
 .editable-title:hover, .editable-desc:hover { border-color: rgba(255,255,255,0.3); }
 .item-color-picker { position: absolute; opacity: 0; pointer-events: none; }

@@ -52,21 +52,27 @@
             <h2>Poster Settings</h2>
             
             <!-- PROJECT MANAGEMENT -->
-            <div class="control-group highlight-group" style="margin-bottom: 15px;">
+            <div class="control-group highlight-group" style="margin-bottom: 10px;">
                 <label>Project File</label>
                 <div style="display: flex; gap: 5px;">
-                    <button id="saveProjectBtn" class="btn primary" style="flex:1;">Save JSON</button>
-                    <button id="loadProjectBtn" class="btn secondary" style="flex:1;">Load JSON</button>
+                    <button id="saveProjectBtn" class="btn primary" style="flex:1;">Save</button>
+                    <button id="loadProjectBtn" class="btn secondary" style="flex:1;">Load</button>
                     <input type="file" id="projectFileInput" accept=".json" style="display: none;">
                 </div>
+            </div>
+
+            <!-- MARKDOWN IMPORT (NEW) -->
+            <div class="control-group highlight-group" style="margin-bottom: 15px; border-color: var(--ui-sep-color); background: var(--ui-input-bg);">
+                <label>Paste Markdown List</label>
+                <textarea id="markdownInput" class="import-box" placeholder="1. **Title** Description..."></textarea>
+                <button id="importMarkdownBtn" class="btn primary" style="margin-top:5px;">Import Content</button>
             </div>
 
             <div class="control-group" style="flex-direction: row; align-items: center; justify-content: space-between;">
                 <label for="autoRenderToggle" style="margin:0; cursor:pointer;">Auto-Render Output</label>
                 <input type="checkbox" id="autoRenderToggle" style="width: 20px; height: 20px;" checked>
             </div>
-            <p class="hint-text" style="margin-top:5px;">(Pauses live edit to show exact export)</p>
-
+            
             <hr class="separator">
 
             <!-- Colors -->
@@ -133,7 +139,6 @@
             <!-- LAYOUT SPACING -->
             <h3>Layout</h3>
 
-            <!-- NEW SLIDER HERE -->
             <div class="control-group">
                 <div class="label-row"><label>Page Top Padding</label><span id="val-topPaddingSlider" class="val-display">50</span></div>
                 <input type="range" id="topPaddingSlider" min="0" max="200" value="50">
@@ -209,7 +214,7 @@
             <div id="scaler-wrapper" class="poster-scaler">
                 <div id="poster" class="poster-canvas">
                     <div id="poster-title" class="poster-title" contenteditable="true">
-                        JOHN HOPKINS
+                        POSTER TITLE
                     </div>
                     <div id="items-container" class="items-wrapper">
                         <!-- Items injected here -->
