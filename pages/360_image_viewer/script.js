@@ -1,11 +1,69 @@
+// --- A-FRAME COMPONENT: Drag to Rotate World (Right Controller) ---
+AFRAME.registerComponent('drag-rotate-world', {
+    init: function () {
+        this.isDragging = false;
+        this.prevX = 0;
+        this.rig = document.querySelector('#rig');
+        
+        // Listen for Trigger Press
+        this.el.addEventListener('triggerdown', (e) => {
+            this.isDragging = true;
+            // Get current controller horizontal rotation
+            this.prevX = this.el.object3D.rotation.y;
+        });
+
+        // Listen for Trigger Release
+        this.el.addEventListener('triggerup', (e) => {
+            this.isDragging = false;
+        });
+        
+        // Also listen for Thumbstick for easier turning
+        this.el.addEventListener('axismove', (e) => {
+            // axis[2] is usually left/right on Quest thumbstick
+            if (e.detail.axis[2] !== 0) {
+                const rotation = this.rig.getAttribute('rotation');
+                this.rig.setAttribute('rotation', {
+                    x: 0, 
+                    y: rotation.y - (e.detail.axis[2] * 2), // Speed multiplier
+                    z: 0
+                });
+            }
+        });
+    },
+
+    tick: function () {
+        if (!this.isDragging) return;
+
+        // Calculate delta
+        const currentX = this.el.object3D.rotation.y;
+        const delta = (currentX - this.prevX) * 100; // Sensitivity
+        
+        // Apply rotation to the RIG (not the camera)
+        const currentRot = this.rig.getAttribute('rotation');
+        this.rig.setAttribute('rotation', {
+            x: 0,
+            y: currentRot.y + delta,
+            z: 0
+        });
+
+        this.prevX = currentX;
+    }
+});
+
 // --- Global State ---
-let viewer = null;
 let imageItems = []; 
 let thumbnails = []; 
 let currentIndex = 0;
 let isUiVisible = true;
 let isGeneratingThumbnails = false;
-let isGyroEnabled = false;
+let isMotionEnabled = false; 
+
+// --- A-Frame Elements ---
+const sceneEl = document.querySelector('a-scene');
+const skyEl = document.querySelector('#image-360');
+const cameraEl = document.querySelector('#camera');
+const loader2d = document.getElementById('loader-2d');
+const loaderVr = document.getElementById('loader-vr');
 
 // --- DOM Elements ---
 const dirInput = document.getElementById('dirInput');
@@ -20,8 +78,8 @@ const galleryBtn = document.getElementById('galleryBtn');
 const clearBtn = document.getElementById('clearBtn');
 const fovSlider = document.getElementById('fovSlider');
 const fovVal = document.getElementById('fovVal');
-const gyroBtn = document.getElementById('gyroBtn');
 const vrBtn = document.getElementById('vrBtn');
+const gyroBtn = document.getElementById('gyroBtn'); // The new motion button
 
 // Containers
 const mainUi = document.getElementById('mainUi');
@@ -29,12 +87,9 @@ const siteHeader = document.getElementById('site-header-container');
 const galleryModal = document.getElementById('galleryModal');
 const galleryGrid = document.getElementById('galleryGrid');
 const galleryProgress = document.getElementById('galleryProgress');
-
-// Buttons
 const toggleUiBtn = document.getElementById('toggleUiBtn');
 const closeUiBtn = document.getElementById('closeUiBtn');
 const closeGalleryBtn = document.getElementById('closeGalleryBtn');
-
 
 // --- Logger ---
 function log(message, type = 'info') {
@@ -43,54 +98,36 @@ function log(message, type = 'info') {
     entry.textContent = `[${timestamp}] ${message}`;
     if (type === 'error') entry.style.color = '#ff6b6b';
     if (type === 'success') entry.style.color = '#4ade80';
-    if (type === 'warn') entry.style.color = '#fbbf24';
     debugLog.appendChild(entry);
     debugLog.scrollTop = debugLog.scrollHeight; 
-    console.log(`[${type.toUpperCase()}] ${message}`);
 }
 
-// --- Initialization: Load from Manifest ---
+// --- Initialization ---
 window.addEventListener('DOMContentLoaded', async () => {
     log('System Initializing...');
-    
-    // The folder path
-    const demoFolder = 'assets/360-images/';
-    // The manifest file that lists the images
-    const manifestFile = 'manifest.json';
 
+    // Load Manifest
+    const demoFolder = 'assets/360-images/';
+    const manifestFile = 'manifest.json';
     try {
-        // Fetch the JSON list instead of the folder folder
         const response = await fetch(demoFolder + manifestFile);
-        
         if (response.ok) {
             const fileList = await response.json();
-            
-            // Map the JSON list to our system format
-            const demoFiles = fileList.map(filename => {
-                return {
-                    name: filename,
-                    path: demoFolder + filename, // e.g. assets/360-images/image1.jpg
-                    file: null 
-                };
-            });
-
+            const demoFiles = fileList.map(filename => ({
+                name: filename,
+                path: demoFolder + filename, 
+                file: null 
+            }));
             if (demoFiles.length > 0) {
-                log(`Loaded ${demoFiles.length} images from manifest.`, 'success');
                 loadImagesIntoSystem(demoFiles);
-            } else {
-                log('Manifest is empty.', 'warn');
             }
-        } else {
-            log(`Could not find ${demoFolder}${manifestFile} (404).`, 'error');
         }
     } catch (e) {
-        log(`Error loading manifest: ${e.message}`, 'error');
-        console.error(e);
+        log(`Manifest Error: ${e.message}`, 'error');
     }
 });
 
-
-// --- UI Toggle Logic ---
+// --- UI Logic ---
 function toggleUI() {
     isUiVisible = !isUiVisible;
     if (isUiVisible) {
@@ -99,336 +136,169 @@ function toggleUI() {
     } else {
         mainUi.classList.add('hidden');
         siteHeader.classList.add('hidden');
-        galleryModal.classList.add('hidden'); // Ensure gallery closes too
+        galleryModal.classList.add('hidden');
     }
 }
-
 toggleUiBtn.addEventListener('click', toggleUI);
 closeUiBtn.addEventListener('click', toggleUI);
-
-document.addEventListener('keydown', (e) => {
-    if (e.target.tagName !== 'INPUT') {
-        if (e.key.toLowerCase() === 'h') toggleUI();
-        if (e.key === 'ArrowRight') nextImage();
-        if (e.key === 'ArrowLeft') prevImage();
-    }
-});
 
 // --- Gallery Logic ---
 galleryBtn.addEventListener('click', () => {
     galleryModal.classList.remove('hidden');
-    // Hide Main UI on mobile when gallery opens to prevent overlap issues
-    if (window.innerWidth < 600) {
-        mainUi.classList.add('hidden');
-    }
-    updateActiveThumbnail();
+    if (window.innerWidth < 600) mainUi.classList.add('hidden');
 });
-
 closeGalleryBtn.addEventListener('click', () => {
     galleryModal.classList.add('hidden');
-    // Restore Main UI if it was hidden
     if (isUiVisible) mainUi.classList.remove('hidden');
 });
 
-// --- Motion & VR Logic ---
-
-// 1. Gyroscope (Phone Motion)
+// --- 1. Motion / Gyro Button Logic ---
 gyroBtn.addEventListener('click', async () => {
-    if (!viewer) return;
-
-    if (isGyroEnabled) {
-        // Turn off
-        viewer.stopOrientation();
-        isGyroEnabled = false;
+    if (isMotionEnabled) {
+        // Disable
+        cameraEl.setAttribute('look-controls', 'magicWindowTrackingEnabled', false);
+        isMotionEnabled = false;
         gyroBtn.classList.remove('active');
-        log('Motion control disabled.');
+        log('Motion disabled.');
     } else {
-        // Turn on (requires permission on iOS 13+)
-        try {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                log('Requesting iOS Motion Permission...');
+        // Enable
+        // iOS 13+ requires permission
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
                 const response = await DeviceOrientationEvent.requestPermission();
                 if (response === 'granted') {
-                    viewer.startOrientation();
-                    isGyroEnabled = true;
-                    gyroBtn.classList.add('active');
-                    log('Motion enabled (iOS).', 'success');
+                    activateMotion();
                 } else {
-                    log('Motion permission denied.', 'error');
+                    alert('Permission denied. Motion control requires sensor access.');
                 }
-            } else {
-                // Non-iOS / Android
-                viewer.startOrientation();
-                isGyroEnabled = true;
-                gyroBtn.classList.add('active');
-                log('Motion enabled.', 'success');
-            }
-        } catch (err) {
-            log(`Motion Error: ${err.message}`, 'error');
+            } catch (err) { console.error(err); }
+        } else {
+            // Android / Non-iOS
+            activateMotion();
         }
     }
 });
 
-// 2. VR / Fullscreen Toggle (Meta Quest)
-vrBtn.addEventListener('click', () => {
-    if (!viewer) return;
-    
-    // Toggle Fullscreen
-    if (!document.fullscreenElement) {
-        const elem = document.getElementById('panorama');
-        if (elem.requestFullscreen) {
-            elem.requestFullscreen().catch(err => {
-                log(`Error enabling fullscreen: ${err.message}`, 'error');
-            });
-        }
-        
-        // On Quest/Mobile, entering VR usually implies tracking
-        // Attempt to start orientation if not already on
-        if (!isGyroEnabled) {
-            viewer.startOrientation();
-            isGyroEnabled = true;
-        }
-        log('Entering Immersive Mode.', 'success');
-    } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        }
-        // Optional: Stop orientation on exit? 
-        // viewer.stopOrientation(); 
-        log('Exiting Immersive Mode.');
+function activateMotion() {
+    cameraEl.setAttribute('look-controls', 'magicWindowTrackingEnabled', true);
+    isMotionEnabled = true;
+    gyroBtn.classList.add('active');
+    log('Motion enabled.');
+}
+
+
+// --- 2. VR Button Logic (Quest Safe) ---
+vrBtn.addEventListener('click', async () => {
+    if (sceneEl.is('vr-mode')) {
+        sceneEl.exitVR();
+        return;
+    }
+    if (location.protocol !== 'https:') {
+        alert('VR ERROR: You must use HTTPS (ngrok) for VR mode.');
+        return;
+    }
+    try {
+        sceneEl.enterVR();
+    } catch (err) {
+        alert('VR Error: ' + err.message);
     }
 });
 
-
-// --- File Input Handler ---
+// --- File Input ---
 dirInput.addEventListener('change', (e) => {
-    const files = Array.from(e.target.files);
-    
-    const validFiles = files
-        .filter(f => {
-            const name = f.name.toLowerCase();
-            return name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png');
-        })
-        .map(f => ({
-            name: f.name,
-            file: f,
-            path: null
-        }));
-
-    // Natural Sort
-    validFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-
-    if (validFiles.length > 0) {
-        loadImagesIntoSystem(validFiles);
-    } else {
-        log('No valid images found.', 'warn');
-    }
+    const files = Array.from(e.target.files).filter(f => f.name.match(/\.(jpg|jpeg|png)$/i));
+    files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    if (files.length > 0) loadImagesIntoSystem(files.map(f => ({ name: f.name, file: f, path: null })));
 });
 
-// --- Core Image System ---
+// --- System Core ---
 function loadImagesIntoSystem(items) {
-    clearCache(); 
     imageItems = items;
     fileCountLabel.textContent = `${imageItems.length} loaded`;
     currentIndex = 0;
     
-    enableControls();
+    prevBtn.disabled = false;
+    nextBtn.disabled = false;
+    galleryBtn.disabled = false;
+    clearBtn.disabled = false;
+    
     loadPanorama(currentIndex);
     startThumbnailGeneration();
 }
 
-// --- Thumbnail Generator ---
+// --- Panorama Loader ---
+function loadPanorama(index) {
+    if (!imageItems[index]) return;
+    const item = imageItems[index];
+    currentNameLabel.textContent = `${index + 1}/${imageItems.length}: ${item.name}`;
+    
+    // 1. Show Loaders
+    loader2d.classList.remove('hidden');
+    loaderVr.setAttribute('visible', true);
+    
+    const imageSource = item.file ? URL.createObjectURL(item.file) : item.path;
+
+    // Reset Sky to trigger load event cleanly
+    skyEl.setAttribute('src', '');
+    setTimeout(() => {
+        skyEl.setAttribute('src', imageSource);
+    }, 50);
+
+    updateActiveThumbnail();
+}
+
+// --- Loading Event Listener (The key for the loading bar) ---
+skyEl.addEventListener('materialtextureloaded', () => {
+    // Hide Loaders when texture is ready
+    loader2d.classList.add('hidden');
+    loaderVr.setAttribute('visible', false);
+    log('Image loaded.');
+});
+
+
+// --- Slider & Nav ---
+fovSlider.addEventListener('input', (e) => {
+    fovVal.textContent = e.target.value;
+    cameraEl.setAttribute('camera', 'fov', e.target.value);
+});
+
+nextBtn.addEventListener('click', () => { if(currentIndex < imageItems.length - 1) loadPanorama(++currentIndex); });
+prevBtn.addEventListener('click', () => { if(currentIndex > 0) loadPanorama(--currentIndex); });
+clearBtn.addEventListener('click', () => { if(confirm('Clear?')) location.reload(); });
+
+// --- Thumbnails (Simplified for space) ---
 async function startThumbnailGeneration() {
     if (isGeneratingThumbnails) return;
     isGeneratingThumbnails = true;
     galleryGrid.innerHTML = ''; 
-    thumbnails = new Array(imageItems.length).fill(null);
-
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 200; 
-    canvas.height = 100; 
+    canvas.width = 200; canvas.height = 100;
 
     for (let i = 0; i < imageItems.length; i++) {
-        if (imageItems.length === 0) break;
-        try {
-            const thumbData = await generateSingleThumbnail(imageItems[i], canvas, ctx);
-            thumbnails[i] = thumbData;
-            addThumbnailToGrid(i, thumbData, imageItems[i].name);
-            galleryProgress.textContent = `(${i+1}/${imageItems.length})`;
-            await new Promise(r => setTimeout(r, 5)); // breathing room for UI
-        } catch (err) {
-            console.error(err);
-        }
-    }
-    galleryProgress.textContent = "";
-    isGeneratingThumbnails = false;
-}
-
-function generateSingleThumbnail(item, canvas, ctx) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous";
-        let url = item.file ? URL.createObjectURL(item.file) : item.path;
+        const item = imageItems[i];
+        const div = document.createElement('div');
+        div.className = 'thumb-card';
+        div.id = `thumb-${i}`;
+        div.onclick = () => loadPanorama(i);
         
-        img.onload = () => {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            if (item.file) URL.revokeObjectURL(url);
-            resolve(canvas.toDataURL('image/jpeg', 0.5));
-        };
-        img.onerror = () => resolve(null);
-        img.src = url;
-    });
-}
-
-function addThumbnailToGrid(index, src, name) {
-    const div = document.createElement('div');
-    div.className = 'thumb-card';
-    div.id = `thumb-${index}`;
-    div.onclick = () => {
-        currentIndex = index;
-        loadPanorama(currentIndex);
-        // On mobile, close gallery after selection
-        if(window.innerWidth < 600) {
-            galleryModal.classList.add('hidden');
-            mainUi.classList.remove('hidden');
-        }
-    };
-
-    const img = document.createElement('img');
-    img.src = src || ''; 
-    
-    const label = document.createElement('div');
-    label.className = 'thumb-label';
-    label.textContent = name;
-
-    div.appendChild(img);
-    div.appendChild(label);
-    galleryGrid.appendChild(div);
+        const img = new Image();
+        img.src = item.file ? URL.createObjectURL(item.file) : item.path;
+        div.appendChild(img); // Simple append for speed
+        
+        const label = document.createElement('div');
+        label.className = 'thumb-label';
+        label.textContent = item.name;
+        div.appendChild(label);
+        
+        galleryGrid.appendChild(div);
+        await new Promise(r => setTimeout(r, 10)); 
+    }
+    isGeneratingThumbnails = false;
 }
 
 function updateActiveThumbnail() {
     document.querySelectorAll('.thumb-card').forEach(el => el.classList.remove('active'));
     const current = document.getElementById(`thumb-${currentIndex}`);
-    if (current) {
-        current.classList.add('active');
-        current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    if (current) current.classList.add('active');
 }
-
-// --- Panorama Viewer ---
-function loadPanorama(index) {
-    if (!imageItems[index]) return;
-    const item = imageItems[index];
-
-    currentNameLabel.textContent = `${index + 1}/${imageItems.length}: ${item.name}`;
-    let imageSource = item.file ? URL.createObjectURL(item.file) : item.path;
-
-    // Preserve FOV across images
-    const currentHFOV = viewer ? viewer.getHfov() : parseInt(fovSlider.value);
-    
-    // Check if motion was active
-    const wasMotionActive = isGyroEnabled;
-
-    if (viewer) {
-        viewer.destroy();
-    }
-
-    try {
-        viewer = pannellum.viewer('panorama', {
-            "type": "equirectangular",
-            "panorama": imageSource,
-            "autoLoad": true,
-            "hfov": currentHFOV,
-            "minHfov": 40,  
-            "maxHfov": 150,
-            "compass": false,
-            "showZoomCtrl": false,
-            "showFullscreenCtrl": false,
-            // Optimization for mobile
-            "preview": null 
-        });
-
-        viewer.on('load', () => {
-            syncSlider();
-            updateActiveThumbnail();
-            // Re-enable motion if it was on
-            if(wasMotionActive) {
-                viewer.startOrientation();
-                log('Restored motion control.');
-            }
-        });
-        
-        viewer.on('zoomchange', syncSlider);
-        viewer.on('error', (err) => log(`Load Error: ${err}`, 'error'));
-
-    } catch (error) {
-        log(`Viewer Crash: ${error.message}`, 'error');
-    }
-}
-
-// --- Reset ---
-clearBtn.addEventListener('click', () => {
-    if(confirm('Clear all images?')) clearCache();
-});
-
-function clearCache() {
-    if (viewer) viewer.destroy();
-    viewer = null;
-    imageItems = [];
-    thumbnails = [];
-    currentIndex = 0;
-    dirInput.value = '';
-    fileCountLabel.textContent = 'No files loaded';
-    currentNameLabel.textContent = '...';
-    galleryGrid.innerHTML = '';
-    disableControls();
-    isGyroEnabled = false;
-    gyroBtn.classList.remove('active');
-}
-
-// --- Nav Helper ---
-function nextImage() {
-    if (currentIndex < imageItems.length - 1) {
-        currentIndex++;
-        loadPanorama(currentIndex);
-    }
-}
-
-function prevImage() {
-    if (currentIndex > 0) {
-        currentIndex--;
-        loadPanorama(currentIndex);
-    }
-}
-
-function enableControls() {
-    prevBtn.disabled = false;
-    nextBtn.disabled = false;
-    galleryBtn.disabled = false;
-    clearBtn.disabled = false;
-}
-
-function disableControls() {
-    prevBtn.disabled = true;
-    nextBtn.disabled = true;
-    galleryBtn.disabled = true;
-    clearBtn.disabled = true;
-}
-
-fovSlider.addEventListener('input', (e) => {
-    if (viewer) viewer.setHfov(parseInt(e.target.value));
-    fovVal.textContent = e.target.value;
-});
-
-function syncSlider() {
-    if(viewer) {
-        const val = Math.round(viewer.getHfov());
-        fovSlider.value = val;
-        fovVal.textContent = val;
-    }
-}
-
-// Events
-nextBtn.addEventListener('click', nextImage);
-prevBtn.addEventListener('click', prevImage);
