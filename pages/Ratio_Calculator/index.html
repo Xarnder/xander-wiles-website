@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Ratio Calculator</title>
+    
+    <!-- Global Site Header -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    
+    <!-- Tool Specific CSS -->
+    <link rel="stylesheet" href="styles.css">
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+</head>
+<body>
+
+    <div id="main-nav-placeholder"></div>
+
+    <main class="container">
+        
+        <!-- Controls Card -->
+        <section class="card glass-panel controls">
+            <div class="header-row">
+                <h1>Ratio Calculator</h1>
+                <!-- Magnifier Controls -->
+                <div class="mag-controls">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="magToggle" checked>
+                        <span class="slider-toggle"></span>
+                        <span class="label-text">Magnifier</span>
+                    </label>
+                    <div class="range-wrapper">
+                        <span class="small-label">Zoom:</span>
+                        <input type="range" id="magZoom" min="2" max="10" step="0.5" value="4">
+                        <span id="magValue" class="small-label">4x</span>
+                    </div>
+                </div>
+            </div>
+
+            <p class="instruction">1. Upload Image &nbsp;|&nbsp; 2. Draw Reference (Blue) &nbsp;|&nbsp; 3. Draw Target (Red)</p>
+            
+            <div class="button-group">
+                <label for="imageLoader" class="btn primary-btn">
+                    Upload Image
+                    <input type="file" id="imageLoader" accept="image/*">
+                </label>
+                <button id="swapBtn" class="btn secondary-btn" disabled>Swap Reference</button>
+                <button id="resetBtn" class="btn danger-btn">Reset Lines</button>
+            </div>
+
+            <div class="results">
+                <div class="result-item">
+                    <span class="label">Reference (1):</span>
+                    <span id="refLineName" class="value blue-text">Blue Line</span>
+                </div>
+                <div class="result-item">
+                    <span class="label">Target Ratio:</span>
+                    <span id="ratioDisplay" class="value red-text">--</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Canvas Card -->
+        <section class="card glass-panel canvas-container">
+            <canvas id="imageCanvas"></canvas>
+            
+            <!-- Magnifier Element (Hidden by default) -->
+            <div id="magnifier" class="glass-panel">
+                <canvas id="magCanvas"></canvas>
+                <div class="crosshair"></div>
+            </div>
+
+            <div id="empty-state">No Image Loaded</div>
+        </section>
+
+        <!-- Debug Console -->
+        <section class="card glass-panel debug-panel">
+            <h3>Debug Log</h3>
+            <div id="debug-log">Waiting for user input...</div>
+        </section>
+
+    </main>
+
+    <script src="/assets/js/nav-loader.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
