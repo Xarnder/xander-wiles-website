@@ -4,14 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Quest 3 AR Studio</title>
-    <link rel="stylesheet" href="style.css">
-    
-    <!-- Icons -->
-    <link rel="icon" href="favicon.ico" sizes="any">
-    <link rel="manifest" href="site.webmanifest">
-    <meta name="theme-color" content="#111115">
-
-    <!-- Three.js Import Map -->
+    <style>
+        body { margin: 0; background: #111; color: white; font-family: sans-serif; }
+        #ar-button-container {
+            position: absolute; bottom: 20px; left: 0; width: 100%;
+            display: flex; justify-content: center; pointer-events: none;
+        }
+        button#ARButton {
+            pointer-events: auto;
+            padding: 12px 24px; border: 1px solid white; background: #4a90e2;
+            border-radius: 20px; font-weight: bold; cursor: pointer; z-index: 999;
+        }
+    </style>
     <script type="importmap">
         {
             "imports": {
@@ -22,71 +26,7 @@
     </script>
 </head>
 <body>
-
-    <!-- DOM Overlay Container (Visible in AR) -->
-    <div id="overlay">
-        
-        <!-- Header & Controls Info -->
-        <header>
-            <div class="header-content">
-                <div>
-                    <h1>AR Studio</h1>
-                    <p>Meta Quest 3</p>
-                </div>
-                <button id="toggle-help" class="icon-btn">?</button>
-            </div>
-            
-            <!-- Instructions Panel -->
-            <div id="instructions" class="glass-panel">
-                <h3>Controls</h3>
-                <ul>
-                    <li><strong>Spawn:</strong> Point at floor ring + Trigger</li>
-                    <li><strong>Move (Slide):</strong> Hold 'A' or 'X' Button + Look at floor</li>
-                    <li><strong>Left Stick (Up/Down):</strong> Lift Up / Down</li>
-                    <li><strong>Right Stick (Up/Down):</strong> Scale Size</li>
-                    <li><strong>Right Stick (L/R):</strong> Rotate</li>
-                </ul>
-            </div>
-        </header>
-
-        <!-- Loading Indicator -->
-        <div id="loader" class="hidden">
-            <div class="spinner"></div>
-            <p id="loading-text">Loading 0%</p>
-        </div>
-
-        <!-- Bottom UI Wrapper -->
-        <div class="bottom-ui">
-            <!-- Model Selection -->
-            <div id="model-panel" class="glass-panel">
-                <h3>Select Asset</h3>
-                <div id="asset-list"></div>
-            </div>
-
-            <!-- Debug Console -->
-            <div id="debug-wrapper">
-                <div id="debug-header">
-                    <span>System Logs</span>
-                    <button id="close-debug" class="tiny-btn">✕</button>
-                </div>
-                <div id="debug-panel" class="glass-panel">
-                    <div id="console-output">Ready...</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Scripts -->
+    <div id="ar-button-container"></div>
     <script type="module" src="script.js"></script>
-    <script>
-        // UI Interaction Logic
-        document.getElementById('close-debug').addEventListener('click', () => {
-            document.getElementById('debug-wrapper').style.display = 'none';
-        });
-        document.getElementById('toggle-help').addEventListener('click', () => {
-            const inst = document.getElementById('instructions');
-            inst.style.display = inst.style.display === 'none' ? 'block' : 'none';
-        });
-    </script>
 </body>
 </html>

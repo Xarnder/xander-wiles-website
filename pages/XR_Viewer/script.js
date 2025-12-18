@@ -11,71 +11,61 @@ import { modelList } from './config.js';
 // --- GLOBALS ---
 let camera, scene, renderer;
 let controller1, controller2;
-let controllerGrip1, controllerGrip2;
-
 let reticle;
 let currentModel = null;
 let modelName = null;
 
-let hitTestSource = null;
-let hitTestSourceRequested = false;
-let directionalLight;
+// UI Groups
+let hudGroup;       
+let menuGroup;      
+let scoreMesh;      
 
 // State
-let isDragging = false; // Now controlled by 'A' button
+let uiButtons = []; 
+let isMenuOpen = false; 
+let isDragging = false; 
+let selectedIndex = 0;
+let scoreValue = 0;
 
-// UI Elements
-const debugOutput = document.getElementById('console-output');
-const loaderUI = document.getElementById('loader');
-const loadingText = document.getElementById('loading-text');
+// Timing Variables
+let lastScrollTime = 0; // Tracks joystick scrolling
+let lastButtonState = {}; // Tracks button presses
+
+// Materials
+const matNormal = new THREE.MeshBasicMaterial({ color: 0x444444 });
+const matHighlight = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); 
+const matSelected = new THREE.MeshBasicMaterial({ color: 0x4a90e2 }); 
 
 init();
 animate();
 
-function log(msg) {
-    const time = new Date().toLocaleTimeString();
-    if(debugOutput) {
-        debugOutput.innerText = `[${time}] ${msg}\n` + debugOutput.innerText;
-    }
-    console.log(msg);
-}
-
 function init() {
-    // 1. Scene
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-    // 2. Lighting
-    directionalLight = new THREE.DirectionalLight(0xffffff, 4);
-    directionalLight.position.set(0, 5, 5);
-    scene.add(directionalLight);
+    // Lights
+    const dirLight = new THREE.DirectionalLight(0xffffff, 3);
+    dirLight.position.set(0, 5, 2);
+    scene.add(dirLight);
     scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
-    // 3. Renderer
+    // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
-    
-    // Append Renderer
+    renderer.xr.setReferenceSpaceType('local-floor');
     document.body.appendChild(renderer.domElement);
 
-    // 4. Environment
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-
-    // 5. AR Button
-    const overlay = document.getElementById('overlay');
+    // AR Button
+    const container = document.getElementById('ar-button-container');
     const arBtn = ARButton.createButton(renderer, { 
-        requiredFeatures: ['hit-test'], 
-        optionalFeatures: ['dom-overlay'], 
-        domOverlay: { root: overlay } 
+        requiredFeatures: ['hit-test', 'local-floor'], 
+        optionalFeatures: ['bounded-floor']
     });
-    document.body.appendChild(arBtn);
+    container.appendChild(arBtn);
 
-    // 6. Controllers
+    // Controllers
     controller1 = renderer.xr.getController(0);
     controller1.addEventListener('select', onSelect); 
     scene.add(controller1);
@@ -84,140 +74,184 @@ function init() {
     controller2.addEventListener('select', onSelect);
     scene.add(controller2);
 
-    const controllerModelFactory = new XRControllerModelFactory();
+    const factory = new XRControllerModelFactory();
     
-    controllerGrip1 = renderer.xr.getControllerGrip(0);
-    controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
-    scene.add(controllerGrip1);
+    const grip1 = renderer.xr.getControllerGrip(0);
+    grip1.add(factory.createControllerModel(grip1));
+    scene.add(grip1);
+    
+    const grip2 = renderer.xr.getControllerGrip(1);
+    grip2.add(factory.createControllerModel(grip2));
+    scene.add(grip2);
 
-    controllerGrip2 = renderer.xr.getControllerGrip(1);
-    controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
-    scene.add(controllerGrip2);
-
-    // 7. Reticle
+    // Reticle
     reticle = new THREE.Mesh(
         new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial()
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
     );
     reticle.matrixAutoUpdate = false;
     reticle.visible = false;
     scene.add(reticle);
 
-    setupUI();
+    // Environment
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    // --- SETUP HUD ---
+    createHUD();
+
     window.addEventListener('resize', onWindowResize);
-    log("Ready. Hold 'A' or 'X' button to Drag.");
 }
 
-function setupUI() {
-    const listContainer = document.getElementById('asset-list');
-    listContainer.innerHTML = ''; 
+function createHUD() {
+    // 1. Master Group (Locks to camera)
+    hudGroup = new THREE.Group();
+    scene.add(hudGroup);
 
-    if (!modelList || modelList.length === 0) {
-        log("No models in config.js");
-        return;
-    }
+    // 2. SCORE DISPLAY (Always On)
+    // Position: Top Left (-0.5, 0.4, -1.0)
+    scoreMesh = createTextLabel("Score: 0", 40, '#000000', '#00ff00');
+    scoreMesh.position.set(-0.4, 0.3, -1.0);
+    hudGroup.add(scoreMesh);
 
-    modelList.forEach((name) => {
-        const btn = document.createElement('button');
-        btn.className = 'asset-btn';
-        btn.innerText = name;
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.asset-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            modelName = name;
-            log(`Selected: ${modelName}`);
-        });
-        listContainer.appendChild(btn);
+    // 3. MENU (Hidden by default)
+    createMenuContent();
+}
+
+function createMenuContent() {
+    menuGroup = new THREE.Group();
+    // Position: Center, slightly down
+    menuGroup.position.set(0, -0.1, -0.8); 
+    menuGroup.visible = false; // Start hidden
+    hudGroup.add(menuGroup);
+
+    // Background
+    const menuHeight = 0.2 + (modelList.length * 0.12);
+    const bg = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.5, menuHeight),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.8 })
+    );
+    bg.position.y = - (menuHeight / 2) + 0.15;
+    menuGroup.add(bg);
+
+    // Title
+    const title = createTextLabel("Library", 50);
+    title.position.set(0, 0.15, 0.01);
+    menuGroup.add(title);
+
+    // Buttons
+    modelList.forEach((name, index) => {
+        const btn = new THREE.Mesh(
+            new THREE.BoxGeometry(0.4, 0.1, 0.02), 
+            matNormal.clone()
+        );
+        btn.userData = { modelName: name };
+        btn.position.set(0, - (index * 0.12), 0.02);
+        
+        const label = createTextLabel(name, 35);
+        label.position.set(0, 0, 0.02);
+        btn.add(label);
+
+        menuGroup.add(btn);
+        uiButtons.push(btn);
+    });
+
+    highlightButton(0);
+}
+
+// --- UTILS ---
+
+function updateScore(points) {
+    scoreValue += points;
+    // Redraw the canvas texture to update text
+    const newTexture = createTexture("Score: " + scoreValue, 40, '#000000', '#00ff00');
+    scoreMesh.material.map = newTexture;
+    scoreMesh.material.needsUpdate = true;
+}
+
+function highlightButton(index) {
+    uiButtons.forEach((btn, i) => {
+        if (i === index) btn.material.color.setHex(0x00ff00); // Green Highlight
+        else btn.material.color.setHex(0x444444);
     });
 }
 
-function onProgress(xhr) {
-    if (xhr.lengthComputable) {
-        const percent = Math.round((xhr.loaded / xhr.total) * 100);
-        loadingText.innerText = `Loading ${percent}%`;
+function createTexture(text, fontSize, bgColor, textColor) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    
+    // Background
+    if (bgColor) {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0,0, 512, 128);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(0,0, 512, 128);
+    } else {
+        ctx.clearRect(0,0, 512, 128);
     }
+    
+    // Text
+    ctx.font = `Bold ${fontSize}px Arial`;
+    ctx.fillStyle = textColor || 'white';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 256, 64);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    return texture;
 }
 
-function showLoader(visible) {
-    if(visible) loaderUI.classList.remove('hidden');
-    else loaderUI.classList.add('hidden');
+function createTextLabel(text, fontSize, bgColor, textColor) {
+    const texture = createTexture(text, fontSize, bgColor, textColor);
+    const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
+    return new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.1), mat);
 }
 
-function normalizeAndCenter(object) {
-    const box = new THREE.Box3().setFromObject(object);
-    const size = box.getSize(new THREE.Vector3()).length();
-    const scalar = 0.5 / size; 
-    object.scale.set(scalar, scalar, scalar);
+// --- INTERACTION ---
+
+function onSelect() {
+    // Standard Trigger logic (only works if Menu is CLOSED)
+    if (!isMenuOpen && reticle.visible && modelName && !isDragging) {
+        loadModel(modelName, reticle.matrix);
+        // Add 10 points to score when model placed
+        updateScore(10);
+    }
 }
 
 function loadModel(name, positionMatrix) {
     if (!name) return;
+    if(currentModel) { scene.remove(currentModel); currentModel = null; }
 
-    if(currentModel) {
-        scene.remove(currentModel);
-        currentModel = null;
-    }
-
-    log(`Downloading ${name}...`);
-    showLoader(true);
-    
-    const extension = name.split('.').pop().toLowerCase();
-
-    if (extension === 'glb' || extension === 'gltf') {
-        const loader = new GLTFLoader();
-        loader.load(`assets/${name}`, (gltf) => {
-            currentModel = gltf.scene;
-            currentModel.position.setFromMatrixPosition(positionMatrix);
-            normalizeAndCenter(currentModel);
-            scene.add(currentModel);
-            directionalLight.target = currentModel;
-            showLoader(false);
-            log("Loaded.");
-        }, onProgress, (err) => { showLoader(false); log("Error: " + err.message); });
-
-    } else if (extension === 'obj') {
-        const mtlFileName = name.replace('.obj', '.mtl');
-        const mtlLoader = new MTLLoader();
-        mtlLoader.load(`assets/${mtlFileName}`, 
-            (materials) => {
-                materials.preload();
-                loadObjFile(name, materials, positionMatrix);
-            }, 
-            undefined, 
-            () => {
-                loadObjFile(name, null, positionMatrix);
-            }
-        );
-    }
-}
-
-function loadObjFile(filename, materials, positionMatrix) {
-    const objLoader = new OBJLoader();
-    if (materials) objLoader.setMaterials(materials);
-
-    objLoader.load(`assets/${filename}`, (object) => {
-        currentModel = object;
+    const ext = name.split('.').pop().toLowerCase();
+    const onLoad = (obj) => {
+        currentModel = obj;
         currentModel.position.setFromMatrixPosition(positionMatrix);
-        
-        if (!materials) {
-            const defaultMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.2 });
-            object.traverse((child) => { if (child.isMesh) child.material = defaultMat; });
-        }
-
-        normalizeAndCenter(currentModel);
+        const box = new THREE.Box3().setFromObject(currentModel);
+        const size = box.getSize(new THREE.Vector3()).length();
+        const scalar = 0.5 / size; 
+        currentModel.scale.set(scalar, scalar, scalar);
         scene.add(currentModel);
-        directionalLight.target = currentModel;
-        showLoader(false);
-        log("OBJ Loaded.");
-    }, onProgress, (err) => { showLoader(false); log("Error: " + err.message); });
-}
+        
+        // Auto-Close menu on load
+        isMenuOpen = false; 
+        menuGroup.visible = false;
+    };
 
-// --- TRIGGER EVENT (Spawn only) ---
-function onSelect() {
-    // Prevent spawn if we are currently dragging
-    if (reticle.visible && modelName && !isDragging) {
-        loadModel(modelName, reticle.matrix);
-        log("Spawned model.");
+    if(ext === 'glb' || ext === 'gltf') {
+        new GLTFLoader().load(`assets/${name}`, (gltf) => onLoad(gltf.scene));
+    } else if (ext === 'obj') {
+        const mtl = name.replace('.obj', '.mtl');
+        new MTLLoader().load(`assets/${mtl}`, 
+            (m) => { m.preload(); new OBJLoader().setMaterials(m).load(`assets/${name}`, onLoad); },
+            null,
+            () => { new OBJLoader().load(`assets/${name}`, (o) => {
+                o.traverse(c=>{if(c.isMesh)c.material=new THREE.MeshStandardMaterial({color:0xffffff})});
+                onLoad(o);
+            })}
+        );
     }
 }
 
@@ -233,91 +267,118 @@ function animate() {
 
 function render(timestamp, frame) {
     if (frame) {
-        const referenceSpace = renderer.xr.getReferenceSpace();
         const session = renderer.xr.getSession();
 
-        // 1. Check Input Sources for "A" Button
-        isDragging = false; 
-        
+        // 1. HUD LOCKING (Keep it on your face)
+        if (hudGroup) {
+            hudGroup.position.copy(camera.position);
+            hudGroup.quaternion.copy(camera.quaternion);
+        }
+
+        // 2. INPUT HANDLING
         for (const source of session.inputSources) {
-            if (source.gamepad) {
-                // Button 4 is usually 'A' on Right or 'X' on Left
-                if (source.gamepad.buttons.length > 4 && source.gamepad.buttons[4].pressed) {
-                    isDragging = true;
-                }
-                
-                // Also handle Joystick Logic inside this loop
-                handleJoystick(source);
-            }
+            if (source.gamepad) handleInput(source);
         }
 
-        // 2. Hit Test
-        if (hitTestSourceRequested === false) {
-            session.requestReferenceSpace('viewer').then((refSpace) => {
-                session.requestHitTestSource({ space: refSpace }).then((source) => {
-                    hitTestSource = source;
+        // 3. RETICLE & SCENE
+        if (!isMenuOpen) {
+            const refSpace = renderer.xr.getReferenceSpace();
+            if (!renderer.xr.hitTestSource && !renderer.xr.hitTestSourceRequested) {
+                session.requestReferenceSpace('viewer').then(ref => {
+                    session.requestHitTestSource({ space: ref }).then(source => renderer.xr.hitTestSource = source);
                 });
-            });
-            session.addEventListener('end', () => { hitTestSourceRequested = false; hitTestSource = null; });
-            hitTestSourceRequested = true;
-        }
-
-        if (hitTestSource) {
-            const hitTestResults = frame.getHitTestResults(hitTestSource);
-            if (hitTestResults.length > 0) {
-                const hit = hitTestResults[0];
-                reticle.visible = true;
-                reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
-                
-                // 3. DRAG LOGIC
-                // If "A" is held, slide model to reticle X/Z
-                if (isDragging && currentModel) {
-                    const hitPos = new THREE.Vector3();
-                    hitPos.setFromMatrixPosition(reticle.matrix);
-                    
-                    // Smooth lerp for visual effect
-                    currentModel.position.x = THREE.MathUtils.lerp(currentModel.position.x, hitPos.x, 0.2);
-                    currentModel.position.z = THREE.MathUtils.lerp(currentModel.position.z, hitPos.z, 0.2);
-                    // Y stays controlled by joystick
-                }
-
-            } else {
-                reticle.visible = false;
+                renderer.xr.hitTestSourceRequested = true;
             }
+
+            if (renderer.xr.hitTestSource) {
+                const hits = frame.getHitTestResults(renderer.xr.hitTestSource);
+                if (hits.length > 0) {
+                    const pose = hits[0].getPose(refSpace);
+                    reticle.visible = true;
+                    reticle.matrix.fromArray(pose.transform.matrix);
+                    
+                    if (isDragging && currentModel) {
+                        const pos = new THREE.Vector3().setFromMatrixPosition(reticle.matrix);
+                        currentModel.position.x = THREE.MathUtils.lerp(currentModel.position.x, pos.x, 0.2);
+                        currentModel.position.z = THREE.MathUtils.lerp(currentModel.position.z, pos.z, 0.2);
+                    }
+                } else {
+                    reticle.visible = false;
+                }
+            }
+        } else {
+            reticle.visible = false;
         }
     }
     renderer.render(scene, camera);
 }
 
-// Separate function for readability
-function handleJoystick(inputSource) {
-    if (!currentModel) return;
+function handleInput(source) {
+    const gp = source.gamepad;
+    const hand = source.handedness;
+    const now = Date.now(); // Use real clock time
 
-    const gp = inputSource.gamepad;
-    
-    // Axes: [2]=Left/Right, [3]=Up/Down
-    if (gp.axes.length >= 4) {
-        const dx = gp.axes[2]; 
-        const dy = gp.axes[3]; 
+    // Toggle Menu (Button B/Y)
+    // Index 5 is B (Right) or Y (Left)
+    const bPressed = (gp.buttons.length > 5 && gp.buttons[5].pressed);
+    if (bPressed && !lastButtonState[hand + 'B']) {
+        isMenuOpen = !isMenuOpen;
+        menuGroup.visible = isMenuOpen;
+    }
+    lastButtonState[hand + 'B'] = bPressed;
 
-        // LEFT HAND: Vertical Lift
-        if (inputSource.handedness === 'left') {
-            if (Math.abs(dy) > 0.1) {
-                currentModel.position.y -= dy * 0.02; 
+    if (isMenuOpen) {
+        // --- MENU NAVIGATION ---
+        
+        // Joystick Logic
+        const dy = gp.axes[3];
+        
+        // CRITICAL FIX: We do NOT reset lastScrollTime if stick is neutral.
+        // We only check if enough time has passed since the last move.
+        // 400ms Delay enforced here.
+        if (Math.abs(dy) > 0.6) {
+            if (now - lastScrollTime > 400) { 
+                if (dy > 0) selectedIndex++;
+                else selectedIndex--;
+                
+                // Clamp Loop
+                if (selectedIndex < 0) selectedIndex = 0;
+                if (selectedIndex >= uiButtons.length) selectedIndex = uiButtons.length - 1;
+                
+                highlightButton(selectedIndex);
+                lastScrollTime = now; // Update timer
             }
         }
-        
-        // RIGHT HAND: Rotate & Scale
-        if (inputSource.handedness === 'right') {
-            // Rotate (Left/Right)
-            if (Math.abs(dx) > 0.1) {
-                currentModel.rotation.y -= dx * 0.05;
-            }
-            // Scale (Up/Down)
-            if (Math.abs(dy) > 0.1) {
-                const scaleFactor = 1 - (dy * 0.02);
-                currentModel.scale.multiplyScalar(scaleFactor);
-                currentModel.scale.clampScalar(0.05, 5.0); 
+
+        // Select (A/X)
+        const aPressed = (gp.buttons.length > 4 && gp.buttons[4].pressed);
+        if (aPressed && !lastButtonState[hand + 'A']) {
+            const btn = uiButtons[selectedIndex];
+            modelName = btn.userData.modelName;
+            
+            // Visual Flash
+            btn.material.color.setHex(0xffffff);
+            setTimeout(() => {
+                isMenuOpen = false;
+                menuGroup.visible = false;
+            }, 200);
+        }
+        lastButtonState[hand + 'A'] = aPressed;
+
+    } else {
+        // --- SCENE MODE ---
+        isDragging = false;
+        if (gp.buttons.length > 4 && gp.buttons[4].pressed) isDragging = true;
+
+        if (currentModel && gp.axes.length >= 4) {
+            const dx = gp.axes[2]; const dy = gp.axes[3];
+            if (hand === 'left' && Math.abs(dy) > 0.1) currentModel.position.y -= dy * 0.02;
+            if (hand === 'right') {
+                if (Math.abs(dx) > 0.1) currentModel.rotation.y -= dx * 0.05;
+                if (Math.abs(dy) > 0.1) {
+                    const s = 1 - (dy * 0.02);
+                    currentModel.scale.multiplyScalar(s).clampScalar(0.1, 5);
+                }
             }
         }
     }
