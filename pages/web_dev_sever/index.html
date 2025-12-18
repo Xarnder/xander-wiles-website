@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Setup Guide | Ngrok & VS Code</title>
+
+    <!-- Requested Global Header Styles (Do Not Remove) -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    
+    <!-- Page Specific CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Theme-aware SVG icons -->
+ <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+</head>
+<body>
+
+    <!-- Site Header Wrapper -->
+    <div id="site-header-container">
+        <div id="main-nav-placeholder"></div> 
+    </div>
+    <script src="/assets/js/nav-loader.js"></script> 
+
+    <!-- Main Content -->
+    <main class="container">
+        
+        <div class="hero-section fade-in">
+            <h1>Local VR Server Guide</h1>
+            <p>How to host your local VS Code project to external devices (Meta Quest, Mobile) using HTTPS.</p>
+            
+            <!-- OS Toggle Switch -->
+            <div class="os-toggle-container">
+                <button class="os-btn active" data-target="mac">macOS</button>
+                <button class="os-btn" data-target="windows">Windows</button>
+            </div>
+        </div>
+
+        <!-- Step 1: Prerequisites & Install -->
+        <section class="card glass-panel fade-in">
+            <div class="card-header">
+                <span class="step-number">01</span>
+                <h2>Installation</h2>
+            </div>
+            <div class="card-body">
+                
+                <!-- macOS Instructions -->
+                <div class="os-content active" id="mac-install">
+                    <div class="instruction-group">
+                        <h3>A. Install Prerequisites (Homebrew)</h3>
+                        <p>We use Homebrew to install tools on Mac. If you don't have it, paste this into Terminal:</p>
+                        <div class="code-block">
+                            <code>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</code>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                    </div>
+
+                    <div class="instruction-group">
+                        <h3>B. Install Ngrok</h3>
+                        <p>Once Homebrew is ready, run this command:</p>
+                        <div class="code-block">
+                            <code>brew install ngrok/ngrok/ngrok</code>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Windows Instructions -->
+                <div class="os-content" id="windows-install">
+                    <div class="instruction-group">
+                        <h3>A. Prerequisites</h3>
+                        <p>On Windows 10/11, we can use the built-in <strong>Terminal</strong> (PowerShell) and <strong>Winget</strong>.</p>
+                        <p>Search for "Terminal" or "PowerShell" in your Start Menu and open it.</p>
+                    </div>
+
+                    <div class="instruction-group">
+                        <h3>B. Install Ngrok</h3>
+                        <p>Paste this command into PowerShell:</p>
+                        <div class="code-block">
+                            <code>winget install Ngrok.Ngrok</code>
+                            <button class="copy-btn">Copy</button>
+                        </div>
+                        <p class="small-note"><em>Note: If prompted, press 'Y' to agree to terms.</em></p>
+                    </div>
+                </div>
+
+                <div class="instruction-group">
+                    <h3>C. Connect Account (Required)</h3>
+                    <p>Ngrok requires a free account to work.</p>
+                    <ol class="styled-list">
+                        <li>Go to <a href="https://dashboard.ngrok.com/signup" target="_blank">dashboard.ngrok.com/signup</a> and sign up.</li>
+                        <li>Verify your email if asked.</li>
+                        <li>In the dashboard sidebar, click <strong>Your Authtoken</strong>.</li>
+                        <li>Copy the code and run this command in your Terminal:</li>
+                    </ol>
+                    <div class="code-block">
+                        <code>ngrok config add-authtoken YOUR_TOKEN_HERE</code>
+                        <button class="copy-btn">Copy</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 2: Workflow -->
+        <section class="card glass-panel fade-in">
+            <div class="card-header">
+                <span class="step-number">02</span>
+                <h2>The Workflow</h2>
+            </div>
+            <div class="card-body">
+                <p>Do this every time you want to test on the headset.</p>
+                
+                <div class="step-list">
+                    <div class="step-item">
+                        <span class="icon">💻</span>
+                        <div class="content">
+                            <h3>1. Start VS Code Server</h3>
+                            <p>Open your project and click <strong>"Go Live"</strong> in the bottom right corner.</p>
+                        </div>
+                    </div>
+
+                    <div class="step-item">
+                        <span class="icon">👀</span>
+                        <div class="content">
+                            <h3>2. Check the Port</h3>
+                            <p>Look at the bottom right. Usually <strong>5500</strong>, but check!</p>
+                        </div>
+                    </div>
+
+                    <div class="step-item">
+                        <span class="icon">🚀</span>
+                        <div class="content">
+                            <h3>3. Run the Tunnel</h3>
+                            <p>Open Terminal/PowerShell and run:</p>
+                            <div class="code-block">
+                                <code>ngrok http 5500</code>
+                                <button class="copy-btn">Copy</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="step-item">
+                        <span class="icon">🔗</span>
+                        <div class="content">
+                            <h3>4. Get the HTTPS Link</h3>
+                            <p>Copy the line ending in <code>.ngrok-free.app</code>.</p>
+                            <p class="warning-text">⚠️ VR Mode ONLY works with the <strong>HTTPS</strong> link.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 3: Shutdown -->
+        <section class="card glass-panel fade-in">
+            <div class="card-header">
+                <span class="step-number">03</span>
+                <h2>How to Stop</h2>
+            </div>
+            <div class="card-body">
+                <div class="instruction-group">
+                    <h3>Stop ngrok</h3>
+                    <p>Click inside the Terminal window and press <kbd>Ctrl</kbd> + <kbd>C</kbd>.</p>
+                </div>
+                <div class="instruction-group">
+                    <h3>Stop VS Code</h3>
+                    <p>Click the <strong>"Port: 5500"</strong> button in VS Code to turn it off.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Troubleshooting -->
+        <section class="card glass-panel fade-in error-panel">
+            <div class="card-header">
+                <span class="step-number">?</span>
+                <h2>Troubleshooting</h2>
+            </div>
+            <div class="card-body">
+                <details>
+                    <summary>Error: "ERR_NGROK_4018" or "Auth failed"</summary>
+                    <p>You missed Step 1C. You must run the `config add-authtoken` command with your unique key from the website.</p>
+                </details>
+                <details>
+                    <summary>VR Button doesn't work</summary>
+                    <p>You are likely using `http://`. You MUST use `https://`.</p>
+                </details>
+                <details>
+                    <summary>Windows: "ngrok is not recognized"</summary>
+                    <p>Try restarting your PowerShell window after installing. If that fails, try installing via the ZIP download on the ngrok website.</p>
+                </details>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="footer fade-in">
+        <p>Local VR Development Guide.</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
