@@ -16,7 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Theme-aware SVG icons (modern browsers) -->
-    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon.ico" sizes="any"> 
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
 
@@ -33,6 +33,18 @@
 <body>
     <div class="background-overlay"></div>
 
+    <!-- LOADING SCREEN OVERLAY -->
+    <div id="app-loading-overlay" class="loading-overlay">
+        <div class="glass-card loading-card">
+            <div class="spinner"></div>
+            <h2>Loading Checklist</h2>
+            <div class="loading-progress-track">
+                <div id="loading-progress-bar"></div>
+            </div>
+            <p id="loading-status-text">Connecting to database...</p>
+        </div>
+    </div>
+
     <div id="main-nav-placeholder"></div> 
 
     <div class="app-container">
@@ -42,18 +54,15 @@
                 <p>A list to check when moving to a new home</p>
             </div>
             <button id="theme-toggle" class="theme-btn" aria-label="Toggle Light/Dark Mode">
-                <!-- Sun Icon (for dark mode) -->
                 <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-                <!-- Moon Icon (for light mode) -->
                 <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
             </button>
         </header>
 
         <div class="main-content-grid">
-            <!-- START: Left Panel (List View) -->
+            <!-- Left Panel (List View) -->
             <aside class="glass-card list-panel">
                 <div class="list-controls">
-                    <!-- Search/Sort/Filter Controls -->
                     <div class="control-group">
                         <label for="filter-category">Category</label>
                         <select id="filter-category">
@@ -86,18 +95,14 @@
                     </div>
                 </div>
 
-                <div id="checklist-container">
-                    <!-- List items will be dynamically inserted here -->
-                </div>
+                <div id="checklist-container"></div>
             </aside>
-            <!-- END: Left Panel (List View) -->
 
-            <!-- START: Right Panel (Carousel View) -->
+            <!-- Right Panel (Carousel View) -->
             <main class="glass-card carousel-panel">
                 <div id="carousel-view">
-                    <!-- Carousel content will be dynamically inserted here -->
                     <div class="carousel-placeholder">
-                        <p>Loading your checklist...</p>
+                        <p>Select an item to view details</p>
                     </div>
                 </div>
 
@@ -110,7 +115,6 @@
                     <button id="next-item" class="nav-arrow" aria-label="Next Item">&gt;</button>
                 </div>
             </main>
-            <!-- END: Right Panel (Carousel View) -->
         </div>
 
         <footer class="glass-card footer-card">

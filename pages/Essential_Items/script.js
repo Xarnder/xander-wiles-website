@@ -40,7 +40,7 @@ function createImageFallback(imageElement, isListThumb = false) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("Debug: DOM fully loaded and parsed.");
+    console.log("Debug: DOM fully loaded and parsed. Initializing App...");
 
     // Element references
     const checklistContainer = document.getElementById('checklist-container');
@@ -56,11 +56,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const carouselView = document.getElementById('carousel-view');
     const prevButton = document.getElementById('prev-item');
     const nextButton = document.getElementById('next-item');
+    
+    // Loading Screen Elements
+    const loadingOverlay = document.getElementById('app-loading-overlay');
+    const loadingBar = document.getElementById('loading-progress-bar');
+    const loadingText = document.getElementById('loading-status-text');
 
     let allItems = []; 
     let itemsToRender = []; 
     let checkedItems = new Set();
     let currentIndex = 0; 
+
+    // --- Loading Screen Logic ---
+    function updateLoadingStatus(message, percent) {
+        if(loadingText) loadingText.textContent = message;
+        if(loadingBar) loadingBar.style.width = `${percent}%`;
+    }
+
+    function hideLoadingScreen() {
+        console.log("Debug: Hiding loading screen.");
+        loadingOverlay.classList.add('hidden');
+        // Remove from DOM after transition to prevent interaction blocking
+        setTimeout(() => {
+            loadingOverlay.style.display = 'none';
+        }, 500);
+    }
 
     // --- Theme Management ---
     function toggleTheme() {
@@ -79,25 +99,32 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Data Fetching ---
     async function loadChecklistData() {
         try {
+            updateLoadingStatus("Fetching Item List...", 10);
             const response = await fetch('Item_List.csv');
+            
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
             const csvText = await response.text();
-            console.log("Debug: Successfully fetched 'Item_List.csv'.");
+            console.log("Debug: CSV Fetched. Parsing...");
+            updateLoadingStatus("Parsing Data...", 20);
+            
             allItems = parseCSV(csvText);
+            console.log(`Debug: Parsed ${allItems.length} items.`);
+            
             loadState(); 
+            populateCategories(allItems);
             
-            // Render immediately (might show broken images briefly before verify finishes)
+            // Start Image Verification with Progress
+            await verifyImages(allItems);
+
+            console.log("Debug: All operations complete. Rendering.");
             updateAndRenderAll();
-            
-            // Check images in background then re-render
-            verifyImages(allItems).then(() => {
-                console.log("Debug: Image verification complete");
-                updateAndRenderAll();
-            });
+            hideLoadingScreen();
 
         } catch (error) {
-            console.error("Debug: Error loading or parsing CSV file:", error);
-            carouselView.innerHTML = `<div class="carousel-placeholder"><p>Error: Could not load data.</p></div>`;
+            console.error("Debug: Error loading data:", error);
+            updateLoadingStatus("Error loading data. Check console.", 0);
+            carouselView.innerHTML = `<div class="carousel-placeholder"><p>Error: Could not load data. check console.</p></div>`;
         }
     }
 
@@ -112,31 +139,57 @@ document.addEventListener('DOMContentLoaded', () => {
                     id: itemID, 
                     name: itemName, 
                     category: columns[2].trim(),
-                    imageVerified: false // Will be updated by verifyImages
+                    imageVerified: false 
                 };
             }
             return null;
         }).filter(item => item !== null);
     }
 
-    // --- Image Verification Helper ---
+    // --- Image Verification Helper (Optimized for Progress Bar) ---
     async function verifyImages(items) {
+        const totalItems = items.length;
+        let processedCount = 0;
+        
+        console.log(`Debug: Starting image verification for ${totalItems} items...`);
+        updateLoadingStatus("Checking Assets...", 25);
+
+        // Map every item to a promise that resolves whether the image loads or fails
         const checkPromises = items.map(item => {
             return new Promise((resolve) => {
                 const img = new Image();
-                // UPDATED: Pointing to WebP folder
                 img.src = `assets/objects_webp/${item.name}.webp`;
+                
                 img.onload = () => {
                     item.imageVerified = true;
+                    processedCount++;
+                    updateProgressUI(processedCount, totalItems);
                     resolve();
                 };
+                
                 img.onerror = () => {
                     item.imageVerified = false;
+                    processedCount++;
+                    updateProgressUI(processedCount, totalItems);
                     resolve(); 
                 };
             });
         });
+
+        // Wait for all checks to finish
         await Promise.all(checkPromises);
+        console.log("Debug: Image verification finished.");
+    }
+
+    function updateProgressUI(current, total) {
+        // Map the 0-100% of image loading to the 25%-100% of the visual loading bar
+        const percentage = Math.round((current / total) * 100);
+        const visualPercent = 25 + (percentage * 0.75); // Start at 25%, end at 100%
+        
+        // Throttle updates slightly to avoid UI freezing on fast machines
+        requestAnimationFrame(() => {
+            updateLoadingStatus(`Loading Images... ${percentage}%`, visualPercent);
+        });
     }
 
     // --- Core Rendering Logic ---
@@ -186,10 +239,16 @@ document.addEventListener('DOMContentLoaded', () => {
             checklistContainer.innerHTML = `<p style="text-align: center; padding: 1rem; color: var(--text-secondary);">No items match filters.</p>`;
             return;
         }
+        
+        // Use document fragment for better performance on large lists
+        const fragment = document.createDocumentFragment();
+        
         itemsToRender.forEach((item, index) => {
             const itemElement = createListItemElement(item, index);
-            checklistContainer.appendChild(itemElement);
+            fragment.appendChild(itemElement);
         });
+        
+        checklistContainer.appendChild(fragment);
         updateListHighlight();
     }
 
@@ -201,8 +260,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const item = itemsToRender[currentIndex];
         const isChecked = checkedItems.has(item.id);
-        
-        // UPDATED: Pointing to WebP folder
         const webpPath = `assets/objects_webp/${item.name}.webp`;
 
         carouselView.innerHTML = `
@@ -231,7 +288,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const isChecked = checkedItems.has(item.id);
         if (isChecked) div.classList.add('checked');
 
-        // UPDATED: Pointing to WebP folder
         const webpPath = `assets/objects_webp/${item.name}.webp`;
 
         div.innerHTML = `
@@ -245,6 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         div.addEventListener('click', (e) => {
+            // Only navigate if not clicking the checkbox directly
             if (e.target.type !== 'checkbox') {
                 currentIndex = index;
                 renderCarouselView();
@@ -260,14 +317,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateListHighlight() {
         const listItems = document.querySelectorAll('.checklist-item');
-        listItems.forEach((itemEl, index) => {
-            if (index === currentIndex) {
-                itemEl.classList.add('active');
-                itemEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            } else {
-                itemEl.classList.remove('active');
+        // Removing 'active' from all first is faster than looping everything
+        const prevActive = document.querySelector('.checklist-item.active');
+        if(prevActive) prevActive.classList.remove('active');
+
+        // Find the specific item based on current index in itemsToRender
+        if(itemsToRender[currentIndex]) {
+            const currentId = itemsToRender[currentIndex].id;
+            const currentEl = document.querySelector(`.checklist-item[data-id="${currentId}"]`);
+            if(currentEl) {
+                currentEl.classList.add('active');
+                currentEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
-        });
+        }
     }
 
     function toggleItemCheck(itemId) {
@@ -278,9 +340,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         saveState();
         
+        // If filtering by status, we must re-render the whole list to remove/add items
         if (statusFilter.value !== 'all') {
             updateAndRenderAll();
         } else {
+            // DOM manipulation optimization: just toggle the class instead of full re-render
             const listItem = document.querySelector(`.checklist-item[data-id="${itemId}"]`);
             if(listItem) {
                 listItem.classList.toggle('checked');
@@ -326,9 +390,9 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCarouselView();
     });
 
-    categoryFilter.addEventListener('change', updateAndRenderAll);
-    statusFilter.addEventListener('change', updateAndRenderAll);
-    imageToggle.addEventListener('change', updateAndRenderAll);
+    categoryFilter.addEventListener('change', () => { currentIndex = 0; updateAndRenderAll(); });
+    statusFilter.addEventListener('change', () => { currentIndex = 0; updateAndRenderAll(); });
+    imageToggle.addEventListener('change', () => { currentIndex = 0; updateAndRenderAll(); });
     sortOrder.addEventListener('change', updateAndRenderAll);
     scaleSlider.addEventListener('input', () => applyScale(scaleSlider.value));
     scaleSlider.addEventListener('change', () => saveScale(scaleSlider.value));
@@ -352,9 +416,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Initialize
     loadTheme();
     loadScale();
-    loadChecklistData().then(() => {
-        populateCategories(allItems);
-    });
+    loadChecklistData(); // Kicks off the whole process
 });
