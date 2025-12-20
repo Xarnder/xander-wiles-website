@@ -21,17 +21,21 @@ let hudGroup, statusMesh, loadingGroup, loadingFill, menuMesh, controlsMesh;
 // Room Mesh State
 const roomMeshes = new Map();
 let roomGroup;
-
-// MESH MODES: 0 = Occlusion, 1 = Wireframe, 2 = Off
-let meshMode = 0; 
+let meshMode = 0; // 0 = Occlusion+Shadow, 1 = Wireframe, 2 = Off
 let isMeshAvailable = true;  
 
-// Materials
+// --- MATERIALS ---
+// 1. Wireframe (Debug Mode)
 const matWireframe = new THREE.MeshBasicMaterial({ 
     color: 0x00ffff, wireframe: true, transparent: true, opacity: 0.3 
 });
-const matOcclusion = new THREE.MeshBasicMaterial({
-    colorWrite: false, depthWrite: true 
+
+// 2. Shadow + Occlusion (Realism Mode)
+// ShadowMaterial is transparent but renders shadows. 
+// depthWrite: true ensures it still hides objects behind the wall.
+const matOcclusion = new THREE.ShadowMaterial({
+    opacity: 0.4,  // Darkness of the shadow
+    depthWrite: true 
 });
 
 // Menu State
@@ -53,15 +57,27 @@ function init() {
         if (!container) throw new Error("Missing #ar-button-container");
 
         // 1. Prepare Menu Items
-        // First item is our Toggle Button
         menuItems = ['Room Mode', ...modelList];
 
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-        // Lights
+        // --- LIGHTING & SHADOWS ---
         const dirLight = new THREE.DirectionalLight(0xffffff, 3);
-        dirLight.position.set(0, 5, 2);
+        dirLight.position.set(2, 6, 2); // High up to cast floor shadows
+        dirLight.castShadow = true;
+        
+        // Optimised Shadow Settings for Mobile VR
+        dirLight.shadow.mapSize.width = 1024; 
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 0.1;
+        dirLight.shadow.camera.far = 10;
+        dirLight.shadow.camera.left = -5;
+        dirLight.shadow.camera.right = 5;
+        dirLight.shadow.camera.top = 5;
+        dirLight.shadow.camera.bottom = -5;
+        dirLight.shadow.bias = -0.001; // Prevents shadow artifacts
+        
         scene.add(dirLight);
         scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 
@@ -71,6 +87,11 @@ function init() {
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.xr.enabled = true;
         renderer.xr.setReferenceSpaceType('local-floor');
+        
+        // ENABLE SHADOW MAP
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer edges
+
         document.body.appendChild(renderer.domElement);
 
         // --- AR BUTTON ---
@@ -200,22 +221,16 @@ function redrawControlsCanvas() {
     canvas.width = width; canvas.height = height;
     const ctx = canvas.getContext('2d');
 
-    // Background
     ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
-    ctx.beginPath();
-    ctx.roundRect(10, 10, width - 20, height - 20, 30);
-    ctx.fill();
+    ctx.beginPath(); ctx.roundRect(10, 10, width - 20, height - 20, 30); ctx.fill();
     ctx.strokeStyle = '#4a90e2'; ctx.lineWidth = 4; ctx.stroke();
 
-    // Header
     ctx.font = 'bold 50px Arial'; ctx.fillStyle = '#4a90e2'; ctx.textAlign = 'center';
     ctx.fillText("Controls", width / 2, 70);
     
-    // Separator
     ctx.strokeStyle = '#555'; ctx.lineWidth = 2; 
     ctx.beginPath(); ctx.moveTo(40, 90); ctx.lineTo(width-40, 90); ctx.stroke();
 
-    // Controls List
     const lines = [
         { label: "Trigger (Click)", val: "Spawn Model" },
         { label: "Trigger (Hold)", val: "Drag Model" },
@@ -229,15 +244,9 @@ function redrawControlsCanvas() {
     ctx.textAlign = 'left';
     let y = 140; 
     lines.forEach(line => {
-        ctx.font = 'bold 32px Arial';
-        ctx.fillStyle = '#ffcc00'; 
-        ctx.fillText(line.label, 40, y);
-        
+        ctx.font = 'bold 32px Arial'; ctx.fillStyle = '#ffcc00'; ctx.fillText(line.label, 40, y);
         y += 40;
-        ctx.font = '28px Arial';
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(line.val, 60, y);
-        
+        ctx.font = '28px Arial'; ctx.fillStyle = '#ffffff'; ctx.fillText(line.val, 60, y);
         y += 45; 
     });
 
@@ -250,63 +259,46 @@ function redrawControlsCanvas() {
 function redrawMenuCanvas() {
     const width = menuMesh.userData.canvasWidth;
     const height = menuMesh.userData.canvasHeight;
-    
     const canvas = document.createElement('canvas');
     canvas.width = width; canvas.height = height;
     const ctx = canvas.getContext('2d');
 
     ctx.clearRect(0, 0, width, height);
 
-    // Background
     ctx.fillStyle = 'rgba(20, 20, 20, 0.9)';
-    ctx.beginPath();
-    ctx.roundRect(10, 10, width - 20, height - 20, 30);
-    ctx.fill();
+    ctx.beginPath(); ctx.roundRect(10, 10, width - 20, height - 20, 30); ctx.fill();
     ctx.strokeStyle = 'white'; ctx.lineWidth = 4; ctx.stroke();
 
-    // Header
     ctx.font = 'bold 50px Arial'; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
     ctx.fillText("Library", width / 2, 70);
     
-    // Separator
     ctx.strokeStyle = '#555'; ctx.lineWidth = 2; 
     ctx.beginPath(); ctx.moveTo(40, 90); ctx.lineTo(width-40, 90); ctx.stroke();
 
-    // Items
     const startY = 150; const itemHeight = 60;
     menuItems.forEach((itemText, i) => {
         const yPos = startY + (i * itemHeight);
-        
         let displayLabel = itemText;
         let textColor = '#aaaaaa';
 
-        // Logic for First Item (Toggle)
         if (i === 0) {
             if (!isMeshAvailable) {
                 displayLabel = "Mesh Unavailable";
                 textColor = '#ff4444'; 
             } else {
-                // CYCLIC LABELS
-                if (meshMode === 0) displayLabel = "Room: Occlusion";
-                else if (meshMode === 1) displayLabel = "Room: Wireframe";
-                else if (meshMode === 2) displayLabel = "Room: Off";
-                
-                textColor = '#ffff00'; // Yellow
+                if (meshMode === 0) displayLabel = "Mode: Shadow/Occlusion";
+                else if (meshMode === 1) displayLabel = "Mode: Wireframe";
+                else if (meshMode === 2) displayLabel = "Mode: Off (No Mesh)";
+                textColor = '#ffff00'; 
             }
         }
 
-        // Selection Box
         if (i === selectedIndex) {
             ctx.fillStyle = '#4a90e2';
-            ctx.beginPath();
-            ctx.roundRect(40, yPos - 35, width - 80, 50, 10);
-            ctx.fill();
-            
-            ctx.fillStyle = 'white'; 
-            ctx.font = 'bold 35px Arial';
+            ctx.beginPath(); ctx.roundRect(40, yPos - 35, width - 80, 50, 10); ctx.fill();
+            ctx.fillStyle = 'white'; ctx.font = 'bold 35px Arial';
         } else {
-            ctx.fillStyle = textColor;
-            ctx.font = '35px Arial';
+            ctx.fillStyle = textColor; ctx.font = '35px Arial';
         }
         ctx.fillText(displayLabel, width / 2, yPos);
     });
@@ -381,6 +373,15 @@ function loadModel(name, positionMatrix) {
         const size = box.getSize(new THREE.Vector3()).length();
         const scalar = size > 0 ? (0.5 / size) : 1;
         currentModel.scale.set(scalar, scalar, scalar);
+        
+        // ENABLE SHADOW CASTING ON NEW MODEL
+        currentModel.traverse((node) => {
+            if (node.isMesh) {
+                node.castShadow = true;
+                node.receiveShadow = true; // Self shadow
+            }
+        });
+
         scene.add(currentModel);
         
         // Hide Menu & Controls
@@ -423,15 +424,12 @@ function animate() {
 
 function render(timestamp, frame) {
     if (frame) {
-        // 1. HUD FOLLOW
         if (hudGroup) {
             hudGroup.position.lerp(camera.position, 0.1);
             hudGroup.quaternion.slerp(camera.quaternion, 0.1);
         }
 
-        // 2. DETECTED MESHES (Room Scanning)
         if (!frame.detectedMeshes && isMeshAvailable) {
-            // Permission possibly denied or tracking lost
         } else if (frame.detectedMeshes) {
             isMeshAvailable = true; 
             for (const [xrMesh, threeMesh] of roomMeshes) {
@@ -445,23 +443,27 @@ function render(timestamp, frame) {
                 let mesh = roomMeshes.get(xrMesh);
                 if (!mesh) {
                     const geometry = new THREE.BufferGeometry();
-                    // Initial creation
+                    // Initial Material
                     mesh = new THREE.Mesh(geometry, matOcclusion);
+                    
+                    // ENABLE SHADOW RECEIVING ON ROOM MESH
+                    mesh.receiveShadow = true;
+                    
                     roomGroup.add(mesh);
                     roomMeshes.set(xrMesh, mesh);
                 }
 
-                // --- 3-STATE LOGIC ---
+                // MODE LOGIC
                 if (meshMode === 2) {
-                    // MODE: OFF
+                    // OFF (Visible = false)
                     mesh.visible = false;
                 } else {
                     mesh.visible = true;
-                    // Mode 0 = Occlusion, Mode 1 = Wireframe
+                    // Mode 1: Wireframe, Mode 0: Occlusion/Shadow
                     mesh.material = (meshMode === 1) ? matWireframe : matOcclusion;
-                    mesh.renderOrder = -1; // Ensure it draws before models
+                    mesh.renderOrder = -1; // Write depth before objects
                 }
-                
+
                 mesh.geometry.setAttribute('position', new THREE.BufferAttribute(xrMesh.vertices, 3));
                 mesh.geometry.setIndex(new THREE.BufferAttribute(xrMesh.indices, 1));
                 const pose = frame.getPose(xrMesh.meshSpace, renderer.xr.getReferenceSpace());
@@ -474,13 +476,11 @@ function render(timestamp, frame) {
              if (isMeshAvailable) { isMeshAvailable = false; redrawMenuCanvas(); }
         }
 
-        // 3. INPUT
         const session = renderer.xr.getSession();
         for (const source of session.inputSources) {
             if (source.gamepad) handleInput(source);
         }
 
-        // 4. RETICLE
         if (!isMenuOpen && !isLoading) {
             const refSpace = renderer.xr.getReferenceSpace();
             if (!renderer.xr.hitTestSourceRequested) {
@@ -540,17 +540,17 @@ function handleInput(source) {
         const aPressed = (gp.buttons.length > 4 && gp.buttons[4].pressed);
         if (aPressed && !lastButtonState[hand + 'A']) {
             if (selectedIndex === 0) {
-                // TOGGLE MODE (CYCLE 0 -> 1 -> 2 -> 0)
+                // TOGGLE MODE (0 -> 1 -> 2 -> 0)
                 if (isMeshAvailable) {
                     meshMode = (meshMode + 1) % 3;
                     redrawMenuCanvas(); 
                     
-                    let statusMsg = "Mode: Occlusion";
+                    let statusMsg = "Mode: Shadow/Occlusion";
                     if(meshMode === 1) statusMsg = "Mode: Wireframe";
                     if(meshMode === 2) statusMsg = "Mode: Off";
                     updateStatusText(statusMsg);
                 } else {
-                    updateStatusText("Error: No Mesh Data Found", true);
+                    updateStatusText("Error: No Mesh Data", true);
                 }
             } else {
                 // LOAD MODEL
