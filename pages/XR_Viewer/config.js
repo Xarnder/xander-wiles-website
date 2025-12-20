@@ -1,7 +1,7 @@
 // config.js
 // Add your GLB or OBJ file names here exactly as they appear in the 'assets' folder.
 export const modelList = [
-    'Mercades_300sl.glb',
+    'Mercedes_300sl.glb',
     'Cute_Robot.glb',
     'Fighter_Jet.glb',
     'Space_Fighter_Large.glb', 
