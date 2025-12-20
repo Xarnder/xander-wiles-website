@@ -4,18 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Quest 3 AR Studio</title>
-    <style>
-        body { margin: 0; background: #111; color: white; font-family: sans-serif; }
-        #ar-button-container {
-            position: absolute; bottom: 20px; left: 0; width: 100%;
-            display: flex; justify-content: center; pointer-events: none;
-        }
-        button#ARButton {
-            pointer-events: auto;
-            padding: 12px 24px; border: 1px solid white; background: #4a90e2;
-            border-radius: 20px; font-weight: bold; cursor: pointer; z-index: 999;
-        }
-    </style>
+    
+    <!-- YOUR SITE HEADER CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <!-- LOCAL AR STYLES -->
+    <link rel="stylesheet" href="style.css">
+
     <script type="importmap">
         {
             "imports": {
@@ -26,7 +20,14 @@
     </script>
 </head>
 <body>
+    <!-- YOUR SITE NAVIGATION -->
+    <div id="main-nav-placeholder"></div> 
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- AR UI CONTAINER -->
     <div id="ar-button-container"></div>
+    
+    <!-- MAIN APP SCRIPT -->
     <script type="module" src="script.js"></script>
 </body>
 </html>
