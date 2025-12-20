@@ -19,23 +19,36 @@ let modelName = null;
 let hudGroup, statusMesh, loadingGroup, loadingFill, menuMesh, controlsMesh;
 
 // Room Mesh State
+// We now map xrMesh -> THREE.Group (containing occlusion, shadow, and wireframe meshes)
 const roomMeshes = new Map();
 let roomGroup;
 let meshMode = 0; // 0 = Occlusion+Shadow, 1 = Wireframe, 2 = Off
 let isMeshAvailable = true;  
 
 // --- MATERIALS ---
-// 1. Wireframe (Debug Mode)
-const matWireframe = new THREE.MeshBasicMaterial({ 
-    color: 0x00ffff, wireframe: true, transparent: true, opacity: 0.3 
+
+// 1. Occlusion Material (The "Invisible Wall")
+// Writes to depth buffer so objects behind it are hidden.
+const matOcclusion = new THREE.MeshBasicMaterial({
+    colorWrite: false, 
+    depthWrite: true,
+    side: THREE.DoubleSide
 });
 
-// 2. Shadow + Occlusion (Realism Mode)
-// ShadowMaterial is transparent but renders shadows. 
-// depthWrite: true ensures it still hides objects behind the wall.
-const matOcclusion = new THREE.ShadowMaterial({
-    opacity: 0.4,  // Darkness of the shadow
-    depthWrite: true 
+// 2. Shadow Material (The "Projected Shadow")
+// Transparent, receives shadows, does NOT write depth (avoids z-fighting with occlusion)
+const matShadow = new THREE.ShadowMaterial({
+    opacity: 0.5,
+    depthWrite: false, // Let occlusion mesh handle depth
+    side: THREE.DoubleSide
+});
+
+// 3. Wireframe Material (Debug)
+const matWireframe = new THREE.MeshBasicMaterial({ 
+    color: 0x00ffff, 
+    wireframe: true, 
+    transparent: true, 
+    opacity: 0.3 
 });
 
 // Menu State
@@ -63,23 +76,24 @@ function init() {
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
         // --- LIGHTING & SHADOWS ---
-        const dirLight = new THREE.DirectionalLight(0xffffff, 3);
-        dirLight.position.set(2, 6, 2); // High up to cast floor shadows
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+        dirLight.position.set(0, 5, 0); // Overhead light
         dirLight.castShadow = true;
         
-        // Optimised Shadow Settings for Mobile VR
-        dirLight.shadow.mapSize.width = 1024; 
-        dirLight.shadow.mapSize.height = 1024;
+        // High Quality Shadows
+        dirLight.shadow.mapSize.width = 2048; 
+        dirLight.shadow.mapSize.height = 2048;
         dirLight.shadow.camera.near = 0.1;
         dirLight.shadow.camera.far = 10;
         dirLight.shadow.camera.left = -5;
         dirLight.shadow.camera.right = 5;
         dirLight.shadow.camera.top = 5;
         dirLight.shadow.camera.bottom = -5;
-        dirLight.shadow.bias = -0.001; // Prevents shadow artifacts
+        dirLight.shadow.bias = -0.0005; 
         
         scene.add(dirLight);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        scene.add(dirLight.target);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
         // Renderer
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -88,9 +102,9 @@ function init() {
         renderer.xr.enabled = true;
         renderer.xr.setReferenceSpaceType('local-floor');
         
-        // ENABLE SHADOW MAP
+        // ENABLE SHADOWS
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer edges
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
 
         document.body.appendChild(renderer.domElement);
 
@@ -184,9 +198,7 @@ function createMenuMesh() {
 
     const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
     const material = new THREE.MeshBasicMaterial({ 
-        transparent: true, 
-        opacity: 0.95, 
-        depthTest: false 
+        transparent: true, opacity: 0.95, depthTest: false 
     });
     
     menuMesh = new THREE.Mesh(geometry, material);
@@ -201,17 +213,13 @@ function createMenuMesh() {
 function createControlsMesh() {
     const geometry = new THREE.PlaneGeometry(0.5, 0.7); 
     const material = new THREE.MeshBasicMaterial({ 
-        transparent: true, 
-        opacity: 0.90, 
-        depthTest: false 
+        transparent: true, opacity: 0.90, depthTest: false 
     });
     controlsMesh = new THREE.Mesh(geometry, material);
-    
     controlsMesh.position.set(-0.7, 0, -1.8);
     controlsMesh.rotation.y = 0.2; 
     controlsMesh.visible = false;
     hudGroup.add(controlsMesh);
-
     redrawControlsCanvas();
 }
 
@@ -227,17 +235,15 @@ function redrawControlsCanvas() {
 
     ctx.font = 'bold 50px Arial'; ctx.fillStyle = '#4a90e2'; ctx.textAlign = 'center';
     ctx.fillText("Controls", width / 2, 70);
-    
     ctx.strokeStyle = '#555'; ctx.lineWidth = 2; 
     ctx.beginPath(); ctx.moveTo(40, 90); ctx.lineTo(width-40, 90); ctx.stroke();
 
     const lines = [
         { label: "Trigger (Click)", val: "Spawn Model" },
-        { label: "Trigger (Hold)", val: "Drag Model" },
+        { label: "Hold Button A", val: "Drag Model" },
         { label: "Left Stick ↕", val: "Lift / Lower" },
         { label: "Right Stick ↔", val: "Rotate" },
         { label: "Right Stick ↕", val: "Scale Size" },
-        { label: "Button A", val: "Select Item" },
         { label: "Button B", val: "Close Menu" }
     ];
 
@@ -288,7 +294,7 @@ function redrawMenuCanvas() {
             } else {
                 if (meshMode === 0) displayLabel = "Mode: Shadow/Occlusion";
                 else if (meshMode === 1) displayLabel = "Mode: Wireframe";
-                else if (meshMode === 2) displayLabel = "Mode: Off (No Mesh)";
+                else if (meshMode === 2) displayLabel = "Mode: Off";
                 textColor = '#ffff00'; 
             }
         }
@@ -309,8 +315,6 @@ function redrawMenuCanvas() {
     menuMesh.material.map = tex;
     menuMesh.material.needsUpdate = true;
 }
-
-// --- UTILS ---
 
 function updateStatusText(text, isError = false) {
     const color = isError ? '#ff0000' : '#00ff00';
@@ -374,17 +378,16 @@ function loadModel(name, positionMatrix) {
         const scalar = size > 0 ? (0.5 / size) : 1;
         currentModel.scale.set(scalar, scalar, scalar);
         
-        // ENABLE SHADOW CASTING ON NEW MODEL
+        // Shadow Casting for Models
         currentModel.traverse((node) => {
             if (node.isMesh) {
                 node.castShadow = true;
-                node.receiveShadow = true; // Self shadow
+                node.receiveShadow = true;
             }
         });
 
         scene.add(currentModel);
         
-        // Hide Menu & Controls
         isLoading = false; 
         isMenuOpen = false; 
         menuMesh.visible = false; 
@@ -432,44 +435,77 @@ function render(timestamp, frame) {
         if (!frame.detectedMeshes && isMeshAvailable) {
         } else if (frame.detectedMeshes) {
             isMeshAvailable = true; 
-            for (const [xrMesh, threeMesh] of roomMeshes) {
+            for (const [xrMesh, threeGroup] of roomMeshes) {
                 if (!frame.detectedMeshes.has(xrMesh)) {
-                    roomGroup.remove(threeMesh);
-                    threeMesh.geometry.dispose(); 
+                    roomGroup.remove(threeGroup);
+                    // Dispose geometry and materials
+                    threeGroup.children.forEach(c => { c.geometry.dispose(); });
                     roomMeshes.delete(xrMesh);
                 }
             }
             for (const xrMesh of frame.detectedMeshes) {
-                let mesh = roomMeshes.get(xrMesh);
-                if (!mesh) {
+                let threeGroup = roomMeshes.get(xrMesh);
+                let meshOcclusion, meshShadow, meshWireframe;
+
+                if (!threeGroup) {
+                    threeGroup = new THREE.Group();
                     const geometry = new THREE.BufferGeometry();
-                    // Initial Material
-                    mesh = new THREE.Mesh(geometry, matOcclusion);
                     
-                    // ENABLE SHADOW RECEIVING ON ROOM MESH
-                    mesh.receiveShadow = true;
-                    
-                    roomGroup.add(mesh);
-                    roomMeshes.set(xrMesh, mesh);
-                }
+                    // 1. Occlusion Mesh
+                    meshOcclusion = new THREE.Mesh(geometry, matOcclusion);
+                    meshOcclusion.renderOrder = -2; // Render FIRST
+                    threeGroup.add(meshOcclusion);
 
-                // MODE LOGIC
-                if (meshMode === 2) {
-                    // OFF (Visible = false)
-                    mesh.visible = false;
+                    // 2. Shadow Mesh
+                    meshShadow = new THREE.Mesh(geometry, matShadow);
+                    meshShadow.receiveShadow = true;
+                    meshShadow.renderOrder = -1; // Render SECOND
+                    threeGroup.add(meshShadow);
+
+                    // 3. Wireframe Mesh
+                    meshWireframe = new THREE.Mesh(geometry, matWireframe);
+                    meshWireframe.renderOrder = 0;
+                    threeGroup.add(meshWireframe);
+
+                    roomGroup.add(threeGroup);
+                    roomMeshes.set(xrMesh, threeGroup);
                 } else {
-                    mesh.visible = true;
-                    // Mode 1: Wireframe, Mode 0: Occlusion/Shadow
-                    mesh.material = (meshMode === 1) ? matWireframe : matOcclusion;
-                    mesh.renderOrder = -1; // Write depth before objects
+                    meshOcclusion = threeGroup.children[0];
+                    meshShadow = threeGroup.children[1];
+                    meshWireframe = threeGroup.children[2];
                 }
 
-                mesh.geometry.setAttribute('position', new THREE.BufferAttribute(xrMesh.vertices, 3));
-                mesh.geometry.setIndex(new THREE.BufferAttribute(xrMesh.indices, 1));
+                // --- VISIBILITY LOGIC ---
+                if (meshMode === 2) {
+                    // OFF
+                    threeGroup.visible = false;
+                } else {
+                    threeGroup.visible = true;
+                    if (meshMode === 0) {
+                        // MODE: OCCLUSION + SHADOW
+                        meshOcclusion.visible = true;
+                        meshShadow.visible = true;
+                        meshWireframe.visible = false;
+                    } else if (meshMode === 1) {
+                        // MODE: WIREFRAME
+                        meshOcclusion.visible = false;
+                        meshShadow.visible = false;
+                        meshWireframe.visible = true;
+                    }
+                }
+
+                // Update shared geometry
+                const geometry = meshOcclusion.geometry;
+                geometry.setAttribute('position', new THREE.BufferAttribute(xrMesh.vertices, 3));
+                geometry.setIndex(new THREE.BufferAttribute(xrMesh.indices, 1));
+                
+                // CRITICAL: Compute Normals for Shadows
+                geometry.computeVertexNormals();
+
                 const pose = frame.getPose(xrMesh.meshSpace, renderer.xr.getReferenceSpace());
                 if (pose) {
-                    mesh.matrix.fromArray(pose.transform.matrix);
-                    mesh.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
+                    threeGroup.matrix.fromArray(pose.transform.matrix);
+                    threeGroup.matrix.decompose(threeGroup.position, threeGroup.quaternion, threeGroup.scale);
                 }
             }
         } else {
