@@ -5,4 +5,5 @@ export const modelList = [
     'Fighter_Jet.glb',
     'Space_Fighter_Large.glb', 
     'Space_Fighter.glb',
+    'Make_Human.glb'
 ];
