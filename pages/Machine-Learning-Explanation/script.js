@@ -5,27 +5,29 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
 // --- Configuration ---
 const CONFIG = {
-    gridSize: 200,      // High detail
+    gridSize: 150,      
     worldSize: 30,      
     ballRadius: 0.5,    
     learningRate: 0.01,
     momentum: 0.0,
+    noise: 0.0,         
     lScale: 1.0,        
     lAmp: 1.0,          
-    lComplexity: 3      
+    lComplexity: 3,
+    showTrails: true    
 };
 
 // --- State Variables ---
 let scene, camera, renderer, controls;
-let landscapeMesh, ballMesh;
+let landscapeMesh;
 let raycaster, mouse;
-let ballPos = { x: 5, z: 5 }; 
-let velocity = { x: 0, z: 0 };
-let isBallRolling = true;
+
+// Swarm System
+let balls = []; // { mesh, pos, vel, active, trailPoints[], trailLine }
+let trailsContainer; 
+let isSimulating = true;
 let epochCount = 0; 
 let lossHistory = [];
-
-// --- Landscape Math State ---
 let noiseParams = []; 
 
 // UI Elements
@@ -36,8 +38,7 @@ const chartCtx = chartCanvas.getContext('2d');
 const debugEl = document.getElementById('debug-log');
 const epochEl = document.getElementById('epoch-val');
 const lossEl = document.getElementById('loss-val');
-const wxEl = document.getElementById('wx-val');
-const wzEl = document.getElementById('wz-val');
+const agentsEl = document.getElementById('agents-val');
 
 function log(msg, type = 'info') {
     if(debugEl) {
@@ -70,19 +71,22 @@ function init() {
 
         raycaster = new THREE.Raycaster();
         mouse = new THREE.Vector2();
+        
+        trailsContainer = new THREE.Group();
+        scene.add(trailsContainer);
 
         setupLights();
         createAxesAndLabels();
         
         generateLandscapeMath(); 
         createLandscape(); 
-        createBall();
+        spawnBall(5, 5);
 
         window.addEventListener('resize', onWindowResize);
         window.addEventListener('pointerdown', onPointerDown);
         setupUI();
 
-        log("Ready. Landscape Generated.");
+        log("Ready. Use controls to experiment.");
         animate();
 
     } catch (error) {
@@ -112,20 +116,14 @@ function setupLights() {
 function createAxesAndLabels() {
     const corner = -CONFIG.worldSize / 2; 
 
-    // Axis Helper
     const axesHelper = new THREE.AxesHelper(CONFIG.worldSize);
     axesHelper.position.set(corner, 0.1, corner);
-    // Make axes thicker/visible by brute force or just leave default R/G/B
     scene.add(axesHelper);
 
-    // Text Labels
     const loader = new FontLoader();
     loader.load('https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json', function (font) {
-        // Changed color to WHITE (0xffffff) for better visibility
         const textMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        
         function createLabel(text, x, y, z) {
-            // Increased size slightly
             const geometry = new TextGeometry(text, { font: font, size: 0.9, height: 0.1 }); 
             const mesh = new THREE.Mesh(geometry, textMaterial);
             mesh.position.set(x, y, z);
@@ -139,16 +137,17 @@ function createAxesAndLabels() {
 }
 
 function onPointerDown(event) {
-    if(event.target.closest('.ui-card')) return;
+    if(event.target.closest('.ui-card') || event.target.closest('.modal')) return;
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObject(landscapeMesh);
 
     if (intersects.length > 0) {
-        ballPos.x = intersects[0].point.x;
-        ballPos.z = intersects[0].point.z;
-        resetBallState();
+        clearBalls();
+        spawnBall(intersects[0].point.x, intersects[0].point.z);
+        resetSimulationState();
+        log("Manual ball placement.");
     }
 }
 
@@ -188,10 +187,16 @@ function getLoss(x, z) {
 function getGradient(x, z) {
     const h = 0.01;
     const c = getLoss(x, z);
-    return { 
-        x: (getLoss(x + h, z) - c) / h, 
-        z: (getLoss(x, z + h) - c) / h 
-    };
+    
+    let gx = (getLoss(x + h, z) - c) / h;
+    let gz = (getLoss(x, z + h) - c) / h;
+
+    if (CONFIG.noise > 0) {
+        gx += (Math.random() - 0.5) * CONFIG.noise * 5;
+        gz += (Math.random() - 0.5) * CONFIG.noise * 5;
+    }
+
+    return { x: gx, z: gz };
 }
 
 function createLandscape() {
@@ -202,8 +207,10 @@ function createLandscape() {
     const geometry = new THREE.PlaneGeometry(CONFIG.worldSize, CONFIG.worldSize, CONFIG.gridSize, CONFIG.gridSize);
     geometry.rotateX(-Math.PI / 2);
     updateLandscapeGeometry(geometry);
+    
     const material = new THREE.MeshStandardMaterial({
-        vertexColors: true, roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide
+        vertexColors: true, roughness: 0.6, metalness: 0.1, side: THREE.DoubleSide,
+        wireframe: false
     });
     landscapeMesh = new THREE.Mesh(geometry, material);
     landscapeMesh.receiveShadow = true;
@@ -242,36 +249,102 @@ function updateLandscapeGeometry(existingGeometry) {
     geometry.computeVertexNormals();
 }
 
-function createBall() {
-    if (ballMesh) scene.remove(ballMesh);
-    ballMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(CONFIG.ballRadius, 32, 32),
-        new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x444444 })
-    );
-    ballMesh.castShadow = true;
-    scene.add(ballMesh);
-    resetBallState();
+// --- BALL & TRAIL SYSTEM ---
+
+function clearBalls() {
+    balls.forEach(b => {
+        scene.remove(b.mesh);
+        if(b.trailLine) trailsContainer.remove(b.trailLine);
+    });
+    balls = [];
 }
 
-function resetBallState() {
-    isBallRolling = true;
+function spawnBall(x, z) {
+    const geometry = new THREE.SphereGeometry(CONFIG.ballRadius, 16, 16);
+    const material = new THREE.MeshStandardMaterial({ 
+        color: 0xffffff, emissive: 0x222222 
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    
+    const y = getLoss(x, z);
+    mesh.position.set(x, y + CONFIG.ballRadius, z);
+    scene.add(mesh);
+
+    // Create Line Geometry for Trail
+    const maxPoints = 300;
+    const lineGeo = new THREE.BufferGeometry();
+    const positions = new Float32Array(maxPoints * 3); // Pre-allocate
+    lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    lineGeo.setDrawRange(0, 0); // Start with 0 points drawn
+
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 });
+    const line = new THREE.Line(lineGeo, lineMat);
+    line.visible = CONFIG.showTrails;
+    trailsContainer.add(line);
+
+    balls.push({
+        mesh: mesh,
+        pos: { x: x, z: z },
+        vel: { x: 0, z: 0 },
+        active: true,
+        trailPoints: [],
+        trailLine: line
+    });
+}
+
+function spawnSwarm() {
+    clearBalls();
+    resetSimulationState();
+    
+    const swarmSize = 20;
+    const range = CONFIG.worldSize / 2 - 2;
+    
+    for(let i=0; i<swarmSize; i++) {
+        const rx = (Math.random() - 0.5) * 2 * range;
+        const rz = (Math.random() - 0.5) * 2 * range;
+        spawnBall(rx, rz);
+    }
+    log(`Swarm of ${swarmSize} agents deployed.`);
+}
+
+function resetSimulationState() {
+    isSimulating = true;
     epochCount = 0;
-    lossHistory = []; 
-    velocity = { x: 0, z: 0 }; 
+    lossHistory = [];
     if(epochEl) epochEl.innerText = "0";
 }
 
-function randomizeBallPosition() {
-    const range = CONFIG.worldSize / 2 - 2; 
-    ballPos.x = (Math.random() - 0.5) * 2 * range;
-    ballPos.z = (Math.random() - 0.5) * 2 * range;
-    resetBallState();
-    log("Ball respawned.");
+function updateTrails(ball) {
+    // Only update trails if ball is moving
+    const speed = Math.sqrt(ball.vel.x**2 + ball.vel.z**2);
+    if(speed < 0.001) return;
+
+    // Add current position to history
+    ball.trailPoints.push(ball.mesh.position.clone());
+    
+    // Limit trail length to prevent performance drop
+    if(ball.trailPoints.length > 250) {
+        ball.trailPoints.shift();
+    }
+
+    // Update Line Geometry
+    const points = ball.trailPoints;
+    const positions = ball.trailLine.geometry.attributes.position.array;
+    
+    for(let i=0; i<points.length; i++) {
+        positions[i*3] = points[i].x;
+        positions[i*3+1] = points[i].y;
+        positions[i*3+2] = points[i].z;
+    }
+    
+    ball.trailLine.geometry.setDrawRange(0, points.length);
+    ball.trailLine.geometry.attributes.position.needsUpdate = true;
 }
 
-// --- 2D VISUALIZATIONS ---
+// --- VISUALIZATIONS ---
 
-function drawNetwork() {
+function drawNetwork(avgX, avgZ) {
     const w = nnCanvas.width;
     const h = nnCanvas.height;
     nnCtx.clearRect(0, 0, w, h);
@@ -279,8 +352,8 @@ function drawNetwork() {
     const inputX = 40, outputX = w - 40;
     const y1 = h/3, y2 = h - h/3, yOut = h/2;
     
-    const weight1 = Math.abs(ballPos.x);
-    const weight2 = Math.abs(ballPos.z);
+    const weight1 = Math.abs(avgX);
+    const weight2 = Math.abs(avgZ);
     const thick1 = Math.min(8, Math.max(1, weight1 * 0.8));
     const thick2 = Math.min(8, Math.max(1, weight2 * 0.8));
 
@@ -317,7 +390,6 @@ function drawNode(ctx, x, y, label) {
     ctx.fillText(label, x - 5, y + 20);
 }
 
-// --- UPDATED LOSS CHART ---
 function drawLossChart() {
     const w = chartCanvas.width;
     const h = chartCanvas.height;
@@ -326,12 +398,11 @@ function drawLossChart() {
     chartCtx.fillStyle = "rgba(0,0,0,0.2)";
     chartCtx.fillRect(0,0,w,h);
 
-    const pLeft = 30; // More space for labels
+    const pLeft = 30; 
     const pBottom = 15;
     const pTop = 15;
     const pRight = 5;
     
-    // Draw Axes (Brighter White)
     chartCtx.beginPath();
     chartCtx.strokeStyle = "#ffffff";
     chartCtx.lineWidth = 1.5;
@@ -342,40 +413,27 @@ function drawLossChart() {
 
     if (lossHistory.length < 2) return;
 
-    // Get range
     let minVal = Infinity;
     let maxVal = -Infinity;
-    
     for(let val of lossHistory) {
         if(val < minVal) minVal = val;
         if(val > maxVal) maxVal = val;
     }
-    
-    // Add epsilon to range to prevent divide by zero on flat lines
     let range = maxVal - minVal;
     if(range < 0.0001) range = 0.0001;
 
-    // --- NORMALIZATION: Scale curve to fit chart height ---
     const yMin = minVal;
-    const yMax = maxVal;
-    
     const graphW = w - pLeft - pRight;
     const graphH = h - pTop - pBottom;
 
-    // Draw Curve
     chartCtx.beginPath();
     chartCtx.strokeStyle = "#4fe24a"; 
     chartCtx.lineWidth = 2;
 
     for (let i = 0; i < lossHistory.length; i++) {
         const loss = lossHistory[i];
-        
         const x = pLeft + (i / (lossHistory.length - 1)) * graphW;
-        
-        // Normalize: (loss - min) / (max - min)
         const ratio = (loss - yMin) / range; 
-        
-        // Invert Y because canvas 0 is top
         const y = (h - pBottom) - (ratio * graphH);
 
         if (i === 0) chartCtx.moveTo(x, y);
@@ -383,106 +441,141 @@ function drawLossChart() {
     }
     chartCtx.stroke();
 
-    // --- DRAW LABELS ---
     chartCtx.fillStyle = "#ffffff";
     chartCtx.font = "10px sans-serif";
     chartCtx.textAlign = "right";
-
-    // Max Label (Top)
     chartCtx.fillText(maxVal.toFixed(2), pLeft - 4, pTop + 8);
-    
-    // Min Label (Bottom)
     chartCtx.fillText(minVal.toFixed(2), pLeft - 4, h - pBottom);
 }
+
+// --- MAIN LOOP ---
 
 function animate() {
     requestAnimationFrame(animate);
 
-    if (isBallRolling && ballMesh) {
-        const grad = getGradient(ballPos.x, ballPos.z);
-        
-        velocity.x = (CONFIG.momentum * velocity.x) - (CONFIG.learningRate * grad.x);
-        velocity.z = (CONFIG.momentum * velocity.z) - (CONFIG.learningRate * grad.z);
+    if (isSimulating && balls.length > 0) {
+        let totalLoss = 0;
+        let activeBalls = 0;
+        let avgX = 0;
+        let avgZ = 0;
 
-        ballPos.x += velocity.x;
-        ballPos.z += velocity.z;
+        balls.forEach(ball => {
+            if (!ball.active) return;
+            
+            const grad = getGradient(ball.pos.x, ball.pos.z);
+            
+            // Physics Update
+            ball.vel.x = (CONFIG.momentum * ball.vel.x) - (CONFIG.learningRate * grad.x);
+            ball.vel.z = (CONFIG.momentum * ball.vel.z) - (CONFIG.learningRate * grad.z);
 
-        const limit = CONFIG.worldSize / 2 - 0.5;
-        if(ballPos.x > limit) { ballPos.x = limit; velocity.x = 0; }
-        if(ballPos.x < -limit) { ballPos.x = -limit; velocity.x = 0; }
-        if(ballPos.z > limit) { ballPos.z = limit; velocity.z = 0; }
-        if(ballPos.z < -limit) { ballPos.z = -limit; velocity.z = 0; }
+            ball.pos.x += ball.vel.x;
+            ball.pos.z += ball.vel.z;
 
-        const y = getLoss(ballPos.x, ballPos.z);
-        ballMesh.position.set(ballPos.x, y + CONFIG.ballRadius, ballPos.z);
+            // Boundaries
+            const limit = CONFIG.worldSize / 2 - 0.5;
+            if(ball.pos.x > limit) { ball.pos.x = limit; ball.vel.x = 0; }
+            if(ball.pos.x < -limit) { ball.pos.x = -limit; ball.vel.x = 0; }
+            if(ball.pos.z > limit) { ball.pos.z = limit; ball.vel.z = 0; }
+            if(ball.pos.z < -limit) { ball.pos.z = -limit; ball.vel.z = 0; }
 
-        epochCount++;
-        lossHistory.push(y); 
-        if(lossHistory.length > 300) lossHistory.shift(); 
+            const y = getLoss(ball.pos.x, ball.pos.z);
+            ball.mesh.position.set(ball.pos.x, y + CONFIG.ballRadius, ball.pos.z);
+            
+            // Trails
+            updateTrails(ball);
 
-        epochEl.innerText = epochCount;
-        lossEl.innerText = y.toFixed(4);
-        wxEl.innerText = ballPos.x.toFixed(2);
-        wzEl.innerText = ballPos.z.toFixed(2);
+            // Accumulate Stats
+            totalLoss += y;
+            avgX += ball.pos.x;
+            avgZ += ball.pos.z;
+            activeBalls++;
 
-        const speed = Math.sqrt(velocity.x**2 + velocity.z**2);
-        if (speed < 0.0001 && Math.abs(grad.x) < 0.005 && Math.abs(grad.z) < 0.005) {
-            isBallRolling = false;
-            log(`Converged in ${epochCount} epochs.`);
+            // Convergence check (individual)
+            const speed = Math.sqrt(ball.vel.x**2 + ball.vel.z**2);
+            if (speed < 0.0001 && Math.abs(grad.x) < 0.005 && Math.abs(grad.z) < 0.005) {
+               // Optional: Stop logic
+            }
+        });
+
+        if (activeBalls > 0) {
+            epochCount++;
+            const avgLoss = totalLoss / activeBalls;
+            lossHistory.push(avgLoss); 
+            if(lossHistory.length > 300) lossHistory.shift(); 
+
+            epochEl.innerText = epochCount;
+            lossEl.innerText = avgLoss.toFixed(4);
+            agentsEl.innerText = activeBalls;
+
+            drawNetwork(avgX/activeBalls, avgZ/activeBalls);
         }
     }
 
-    drawNetwork();
     drawLossChart();
     controls.update();
     renderer.render(scene, camera);
 }
 
 function setupUI() {
-    const lrSlider = document.getElementById('learning-rate');
-    const lrVal = document.getElementById('lr-value');
-    lrSlider.addEventListener('input', (e) => {
-        CONFIG.learningRate = parseFloat(e.target.value);
-        lrVal.innerText = CONFIG.learningRate;
+    const setupSlider = (id, configKey, displayId, int=false) => {
+        const slider = document.getElementById(id);
+        const display = document.getElementById(displayId);
+        slider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            CONFIG[configKey] = int ? parseInt(val) : val;
+            if(display) display.innerText = val;
+            if(['lScale', 'lAmp', 'lComplexity'].includes(configKey)) {
+                updateLandscapeGeometry();
+            }
+        });
+    };
+
+    setupSlider('learning-rate', 'learningRate', 'lr-value');
+    setupSlider('momentum', 'momentum', 'mom-value');
+    setupSlider('noise', 'noise', 'noise-value');
+    setupSlider('scale', 'lScale', 'scale-value');
+    setupSlider('intensity', 'lAmp', 'intensity-value');
+    setupSlider('complexity', 'lComplexity', 'complexity-value', true);
+
+    document.getElementById('btn-reset-ball').addEventListener('click', () => {
+        clearBalls();
+        spawnBall(5, 5);
+        resetSimulationState();
     });
 
-    const momSlider = document.getElementById('momentum');
-    const momVal = document.getElementById('mom-value');
-    momSlider.addEventListener('input', (e) => {
-        CONFIG.momentum = parseFloat(e.target.value);
-        momVal.innerText = CONFIG.momentum;
-    });
-
-    const scaleSlider = document.getElementById('scale');
-    const scaleVal = document.getElementById('scale-value');
-    scaleSlider.addEventListener('input', (e) => {
-        CONFIG.lScale = parseFloat(e.target.value);
-        scaleVal.innerText = CONFIG.lScale;
-        updateLandscapeGeometry();
-    });
-
-    const intSlider = document.getElementById('intensity');
-    const intVal = document.getElementById('intensity-value');
-    intSlider.addEventListener('input', (e) => {
-        CONFIG.lAmp = parseFloat(e.target.value);
-        intVal.innerText = CONFIG.lAmp;
-        updateLandscapeGeometry();
-    });
-
-    const compSlider = document.getElementById('complexity');
-    const compVal = document.getElementById('complexity-value');
-    compSlider.addEventListener('input', (e) => {
-        CONFIG.lComplexity = parseInt(e.target.value);
-        compVal.innerText = CONFIG.lComplexity;
-        updateLandscapeGeometry();
-    });
-
-    document.getElementById('btn-reset-ball').addEventListener('click', randomizeBallPosition);
     document.getElementById('btn-new-landscape').addEventListener('click', () => {
         log("Generating new landscape...");
         generateLandscapeMath(); 
         updateLandscapeGeometry();
-        randomizeBallPosition();
+        clearBalls();
+        spawnBall(5, 5);
+        resetSimulationState();
+    });
+
+    document.getElementById('btn-spawn-swarm').addEventListener('click', spawnSwarm);
+
+    document.getElementById('btn-toggle-wire').addEventListener('click', () => {
+        landscapeMesh.material.wireframe = !landscapeMesh.material.wireframe;
+    });
+
+    const trailBtn = document.getElementById('btn-toggle-trails');
+    trailBtn.addEventListener('click', () => {
+        CONFIG.showTrails = !CONFIG.showTrails;
+        trailBtn.querySelector('span').innerText = CONFIG.showTrails ? "〰️ Trails" : "〰️ No Trails";
+        balls.forEach(b => {
+            if(b.trailLine) b.trailLine.visible = CONFIG.showTrails;
+        });
+    });
+
+    // --- MODAL LOGIC ---
+    const modal = document.getElementById('info-modal');
+    const btnInfo = document.getElementById('btn-info');
+    const btnClose = document.getElementById('btn-close-modal');
+
+    btnInfo.addEventListener('click', () => modal.classList.remove('hidden'));
+    btnClose.addEventListener('click', () => modal.classList.add('hidden'));
+    modal.addEventListener('click', (e) => {
+        if(e.target === modal) modal.classList.add('hidden');
     });
 }
 
