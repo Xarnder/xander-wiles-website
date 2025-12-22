@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Loss Function Visualizer</title>
+
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="style.css">
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <div id="canvas-container"></div>
+
+    <div class="ui-card">
+        <div class="card-header">
+            <h2>Gradient Descent</h2>
+            <div class="status-indicator active"></div>
+        </div>
+        <p class="subtitle">Click landscape to place ball</p>
+        
+        <div class="viz-wrapper">
+            <div class="viz-header">Network Structure</div>
+            <div class="viz-container">
+                <canvas id="nn-viz" width="280" height="80"></canvas>
+            </div>
+            
+            <div class="viz-header" style="margin-top:10px;">Loss History</div>
+            <div class="viz-container">
+                <canvas id="loss-chart" width="280" height="80"></canvas>
+            </div>
+        </div>
+
+        <div class="section-title">Model Parameters</div>
+        <div class="control-group">
+            <div class="label-row">
+                <label for="learning-rate">Learning Rate</label>
+                <span id="lr-value" class="value-tag">0.01</span>
+            </div>
+            <input type="range" id="learning-rate" min="0.001" max="0.1" step="0.001" value="0.01">
+
+            <div class="label-row" style="margin-top:12px;">
+                <label for="momentum">Momentum</label>
+                <span id="mom-value" class="value-tag">0.00</span>
+            </div>
+            <input type="range" id="momentum" min="0.0" max="0.95" step="0.05" value="0.0">
+        </div>
+
+        <div class="section-title" style="margin-top:20px;">Landscape Settings</div>
+        <div class="control-group">
+            <div class="label-row">
+                <label for="scale">Scale (Zoom)</label>
+                <span id="scale-value" class="value-tag">1.0</span>
+            </div>
+            <input type="range" id="scale" min="0.2" max="2.0" step="0.1" value="1.0">
+
+            <div class="label-row" style="margin-top:8px;">
+                <label for="intensity">Intensity (Height)</label>
+                <span id="intensity-value" class="value-tag">1.0</span>
+            </div>
+            <input type="range" id="intensity" min="0.2" max="2.0" step="0.1" value="1.0">
+
+            <div class="label-row" style="margin-top:8px;">
+                <label for="complexity">Complexity</label>
+                <span id="complexity-value" class="value-tag">3</span>
+            </div>
+            <input type="range" id="complexity" min="1" max="5" step="1" value="3">
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-item">
+                <span class="stat-label">Loss</span>
+                <span id="loss-val" class="stat-value">--</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Epochs</span>
+                <span id="epoch-val" class="stat-value">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Weight X</span>
+                <span id="wx-val" class="stat-value">--</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Weight Z</span>
+                <span id="wz-val" class="stat-value">--</span>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button id="btn-reset-ball" class="btn btn-primary">
+                <span>Respawn Ball</span>
+            </button>
+            <button id="btn-new-landscape" class="btn btn-secondary">
+                <span>New Landscape</span>
+            </button>
+        </div>
+        
+        <div id="debug-log">Initializing...</div>
+    </div>
+
+    <script type="module" src="script.js"></script>
+</body>
+</html>
