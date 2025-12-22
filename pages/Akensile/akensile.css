@@ -111,7 +111,7 @@ body {
 }
 .book-card-3d:hover { transform: scale(1.03) translateY(-10px) rotateY(-5deg); }
 
-/* --- NEW VISUAL BREAK SECTION (The new big image slot) --- */
+/* --- VISUAL BREAK SECTION (LUMINOUS) --- */
 .visual-break {
     padding: 80px 0;
     text-align: center;
@@ -125,10 +125,10 @@ body {
 .feature-art-container {
     position: relative;
     width: 100%;
-    max-width: 1000px; /* Big wide container */
+    max-width: 1000px;
     margin: 0 auto;
     border-radius: 20px;
-    padding: 5px; /* Creates a border effect */
+    padding: 5px;
     background: rgba(0,0,0,0.5);
 }
 
