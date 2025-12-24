@@ -23,6 +23,9 @@ const hintBtn = document.getElementById('hint-btn');
 const clearBtn = document.getElementById('clear-btn');
 const submitBtn = document.getElementById('submit-btn');
 const clueDisplay = document.getElementById('clue-display');
+const scrollLockBtn = document.getElementById('scroll-lock-btn');
+const scaleSlider = document.getElementById('ui-scale-slider');
+const scaleValDisplay = document.getElementById('scale-val-display');
 
 // Custom Modal Elements
 const customModal = document.getElementById('custom-modal');
@@ -134,7 +137,6 @@ let PRELOADED_MODELS = [];
 const GLB_FILES = ["flower1.glb", "flower2.glb", "flower3.glb"]; 
 const FLOOR_FILE = "floor.glb";
 
-// Default Camera Positions
 const DEFAULT_CAM_POS = new THREE.Vector3(0, 10, 18);
 const DEFAULT_TARGET = new THREE.Vector3(0, 0, 0);
 
@@ -240,8 +242,9 @@ function init3D() {
     controls.maxDistance = 40;
     controls.target.copy(DEFAULT_TARGET);
     
+    // --- UPDATED SPEED ---
     controls.autoRotate = true; 
-    controls.autoRotateSpeed = 1.0; 
+    controls.autoRotateSpeed = 5.0; // Much faster rotation
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
@@ -349,9 +352,7 @@ function animateCameraTo(targetPos) {
 
     const startPos = camera.position.clone();
     const startTarget = controls.target.clone();
-    
     const zoomPos = new THREE.Vector3(targetPos.x, targetPos.y + 3, targetPos.z + 3);
-    
     const startTime = Date.now();
     const duration = 1000; 
 
@@ -375,7 +376,6 @@ function animateCameraTo(targetPos) {
 
     function stepZoomOut(currentCamPos, currentTarget) {
         const startOut = Date.now();
-        
         function step() {
             const now = Date.now();
             const progress = Math.min((now - startOut) / duration, 1);
@@ -411,7 +411,7 @@ function onWindowResize() {
 
 // --- AUTO LAYOUT CHECK ---
 function checkLayout() {
-    // Enable compact mode on shorter screens
+    // If height is small (iPad Landscape), enable compact mode
     if (window.innerHeight < 820) {
         document.body.classList.add('compact-mode');
     } else {
@@ -440,6 +440,30 @@ let isTouchActive = false;
 let touchTimer = null;
 let lastTouchedTile = null;
 let currentClueTarget = null;
+
+// SCROLL LOCK LOGIC
+let isScrollLocked = false;
+
+scrollLockBtn.addEventListener('click', () => {
+    isScrollLocked = !isScrollLocked;
+    if(isScrollLocked) {
+        document.body.classList.add('scroll-locked');
+        scrollLockBtn.innerText = "🔒 Scroll: Locked";
+        scrollLockBtn.style.backgroundColor = "#e74c3c";
+    } else {
+        document.body.classList.remove('scroll-locked');
+        scrollLockBtn.innerText = "🔓 Scroll: Free";
+        scrollLockBtn.style.backgroundColor = "#7f8c8d";
+    }
+});
+
+// UI SCALE LOGIC
+scaleSlider.addEventListener('input', (e) => {
+    const val = e.target.value;
+    document.documentElement.style.setProperty('--ui-zoom', val);
+    scaleValDisplay.innerText = Math.round(val * 100) + "%";
+    if(scene) onWindowResize();
+});
 
 // --- MAIN ENTRY POINT ---
 loadAssets();
