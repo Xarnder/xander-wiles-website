@@ -59,7 +59,7 @@
         </div>
     </div>
 
-    <!-- CUSTOM CONFIRM MODAL (New) -->
+    <!-- CUSTOM CONFIRM MODAL -->
     <div id="custom-modal" class="start-overlay" style="display:none; z-index: 1000;">
         <div class="glass-panel start-card" style="max-width: 350px;">
             <h2 style="margin-top:0; color:var(--text-color);">Return to Menu?</h2>
@@ -78,7 +78,6 @@
         <aside class="side-panel">
             <section class="garden-area glass-panel">
                 <h3>Your Garden</h3>
-                <!-- 3D Garden Canvas -->
                 <div id="garden-canvas-container">
                     <canvas id="garden-canvas"></canvas>
                 </div>
@@ -102,6 +101,10 @@
                     </div>
                     <button id="reset-btn" class="refresh-btn">🔄 Menu</button>
                 </div>
+                
+                <!-- CURRENT WORD MOVED HERE -->
+                <div class="current-word-display" id="current-word">_ _ _</div>
+                
                 <div class="message-area" id="message-area">Tap letters to start</div>
             </section>
 
@@ -110,8 +113,6 @@
             </section>
 
             <section class="controls-area glass-panel">
-                <div class="current-word-display" id="current-word">_ _ _</div>
-                
                 <div class="button-row">
                     <button id="magic-btn" class="action-btn magic">🌟 Magic</button>
                     <button id="hint-btn" class="action-btn info">💡 Hint</button>
@@ -129,7 +130,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <!-- UTILS -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
 
     <script src="script.js"></script>
