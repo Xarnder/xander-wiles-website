@@ -5,11 +5,11 @@
     --glass-bg: rgba(30, 30, 40, 0.85);
     --glass-border: rgba(255, 255, 255, 0.1);
     --text-color: #ffffff;
-    --btn-success: #2ecc71; /* Green */
-    --btn-warning: #e74c3c; /* Red */
-    --btn-info: #f39c12;    /* Orange */
-    --btn-magic: #9b59b6;   /* Purple */
-    --btn-refresh: #7f8c8d; /* Grey */
+    --btn-success: #2ecc71; 
+    --btn-warning: #e74c3c; 
+    --btn-info: #f39c12;    
+    --btn-magic: #9b59b6;   
+    --btn-refresh: #7f8c8d; 
 }
 
 body {
@@ -77,7 +77,7 @@ body {
 
 /* LAYOUT */
 .game-container {
-    max-width: 1000px;
+    max-width: 1200px; /* Wider to accommodate larger garden */
     margin: 0 auto;
     padding: 20px;
     padding-top: 80px; 
@@ -88,21 +88,38 @@ body {
 }
 
 .side-panel {
-    flex: 1;
-    min-width: 250px;
+    flex: 1.5; /* Give garden more space */
+    min-width: 300px;
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
 
 .main-play-area {
-    flex: 2;
+    flex: 1; /* Grid area can be smaller */
     display: flex;
     flex-direction: column;
     gap: 15px;
     max-width: 600px;
 }
 
+#garden-canvas-container {
+    width: 100%;
+    height: 500px; /* LARGER GARDEN */
+    position: relative;
+    overflow: hidden;
+    border-radius: 15px;
+    cursor: grab;
+    background: #111; /* Fallback */
+}
+
+#garden-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* GLASS PANELS */
 .glass-panel {
     background: var(--glass-bg);
     backdrop-filter: blur(12px);
@@ -203,7 +220,6 @@ body {
 }
 .action-btn:active { transform: scale(0.95); }
 
-/* Ensuring specific colors apply correctly */
 .action-btn.success { background-color: var(--btn-success); }
 .action-btn.success-big { background-color: var(--btn-success); font-size: 1.5rem; padding: 20px; }
 .action-btn.warning { background-color: var(--btn-warning); }
@@ -231,24 +247,15 @@ body {
     font-size: 1rem;
 }
 
-.flower-patch {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
-    min-height: 100px;
-    font-size: 2.5rem;
-}
-.flower { animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-@keyframes popIn { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-
-@media (max-width: 768px) {
+@media (max-width: 900px) {
     .game-container {
         flex-direction: column-reverse; 
     }
     .side-panel {
         width: 100%;
+        flex: auto;
     }
     .current-word-display { font-size: 2rem; }
     .words-list { max-height: 100px; }
+    #garden-canvas-container { height: 350px; } /* Slightly smaller on phones, but still big */
 }

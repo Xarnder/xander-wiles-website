@@ -3,41 +3,53 @@ console.log("Game Initialization Started...");
 // --- CONFIGURATION ---
 const MIN_WORD_LENGTH = 3;
 let GRID_SIZE = 4;
-
 const DICTIONARY_URL = "https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt";
 
-// --- AUDIO SYSTEM (Zero Latency Pool) ---
+// --- DOM ELEMENTS ---
+const gridEl = document.getElementById('boggle-grid');
+const currentWordEl = document.getElementById('current-word');
+const messageEl = document.getElementById('message-area');
+const scoreEl = document.getElementById('current-score');
+const foundWordsListEl = document.getElementById('found-words-list');
+const resetBtn = document.getElementById('reset-btn');
+const startScreen = document.getElementById('start-screen');
+const gameContainer = document.getElementById('game-container');
+const loadingStatus = document.getElementById('loading-text');
+const progressBar = document.getElementById('progress-bar');
+const loadingContainer = document.getElementById('loading-container');
+const startOptions = document.getElementById('start-options');
+const magicBtn = document.getElementById('magic-btn');
+const hintBtn = document.getElementById('hint-btn');
+const clearBtn = document.getElementById('clear-btn');
+const submitBtn = document.getElementById('submit-btn');
 
-// 1. Preload general sounds
+// Modal Elements
+const customModal = document.getElementById('custom-modal');
+const modalYes = document.getElementById('modal-yes');
+const modalNo = document.getElementById('modal-no');
+
+// --- AUDIO SYSTEM ---
 const audioCorrect = new Audio('assets/sounds/correct.mp3');
 const audioWrong = new Audio('assets/sounds/wrong.mp3');
 const audioSpecial = new Audio('assets/sounds/special.mp3');
 
-// 2. Create a pool for Click sounds (5 copies to allow overlapping)
 const CLICK_POOL = [];
 for(let i=0; i<5; i++) {
     const a = new Audio('assets/sounds/click.mp3');
-    a.preload = 'auto'; // Force load
+    a.preload = 'auto';
     CLICK_POOL.push(a);
 }
 let clickPoolIndex = 0;
 
 function playSound(type) {
     if (type === 'click') {
-        // Use the pool for clicks
         const sound = CLICK_POOL[clickPoolIndex];
         sound.currentTime = 0;
-        sound.play().catch(e => {}); // Ignore interaction errors
-        clickPoolIndex = (clickPoolIndex + 1) % CLICK_POOL.length; // Rotate index
+        sound.play().catch(e => {}); 
+        clickPoolIndex = (clickPoolIndex + 1) % CLICK_POOL.length;
     } else {
-        // Use standard objects for others
-        let sound;
-        if (type === 'correct') sound = audioCorrect;
-        else if (type === 'special') sound = audioSpecial;
-        else if (type === 'wrong') sound = audioWrong;
-        
-        // Clone for overlap on special sounds too, or just reset
-        // Cloning is safer for rapid Correct answers
+        const sound = type === 'special' ? audioSpecial : 
+                      type === 'correct' ? audioCorrect : audioWrong;
         if (sound) {
             const temp = sound.cloneNode();
             temp.play().catch(e => {});
@@ -56,121 +68,324 @@ const DICE_SOURCE = [
     "EIOSST", "ELRTTY", "HIMNQU", "HLNNRZ"
 ];
 
-const FLOWERS = ["🌸", "🌹", "🌻", "🌼", "🌷", "🪷", "🌺", "💐", "🍀", "🍄"];
+// --- 3D GARDEN & ASSET LOADING ---
+let scene, camera, renderer, controls, orbitActive = false;
+let PRELOADED_MODELS = []; 
 
-// --- STATE VARIABLES ---
+// ASSET FILES
+const GLB_FILES = ["flower1.glb", "flower2.glb", "flower3.glb"]; 
+const FLOOR_FILE = "floor.glb";
+
+// Tracking Loading Progress
+let dictProgress = 0;
+let modelProgress = 0;
+let isAssetsLoaded = false;
+
+function updateLoadingUI() {
+    const total = (dictProgress * 0.5) + (modelProgress * 0.5);
+    progressBar.style.width = total + "%";
+    loadingStatus.innerText = `Loading Garden & Words... ${Math.round(total)}%`;
+
+    if (total >= 100 && !isAssetsLoaded) {
+        isAssetsLoaded = true;
+        loadingStatus.innerText = "Ready!";
+        loadingStatus.style.color = "#2ecc71";
+        setTimeout(() => {
+            loadingContainer.style.display = 'none';
+            startOptions.style.display = 'flex';
+            void startOptions.offsetWidth; 
+            startOptions.style.opacity = '1';
+        }, 800);
+    }
+}
+
+function loadAssets() {
+    // 1. Load Dictionary
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", DICTIONARY_URL, true);
+    xhr.onprogress = (event) => {
+        if (event.lengthComputable) {
+            dictProgress = (event.loaded / event.total) * 100;
+        } else {
+            dictProgress = 50; 
+        }
+        updateLoadingUI();
+    };
+    xhr.onload = () => {
+        if (xhr.status === 200) {
+            const text = xhr.responseText;
+            const words = text.split(/\r?\n/);
+            dictionarySet = new Set(words.map(w => w.toUpperCase().trim()));
+            dictProgress = 100;
+            updateLoadingUI();
+            
+            loadModels();
+        }
+    };
+    xhr.onerror = () => { loadingStatus.innerText = "Network Error (Dictionary)"; };
+    xhr.send();
+}
+
+function loadModels() {
+    const loader = new THREE.GLTFLoader();
+    const totalModels = GLB_FILES.length; 
+    let loadedCount = 0;
+    
+    if (totalModels === 0) {
+        modelProgress = 100;
+        updateLoadingUI();
+        return;
+    }
+
+    GLB_FILES.forEach((fileName) => {
+        loader.load(
+            `assets/models/${fileName}`,
+            (gltf) => {
+                PRELOADED_MODELS.push(gltf.scene);
+                loadedCount++;
+                modelProgress = (loadedCount / totalModels) * 100;
+                updateLoadingUI();
+            },
+            undefined, 
+            (error) => {
+                console.warn(`Could not load ${fileName}. Playing without it.`);
+                loadedCount++;
+                modelProgress = (loadedCount / totalModels) * 100;
+                updateLoadingUI();
+            }
+        );
+    });
+}
+
+function init3D() {
+    const canvas = document.getElementById('garden-canvas');
+    if (!canvas) return;
+
+    // Scene
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // SKY BLUE
+
+    // Camera
+    camera = new THREE.PerspectiveCamera(60, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+    camera.position.set(0, 8, 12);
+
+    // Renderer
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Controls
+    controls = new THREE.OrbitControls(camera, canvas);
+    controls.enableDamping = true; 
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.1; 
+    controls.minDistance = 5;
+    controls.maxDistance = 40;
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambientLight);
+    
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    
+    // --- SHADOW FIX ---
+    // Increase the size of the shadow camera to cover the whole garden
+    dirLight.shadow.camera.left = -30;
+    dirLight.shadow.camera.right = 30;
+    dirLight.shadow.camera.top = 30;
+    dirLight.shadow.camera.bottom = -30;
+    
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    scene.add(dirLight);
+
+    // --- FLOOR LOADING ---
+    const loader = new THREE.GLTFLoader();
+    loader.load(
+        `assets/models/${FLOOR_FILE}`,
+        (gltf) => {
+            const floor = gltf.scene;
+            floor.scale.set(1, 1, 1); 
+            floor.position.set(0, -0.1, 0); 
+            
+            floor.traverse((child) => {
+                if (child.isMesh) {
+                    child.receiveShadow = true;
+                }
+            });
+            scene.add(floor);
+        },
+        undefined,
+        (error) => {
+            // Fallback Green Ground
+            const groundGeo = new THREE.PlaneGeometry(50, 50);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x4caf50 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+        }
+    );
+
+    // Initial Resize
+    onWindowResize();
+    window.addEventListener('resize', onWindowResize, false);
+    
+    // Interaction listeners
+    controls.addEventListener('start', () => { orbitActive = true; });
+    controls.addEventListener('end', () => { orbitActive = false; });
+
+    animate();
+}
+
+function plantNewFlower() {
+    if (PRELOADED_MODELS.length === 0 || !scene) return;
+
+    const randomIndex = Math.floor(Math.random() * PRELOADED_MODELS.length);
+    const template = PRELOADED_MODELS[randomIndex];
+    
+    let flower;
+    if (THREE.SkeletonUtils) {
+        flower = THREE.SkeletonUtils.clone(template);
+    } else {
+        flower = template.clone();
+    }
+
+    // Random Position
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 1.5 + Math.random() * 10; 
+    const x = Math.sin(angle) * radius;
+    const z = Math.cos(angle) * radius;
+
+    flower.position.set(x, 0, z);
+    
+    // Random rotation and scale
+    flower.rotation.y = Math.random() * Math.PI * 2;
+    const scale = 1.2 + (Math.random() * 0.8); 
+    flower.scale.set(scale, scale, scale);
+
+    // Shadow setup
+    flower.traverse((child) => {
+        if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+        }
+    });
+
+    flower.userData.isFlower = true;
+    scene.add(flower);
+
+    // Pop animation
+    flower.scale.set(0.1, 0.1, 0.1);
+    let growFrame = 0;
+    function grow() {
+        if (growFrame < 20) {
+            const s = 0.1 + (scale - 0.1) * (growFrame / 20); 
+            flower.scale.set(s, s, s);
+            growFrame++;
+            requestAnimationFrame(grow);
+        }
+    }
+    grow();
+}
+
+function onWindowResize() {
+    const canvas = document.getElementById('garden-canvas');
+    if (!canvas || !camera || !renderer) return;
+    
+    camera.aspect = canvas.clientWidth / canvas.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    if(controls) controls.update();
+    if(renderer && scene && camera) renderer.render(scene, camera);
+}
+
+
+// --- GAME STATE ---
 let grid = []; 
 let selectedTiles = []; 
 let foundWords = new Set();
 let dictionarySet = new Set();
 let possibleWords = [];
 let score = 0;
-let isDictionaryLoaded = false;
-
 const tileLocks = {}; 
-
 let currentHintWord = null;
 let hintStep = 0;
 let magicLetterUsed = false;
 
-// --- DOM ELEMENTS ---
-const gridEl = document.getElementById('boggle-grid');
-const currentWordEl = document.getElementById('current-word');
-const messageEl = document.getElementById('message-area');
-const scoreEl = document.getElementById('current-score');
-const flowerPatchEl = document.getElementById('flower-patch');
-const foundWordsListEl = document.getElementById('found-words-list');
-const resetBtn = document.getElementById('reset-btn');
-const startScreen = document.getElementById('start-screen');
-const gameContainer = document.getElementById('game-container');
-const loadingStatus = document.getElementById('loading-text');
-const progressBar = document.getElementById('progress-bar');
-const loadingContainer = document.getElementById('loading-container');
-const startOptions = document.getElementById('start-options');
-const magicBtn = document.getElementById('magic-btn');
-const hintBtn = document.getElementById('hint-btn');
+let isTouchActive = false;
+let touchTimer = null;
+let lastTouchedTile = null;
 
-// --- INITIALIZATION ---
 
-function loadDictionary() {
-    const xhr = new XMLHttpRequest();
-    xhr.open("GET", DICTIONARY_URL, true);
-    
-    xhr.onprogress = function(event) {
-        if (event.lengthComputable) {
-            const percentComplete = (event.loaded / event.total) * 100;
-            progressBar.style.width = percentComplete + "%";
-            loadingStatus.innerText = `Downloading... ${Math.round(percentComplete)}%`;
-        } else {
-            loadingStatus.innerText = "Downloading Dictionary... (Please wait)";
-            progressBar.style.width = "50%";
-        }
-    };
-
-    xhr.onload = function() {
-        if (xhr.status === 200) {
-            const text = xhr.responseText;
-            const words = text.split(/\r?\n/);
-            dictionarySet = new Set(words.map(w => w.toUpperCase().trim()));
-            isDictionaryLoaded = true;
-            
-            progressBar.style.width = "100%";
-            loadingStatus.innerText = "Dictionary Ready!";
-            loadingStatus.style.color = "#2ecc71";
-            
-            setTimeout(() => {
-                loadingContainer.style.display = 'none';
-                startOptions.style.display = 'flex';
-                void startOptions.offsetWidth; 
-                startOptions.style.opacity = '1';
-            }, 500);
-        } else {
-            loadingStatus.innerText = "Error loading dictionary.";
-        }
-    };
-
-    xhr.onerror = function() {
-        loadingStatus.innerText = "Network Error. Check internet connection.";
-    };
-
-    xhr.send();
-}
-
-loadDictionary();
+// --- MAIN ENTRY POINT ---
+loadAssets();
 
 window.startGame = function(size) {
-    if(!isDictionaryLoaded) return;
+    if(!isAssetsLoaded) return;
     GRID_SIZE = size;
     startScreen.style.display = 'none';
     gameContainer.style.display = 'flex';
     gridEl.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
+    
+    if (!scene) init3D();
+    
     initGame();
 };
 
+// --- CUSTOM MODAL LOGIC ---
 resetBtn.addEventListener('click', () => {
-    if(confirm("Go back to menu?")) {
-        gameContainer.style.display = 'none';
-        startScreen.style.display = 'flex';
-        resetSelection();
-    }
+    // Show custom modal instead of window.confirm
+    customModal.style.display = 'flex';
 });
 
-// --- GAME LOGIC ---
+modalYes.addEventListener('click', () => {
+    customModal.style.display = 'none';
+    gameContainer.style.display = 'none';
+    startScreen.style.display = 'flex';
+    resetSelection();
+});
 
+modalNo.addEventListener('click', () => {
+    customModal.style.display = 'none';
+});
+
+
+// --- GAME LOGIC ---
 function initGame() {
     foundWords.clear();
     score = 0;
     scoreEl.innerText = "0";
-    flowerPatchEl.innerHTML = "";
-    foundWordsListEl.innerHTML = '<span class="placeholder-text">...</span>';
     messageEl.innerText = "Tap letters to form words!";
     messageEl.style.color = "#ffeb3b";
+    
+    // Clear the words list display
+    foundWordsListEl.innerHTML = '<span class="placeholder-text">...</span>';
+    
     possibleWords = [];
     
+    // Clear existing flowers
+    if (scene) {
+        const toRemove = [];
+        scene.traverse((child) => {
+            if (child.userData.isFlower) {
+                toRemove.push(child);
+            }
+        });
+        toRemove.forEach(child => scene.remove(child));
+    }
+
     resetSelection();
     generateGrid();
     renderGrid();
-    
     setTimeout(solveGrid, 500); 
 }
 
@@ -206,16 +421,9 @@ function renderGrid() {
             tile.dataset.col = c;
             tile.innerText = grid[r][c];
             
-            // Mouse Interaction
-            tile.addEventListener('mousedown', (e) => {
-                if (!isTouchActive) toggleTile(r, c);
-            });
-
-            // Drag Interaction
-            tile.addEventListener('mouseenter', (e) => {
-                if (e.buttons === 1 && !isTouchActive) {
-                    addTileOnly(r, c);
-                }
+            tile.addEventListener('mousedown', () => { if (!isTouchActive) toggleTile(r, c); });
+            tile.addEventListener('mouseenter', (e) => { 
+                if (e.buttons === 1 && !isTouchActive) addTileOnly(r, c); 
             });
 
             container.appendChild(tile);
@@ -227,23 +435,14 @@ function renderGrid() {
     container.addEventListener('touchend', handleTouchEnd);
 }
 
-// --- INPUT HANDLERS (TILE SPECIFIC DEBOUNCE) ---
-
-let isTouchActive = false;
-let touchTimer = null;
-
+// --- INPUT LOGIC ---
 function toggleTile(r, c) {
     const key = `${r},${c}`;
     const now = Date.now();
-
-    if (tileLocks[key] && now - tileLocks[key] < 1000) {
-        return; // Locked
-    }
-
+    if (tileLocks[key] && now - tileLocks[key] < 1000) return;
     tileLocks[key] = now;
 
     const existingIndex = selectedTiles.findIndex(t => t.row === r && t.col === c);
-
     if (existingIndex !== -1) {
         selectedTiles.splice(existingIndex, 1);
         playSound('click');
@@ -259,10 +458,7 @@ function toggleTile(r, c) {
 function addTileOnly(r, c) {
     const key = `${r},${c}`;
     const now = Date.now();
-
-    if (tileLocks[key] && now - tileLocks[key] < 500) {
-        return; 
-    }
+    if (tileLocks[key] && now - tileLocks[key] < 500) return;
     tileLocks[key] = now;
     
     const isSelected = selectedTiles.some(t => t.row === r && t.col === c);
@@ -275,10 +471,8 @@ function addTileOnly(r, c) {
     }
 }
 
-// TOUCH LOGIC
-let lastTouchedTile = null;
-
 function handleTouchStart(e) {
+    if (orbitActive) return;
     e.preventDefault(); 
     isTouchActive = true;
     clearTimeout(touchTimer);
@@ -296,6 +490,7 @@ function handleTouchStart(e) {
 }
 
 function handleTouchMove(e) {
+    if (orbitActive) return;
     e.preventDefault(); 
     const touch = e.touches[0];
     const el = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -303,7 +498,6 @@ function handleTouchMove(e) {
     if (el && el.classList.contains('tile')) {
         const r = parseInt(el.dataset.row);
         const c = parseInt(el.dataset.col);
-        
         if (!lastTouchedTile || lastTouchedTile.r !== r || lastTouchedTile.c !== c) {
             lastTouchedTile = {r, c};
             addTileOnly(r, c);
@@ -317,11 +511,9 @@ function handleTouchEnd(e) {
 }
 
 // --- VISUALS ---
-
 function updateGridVisuals() {
     const allTiles = document.querySelectorAll('.tile');
     allTiles.forEach(t => t.classList.remove('selected'));
-
     selectedTiles.forEach(t => {
         if(t.row !== -1) {
             const el = document.querySelector(`.tile[data-row="${t.row}"][data-col="${t.col}"]`);
@@ -331,7 +523,7 @@ function updateGridVisuals() {
 }
 
 function updateCurrentWordDisplay() {
-    const word = selectedTiles.map(t => t.char).join('');
+    const word = selectedTiles.map(t => t.char === '?' ? '-' : t.char).join('');
     currentWordEl.innerText = word.length > 0 ? word : "_ _ _";
 }
 
@@ -342,8 +534,7 @@ function showMessage(msg, type) {
     else messageEl.style.color = "#ffeb3b";
 }
 
-// --- SOLVER & HINTS ---
-
+// --- SOLVER & HINT ---
 function solveGrid() {
     const boardCounts = {};
     for(let r=0; r<GRID_SIZE; r++) {
@@ -352,19 +543,15 @@ function solveGrid() {
             boardCounts[char] = (boardCounts[char] || 0) + 1;
         }
     }
-
     possibleWords = [];
-
     for (const word of dictionarySet) {
         if (word.length < MIN_WORD_LENGTH) continue;
         if (word.length > GRID_SIZE * GRID_SIZE) continue;
-
         const wordCounts = {};
         let canForm = true;
         for (const char of word) {
             wordCounts[char] = (wordCounts[char] || 0) + 1;
         }
-
         for (const char in wordCounts) {
             if (!boardCounts[char] || boardCounts[char] < wordCounts[char]) {
                 canForm = false;
@@ -373,16 +560,37 @@ function solveGrid() {
         }
         if (canForm) possibleWords.push(word);
     }
-    possibleWords.sort((a,b) => a.length - b.length);
+    possibleWords.sort(() => Math.random() - 0.5);
 }
+
+// --- BUTTONS ---
+magicBtn.addEventListener('click', () => {
+    const now = Date.now();
+    if(tileLocks['magic'] && now - tileLocks['magic'] < 1000) return;
+    tileLocks['magic'] = now;
+
+    if(magicLetterUsed) {
+        showMessage("Only 1 Magic Letter per word!", "warning");
+        return;
+    }
+    selectedTiles.push({ row: -1, col: -1, char: "?" });
+    magicLetterUsed = true;
+    updateCurrentWordDisplay();
+    playSound('click');
+});
+
+clearBtn.addEventListener('click', () => {
+    resetSelection();
+    showMessage("Start a new word", "neutral");
+});
+
+submitBtn.addEventListener('click', submitWord);
 
 hintBtn.addEventListener('click', () => {
     document.querySelectorAll('.hint-flash').forEach(el => el.classList.remove('hint-flash'));
 
     if (!currentHintWord || foundWords.has(currentHintWord)) {
-        
         const unfound = possibleWords.filter(w => !foundWords.has(w));
-        
         if(unfound.length === 0) {
             showMessage("No more words found!", "info");
             currentHintWord = null;
@@ -395,10 +603,8 @@ hintBtn.addEventListener('click', () => {
     if (hintStep < currentHintWord.length) {
         const charToFind = currentHintWord[hintStep];
         let foundTile = null;
-        
         const tiles = Array.from(document.querySelectorAll('.tile'));
         tiles.sort(() => Math.random() - 0.5);
-
         for (let t of tiles) {
              if (t.innerText.includes(charToFind) || (charToFind === 'Q' && t.innerText === 'Qu')) {
                  foundTile = t;
@@ -418,54 +624,28 @@ hintBtn.addEventListener('click', () => {
     }
 });
 
-// --- SUBMIT & MAGIC ---
-
-magicBtn.addEventListener('click', () => {
-    const now = Date.now();
-    if(tileLocks['magic'] && now - tileLocks['magic'] < 1000) return;
-    tileLocks['magic'] = now;
-
-    if(magicLetterUsed) {
-        showMessage("Only 1 Magic Letter per word!", "warning");
-        return;
-    }
-    selectedTiles.push({ row: -1, col: -1, char: "?" });
-    magicLetterUsed = true;
-    updateCurrentWordDisplay();
-    playSound('click');
-});
-
-document.getElementById('clear-btn').addEventListener('click', () => {
-    resetSelection();
-    showMessage("Start a new word", "neutral");
-});
-
-document.getElementById('submit-btn').addEventListener('click', submitWord);
-
 function submitWord() {
     const now = Date.now();
     if(tileLocks['submit'] && now - tileLocks['submit'] < 1000) return;
     tileLocks['submit'] = now;
 
-    const btn = document.getElementById('submit-btn');
-    btn.style.opacity = "0.5";
-    btn.innerText = "Wait...";
-
+    submitBtn.style.opacity = "0.5";
+    submitBtn.innerText = "Wait...";
     setTimeout(() => {
-        btn.style.opacity = "1";
-        btn.innerText = "✅ CHECK WORD";
+        submitBtn.style.opacity = "1";
+        submitBtn.innerText = "✅ CHECK WORD";
     }, 1000); 
 
     let word = selectedTiles.map(t => t.char).join('').toUpperCase();
 
     if (word.length < MIN_WORD_LENGTH) {
-        showMessage("Too short! Need 3+ letters.", "warning");
+        showMessage("Too short!", "warning");
         playSound('wrong');
+        setTimeout(resetSelection, 800);
         return;
     }
 
     let finalWord = null;
-
     if (word.includes("?")) {
         const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         for (let letter of alphabet) {
@@ -475,11 +655,9 @@ function submitWord() {
                 break; 
             }
         }
-        
         if (!finalWord) {
-            showMessage("No word matches!", "warning");
+            showMessage("No match!", "warning");
             playSound('wrong');
-            // AUTOMATIC CLEAR ON WRONG
             setTimeout(resetSelection, 800);
             return;
         }
@@ -488,36 +666,26 @@ function submitWord() {
     }
 
     if (foundWords.has(finalWord)) {
-        showMessage(`Already found "${finalWord}"!`, "info");
+        showMessage("Already found!", "info");
         playSound('wrong');
-        // AUTOMATIC CLEAR ON DUPLICATE
         setTimeout(resetSelection, 800);
     } else if (dictionarySet.has(finalWord)) {
         foundWords.add(finalWord);
-        
-        let points = 1;
-        if (finalWord.length >= 5) points = 3;
-        else if (finalWord.length === 4) points = 2;
-        
-        score += points;
+        score += finalWord.length > 4 ? 3 : 1;
         scoreEl.innerText = score;
         
         showMessage(`Great! "${finalWord}"`, "success");
-        growFlower();
         addWordToList(finalWord);
         resetSelection();
+        
+        plantNewFlower();
 
-        // SPECIAL SOUND CHECK (Length > 5 means 6, 7, 8...)
-        if (finalWord.length > 5) {
-            playSound('special');
-        } else {
-            playSound('correct');
-        }
+        if (finalWord.length > 5) playSound('special');
+        else playSound('correct');
 
     } else {
         showMessage("Not in dictionary.", "warning");
         playSound('wrong');
-        // AUTOMATIC CLEAR ON WRONG
         setTimeout(resetSelection, 800);
     }
 }
@@ -536,11 +704,4 @@ function addWordToList(word) {
     tag.className = 'word-tag';
     tag.innerText = word;
     foundWordsListEl.prepend(tag);
-}
-
-function growFlower() {
-    const flower = document.createElement('div');
-    flower.className = 'flower';
-    flower.innerText = FLOWERS[Math.floor(Math.random() * FLOWERS.length)];
-    flowerPatchEl.appendChild(flower);
 }

@@ -37,7 +37,7 @@
             
             <div id="loading-container">
                 <div class="loading-spinner"></div>
-                <p id="loading-text" style="color: #4facfe; font-weight: bold; margin-bottom: 5px;">Connecting...</p>
+                <p id="loading-text" style="color: #4facfe; font-weight: bold; margin-bottom: 5px;">Initializing...</p>
                 <div class="progress-container">
                     <div id="progress-bar" class="progress-bar"></div>
                 </div>
@@ -46,7 +46,6 @@
             <div id="start-options" class="size-options" style="display:none; opacity: 0;">
                 <p>Select your grid size:</p>
                 
-                <!-- REORDERED: Easy First -->
                 <button class="action-btn success" onclick="startGame(5)">Large (Easy)</button>
                 <button class="action-btn info" onclick="startGame(4)">Normal (Medium)</button>
                 <button class="action-btn warning" onclick="startGame(3)">Small (Hard)</button>
@@ -54,8 +53,20 @@
                 <p class="instruction-text">
                     • <b>Tap</b> a letter to add it.<br>
                     • <b>Tap again</b> to remove it.<br>
-                    • <b>Long words</b> (6+ letters) give special rewards!
+                    • Find words to <b>plant flowers</b> in the garden!
                 </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- CUSTOM CONFIRM MODAL (New) -->
+    <div id="custom-modal" class="start-overlay" style="display:none; z-index: 1000;">
+        <div class="glass-panel start-card" style="max-width: 350px;">
+            <h2 style="margin-top:0; color:var(--text-color);">Return to Menu?</h2>
+            <p style="color:#ccc; margin-bottom: 20px;">Your current garden will be lost!</p>
+            <div class="button-row">
+                <button id="modal-yes" class="action-btn warning">Yes, Quit</button>
+                <button id="modal-no" class="action-btn info">No, Keep Playing</button>
             </div>
         </div>
     </div>
@@ -67,7 +78,10 @@
         <aside class="side-panel">
             <section class="garden-area glass-panel">
                 <h3>Your Garden</h3>
-                <div id="flower-patch" class="flower-patch"></div>
+                <!-- 3D Garden Canvas -->
+                <div id="garden-canvas-container">
+                    <canvas id="garden-canvas"></canvas>
+                </div>
             </section>
 
             <section class="found-words glass-panel">
@@ -110,6 +124,13 @@
         </div>
 
     </main>
+
+    <!-- THREE.JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- UTILS -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
 
     <script src="script.js"></script>
 </body>
