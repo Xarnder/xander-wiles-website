@@ -5,173 +5,8 @@ const MIN_WORD_LENGTH = 3;
 let GRID_SIZE = 4;
 const DICTIONARY_URL = "https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt";
 
-// --- CLUE DATABASE (Common Words) ---
-const SIMPLE_CLUES = {
-    "ANT": "Tiny insect living in a colony",
-    "ART": "Paintings and drawings",
-    "ARM": "Body part between shoulder and hand",
-    "ASK": "To pose a question",
-    "BAG": "Used to carry things",
-    "BED": "Where you sleep at night",
-    "BEE": "Insect that makes honey",
-    "BIG": "Large, not small",
-    "BOX": "A container with 6 sides",
-    "BOY": "A young male child",
-    "BUS": "Large vehicle for many people",
-    "CAN": "Metal container for food",
-    "CAP": "A soft hat",
-    "CAR": "Vehicle with 4 wheels",
-    "CAT": "Small pet that meows",
-    "COW": "Farm animal that says moo",
-    "CUP": "Used to drink tea or coffee",
-    "CUT": "To slice with scissors",
-    "DAD": "Another name for father",
-    "DAY": "Opposite of night",
-    "DOG": "Loyal pet that barks",
-    "DRY": "Not wet",
-    "EAR": "Body part for hearing",
-    "EAT": "To consume food",
-    "EGG": "Laid by a chicken",
-    "EYE": "Body part for seeing",
-    "FAN": "Blows air to cool you",
-    "FLY": "Insect that buzzes",
-    "FUN": "Enjoyable and happy",
-    "GET": "To receive something",
-    "GOD": "Creator in religion",
-    "HAT": "Worn on your head",
-    "HEN": "A female chicken",
-    "HIT": "To strike something",
-    "HOT": "High temperature, opposite of cold",
-    "ICE": "Frozen water",
-    "INK": "Fluid in a pen",
-    "JAR": "Glass container for jam",
-    "JOB": "Work you do for money",
-    "JOY": "Feeling of great happiness",
-    "KEY": "Used to unlock a door",
-    "KID": "A child",
-    "KIT": "Set of tools or gear",
-    "LAW": "Rules of society",
-    "LEG": "Body part for walking",
-    "LIP": "Edge of your mouth",
-    "MAN": "Adult male",
-    "MAP": "Drawing of a location",
-    "MUD": "Wet dirt",
-    "MUG": "Large cup for hot drinks",
-    "NAP": "Short sleep during the day",
-    "NET": "Used to catch fish",
-    "NEW": "Not old",
-    "NUT": "Hard shelled snack",
-    "OIL": "Used for cooking or engines",
-    "OLD": "Not new, aged",
-    "ONE": "Number 1",
-    "OWL": "Bird active at night",
-    "PAN": "Used for frying food",
-    "PEN": "Used for writing with ink",
-    "PET": "Animal kept at home",
-    "PIE": "Baked dessert with crust",
-    "PIG": "Farm animal, pink and oinks",
-    "PIN": "Sharp needle",
-    "POT": "Deep cooking vessel",
-    "RAT": "Rodent larger than a mouse",
-    "RED": "Color of a rose or blood",
-    "RUN": "Move faster than walking",
-    "SAD": "Unhappy feeling",
-    "SEA": "Large body of salt water",
-    "SEE": "Use your eyes",
-    "SET": "To place something down",
-    "SEW": "Join fabric with needle",
-    "SIT": "Rest on a chair",
-    "SKY": "Blue space above earth",
-    "SON": "Male child",
-    "SUN": "Star that gives us light",
-    "TAX": "Money paid to government",
-    "TEA": "Hot drink from leaves",
-    "TEN": "Number 10",
-    "TIE": "Worn around neck with suit",
-    "TOE": "Digit on your foot",
-    "TOP": "Highest point",
-    "TOY": "Item for playing",
-    "TWO": "Number 2",
-    "USE": "To employ something",
-    "VAN": "Large boxy vehicle",
-    "WAR": "Conflict between nations",
-    "WAY": "Path or direction",
-    "WEB": "Spun by a spider",
-    "WET": "Soaked with water",
-    "WIN": "Victory in a game",
-    "YES": "Opposite of no",
-    "ZOO": "Place to see wild animals",
-    "BALL": "Round object for sports",
-    "BIRD": "Animal with feathers and wings",
-    "BLUE": "Color of the sky",
-    "BOAT": "Vehicle for water",
-    "BOOK": "Pages with story to read",
-    "CAKE": "Sweet baked dessert",
-    "COLD": "Low temp, opposite of hot",
-    "COOK": "Prepare food",
-    "DOOR": "Entry to a room",
-    "DUCK": "Water bird that quacks",
-    "FACE": "Front part of head",
-    "FARM": "Place for growing crops",
-    "FISH": "Lives underwater",
-    "FOOD": "What we eat",
-    "FOOT": "Body part for standing",
-    "FROG": "Green jumper, says ribbit",
-    "GAME": "Activity for fun",
-    "GIRL": "Young female child",
-    "GOLD": "Precious yellow metal",
-    "GOOD": "Opposite of bad",
-    "HAIR": "Grows on your head",
-    "HAND": "Body part with fingers",
-    "HEAD": "Top part of body",
-    "HILL": "Small mountain",
-    "HOME": "Where you live",
-    "HOPE": "Wish for something good",
-    "KING": "Male ruler of a country",
-    "KITE": "Flies in the wind on string",
-    "LAKE": "Body of fresh water",
-    "LAMP": "Produces light",
-    "LAND": "Solid ground",
-    "LEAF": "Green part of a tree",
-    "LION": "Big cat, king of jungle",
-    "LOVE": "Deep affection",
-    "MILK": "White drink from cows",
-    "MOON": "Shines at night",
-    "NAME": "What you call someone",
-    "NOSE": "Body part for smelling",
-    "PARK": "Public green space",
-    "RAIN": "Water falling from sky",
-    "RING": "Jewelry for finger",
-    "ROAD": "Street for cars",
-    "ROCK": "Hard stone",
-    "ROOM": "Part of a house",
-    "ROSE": "Red flower with thorns",
-    "SALT": "White seasoning for food",
-    "SAND": "Found at the beach",
-    "SHIP": "Large boat",
-    "SHOE": "Worn on feet",
-    "SHOP": "Place to buy things",
-    "SICK": "Not feeling well",
-    "SING": "Make music with voice",
-    "SNOW": "Cold white flakes",
-    "SOAP": "Used for washing",
-    "SOCK": "Worn under shoes",
-    "SOUP": "Liquid food",
-    "STAR": "Twinkles in night sky",
-    "STOP": "Halt, do not go",
-    "TALL": "High height",
-    "TIME": "Measured by a clock",
-    "TREE": "Tall plant with trunk",
-    "WALK": "Move on feet",
-    "WIND": "Moving air",
-    "WOOD": "Material from trees",
-    "WORD": "Made of letters",
-    "WORK": "Effort or job",
-    "YEAR": "365 days"
-};
-
 // --- DOM ELEMENTS ---
-const gridEl = document.getElementById('boggle-grid');
+let gridEl = document.getElementById('boggle-grid');
 const currentWordEl = document.getElementById('current-word');
 const messageEl = document.getElementById('message-area');
 const scoreEl = document.getElementById('current-score');
@@ -187,12 +22,70 @@ const magicBtn = document.getElementById('magic-btn');
 const hintBtn = document.getElementById('hint-btn');
 const clearBtn = document.getElementById('clear-btn');
 const submitBtn = document.getElementById('submit-btn');
-const clueDisplay = document.getElementById('clue-display'); // NEW
+const clueDisplay = document.getElementById('clue-display');
 
 // Custom Modal Elements
 const customModal = document.getElementById('custom-modal');
 const modalYes = document.getElementById('modal-yes');
 const modalNo = document.getElementById('modal-no');
+
+// --- CLUE DATABASE ---
+const SIMPLE_CLUES = {
+    "ANT": "Tiny insect", "ART": "Paintings", "ARM": "Body part",
+    "ASK": "Question", "BAG": "Carrier", "BED": "Sleep here",
+    "BEE": "Makes honey", "BIG": "Large", "BOX": "Container",
+    "BOY": "Young man", "BUS": "Vehicle", "CAN": "Metal tin",
+    "CAP": "Hat", "CAR": "Drive it", "CAT": "Meowing pet",
+    "COW": "Says Moo", "CUP": "Drink from", "CUT": "Scissors do this",
+    "DAD": "Father", "DAY": "Not night", "DOG": "Barking pet",
+    "DRY": "Not wet", "EAR": "Hear with it", "EAT": "Consume food",
+    "EGG": "Breakfast food", "EYE": "See with it", "FAN": "Cool air",
+    "FLY": "Flying insect", "FUN": "Happy time", "GET": "Receive",
+    "GOD": "Deity", "HAT": "Headwear", "HEN": "Chicken",
+    "HIT": "Strike", "HOT": "Warm", "ICE": "Frozen water",
+    "INK": "Pen fluid", "JAR": "Glass pot", "JOB": "Work",
+    "JOY": "Happiness", "KEY": "Unlock door", "KID": "Child",
+    "KIT": "Gear set", "LAW": "Rules", "LEG": "Walk with it",
+    "LIP": "Mouth part", "MAN": "Adult male", "MAP": "Guide",
+    "MUD": "Wet dirt", "MUG": "Coffee cup", "NAP": "Short sleep",
+    "NET": "Catch fish", "NEW": "Fresh", "NUT": "Snack",
+    "OIL": "Cooking liquid", "OLD": "Aged", "ONE": "Number 1",
+    "OWL": "Night bird", "PAN": "Frying tool", "PEN": "Write tool",
+    "PET": "Animal friend", "PIE": "Dessert", "PIG": "Oinking animal",
+    "PIN": "Needle", "POT": "Cooking vessel", "RAT": "Rodent",
+    "RED": "Color", "RUN": "Fast walk", "SAD": "Unhappy",
+    "SEA": "Ocean", "SEE": "Look", "SET": "Ready",
+    "SEW": "Stitch", "SIT": "Chair action", "SKY": "Up above",
+    "SON": "Male child", "SUN": "Bright star", "TAX": "Money fee",
+    "TEA": "Drink", "TEN": "Number 10", "TIE": "Neckwear",
+    "TOE": "Foot digit", "TOP": "Summit", "TOY": "Plaything",
+    "TWO": "Number 2", "USE": "Utilize", "VAN": "Vehicle",
+    "WAR": "Battle", "WAY": "Path", "WEB": "Spider home",
+    "WET": "Soaked", "WIN": "Victory", "YES": "Affirmative",
+    "ZOO": "Animal park", "BALL": "Round toy", "BIRD": "Flying animal",
+    "BLUE": "Sky color", "BOAT": "Water vehicle", "BOOK": "Reading",
+    "CAKE": "Birthday treat", "COLD": "Freezing", "COOK": "Make food",
+    "DOOR": "Entrance", "DUCK": "Quacking bird", "FACE": "Front of head",
+    "FARM": "Grow food here", "FISH": "Swims", "FOOD": "Eat it",
+    "FOOT": "Walk on it", "FROG": "Green hopper", "GAME": "Play",
+    "GIRL": "Young female", "GOLD": "Shiny metal", "GOOD": "Nice",
+    "HAIR": "On head", "HAND": "Five fingers", "HEAD": "Top of body",
+    "HILL": "Small mountain", "HOME": "House", "HOPE": "Wish",
+    "KING": "Ruler", "KITE": "Flies in wind", "LAKE": "Water body",
+    "LAMP": "Light source", "LAND": "Ground", "LEAF": "Tree part",
+    "LION": "Jungle king", "LOVE": "Heart feeling", "MILK": "White drink",
+    "MOON": "Night light", "NAME": "Title", "NOSE": "Smell with it",
+    "PARK": "Play area", "RAIN": "Water drops", "RING": "Jewelry for finger",
+    "ROAD": "Street", "ROCK": "Stone", "ROOM": "Inside house",
+    "ROSE": "Red flower", "SALT": "Seasoning", "SAND": "Beach soil",
+    "SHIP": "Big boat", "SHOE": "Footwear", "SHOP": "Store",
+    "SICK": "Ill", "SING": "Vocalize", "SNOW": "Winter ice",
+    "SOAP": "Clean with it", "SOCK": "Foot cover", "SOUP": "Hot meal",
+    "STAR": "Night sparkle", "STOP": "Halt", "TALL": "High",
+    "TIME": "Clock", "TREE": "Plant", "WALK": "Stroll",
+    "WIND": "Air", "WOOD": "Timber", "WORD": "Text",
+    "WORK": "Job", "YEAR": "Time period"
+};
 
 // --- AUDIO SYSTEM ---
 const audioCorrect = new Audio('assets/sounds/correct.mp3');
@@ -513,6 +406,17 @@ function onWindowResize() {
     camera.aspect = canvas.clientWidth / canvas.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+    checkLayout(); // Re-check on resize
+}
+
+// --- AUTO LAYOUT CHECK ---
+function checkLayout() {
+    // Enable compact mode on shorter screens
+    if (window.innerHeight < 820) {
+        document.body.classList.add('compact-mode');
+    } else {
+        document.body.classList.remove('compact-mode');
+    }
 }
 
 function animate() {
@@ -535,8 +439,6 @@ let magicLetterUsed = false;
 let isTouchActive = false;
 let touchTimer = null;
 let lastTouchedTile = null;
-
-// New: Track current Target for Clues
 let currentClueTarget = null;
 
 // --- MAIN ENTRY POINT ---
@@ -547,6 +449,7 @@ window.startGame = function(size) {
     GRID_SIZE = size;
     startScreen.style.display = 'none';
     gameContainer.style.display = 'flex';
+    checkLayout(); 
     gridEl.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
     if (!scene) init3D();
     initGame();
@@ -612,10 +515,11 @@ function generateGrid() {
 }
 
 function renderGrid() {
+    gridEl = document.getElementById('boggle-grid');
     gridEl.innerHTML = '';
     const newGrid = gridEl.cloneNode(false);
     gridEl.parentNode.replaceChild(newGrid, gridEl);
-    const container = document.getElementById('boggle-grid');
+    gridEl = newGrid; 
 
     for (let r = 0; r < GRID_SIZE; r++) {
         for (let c = 0; c < GRID_SIZE; c++) {
@@ -630,13 +534,13 @@ function renderGrid() {
                 if (e.buttons === 1 && !isTouchActive) addTileOnly(r, c); 
             });
 
-            container.appendChild(tile);
+            gridEl.appendChild(tile);
         }
     }
 
-    container.addEventListener('touchstart', handleTouchStart, {passive: false});
-    container.addEventListener('touchmove', handleTouchMove, {passive: false});
-    container.addEventListener('touchend', handleTouchEnd);
+    gridEl.addEventListener('touchstart', handleTouchStart, {passive: false});
+    gridEl.addEventListener('touchmove', handleTouchMove, {passive: false});
+    gridEl.addEventListener('touchend', handleTouchEnd);
 }
 
 // --- INPUT LOGIC ---
@@ -765,26 +669,18 @@ function solveGrid() {
         if (canForm) possibleWords.push(word);
     }
     possibleWords.sort(() => Math.random() - 0.5);
-    
-    updateClue(); // Set initial clue
+    updateClue(); 
 }
 
 function updateClue() {
-    // Find a word in possibleWords that IS IN SIMPLE_CLUES and NOT FOUND
     const targets = possibleWords.filter(w => !foundWords.has(w) && SIMPLE_CLUES[w]);
-    
     if (targets.length > 0) {
-        // Pick random one
         currentClueTarget = targets[Math.floor(Math.random() * targets.length)];
         clueDisplay.innerText = `CLUE: ${SIMPLE_CLUES[currentClueTarget]}`;
-        
-        // Also update hint system to point to this target
         currentHintWord = currentClueTarget;
         hintStep = 0;
     } else {
-        // No simple words left
         currentClueTarget = null;
-        // Fallback generic clue
         const anyWord = possibleWords.find(w => !foundWords.has(w));
         if (anyWord) {
             clueDisplay.innerText = `Find a word starting with ${anyWord[0]}...`;
@@ -822,9 +718,8 @@ submitBtn.addEventListener('click', submitWord);
 hintBtn.addEventListener('click', () => {
     document.querySelectorAll('.hint-flash').forEach(el => el.classList.remove('hint-flash'));
 
-    // Ensure we have a hint target
     if (!currentHintWord || foundWords.has(currentHintWord)) {
-        updateClue(); // Will refresh hint word
+        updateClue();
         if (!currentHintWord) return;
     }
 
@@ -860,7 +755,7 @@ function submitWord() {
     submitBtn.innerText = "Wait...";
     setTimeout(() => {
         submitBtn.style.opacity = "1";
-        submitBtn.innerText = "✅ CHECK WORD";
+        submitBtn.innerText = "✅ CHECK";
     }, 1000); 
 
     let word = selectedTiles.map(t => t.char).join('').toUpperCase();
@@ -904,21 +799,13 @@ function submitWord() {
         showMessage(`Great! "${finalWord}"`, "success");
         addWordToList(finalWord);
         
-        // --- 1 FLOWER PER WORD, SIZE BASED ON LENGTH ---
         const lastFlowerPos = plantNewFlower(finalWord.length);
-
-        if (lastFlowerPos) {
-            animateCameraTo(lastFlowerPos);
-        }
+        if (lastFlowerPos) animateCameraTo(lastFlowerPos);
 
         if (finalWord.length > 5) playSound('special');
         else playSound('correct');
         
-        // CHECK IF TARGET FOUND
-        if (finalWord === currentClueTarget) {
-            // Found the target! Get a new one.
-            updateClue();
-        }
+        if (finalWord === currentClueTarget) updateClue();
         
         resetSelection();
 
