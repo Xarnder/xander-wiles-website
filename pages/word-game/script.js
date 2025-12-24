@@ -72,11 +72,13 @@ const DICE_SOURCE = [
 let scene, camera, renderer, controls, orbitActive = false;
 let PRELOADED_MODELS = []; 
 
-// ASSET FILES
 const GLB_FILES = ["flower1.glb", "flower2.glb", "flower3.glb"]; 
 const FLOOR_FILE = "floor.glb";
 
-// Tracking Loading Progress
+// Default Camera Positions
+const DEFAULT_CAM_POS = new THREE.Vector3(0, 10, 18);
+const DEFAULT_TARGET = new THREE.Vector3(0, 0, 0);
+
 let dictProgress = 0;
 let modelProgress = 0;
 let isAssetsLoaded = false;
@@ -163,7 +165,7 @@ function init3D() {
     scene.background = new THREE.Color(0x87CEEB); 
 
     camera = new THREE.PerspectiveCamera(60, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
-    camera.position.set(0, 8, 12);
+    camera.position.copy(DEFAULT_CAM_POS);
 
     renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     renderer.setSize(canvas.clientWidth, canvas.clientHeight);
@@ -177,6 +179,11 @@ function init3D() {
     controls.maxPolarAngle = Math.PI / 2 - 0.1; 
     controls.minDistance = 5;
     controls.maxDistance = 40;
+    controls.target.copy(DEFAULT_TARGET);
+    
+    // --- AUTO ORBIT SETTINGS ---
+    controls.autoRotate = true; 
+    controls.autoRotateSpeed = 1.0; 
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
@@ -215,14 +222,17 @@ function init3D() {
 
     onWindowResize();
     window.addEventListener('resize', onWindowResize, false);
+    
+    // Manual interaction stops auto-rotate temporarily handled by OrbitControls usually,
+    // but we track it to prevent conflict with game touch
     controls.addEventListener('start', () => { orbitActive = true; });
     controls.addEventListener('end', () => { orbitActive = false; });
 
     animate();
 }
 
-function plantNewFlower() {
-    if (PRELOADED_MODELS.length === 0 || !scene) return;
+function plantNewFlower(wordLength) {
+    if (PRELOADED_MODELS.length === 0 || !scene) return null;
 
     const randomIndex = Math.floor(Math.random() * PRELOADED_MODELS.length);
     const template = PRELOADED_MODELS[randomIndex];
@@ -235,14 +245,20 @@ function plantNewFlower() {
     }
 
     const angle = Math.random() * Math.PI * 2;
-    const radius = 1.5 + Math.random() * 10; 
+    const radius = 1.5 + Math.random() * 14; 
     const x = Math.sin(angle) * radius;
     const z = Math.cos(angle) * radius;
 
     flower.position.set(x, 0, z);
     flower.rotation.y = Math.random() * Math.PI * 2;
-    const scale = 1.2 + (Math.random() * 0.8); 
-    flower.scale.set(scale, scale, scale);
+    
+    // --- SCALE BASED ON WORD LENGTH ---
+    // Min word length is 3. Base scale 1.0. Add 0.3 for each extra letter.
+    // 3 letters = 1.0
+    // 6 letters = 1.9
+    let sizeScale = 1.0 + (wordLength - 3) * 0.3;
+    if (sizeScale > 2.5) sizeScale = 2.5; // Max cap
+    flower.scale.set(sizeScale, sizeScale, sizeScale);
 
     flower.traverse((child) => {
         if (child.isMesh) {
@@ -254,17 +270,89 @@ function plantNewFlower() {
     flower.userData.isFlower = true;
     scene.add(flower);
 
+    // Pop animation
+    const targetScale = sizeScale;
     flower.scale.set(0.1, 0.1, 0.1);
     let growFrame = 0;
     function grow() {
         if (growFrame < 20) {
-            const s = 0.1 + (scale - 0.1) * (growFrame / 20); 
+            const s = 0.1 + (targetScale - 0.1) * (growFrame / 20); 
             flower.scale.set(s, s, s);
             growFrame++;
             requestAnimationFrame(grow);
         }
     }
     grow();
+
+    return flower.position; 
+}
+
+// --- CAMERA ANIMATION ---
+let cameraAnimation = null;
+
+function animateCameraTo(targetPos) {
+    if(!controls || !camera) return;
+
+    // Stop controls and auto rotation
+    orbitActive = true; 
+    controls.enabled = false;
+    controls.autoRotate = false; // STOP ROTATION
+
+    // 1. Zoom In state
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    
+    // Position camera slightly above and in front of flower
+    const zoomPos = new THREE.Vector3(targetPos.x, targetPos.y + 3, targetPos.z + 3);
+    
+    const startTime = Date.now();
+    const duration = 1000; // 1 sec to zoom in
+
+    function stepZoomIn() {
+        const now = Date.now();
+        const progress = Math.min((now - startTime) / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3); // Cubic ease out
+
+        camera.position.lerpVectors(startPos, zoomPos, ease);
+        controls.target.lerpVectors(startTarget, targetPos, ease);
+        controls.update();
+
+        if (progress < 1) {
+            cameraAnimation = requestAnimationFrame(stepZoomIn);
+        } else {
+            // Wait 2 seconds then zoom out
+            setTimeout(() => {
+                stepZoomOut(zoomPos, targetPos);
+            }, 2000);
+        }
+    }
+
+    function stepZoomOut(currentCamPos, currentTarget) {
+        const startOut = Date.now();
+        
+        function step() {
+            const now = Date.now();
+            const progress = Math.min((now - startOut) / duration, 1);
+            const ease = 1 - Math.pow(1 - progress, 3);
+
+            camera.position.lerpVectors(currentCamPos, DEFAULT_CAM_POS, ease);
+            controls.target.lerpVectors(currentTarget, DEFAULT_TARGET, ease);
+            controls.update();
+
+            if (progress < 1) {
+                cameraAnimation = requestAnimationFrame(step);
+            } else {
+                // Done - Restart Normal Orbit
+                orbitActive = false;
+                controls.enabled = true;
+                controls.autoRotate = true; // RESTART ROTATION
+            }
+        }
+        step();
+    }
+
+    if(cameraAnimation) cancelAnimationFrame(cameraAnimation);
+    stepZoomIn();
 }
 
 function onWindowResize() {
@@ -635,12 +723,18 @@ function submitWord() {
         
         showMessage(`Great! "${finalWord}"`, "success");
         addWordToList(finalWord);
-        resetSelection();
         
-        plantNewFlower();
+        // --- 1 FLOWER PER WORD, SIZE BASED ON LENGTH ---
+        const lastFlowerPos = plantNewFlower(finalWord.length);
+
+        if (lastFlowerPos) {
+            animateCameraTo(lastFlowerPos);
+        }
 
         if (finalWord.length > 5) playSound('special');
         else playSound('correct');
+        
+        resetSelection();
 
     } else {
         showMessage("Not in dictionary.", "warning");
