@@ -34,6 +34,23 @@ button, .action-btn, .tile, .glass-panel {
     outline: none;
 }
 
+/* CLUE BOX (NEW) */
+.clue-box {
+    background: rgba(255, 235, 59, 0.15); /* Subtle yellow tint */
+    border: 2px solid rgba(255, 235, 59, 0.5);
+    border-radius: 12px;
+    padding: 10px;
+    text-align: center;
+    color: #ffd700; /* Gold text */
+    font-size: 1.4rem;
+    font-weight: bold;
+    margin: 5px 0;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
 /* START SCREEN */
 .start-overlay {
     position: fixed;

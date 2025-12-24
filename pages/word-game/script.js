@@ -5,6 +5,171 @@ const MIN_WORD_LENGTH = 3;
 let GRID_SIZE = 4;
 const DICTIONARY_URL = "https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt";
 
+// --- CLUE DATABASE (Common Words) ---
+const SIMPLE_CLUES = {
+    "ANT": "Tiny insect living in a colony",
+    "ART": "Paintings and drawings",
+    "ARM": "Body part between shoulder and hand",
+    "ASK": "To pose a question",
+    "BAG": "Used to carry things",
+    "BED": "Where you sleep at night",
+    "BEE": "Insect that makes honey",
+    "BIG": "Large, not small",
+    "BOX": "A container with 6 sides",
+    "BOY": "A young male child",
+    "BUS": "Large vehicle for many people",
+    "CAN": "Metal container for food",
+    "CAP": "A soft hat",
+    "CAR": "Vehicle with 4 wheels",
+    "CAT": "Small pet that meows",
+    "COW": "Farm animal that says moo",
+    "CUP": "Used to drink tea or coffee",
+    "CUT": "To slice with scissors",
+    "DAD": "Another name for father",
+    "DAY": "Opposite of night",
+    "DOG": "Loyal pet that barks",
+    "DRY": "Not wet",
+    "EAR": "Body part for hearing",
+    "EAT": "To consume food",
+    "EGG": "Laid by a chicken",
+    "EYE": "Body part for seeing",
+    "FAN": "Blows air to cool you",
+    "FLY": "Insect that buzzes",
+    "FUN": "Enjoyable and happy",
+    "GET": "To receive something",
+    "GOD": "Creator in religion",
+    "HAT": "Worn on your head",
+    "HEN": "A female chicken",
+    "HIT": "To strike something",
+    "HOT": "High temperature, opposite of cold",
+    "ICE": "Frozen water",
+    "INK": "Fluid in a pen",
+    "JAR": "Glass container for jam",
+    "JOB": "Work you do for money",
+    "JOY": "Feeling of great happiness",
+    "KEY": "Used to unlock a door",
+    "KID": "A child",
+    "KIT": "Set of tools or gear",
+    "LAW": "Rules of society",
+    "LEG": "Body part for walking",
+    "LIP": "Edge of your mouth",
+    "MAN": "Adult male",
+    "MAP": "Drawing of a location",
+    "MUD": "Wet dirt",
+    "MUG": "Large cup for hot drinks",
+    "NAP": "Short sleep during the day",
+    "NET": "Used to catch fish",
+    "NEW": "Not old",
+    "NUT": "Hard shelled snack",
+    "OIL": "Used for cooking or engines",
+    "OLD": "Not new, aged",
+    "ONE": "Number 1",
+    "OWL": "Bird active at night",
+    "PAN": "Used for frying food",
+    "PEN": "Used for writing with ink",
+    "PET": "Animal kept at home",
+    "PIE": "Baked dessert with crust",
+    "PIG": "Farm animal, pink and oinks",
+    "PIN": "Sharp needle",
+    "POT": "Deep cooking vessel",
+    "RAT": "Rodent larger than a mouse",
+    "RED": "Color of a rose or blood",
+    "RUN": "Move faster than walking",
+    "SAD": "Unhappy feeling",
+    "SEA": "Large body of salt water",
+    "SEE": "Use your eyes",
+    "SET": "To place something down",
+    "SEW": "Join fabric with needle",
+    "SIT": "Rest on a chair",
+    "SKY": "Blue space above earth",
+    "SON": "Male child",
+    "SUN": "Star that gives us light",
+    "TAX": "Money paid to government",
+    "TEA": "Hot drink from leaves",
+    "TEN": "Number 10",
+    "TIE": "Worn around neck with suit",
+    "TOE": "Digit on your foot",
+    "TOP": "Highest point",
+    "TOY": "Item for playing",
+    "TWO": "Number 2",
+    "USE": "To employ something",
+    "VAN": "Large boxy vehicle",
+    "WAR": "Conflict between nations",
+    "WAY": "Path or direction",
+    "WEB": "Spun by a spider",
+    "WET": "Soaked with water",
+    "WIN": "Victory in a game",
+    "YES": "Opposite of no",
+    "ZOO": "Place to see wild animals",
+    "BALL": "Round object for sports",
+    "BIRD": "Animal with feathers and wings",
+    "BLUE": "Color of the sky",
+    "BOAT": "Vehicle for water",
+    "BOOK": "Pages with story to read",
+    "CAKE": "Sweet baked dessert",
+    "COLD": "Low temp, opposite of hot",
+    "COOK": "Prepare food",
+    "DOOR": "Entry to a room",
+    "DUCK": "Water bird that quacks",
+    "FACE": "Front part of head",
+    "FARM": "Place for growing crops",
+    "FISH": "Lives underwater",
+    "FOOD": "What we eat",
+    "FOOT": "Body part for standing",
+    "FROG": "Green jumper, says ribbit",
+    "GAME": "Activity for fun",
+    "GIRL": "Young female child",
+    "GOLD": "Precious yellow metal",
+    "GOOD": "Opposite of bad",
+    "HAIR": "Grows on your head",
+    "HAND": "Body part with fingers",
+    "HEAD": "Top part of body",
+    "HILL": "Small mountain",
+    "HOME": "Where you live",
+    "HOPE": "Wish for something good",
+    "KING": "Male ruler of a country",
+    "KITE": "Flies in the wind on string",
+    "LAKE": "Body of fresh water",
+    "LAMP": "Produces light",
+    "LAND": "Solid ground",
+    "LEAF": "Green part of a tree",
+    "LION": "Big cat, king of jungle",
+    "LOVE": "Deep affection",
+    "MILK": "White drink from cows",
+    "MOON": "Shines at night",
+    "NAME": "What you call someone",
+    "NOSE": "Body part for smelling",
+    "PARK": "Public green space",
+    "RAIN": "Water falling from sky",
+    "RING": "Jewelry for finger",
+    "ROAD": "Street for cars",
+    "ROCK": "Hard stone",
+    "ROOM": "Part of a house",
+    "ROSE": "Red flower with thorns",
+    "SALT": "White seasoning for food",
+    "SAND": "Found at the beach",
+    "SHIP": "Large boat",
+    "SHOE": "Worn on feet",
+    "SHOP": "Place to buy things",
+    "SICK": "Not feeling well",
+    "SING": "Make music with voice",
+    "SNOW": "Cold white flakes",
+    "SOAP": "Used for washing",
+    "SOCK": "Worn under shoes",
+    "SOUP": "Liquid food",
+    "STAR": "Twinkles in night sky",
+    "STOP": "Halt, do not go",
+    "TALL": "High height",
+    "TIME": "Measured by a clock",
+    "TREE": "Tall plant with trunk",
+    "WALK": "Move on feet",
+    "WIND": "Moving air",
+    "WOOD": "Material from trees",
+    "WORD": "Made of letters",
+    "WORK": "Effort or job",
+    "YEAR": "365 days"
+};
+
 // --- DOM ELEMENTS ---
 const gridEl = document.getElementById('boggle-grid');
 const currentWordEl = document.getElementById('current-word');
@@ -22,6 +187,7 @@ const magicBtn = document.getElementById('magic-btn');
 const hintBtn = document.getElementById('hint-btn');
 const clearBtn = document.getElementById('clear-btn');
 const submitBtn = document.getElementById('submit-btn');
+const clueDisplay = document.getElementById('clue-display'); // NEW
 
 // Custom Modal Elements
 const customModal = document.getElementById('custom-modal');
@@ -181,7 +347,6 @@ function init3D() {
     controls.maxDistance = 40;
     controls.target.copy(DEFAULT_TARGET);
     
-    // --- AUTO ORBIT SETTINGS ---
     controls.autoRotate = true; 
     controls.autoRotateSpeed = 1.0; 
 
@@ -222,9 +387,6 @@ function init3D() {
 
     onWindowResize();
     window.addEventListener('resize', onWindowResize, false);
-    
-    // Manual interaction stops auto-rotate temporarily handled by OrbitControls usually,
-    // but we track it to prevent conflict with game touch
     controls.addEventListener('start', () => { orbitActive = true; });
     controls.addEventListener('end', () => { orbitActive = false; });
 
@@ -252,12 +414,8 @@ function plantNewFlower(wordLength) {
     flower.position.set(x, 0, z);
     flower.rotation.y = Math.random() * Math.PI * 2;
     
-    // --- SCALE BASED ON WORD LENGTH ---
-    // Min word length is 3. Base scale 1.0. Add 0.3 for each extra letter.
-    // 3 letters = 1.0
-    // 6 letters = 1.9
     let sizeScale = 1.0 + (wordLength - 3) * 0.3;
-    if (sizeScale > 2.5) sizeScale = 2.5; // Max cap
+    if (sizeScale > 2.5) sizeScale = 2.5; 
     flower.scale.set(sizeScale, sizeScale, sizeScale);
 
     flower.traverse((child) => {
@@ -270,7 +428,6 @@ function plantNewFlower(wordLength) {
     flower.userData.isFlower = true;
     scene.add(flower);
 
-    // Pop animation
     const targetScale = sizeScale;
     flower.scale.set(0.1, 0.1, 0.1);
     let growFrame = 0;
@@ -293,25 +450,22 @@ let cameraAnimation = null;
 function animateCameraTo(targetPos) {
     if(!controls || !camera) return;
 
-    // Stop controls and auto rotation
     orbitActive = true; 
     controls.enabled = false;
-    controls.autoRotate = false; // STOP ROTATION
+    controls.autoRotate = false; 
 
-    // 1. Zoom In state
     const startPos = camera.position.clone();
     const startTarget = controls.target.clone();
     
-    // Position camera slightly above and in front of flower
     const zoomPos = new THREE.Vector3(targetPos.x, targetPos.y + 3, targetPos.z + 3);
     
     const startTime = Date.now();
-    const duration = 1000; // 1 sec to zoom in
+    const duration = 1000; 
 
     function stepZoomIn() {
         const now = Date.now();
         const progress = Math.min((now - startTime) / duration, 1);
-        const ease = 1 - Math.pow(1 - progress, 3); // Cubic ease out
+        const ease = 1 - Math.pow(1 - progress, 3); 
 
         camera.position.lerpVectors(startPos, zoomPos, ease);
         controls.target.lerpVectors(startTarget, targetPos, ease);
@@ -320,7 +474,6 @@ function animateCameraTo(targetPos) {
         if (progress < 1) {
             cameraAnimation = requestAnimationFrame(stepZoomIn);
         } else {
-            // Wait 2 seconds then zoom out
             setTimeout(() => {
                 stepZoomOut(zoomPos, targetPos);
             }, 2000);
@@ -342,10 +495,9 @@ function animateCameraTo(targetPos) {
             if (progress < 1) {
                 cameraAnimation = requestAnimationFrame(step);
             } else {
-                // Done - Restart Normal Orbit
                 orbitActive = false;
                 controls.enabled = true;
-                controls.autoRotate = true; // RESTART ROTATION
+                controls.autoRotate = true; 
             }
         }
         step();
@@ -384,6 +536,9 @@ let isTouchActive = false;
 let touchTimer = null;
 let lastTouchedTile = null;
 
+// New: Track current Target for Clues
+let currentClueTarget = null;
+
 // --- MAIN ENTRY POINT ---
 loadAssets();
 
@@ -421,6 +576,8 @@ function initGame() {
     messageEl.style.color = "#ffeb3b";
     foundWordsListEl.innerHTML = '<span class="placeholder-text">...</span>';
     possibleWords = [];
+    currentClueTarget = null;
+    clueDisplay.innerText = "Searching for clue...";
     
     if (scene) {
         const toRemove = [];
@@ -581,7 +738,7 @@ function showMessage(msg, type) {
     else messageEl.style.color = "#ffeb3b";
 }
 
-// --- SOLVER & HINT ---
+// --- SOLVER & TARGET LOGIC ---
 function solveGrid() {
     const boardCounts = {};
     for(let r=0; r<GRID_SIZE; r++) {
@@ -608,6 +765,35 @@ function solveGrid() {
         if (canForm) possibleWords.push(word);
     }
     possibleWords.sort(() => Math.random() - 0.5);
+    
+    updateClue(); // Set initial clue
+}
+
+function updateClue() {
+    // Find a word in possibleWords that IS IN SIMPLE_CLUES and NOT FOUND
+    const targets = possibleWords.filter(w => !foundWords.has(w) && SIMPLE_CLUES[w]);
+    
+    if (targets.length > 0) {
+        // Pick random one
+        currentClueTarget = targets[Math.floor(Math.random() * targets.length)];
+        clueDisplay.innerText = `CLUE: ${SIMPLE_CLUES[currentClueTarget]}`;
+        
+        // Also update hint system to point to this target
+        currentHintWord = currentClueTarget;
+        hintStep = 0;
+    } else {
+        // No simple words left
+        currentClueTarget = null;
+        // Fallback generic clue
+        const anyWord = possibleWords.find(w => !foundWords.has(w));
+        if (anyWord) {
+            clueDisplay.innerText = `Find a word starting with ${anyWord[0]}...`;
+            currentHintWord = anyWord;
+            hintStep = 0;
+        } else {
+            clueDisplay.innerText = "All words found!";
+        }
+    }
 }
 
 // --- BUTTONS ---
@@ -636,15 +822,10 @@ submitBtn.addEventListener('click', submitWord);
 hintBtn.addEventListener('click', () => {
     document.querySelectorAll('.hint-flash').forEach(el => el.classList.remove('hint-flash'));
 
+    // Ensure we have a hint target
     if (!currentHintWord || foundWords.has(currentHintWord)) {
-        const unfound = possibleWords.filter(w => !foundWords.has(w));
-        if(unfound.length === 0) {
-            showMessage("No more words found!", "info");
-            currentHintWord = null;
-            return;
-        }
-        currentHintWord = unfound[0];
-        hintStep = 0;
+        updateClue(); // Will refresh hint word
+        if (!currentHintWord) return;
     }
 
     if (hintStep < currentHintWord.length) {
@@ -667,7 +848,6 @@ hintBtn.addEventListener('click', () => {
         }
     } else {
         showMessage(`Word was: ${currentHintWord}`, "info");
-        currentHintWord = null;
     }
 });
 
@@ -733,6 +913,12 @@ function submitWord() {
 
         if (finalWord.length > 5) playSound('special');
         else playSound('correct');
+        
+        // CHECK IF TARGET FOUND
+        if (finalWord === currentClueTarget) {
+            // Found the target! Get a new one.
+            updateClue();
+        }
         
         resetSelection();
 
