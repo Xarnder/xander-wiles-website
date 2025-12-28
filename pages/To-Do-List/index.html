@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Task Master</title>
+
+    <!-- Theme-aware SVG icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="manifest" href="site.webmanifest">
+    
+    <!-- Global Header -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    
+    <!-- App Styles -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- SortableJS & Icons -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+
+    <!-- GLOBAL HEADER PLACEHOLDER -->
+    <div id="main-nav-placeholder"></div> 
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- APP CONTAINER -->
+    <div class="app-wrapper">
+        <header class="app-header glass-panel">
+            <div class="header-left">
+                <h1>Task Master</h1>
+            </div>
+            
+            <div class="header-controls">
+                
+                <!-- Sorting -->
+                <div class="sort-container control-item">
+                    <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
+                    <select id="sort-select" class="glass-select">
+                        <option value="custom">Custom</option>
+                        <option value="alphabetical">A-Z</option>
+                        <option value="newest">Newest</option>
+                        <option value="oldest">Oldest</option>
+                    </select>
+                </div>
+
+                <!-- Drag Toggle -->
+                <div class="toggle-group control-item" title="Drag Mode">
+                    <span class="label">Drag:</span>
+                    <button id="mode-cut-btn" class="mode-btn active">Cut</button>
+                    <button id="mode-copy-btn" class="mode-btn">Copy</button>
+                </div>
+
+                <!-- View Archive Toggle -->
+                <button id="toggle-archive-view-btn" class="icon-btn-large control-item" title="Show/Hide Archived Tasks">
+                    <i class="ph ph-eye-slash" id="archive-view-icon"></i>
+                </button>
+
+                <!-- Theme Toggle -->
+                <button id="theme-toggle" class="icon-btn-large control-item" title="Toggle Theme">
+                    <i class="ph ph-sun"></i>
+                </button>
+
+                <button id="add-list-btn" class="btn primary control-item">+ List</button>
+                
+                <!-- Options Button (Triggers Modal now) -->
+                <button id="options-btn" class="btn secondary control-item">Options</button>
+            </div>
+        </header>
+
+        <!-- Horizontal Scroll Container -->
+        <main id="board-container" class="board-container">
+            <!-- Lists injected here -->
+        </main>
+    </div>
+
+    <!-- Hidden File Input -->
+    <input type="file" id="hidden-image-input" accept="image/*" style="display: none;">
+
+    <!-- OPTIONS POPUP MODAL (Moved here for reliability) -->
+    <div id="options-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2>App Options</h2>
+                <button id="close-options-btn" class="icon-btn-large">&times;</button>
+            </div>
+            
+            <div class="options-list">
+                <label class="dropdown-item-toggle">
+                    <span>Auto-Archive Completed</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="auto-archive-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+                
+                <hr class="dropdown-divider">
+                
+                <button id="download-json-btn" class="menu-action-item">
+                    <i class="ph ph-download-simple"></i> Download Backup (JSON)
+                </button>
+                
+                <label for="upload-json" class="menu-action-item">
+                    <i class="ph ph-upload-simple"></i> Restore Backup (JSON)
+                </label>
+                <input type="file" id="upload-json" accept=".json" style="display: none;">
+                
+                <hr class="dropdown-divider">
+                
+                <button id="trigger-reset-btn" class="menu-action-item danger-text">
+                    <i class="ph ph-trash"></i> Reset App Data
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT TASK MODAL -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <h2>Edit Task</h2>
+            <textarea id="modal-task-input" rows="3"></textarea>
+            
+            <div class="modal-actions-bar">
+                <button id="modal-save-btn" class="btn primary">Save Changes</button>
+                <button id="modal-close-btn" class="btn secondary">Close</button>
+            </div>
+
+            <!-- Manage Task Section -->
+            <div class="modal-divider"></div>
+            <div class="manual-move-section">
+                <h3>Currently In:</h3>
+                <div id="current-locations-list" class="current-locations-list"></div>
+
+                <h3>Add to another List:</h3>
+                <div class="move-controls">
+                    <select id="manual-move-select" class="glass-select full-width">
+                        <option value="" disabled selected>Select Destination...</option>
+                    </select>
+                    <div class="move-buttons">
+                        <button id="manual-link-btn" class="btn secondary">Link (Copy)</button>
+                        <button id="manual-move-btn" class="btn secondary">Move (Cut)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Lightbox -->
+    <div id="image-modal-overlay" class="modal-overlay hidden" style="background: rgba(0,0,0,0.95);">
+        <div class="image-modal-content">
+            <button id="image-modal-close" class="icon-btn-large" style="position: absolute; top: 20px; right: 20px; color: white; z-index: 2000;">&times;</button>
+            <img id="full-size-image" src="" alt="Full view">
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden">
+        <i class="ph ph-warning"></i>
+        <span id="toast-message"></span>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box">
+            <div class="confirm-icon-area">
+                <i class="ph ph-warning-circle"></i>
+            </div>
+            <h2 id="confirm-title">Are you sure?</h2>
+            <p id="confirm-desc">This action cannot be undone.</p>
+            <div class="modal-actions centered-actions">
+                <button id="confirm-cancel-btn" class="btn secondary">Cancel</button>
+                <button id="confirm-yes-btn" class="btn danger">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLIDE TO RESET MODAL -->
+    <div id="reset-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box">
+            <div class="confirm-icon-area" style="color: var(--accent-red);">
+                <i class="ph ph-skull"></i>
+            </div>
+            <h2>Reset Everything?</h2>
+            <p>This will delete all lists, tasks, and images permanently.</p>
+            
+            <div class="slider-container" id="slider-container">
+                <div class="slider-track">
+                    <span class="slider-text">Slide to Confirm</span>
+                </div>
+                <div class="slider-handle" id="slider-handle">
+                    <i class="ph ph-caret-right"></i>
+                </div>
+            </div>
+
+            <button id="reset-cancel-btn" class="btn secondary" style="margin-top: 15px; width: 100%;">Cancel</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
