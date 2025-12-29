@@ -33,18 +33,19 @@
 
     <main class="main-wrapper">
         
-        <!-- 1. Input Panel (Top Left) -->
+        <!-- 1. Input Panel -->
         <section class="panel editor">
             <div class="panel-header">
                 <h2>Input (Markdown + LaTeX)</h2>
             </div>
             <textarea id="input-text" placeholder="### Section Title
 Paste your notes here.
-New lines will change color.
-$E=mc^2$ works too."></textarea>
+---
+Lines with '---' will be removed.
+Double dollar $$x^2$$ equations supported."></textarea>
         </section>
 
-        <!-- 2. Controls Panel (Bottom Left) -->
+        <!-- 2. Controls Panel -->
         <section class="panel controls">
             <div class="panel-header">
                 <h2>Format Settings</h2>
@@ -70,7 +71,7 @@ $E=mc^2$ works too."></textarea>
                     </select>
                 </div>
 
-                <!-- Font & Line Height -->
+                <!-- Font & Tightness -->
                 <div class="split-row">
                     <div class="input-group">
                         <label>Font: <span id="fs-val">10</span>px</label>
@@ -82,7 +83,7 @@ $E=mc^2$ works too."></textarea>
                     </div>
                 </div>
 
-                <!-- Margin & Box Padding -->
+                <!-- Padding -->
                 <div class="split-row">
                     <div class="input-group">
                         <label>Page Margin: <span id="pad-page-val">5</span>mm</label>
@@ -94,9 +95,14 @@ $E=mc^2$ works too."></textarea>
                     </div>
                 </div>
                 
+                <!-- Toggles -->
                 <div class="input-group checkbox-group">
                     <input type="checkbox" id="remove-bullets" checked>
                     <label for="remove-bullets">Auto-remove bullets (*)</label>
+                </div>
+                <div class="input-group checkbox-group">
+                    <input type="checkbox" id="show-brackets" checked>
+                    <label for="show-brackets">Show Header Brackets [ ]</label>
                 </div>
             </div>
 
@@ -117,7 +123,7 @@ $E=mc^2$ works too."></textarea>
             </div>
         </section>
 
-        <!-- 3. Preview Panel (Right Side) -->
+        <!-- 3. Preview Panel -->
         <section class="panel preview">
             <h2>Live Preview</h2>
             <div class="canvas-container">

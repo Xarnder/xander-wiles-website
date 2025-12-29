@@ -11,13 +11,13 @@ document.addEventListener('DOMContentLoaded', () => {
         fsVal: document.getElementById('fs-val'),
         lhVal: document.getElementById('lh-val'),
         
-        // Margin & Padding Inputs
         padPage: document.getElementById('padPage'),
         padBox: document.getElementById('padBox'),
         padPageVal: document.getElementById('pad-page-val'),
         padBoxVal: document.getElementById('pad-box-val'),
 
         removeBullets: document.getElementById('remove-bullets'),
+        showBrackets: document.getElementById('show-brackets'), // New
         exportFormat: document.getElementById('export-format'),
         btnRender: document.getElementById('btn-render'),
         btnDownload: document.getElementById('btn-download'),
@@ -26,12 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Palettes ---
     const fontColors = [
-        '#000000', // Black
-        '#c00000', // Deep Red
-        '#00008b', // Dark Blue
-        '#005500', // Dark Green
-        '#550055', // Purple
-        '#663300'  // Brown
+        '#000000', '#c00000', '#00008b', '#005500', '#550055', '#663300'
     ];
 
     const bgColors = [
@@ -40,7 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
         '#fff0ff', '#fffff0', '#f0ffff', '#fff5e6'
     ];
 
-    // --- Logger ---
     function log(msg, type = 'info') {
         const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
         const entry = document.createElement('div');
@@ -55,11 +49,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Formatters ---
     function processMath(text) {
-        return text.replace(/\$([^$]+)\$/g, (match, latex) => {
+        // 1. Handle Double Dollar $$...$$ (Block math, but forced inline for cheatsheet)
+        text = text.replace(/\$\$([^$]+)\$\$/g, (match, latex) => {
             try {
-                return katex.renderToString(latex, { throwOnError: false, displayMode: false });
+                return katex.renderToString(latex, { 
+                    throwOnError: false, 
+                    displayMode: false // Force inline to save space
+                });
             } catch (e) { return match; }
         });
+
+        // 2. Handle Single Dollar $...$ (Inline math)
+        text = text.replace(/\$([^$]+)\$/g, (match, latex) => {
+            try {
+                return katex.renderToString(latex, { 
+                    throwOnError: false, 
+                    displayMode: false 
+                });
+            } catch (e) { return match; }
+        });
+        
+        return text;
     }
 
     function parseMarkdown(text) {
@@ -79,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const styleMode = els.sectionStyle.value; 
             const lines = rawText.split('\n');
             const shouldCleanBullets = els.removeBullets.checked;
+            const shouldShowBrackets = els.showBrackets.checked;
 
             let finalHTML = "";
             let fontColorIdx = 0;
@@ -95,7 +106,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             lines.forEach((line) => {
                 let text = line.trim();
-                if (text.length === 0) return;
+                
+                // Skip empty lines or separator lines (---)
+                if (text.length === 0 || text.match(/^---+$/)) return;
 
                 // 1. Detect Header
                 const headerMatch = text.match(/^(#+)\s+(.*)/);
@@ -113,14 +126,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     text = text.replace(/^(\*|-|\+)\s+/, '');
                 }
 
-                // 3. Process Content
+                // 3. Process Content (Math & MD)
                 text = processMath(text);
                 text = parseMarkdown(text);
 
                 // 4. Styles
                 const fColor = fontColors[fontColorIdx % fontColors.length];
                 let bgColor = 'transparent';
-                // Only use bg colors on spans if NOT in box mode (box mode colors the container)
                 if (styleMode === 'highlight' && sectionIdx > 0) {
                     bgColor = bgColors[sectionIdx % bgColors.length];
                 }
@@ -128,7 +140,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 let spanHTML = "";
                 
                 if (isHeader) {
-                    spanHTML = `<span class="sheet-span sheet-header" style="color: #000; background-color: ${bgColor};">[${text}]</span>`;
+                    // Header Rendering with optional Brackets
+                    const headerContent = shouldShowBrackets ? `[${text}]` : text;
+                    spanHTML = `<span class="sheet-span sheet-header" style="color: #000; background-color: ${bgColor};">${headerContent}</span>`;
                     fontColorIdx = 0; 
                 } else {
                     spanHTML = `<span class="sheet-span" style="color: ${fColor}; background-color: ${bgColor};">${text} </span>`;
@@ -150,22 +164,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Update CSS Variables & Styles ---
+    // --- Update CSS Variables ---
     function updateStyles() {
-        // Font
         els.fsVal.textContent = els.fontSize.value;
         els.content.style.fontSize = `${els.fontSize.value}px`;
         
-        // Line Height
         els.lhVal.textContent = els.lineHeight.value;
         els.content.style.lineHeight = els.lineHeight.value;
 
-        // Page Margin
         const margin = els.padPage.value;
         els.padPageVal.textContent = margin;
         els.sheet.style.padding = `${margin}mm`;
 
-        // Box Padding (Using CSS Variable for instant updates)
         const boxPad = els.padBox.value;
         els.padBoxVal.textContent = boxPad;
         els.sheet.style.setProperty('--box-pad', `${boxPad}px`);
@@ -173,13 +183,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners ---
 
-    // 1. Style Inputs (Live CSS updates)
+    // 1. Style Inputs
     [els.fontSize, els.lineHeight, els.padPage, els.padBox].forEach(el => {
         el.addEventListener('input', updateStyles);
     });
 
-    // 2. Trigger Full Renders
-    [els.sectionStyle, els.removeBullets, els.orientation].forEach(el => {
+    // 2. Toggles
+    [els.sectionStyle, els.removeBullets, els.showBrackets, els.orientation].forEach(el => {
         el.addEventListener('change', (e) => {
             if(e.target.id === 'orientation') {
                 els.sheet.className = `a4-sheet ${e.target.value}`;
@@ -188,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 3. Text Input
+    // 3. Input
     let debounceTimer;
     els.input.addEventListener('input', () => {
         clearTimeout(debounceTimer);
@@ -235,6 +245,5 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Initial Setup
     updateStyles();
 });
