@@ -1,9 +1,10 @@
 /* 
-    Task Master Script v12 (Bulk Add)
+    Task Master Script v16 (Same Logic as v15 - Drag Fix handled in CSS)
 */
 
 console.log("[DEBUG] App initialized.");
 
+// --- STATE MANAGEMENT ---
 const defaultData = {
     projectTitle: "Task Master", 
     lists: [
@@ -13,6 +14,7 @@ const defaultData = {
     tasks: {},
     settings: {
         autoArchive: false,
+        showNumbers: false, 
         theme: 'dark',
         sortMode: 'custom'
     }
@@ -22,14 +24,16 @@ let appData = loadData();
 let dragMode = 'move';
 let showArchived = false;
 let sortableInstances = [];
+let listSortable = null;
 
-// DOM Elements
+// --- DOM ELEMENTS ---
 const boardContainer = document.getElementById('board-container');
 const addListBtn = document.getElementById('add-list-btn');
 const themeToggleBtn = document.getElementById('theme-toggle');
 const modeCutBtn = document.getElementById('mode-cut-btn');
 const modeCopyBtn = document.getElementById('mode-copy-btn');
 const autoArchiveToggle = document.getElementById('auto-archive-toggle');
+const showNumbersToggle = document.getElementById('show-numbers-toggle');
 const sortSelect = document.getElementById('sort-select');
 const toggleArchiveBtn = document.getElementById('toggle-archive-view-btn');
 const archiveViewIcon = document.getElementById('archive-view-icon');
@@ -43,6 +47,7 @@ const modalOverlay = document.getElementById('modal-overlay');
 const modalInput = document.getElementById('modal-task-input');
 const modalSaveBtn = document.getElementById('modal-save-btn');
 const modalCloseBtn = document.getElementById('modal-close-btn');
+const glowColorOptions = document.getElementById('glow-color-options');
 
 // Bulk Add DOM
 const bulkAddModal = document.getElementById('bulk-add-modal-overlay');
@@ -79,25 +84,41 @@ const hiddenImageInput = document.getElementById('hidden-image-input');
 let currentEditingTaskId = null;
 let currentEditingListId = null; 
 let currentImageUploadTaskId = null;
+let selectedGlowColor = 'none'; 
 let confirmCallback = null; 
 
-function init() {
-    document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('hidden'));
+// --- UTILITY FUNCTIONS ---
 
-    applyTheme(appData.settings.theme);
-    autoArchiveToggle.checked = appData.settings.autoArchive || false;
-    
-    if (appData.projectTitle) {
-        projectTitleInput.value = appData.projectTitle;
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    const icon = themeToggleBtn.querySelector('i');
+    if (theme === 'light') icon.classList.replace('ph-sun', 'ph-moon');
+    else icon.classList.replace('ph-moon', 'ph-sun');
+}
+
+function updateDragModeUI() {
+    if (dragMode === 'move') { 
+        modeCutBtn.classList.add('active'); 
+        modeCopyBtn.classList.remove('active'); 
+    } else { 
+        modeCutBtn.classList.remove('active'); 
+        modeCopyBtn.classList.add('active'); 
     }
+}
 
-    if(!appData.settings.sortMode) appData.settings.sortMode = 'custom';
-    sortSelect.value = appData.settings.sortMode;
+function showToast(msg) {
+    toastMessage.innerText = msg;
+    toast.classList.remove('hidden');
+    setTimeout(() => { toast.classList.add('hidden'); }, 3000);
+}
 
-    updateDragModeUI();
-    renderBoard();
-    setupGlobalListeners();
-    setupSlider();
+function generateId() { 
+    return 'id-' + Math.random().toString(36).substr(2, 9); 
+}
+
+function escapeHtml(text) {
+    if (!text) return text;
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function loadData() {
@@ -106,6 +127,7 @@ function loadData() {
         try { 
             const data = JSON.parse(json); 
             if (!data.projectTitle) data.projectTitle = "Task Master";
+            if (data.settings.showNumbers === undefined) data.settings.showNumbers = false;
             return data;
         } 
         catch (e) { return defaultData; }
@@ -115,12 +137,11 @@ function loadData() {
 
 function saveData() {
     appData.settings.autoArchive = autoArchiveToggle.checked;
+    appData.settings.showNumbers = showNumbersToggle.checked;
     appData.settings.sortMode = sortSelect.value;
     appData.projectTitle = projectTitleInput.value;
     localStorage.setItem('taskmaster_v6', JSON.stringify(appData));
 }
-
-function generateId() { return 'id-' + Math.random().toString(36).substr(2, 9); }
 
 function getTaskReferenceCount(taskId) {
     let count = 0;
@@ -128,9 +149,34 @@ function getTaskReferenceCount(taskId) {
     return count;
 }
 
+// --- INITIALIZATION ---
+
+function init() {
+    document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('hidden'));
+
+    applyTheme(appData.settings.theme);
+    
+    autoArchiveToggle.checked = appData.settings.autoArchive || false;
+    showNumbersToggle.checked = appData.settings.showNumbers || false;
+    
+    if (appData.projectTitle) projectTitleInput.value = appData.projectTitle;
+    
+    if (!appData.settings.sortMode) appData.settings.sortMode = 'custom';
+    sortSelect.value = appData.settings.sortMode;
+
+    updateDragModeUI();
+    renderBoard();
+    setupGlobalListeners();
+    setupSlider();
+}
+
+// --- RENDERING ---
+
 function renderBoard() {
     sortableInstances.forEach(s => s.destroy());
     sortableInstances = [];
+    if(listSortable) listSortable.destroy();
+
     boardContainer.innerHTML = '';
 
     const isCustomSort = appData.settings.sortMode === 'custom';
@@ -150,6 +196,28 @@ function renderBoard() {
             renderListColumn(orphanList, true, false); 
         }
     }
+
+    // List Reordering with Fallback
+    listSortable = new Sortable(boardContainer, {
+        animation: 150,
+        handle: '.list-drag-handle',
+        direction: 'horizontal',
+        filter: '.orphan-list',
+        forceFallback: true,
+        fallbackOnBody: true,
+        fallbackClass: "sortable-fallback",
+        swapThreshold: 0.65,
+        onEnd: (evt) => {
+            const newIndex = evt.newIndex;
+            const oldIndex = evt.oldIndex;
+            
+            if (newIndex !== oldIndex) {
+                const movedList = appData.lists.splice(oldIndex, 1)[0];
+                appData.lists.splice(newIndex, 0, movedList);
+                saveData();
+            }
+        }
+    });
 }
 
 function getOrphanedTaskIds() {
@@ -164,18 +232,19 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     listEl.className = `list-column ${isOrphan ? 'orphan-list' : ''}`;
     listEl.dataset.listId = list.id;
 
-    // Added Bulk Add Button to header
-    let headerButtons = '';
-    if (isOrphan) {
-        headerButtons = `<button class="icon-btn danger" onclick="emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`;
-    } else {
-        headerButtons = `
-            <div class="list-header-right">
-                <button class="icon-btn" onclick="openBulkAddModal('${list.id}')" title="Bulk Add Tasks"><i class="ph ph-list-plus"></i></button>
-                <button class="icon-btn" onclick="deleteList('${list.id}')" title="Delete List"><i class="ph ph-trash"></i></button>
-            </div>
-        `;
-    }
+    let headerLeft = isOrphan 
+        ? `<input type="text" class="list-title" value="${list.title}" disabled>`
+        : `<div class="list-header-left">
+             <i class="ph ph-dots-six list-drag-handle" title="Drag to reorder list"></i>
+             <input type="text" class="list-title" value="${list.title}" onchange="updateListTitle('${list.id}', this.value)">
+           </div>`;
+
+    let headerButtons = isOrphan 
+        ? `<button class="icon-btn danger" onclick="emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
+        : `<div class="list-header-right">
+             <button class="icon-btn" onclick="openBulkAddModal('${list.id}')" title="Bulk Add Tasks"><i class="ph ph-list-plus"></i></button>
+             <button class="icon-btn" onclick="deleteList('${list.id}')" title="Delete List"><i class="ph ph-trash"></i></button>
+           </div>`;
 
     let addFormHtml = isOrphan ? '' : `
         <div class="add-task-container">
@@ -187,7 +256,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
 
     listEl.innerHTML = `
         <div class="list-header">
-            <input type="text" class="list-title" value="${list.title}" ${isOrphan ? 'disabled' : ''} onchange="updateListTitle('${list.id}', this.value)">
+            ${headerLeft}
             ${headerButtons}
         </div>
         <div class="task-list" id="container-${list.id}"></div>
@@ -197,11 +266,11 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     const taskListContainer = listEl.querySelector('.task-list');
     const sortedIds = getSortedTaskIds(list.taskIds);
 
-    sortedIds.forEach(taskId => {
+    sortedIds.forEach((taskId, index) => {
         const task = appData.tasks[taskId];
         if (task) {
             if (showArchived || !task.archived) {
-                taskListContainer.appendChild(createTaskElement(task, list.id));
+                taskListContainer.appendChild(createTaskElement(task, list.id, index + 1));
             }
         }
     });
@@ -222,11 +291,18 @@ function renderListColumn(list, isOrphan, isCustomSort) {
                 put: true 
             },
             animation: 150,
-            delay: 200, 
+            delay: 150, 
             delayOnTouchOnly: true,
-            touchStartThreshold: 3, 
+            touchStartThreshold: 5, 
             disabled: !isCustomSort,
             filter: '.archived-task',
+            
+            // CRITICAL FIXES FOR TASK DRAGGING
+            forceFallback: true, 
+            fallbackOnBody: true, 
+            fallbackClass: "sortable-fallback",
+            swapThreshold: 0.65,
+            
             onEnd: handleDragEnd
         });
         sortableInstances.push(sortable);
@@ -256,7 +332,7 @@ function getSortedTaskIds(taskIds) {
     return ids;
 }
 
-function createTaskElement(task, sourceListId) {
+function createTaskElement(task, sourceListId, number) {
     const el = document.createElement('div');
     const refCount = getTaskReferenceCount(task.id);
     const isLinked = refCount > 1;
@@ -272,6 +348,11 @@ function createTaskElement(task, sourceListId) {
 
     el.className = classes;
     el.dataset.taskId = task.id;
+
+    if (task.glowColor && task.glowColor !== 'none') {
+        el.style.boxShadow = `0 0 10px ${task.glowColor}, inset 0 0 5px ${task.glowColor}20`;
+        el.style.borderColor = task.glowColor;
+    }
 
     let imagesHtml = '';
     if (task.images && task.images.length > 0) {
@@ -296,11 +377,17 @@ function createTaskElement(task, sourceListId) {
         `;
     }
 
+    let numberHtml = '';
+    if (appData.settings.showNumbers) {
+        numberHtml = `<span class="task-number">${number}.</span>`;
+    }
+
     el.innerHTML = `
         <input type="checkbox" class="task-checkbox" 
             ${task.completed ? 'checked' : ''} 
             ${task.archived ? 'disabled' : ''} 
             onchange="toggleTaskComplete('${task.id}', this.checked)">
+        ${numberHtml}
         <div class="task-content-wrapper">
             <div class="task-text">${escapeHtml(task.text)}</div>
             ${imagesHtml}
@@ -310,13 +397,15 @@ function createTaskElement(task, sourceListId) {
     return el;
 }
 
+// --- LOGIC ---
+
 function handleAddTask(e, listId) {
     e.preventDefault();
     const input = e.target.elements.taskText;
     const text = input.value.trim();
     if (!text) return;
     const newId = generateId();
-    appData.tasks[newId] = { id: newId, text: text, completed: false, archived: false, createdAt: Date.now(), images: [] };
+    appData.tasks[newId] = { id: newId, text: text, completed: false, archived: false, createdAt: Date.now(), images: [], glowColor: 'none' };
     const list = appData.lists.find(l => l.id === listId);
     list.taskIds.push(newId);
     saveData();
@@ -484,6 +573,7 @@ imageModal.addEventListener('click', (e) => {
     if(e.target === imageModal) imageModal.classList.add('hidden');
 });
 
+// --- SLIDER ---
 function setupSlider() {
     let isDragging = false;
     let startX = 0;
@@ -527,27 +617,7 @@ function setupSlider() {
     document.addEventListener('touchend', endDrag);
 }
 
-// Global functions for inline onclicks
-window.openBulkAddModal = function(listId) {
-    currentBulkListId = listId;
-    bulkAddInput.value = '';
-    bulkAddModal.classList.remove('hidden');
-};
-
-window.removeTaskFromList = function(listId, taskId) {
-    const list = appData.lists.find(l => l.id === listId);
-    if (list) {
-        if (getTaskReferenceCount(taskId) <= 1 && !appData.tasks[taskId].archived) {
-            if(!confirm("This is the last list containing this task. Removing it will archive it. Continue?")) return;
-            appData.tasks[taskId].archived = true;
-        }
-        list.taskIds = list.taskIds.filter(id => id !== taskId);
-        saveData();
-        renderBoard();
-        renderTaskLocations(taskId);
-        populateMoveDropdown(taskId);
-    }
-};
+// --- STANDARD CONTROLS & LISTENERS ---
 
 function setupGlobalListeners() {
     document.getElementById('download-json-btn').onclick = () => {
@@ -574,6 +644,7 @@ function setupGlobalListeners() {
         renderBoard();
     };
 
+    // Open Options Modal
     optionsBtn.onclick = () => {
         optionsModal.classList.remove('hidden');
     };
@@ -601,6 +672,12 @@ function setupGlobalListeners() {
         renderBoard();
     };
 
+    showNumbersToggle.onchange = () => {
+        appData.settings.showNumbers = showNumbersToggle.checked;
+        saveData();
+        renderBoard();
+    }
+
     modeCutBtn.onclick = () => { dragMode = 'move'; updateDragModeUI(); renderBoard(); };
     modeCopyBtn.onclick = () => { dragMode = 'copy'; updateDragModeUI(); renderBoard(); };
     
@@ -614,6 +691,7 @@ function setupGlobalListeners() {
     modalSaveBtn.onclick = () => {
         if (currentEditingTaskId && appData.tasks[currentEditingTaskId]) {
             appData.tasks[currentEditingTaskId].text = modalInput.value;
+            appData.tasks[currentEditingTaskId].glowColor = selectedGlowColor; // Save Glow
             saveData();
             renderBoard();
             modalOverlay.classList.add('hidden');
@@ -666,37 +744,58 @@ function setupGlobalListeners() {
         saveData();
     };
 
-    // --- BULK ADD LOGIC ---
+    // Bulk Add Logic
     bulkAddCloseBtn.onclick = () => bulkAddModal.classList.add('hidden');
     
     bulkAddConfirmBtn.onclick = () => {
         const rawText = bulkAddInput.value;
         if (!rawText.trim()) return;
-        
         const lines = rawText.split(/\r?\n/).filter(line => line.trim() !== '');
         const list = appData.lists.find(l => l.id === currentBulkListId);
-        
         if (list) {
             lines.forEach(line => {
                 const newId = generateId();
-                appData.tasks[newId] = { 
-                    id: newId, 
-                    text: line.trim(), 
-                    completed: false, 
-                    archived: false, 
-                    createdAt: Date.now(), 
-                    images: [] 
-                };
+                appData.tasks[newId] = { id: newId, text: line.trim(), completed: false, archived: false, createdAt: Date.now(), images: [], glowColor: 'none' };
                 list.taskIds.push(newId);
             });
-            
             saveData();
             renderBoard();
             bulkAddModal.classList.add('hidden');
             showToast(`Added ${lines.length} tasks.`);
         }
     };
+
+    // Color Picker Logic
+    document.querySelectorAll('.color-btn').forEach(btn => {
+        btn.onclick = () => {
+            selectedGlowColor = btn.dataset.color;
+            document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        };
+    });
 }
+
+// Global Wrappers
+window.openBulkAddModal = function(listId) {
+    currentBulkListId = listId;
+    bulkAddInput.value = '';
+    bulkAddModal.classList.remove('hidden');
+};
+
+window.removeTaskFromList = function(listId, taskId) {
+    const list = appData.lists.find(l => l.id === listId);
+    if (list) {
+        if (getTaskReferenceCount(taskId) <= 1 && !appData.tasks[taskId].archived) {
+            if(!confirm("This is the last list containing this task. Removing it will archive it. Continue?")) return;
+            appData.tasks[taskId].archived = true;
+        }
+        list.taskIds = list.taskIds.filter(id => id !== taskId);
+        saveData();
+        renderBoard();
+        renderTaskLocations(taskId);
+        populateMoveDropdown(taskId);
+    }
+};
 
 function renderTaskLocations(taskId) {
     currentLocationsList.innerHTML = '';
@@ -733,28 +832,19 @@ function populateMoveDropdown(taskId) {
 function openEditModal(taskId, listId) {
     currentEditingTaskId = taskId;
     currentEditingListId = listId; 
-    modalInput.value = appData.tasks[taskId].text;
+    
+    const task = appData.tasks[taskId];
+    modalInput.value = task.text;
+    selectedGlowColor = task.glowColor || 'none';
+
+    document.querySelectorAll('.color-btn').forEach(b => {
+        b.classList.remove('selected');
+        if (b.dataset.color === selectedGlowColor) b.classList.add('selected');
+    });
+
     renderTaskLocations(taskId);
     populateMoveDropdown(taskId);
     modalOverlay.classList.remove('hidden');
-}
-
-function showToast(msg) {
-    toastMessage.innerText = msg;
-    toast.classList.remove('hidden');
-    setTimeout(() => { toast.classList.add('hidden'); }, 3000);
-}
-
-function updateDragModeUI() {
-    if (dragMode === 'move') { modeCutBtn.classList.add('active'); modeCopyBtn.classList.remove('active'); } 
-    else { modeCutBtn.classList.remove('active'); modeCopyBtn.classList.add('active'); }
-}
-
-function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    const icon = themeToggleBtn.querySelector('i');
-    if (theme === 'light') icon.classList.replace('ph-sun', 'ph-moon');
-    else icon.classList.replace('ph-moon', 'ph-sun');
 }
 
 function updateListTitle(id, val) {
@@ -768,11 +858,6 @@ function showCustomConfirm(title, desc, callback) {
     confirmDesc.innerText = desc;
     confirmCallback = callback;
     confirmOverlay.classList.remove('hidden');
-}
-
-function escapeHtml(text) {
-    if (!text) return text;
-    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 init();

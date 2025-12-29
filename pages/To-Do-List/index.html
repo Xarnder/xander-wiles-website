@@ -83,6 +83,13 @@
             </div>
             <div class="options-list">
                 <label class="dropdown-item-toggle">
+                    <span>Show Task Numbers</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="show-numbers-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+                <label class="dropdown-item-toggle">
                     <span>Auto-Archive Completed</span>
                     <div class="switch-small">
                         <input type="checkbox" id="auto-archive-toggle">
@@ -99,15 +106,14 @@
         </div>
     </div>
 
-    <!-- BULK ADD MODAL (NEW) -->
+    <!-- BULK ADD MODAL -->
     <div id="bulk-add-modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel">
             <h2>Bulk Add Tasks</h2>
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px;">
                 Paste your list below. Each new line will become a separate task.
             </p>
-            <textarea id="bulk-add-input" rows="8" placeholder="Task 1&#10;Task 2&#10;Task 3..."></textarea>
-            
+            <textarea id="bulk-add-input" rows="8" placeholder="Task 1&#10;Task 2..."></textarea>
             <div class="modal-actions-bar">
                 <button id="bulk-add-confirm-btn" class="btn primary">Add Tasks</button>
                 <button id="bulk-add-close-btn" class="btn secondary">Cancel</button>
@@ -121,6 +127,20 @@
             <h2>Edit Task</h2>
             <textarea id="modal-task-input" rows="4" placeholder="Task description..."></textarea>
             
+            <!-- GLOW COLOR PICKER -->
+            <div class="color-picker-section">
+                <h3>Card Glow Effect:</h3>
+                <div class="color-options" id="glow-color-options">
+                    <button class="color-btn" data-color="none" title="None"><i class="ph ph-prohibit"></i></button>
+                    <button class="color-btn" data-color="#ef4444" style="background:#ef4444;"></button> <!-- Red -->
+                    <button class="color-btn" data-color="#f97316" style="background:#f97316;"></button> <!-- Orange -->
+                    <button class="color-btn" data-color="#eab308" style="background:#eab308;"></button> <!-- Yellow -->
+                    <button class="color-btn" data-color="#22c55e" style="background:#22c55e;"></button> <!-- Green -->
+                    <button class="color-btn" data-color="#3b82f6" style="background:#3b82f6;"></button> <!-- Blue -->
+                    <button class="color-btn" data-color="#a855f7" style="background:#a855f7;"></button> <!-- Purple -->
+                </div>
+            </div>
+
             <div class="modal-actions-bar">
                 <button id="modal-save-btn" class="btn primary">Save Changes</button>
                 <button id="modal-close-btn" class="btn secondary">Close</button>
