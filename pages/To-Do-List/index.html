@@ -32,11 +32,11 @@
     <div class="app-wrapper">
         <header class="app-header glass-panel">
             <div class="header-left">
-                <h1>Task Master</h1>
+                <!-- EDITABLE PROJECT TITLE -->
+                <input type="text" id="project-title-input" class="project-title-input" value="Task Master" placeholder="Project Name">
             </div>
             
             <div class="header-controls">
-                
                 <!-- Sorting -->
                 <div class="sort-container control-item">
                     <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
@@ -67,7 +67,7 @@
 
                 <button id="add-list-btn" class="btn primary control-item">+ List</button>
                 
-                <!-- Options Button (Triggers Modal now) -->
+                <!-- Options Button -->
                 <button id="options-btn" class="btn secondary control-item">Options</button>
             </div>
         </header>
@@ -81,14 +81,13 @@
     <!-- Hidden File Input -->
     <input type="file" id="hidden-image-input" accept="image/*" style="display: none;">
 
-    <!-- OPTIONS POPUP MODAL (Moved here for reliability) -->
+    <!-- OPTIONS MODAL -->
     <div id="options-modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel">
             <div class="modal-header-row">
                 <h2>App Options</h2>
                 <button id="close-options-btn" class="icon-btn-large">&times;</button>
             </div>
-            
             <div class="options-list">
                 <label class="dropdown-item-toggle">
                     <span>Auto-Archive Completed</span>
@@ -97,23 +96,12 @@
                         <span class="slider-small round"></span>
                     </div>
                 </label>
-                
                 <hr class="dropdown-divider">
-                
-                <button id="download-json-btn" class="menu-action-item">
-                    <i class="ph ph-download-simple"></i> Download Backup (JSON)
-                </button>
-                
-                <label for="upload-json" class="menu-action-item">
-                    <i class="ph ph-upload-simple"></i> Restore Backup (JSON)
-                </label>
+                <button id="download-json-btn" class="menu-action-item"><i class="ph ph-download-simple"></i> Download Backup</button>
+                <label for="upload-json" class="menu-action-item"><i class="ph ph-upload-simple"></i> Restore Backup</label>
                 <input type="file" id="upload-json" accept=".json" style="display: none;">
-                
                 <hr class="dropdown-divider">
-                
-                <button id="trigger-reset-btn" class="menu-action-item danger-text">
-                    <i class="ph ph-trash"></i> Reset App Data
-                </button>
+                <button id="trigger-reset-btn" class="menu-action-item danger-text"><i class="ph ph-trash"></i> Reset App Data</button>
             </div>
         </div>
     </div>
@@ -122,14 +110,15 @@
     <div id="modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel">
             <h2>Edit Task</h2>
-            <textarea id="modal-task-input" rows="3"></textarea>
+            
+            <!-- STYLED TEXTAREA -->
+            <textarea id="modal-task-input" rows="4" placeholder="Task description..."></textarea>
             
             <div class="modal-actions-bar">
                 <button id="modal-save-btn" class="btn primary">Save Changes</button>
                 <button id="modal-close-btn" class="btn secondary">Close</button>
             </div>
 
-            <!-- Manage Task Section -->
             <div class="modal-divider"></div>
             <div class="manual-move-section">
                 <h3>Currently In:</h3>
@@ -166,9 +155,7 @@
     <!-- Confirm Modal -->
     <div id="confirm-modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel confirm-box">
-            <div class="confirm-icon-area">
-                <i class="ph ph-warning-circle"></i>
-            </div>
+            <div class="confirm-icon-area"><i class="ph ph-warning-circle"></i></div>
             <h2 id="confirm-title">Are you sure?</h2>
             <p id="confirm-desc">This action cannot be undone.</p>
             <div class="modal-actions centered-actions">
@@ -178,24 +165,16 @@
         </div>
     </div>
 
-    <!-- SLIDE TO RESET MODAL -->
+    <!-- Reset Slider -->
     <div id="reset-modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel confirm-box">
-            <div class="confirm-icon-area" style="color: var(--accent-red);">
-                <i class="ph ph-skull"></i>
-            </div>
+            <div class="confirm-icon-area" style="color: var(--accent-red);"><i class="ph ph-skull"></i></div>
             <h2>Reset Everything?</h2>
-            <p>This will delete all lists, tasks, and images permanently.</p>
-            
+            <p>Delete all lists, tasks, and images.</p>
             <div class="slider-container" id="slider-container">
-                <div class="slider-track">
-                    <span class="slider-text">Slide to Confirm</span>
-                </div>
-                <div class="slider-handle" id="slider-handle">
-                    <i class="ph ph-caret-right"></i>
-                </div>
+                <div class="slider-track"><span class="slider-text">Slide to Confirm</span></div>
+                <div class="slider-handle" id="slider-handle"><i class="ph ph-caret-right"></i></div>
             </div>
-
             <button id="reset-cancel-btn" class="btn secondary" style="margin-top: 15px; width: 100%;">Cancel</button>
         </div>
     </div>

@@ -1,10 +1,12 @@
 /* 
-    Task Master Script v11 (Options as Modal)
+    Task Master Script v12 (Project Title & !! Highlights)
 */
 
 console.log("[DEBUG] App initialized.");
 
+// Updated default data with projectTitle
 const defaultData = {
+    projectTitle: "Task Master", 
     lists: [
         { id: 'list-1', title: 'To Do', taskIds: [] },
         { id: 'list-2', title: 'Doing', taskIds: [] }
@@ -32,29 +34,26 @@ const autoArchiveToggle = document.getElementById('auto-archive-toggle');
 const sortSelect = document.getElementById('sort-select');
 const toggleArchiveBtn = document.getElementById('toggle-archive-view-btn');
 const archiveViewIcon = document.getElementById('archive-view-icon');
+const projectTitleInput = document.getElementById('project-title-input'); // New
 
 const optionsBtn = document.getElementById('options-btn');
 const optionsModal = document.getElementById('options-modal-overlay');
 const closeOptionsBtn = document.getElementById('close-options-btn');
 
-// Edit Modal
 const modalOverlay = document.getElementById('modal-overlay');
 const modalInput = document.getElementById('modal-task-input');
 const modalSaveBtn = document.getElementById('modal-save-btn');
 const modalCloseBtn = document.getElementById('modal-close-btn');
 
-// Task Manager DOM
 const currentLocationsList = document.getElementById('current-locations-list');
 const manualMoveSelect = document.getElementById('manual-move-select');
 const manualMoveBtn = document.getElementById('manual-move-btn');
 const manualLinkBtn = document.getElementById('manual-link-btn');
 
-// Image Modal
 const imageModal = document.getElementById('image-modal-overlay');
 const fullSizeImage = document.getElementById('full-size-image');
 const imageModalClose = document.getElementById('image-modal-close');
 
-// Confirm & Reset
 const confirmOverlay = document.getElementById('confirm-modal-overlay');
 const confirmTitle = document.getElementById('confirm-title');
 const confirmDesc = document.getElementById('confirm-desc');
@@ -64,11 +63,9 @@ const resetOverlay = document.getElementById('reset-modal-overlay');
 const triggerResetBtn = document.getElementById('trigger-reset-btn');
 const resetCancelBtn = document.getElementById('reset-cancel-btn');
 
-// Slider
 const sliderContainer = document.getElementById('slider-container');
 const sliderHandle = document.getElementById('slider-handle');
 
-// Others
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toast-message');
 const hiddenImageInput = document.getElementById('hidden-image-input');
@@ -78,14 +75,17 @@ let currentEditingListId = null;
 let currentImageUploadTaskId = null;
 let confirmCallback = null; 
 
-// --- INITIALIZATION ---
-
 function init() {
     document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('hidden'));
 
     applyTheme(appData.settings.theme);
     autoArchiveToggle.checked = appData.settings.autoArchive || false;
     
+    // Set Project Title
+    if (appData.projectTitle) {
+        projectTitleInput.value = appData.projectTitle;
+    }
+
     if(!appData.settings.sortMode) appData.settings.sortMode = 'custom';
     sortSelect.value = appData.settings.sortMode;
 
@@ -95,12 +95,15 @@ function init() {
     setupSlider();
 }
 
-// --- DATA ---
-
 function loadData() {
     const json = localStorage.getItem('taskmaster_v6');
     if (json) {
-        try { return JSON.parse(json); } 
+        try { 
+            const data = JSON.parse(json); 
+            // Backwards compatibility for old saves without title
+            if (!data.projectTitle) data.projectTitle = "Task Master";
+            return data;
+        } 
         catch (e) { return defaultData; }
     }
     return defaultData;
@@ -109,6 +112,7 @@ function loadData() {
 function saveData() {
     appData.settings.autoArchive = autoArchiveToggle.checked;
     appData.settings.sortMode = sortSelect.value;
+    appData.projectTitle = projectTitleInput.value; // Save Title
     localStorage.setItem('taskmaster_v6', JSON.stringify(appData));
 }
 
@@ -119,8 +123,6 @@ function getTaskReferenceCount(taskId) {
     appData.lists.forEach(list => { if (list.taskIds.includes(taskId)) count++; });
     return count;
 }
-
-// --- RENDERING ---
 
 function renderBoard() {
     sortableInstances.forEach(s => s.destroy());
@@ -246,12 +248,16 @@ function createTaskElement(task, sourceListId) {
     const refCount = getTaskReferenceCount(task.id);
     const isLinked = refCount > 1;
     const isLocked = appData.settings.sortMode !== 'custom';
+    
+    // Check for "!!"
+    const isImportant = task.text.includes('!!');
 
     let classes = 'task-card';
     if (isLinked) classes += ' linked-task';
     if (task.completed) classes += ' task-completed';
     if (task.archived) classes += ' archived-task';
     if (isLocked) classes += ' locked-sort';
+    if (isImportant) classes += ' important'; // Add styling class
 
     el.className = classes;
     el.dataset.taskId = task.id;
@@ -292,8 +298,6 @@ function createTaskElement(task, sourceListId) {
     `;
     return el;
 }
-
-// --- LOGIC ---
 
 function handleAddTask(e, listId) {
     e.preventDefault();
@@ -469,7 +473,6 @@ imageModal.addEventListener('click', (e) => {
     if(e.target === imageModal) imageModal.classList.add('hidden');
 });
 
-// --- SLIDER ---
 function setupSlider() {
     let isDragging = false;
     let startX = 0;
@@ -513,14 +516,12 @@ function setupSlider() {
     document.addEventListener('touchend', endDrag);
 }
 
-// --- STANDARD CONTROLS & LISTENERS ---
-
 function setupGlobalListeners() {
     document.getElementById('download-json-btn').onclick = () => {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData));
         const anchor = document.createElement('a');
         anchor.href = dataStr;
-        anchor.download = "taskmaster_backup.json";
+        anchor.download = (appData.projectTitle || "taskmaster") + "_backup.json";
         anchor.click();
     };
 
@@ -540,7 +541,6 @@ function setupGlobalListeners() {
         renderBoard();
     };
 
-    // --- UPDATED OPTIONS TOGGLE ---
     optionsBtn.onclick = () => {
         optionsModal.classList.remove('hidden');
     };
@@ -591,7 +591,6 @@ function setupGlobalListeners() {
     confirmYesBtn.onclick = () => { if (confirmCallback) confirmCallback(); confirmOverlay.classList.add('hidden'); confirmCallback = null; };
     confirmCancelBtn.onclick = () => { confirmOverlay.classList.add('hidden'); confirmCallback = null; };
 
-    // --- MANUAL MOVE LOGIC ---
     manualMoveBtn.onclick = () => {
         const targetListId = manualMoveSelect.value;
         if (!targetListId) return alert("Please select a list.");
@@ -605,7 +604,6 @@ function setupGlobalListeners() {
                 targetList.taskIds.push(currentEditingTaskId);
             }
             sourceList.taskIds = sourceList.taskIds.filter(id => id !== currentEditingTaskId);
-            
             saveData();
             renderBoard();
             modalOverlay.classList.add('hidden');
@@ -616,7 +614,6 @@ function setupGlobalListeners() {
     manualLinkBtn.onclick = () => {
         const targetListId = manualMoveSelect.value;
         if (!targetListId) return alert("Please select a list.");
-        
         const targetList = appData.lists.find(l => l.id === targetListId);
         if (targetList) {
             if (!targetList.taskIds.includes(currentEditingTaskId)) {
@@ -630,20 +627,21 @@ function setupGlobalListeners() {
             }
         }
     };
+
+    // Save Title Changes
+    projectTitleInput.onchange = () => {
+        appData.projectTitle = projectTitleInput.value;
+        saveData();
+    };
 }
 
-// Render "Currently In" list
 function renderTaskLocations(taskId) {
     currentLocationsList.innerHTML = '';
-    
-    // Find all lists containing this task
     const lists = appData.lists.filter(l => l.taskIds.includes(taskId));
-    
     if (lists.length === 0) {
         currentLocationsList.innerHTML = '<div style="color:#888; font-size:0.9rem;">Not in any active lists (Archived).</div>';
         return;
     }
-
     lists.forEach(list => {
         const div = document.createElement('div');
         div.className = 'location-item';
@@ -664,7 +662,6 @@ window.removeTaskFromList = function(listId, taskId) {
             if(!confirm("This is the last list containing this task. Removing it will archive it. Continue?")) return;
             appData.tasks[taskId].archived = true;
         }
-
         list.taskIds = list.taskIds.filter(id => id !== taskId);
         saveData();
         renderBoard();
@@ -688,12 +685,9 @@ function populateMoveDropdown(taskId) {
 function openEditModal(taskId, listId) {
     currentEditingTaskId = taskId;
     currentEditingListId = listId; 
-    
     modalInput.value = appData.tasks[taskId].text;
-    
     renderTaskLocations(taskId);
     populateMoveDropdown(taskId);
-
     modalOverlay.classList.remove('hidden');
 }
 
