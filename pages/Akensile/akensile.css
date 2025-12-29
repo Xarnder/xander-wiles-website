@@ -271,7 +271,7 @@ body {
     z-index: 1;
     opacity: 0.6;
     border-radius: 30px;
-    animation: glowPulse 4s infinite alternate;
+    /* Animation removed for static look */
 }
 
 .glow-effect-secondary {
@@ -290,12 +290,12 @@ body {
 @keyframes glowPulse {
     0% {
         opacity: 0.5;
-        transform: scale(0.95);
+        transform: scale(0.99);
     }
 
     100% {
         opacity: 0.8;
-        transform: scale(1.05);
+        transform: scale(1.01);
     }
 }
 
@@ -352,7 +352,7 @@ body {
     background-size: 300% 300%;
     z-index: 1;
     border-radius: 25px;
-    animation: moveGradient 6s ease-in-out infinite alternate;
+    animation: moveGradient 6s ease-in-out infinite alternate, glowPulse 8s ease-in-out infinite alternate;
     opacity: 0.8;
     mask-image: radial-gradient(closest-side, black 50%, transparent 100%);
     -webkit-mask-image: radial-gradient(closest-side, black 50%, transparent 100%);
