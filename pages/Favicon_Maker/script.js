@@ -4,14 +4,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const uploadLabel = document.getElementById('upload-label');
     const imagePreview = document.getElementById('image-preview');
     const imageFilename = document.getElementById('image-filename');
-    
+
     const svgControlsCard = document.getElementById('svg-controls-card');
     const rasterControls = document.getElementById('raster-controls');
-    
+
     const svgPreviewWrapperLight = document.getElementById('svg-preview-wrapper-light');
     const svgPreviewWrapperDark = document.getElementById('svg-preview-wrapper-dark');
     const swapBtn = document.getElementById('swap-themes-btn');
-    
+
     const bgControls = document.getElementById('bg-controls');
     const colorsSlider = document.getElementById('colors-slider');
     const colorsValue = document.getElementById('colors-value');
@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const detailValue = document.getElementById('detail-value');
     const smoothingSlider = document.getElementById('smoothing-slider');
     const smoothingValue = document.getElementById('smoothing-value');
-    
+
     const generateBtn = document.getElementById('generate-btn');
     const resultsCard = document.getElementById('results-card');
     const resultsContent = document.getElementById('results-content');
@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isVectorMode = false;
     let sourceImageData = null; // For PNGs
     let sourceSvgText = null;   // For SVGs
-    
+
     let lightSvgString = null;
     let darkSvgString = null;
     let downloadBlob = null;
@@ -45,15 +45,15 @@ document.addEventListener('DOMContentLoaded', () => {
     ['dragenter', 'dragover', 'dragleave'].forEach(eventName => uploadLabel.addEventListener(eventName, preventDefaults));
     ['dragenter', 'dragover'].forEach(() => uploadLabel.classList.add('dragover'));
     ['dragleave', 'drop'].forEach(() => uploadLabel.classList.remove('dragover'));
-    
+
     bgControls.addEventListener('click', handleBgChange);
     swapBtn.addEventListener('click', handleSwapThemes);
-    
+
     // Sliders only affect PNG tracing
     colorsSlider.addEventListener('input', () => handleSliderChange(colorsSlider, colorsValue));
     detailSlider.addEventListener('input', () => handleSliderChange(detailSlider, detailValue, 1));
     smoothingSlider.addEventListener('input', () => handleSliderChange(smoothingSlider, smoothingValue));
-    
+
     generateBtn.addEventListener('click', handleFinalGeneration);
     resultsContent.addEventListener('click', handleResultsClick);
 
@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleFile(file) {
         if (!file) return;
-        
+
         // Reset state
         sourceFile = file;
         uploadLabel.classList.add('uploaded');
@@ -76,11 +76,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const reader = new FileReader();
         reader.onload = async (e) => {
             imagePreview.src = e.target.result;
-            
+
             if (isVectorMode) {
                 // Handle SVG Input
                 rasterControls.classList.add('hidden'); // Hide tracing sliders
-                
+
                 // Read content as text for manipulation
                 const textReader = new FileReader();
                 textReader.onload = async (textEvent) => {
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await updateSvgPreviews();
                 };
                 textReader.readAsText(file);
-                
+
             } else {
                 // Handle PNG Input
                 if (file.type !== 'image/png') { alert('Please upload a PNG or SVG.'); return; }
@@ -105,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         reader.readAsDataURL(file);
     }
-    
+
     function handleBgChange(e) {
         const swatch = e.target.closest('.color-swatch');
         if (!swatch) return;
@@ -130,11 +130,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const debouncedUpdate = debounce(() => updateSvgPreviews(), 250);
-    function handleSliderChange(slider, valueSpan, fixed = 0) { 
-        valueSpan.textContent = parseFloat(slider.value).toFixed(fixed); 
-        debouncedUpdate(); 
+    function handleSliderChange(slider, valueSpan, fixed = 0) {
+        valueSpan.textContent = parseFloat(slider.value).toFixed(fixed);
+        debouncedUpdate();
     }
-    
+
     async function updateSvgPreviews() {
         svgPreviewWrapperLight.innerHTML = '<span>Processing...</span>';
         svgPreviewWrapperDark.innerHTML = '<span>Processing...</span>';
@@ -148,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // --- RASTER PATH: Tracing ---
                 const settings = { colors: parseInt(colorsSlider.value), detail: parseFloat(detailSlider.value), smoothing: parseInt(smoothingSlider.value) };
                 const lightPalette = await getSmartPalette(imagePreview.src, settings.colors);
-                
+
                 // 1. Trace PNG to create Light SVG
                 lightSvgString = traceImageDataToSvg(sourceImageData, lightPalette, settings);
                 // 2. Invert Traced SVG to create Dark SVG
@@ -157,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             renderPreviewsInDOM();
 
-        } catch(error) {
+        } catch (error) {
             console.error("SVG Processing failed:", error);
             svgPreviewWrapperLight.innerHTML = '<span style="color:red;">Error</span>';
         }
@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const parser = new DOMParser();
         const doc = parser.parseFromString(svgStr, "image/svg+xml");
         const svgEl = doc.querySelector('svg');
-        if(!svgEl) return svgStr;
+        if (!svgEl) return svgStr;
 
         if (!svgEl.hasAttribute('viewBox') && svgEl.hasAttribute('width') && svgEl.hasAttribute('height')) {
             const w = parseFloat(svgEl.getAttribute('width'));
@@ -189,21 +189,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function generateDarkSvg(inputSvgStr) {
         if (!inputSvgStr) return null;
-        
+
         const parser = new DOMParser();
         const doc = parser.parseFromString(inputSvgStr, "image/svg+xml");
-        
+
         // Helper to process color
         const processColor = (colorStr) => {
             if (!colorStr || colorStr === 'none' || colorStr === 'transparent') return colorStr;
-            const rgb = parseColorToRgb(colorStr);
-            if (!rgb) return colorStr; // return original if parse fails
-            return createDarkModeColor(rgb.r, rgb.g, rgb.b);
+            const rgba = parseColorToRgb(colorStr);
+            if (!rgba) return colorStr; // return original if parse fails
+            return createDarkModeColor(rgba.r, rgba.g, rgba.b, rgba.a);
         };
 
         // Select shapes
         const elements = doc.querySelectorAll('path, circle, rect, polygon, polyline, ellipse, line, text, g');
-        
+
         elements.forEach(el => {
             const fill = el.getAttribute('fill');
             const stroke = el.getAttribute('stroke');
@@ -212,7 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 1. Handle Explicit Fills
             if (fill && fill !== 'none') {
                 el.setAttribute('fill', processColor(fill));
-            } 
+            }
             // 2. Handle Implicit Black Fills (No fill attribute = Black)
             else if (!fill && !style?.includes('fill') && el.tagName !== 'g') {
                 // If it has no fill, SVG defaults to black.
@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 3. Handle Strokes
             if (stroke && stroke !== 'none') el.setAttribute('stroke', processColor(stroke));
-            
+
             // 4. Handle Inline Styles
             if (style) {
                 let newStyle = style.replace(/fill:\s*([^;"]+)/g, (m, c) => `fill:${processColor(c)}`);
@@ -244,45 +244,146 @@ document.addEventListener('DOMContentLoaded', () => {
         // Use browser's internal parser via Canvas
         ctxParser.fillStyle = str;
         let computed = ctxParser.fillStyle; // returns #rrggbb or rgba()
-        
+
+        let r = 0, g = 0, b = 0, a = 1;
+
         // Handle Hex #rrggbb
         if (computed.startsWith('#')) {
             const bigint = parseInt(computed.slice(1), 16);
-            return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+            r = (bigint >> 16) & 255;
+            g = (bigint >> 8) & 255;
+            b = bigint & 255;
         }
         // Handle rgba() / rgb()
-        if (computed.startsWith('rgb')) {
+        else if (computed.startsWith('rgb')) {
             const parts = computed.match(/[\d.]+/g);
-            if(parts && parts.length >= 3) {
-                return { r: parseFloat(parts[0]), g: parseFloat(parts[1]), b: parseFloat(parts[2]) };
+            if (parts && parts.length >= 3) {
+                r = parseFloat(parts[0]);
+                g = parseFloat(parts[1]);
+                b = parseFloat(parts[2]);
+                if (parts.length >= 4) {
+                    a = parseFloat(parts[3]);
+                }
             }
         }
-        return null;
+        return { r, g, b, a };
     }
 
     function rgbToHsl(r, g, b) { r /= 255; g /= 255; b /= 255; const max = Math.max(r, g, b), min = Math.min(r, g, b); let h, s, l = (max + min) / 2; if (max === min) { h = s = 0; } else { const d = max - min; s = l > 0.5 ? d / (2 - max - min) : d / (max + min); switch (max) { case r: h = (g - b) / d + (g < b ? 6 : 0); break; case g: h = (b - r) / d + 2; break; case b: h = (r - g) / d + 4; break; } h /= 6; } return { h, s, l }; }
     function hslToRgb(h, s, l) { let r, g, b; if (s === 0) { r = g = b = l; } else { const hue2rgb = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < 1 / 2) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; }; const q = l < 0.5 ? l * (1 + s) : l + s - l * s; const p = 2 * l - q; r = hue2rgb(p, q, h + 1 / 3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1 / 3); } return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) }; }
-    function isSkinTone({ h, s, l }) { const hue = h * 360; return (hue >= 0 && hue <= 50) && (s >= 0.15 && s <= 0.95) && (l >= 0.2 && l <= 0.95); }
+
+    function isSkinTone({ h, s, l }) {
+        const hue = h * 360;
+        // Expanded range for oranges/browns (0-50 covers reds to yellow-oranges)
+        // Ensure saturation is high enough to not be grey, but not necessarily neon
+        return (hue >= 0 && hue <= 50) && (s >= 0.15 && s <= 1.0) && (l >= 0.15 && l <= 0.95);
+    }
     function isGrayscale({ s }) { return s < 0.10; }
-    
-    function createDarkModeColor(r, g, b) { 
-        const hsl = rgbToHsl(r, g, b); 
-        // 1. Preserve Skin Tones
-        if (isSkinTone(hsl)) { return `rgb(${r},${g},${b})`; } 
+
+    function createDarkModeColor(r, g, b, a = 1) {
+        // If fully transparent, remain fully transparent
+        if (a === 0) return `rgba(0,0,0,0)`;
+
+        const hsl = rgbToHsl(r, g, b);
+
+        // 1. Preserve Skin Tones & Warm Colors (don't invert brown/orange to blue)
+        if (isSkinTone(hsl)) {
+            return `rgba(${r},${g},${b},${a})`;
+        }
+
         // 2. Invert Grayscale (Black text -> White text)
-        if (isGrayscale(hsl)) { 
-            const invertedL = 1.0 - hsl.l; 
-            const { r: newR, g: newG, b: newB } = hslToRgb(hsl.h, hsl.s, invertedL); 
-            return `rgb(${newR},${newG},${newB})`; 
-        } 
-        // 3. Brighten Colors for Dark Backgrounds
-        const newL = Math.max(0.75, hsl.l + 0.2); 
-        const { r: newR, g: newG, b: newB } = hslToRgb(hsl.h, hsl.s, Math.min(newL, 0.95)); 
-        return `rgb(${newR},${newG},${newB})`; 
+        if (isGrayscale(hsl)) {
+            const invertedL = 1.0 - hsl.l;
+            const { r: newR, g: newG, b: newB } = hslToRgb(hsl.h, hsl.s, invertedL);
+            return `rgba(${newR},${newG},${newB},${a})`;
+        }
+
+        // 3. Brighten other colors for Dark Backgrounds
+        // (Slightly increase lightness to ensure visibility against dark bg)
+        const newL = Math.max(0.70, hsl.l + 0.15);
+        const { r: newR, g: newG, b: newB } = hslToRgb(hsl.h, hsl.s, Math.min(newL, 0.95));
+        return `rgba(${newR},${newG},${newB},${a})`;
     }
 
-    async function getSmartPalette(imgSrc, targetColorCount) { return new Promise((resolve, reject) => { const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { const colorThief = new ColorThief(); const largePalette = colorThief.getPalette(img, 32); const uniqueColors = []; const similarityThreshold = 30; for (const color of largePalette) { const rgb = { r: color[0], g: color[1], b: color[2] }; let isUnique = true; for (const uniqueColor of uniqueColors) { if (colorDifference(rgb, uniqueColor) < similarityThreshold) { isUnique = false; break; } } if (isUnique) uniqueColors.push(rgb); } uniqueColors.sort((a, b) => { const aHsl = rgbToHsl(a.r, a.g, a.b); const bHsl = rgbToHsl(b.r, b.g, b.b); const aScore = aHsl.s + (aHsl.l > 0.05 && aHsl.l < 0.95 ? 0.1 : 0); const bScore = bHsl.s + (bHsl.l > 0.05 && bHsl.l < 0.95 ? 0.1 : 0); return bScore - aScore; }); const finalPalette = uniqueColors.slice(0, targetColorCount).map(c => ({ r: c.r, g: c.g, b: c.b, a: 255 })); resolve(finalPalette); }; img.onerror = reject; img.src = imgSrc; }); }
-    function colorDifference(rgb1, rgb2) { const rDiff = rgb1.r - rgb2.r, gDiff = rgb1.g - rgb2.g, bDiff = rgb1.b - rgb2.b; return Math.sqrt(rDiff * rDiff + gDiff * gDiff + bDiff * bDiff); }
+    async function getSmartPalette(imgSrc, targetColorCount) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = () => {
+                // 1. Check for transparency first manually
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const data = ctx.getImageData(0, 0, img.width, img.height).data;
+
+                let hasTransparency = false;
+                for (let i = 3; i < data.length; i += 4) {
+                    if (data[i] < 250) { // Tolerance for semi-transparent
+                        hasTransparency = true;
+                        break;
+                    }
+                }
+
+                const colorThief = new ColorThief();
+                // ColorThief might fail on mostly transparent images, so wrap in try/catch or fallback
+                let largePalette = [];
+                try {
+                    largePalette = colorThief.getPalette(img, 32);
+                } catch (e) {
+                    // If ColorThief fails (e.g. single color image), fallback to center pixel
+                    largePalette = [[data[0], data[1], data[2]]];
+                }
+
+                if (!largePalette) largePalette = [];
+
+                const uniqueColors = [];
+                // If transparent, ensure we have a transparent color in palette
+                if (hasTransparency) {
+                    uniqueColors.push({ r: 0, g: 0, b: 0, a: 0 });
+                }
+
+                const similarityThreshold = 30;
+                for (const color of largePalette) {
+                    const rgb = { r: color[0], g: color[1], b: color[2], a: 255 };
+                    let isUnique = true;
+                    for (const uniqueColor of uniqueColors) {
+                        if (colorDifference(rgb, uniqueColor) < similarityThreshold) {
+                            isUnique = false;
+                            break;
+                        }
+                    }
+                    if (isUnique) uniqueColors.push(rgb);
+                }
+
+                // Sort by "interest" (saturation/lightness)
+                // Filter out the transparent one from sort so it stays first? Or just sort everything.
+                // ImageTracer expects palette to include the colors to map to.
+
+                // We actually want to KEEP transparent at index 0 if possible for consistency, 
+                // but ImageTracer just tries to match closest RGBA.
+
+                const finalPalette = uniqueColors.slice(0, targetColorCount + (hasTransparency ? 1 : 0));
+
+                // Ensure all have 4 components for ImageTracer
+                // (Existing logic: map c => ... a:255 was bad)
+                resolve(finalPalette);
+            };
+            img.onerror = reject;
+            img.src = imgSrc;
+        });
+    }
+    function colorDifference(c1, c2) {
+        // Simple Euclidean distance including Alpha
+        const rAvg = (c1.r + c2.r) / 2;
+        const rDiff = c1.r - c2.r;
+        const gDiff = c1.g - c2.g;
+        const bDiff = c1.b - c2.b;
+        const aDiff = (c1.a - c2.a);
+        // Weight alpha heavily so transparent != black
+        return Math.sqrt(2 * rDiff * rDiff + 4 * gDiff * gDiff + 3 * bDiff * bDiff + aDiff * aDiff * 10);
+    }
 
     // --- Final Generation & Output ---
     async function handleFinalGeneration() {
@@ -294,7 +395,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // If we are in Vector Mode, we need to rasterize the SVG to PNGs first
             let pngSourceBlob = sourceFile;
-            
+
             if (isVectorMode) {
                 updateStatus('Rasterizing SVG...');
                 // We use the Light SVG (Original) for the PNG fallbacks
@@ -315,18 +416,19 @@ document.addEventListener('DOMContentLoaded', () => {
             zip.file('android-chrome-192x192.png', imageBlobs[192]);
             zip.file('android-chrome-512x512.png', imageBlobs[512]);
             zip.file('favicon.ico', imageBlobs[32]);
-            
+
             // Add the SVGs currently displayed in preview
             if (lightSvgString) zip.file('favicon-light.svg', lightSvgString);
             if (darkSvgString) zip.file('favicon-dark.svg', darkSvgString);
-            
+
             downloadBlob = await zip.generateAsync({ type: 'blob' });
-            
+
             updateStatus('Generating HTML code...');
             generateResultsCode(!!lightSvgString);
             updateStatus('Done! Your files are ready.');
-            
-        } catch (error) { console.error("Final generation failed:", error); updateStatus(`Error: ${error.message}`);
+
+        } catch (error) {
+            console.error("Final generation failed:", error); updateStatus(`Error: ${error.message}`);
         } finally { generateBtn.disabled = false; generateBtn.textContent = 'Generate All Files'; }
     }
 
@@ -383,12 +485,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Utility Functions ---
-    function debounce(func, delay) { let timeout; return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; }
+    function debounce(func, delay) { let timeout; return function (...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; }
     function getImageDataFromSrc(imgSrc) { return new Promise((resolve, reject) => { const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); resolve(ctx.getImageData(0, 0, img.width, img.height)); }; img.onerror = reject; img.src = imgSrc; }); }
     function traceImageDataToSvg(imageData, palette, settings) { const options = { pal: palette, numberofcolors: palette.length, ltres: settings.detail, qtres: settings.detail, roundcoords: settings.smoothing }; let svgString = ImageTracer.imagedataToSVG(imageData, options); const viewBox = `viewBox="0 0 ${imageData.width} ${imageData.height}"`; return svgString.replace('<svg ', `<svg ${viewBox} `); }
     function convertToSquare(blob, size) { return new Promise((resolve, reject) => { const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size; const ctx = canvas.getContext('2d'); const img = new Image(); img.onload = () => { const scale = Math.min(size / img.width, size / img.height); const newWidth = img.width * scale; const newHeight = img.height * scale; const x = (size - newWidth) / 2; const y = (size - newHeight) / 2; ctx.drawImage(img, x, y, newWidth, newHeight); canvas.toBlob(resolve, 'image/png'); }; img.onerror = reject; img.src = URL.createObjectURL(blob); }); }
     function updateStatus(message) { generateStatus.textContent = message; }
-    
+
     // New: Rasterize SVG to a PNG blob
     function svgToPngBlob(svgStr, size) {
         return new Promise((resolve, reject) => {
