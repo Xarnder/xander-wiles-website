@@ -1,10 +1,9 @@
 /* 
-    Task Master Script v12 (Project Title & !! Highlights)
+    Task Master Script v12 (Bulk Add)
 */
 
 console.log("[DEBUG] App initialized.");
 
-// Updated default data with projectTitle
 const defaultData = {
     projectTitle: "Task Master", 
     lists: [
@@ -34,7 +33,7 @@ const autoArchiveToggle = document.getElementById('auto-archive-toggle');
 const sortSelect = document.getElementById('sort-select');
 const toggleArchiveBtn = document.getElementById('toggle-archive-view-btn');
 const archiveViewIcon = document.getElementById('archive-view-icon');
-const projectTitleInput = document.getElementById('project-title-input'); // New
+const projectTitleInput = document.getElementById('project-title-input');
 
 const optionsBtn = document.getElementById('options-btn');
 const optionsModal = document.getElementById('options-modal-overlay');
@@ -44,6 +43,13 @@ const modalOverlay = document.getElementById('modal-overlay');
 const modalInput = document.getElementById('modal-task-input');
 const modalSaveBtn = document.getElementById('modal-save-btn');
 const modalCloseBtn = document.getElementById('modal-close-btn');
+
+// Bulk Add DOM
+const bulkAddModal = document.getElementById('bulk-add-modal-overlay');
+const bulkAddInput = document.getElementById('bulk-add-input');
+const bulkAddConfirmBtn = document.getElementById('bulk-add-confirm-btn');
+const bulkAddCloseBtn = document.getElementById('bulk-add-close-btn');
+let currentBulkListId = null;
 
 const currentLocationsList = document.getElementById('current-locations-list');
 const manualMoveSelect = document.getElementById('manual-move-select');
@@ -81,7 +87,6 @@ function init() {
     applyTheme(appData.settings.theme);
     autoArchiveToggle.checked = appData.settings.autoArchive || false;
     
-    // Set Project Title
     if (appData.projectTitle) {
         projectTitleInput.value = appData.projectTitle;
     }
@@ -100,7 +105,6 @@ function loadData() {
     if (json) {
         try { 
             const data = JSON.parse(json); 
-            // Backwards compatibility for old saves without title
             if (!data.projectTitle) data.projectTitle = "Task Master";
             return data;
         } 
@@ -112,7 +116,7 @@ function loadData() {
 function saveData() {
     appData.settings.autoArchive = autoArchiveToggle.checked;
     appData.settings.sortMode = sortSelect.value;
-    appData.projectTitle = projectTitleInput.value; // Save Title
+    appData.projectTitle = projectTitleInput.value;
     localStorage.setItem('taskmaster_v6', JSON.stringify(appData));
 }
 
@@ -160,9 +164,18 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     listEl.className = `list-column ${isOrphan ? 'orphan-list' : ''}`;
     listEl.dataset.listId = list.id;
 
-    let deleteBtnHtml = isOrphan 
-        ? `<button class="icon-btn danger" onclick="emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
-        : `<button class="icon-btn" onclick="deleteList('${list.id}')"><i class="ph ph-trash"></i></button>`;
+    // Added Bulk Add Button to header
+    let headerButtons = '';
+    if (isOrphan) {
+        headerButtons = `<button class="icon-btn danger" onclick="emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`;
+    } else {
+        headerButtons = `
+            <div class="list-header-right">
+                <button class="icon-btn" onclick="openBulkAddModal('${list.id}')" title="Bulk Add Tasks"><i class="ph ph-list-plus"></i></button>
+                <button class="icon-btn" onclick="deleteList('${list.id}')" title="Delete List"><i class="ph ph-trash"></i></button>
+            </div>
+        `;
+    }
 
     let addFormHtml = isOrphan ? '' : `
         <div class="add-task-container">
@@ -175,7 +188,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     listEl.innerHTML = `
         <div class="list-header">
             <input type="text" class="list-title" value="${list.title}" ${isOrphan ? 'disabled' : ''} onchange="updateListTitle('${list.id}', this.value)">
-            ${deleteBtnHtml}
+            ${headerButtons}
         </div>
         <div class="task-list" id="container-${list.id}"></div>
         ${addFormHtml}
@@ -248,8 +261,6 @@ function createTaskElement(task, sourceListId) {
     const refCount = getTaskReferenceCount(task.id);
     const isLinked = refCount > 1;
     const isLocked = appData.settings.sortMode !== 'custom';
-    
-    // Check for "!!"
     const isImportant = task.text.includes('!!');
 
     let classes = 'task-card';
@@ -257,7 +268,7 @@ function createTaskElement(task, sourceListId) {
     if (task.completed) classes += ' task-completed';
     if (task.archived) classes += ' archived-task';
     if (isLocked) classes += ' locked-sort';
-    if (isImportant) classes += ' important'; // Add styling class
+    if (isImportant) classes += ' important';
 
     el.className = classes;
     el.dataset.taskId = task.id;
@@ -516,6 +527,28 @@ function setupSlider() {
     document.addEventListener('touchend', endDrag);
 }
 
+// Global functions for inline onclicks
+window.openBulkAddModal = function(listId) {
+    currentBulkListId = listId;
+    bulkAddInput.value = '';
+    bulkAddModal.classList.remove('hidden');
+};
+
+window.removeTaskFromList = function(listId, taskId) {
+    const list = appData.lists.find(l => l.id === listId);
+    if (list) {
+        if (getTaskReferenceCount(taskId) <= 1 && !appData.tasks[taskId].archived) {
+            if(!confirm("This is the last list containing this task. Removing it will archive it. Continue?")) return;
+            appData.tasks[taskId].archived = true;
+        }
+        list.taskIds = list.taskIds.filter(id => id !== taskId);
+        saveData();
+        renderBoard();
+        renderTaskLocations(taskId);
+        populateMoveDropdown(taskId);
+    }
+};
+
 function setupGlobalListeners() {
     document.getElementById('download-json-btn').onclick = () => {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData));
@@ -628,10 +661,40 @@ function setupGlobalListeners() {
         }
     };
 
-    // Save Title Changes
     projectTitleInput.onchange = () => {
         appData.projectTitle = projectTitleInput.value;
         saveData();
+    };
+
+    // --- BULK ADD LOGIC ---
+    bulkAddCloseBtn.onclick = () => bulkAddModal.classList.add('hidden');
+    
+    bulkAddConfirmBtn.onclick = () => {
+        const rawText = bulkAddInput.value;
+        if (!rawText.trim()) return;
+        
+        const lines = rawText.split(/\r?\n/).filter(line => line.trim() !== '');
+        const list = appData.lists.find(l => l.id === currentBulkListId);
+        
+        if (list) {
+            lines.forEach(line => {
+                const newId = generateId();
+                appData.tasks[newId] = { 
+                    id: newId, 
+                    text: line.trim(), 
+                    completed: false, 
+                    archived: false, 
+                    createdAt: Date.now(), 
+                    images: [] 
+                };
+                list.taskIds.push(newId);
+            });
+            
+            saveData();
+            renderBoard();
+            bulkAddModal.classList.add('hidden');
+            showToast(`Added ${lines.length} tasks.`);
+        }
     };
 }
 
@@ -654,21 +717,6 @@ function renderTaskLocations(taskId) {
         currentLocationsList.appendChild(div);
     });
 }
-
-window.removeTaskFromList = function(listId, taskId) {
-    const list = appData.lists.find(l => l.id === listId);
-    if (list) {
-        if (getTaskReferenceCount(taskId) <= 1 && !appData.tasks[taskId].archived) {
-            if(!confirm("This is the last list containing this task. Removing it will archive it. Continue?")) return;
-            appData.tasks[taskId].archived = true;
-        }
-        list.taskIds = list.taskIds.filter(id => id !== taskId);
-        saveData();
-        renderBoard();
-        renderTaskLocations(taskId);
-        populateMoveDropdown(taskId);
-    }
-};
 
 function populateMoveDropdown(taskId) {
     manualMoveSelect.innerHTML = '<option value="" disabled selected>Select Destination...</option>';

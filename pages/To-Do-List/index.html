@@ -32,12 +32,10 @@
     <div class="app-wrapper">
         <header class="app-header glass-panel">
             <div class="header-left">
-                <!-- EDITABLE PROJECT TITLE -->
                 <input type="text" id="project-title-input" class="project-title-input" value="Task Master" placeholder="Project Name">
             </div>
             
             <div class="header-controls">
-                <!-- Sorting -->
                 <div class="sort-container control-item">
                     <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
                     <select id="sort-select" class="glass-select">
@@ -48,31 +46,26 @@
                     </select>
                 </div>
 
-                <!-- Drag Toggle -->
                 <div class="toggle-group control-item" title="Drag Mode">
                     <span class="label">Drag:</span>
                     <button id="mode-cut-btn" class="mode-btn active">Cut</button>
                     <button id="mode-copy-btn" class="mode-btn">Copy</button>
                 </div>
 
-                <!-- View Archive Toggle -->
                 <button id="toggle-archive-view-btn" class="icon-btn-large control-item" title="Show/Hide Archived Tasks">
                     <i class="ph ph-eye-slash" id="archive-view-icon"></i>
                 </button>
 
-                <!-- Theme Toggle -->
                 <button id="theme-toggle" class="icon-btn-large control-item" title="Toggle Theme">
                     <i class="ph ph-sun"></i>
                 </button>
 
                 <button id="add-list-btn" class="btn primary control-item">+ List</button>
                 
-                <!-- Options Button -->
                 <button id="options-btn" class="btn secondary control-item">Options</button>
             </div>
         </header>
 
-        <!-- Horizontal Scroll Container -->
         <main id="board-container" class="board-container">
             <!-- Lists injected here -->
         </main>
@@ -106,12 +99,26 @@
         </div>
     </div>
 
+    <!-- BULK ADD MODAL (NEW) -->
+    <div id="bulk-add-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <h2>Bulk Add Tasks</h2>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px;">
+                Paste your list below. Each new line will become a separate task.
+            </p>
+            <textarea id="bulk-add-input" rows="8" placeholder="Task 1&#10;Task 2&#10;Task 3..."></textarea>
+            
+            <div class="modal-actions-bar">
+                <button id="bulk-add-confirm-btn" class="btn primary">Add Tasks</button>
+                <button id="bulk-add-close-btn" class="btn secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- EDIT TASK MODAL -->
     <div id="modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel">
             <h2>Edit Task</h2>
-            
-            <!-- STYLED TEXTAREA -->
             <textarea id="modal-task-input" rows="4" placeholder="Task description..."></textarea>
             
             <div class="modal-actions-bar">

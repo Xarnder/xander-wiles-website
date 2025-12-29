@@ -1,5 +1,5 @@
 :root {
-    /* Dark Mode */
+    /* Dark Mode (Default) */
     --bg-gradient: linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #1c1c1c);
     --glass-bg: rgba(30, 30, 30, 0.4);
     --glass-border: rgba(255, 255, 255, 0.1);
@@ -8,25 +8,20 @@
     --card-bg: rgba(255, 255, 255, 0.05);
     --card-linked-bg: rgba(59, 130, 246, 0.2); 
     --card-archived-bg: rgba(0, 0, 0, 0.3);
-    /* Yellow for !! tasks */
     --card-important-bg: rgba(255, 215, 0, 0.15);
     --card-important-border: rgba(255, 215, 0, 0.5);
-    
     --accent-blue: #3b82f6;
     --accent-red: #ef4444;
     --radius: 16px;
     --shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
     --dropdown-bg: #1a1a1a; 
     --dropdown-bg-glass: rgba(20, 20, 20, 0.98); 
-    
-    /* Input Styling */
     --input-bg: rgba(0, 0, 0, 0.3);
     --input-border: rgba(255, 255, 255, 0.1);
     --input-text: #ffffff;
 }
 
 [data-theme="light"] {
-    /* Light Mode */
     --bg-gradient: linear-gradient(-45deg, #ffffff, #f0f0f0, #e6e6e6, #ffffff);
     --glass-bg: rgba(255, 255, 255, 0.85);
     --glass-border: rgba(0, 0, 0, 0.1);
@@ -35,15 +30,11 @@
     --card-bg: #ffffff;
     --card-linked-bg: rgba(59, 130, 246, 0.15);
     --card-archived-bg: rgba(0, 0, 0, 0.03);
-    /* Yellow for !! tasks */
     --card-important-bg: rgba(255, 223, 0, 0.15);
     --card-important-border: rgba(255, 193, 7, 0.5);
-
     --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     --dropdown-bg: #ffffff;
     --dropdown-bg-glass: rgba(255, 255, 255, 0.98);
-    
-    /* Input Styling */
     --input-bg: #f3f4f6;
     --input-border: #d1d5db;
     --input-text: #1f2937;
@@ -93,26 +84,13 @@ body {
     flex-shrink: 0;
 }
 
-/* PROJECT TITLE INPUT STYLE */
 .project-title-input {
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text-primary);
-    font-size: 1.4rem;
-    font-weight: 700;
-    font-family: inherit;
-    padding: 5px;
-    border-radius: 8px;
-    width: 100%;
-    max-width: 300px;
-    transition: all 0.2s;
+    background: transparent; border: 1px solid transparent; color: var(--text-primary);
+    font-size: 1.4rem; font-weight: 700; font-family: inherit; padding: 5px;
+    border-radius: 8px; width: 100%; max-width: 300px; transition: all 0.2s;
 }
 .project-title-input:hover { border-color: var(--glass-border); background: rgba(255,255,255,0.05); }
-.project-title-input:focus { 
-    outline: none; 
-    background: var(--input-bg); 
-    border-color: var(--accent-blue); 
-}
+.project-title-input:focus { outline: none; background: var(--input-bg); border-color: var(--accent-blue); }
 
 .header-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
@@ -153,7 +131,8 @@ body {
 [data-theme="light"] .list-column.orphan-list { background: rgba(255, 0, 0, 0.05); }
 
 .list-header { padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; }
-.list-title { background: transparent; border: none; color: var(--text-primary); font-size: 1.1rem; font-weight: 700; width: 80%; }
+.list-header-right { display: flex; gap: 5px; } /* Wrapper for header buttons */
+.list-title { background: transparent; border: none; color: var(--text-primary); font-size: 1.1rem; font-weight: 700; width: 70%; }
 .list-title:focus { outline: none; border-bottom: 2px solid var(--accent-blue); }
 .task-list { padding: 10px; overflow-y: auto; flex-grow: 1; min-height: 50px; }
 
@@ -168,12 +147,7 @@ body {
 
 .task-card.linked-task { background: var(--card-linked-bg); border: 1px solid rgba(59, 130, 246, 0.3); }
 .task-card.archived-task { background: var(--card-archived-bg); border: 1px dashed var(--text-secondary); opacity: 0.9; }
-
-/* YELLOW HIGHLIGHT FOR !! TASKS */
-.task-card.important {
-    background: var(--card-important-bg);
-    border: 1px solid var(--card-important-border);
-}
+.task-card.important { background: var(--card-important-bg); border: 1px solid var(--card-important-border); }
 
 .task-checkbox { appearance: none; width: 16px; height: 16px; border: 2px solid var(--text-secondary); border-radius: 4px; cursor: pointer; margin-top: 3px; display: grid; place-content: center; flex-shrink: 0; }
 .task-checkbox::before { content: ""; width: 10px; height: 10px; transform: scale(0); background: var(--accent-blue); border-radius: 2px; transition: 0.1s; }
@@ -189,8 +163,8 @@ body {
 
 .task-actions { display: flex; flex-direction: row; gap: 6px; margin-left: 2px; opacity: 0; transition: opacity 0.2s; align-self: flex-start; }
 .task-card:hover .task-actions { opacity: 1; }
-.icon-btn { font-size: 1rem; padding: 2px; color: var(--text-secondary); background: none; border: none; }
-.icon-btn:hover { color: var(--text-primary); }
+.icon-btn { font-size: 1rem; padding: 4px; color: var(--text-secondary); background: none; border: none; cursor: pointer; border-radius: 4px; }
+.icon-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.1); }
 
 .add-task-container { padding: 12px; border-top: 1px solid var(--glass-border); }
 .add-task-form { display: flex; gap: 8px; }
@@ -219,21 +193,13 @@ input:checked + .slider-small:before { transform: translateX(16px); }
 .modal-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .modal-header-row h2 { margin: 0; font-size: 1.2rem; }
 
-/* BETTER MODAL INPUT */
-#modal-task-input {
-    width: 100%;
-    background: var(--input-bg);
-    color: var(--input-text);
-    border: 1px solid var(--input-border);
-    padding: 12px;
-    border-radius: 12px; /* Rounded corners */
-    font-size: 1rem;
-    font-family: inherit;
-    resize: vertical;
-    box-sizing: border-box;
-    transition: border 0.2s;
+/* INPUT STYLES FOR MODALS */
+#modal-task-input, #bulk-add-input {
+    width: 100%; background: var(--input-bg); color: var(--input-text);
+    border: 1px solid var(--input-border); padding: 12px; border-radius: 12px;
+    font-size: 1rem; font-family: inherit; resize: vertical; box-sizing: border-box; transition: border 0.2s;
 }
-#modal-task-input:focus { outline: none; border-color: var(--accent-blue); }
+#modal-task-input:focus, #bulk-add-input:focus { outline: none; border-color: var(--accent-blue); }
 
 .modal-actions-bar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 5px; }
 .modal-divider { border-top: 1px solid var(--glass-border); margin: 15px 0; }
