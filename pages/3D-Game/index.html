@@ -1,13 +1,28 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>3D Game</title>
   <link rel="stylesheet" href="./style.css" />
-  <link rel="icon" href="images/favicon.svg" type="image/svg+xml"/>
+  <link rel="icon" href="images/favicon.svg" type="image/svg+xml" />
 </head>
+
 <body>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loader-content">
+      <div class="spinner"></div>
+      <div class="loading-text">Loading Assets...</div>
+      <div class="progress-container">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+      <div id="loading-percentage">0%</div>
+    </div>
+  </div>
+
   <div id="ui" class="">
     <div class="header">
       <button id="btnCollapse" title="Collapse/expand menu (M)">▾</button>
@@ -24,17 +39,19 @@
       <details class="row" open>
         <summary><strong>Scene Selection</strong></summary>
         <div class="row">
-          <label for="sceneSelector">Current Scene</label><br/>
+          <label for="sceneSelector">Current Scene</label><br />
           <select id="sceneSelector"></select>
         </div>
       </details>
-      
+
       <!-- Main Toggles -->
       <div class="row">
-        <label><input id="toggleSplitScreen" type="checkbox" /> Split Screen Mode (Use external controller to control player 2)</label>
+        <label><input id="toggleSplitScreen" type="checkbox" /> Split Screen Mode (Use external controller to control
+          player 2)</label>
       </div>
       <div class="row">
-        <label><input id="toggleCollision" type="checkbox" /> Show collision scene <span class="small"> (H)</span></label>
+        <label><input id="toggleCollision" type="checkbox" /> Show collision scene <span class="small">
+            (H)</span></label>
       </div>
       <div class="row">
         <label><input id="toggleFly" type="checkbox" /> Fly mode (no gravity) <span class="small"> (F)</span></label>
@@ -44,51 +61,51 @@
       <details class="row">
         <summary><strong>Player Settings</strong></summary>
         <div class="row">
-          <label for="moveSpeed">Movement Speed</label><br/>
+          <label for="moveSpeed">Movement Speed</label><br />
           <input id="moveSpeed" type="range" min="1" max="15" step="0.1" value="4.0" />
           <span id="moveSpeedValue" class="small">4.0</span>
         </div>
         <div class="row">
-          <label for="jumpHeight">Jump Power</label><br/>
+          <label for="jumpHeight">Jump Power</label><br />
           <input id="jumpHeight" type="range" min="1" max="15" step="0.1" value="5.5" />
           <span id="jumpHeightValue" class="small">5.5</span>
         </div>
         <div class="row">
-          <label for="playerHeight">Player Height</label><br/>
+          <label for="playerHeight">Player Height</label><br />
           <input id="playerHeight" type="range" min="1.0" max="3.0" step="0.05" value="1.6" />
           <span id="playerHeightValue" class="small">1.60 m</span>
         </div>
         <div class="row">
-          <label for="playerWidth">Player Width (Radius)</label><br/>
+          <label for="playerWidth">Player Width (Radius)</label><br />
           <input id="playerWidth" type="range" min="0.2" max="1.0" step="0.01" value="0.35" />
           <span id="playerWidthValue" class="small">0.35 m</span>
         </div>
         <!-- ADD THIS SECTION -->
         <div class="row" id="gamepad-settings" style="display: none;">
-          <label for="gamepadSens">Gamepad Look Sensitivity</label><br/>
+          <label for="gamepadSens">Gamepad Look Sensitivity</label><br />
           <input id="gamepadSens" type="range" min="0.5" max="5.0" step="0.1" value="1.8" />
           <span id="gamepadSensValue" class="small">1.8</span>
         </div>
         <!-- END ADDED SECTION -->
       </details>
-      
+
       <!-- Visual Settings Sub-menu -->
       <details class="row">
         <summary><strong>Visual Settings</strong></summary>
         <div class="row">
-          <label for="exposure"><strong>Exposure</strong> <span class="small">(dims all lighting)</span></label><br/>
+          <label for="exposure"><strong>Exposure</strong> <span class="small">(dims all lighting)</span></label><br />
           <input id="exposure" type="range" min="0.01" max="2.00" step="0.01" value="0.25" />
           <span id="exposureValue" class="small">0.25</span>
         </div>
         <div class="row">
-          <label for="fovSlider">Field of View (FOV)</label><br/>
+          <label for="fovSlider">Field of View (FOV)</label><br />
           <input id="fovSlider" type="range" min="30" max="110" step="1" value="75" />
           <span id="fovValue" class="small">75</span>
         </div>
         <details class="row" open>
           <summary><strong>Advanced lighting</strong></summary>
           <div class="row">
-            <label for="lightScale">Light Intensity Scale <span class="small">(0 → 0.01)</span></label><br/>
+            <label for="lightScale">Light Intensity Scale <span class="small">(0 → 0.01)</span></label><br />
             <input id="lightScale" type="range" min="0.0000" max="0.0100" step="0.0001" value="0.0020" />
             <span id="lightScaleValue" class="small">0.0020</span>
           </div>
@@ -96,10 +113,11 @@
         <details class="row" open>
           <summary><strong>Performance &amp; Quality</strong></summary>
           <div class="row">
-            <label><input id="toggleHQLighting" type="checkbox" checked /> High Quality Lighting <span class="small">(shadows, env map)</span></label>
+            <label><input id="toggleHQLighting" type="checkbox" checked /> High Quality Lighting <span
+                class="small">(shadows, env map)</span></label>
           </div>
           <div class="row">
-            <label for="shadowQuality">Shadow Quality</label><br/>
+            <label for="shadowQuality">Shadow Quality</label><br />
             <input id="shadowQuality" type="range" min="0" max="3" step="1" value="2" />
             <span id="shadowQualityValue" class="small">Medium</span>
           </div>
@@ -129,4 +147,5 @@
   </script>
   <script type="module" src="./main.js"></script>
 </body>
+
 </html>
