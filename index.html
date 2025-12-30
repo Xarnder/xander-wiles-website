@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,8 +20,11 @@
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <!-- Background elements from your original design -->
     <div class="background-overlay"></div>
@@ -30,66 +34,79 @@
     </div>
 
     <!-- The header now correctly contains the navigation again -->
-<div id="main-nav-placeholder"></div>
+    <div id="main-nav-placeholder"></div>
 
     <main class="app-container">
         <div class="hero-card glass-card">
-    <picture>
-        <!-- The browser tries to load this AVIF file first -->
-        <source srcset="assets/images/xander_Correted_Edited.avif" type="image/avif">
-        
-        <!-- If it can't, it tries this WebP file next -->
-        <source srcset="assets/images/Xander_Corrected_Edited.webp" type="image/webp">
-        
-        <!-- This is the final fallback for older browsers. It also provides the alt text. -->
-        <img 
-            src="assets/images/Xander Corrected Edited.png" 
-            alt="A profile picture of Xander Wiles" 
-            class="profile-picture"
-            width="300" 
-            height="300"
-            loading="lazy">
-    </picture>
+            <picture>
+                <!-- The browser tries to load this AVIF file first -->
+                <source srcset="assets/images/xander_Correted_Edited.avif" type="image/avif">
+
+                <!-- If it can't, it tries this WebP file next -->
+                <source srcset="assets/images/Xander_Corrected_Edited.webp" type="image/webp">
+
+                <!-- This is the final fallback for older browsers. It also provides the alt text. -->
+                <img src="assets/images/Xander Corrected Edited.png" alt="A profile picture of Xander Wiles"
+                    class="profile-picture" width="300" height="300" loading="lazy">
+            </picture>
             <h1>Welcome</h1>
-            <p>Select a game or page from the navigation menu below to get started. All projects are built with passion and a lot of JavaScript.</p>
+            <p>Select a game or page from the navigation menu below to get started. All projects are built with passion
+                and a lot of JavaScript.</p>
         </div>
-        
+
+        <!-- === GAMES === -->
+        <h2 class="section-title">Games</h2>
         <div class="page-grid">
-            <a href="/pages/Akensile/" class="page-card glass-card">
-                <h3>Akensile</h3>
-                <p>Discover more about the book Akensile</p>
-            </a>
-            <a href="/pages/Machine-Learning-Explanation/" class="page-card glass-card">
-                <h3>Machine Learning Toy</h3>
-                <p>Interactive visualization of machine learning concepts.</p>
-            </a>
-            <a href="/pages/To-Do-List/" class="page-card glass-card">
-                <h3>To Do List</h3>
-                <p>A tool for managing tasks and to-dos with features like drag-and-drop and linked tasks.</p>
-            </a>
-            <a href="/pages/word-game/" class="page-card glass-card">
-                <h3>Word Game</h3>
-                <p>A classic  word game with big buttons and flower rewards.</p>
-            </a>
-            <a href="/pages/Poster_Gen/" class="page-card glass-card">
-                <h3>Poster Maker</h3>
-                <p>A tool for creating custom posters with editable text and colors.</p>
-            </a>
             <a href="/games/rocket-lander/" class="page-card glass-card">
                 <h3>Rocket Lander 2</h3>
                 <p>A challenging physics-based game. Can you land the rocket safely?</p>
             </a>
-            <a href="/pages/360_image_viewer/" class="page-card glass-card">
-                <h3>360 Image Viewer</h3>
-                <p>A tool for viewing 360-degree images.</p>
+            <a href="/pages/3D-Game/" class="page-card glass-card">
+                <h3>3D Game</h3>
+                <p>A 3D game built with Three.js</p>
             </a>
-            <a href="/pages/tax_bracket_visualizer/" class="page-card glass-card">
-                <h3>Tax Bracket Visualiser</h3>
-                <p>A tool to visualize UK tax brackets and calculate take-home pay.</p>
+            <a href="/games/original-rocket-lander/" class="page-card glass-card">
+                <h3>Original Rocket Lander (2012)</h3>
+                <p>The Original Rocket Lander game made at age 10</p>
             </a>
-             <a href="/pages/Table_Extractor/" class="page-card glass-card">
-                <h3>Table Extractor</h3>
-                <p>A tool to extract tables from PDF and export as a CSV file.</p>
+            <a href="/pages/word-game/" class="page-card glass-card">
+                <h3>Word Game</h3>
+                <p>A classic word game with big buttons and flower rewards.</p>
+            </a>
+        </div>
+
+        <!-- === AI & MACHINE LEARNING === -->
+        <h2 class="section-title">AI & Extended Reality</h2>
+        <div class="page-grid">
+            <a href="/pages/Machine-Learning-Explanation/" class="page-card glass-card">
+                <h3>Machine Learning Toy</h3>
+                <p>Interactive visualization of machine learning concepts.</p>
+            </a>
+            <a href="/pages/Gaussian_Splatting/" class="page-card glass-card">
+                <h3>Gaussian Splatting Explainer</h3>
+                <p>A project exploring Gaussian splatting techniques.</p>
+            </a>
+            <a href="/pages/Alignment_Game/" class="page-card glass-card">
+                <h3>Alignment Game</h3>
+                <p>A project focused on alignment techniques for machine learning.</p>
+            </a>
+            <a href="/pages/XR_Viewer/" class="page-card glass-card">
+                <h3>AR Viewer</h3>
+                <p>A tool for viewing 3D models in AR in a headset.</p>
+            </a>
+        </div>
+
+
+        <!-- === IMAGE & GRAPHICS TOOLS === -->
+        <h2 class="section-title">Image & Graphics Tools</h2>
+        <div class="page-grid">
+            <a href="/pages/Poster_Gen/" class="page-card glass-card">
+                <h3>Poster Maker</h3>
+                <p>A tool for creating custom posters with editable text and colors.</p>
+            </a>
+            <a href="/pages/Favicon_Maker/" class="page-card glass-card">
+                <h3>Favicon Maker</h3>
+                <p>A tool for generating favicons from images.</p>
             </a>
             <a href="/pages/Batch_Image_Manger/" class="page-card glass-card">
                 <h3>Batch Image Manger</h3>
@@ -107,33 +124,34 @@
                 <h3>Image Align Tool</h3>
                 <p>A tool for aligning images based on user-defined points.</p>
             </a>
-            <a href="pages/Essential_Items/" class="page-card glass-card">
-                <h3>Essential Items Checklist</h3>
-                <p>A checklist of basic needs to ensure you're prepared.</p>
+            <a href="/pages/360_image_viewer/" class="page-card glass-card">
+                <h3>360 Image Viewer</h3>
+                <p>A tool for viewing 360-degree images.</p>
             </a>
-            <a href="/pages/3D-Game/" class="page-card glass-card">
-                <h3>3D Game</h3>
-                <p>A 3D game built with Three.js</p>
+        </div>
+
+        <!-- === UTILITIES & PRODUCTIVITY === -->
+        <h2 class="section-title">Utilities & Productivity</h2>
+        <div class="page-grid">
+            <a href="/pages/To-Do-List/" class="page-card glass-card">
+                <h3>To Do List</h3>
+                <p>A tool for managing tasks and to-dos with features like drag-and-drop and linked tasks.</p>
             </a>
-            <a href="/games/original-rocket-lander/" class="page-card glass-card">
-                <h3>Original Rocket Lander (2012)</h3>
-                <p>The Original Rocket Lander game made at age 10</p>
+            <a href="/pages/tax_bracket_visualizer/" class="page-card glass-card">
+                <h3>Tax Bracket Visualiser</h3>
+                <p>A tool to visualize UK tax brackets and calculate take-home pay.</p>
+            </a>
+            <a href="/pages/Table_Extractor/" class="page-card glass-card">
+                <h3>Table Extractor</h3>
+                <p>A tool to extract tables from PDF and export as a CSV file.</p>
             </a>
             <a href="/pages/WhatsAppViewer/" class="page-card glass-card">
                 <h3>WhatsApp Chat Viewer</h3>
                 <p>A Simple WhatsApp Chat Viewer</p>
             </a>
-            <a href="pages/Docker_Guide/" class="page-card glass-card">
-                <h3>Docker Guide</h3>
-                <p>A guide for setting up Docker containers</p>
-            </a>
             <a href="pages/Timeline_Generator/" class="page-card glass-card">
                 <h3>Timeline Generator</h3>
                 <p>With this tool, you can easily create a timeline from your text input.</p>
-            </a>
-             <a href="http://www.akensile.com/" class="page-card glass-card">
-                <h3>Legacy Akensile Site</h3>
-                <p>The old webpage about the book Akensile</p>
             </a>
             <a href="/pages/Flashcard_App/" class="page-card glass-card">
                 <h3>Flashcard App</h3>
@@ -143,72 +161,72 @@
                 <h3>Your life in weeks</h3>
                 <p>Visualize your life in weeks with this simple tool.</p>
             </a>
-            <a href="/pages/Siewli/" class="page-card glass-card">
-                <h3>Siewli Kok Memorial</h3>
-                <p>A tribute page for Siewli Kok</p>
-            </a>
-            <a href="/pages/Favicon_Maker/" class="page-card glass-card">
-                <h3>Favicon Maker</h3>
-                <p>A tool for generating favicons from images.</p>
-            </a>
-            <a href="/pages/Gaussian_Splatting/" class="page-card glass-card">
-                <h3>Gaussian Splatting Explainer</h3>
-                <p>A project exploring Gaussian splatting techniques.</p>
-            </a>
-            <a href="/pages/Alignment_Game/" class="page-card glass-card">
-                <h3>Alignment Game</h3>
-                <p>A project focused on alignment techniques for machine learning.</p>
-            </a>
             <a href="/pages/Ratio_Calculator/" class="page-card glass-card">
                 <h3>Ratio Calculator</h3>
                 <p>A tool for calculating ratios based on user-defined lines.</p>
-            </a>
-            <a href="/pages/web_dev_sever/" class="page-card glass-card">
-                <h3>Web Dev Server Setup</h3>
-                <p>A guide for setting up a local development server with VS Code and Ngrok.</p>
-            </a>
-           <a href="/pages/XR_Viewer/" class="page-card glass-card">
-                <h3>AR Viewer</h3>
-                <p>A tool for viewing 3D models in AR in a headset.</p>
-            </a>
-            <a href="/pages/ultimate-christmas-playlist/" class="page-card glass-card">
-                <h3>Ultimate Christmas Playlist</h3>
-                <p>A curated list of festive songs for the holiday season.</p>
             </a>
             <a href="/pages/Text-Compactor/" class="page-card glass-card">
                 <h3>Text Compactor</h3>
                 <p>A tool for compacting text into a printable format.</p>
             </a>
-            
-            
-            
-            
-           
-           
-            
-            <!-- <a href="/pages/exprimental_align_tool/" class="page-card glass-card">
-                <h3>Exrimental Alignment Game</h3>
-                <p>Working Project! Exprimental Only!</p>
-            </a> -->
+            <a href="/pages/ultimate-christmas-playlist/" class="page-card glass-card">
+                <h3>Ultimate Christmas Playlist</h3>
+                <p>A curated list of festive songs for the holiday season.</p>
+            </a>
+            <a href="pages/Essential_Items/" class="page-card glass-card">
+                <h3>Essential Items Checklist</h3>
+                <p>A checklist of basic needs to ensure you're prepared.</p>
+            </a>
+        </div>
+
+        <!-- === GUIDES, DEMOS & MEMORIALS === -->
+        <h2 class="section-title">Guides, Demos & More</h2>
+        <div class="page-grid">
+            <a href="/pages/Akensile/" class="page-card glass-card special-akensile-card">
+                <h3>Akensile</h3>
+                <p>Discover more about the book Akensile</p>
+            </a>
+            <a href="pages/Docker_Guide/" class="page-card glass-card">
+                <h3>Docker Guide</h3>
+                <p>A guide for setting up Docker containers</p>
+            </a>
+            <a href="/pages/web_dev_sever/" class="page-card glass-card">
+                <h3>Web Dev Server Setup</h3>
+                <p>A guide for setting up a local development server with VS Code and Ngrok.</p>
+            </a>
+            <a href="/pages/Siewli/" class="page-card glass-card">
+                <h3>Siewli Kok Memorial</h3>
+                <p>A tribute page for Siewli Kok</p>
+            </a>
+            <a href="http://www.akensile.com/" class="page-card glass-card">
+                <h3>Legacy Akensile Site</h3>
+                <p>The old webpage about the book Akensile</p>
+            </a>
         </div>
 
         <div class="support-links-grid">
-            <a href="https://github.com/Xarnder" target="_blank" rel="noopener noreferrer" class="support-card glass-card">
+            <a href="https://github.com/Xarnder" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
                 <span>GitHub</span>
             </a>
-            <a href="https://www.instagram.com/xander.and.the.lens/" target="_blank" rel="noopener noreferrer" class="support-card glass-card">
+            <a href="https://www.instagram.com/xander.and.the.lens/" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
                 <span>Instagram</span>
             </a>
-            <a href="https://www.youtube.com/@XanderWiles" target="_blank" rel="noopener noreferrer" class="support-card glass-card">
+            <a href="https://www.youtube.com/@XanderWiles" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
                 <span>YouTube</span>
             </a>
-            <a href="https://buymeacoffee.com/xarnder" target="_blank" rel="noopener noreferrer" class="support-card glass-card">
+            <a href="https://buymeacoffee.com/xarnder" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
                 <span>Buy Me a Coffee</span>
             </a>
-            <a href="https://www.linkedin.com/in/xander-wiles-245999169/" target="_blank" rel="noopener noreferrer" class="support-card glass-card">
+            <a href="https://www.linkedin.com/in/xander-wiles-245999169/" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
                 <span>LinkedIn</span>
             </a>
-            <a href="https://www.youtube.com/watch?v=xvFZjo5PgG0" target="_blank" rel="noopener noreferrer" class="support-card glass-card">
+            <a href="https://www.youtube.com/watch?v=xvFZjo5PgG0" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
                 <span>Only Fans</span>
             </a>
         </div>
@@ -217,4 +235,5 @@
     <script src="assets/js/main.js"></script>
     <script src="/assets/js/nav-loader.js"></script> <!-- ADD THIS LINE -->
 </body>
+
 </html>
