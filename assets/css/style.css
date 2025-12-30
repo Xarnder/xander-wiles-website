@@ -232,6 +232,14 @@ a:hover {
     color: var(--text-muted);
 }
 
+.page-icon {
+    width: 32px;
+    height: 32px;
+    margin-bottom: 0.5rem;
+    display: inline-block;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
 .support-links-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

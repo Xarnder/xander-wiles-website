@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -13,12 +14,25 @@
 
   <!-- Page-specific overrides -->
   <link rel="stylesheet" href="./siewli.css">
-  <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
+
+  <!-- Theme-aware SVG icons (modern browsers) -->
+  <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+  <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+  <!-- Fallback PNG icons -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+  <!-- Other essential links -->
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#6b1430">
 </head>
 
-<div id="main-nav-placeholder"></div> 
+<div id="main-nav-placeholder"></div>
 
 <body>
   <!-- Background from your theme + gentle burgundy accents -->
@@ -41,12 +55,15 @@
     <section class="glass-card video-card">
       <div class="video-wrap">
         <!-- Replace VIDEO_ID with your video’s ID -->
-       <iframe width="560" height="315" src="https://www.youtube.com/embed/kLvglHwqxxs?si=fxIJ79_yPPYKPRWc" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+        <iframe width="560" height="315" src="https://www.youtube.com/embed/kLvglHwqxxs?si=fxIJ79_yPPYKPRWc"
+          title="YouTube video player" frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
       </div>
     </section>
 
-    
+
 
     <!-- Gallery -->
     <section class="gallery-section">
@@ -120,7 +137,8 @@
   <!-- Scripts -->
   <script src="/assets/js/main.js"></script>
   <script src="./siewli.js"></script>
-  <script src="/assets/js/nav-loader.js"></script> 
+  <script src="/assets/js/nav-loader.js"></script>
 
 </body>
+
 </html>
