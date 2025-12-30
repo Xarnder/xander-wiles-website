@@ -1,15 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Akensile | Where Shadows Bleed Into Reality</title>
-    
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Lato:wght@300;400;700&display=swap"
+        rel="stylesheet">
+
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -29,16 +31,47 @@
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 
     <!-- GLOBAL SITE HEADER CSS -->
-    <link rel="stylesheet" href="/assets/css/style.css">
-    
+    <link rel="stylesheet" href="../../assets/css/style.css">
+
+
     <!-- PAGE SPECIFIC CSS -->
     <link rel="stylesheet" href="akensile.css">
 </head>
+
 <body>
 
-    <!-- GLOBAL HEADER PLACEHOLDER -->
-    <div id="main-nav-placeholder"></div> 
-    <script src="/assets/js/nav-loader.js"></script>
+    <div id="main-nav-placeholder"></div>
+
+
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Mobile Menu Toggle
+            const navToggle = document.querySelector('.nav-toggle');
+            const mainNav = document.querySelector('.main-nav');
+
+            if (navToggle && mainNav) {
+                navToggle.addEventListener('click', () => {
+                    mainNav.classList.toggle('active');
+                    document.body.classList.toggle('nav-open');
+                    navToggle.setAttribute('aria-expanded', mainNav.classList.contains('active'));
+                });
+            }
+
+            // Active Link Highlighting
+            const currentPage = window.location.pathname;
+            const navLinks = document.querySelectorAll('.nav-links a');
+
+            navLinks.forEach(link => {
+                const linkPath = link.getAttribute('href');
+                if (linkPath === '/' && (currentPage === '/' || currentPage === '/index.html')) {
+                    link.classList.add('active');
+                } else if (linkPath !== '/' && currentPage.startsWith(linkPath)) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
 
     <!-- BACKGROUND PORTAL EFFECT -->
     <div class="portal-background">
@@ -59,15 +92,16 @@
                     <h1 class="main-title">AKENSILE</h1>
                     <p class="author-name">By Xander Wiles</p>
                     <p class="synopsis-preview">
-                        A gripping mystery where organized crime meets magical fantasy. 
-                        As a forbidden <strong>romance</strong> ignites, the barrier between worlds shatters, revealing that our inner demons are not just metaphors, but flesh and blood monsters.
+                        A gripping mystery where organized crime meets magical fantasy.
+                        As a forbidden <strong>romance</strong> ignites, the barrier between worlds shatters, revealing
+                        that our inner demons are not just metaphors, but flesh and blood monsters.
                     </p>
                     <div class="cta-group">
                         <a href="#" class="btn btn-primary">Start The Mystery <i class="fas fa-book-open"></i></a>
                         <a href="#about" class="btn btn-secondary">Discover The Truth</a>
                     </div>
                 </div>
-                
+
                 <div class="hero-image fade-in-right">
                     <div class="book-card-3d">
                         <!-- UPDATED TO WEBP -->
@@ -86,12 +120,12 @@
                     <span class="subtitle">As Above, So Below</span>
                     <h2>Akensile</h2>
                 </div>
-                
+
                 <!-- NEW BIG IMAGE SLOT (UPDATED TO WEBP) -->
                 <div class="feature-art-container fade-in-up delay-100">
                     <div class="moving-gradient-glow"></div>
                     <div class="moving-gradient-glow blur-layer"></div>
-                    
+
                     <img src="assets/images/feature-art.webp" alt="Akensile World Art" id="feature-art-img">
                 </div>
             </div>
@@ -103,17 +137,21 @@
                 <div class="glass-card fade-in-up">
                     <h2>The Secret</h2>
                     <p>
-                        In the shadows of the city's mafia underworld, a terrifying truth is surfacing. 
-                        Every person has a counterpart in Akensile. A distorted, <strong>monstrous reflection</strong> of their true self. 
-                        When the subconscious world begins seeping into ours, crime lords must face their own beasts, and lovers must navigate a reality where a kiss can be as deadly as a claw.
+                        In the shadows of the city's mafia underworld, a terrifying truth is surfacing.
+                        Every person has a counterpart in Akensile. A distorted, <strong>monstrous reflection</strong>
+                        of their true self.
+                        When the subconscious world begins seeping into ours, crime lords must face their own beasts,
+                        and lovers must navigate a reality where a kiss can be as deadly as a claw.
                     </p>
                 </div>
 
                 <div class="glass-card fade-in-up delay-100">
                     <h2>About</h2>
                     <p>
-                        Blending high-stakes drama with dark comedy and adventure, this story creates a universe where the 
-                        human condition is dissected by teeth and talons. A genre bending journey into the things we all try to hide.
+                        Blending high-stakes drama with dark comedy and adventure, this story creates a universe where
+                        the
+                        human condition is dissected by teeth and talons. A genre bending journey into the things we all
+                        try to hide.
                     </p>
                 </div>
             </div>
@@ -133,5 +171,7 @@
 
     <!-- PAGE SPECIFIC SCRIPT -->
     <script src="script.js"></script>
+    <script src="../../assets/js/nav-loader.js"></script>
 </body>
+
 </html>

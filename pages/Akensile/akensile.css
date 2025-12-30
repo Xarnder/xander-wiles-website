@@ -532,4 +532,50 @@ footer {
     .feature-art-container {
         width: 100%;
     }
+
+    /* FIX: Reduce Glow Spread on Mobile to prevent overflow */
+    .moving-gradient-glow {
+        inset: -20px;
+    }
+
+    .blur-layer {
+        inset: -30px;
+        filter: blur(20px);
+    }
+
+    /* FIX: Constrain Orbs on Mobile */
+    .orb-1 {
+        width: 300px;
+        height: 300px;
+        top: -50px;
+        left: -50px;
+    }
+
+    .orb-2 {
+        width: 250px;
+        height: 250px;
+        bottom: -50px;
+        right: -50px;
+    }
+
+    .orb-3 {
+        width: 200px;
+        height: 200px;
+    }
+
+    .orb-4 {
+        width: 150px;
+        height: 150px;
+    }
+
+    .orb-5 {
+        width: 100px;
+        height: 100px;
+    }
+
+    /* FIX: Ensure container clips overflow */
+    .visual-break {
+        overflow: hidden;
+        width: 100%;
+    }
 }
