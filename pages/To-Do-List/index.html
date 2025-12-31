@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -11,30 +12,33 @@
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <link rel="manifest" href="site.webmanifest">
-    
+
     <!-- Global Header -->
     <link rel="stylesheet" href="/assets/css/style.css">
-    
+
     <!-- App Styles -->
     <link rel="stylesheet" href="style.css">
-    
+
     <!-- SortableJS & Icons -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 </head>
+
 <body>
 
     <!-- GLOBAL HEADER PLACEHOLDER -->
-    <div id="main-nav-placeholder"></div> 
+    <div id="main-nav-placeholder"></div>
     <script src="/assets/js/nav-loader.js"></script>
 
     <!-- APP CONTAINER -->
     <div class="app-wrapper">
         <header class="app-header glass-panel">
             <div class="header-left">
-                <input type="text" id="project-title-input" class="project-title-input" value="Task Master" placeholder="Project Name">
+                <input type="text" id="project-title-input" class="project-title-input" value="Task Master"
+                    placeholder="Project Name">
+                <span id="total-task-count" class="total-count-badge"></span>
             </div>
-            
+
             <div class="header-controls">
                 <div class="sort-container control-item">
                     <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
@@ -52,7 +56,8 @@
                     <button id="mode-copy-btn" class="mode-btn">Copy</button>
                 </div>
 
-                <button id="toggle-archive-view-btn" class="icon-btn-large control-item" title="Show/Hide Archived Tasks">
+                <button id="toggle-archive-view-btn" class="icon-btn-large control-item"
+                    title="Show/Hide Archived Tasks">
                     <i class="ph ph-eye-slash" id="archive-view-icon"></i>
                 </button>
 
@@ -61,7 +66,7 @@
                 </button>
 
                 <button id="add-list-btn" class="btn primary control-item">+ List</button>
-                
+
                 <button id="options-btn" class="btn secondary control-item">Options</button>
             </div>
         </header>
@@ -97,11 +102,23 @@
                     </div>
                 </label>
                 <hr class="dropdown-divider">
-                <button id="download-json-btn" class="menu-action-item"><i class="ph ph-download-simple"></i> Download Backup</button>
-                <label for="upload-json" class="menu-action-item"><i class="ph ph-upload-simple"></i> Restore Backup</label>
+
+                <!-- IMPORT / EXPORT -->
+                <button id="download-json-btn" class="menu-action-item"><i class="ph ph-download-simple"></i> Download
+                    Backup</button>
+                <label for="upload-json" class="menu-action-item"><i class="ph ph-upload-simple"></i> Restore
+                    Backup</label>
                 <input type="file" id="upload-json" accept=".json" style="display: none;">
+
+                <!-- TODOIST IMPORT (NEW) -->
+                <label for="import-todoist-csv" class="menu-action-item" style="color: #e44332;">
+                    <i class="ph ph-file-csv"></i> Import Todoist CSV
+                </label>
+                <input type="file" id="import-todoist-csv" accept=".csv" style="display: none;">
+
                 <hr class="dropdown-divider">
-                <button id="trigger-reset-btn" class="menu-action-item danger-text"><i class="ph ph-trash"></i> Reset App Data</button>
+                <button id="trigger-reset-btn" class="menu-action-item danger-text"><i class="ph ph-trash"></i> Reset
+                    App Data</button>
             </div>
         </div>
     </div>
@@ -126,7 +143,7 @@
         <div class="modal glass-panel">
             <h2>Edit Task</h2>
             <textarea id="modal-task-input" rows="4" placeholder="Task description..."></textarea>
-            
+
             <!-- GLOW COLOR PICKER -->
             <div class="color-picker-section">
                 <h3>Card Glow Effect:</h3>
@@ -168,7 +185,8 @@
     <!-- Image Lightbox -->
     <div id="image-modal-overlay" class="modal-overlay hidden" style="background: rgba(0,0,0,0.95);">
         <div class="image-modal-content">
-            <button id="image-modal-close" class="icon-btn-large" style="position: absolute; top: 20px; right: 20px; color: white; z-index: 2000;">&times;</button>
+            <button id="image-modal-close" class="icon-btn-large"
+                style="position: absolute; top: 20px; right: 20px; color: white; z-index: 2000;">&times;</button>
             <img id="full-size-image" src="" alt="Full view">
         </div>
     </div>
@@ -208,4 +226,5 @@
 
     <script src="app.js"></script>
 </body>
+
 </html>

@@ -1,12 +1,13 @@
 /* 
-    Task Master Script v16 (Same Logic as v15 - Drag Fix handled in CSS)
+    Task Master Script v17
+    Includes Todoist CSV Import Feature
 */
 
 console.log("[DEBUG] App initialized.");
 
 // --- STATE MANAGEMENT ---
 const defaultData = {
-    projectTitle: "Task Master", 
+    projectTitle: "Task Master",
     lists: [
         { id: 'list-1', title: 'To Do', taskIds: [] },
         { id: 'list-2', title: 'Doing', taskIds: [] }
@@ -14,7 +15,7 @@ const defaultData = {
     tasks: {},
     settings: {
         autoArchive: false,
-        showNumbers: false, 
+        showNumbers: false,
         theme: 'dark',
         sortMode: 'custom'
     }
@@ -38,6 +39,7 @@ const sortSelect = document.getElementById('sort-select');
 const toggleArchiveBtn = document.getElementById('toggle-archive-view-btn');
 const archiveViewIcon = document.getElementById('archive-view-icon');
 const projectTitleInput = document.getElementById('project-title-input');
+const totalTaskCountEl = document.getElementById('total-task-count');
 
 const optionsBtn = document.getElementById('options-btn');
 const optionsModal = document.getElementById('options-modal-overlay');
@@ -81,11 +83,15 @@ const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toast-message');
 const hiddenImageInput = document.getElementById('hidden-image-input');
 
+// Import Inputs
+const uploadJsonInput = document.getElementById('upload-json');
+const importTodoistInput = document.getElementById('import-todoist-csv');
+
 let currentEditingTaskId = null;
-let currentEditingListId = null; 
+let currentEditingListId = null;
 let currentImageUploadTaskId = null;
-let selectedGlowColor = 'none'; 
-let confirmCallback = null; 
+let selectedGlowColor = 'none';
+let confirmCallback = null;
 
 // --- UTILITY FUNCTIONS ---
 
@@ -97,12 +103,12 @@ function applyTheme(theme) {
 }
 
 function updateDragModeUI() {
-    if (dragMode === 'move') { 
-        modeCutBtn.classList.add('active'); 
-        modeCopyBtn.classList.remove('active'); 
-    } else { 
-        modeCutBtn.classList.remove('active'); 
-        modeCopyBtn.classList.add('active'); 
+    if (dragMode === 'move') {
+        modeCutBtn.classList.add('active');
+        modeCopyBtn.classList.remove('active');
+    } else {
+        modeCutBtn.classList.remove('active');
+        modeCopyBtn.classList.add('active');
     }
 }
 
@@ -112,8 +118,8 @@ function showToast(msg) {
     setTimeout(() => { toast.classList.add('hidden'); }, 3000);
 }
 
-function generateId() { 
-    return 'id-' + Math.random().toString(36).substr(2, 9); 
+function generateId() {
+    return 'id-' + Math.random().toString(36).substr(2, 9);
 }
 
 function escapeHtml(text) {
@@ -124,12 +130,12 @@ function escapeHtml(text) {
 function loadData() {
     const json = localStorage.getItem('taskmaster_v6');
     if (json) {
-        try { 
-            const data = JSON.parse(json); 
+        try {
+            const data = JSON.parse(json);
             if (!data.projectTitle) data.projectTitle = "Task Master";
             if (data.settings.showNumbers === undefined) data.settings.showNumbers = false;
             return data;
-        } 
+        }
         catch (e) { return defaultData; }
     }
     return defaultData;
@@ -155,12 +161,12 @@ function init() {
     document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('hidden'));
 
     applyTheme(appData.settings.theme);
-    
+
     autoArchiveToggle.checked = appData.settings.autoArchive || false;
     showNumbersToggle.checked = appData.settings.showNumbers || false;
-    
+
     if (appData.projectTitle) projectTitleInput.value = appData.projectTitle;
-    
+
     if (!appData.settings.sortMode) appData.settings.sortMode = 'custom';
     sortSelect.value = appData.settings.sortMode;
 
@@ -175,7 +181,7 @@ function init() {
 function renderBoard() {
     sortableInstances.forEach(s => s.destroy());
     sortableInstances = [];
-    if(listSortable) listSortable.destroy();
+    if (listSortable) listSortable.destroy();
 
     boardContainer.innerHTML = '';
 
@@ -193,7 +199,7 @@ function renderBoard() {
                 title: '🗄️ Archived / Orphans',
                 taskIds: orphanTaskIds
             };
-            renderListColumn(orphanList, true, false); 
+            renderListColumn(orphanList, true, false);
         }
     }
 
@@ -210,7 +216,7 @@ function renderBoard() {
         onEnd: (evt) => {
             const newIndex = evt.newIndex;
             const oldIndex = evt.oldIndex;
-            
+
             if (newIndex !== oldIndex) {
                 const movedList = appData.lists.splice(oldIndex, 1)[0];
                 appData.lists.splice(newIndex, 0, movedList);
@@ -218,6 +224,8 @@ function renderBoard() {
             }
         }
     });
+
+    updateTotalTaskCount();
 }
 
 function getOrphanedTaskIds() {
@@ -227,19 +235,41 @@ function getOrphanedTaskIds() {
     return allIds.filter(id => !activeIds.has(id));
 }
 
+function updateTotalTaskCount() {
+    let total = 0;
+    let completed = 0;
+
+    // Calculate total active tasks (unique)
+    // We iterate over tasks directly to get true unique count
+    Object.values(appData.tasks).forEach(task => {
+        if (!task.archived) {
+            total++;
+            if (task.completed) completed++;
+        }
+    });
+
+    if (total > 0) {
+        totalTaskCountEl.textContent = `Total: ${total}`;
+        totalTaskCountEl.classList.remove('hidden');
+    } else {
+        totalTaskCountEl.classList.add('hidden');
+        totalTaskCountEl.textContent = '';
+    }
+}
+
 function renderListColumn(list, isOrphan, isCustomSort) {
     const listEl = document.createElement('div');
     listEl.className = `list-column ${isOrphan ? 'orphan-list' : ''}`;
     listEl.dataset.listId = list.id;
 
-    let headerLeft = isOrphan 
+    let headerLeft = isOrphan
         ? `<input type="text" class="list-title" value="${list.title}" disabled>`
         : `<div class="list-header-left">
              <i class="ph ph-dots-six list-drag-handle" title="Drag to reorder list"></i>
              <input type="text" class="list-title" value="${list.title}" onchange="updateListTitle('${list.id}', this.value)">
            </div>`;
 
-    let headerButtons = isOrphan 
+    let headerButtons = isOrphan
         ? `<button class="icon-btn danger" onclick="emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
              <button class="icon-btn" onclick="openBulkAddModal('${list.id}')" title="Bulk Add Tasks"><i class="ph ph-list-plus"></i></button>
@@ -266,18 +296,45 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     const taskListContainer = listEl.querySelector('.task-list');
     const sortedIds = getSortedTaskIds(list.taskIds);
 
-    sortedIds.forEach((taskId, index) => {
+    let visibleCount = 0;
+    let visibleIndex = 1;
+
+    sortedIds.forEach((taskId) => {
         const task = appData.tasks[taskId];
         if (task) {
             if (showArchived || !task.archived) {
-                taskListContainer.appendChild(createTaskElement(task, list.id, index + 1));
+                taskListContainer.appendChild(createTaskElement(task, list.id, visibleIndex));
+                visibleIndex++;
+                visibleCount++;
             }
         }
     });
 
+    // Update list title with count if not orphan list
+    if (!isOrphan) {
+        const titleInput = listEl.querySelector('.list-title');
+        // We add a data attribute to store the raw title so we don't double append counts
+        // But the input value is what user sees.
+        // A better approach is adding a badge next to it.
+        // However, the requested design was "add a total task number at the top of the lists".
+        // Let's modify headerLeft to include a badge.
+        // Since we already rendered headerLeft string, we can inject a span into the list header.
+
+        const countBadge = document.createElement('span');
+        countBadge.className = 'list-count-badge';
+        countBadge.textContent = visibleCount;
+        listEl.querySelector('.list-header-left').appendChild(countBadge);
+    } else {
+        // For orphan list title is disabled input, maybe append to header
+        const countBadge = document.createElement('span');
+        countBadge.className = 'list-count-badge';
+        countBadge.textContent = visibleCount;
+        listEl.querySelector('.list-header').insertBefore(countBadge, listEl.querySelector('.list-header-right'));
+    }
+
     if (!isCustomSort && !isOrphan) {
         taskListContainer.addEventListener('mousedown', (e) => {
-            if(e.target.closest('.task-card')) showToast("Switch to 'Custom Order' to reorder.");
+            if (e.target.closest('.task-card')) showToast("Switch to 'Custom Order' to reorder.");
         }, { capture: true });
     }
 
@@ -288,21 +345,21 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             group: {
                 name: 'shared',
                 pull: dragMode === 'copy' ? 'clone' : true,
-                put: true 
+                put: true
             },
             animation: 150,
-            delay: 150, 
+            delay: 150,
             delayOnTouchOnly: true,
-            touchStartThreshold: 5, 
+            touchStartThreshold: 5,
             disabled: !isCustomSort,
             filter: '.archived-task',
-            
+
             // CRITICAL FIXES FOR TASK DRAGGING
-            forceFallback: true, 
-            fallbackOnBody: true, 
+            forceFallback: true,
+            fallbackOnBody: true,
             fallbackClass: "sortable-fallback",
             swapThreshold: 0.65,
-            
+
             onEnd: handleDragEnd
         });
         sortableInstances.push(sortable);
@@ -319,11 +376,11 @@ function getSortedTaskIds(taskIds) {
     const mode = appData.settings.sortMode;
     if (mode === 'custom') return taskIds;
 
-    let ids = [...taskIds]; 
+    let ids = [...taskIds];
     ids.sort((a, b) => {
         const taskA = appData.tasks[a];
         const taskB = appData.tasks[b];
-        if(!taskA || !taskB) return 0;
+        if (!taskA || !taskB) return 0;
         if (mode === 'alphabetical') return taskA.text.localeCompare(taskB.text);
         else if (mode === 'newest') return (taskB.createdAt || 0) - (taskA.createdAt || 0);
         else if (mode === 'oldest') return (taskA.createdAt || 0) - (taskB.createdAt || 0);
@@ -417,7 +474,7 @@ function archiveTask(taskId) {
     if (appData.tasks[taskId]) {
         appData.tasks[taskId].archived = true;
         saveData();
-        renderBoard(); 
+        renderBoard();
     }
 }
 
@@ -481,11 +538,11 @@ function handleDragEnd(evt) {
             const toList = appData.lists.find(l => l.id === toIdRaw);
             if (toList && !toList.taskIds.includes(taskId)) {
                 toList.taskIds.splice(evt.newIndex, 0, taskId);
-                if (appData.tasks[taskId]) appData.tasks[taskId].archived = false; 
+                if (appData.tasks[taskId]) appData.tasks[taskId].archived = false;
             } else {
                 evt.item.remove();
             }
-        } 
+        }
         else if (dragMode === 'copy' && fromIdRaw !== toIdRaw) {
             const toList = appData.lists.find(l => l.id === toIdRaw);
             if (!toList.taskIds.includes(taskId)) {
@@ -493,7 +550,7 @@ function handleDragEnd(evt) {
             } else {
                 evt.item.remove();
             }
-        } 
+        }
         else {
             appData.lists.forEach(list => {
                 const container = document.getElementById(`container-${list.id}`);
@@ -536,7 +593,7 @@ hiddenImageInput.addEventListener('change', (e) => {
     if (file.size > 2 * 1024 * 1024) alert("Image is large. It might slow down the app.");
 
     const reader = new FileReader();
-    reader.onload = function(event) {
+    reader.onload = function (event) {
         const img = new Image();
         img.src = event.target.result;
         img.onload = () => {
@@ -548,7 +605,7 @@ hiddenImageInput.addEventListener('change', (e) => {
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            
+
             const task = appData.tasks[currentImageUploadTaskId];
             if (!task.images) task.images = [];
             if (task.images.length >= 3) {
@@ -570,7 +627,7 @@ function openImageLightbox(src) {
 }
 imageModalClose.addEventListener('click', () => imageModal.classList.add('hidden'));
 imageModal.addEventListener('click', (e) => {
-    if(e.target === imageModal) imageModal.classList.add('hidden');
+    if (e.target === imageModal) imageModal.classList.add('hidden');
 });
 
 // --- SLIDER ---
@@ -628,12 +685,25 @@ function setupGlobalListeners() {
         anchor.click();
     };
 
-    document.getElementById('upload-json').onchange = (e) => {
+    uploadJsonInput.onchange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (event) => {
-            try { appData = JSON.parse(event.target.result); init(); } catch(err) { alert('Invalid JSON'); }
+            try { appData = JSON.parse(event.target.result); init(); } catch (err) { alert('Invalid JSON'); }
+        };
+        reader.readAsText(file);
+    };
+
+    // --- TODOIST CSV IMPORT LISTENER ---
+    importTodoistInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            handleTodoistImport(event.target.result);
+            // Reset input so same file can be selected again if needed
+            importTodoistInput.value = '';
         };
         reader.readAsText(file);
     };
@@ -648,7 +718,7 @@ function setupGlobalListeners() {
     optionsBtn.onclick = () => {
         optionsModal.classList.remove('hidden');
     };
-    
+
     closeOptionsBtn.onclick = () => {
         optionsModal.classList.add('hidden');
     }
@@ -662,7 +732,7 @@ function setupGlobalListeners() {
 
     toggleArchiveBtn.onclick = () => {
         showArchived = !showArchived;
-        if(showArchived) {
+        if (showArchived) {
             archiveViewIcon.classList.replace('ph-eye-slash', 'ph-eye');
             toggleArchiveBtn.classList.add('active');
         } else {
@@ -680,14 +750,14 @@ function setupGlobalListeners() {
 
     modeCutBtn.onclick = () => { dragMode = 'move'; updateDragModeUI(); renderBoard(); };
     modeCopyBtn.onclick = () => { dragMode = 'copy'; updateDragModeUI(); renderBoard(); };
-    
+
     themeToggleBtn.onclick = () => {
         const newTheme = appData.settings.theme === 'dark' ? 'light' : 'dark';
         appData.settings.theme = newTheme;
         applyTheme(newTheme);
         saveData();
     };
-    
+
     modalSaveBtn.onclick = () => {
         if (currentEditingTaskId && appData.tasks[currentEditingTaskId]) {
             appData.tasks[currentEditingTaskId].text = modalInput.value;
@@ -698,7 +768,7 @@ function setupGlobalListeners() {
         }
     };
     modalCloseBtn.onclick = () => modalOverlay.classList.add('hidden');
-    
+
     confirmYesBtn.onclick = () => { if (confirmCallback) confirmCallback(); confirmOverlay.classList.add('hidden'); confirmCallback = null; };
     confirmCancelBtn.onclick = () => { confirmOverlay.classList.add('hidden'); confirmCallback = null; };
 
@@ -746,7 +816,7 @@ function setupGlobalListeners() {
 
     // Bulk Add Logic
     bulkAddCloseBtn.onclick = () => bulkAddModal.classList.add('hidden');
-    
+
     bulkAddConfirmBtn.onclick = () => {
         const rawText = bulkAddInput.value;
         if (!rawText.trim()) return;
@@ -775,18 +845,166 @@ function setupGlobalListeners() {
     });
 }
 
+// --- TODOIST CSV IMPORT LOGIC ---
+
+// Simple CSV parser that handles commas inside quotes
+function parseCSV(text) {
+    console.log("[CSV DEBUG] Starting raw parse...");
+    const rows = [];
+    let row = [];
+    let curVal = '';
+    let inQuote = false;
+
+    // Remove Byte Order Mark if present (common in Todoist exports)
+    if (text.charCodeAt(0) === 0xFEFF) {
+        text = text.slice(1);
+    }
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+
+        if (inQuote) {
+            if (char === '"' && nextChar === '"') {
+                curVal += '"';
+                i++; // Skip escaped quote
+            } else if (char === '"') {
+                inQuote = false;
+            } else {
+                curVal += char;
+            }
+        } else {
+            if (char === '"') {
+                inQuote = true;
+            } else if (char === ',') {
+                row.push(curVal);
+                curVal = '';
+            } else if (char === '\n' || char === '\r') {
+                row.push(curVal);
+                if (row.length > 0 && (row.length > 1 || row[0] !== '')) {
+                    rows.push(row);
+                }
+                row = [];
+                curVal = '';
+                // Handle \r\n
+                if (char === '\r' && nextChar === '\n') {
+                    i++;
+                }
+            } else {
+                curVal += char;
+            }
+        }
+    }
+    // Push last row if exists
+    if (curVal || row.length > 0) {
+        row.push(curVal);
+        rows.push(row);
+    }
+
+    console.log(`[CSV DEBUG] Parsed ${rows.length} rows.`);
+    return rows;
+}
+
+function handleTodoistImport(csvText) {
+    if (!csvText) {
+        alert("File is empty.");
+        return;
+    }
+
+    console.log("[CSV DEBUG] Processing content...");
+    const rows = parseCSV(csvText);
+
+    if (rows.length < 2) {
+        alert("Invalid CSV format or empty file.");
+        return;
+    }
+
+    let addedLists = 0;
+    let addedTasks = 0;
+    let currentListId = null;
+
+    // We assume standard Todoist CSV columns.
+    // Index 0: TYPE, Index 1: CONTENT
+
+    // Check if the current app is empty-ish. If so, we can clear defaults.
+    // If not, we just append.
+
+    rows.forEach((row, index) => {
+        const type = row[0]; // 'section' or 'task'
+        const content = row[1]; // Name or Content
+
+        if (!type || !content) return;
+
+        // Skip header or metadata rows
+        if (type === 'TYPE' || type === 'meta') {
+            console.log("[CSV DEBUG] Skipping metadata/header row.");
+            return;
+        }
+
+        if (type === 'section') {
+            // CREATE NEW LIST
+            const newListId = generateId();
+            const newList = {
+                id: newListId,
+                title: content,
+                taskIds: []
+            };
+            appData.lists.push(newList);
+            currentListId = newListId;
+            addedLists++;
+            console.log(`[CSV DEBUG] Created List: ${content}`);
+        } else if (type === 'task') {
+            // CREATE NEW TASK
+            const newTaskId = generateId();
+            const newTask = {
+                id: newTaskId,
+                text: content,
+                completed: false, // Todoist CSV exports usually export incomplete tasks, or we treat them as active
+                archived: false,
+                createdAt: Date.now(),
+                images: [],
+                glowColor: 'none'
+            };
+
+            // If task appears before any section, create an Inbox list
+            if (!currentListId) {
+                const inboxId = generateId();
+                appData.lists.unshift({
+                    id: inboxId,
+                    title: "Inbox (Imported)",
+                    taskIds: []
+                });
+                currentListId = inboxId;
+                console.log("[CSV DEBUG] Created Default Inbox for uncategorized tasks.");
+            }
+
+            appData.tasks[newTaskId] = newTask;
+            const currentList = appData.lists.find(l => l.id === currentListId);
+            if (currentList) currentList.taskIds.push(newTaskId);
+
+            addedTasks++;
+        }
+    });
+
+    saveData();
+    renderBoard();
+    optionsModal.classList.add('hidden');
+    showToast(`Imported ${addedLists} lists and ${addedTasks} tasks.`);
+    console.log(`[CSV DEBUG] Complete. Lists: ${addedLists}, Tasks: ${addedTasks}`);
+}
+
 // Global Wrappers
-window.openBulkAddModal = function(listId) {
+window.openBulkAddModal = function (listId) {
     currentBulkListId = listId;
     bulkAddInput.value = '';
     bulkAddModal.classList.remove('hidden');
 };
 
-window.removeTaskFromList = function(listId, taskId) {
+window.removeTaskFromList = function (listId, taskId) {
     const list = appData.lists.find(l => l.id === listId);
     if (list) {
         if (getTaskReferenceCount(taskId) <= 1 && !appData.tasks[taskId].archived) {
-            if(!confirm("This is the last list containing this task. Removing it will archive it. Continue?")) return;
+            if (!confirm("This is the last list containing this task. Removing it will archive it. Continue?")) return;
             appData.tasks[taskId].archived = true;
         }
         list.taskIds = list.taskIds.filter(id => id !== taskId);
@@ -831,8 +1049,8 @@ function populateMoveDropdown(taskId) {
 
 function openEditModal(taskId, listId) {
     currentEditingTaskId = taskId;
-    currentEditingListId = listId; 
-    
+    currentEditingListId = listId;
+
     const task = appData.tasks[taskId];
     modalInput.value = task.text;
     selectedGlowColor = task.glowColor || 'none';
@@ -849,7 +1067,7 @@ function openEditModal(taskId, listId) {
 
 function updateListTitle(id, val) {
     const list = appData.lists.find(l => l.id === id);
-    if(list) list.title = val;
+    if (list) list.title = val;
     saveData();
 }
 
