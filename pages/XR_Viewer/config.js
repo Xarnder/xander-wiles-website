@@ -4,8 +4,9 @@ export const modelList = [
     'Mercedes_300sl.glb',
     'Cute_Robot.glb',
     'Fighter_Jet.glb',
-    'Space_Fighter_Large.glb', 
+    'Space_Fighter_Large.glb',
     'Space_Fighter.glb',
+    'Guildford-Plaza.glb',
     // 'Make_Human.glb'
     'Bedroom.glb'
 ];
