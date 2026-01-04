@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
         lineHeight: document.getElementById('lineHeight'),
         fsVal: document.getElementById('fs-val'),
         lhVal: document.getElementById('lh-val'),
-        
+
         padPage: document.getElementById('padPage'),
         padBox: document.getElementById('padBox'),
         padPageVal: document.getElementById('pad-page-val'),
@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const bgColors = [
         'transparent',
-        '#fff0f0', '#f0f8ff', '#f0fff0', 
+        '#fff0f0', '#f0f8ff', '#f0fff0',
         '#fff0ff', '#fffff0', '#f0ffff', '#fff5e6'
     ];
 
@@ -52,8 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // 1. Handle Double Dollar $$...$$ (Block math, but forced inline for cheatsheet)
         text = text.replace(/\$\$([^$]+)\$\$/g, (match, latex) => {
             try {
-                return katex.renderToString(latex, { 
-                    throwOnError: false, 
+                return katex.renderToString(latex, {
+                    throwOnError: false,
                     displayMode: false // Force inline to save space
                 });
             } catch (e) { return match; }
@@ -62,13 +62,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 2. Handle Single Dollar $...$ (Inline math)
         text = text.replace(/\$([^$]+)\$/g, (match, latex) => {
             try {
-                return katex.renderToString(latex, { 
-                    throwOnError: false, 
-                    displayMode: false 
+                return katex.renderToString(latex, {
+                    throwOnError: false,
+                    displayMode: false
                 });
             } catch (e) { return match; }
         });
-        
+
         return text;
     }
 
@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const rawText = els.input.value;
             if (!rawText) return;
 
-            const styleMode = els.sectionStyle.value; 
+            const styleMode = els.sectionStyle.value;
             const lines = rawText.split('\n');
             const shouldCleanBullets = els.removeBullets.checked;
             const shouldShowBrackets = els.showBrackets.checked;
@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             lines.forEach((line) => {
                 let text = line.trim();
-                
+
                 // Skip empty lines or separator lines (---)
                 if (text.length === 0 || text.match(/^---+$/)) return;
 
@@ -116,9 +116,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (headerMatch) {
                     isHeader = true;
-                    if (styleMode === 'box') flushBox(); 
-                    sectionIdx++; 
-                    text = headerMatch[2]; 
+                    if (styleMode === 'box') flushBox();
+                    sectionIdx++;
+                    text = headerMatch[2];
                 }
 
                 // 2. Clean Bullets
@@ -138,12 +138,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 let spanHTML = "";
-                
+
                 if (isHeader) {
                     // Header Rendering with optional Brackets
                     const headerContent = shouldShowBrackets ? `[${text}]` : text;
                     spanHTML = `<span class="sheet-span sheet-header" style="color: #000; background-color: ${bgColor};">${headerContent}</span>`;
-                    fontColorIdx = 0; 
+                    fontColorIdx = 0;
                 } else {
                     spanHTML = `<span class="sheet-span" style="color: ${fColor}; background-color: ${bgColor};">${text} </span>`;
                     fontColorIdx++;
@@ -168,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateStyles() {
         els.fsVal.textContent = els.fontSize.value;
         els.content.style.fontSize = `${els.fontSize.value}px`;
-        
+
         els.lhVal.textContent = els.lineHeight.value;
         els.content.style.lineHeight = els.lineHeight.value;
 
@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 2. Toggles
     [els.sectionStyle, els.removeBullets, els.showBrackets, els.orientation].forEach(el => {
         el.addEventListener('change', (e) => {
-            if(e.target.id === 'orientation') {
+            if (e.target.id === 'orientation') {
                 els.sheet.className = `a4-sheet ${e.target.value}`;
             }
             render();
@@ -209,15 +209,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 4. Download
     els.btnDownload.addEventListener('click', async () => {
-        const format = els.exportFormat.value; 
-        const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
-        
+        const format = els.exportFormat.value;
+
         els.btnDownload.textContent = "Processing...";
         els.btnDownload.disabled = true;
-        
+
         try {
             els.sheet.style.boxShadow = 'none';
 
+            // High resolution capture
             const canvas = await html2canvas(els.sheet, {
                 scale: 3,
                 useCORS: true,
@@ -228,14 +228,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            els.sheet.style.boxShadow = ''; 
+            els.sheet.style.boxShadow = '';
 
-            const imgData = canvas.toDataURL(mimeType, 1.0);
-            const link = document.createElement('a');
-            link.href = imgData;
-            link.download = `cheatsheet_${Date.now()}.${format}`;
-            link.click();
-            
+            if (format === 'pdf') {
+                // PDF Export
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                const { jsPDF } = window.jspdf;
+
+                const isPortrait = els.orientation.value === 'portrait';
+                const orient = isPortrait ? 'p' : 'l';
+                const formatSize = 'a4';
+
+                const pdf = new jsPDF(orient, 'mm', formatSize);
+
+                const imgProps = pdf.getImageProperties(imgData);
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                pdf.save(`cheatsheet_${Date.now()}.pdf`);
+
+            } else {
+                // Image Export (PNG/JPG)
+                const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+                const imgData = canvas.toDataURL(mimeType, 1.0);
+                const link = document.createElement('a');
+                link.href = imgData;
+                link.download = `cheatsheet_${Date.now()}.${format}`;
+                link.click();
+            }
+
             log("Download started.");
         } catch (error) {
             log(`Error: ${error.message}`, 'error');
