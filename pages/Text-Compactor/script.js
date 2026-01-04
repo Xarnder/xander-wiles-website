@@ -292,6 +292,22 @@ document.addEventListener('DOMContentLoaded', () => {
             els.sheet.style.transform = originalTransform;
             els.sheet.style.marginBottom = originalMargin;
 
+            // Helper: Extract filename from first header
+            function getExportFilename() {
+                const rawText = els.input.value;
+                const headerMatch = rawText.match(/^#+\s+(.*)/m); // Find first header
+
+                if (headerMatch && headerMatch[1]) {
+                    let title = headerMatch[1].trim();
+                    // Sanitize: replace spaces with hyphens, remove unsafe chars
+                    title = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '');
+                    if (title.length > 0) return title;
+                }
+                return `cheatsheet_${Date.now()}`;
+            }
+
+            const filenameBase = getExportFilename();
+
             if (format === 'pdf') {
                 // PDF Export
                 const imgData = canvas.toDataURL('image/jpeg', 1.0);
@@ -308,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
                 pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-                pdf.save(`cheatsheet_${Date.now()}.pdf`);
+                pdf.save(`${filenameBase}.pdf`);
 
             } else {
                 // Image Export (PNG/JPG)
@@ -316,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const imgData = canvas.toDataURL(mimeType, 1.0);
                 const link = document.createElement('a');
                 link.href = imgData;
-                link.download = `cheatsheet_${Date.now()}.${format}`;
+                link.download = `${filenameBase}.${format}`;
                 link.click();
             }
 
