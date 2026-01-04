@@ -3,7 +3,9 @@
    ========================================= */
 const state = {
     mode: 'numerical', // 'numerical' or 'image'
-    gridSize: 5,
+    gridSize: 5, // Fallback for square size controls
+    gridWidth: 5,
+    gridHeight: 5,
     kernelSize: 3,
     maxVal: 10,
 
@@ -28,6 +30,12 @@ const state = {
 
 // Common Kernels by Size
 const KERNELS = {
+    2: {
+        identity: [[1, 0], [0, 0]],
+        robertsX: [[1, 0], [0, -1]],
+        robertsY: [[0, 1], [-1, 0]],
+        uniform: [[0.25, 0.25], [0.25, 0.25]]
+    },
     3: {
         identity: [[0, 0, 0], [0, 1, 0], [0, 0, 0]],
         shiftLeft: [[0, 0, 0], [0, 0, 1], [0, 0, 0]],
@@ -71,6 +79,8 @@ const els = {
     fileUploadGroup: document.getElementById('fileUploadGroup'),
     imageUpload: document.getElementById('imageUpload'),
     rangeToggle: document.getElementById('rangeToggle'),
+    csvUploadGroup: document.getElementById('csvUploadGroup'),
+    csvUpload: document.getElementById('csvUpload'),
 
     // Kernel Controls
     kernelSelect: document.getElementById('kernelSelect'),
@@ -120,18 +130,80 @@ function getRandomInt(max) {
 }
 
 function generateInputMatrix() {
-    logDebug(`Generating ${state.gridSize}x${state.gridSize} matrix with range 0-${state.maxVal}`);
+    // If not using CSV "custom" mode, force square based on slider
+    // But here we just update using current state.gridWidth/Height
+    // Note: If user touched the slider, we might want to reset to square.
+    // For now, let's assume this is called when resetting or init.
+    // We'll trust state.gridSize if we are "resetting".
+
+    // To keep it simple: if this is called, we make a square matrix from state.gridSize
+    // effectively "resetting" any CSV custom shape.
+    state.gridWidth = state.gridSize;
+    state.gridHeight = state.gridSize;
+
+    logDebug(`Generating ${state.gridWidth}x${state.gridHeight} matrix with range 0-${state.maxVal}`);
     const matrix = [];
-    for (let y = 0; y < state.gridSize; y++) {
+    for (let y = 0; y < state.gridHeight; y++) {
         const row = [];
-        for (let x = 0; x < state.gridSize; x++) {
+        for (let x = 0; x < state.gridWidth; x++) {
             row.push(getRandomInt(state.maxVal));
         }
         matrix.push(row);
     }
     state.inputMatrix = matrix;
     renderGrid(els.inputGrid, state.inputMatrix, state.maxVal);
-    els.inputDims.textContent = `${state.gridSize}x${state.gridSize}`;
+    els.inputDims.textContent = `${state.gridWidth}x${state.gridHeight}`;
+}
+
+function handleCSVUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (event) {
+        const text = event.target.result;
+        const matrix = [];
+        const lines = text.split(/\r?\n/);
+
+        let cols = 0;
+
+        lines.forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed) {
+                const parts = trimmed.split(',').map(v => parseFloat(v));
+                // Filter out NaNs if any, or treat as 0? 
+                // Let's treat as 0 if invalid
+                const row = parts.map(v => isNaN(v) ? 0 : v);
+                if (row.length > 0) {
+                    matrix.push(row);
+                    cols = Math.max(cols, row.length);
+                }
+            }
+        });
+
+        // Normalize rows to max cols
+        matrix.forEach(row => {
+            while (row.length < cols) row.push(0);
+        });
+
+        if (matrix.length > 0 && cols > 0) {
+            state.inputMatrix = matrix;
+            state.gridHeight = matrix.length;
+            state.gridWidth = cols;
+            // Note: We don't update state.gridSize (slider) because it assumes square.
+
+            logDebug(`Loaded CSV: ${state.gridWidth}x${state.gridHeight}`);
+            els.inputDims.textContent = `${state.gridWidth}x${state.gridHeight}`;
+            renderGrid(els.inputGrid, state.inputMatrix, state.maxVal);
+            applyConvolution();
+        } else {
+            logDebug("Error: Invalid CSV");
+        }
+
+        // Reset input
+        e.target.value = '';
+    };
+    reader.readAsText(file);
 }
 
 function updateKernelOptions() {
@@ -428,7 +500,10 @@ function applyConvolution() {
     if (!state.inputMatrix.length) return;
 
     const input = state.inputMatrix;
-    const N = state.gridSize;
+    // Use stored width/height which might come from CSV
+    const N_H = state.gridHeight;
+    const N_W = state.gridWidth;
+
     const K = state.kernelSize;
     const pad = state.usePadding ? Math.floor(K / 2) : 0;
 
@@ -439,9 +514,10 @@ function applyConvolution() {
     const mode = state.mixMode;
 
     // Calculate Output Size
-    const outSize = N - K + (2 * pad) + 1;
+    const outH = N_H - K + (2 * pad) + 1;
+    const outW = N_W - K + (2 * pad) + 1;
 
-    if (outSize <= 0) {
+    if (outH <= 0 || outW <= 0) {
         els.outputGrid.innerHTML = "<p>Grid too small</p>";
         return;
     }
@@ -449,9 +525,9 @@ function applyConvolution() {
     const output = [];
 
     // Loop over output grid coordinates
-    for (let y = 0; y < outSize; y++) {
+    for (let y = 0; y < outH; y++) {
         const row = [];
-        for (let x = 0; x < outSize; x++) {
+        for (let x = 0; x < outW; x++) {
 
             let sumA = 0;
             let sumB = 0;
@@ -466,7 +542,7 @@ function applyConvolution() {
                     const inputX = startX + kx;
 
                     let val = 0;
-                    if (inputY >= 0 && inputY < N && inputX >= 0 && inputX < N) {
+                    if (inputY >= 0 && inputY < N_H && inputX >= 0 && inputX < N_W) {
                         val = input[inputY][inputX];
                     }
 
@@ -497,7 +573,7 @@ function applyConvolution() {
         output.push(row);
     }
 
-    els.outputDims.textContent = `${outSize}x${outSize}`;
+    els.outputDims.textContent = `${outW}x${outH}`;
     renderGrid(els.outputGrid, output, state.maxVal, true);
 }
 
@@ -645,7 +721,8 @@ function showCalculation(outY, outX) {
     const pad = state.usePadding ? Math.floor(K / 2) : 0;
     const startY = outY - pad;
     const startX = outX - pad;
-    const N = state.gridSize;
+    const N_W = state.gridWidth;
+    const N_H = state.gridHeight;
 
     // Highlight Input Grid
     // We iterate the DOM cells directly. Since grid is row-major: index = y * width + x
@@ -659,18 +736,22 @@ function showCalculation(outY, outX) {
     // visual row index = (startY + pad) + ky
     // visual col index = (startX + pad) + kx
 
-    const visualWidth = N + (2 * pad);
+    const visualWidth = N_W + (2 * pad);
+    const visualHeight = N_H + (2 * pad);
+    // visualWidth is different from visualHeight
+
     const cells = els.inputGrid.children; // Flat list of cells
 
     // Safety check just in case
-    if (cells.length === visualWidth * visualWidth) {
+    // Total cells = visualWidth * visualHeight
+    if (cells.length === visualWidth * visualHeight) {
         for (let ky = 0; ky < K; ky++) {
             for (let kx = 0; kx < K; kx++) {
                 const globalY = (startY + pad) + ky;
                 const globalX = (startX + pad) + kx;
 
                 // Check if within visual grid bounds (it should be, since output exists)
-                if (globalY >= 0 && globalY < visualWidth && globalX >= 0 && globalX < visualWidth) {
+                if (globalY >= 0 && globalY < visualHeight && globalX >= 0 && globalX < visualWidth) {
                     const idx = globalY * visualWidth + globalX;
                     if (cells[idx]) {
                         cells[idx].classList.add('input-highlight');
@@ -797,6 +878,7 @@ function updateOutput() {
    ========================================= */
 
 // Output Canvas Click for Analysis
+// Output Canvas Click for Analysis
 els.outputCanvas.addEventListener('click', (e) => {
     if (!state.outputImageData) return;
 
@@ -811,6 +893,11 @@ els.outputCanvas.addEventListener('click', (e) => {
         showImageCalculation(y, x);
     }
 });
+
+// CSV Listener
+if (els.csvUpload) {
+    els.csvUpload.addEventListener('change', handleCSVUpload);
+}
 
 function showImageCalculation(y, x) {
     const elCalcPanel = document.getElementById('calcBreakdown');

@@ -51,6 +51,7 @@
             <div class="control-group">
                 <label for="kernelSizeSelect">Kernel Size</label>
                 <select id="kernelSizeSelect">
+                    <option value="2">2 x 2</option>
                     <option value="3" selected>3 x 3</option>
                     <option value="5">5 x 5</option>
                     <option value="7">7 x 7</option>
@@ -63,6 +64,11 @@
                     <option value="numerical">Numerical Grid</option>
                     <option value="image">Image Processing</option>
                 </select>
+            </div>
+
+            <div class="control-group" id="csvUploadGroup">
+                <label for="csvUpload">Upload CSV (Grid)</label>
+                <input type="file" id="csvUpload" accept=".csv">
             </div>
 
             <div class="control-group" id="fileUploadGroup" style="display: none;">
