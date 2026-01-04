@@ -19,6 +19,7 @@
 
     <!-- Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -40,7 +41,26 @@
         <section class="panel editor">
             <div class="panel-header">
                 <h2>Input (Markdown + LaTeX)</h2>
+                <!-- File Navigation & Info -->
+                <div id="file-nav" style="display: none; flex-direction: column; align-items: center; gap: 5px;">
+                    <span id="file-info" style="font-size: 0.9em; text-align: center; word-break: break-all;">File 1 of
+                        1</span>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="btn-prev-file" class="btn-micro" title="Previous File (Left Arrow)">◀</button>
+                        <button id="btn-next-file" class="btn-micro" title="Next File (Right Arrow)">▶</button>
+                    </div>
+                </div>
             </div>
+
+            <!-- Batch Upload Controls -->
+            <div class="file-load-controls" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
+                <label class="btn btn-secondary" style="cursor: pointer; display: inline-block;">
+                    📂 Upload Folder
+                    <input type="file" id="folder-input" webkitdirectory multiple style="display: none;">
+                </label>
+                <div style="font-size: 0.85em; color: #888;">Select a folder containing .md files</div>
+            </div>
+
             <textarea id="input-text" placeholder="### Section Title
 Paste your notes here.
 ---
@@ -137,6 +157,8 @@ Double dollar $$x^2$$ equations supported."></textarea>
 
             <div class="button-group">
                 <button id="btn-render" class="btn btn-primary">Refresh Preview</button>
+                <button id="btn-batch-export" class="btn btn-primary"
+                    style="background-color: #663399; display: none;">Batch Export (ZIP)</button>
                 <div class="split-btn">
                     <select id="export-format" class="format-select">
                         <option value="jpg">JPG</option>

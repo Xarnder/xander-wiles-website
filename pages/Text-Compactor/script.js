@@ -18,25 +18,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
         removeBullets: document.getElementById('remove-bullets'),
         showBrackets: document.getElementById('show-brackets'),
-        bolderFormulas: document.getElementById('bolder-formulas'), // New
+        bolderFormulas: document.getElementById('bolder-formulas'),
         zoomLevel: document.getElementById('zoomLevel'),
         zoomVal: document.getElementById('zoom-val'),
         exportFormat: document.getElementById('export-format'),
         btnRender: document.getElementById('btn-render'),
         btnDownload: document.getElementById('btn-download'),
+
+        // New Elements
+        folderInput: document.getElementById('folder-input'),
+        fileNav: document.getElementById('file-nav'),
+        fileInfo: document.getElementById('file-info'),
+        btnPrevFile: document.getElementById('btn-prev-file'),
+        btnNextFile: document.getElementById('btn-next-file'),
+        btnBatchExport: document.getElementById('btn-batch-export'),
+
         debug: document.getElementById('debug-content')
     };
 
-    // --- Palettes ---
-    const fontColors = [
-        '#000000', '#c00000', '#00008b', '#005500', '#550055', '#663300'
-    ];
+    // --- State Management ---
+    const defaultSettings = {
+        orientation: 'portrait',
+        sectionStyle: 'box',
+        fontSize: 10,
+        lineHeight: 1.0,
+        padPage: 5,
+        padBox: 1,
+        removeBullets: true,
+        showBrackets: false,
+        bolderFormulas: true
+    };
 
-    const bgColors = [
-        'transparent',
-        '#fff0f0', '#f0f8ff', '#f0fff0',
-        '#fff0ff', '#fffff0', '#f0ffff', '#fff5e6'
-    ];
+    let filesData = [];
+    let currentIndex = 0;
+
+    // Initialize with one empty file
+    function initState() {
+        filesData = [{
+            name: "untitled.md",
+            content: els.input.value, // Start with placeholder or empty
+            settings: { ...defaultSettings }
+        }];
+        currentIndex = 0;
+        updateFileNavUI();
+    }
+
+    // --- Palettes ---
+    const fontColors = ['#000000', '#c00000', '#00008b', '#005500', '#550055', '#663300'];
+    const bgColors = ['transparent', '#fff0f0', '#f0f8ff', '#f0fff0', '#fff0ff', '#fffff0', '#f0ffff', '#fff5e6'];
 
     function log(msg, type = 'info') {
         const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
@@ -52,26 +81,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Formatters ---
     function processMath(text) {
-        // 1. Handle Double Dollar $$...$$ (Block math, but forced inline for cheatsheet)
         text = text.replace(/\$\$([^$]+)\$\$/g, (match, latex) => {
             try {
-                return katex.renderToString(latex, {
-                    throwOnError: false,
-                    displayMode: false // Force inline to save space
-                });
+                return katex.renderToString(latex, { throwOnError: false, displayMode: false });
             } catch (e) { return match; }
         });
-
-        // 2. Handle Single Dollar $...$ (Inline math)
         text = text.replace(/\$([^$]+)\$/g, (match, latex) => {
             try {
-                return katex.renderToString(latex, {
-                    throwOnError: false,
-                    displayMode: false
-                });
+                return katex.renderToString(latex, { throwOnError: false, displayMode: false });
             } catch (e) { return match; }
         });
-
         return text;
     }
 
@@ -87,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function render() {
         try {
             const rawText = els.input.value;
-            if (!rawText) return;
+            // Always render even if empty to clear view, but logic below skips empty lines
 
             const styleMode = els.sectionStyle.value;
             const lines = rawText.split('\n');
@@ -109,11 +128,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             lines.forEach((line) => {
                 let text = line.trim();
-
-                // Skip empty lines or separator lines (---)
                 if (text.length === 0 || text.match(/^---+$/)) return;
 
-                // 1. Detect Header
                 const headerMatch = text.match(/^(#+)\s+(.*)/);
                 let isHeader = false;
 
@@ -124,16 +140,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     text = headerMatch[2];
                 }
 
-                // 2. Clean Bullets
                 if (shouldCleanBullets && !isHeader) {
                     text = text.replace(/^(\*|-|\+)\s+/, '');
                 }
 
-                // 3. Process Content (Math & MD)
                 text = processMath(text);
                 text = parseMarkdown(text);
 
-                // 4. Styles
                 const fColor = fontColors[fontColorIdx % fontColors.length];
                 let bgColor = 'transparent';
                 if (styleMode === 'highlight' && sectionIdx > 0) {
@@ -141,9 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 let spanHTML = "";
-
                 if (isHeader) {
-                    // Header Rendering with optional Brackets
                     const headerContent = shouldShowBrackets ? `[${text}]` : text;
                     spanHTML = `<span class="sheet-span sheet-header" style="color: #000; background-color: ${bgColor};">${headerContent}</span>`;
                     fontColorIdx = 0;
@@ -167,64 +178,178 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Fit to Height Logic ---
-    // --- Manual Zoom Logic ---
+    // --- View Logic ---
     function updateZoom() {
         const scale = parseFloat(els.zoomLevel.value) || 1;
         const sheetH = els.sheet.offsetHeight;
-
         els.sheet.style.transform = `scale(${scale})`;
         els.sheet.style.transformOrigin = 'top center';
-
         if (sheetH > 0) {
             const heightDiff = sheetH * (1 - scale);
             els.sheet.style.marginBottom = `-${heightDiff}px`;
         }
     }
 
-    // --- Update CSS Variables ---
-    // --- Update CSS Variables ---
     function updateStyles() {
-        // Fix: Do NOT overwrite the number input values here.
-        // This breaks typing because it resets the cursor position and value if the listener hasn't fired yet or logic overlaps.
-
-        // Only update the VISUALS on the sheet.
         els.content.style.fontSize = `${els.fontSize.value}px`;
         els.content.style.lineHeight = els.lineHeight.value;
         els.sheet.style.padding = `${els.padPage.value}mm`;
         els.sheet.style.setProperty('--box-pad', `${els.padBox.value}px`);
 
-        if (els.bolderFormulas.checked) {
-            els.content.classList.add('bolder-math');
-        } else {
-            els.content.classList.remove('bolder-math');
-        }
+        if (els.bolderFormulas.checked) els.content.classList.add('bolder-math');
+        else els.content.classList.remove('bolder-math');
 
-        // Update Zoom
         setTimeout(updateZoom, 0);
     }
 
+    // --- State Persistence & Navigation ---
 
-    // --- Event Listeners ---
+    function saveCurrentState() {
+        if (!filesData[currentIndex]) return;
 
-    // 1. Style Inputs (Sliders & Numbers)
-    // 1. Style Inputs (Sliders & Numbers)
+        // Save Content
+        filesData[currentIndex].content = els.input.value;
+
+        // Save Settings
+        filesData[currentIndex].settings = {
+            orientation: els.orientation.value,
+            sectionStyle: els.sectionStyle.value,
+            fontSize: parseFloat(els.fontSize.value),
+            lineHeight: parseFloat(els.lineHeight.value),
+            padPage: parseInt(els.padPage.value),
+            padBox: parseInt(els.padBox.value),
+            removeBullets: els.removeBullets.checked,
+            showBrackets: els.showBrackets.checked,
+            bolderFormulas: els.bolderFormulas.checked
+        };
+    }
+
+    function loadState(index) {
+        if (!filesData[index]) return;
+        const file = filesData[index];
+        const s = file.settings;
+
+        // Load Content
+        els.input.value = file.content;
+
+        // Load Settings to DOM
+        els.orientation.value = s.orientation;
+        els.sectionStyle.value = s.sectionStyle;
+
+        els.fontSize.value = s.fontSize;
+        els.fsVal.value = s.fontSize;
+
+        els.lineHeight.value = s.lineHeight;
+        els.lhVal.value = s.lineHeight;
+
+        els.padPage.value = s.padPage;
+        els.padPageVal.value = s.padPage;
+
+        els.padBox.value = s.padBox;
+        els.padBoxVal.value = s.padBox;
+
+        els.removeBullets.checked = s.removeBullets;
+        els.showBrackets.checked = s.showBrackets;
+        els.bolderFormulas.checked = s.bolderFormulas;
+
+        // Force orientation update on sheet class
+        els.sheet.className = `a4-sheet ${s.orientation}`;
+
+        // Render & Update UI
+        updateStyles();
+        render();
+        updateFileNavUI();
+    }
+
+    function updateFileNavUI() {
+        if (filesData.length > 1) {
+            els.fileNav.style.display = 'flex';
+            els.btnBatchExport.style.display = 'inline-block';
+        } else {
+            els.fileNav.style.display = 'none';
+            els.btnBatchExport.style.display = 'none';
+        }
+        els.fileInfo.textContent = `File ${currentIndex + 1} of ${filesData.length}: ${filesData[currentIndex].name}`;
+
+        els.btnPrevFile.disabled = currentIndex === 0;
+        els.btnNextFile.disabled = currentIndex === filesData.length - 1;
+    }
+
+    function switchFile(newIndex) {
+        if (newIndex < 0 || newIndex >= filesData.length) return;
+        saveCurrentState(); // Save old file settings
+        currentIndex = newIndex;
+        loadState(currentIndex); // Load new file settings
+    }
+
+    // --- Folder Upload ---
+    els.folderInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files).filter(f => f.name.endsWith('.md') || f.name.endsWith('.txt'));
+        if (files.length === 0) {
+            alert("No markdown files found in selection.");
+            return;
+        }
+
+        // Sort files alphabetically to ensure consistent order
+        files.sort((a, b) => a.name.localeCompare(b.name));
+
+        const loadedFiles = [];
+
+        // Helper to read file
+        const readFileStr = (file) => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsText(file);
+        });
+
+        for (const file of files) {
+            const content = await readFileStr(file);
+            loadedFiles.push({
+                name: file.name,
+                content: content,
+                settings: { ...defaultSettings } // Start with defaults
+            });
+        }
+
+        filesData = loadedFiles;
+        currentIndex = 0;
+        loadState(0);
+        log(`Loaded folder: ${files.length} files.`);
+    });
+
+    // --- Interaction Listeners ---
+
+    // 1. Navigation Buttons
+    els.btnPrevFile.addEventListener('click', () => switchFile(currentIndex - 1));
+    els.btnNextFile.addEventListener('click', () => switchFile(currentIndex + 1));
+
+    // 2. Keyboard Navigation
+    document.addEventListener('keydown', (e) => {
+        // Only navigate if NOT typing in inputs
+        const target = e.target;
+        const isInput = target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.tagName === 'SELECT';
+
+        if (!isInput) {
+            if (e.key === 'ArrowLeft') switchFile(currentIndex - 1);
+            if (e.key === 'ArrowRight') switchFile(currentIndex + 1);
+        }
+    });
+
+    // 3. Inputs Sync
     const syncGroups = [
         { range: els.fontSize, number: els.fsVal },
         { range: els.lineHeight, number: els.lhVal },
         { range: els.padPage, number: els.padPageVal },
         { range: els.padBox, number: els.padBoxVal },
-        { range: els.zoomLevel, number: els.zoomVal } // New zoom group
+        { range: els.zoomLevel, number: els.zoomVal }
     ];
 
     syncGroups.forEach(group => {
-        // Range -> Number
         group.range.addEventListener('input', () => {
             group.number.value = group.range.value;
             if (group.range === els.zoomLevel) updateZoom();
             else updateStyles();
         });
-        // Number -> Range
         group.number.addEventListener('input', () => {
             group.range.value = group.number.value;
             if (group.range === els.zoomLevel) updateZoom();
@@ -232,25 +357,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 2. Toggles
-    [els.sectionStyle, els.removeBullets, els.showBrackets, els.bolderFormulas, els.orientation]
-        .filter(el => el)
-        .forEach(el => {
-            el.addEventListener('change', (e) => {
-                if (e.target.id === 'orientation') {
-                    els.sheet.className = `a4-sheet ${e.target.value}`;
-                }
-                if (e.target.id === 'bolder-formulas') {
-                    updateStyles();
-                    return;
-                }
-                render();
-            });
+    // 4. Input Changes (Text & Settings)
+    // We already have listeners for specific settings that call updateStyles/render.
+    // But we need to ensure state is saved if we switch away. 
+    // `saveCurrentState` is called on switch, so we are good.
+    // However, we should listen to changes to update the view live.
+
+    [els.sectionStyle, els.removeBullets, els.showBrackets, els.bolderFormulas].forEach(el => {
+        el.addEventListener('change', (e) => {
+            if (e.target.id === 'bolder-formulas') updateStyles();
+            else render();
         });
+    });
 
-    // Remove window resize listener for zoom since it's manual now
+    els.orientation.addEventListener('change', (e) => {
+        els.sheet.className = `a4-sheet ${e.target.value}`;
+        updateZoom();
+    });
 
-    // 3. Input
     let debounceTimer;
     els.input.addEventListener('input', () => {
         clearTimeout(debounceTimer);
@@ -259,23 +383,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     els.btnRender.addEventListener('click', render);
 
-    // 4. Download
-    els.btnDownload.addEventListener('click', async () => {
-        const format = els.exportFormat.value;
+    // --- Export Logic ---
 
-        els.btnDownload.textContent = "Processing...";
-        els.btnDownload.disabled = true;
+    // Single Export
+    els.btnDownload.addEventListener('click', async () => {
+        saveCurrentState(); // Ensure state is fresh
+        await performExport(false);
+    });
+
+    // Batch Export
+    els.btnBatchExport.addEventListener('click', async () => {
+        saveCurrentState();
+        await performBatchExport();
+    });
+
+    async function captureSheet() {
+        // Disable zoom/margin for clean capture
+        const originalTransform = els.sheet.style.transform;
+        const originalMargin = els.sheet.style.marginBottom;
+        els.sheet.style.transform = 'none';
+        els.sheet.style.marginBottom = '0';
+        els.sheet.style.boxShadow = 'none';
 
         try {
-            // Disable zoom for capture
-            const originalTransform = els.sheet.style.transform;
-            const originalMargin = els.sheet.style.marginBottom;
-            els.sheet.style.transform = 'none';
-            els.sheet.style.marginBottom = '0';
-
-            els.sheet.style.boxShadow = 'none';
-
-            // High resolution capture
             const canvas = await html2canvas(els.sheet, {
                 scale: 3,
                 useCORS: true,
@@ -285,65 +415,140 @@ document.addEventListener('DOMContentLoaded', () => {
                     doc.getElementById('sheet').style.fontFeatureSettings = '"liga" 0';
                 }
             });
-
+            return canvas;
+        } finally {
+            // Restore
             els.sheet.style.boxShadow = '';
-
-            // Restore zoom
             els.sheet.style.transform = originalTransform;
             els.sheet.style.marginBottom = originalMargin;
+        }
+    }
 
-            // Helper: Extract filename from first header
-            function getExportFilename() {
-                const rawText = els.input.value;
-                const headerMatch = rawText.match(/^#+\s+(.*)/m); // Find first header
+    function getExportFilename(currentContent) {
+        const headerMatch = currentContent.match(/^#+\s+(.*)/m);
+        if (headerMatch && headerMatch[1]) {
+            let title = headerMatch[1].trim();
+            title = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '');
+            if (title.length > 0) return title;
+        }
+        return `cheatsheet_${Date.now()}`;
+    }
 
-                if (headerMatch && headerMatch[1]) {
-                    let title = headerMatch[1].trim();
-                    // Sanitize: replace spaces with hyphens, remove unsafe chars
-                    title = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '');
-                    if (title.length > 0) return title;
-                }
-                return `cheatsheet_${Date.now()}`;
-            }
+    async function performExport(isBatch = false, batchZip = null) {
+        const format = els.exportFormat.value;
+        const filename = getExportFilename(els.input.value);
 
-            const filenameBase = getExportFilename();
+        if (!isBatch) {
+            els.btnDownload.textContent = "Processing...";
+            els.btnDownload.disabled = true;
+        }
+
+        try {
+            const canvas = await captureSheet();
 
             if (format === 'pdf') {
-                // PDF Export
                 const imgData = canvas.toDataURL('image/jpeg', 1.0);
                 const { jsPDF } = window.jspdf;
-
                 const isPortrait = els.orientation.value === 'portrait';
-                const orient = isPortrait ? 'p' : 'l';
-                const formatSize = 'a4';
-
-                const pdf = new jsPDF(orient, 'mm', formatSize);
+                const pdf = new jsPDF(isPortrait ? 'p' : 'l', 'mm', 'a4');
 
                 const imgProps = pdf.getImageProperties(imgData);
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
                 pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-                pdf.save(`${filenameBase}.pdf`);
+
+                if (isBatch && batchZip) {
+                    batchZip.file(`${filename}.pdf`, pdf.output('blob'));
+                } else {
+                    pdf.save(`${filename}.pdf`);
+                }
 
             } else {
-                // Image Export (PNG/JPG)
-                const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
-                const imgData = canvas.toDataURL(mimeType, 1.0);
-                const link = document.createElement('a');
-                link.href = imgData;
-                link.download = `${filenameBase}.${format}`;
-                link.click();
+                // Image
+                const mime = format === 'png' ? 'image/png' : 'image/jpeg';
+                const imgData = canvas.toDataURL(mime, 1.0); // Base64
+
+                if (isBatch && batchZip) {
+                    const base64Data = imgData.split(',')[1];
+                    batchZip.file(`${filename}.${format}`, base64Data, { base64: true });
+                } else {
+                    const link = document.createElement('a');
+                    link.href = imgData;
+                    link.download = `${filename}.${format}`;
+                    link.click();
+                }
+            }
+        } catch (e) {
+            log(`Export Error: ${e.message}`, 'error');
+        } finally {
+            if (!isBatch) {
+                els.btnDownload.textContent = "Download Image";
+                els.btnDownload.disabled = false;
+            }
+        }
+    }
+
+    async function performBatchExport() {
+        if (!window.JSZip) {
+            alert("JSZip library not loaded.");
+            return;
+        }
+
+        if (filesData.length === 0) return;
+
+        els.btnBatchExport.textContent = "Packing...";
+        els.btnBatchExport.disabled = true;
+
+        const zip = new JSZip();
+        // Remember where we were
+        const originalIndex = currentIndex;
+
+        try {
+            // Iterate all files
+            for (let i = 0; i < filesData.length; i++) {
+                // Load file state into DOM/Vars
+                // We MUST update currentIndex so loadState references correct data
+                currentIndex = i;
+                loadState(i);
+
+                // Allow DOM to update (render is sync, but images might need a tick? 
+                // Math rendering is sync (katex). Should be fine.)
+                // Just in case, small delay to let browser paint/layout if needed by html2canvas? 
+                // html2canvas reads computed styles. 
+                await new Promise(r => setTimeout(r, 50));
+
+                log(`Exporting ${i + 1}/${filesData.length}: ${filesData[i].name}`);
+                await performExport(true, zip);
             }
 
-            log("Download started.");
-        } catch (error) {
-            log(`Error: ${error.message}`, 'error');
-        } finally {
-            els.btnDownload.textContent = "Download Image";
-            els.btnDownload.disabled = false;
-        }
-    });
+            // Generate Zip
+            const content = await zip.generateAsync({ type: "blob" });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = "cheatsheets_batch.zip";
+            link.click();
+            log("Batch export complete.");
 
+        } catch (e) {
+            log(`Batch Export Failed: ${e.message}`, 'error');
+        } finally {
+            // Restore original view
+            currentIndex = originalIndex;
+            loadState(currentIndex);
+
+            els.btnBatchExport.textContent = "Batch Export (ZIP)";
+            els.btnBatchExport.disabled = false;
+        }
+    }
+
+    // Init
+    initState();
+    // If text area had content initially (e.g. browser cache or placeholder), update first file
+    if (els.input.value && els.input.value !== filesData[0].content) {
+        filesData[0].content = els.input.value;
+    }
+    // Initial Render
     updateStyles();
+    render();
 });

@@ -142,6 +142,7 @@ input[type="number"] {
     padding: 4px;
     text-align: center;
     -moz-appearance: textfield;
+    appearance: textfield;
     /* Firefox */
 }
 
@@ -364,4 +365,24 @@ textarea:focus {
 
 .bolder-math .katex .base {
     font-weight: bold;
+}
+
+/* Navigation Controls */
+.btn-micro {
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.btn-micro:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+#file-info {
+    font-family: monospace;
+    color: var(--text-muted);
 }
