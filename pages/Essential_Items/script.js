@@ -1,39 +1,33 @@
 // Global helper for image fallbacks
-function createImageFallback(imageElement, isListThumb = false) {
+function createImageFallback(imageElement, type = 'carousel') {
     const altText = imageElement.alt;
-    
-    // prevent infinite loop if fallback generation fails
-    imageElement.onerror = null;
+    imageElement.onerror = null; // prevent infinite loop
 
-    if (isListThumb) {
-        const fallback = document.createElement('div');
-        fallback.className = 'list-item-thumb';
-        fallback.style.display = 'flex';
-        fallback.style.alignItems = 'center';
-        fallback.style.justifyContent = 'center';
-        fallback.style.backgroundColor = 'rgba(125,125,125,0.2)';
-        fallback.style.color = 'var(--text-secondary)';
-        fallback.textContent = '?'; 
-        if (imageElement.parentElement) {
-            imageElement.parentElement.replaceChild(fallback, imageElement);
-        }
-        return;
-    }
-
-    // Carousel Fallback
-    console.log(`Debug: Image source failed for "${altText}". Displaying fallback text.`);
     const fallback = document.createElement('div');
-    fallback.className = 'carousel-item-image'; 
     fallback.style.display = 'flex';
     fallback.style.alignItems = 'center';
     fallback.style.justifyContent = 'center';
-    fallback.style.backgroundColor = 'rgba(0,0,0,0.1)';
-    fallback.style.border = '1px dashed var(--text-secondary)';
+    fallback.style.backgroundColor = 'rgba(125,125,125,0.2)';
     fallback.style.color = 'var(--text-secondary)';
-    fallback.style.height = '200px'; 
-    fallback.style.width = '100%';
-    fallback.innerHTML = `<p>Image not found for<br><strong>${altText}</strong></p>`;
-    
+
+    if (type === 'list') {
+        fallback.className = 'list-item-thumb';
+        fallback.textContent = '?';
+    } else if (type === 'grid') {
+        fallback.className = 'grid-item-image';
+        fallback.style.border = '1px dashed var(--glass-border)';
+        fallback.innerHTML = '<span style="font-size: 2rem;">?</span>';
+    } else {
+        // Carousel
+        console.log(`Debug: Image source failed for "${altText}". Displaying fallback text.`);
+        fallback.className = 'carousel-item-image';
+        fallback.style.backgroundColor = 'rgba(0,0,0,0.1)';
+        fallback.style.border = '1px dashed var(--text-secondary)';
+        fallback.style.height = '200px';
+        fallback.style.width = '100%';
+        fallback.innerHTML = `<p>Image not found for<br><strong>${altText}</strong></p>`;
+    }
+
     if (imageElement.parentElement) {
         imageElement.parentElement.replaceChild(fallback, imageElement);
     }
@@ -45,35 +39,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // Element references
     const checklistContainer = document.getElementById('checklist-container');
     const categoryFilter = document.getElementById('filter-category');
-    const statusFilter = document.getElementById('filter-status'); 
+    const statusFilter = document.getElementById('filter-status');
     const sortOrder = document.getElementById('sort-order');
-    const imageToggle = document.getElementById('toggle-has-image'); 
-    const themeBtn = document.getElementById('theme-toggle'); 
+    const imageToggle = document.getElementById('toggle-has-image');
+    const themeBtn = document.getElementById('theme-toggle');
     const clearAllButton = document.getElementById('clear-all-button');
     const progressBarFill = document.getElementById('progress-bar-fill');
     const progressText = document.getElementById('progress-text');
     const scaleSlider = document.getElementById('scale-slider');
+
+    // View Containers
+    const splitViewContainer = document.getElementById('split-view-container');
+    const gridViewContainer = document.getElementById('grid-view-container');
     const carouselView = document.getElementById('carousel-view');
+
+    // View Toggles
+    const viewSplitBtn = document.getElementById('view-split');
+    const viewGridBtn = document.getElementById('view-grid');
+
     const prevButton = document.getElementById('prev-item');
     const nextButton = document.getElementById('next-item');
-    
+
     // Loading Screen Elements
     const loadingOverlay = document.getElementById('app-loading-overlay');
     const loadingBar = document.getElementById('loading-progress-bar');
     const loadingText = document.getElementById('loading-status-text');
 
-    let allItems = []; 
-    let itemsToRender = []; 
+    let allItems = [];
+    let itemsToRender = [];
     let checkedItems = new Set();
-    let currentIndex = 0; 
-    
+    let currentIndex = 0;
+    let currentView = 'split'; // 'split' or 'grid'
+
     // Cache for preloaded images to prevent garbage collection
     const preloadCache = new Map();
 
     // --- Loading Screen Logic ---
     function updateLoadingStatus(message, percent) {
-        if(loadingText) loadingText.textContent = message;
-        if(loadingBar) loadingBar.style.width = `${percent}%`;
+        if (loadingText) loadingText.textContent = message;
+        if (loadingBar) loadingBar.style.width = `${percent}%`;
     }
 
     function hideLoadingScreen() {
@@ -98,21 +102,40 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.setAttribute('data-theme', savedTheme);
     }
 
+    // --- View Switching ---
+    function switchView(view) {
+        currentView = view;
+        if (view === 'split') {
+            splitViewContainer.classList.remove('hidden');
+            gridViewContainer.classList.add('hidden');
+            viewSplitBtn.classList.add('active');
+            viewGridBtn.classList.remove('active');
+            renderListView(); // refresh list highlight
+            renderCarouselView();
+        } else {
+            splitViewContainer.classList.add('hidden');
+            gridViewContainer.classList.remove('hidden');
+            viewSplitBtn.classList.remove('active');
+            viewGridBtn.classList.add('active');
+            renderGridView();
+        }
+    }
+
     // --- Data Fetching ---
     async function loadChecklistData() {
         try {
             updateLoadingStatus("Fetching Item List...", 10);
             const response = await fetch('Item_List.csv');
-            
+
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            
+
             const csvText = await response.text();
             updateLoadingStatus("Parsing Data...", 20);
-            
+
             allItems = parseCSV(csvText);
-            loadState(); 
+            loadState();
             populateCategories(allItems);
-            
+
             await verifyImages(allItems);
 
             console.log("Debug: All operations complete. Rendering.");
@@ -132,12 +155,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (columns.length >= 3 && columns[1]) {
                 const itemName = columns[1].trim();
                 const itemID = `item-${itemName.replace(/[^a-zA-Z0-9]/g, '-')}-${index}`;
-                
-                return { 
-                    id: itemID, 
-                    name: itemName, 
+
+                return {
+                    id: itemID,
+                    name: itemName,
                     category: columns[2].trim(),
-                    imageVerified: false 
+                    imageVerified: false
                 };
             }
             return null;
@@ -148,26 +171,26 @@ document.addEventListener('DOMContentLoaded', () => {
     async function verifyImages(items) {
         const totalItems = items.length;
         let processedCount = 0;
-        
+
         updateLoadingStatus("Checking Assets...", 25);
 
         const checkPromises = items.map(item => {
             return new Promise((resolve) => {
                 const img = new Image();
                 img.src = `assets/objects_webp/${item.name}.webp`;
-                
+
                 img.onload = () => {
                     item.imageVerified = true;
                     processedCount++;
                     updateProgressUI(processedCount, totalItems);
                     resolve();
                 };
-                
+
                 img.onerror = () => {
                     item.imageVerified = false;
                     processedCount++;
                     updateProgressUI(processedCount, totalItems);
-                    resolve(); 
+                    resolve();
                 };
             });
         });
@@ -190,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Calculate indices (wrapping around)
         const nextIndex = (currentIndex + 1) % itemsToRender.length;
         const prevIndex = (currentIndex - 1 + itemsToRender.length) % itemsToRender.length;
-        
+
         const indicesToPreload = [nextIndex, prevIndex];
 
         indicesToPreload.forEach(idx => {
@@ -215,6 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateItemsToRender();
         renderListView();
         renderCarouselView();
+        renderGridView();
         updateProgress();
     }
 
@@ -224,8 +248,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const status = statusFilter.value;
         const onlyImages = imageToggle.checked;
 
-        let tempItems = category === 'all' 
-            ? [...allItems] 
+        let tempItems = category === 'all'
+            ? [...allItems]
             : allItems.filter(item => item.category === category);
 
         if (status === 'checked') {
@@ -257,7 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
             checklistContainer.innerHTML = `<p style="text-align: center; padding: 1rem; color: var(--text-secondary);">No items match filters.</p>`;
             return;
         }
-        
+
         const fragment = document.createDocumentFragment();
         itemsToRender.forEach((item, index) => {
             const itemElement = createListItemElement(item, index);
@@ -279,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         carouselView.innerHTML = `
             <img src="${webpPath}" class="carousel-item-image" alt="${item.name}" 
-                onerror="createImageFallback(this);">
+                onerror="createImageFallback(this, 'carousel');">
             <h2 class="carousel-item-title">${item.name}</h2>
             <p class="carousel-item-category">${item.category}</p>
             <label class="carousel-item-checkbox-label">
@@ -294,8 +318,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- TRIGGER PRELOAD ---
         preloadNeighbors();
-        
+
         updateListHighlight();
+    }
+
+    function renderGridView() {
+        gridViewContainer.innerHTML = '';
+        if (itemsToRender.length === 0) {
+            gridViewContainer.innerHTML = `<p style="color: var(--text-secondary); text-align: center; grid-column: 1/-1;">No items match filters.</p>`;
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        itemsToRender.forEach(item => {
+            const isChecked = checkedItems.has(item.id);
+            const gridItem = document.createElement('div');
+            gridItem.className = `grid-item ${isChecked ? 'checked' : ''}`;
+            gridItem.dataset.id = item.id;
+
+            const webpPath = `assets/objects_webp/${item.name}.webp`;
+
+            gridItem.innerHTML = `
+                <img src="${webpPath}" class="grid-item-image" alt="${item.name}" loading="lazy"
+                     onerror="createImageFallback(this, 'grid');">
+                <h3>${item.name}</h3>
+                <p>${item.category}</p>
+            `;
+
+            gridItem.addEventListener('click', () => {
+                toggleItemCheck(item.id);
+            });
+
+            fragment.appendChild(gridItem);
+        });
+        gridViewContainer.appendChild(fragment);
     }
 
     function createListItemElement(item, index) {
@@ -311,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         div.innerHTML = `
             <img src="${webpPath}" class="list-item-thumb" alt="${item.name}" loading="lazy"
-                 onerror="createImageFallback(this, true);">
+                 onerror="createImageFallback(this, 'list');">
             <div class="item-details">
                 <h3>${item.name}</h3>
                 <p>${item.category}</p>
@@ -325,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderCarouselView();
             }
         });
-        
+
         div.querySelector('.checkbox').addEventListener('change', () => {
             toggleItemCheck(item.id);
         });
@@ -336,12 +392,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateListHighlight() {
         const listItems = document.querySelectorAll('.checklist-item');
         const prevActive = document.querySelector('.checklist-item.active');
-        if(prevActive) prevActive.classList.remove('active');
+        if (prevActive) prevActive.classList.remove('active');
 
-        if(itemsToRender[currentIndex]) {
+        if (itemsToRender[currentIndex]) {
             const currentId = itemsToRender[currentIndex].id;
             const currentEl = document.querySelector(`.checklist-item[data-id="${currentId}"]`);
-            if(currentEl) {
+            if (currentEl) {
                 currentEl.classList.add('active');
                 currentEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
@@ -355,17 +411,38 @@ document.addEventListener('DOMContentLoaded', () => {
             checkedItems.add(itemId);
         }
         saveState();
-        
+
         if (statusFilter.value !== 'all') {
             updateAndRenderAll();
         } else {
+            // Update UI locally without full re-render for performance
+
+            // 1. List View Update
             const listItem = document.querySelector(`.checklist-item[data-id="${itemId}"]`);
-            if(listItem) {
+            if (listItem) {
                 listItem.classList.toggle('checked');
                 const cb = listItem.querySelector('.checkbox');
-                if(cb) cb.checked = checkedItems.has(itemId);
+                if (cb) cb.checked = checkedItems.has(itemId);
             }
-            renderCarouselView();
+
+            // 2. Carousel View Update
+            if (itemsToRender[currentIndex] && itemsToRender[currentIndex].id === itemId) {
+                const carouselCb = document.querySelector('.carousel-item-checkbox');
+                const carouselLabelSpan = document.querySelector('.carousel-item-checkbox-label span');
+                if (carouselCb) {
+                    carouselCb.checked = checkedItems.has(itemId);
+                    if (carouselLabelSpan) {
+                        carouselLabelSpan.textContent = checkedItems.has(itemId) ? 'Completed' : 'Mark as Complete';
+                    }
+                }
+            }
+
+            // 3. Grid View Update
+            const gridItem = document.querySelector(`.grid-item[data-id="${itemId}"]`);
+            if (gridItem) {
+                gridItem.classList.toggle('checked');
+            }
+
             updateProgress();
         }
     }
@@ -391,7 +468,8 @@ document.addEventListener('DOMContentLoaded', () => {
         scaleSlider.value = savedScale;
         applyScale(savedScale);
     }
-    
+
+    // Listeners
     prevButton.addEventListener('click', () => {
         if (itemsToRender.length === 0) return;
         currentIndex = (currentIndex - 1 + itemsToRender.length) % itemsToRender.length;
@@ -412,6 +490,14 @@ document.addEventListener('DOMContentLoaded', () => {
     scaleSlider.addEventListener('change', () => saveScale(scaleSlider.value));
     themeBtn.addEventListener('click', toggleTheme);
 
+    // Label Toggle
+    const labelToggle = document.getElementById('toggle-show-labels');
+    if (labelToggle) {
+        labelToggle.addEventListener('change', () => {
+            gridViewContainer.classList.toggle('hide-labels', !labelToggle.checked);
+        });
+    }
+
     clearAllButton.addEventListener('click', () => {
         if (confirm("Are you sure you want to clear all selections?")) {
             checkedItems.clear();
@@ -419,6 +505,9 @@ document.addEventListener('DOMContentLoaded', () => {
             updateAndRenderAll();
         }
     });
+
+    viewSplitBtn.addEventListener('click', () => switchView('split'));
+    viewGridBtn.addEventListener('click', () => switchView('grid'));
 
     function populateCategories(items) {
         const categories = [...new Set(items.map(item => item.category))].sort();
