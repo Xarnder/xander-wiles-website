@@ -4,69 +4,61 @@
 const state = {
     mode: 'numerical', // 'numerical' or 'image'
     gridSize: 5,
+    kernelSize: 3,
     maxVal: 10,
+
+    // Kernel A
     kernelName: 'identity',
+    kernelMatrix: [],
+
+    // Kernel B (Dual)
+    useDual: false,
+    kernelNameB: 'identity',
+    kernelMatrixB: [],
+    mixMode: 'magnitude', // 'magnitude', 'add', 'sub'
+
     usePadding: false,
     inputMatrix: [],
-    kernelMatrix: [],
+
     // Image Mode State
     sourceImage: null, // HTMLImageElement
     inputImageData: null, // ImageData
     outputImageData: null // ImageData
 };
 
-// Common 3x3 Kernels
+// Common Kernels by Size
 const KERNELS = {
-    identity: [
-        [0, 0, 0],
-        [0, 1, 0],
-        [0, 0, 0]
-    ],
-    shiftLeft: [
-        [0, 0, 0],
-        [0, 0, 1],
-        [0, 0, 0]
-    ],
-    shiftRight: [
-        [0, 0, 0],
-        [1, 0, 0],
-        [0, 0, 0]
-    ],
-    shiftUp: [
-        [0, 0, 0],
-        [0, 0, 0],
-        [0, 1, 0]
-    ],
-    shiftDown: [
-        [0, 1, 0],
-        [0, 0, 0],
-        [0, 0, 0]
-    ],
-    edge1: [
-        [1, 0, -1],
-        [0, 0, 0],
-        [-1, 0, 1]
-    ],
-    edge2: [
-        [0, 1, 0],
-        [1, -4, 1],
-        [0, 1, 0]
-    ],
-    sharpen: [
-        [0, -1, 0],
-        [-1, 5, -1],
-        [0, -1, 0]
-    ],
-    boxBlur: [
-        [1 / 9, 1 / 9, 1 / 9],
-        [1 / 9, 1 / 9, 1 / 9],
-        [1 / 9, 1 / 9, 1 / 9]
-    ],
-    gaussian: [
-        [1 / 16, 2 / 16, 1 / 16],
-        [2 / 16, 4 / 16, 2 / 16],
-        [1 / 16, 2 / 16, 1 / 16]
-    ]
+    3: {
+        identity: [[0, 0, 0], [0, 1, 0], [0, 0, 0]],
+        shiftLeft: [[0, 0, 0], [0, 0, 1], [0, 0, 0]],
+        shiftRight: [[0, 0, 0], [1, 0, 0], [0, 0, 0]],
+        shiftUp: [[0, 0, 0], [0, 0, 0], [0, 1, 0]],
+        shiftDown: [[0, 1, 0], [0, 0, 0], [0, 0, 0]],
+        edge1: [[1, 0, -1], [0, 0, 0], [-1, 0, 1]],
+        edge2: [[0, 1, 0], [1, -4, 1], [0, 1, 0]],
+        sobelX: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],
+        sobelY: [[-1, -2, -1], [0, 0, 0], [1, 2, 1]],
+        sharpen: [[0, -1, 0], [-1, 5, -1], [0, -1, 0]],
+        boxBlur: [[1 / 9, 1 / 9, 1 / 9], [1 / 9, 1 / 9, 1 / 9], [1 / 9, 1 / 9, 1 / 9]],
+        gaussian: [[1 / 16, 2 / 16, 1 / 16], [2 / 16, 4 / 16, 2 / 16], [1 / 16, 2 / 16, 1 / 16]]
+    },
+    5: {
+        identity: [
+            [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 1, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]
+        ],
+        boxBlur: Array(5).fill().map(() => Array(5).fill(1 / 25)),
+        gaussian: [
+            [1 / 273, 4 / 273, 7 / 273, 4 / 273, 1 / 273],
+            [4 / 273, 16 / 273, 26 / 273, 16 / 273, 4 / 273],
+            [7 / 273, 26 / 273, 41 / 273, 26 / 273, 7 / 273],
+            [4 / 273, 16 / 273, 26 / 273, 16 / 273, 4 / 273],
+            [1 / 273, 4 / 273, 7 / 273, 4 / 273, 1 / 273]
+        ]
+    },
+    7: {
+        identity: (() => { const m = Array(7).fill().map(() => Array(7).fill(0)); m[3][3] = 1; return m; })(),
+        boxBlur: Array(7).fill().map(() => Array(7).fill(1 / 49))
+    }
 };
 
 /* =========================================
@@ -74,13 +66,24 @@ const KERNELS = {
    ========================================= */
 const els = {
     gridSize: document.getElementById('gridSize'),
+    kernelSizeSelect: document.getElementById('kernelSizeSelect'),
     modeSelect: document.getElementById('modeSelect'),
     fileUploadGroup: document.getElementById('fileUploadGroup'),
     imageUpload: document.getElementById('imageUpload'),
     rangeToggle: document.getElementById('rangeToggle'),
+
+    // Kernel Controls
     kernelSelect: document.getElementById('kernelSelect'),
+    dualKernelCheck: document.getElementById('dualKernelCheck'),
+    dualKernelControls: document.getElementById('dualKernelControls'),
+    kernelSelectB: document.getElementById('kernelSelectB'),
+    mixModeSelect: document.getElementById('mixModeSelect'),
+
     paddingCheck: document.getElementById('paddingCheck'),
     refreshBtn: document.getElementById('refreshBtn'),
+    downloadBtn: document.getElementById('downloadBtn'),
+    downloadGroup: document.getElementById('downloadGroup'),
+    dlOriginalCheck: document.getElementById('dlOriginalCheck'),
 
     // Numerical Views
     inputGrid: document.getElementById('inputGrid'),
@@ -90,7 +93,10 @@ const els = {
     inputCanvas: document.getElementById('inputCanvas'),
     outputCanvas: document.getElementById('outputCanvas'),
 
-    kernelGrid: document.getElementById('kernelGrid'),
+    kernelGrid: document.getElementById('kernelGrid'),       // Grid A
+    kernelWrapperB: document.getElementById('kernelWrapperB'),
+    kernelGridB: document.getElementById('kernelGridB'),     // Grid B
+
     debugLog: document.getElementById('debugLog'),
     inputDims: document.getElementById('inputDims'),
     outputDims: document.getElementById('outputDims')
@@ -128,17 +134,106 @@ function generateInputMatrix() {
     els.inputDims.textContent = `${state.gridSize}x${state.gridSize}`;
 }
 
+function updateKernelOptions() {
+    state.kernelSize = parseInt(els.kernelSizeSelect.value);
+    const size = state.kernelSize;
+    const available = KERNELS[size];
+
+    // Clear existing
+    els.kernelSelect.innerHTML = '';
+    els.kernelSelectB.innerHTML = '';
+
+    // Populate
+    Object.keys(available).forEach(key => {
+        const title = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+
+        // Opt A
+        const optA = document.createElement('option');
+        optA.value = key;
+        optA.textContent = title;
+        els.kernelSelect.appendChild(optA);
+
+        // Opt B
+        const optB = document.createElement('option');
+        optB.value = key;
+        optB.textContent = title;
+        els.kernelSelectB.appendChild(optB);
+    });
+
+    // Set Defaults
+    // A: Identity
+    // B: Identity
+    state.kernelName = Object.keys(available)[0];
+    state.kernelNameB = Object.keys(available)[0];
+
+    updateKernel();
+    updateKernelB();
+}
+
+// Update Kernel A
 function updateKernel() {
     state.kernelName = els.kernelSelect.value;
-    state.kernelMatrix = KERNELS[state.kernelName];
-    logDebug(`Kernel changed to: ${state.kernelName}`);
-    renderKernel();
-
-    if (state.mode === 'numerical') {
-        applyConvolution();
-    } else {
-        applyImageConvolution();
+    if (KERNELS[state.kernelSize][state.kernelName]) {
+        state.kernelMatrix = KERNELS[state.kernelSize][state.kernelName];
+    } else if (state.kernelName !== 'custom') {
+        state.kernelMatrix = KERNELS[state.kernelSize]['identity'];
     }
+
+    renderKernel(els.kernelGrid, state.kernelMatrix, (y, x, val) => {
+        state.kernelMatrix[y][x] = val;
+        state.kernelName = "custom";
+        els.kernelSelect.value = "";
+        updateOutput();
+    });
+
+    updateOutput();
+}
+
+// Update Kernel B
+function updateKernelB() {
+    state.kernelNameB = els.kernelSelectB.value;
+    if (KERNELS[state.kernelSize][state.kernelNameB]) {
+        state.kernelMatrixB = KERNELS[state.kernelSize][state.kernelNameB];
+    } else if (state.kernelNameB !== 'custom') {
+        state.kernelMatrixB = KERNELS[state.kernelSize]['identity'];
+    }
+
+    renderKernel(els.kernelGridB, state.kernelMatrixB, (y, x, val) => {
+        state.kernelMatrixB[y][x] = val;
+        state.kernelNameB = "custom";
+        els.kernelSelectB.value = "";
+        updateOutput();
+    });
+
+    updateOutput();
+}
+
+function renderKernel(container, matrix, maxValCallback) {
+    container.innerHTML = '';
+    // Update Grid Columns
+    container.style.gridTemplateColumns = `repeat(${state.kernelSize}, 1fr)`;
+
+    matrix.forEach((row, y) => {
+        row.forEach((val, x) => {
+            const div = document.createElement('div');
+            div.className = 'k-cell';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'k-input';
+            input.value = Number.isInteger(val) ? val : val.toFixed(3);
+
+            input.addEventListener('change', (e) => {
+                const num = parseFloat(e.target.value);
+                if (!isNaN(num)) {
+                    maxValCallback(y, x, num);
+                }
+            });
+
+            div.appendChild(input);
+            container.appendChild(div);
+        });
+    });
 }
 
 function toggleMode() {
@@ -156,6 +251,11 @@ function toggleMode() {
     els.gridSize.disabled = isImage;
     els.rangeToggle.disabled = isImage;
     els.refreshBtn.disabled = isImage;
+
+    // Download logic
+    if (els.downloadGroup) {
+        els.downloadGroup.style.display = isImage ? 'block' : 'none';
+    }
 
     logDebug(`Switched to ${state.mode} mode.`);
 
@@ -221,55 +321,22 @@ function drawSourceImage() {
     applyImageConvolution();
 }
 
-function applyImageConvolution() {
-    if (state.mode !== 'image' || !state.inputImageData) return;
+// Helper: Pure Data Convolution
+function convolveData(srcData, w, h, kernelA, kernelB, useDual, mixMode, kernelSize) {
+    const output = new Uint8ClampedArray(w * h * 4);
+    const K = kernelSize;
+    const half = Math.floor(K / 2);
 
-    logDebug("Processing image convolution...");
-    const srcData = state.inputImageData.data;
-    const w = state.inputImageData.width;
-    const h = state.inputImageData.height;
-    const kernel = state.kernelMatrix;
-
-    // Prepare Output Canvas
-    const outCanvas = els.outputCanvas;
-    const outCtx = outCanvas.getContext('2d');
-    outCanvas.width = w;
-    outCanvas.height = h;
-
-    // Create new ImageData
-    const outputImgData = outCtx.createImageData(w, h);
-    const dstData = outputImgData.data;
-
-    // Kernel Info
-    const K = 3;
-    const half = Math.floor(K / 2); // 1
-
-    // Optimization: Pre-calculate kernel flat array
-    // Not strictly needed for 3x3 but good practice.
-
-    // Loop Pixels
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
 
-            let r = 0, g = 0, b = 0;
+            let rA = 0, gA = 0, bA = 0;
+            let rB = 0, gB = 0, bB = 0;
 
-            // Convolution Loop
             for (let ky = 0; ky < K; ky++) {
                 for (let kx = 0; kx < K; kx++) {
-
                     const iy = y + (ky - half);
                     const ix = x + (kx - half);
-
-                    // Edge Handling (Zero Padding/Clamp)
-                    // For image viewing, Clamp (extend edge) is usually better visually than zero padding black borders,
-                    // but "Zero Padding" checkbox exists.
-                    // Let's stick to explicit Zero Padding logic if checked, otherwise REPLICATE edge?
-                    // Actually, simple standard is usually:
-                    // If out of bounds -> 0 (Zero Padding)
-                    // User tool has "Use Padding" checkbox which implies Output Size change in numerical mode.
-                    // In Image Processing, we typically keep image size SAME (same padding).
-                    // We will interpret "Use Padding" checkbox as "Zero Pad vs Skip/Clamp" but for simplicity
-                    // we'll just always produce same-size output (using padding logic).
 
                     let idRay = 0, idGay = 0, idBay = 0;
 
@@ -279,28 +346,79 @@ function applyImageConvolution() {
                         idGay = srcData[offset + 1];
                         idBay = srcData[offset + 2];
                     }
-                    // else { zero padding (0,0,0) }
 
-                    const kVal = kernel[ky][kx];
-                    r += idRay * kVal;
-                    g += idGay * kVal;
-                    b += idBay * kVal;
+                    const kValA = kernelA[ky][kx];
+                    rA += idRay * kValA;
+                    gA += idGay * kValA;
+                    bA += idBay * kValA;
+
+                    if (useDual) {
+                        const kValB = kernelB[ky][kx];
+                        rB += idRay * kValB;
+                        gB += idGay * kValB;
+                        bB += idBay * kValB;
+                    }
                 }
             }
 
-            // Clamp and Assign
+            let finalR = rA;
+            let finalG = gA;
+            let finalB = bA;
+
+            if (useDual) {
+                if (mixMode === 'magnitude') {
+                    finalR = Math.sqrt(rA * rA + rB * rB);
+                    finalG = Math.sqrt(gA * gA + gB * gB);
+                    finalB = Math.sqrt(bA * bA + bB * bB);
+                } else if (mixMode === 'add') {
+                    finalR = rA + rB;
+                    finalG = gA + gB;
+                    finalB = bA + bB;
+                } else if (mixMode === 'sub') {
+                    finalR = rA - rB;
+                    finalG = gA - gB;
+                    finalB = bA - bB;
+                }
+            }
+
             const dstOffset = (y * w + x) * 4;
-            dstData[dstOffset] = Math.min(255, Math.max(0, r));
-            dstData[dstOffset + 1] = Math.min(255, Math.max(0, g));
-            dstData[dstOffset + 2] = Math.min(255, Math.max(0, b));
-            dstData[dstOffset + 3] = 255; // Alpha
+            output[dstOffset] = Math.min(255, Math.max(0, finalR));
+            output[dstOffset + 1] = Math.min(255, Math.max(0, finalG));
+            output[dstOffset + 2] = Math.min(255, Math.max(0, finalB));
+            output[dstOffset + 3] = 255;
         }
     }
+    return output;
+}
 
+function applyImageConvolution() {
+    if (state.mode !== 'image' || !state.inputImageData) return;
+
+    const srcData = state.inputImageData.data;
+    const w = state.inputImageData.width;
+    const h = state.inputImageData.height;
+
+    // Process Data
+    const resultData = convolveData(
+        srcData, w, h,
+        state.kernelMatrix,
+        state.kernelMatrixB,
+        state.useDual,
+        state.mixMode,
+        state.kernelSize
+    );
+
+    // Draw to Canvas
+    const outCanvas = els.outputCanvas;
+    const outCtx = outCanvas.getContext('2d');
+    outCanvas.width = w;
+    outCanvas.height = h;
+
+    const outputImgData = new ImageData(resultData, w, h);
     outCtx.putImageData(outputImgData, 0, 0);
+
     state.outputImageData = outputImgData;
     els.outputDims.innerText = `${w}x${h}`;
-    logDebug("Image processing complete.");
 }
 
 /**
@@ -309,21 +427,21 @@ function applyImageConvolution() {
 function applyConvolution() {
     if (!state.inputMatrix.length) return;
 
-    logDebug("Calculating convolution...");
     const input = state.inputMatrix;
-    const kernel = state.kernelMatrix;
     const N = state.gridSize;
-    const K = 3; // Kernel size is always 3 for this tool
-    const pad = state.usePadding ? 1 : 0;
+    const K = state.kernelSize;
+    const pad = state.usePadding ? Math.floor(K / 2) : 0;
+
+    // Params for Dual
+    const useDual = state.useDual;
+    const kernelA = state.kernelMatrix;
+    const kernelB = state.kernelMatrixB;
+    const mode = state.mixMode;
 
     // Calculate Output Size
-    // Formula: Output = (Input - Kernel + 2*Padding) + 1
-    // If Padding (1): (N - 3 + 2) + 1 = N (Same size)
-    // If No Padding: (N - 3 + 0) + 1 = N - 2
     const outSize = N - K + (2 * pad) + 1;
 
     if (outSize <= 0) {
-        logDebug("Error: Grid too small for 3x3 kernel without padding.");
         els.outputGrid.innerHTML = "<p>Grid too small</p>";
         return;
     }
@@ -335,11 +453,9 @@ function applyConvolution() {
         const row = [];
         for (let x = 0; x < outSize; x++) {
 
-            let sum = 0;
+            let sumA = 0;
+            let sumB = 0;
 
-            // Map output coordinate back to input coordinate (top-left of the 3x3 window)
-            // If No Padding: Output(0,0) corresponds to Input(0,0) as top-left of window
-            // If Padding: Output(0,0) corresponds to Input(-1, -1) effectively
             const startY = y - pad;
             const startX = x - pad;
 
@@ -349,24 +465,39 @@ function applyConvolution() {
                     const inputY = startY + ky;
                     const inputX = startX + kx;
 
-                    // Get value or use 0 if out of bounds (Zero Padding logic)
                     let val = 0;
                     if (inputY >= 0 && inputY < N && inputX >= 0 && inputX < N) {
                         val = input[inputY][inputX];
                     }
 
-                    const kVal = kernel[ky][kx];
-                    sum += val * kVal;
+                    const kValA = kernelA[ky][kx];
+                    sumA += val * kValA;
+
+                    if (useDual) {
+                        const kValB = kernelB[ky][kx];
+                        sumB += val * kValB;
+                    }
                 }
             }
-            // Round to 2 decimals for cleaner display if floats
-            row.push(parseFloat(sum.toFixed(2)));
+
+            let finalVal = sumA;
+            if (useDual) {
+                if (mode === 'magnitude') {
+                    finalVal = Math.sqrt(sumA * sumA + sumB * sumB);
+                } else if (mode === 'add') {
+                    finalVal = sumA + sumB;
+                } else if (mode === 'sub') {
+                    finalVal = sumA - sumB;
+                }
+            }
+
+            // Round to 2 decimals for cleaner display
+            row.push(parseFloat(finalVal.toFixed(2)));
         }
         output.push(row);
     }
 
     els.outputDims.textContent = `${outSize}x${outSize}`;
-    logDebug(`Convolution complete. Output size: ${outSize}x${outSize}`);
     renderGrid(els.outputGrid, output, state.maxVal, true);
 }
 
@@ -382,7 +513,10 @@ function renderGrid(container, matrix, maxScaleRef, isOutput = false) {
     const cols = matrix[0].length;
 
     // Padding Logic
-    const pad = (!isOutput && state.usePadding) ? 1 : 0;
+    const K = state.kernelSize;
+    const pVal = Math.floor(K / 2);
+    // If we're rendering Output, no padding. If Input, show padding if enabled.
+    const pad = (!isOutput && state.usePadding) ? pVal : 0;
     const visualRows = rows + (pad * 2);
     const visualCols = cols + (pad * 2);
 
@@ -393,9 +527,6 @@ function renderGrid(container, matrix, maxScaleRef, isOutput = false) {
     const isTiny = visualRows > 15;
 
     // Loop through visual grid coordinates
-    // y goes from -pad to rows + pad - 1 (exclusive of end cap, so < rows + pad) which is wrong.
-    // simpler: 0 to visualRows, then map back.
-
     for (let vy = 0; vy < visualRows; vy++) {
         for (let vx = 0; vx < visualCols; vx++) {
 
@@ -510,10 +641,10 @@ function showCalculation(outY, outX) {
     const oldHighlights = els.inputGrid.querySelectorAll('.input-highlight');
     oldHighlights.forEach(el => el.classList.remove('input-highlight'));
 
-    const pad = state.usePadding ? 1 : 0;
+    const K = state.kernelSize;
+    const pad = state.usePadding ? Math.floor(K / 2) : 0;
     const startY = outY - pad;
     const startX = outX - pad;
-    const K = 3;
     const N = state.gridSize;
 
     // Highlight Input Grid
@@ -549,8 +680,9 @@ function showCalculation(outY, outX) {
         }
     }
 
-    let inputHTML = '<div class="matrix-block"><h5>Input Patch</h5><div class="mini-grid">';
-    let kernelHTML = '<div class="matrix-block"><h5>Kernel</h5><div class="mini-grid">';
+    const gridStyle = `style="grid-template-columns: repeat(${K}, 1fr);"`;
+    let inputHTML = `<div class="matrix-block"><h5>Input Patch</h5><div class="mini-grid" ${gridStyle}>`;
+    let kernelHTML = `<div class="matrix-block"><h5>Kernel</h5><div class="mini-grid" ${gridStyle}>`;
 
     let parts = [];
     let sum = 0;
@@ -608,7 +740,7 @@ function showCalculation(outY, outX) {
         
         <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
             <div style="margin-bottom: 5px; color:#aaa; font-size:0.9rem;">Step-by-step Calculation:</div>
-            <div style="font-family: monospace; color: #e0e0e0; line-height: 1.5;">${calculationStr}</div>
+            <div style="font-family: monospace; color: #e0e0e0; line-height: 1.5; word-break: break-all;">${calculationStr}</div>
         </div>
     `;
 
@@ -620,6 +752,9 @@ function showCalculation(outY, outX) {
 
 function renderKernel() {
     els.kernelGrid.innerHTML = '';
+    // Update Grid Columns
+    els.kernelGrid.style.gridTemplateColumns = `repeat(${state.kernelSize}, 1fr)`;
+
     state.kernelMatrix.forEach((row, y) => {
         row.forEach((val, x) => {
             const div = document.createElement('div');
@@ -628,7 +763,7 @@ function renderKernel() {
             const input = document.createElement('input');
             input.type = 'text';
             input.className = 'k-input';
-            input.value = Number.isInteger(val) ? val : val.toFixed(2);
+            input.value = Number.isInteger(val) ? val : val.toFixed(3); // More precision for 5x5/7x7
 
             input.addEventListener('change', (e) => {
                 const num = parseFloat(e.target.value);
@@ -686,8 +821,8 @@ function showImageCalculation(y, x) {
     const h = state.inputImageData.height;
     const src = state.inputImageData.data;
     const kernel = state.kernelMatrix;
-    const K = 3;
-    const half = 1;
+    const K = state.kernelSize;
+    const half = Math.floor(K / 2);
 
     // Highlight Input (Draw a rectangle on input canvas)
     // We need to redraw clean image then rect
@@ -695,26 +830,24 @@ function showImageCalculation(y, x) {
     ctx.putImageData(state.inputImageData, 0, 0); // Reset
     ctx.strokeStyle = 'rgba(74, 158, 255, 0.8)';
     ctx.lineWidth = 1;
-    // Draw 3x3 box roughly around the center pixel
-    // y is center. Top-left involved is y-1
-    ctx.strokeRect(x - 1.5, y - 1.5, 3, 3);
+    // Draw box roughly around the center pixel
+    ctx.strokeRect(x - (half + 0.5), y - (half + 0.5), K, K);
 
-    // To make it visible on large images, maybe draw a bigger indicator?
-    // Let's draw a crosshair + box
+    // Crosshair
     ctx.beginPath();
-    ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5);
-    ctx.moveTo(x - 5, y); ctx.lineTo(x + 5, y);
+    ctx.moveTo(x, y - (half + 2)); ctx.lineTo(x, y + (half + 2));
+    ctx.moveTo(x - (half + 2), y); ctx.lineTo(x + (half + 2), y);
     ctx.stroke();
 
 
-    // Calculate Math (Focus on Red channel or Grayscale avg for display simplicity)
-    // Let's show RED channel for demonstration or Average
+    // Calculate Math (Focus on Red channel)
     let parts = [];
     let sum = 0;
 
     // Header
-    let inputHTML = '<div class="matrix-block"><h5>Input Patch (R)</h5><div class="mini-grid">';
-    let kernelHTML = '<div class="matrix-block"><h5>Kernel</h5><div class="mini-grid">';
+    const gridStyle = `style="grid-template-columns: repeat(${K}, 1fr);"`;
+    let inputHTML = `<div class="matrix-block"><h5>Input Patch (R)</h5><div class="mini-grid" ${gridStyle}>`;
+    let kernelHTML = `<div class="matrix-block"><h5>Kernel</h5><div class="mini-grid" ${gridStyle}>`;
 
     for (let ky = 0; ky < K; ky++) {
         for (let kx = 0; kx < K; kx++) {
@@ -755,7 +888,7 @@ function showImageCalculation(y, x) {
             <div class="symbol">=</div>
             <div class="result-value">${Math.max(0, Math.min(255, Math.round(sum)))}</div>
         </div>
-        <div style="margin-top: 10px; font-family:monospace; color:#ccc;">${calculationStr}</div>
+        <div style="margin-top: 10px; font-family:monospace; color:#ccc; word-break: break-all;">${calculationStr}</div>
     `;
 
     elCalcContent.innerHTML = equationHTML;
@@ -792,7 +925,83 @@ els.rangeToggle.addEventListener('change', (e) => {
     applyConvolution();
 });
 
+
+// Dual Kernel Logic Listeners
+els.dualKernelCheck.addEventListener('change', (e) => {
+    state.useDual = e.target.checked;
+
+    if (state.useDual) {
+        els.dualKernelControls.style.display = 'block';
+        els.kernelWrapperB.style.display = 'block';
+    } else {
+        els.dualKernelControls.style.display = 'none';
+        els.kernelWrapperB.style.display = 'none';
+    }
+    updateOutput();
+});
+
+els.kernelSelectB.addEventListener('change', updateKernelB);
+els.mixModeSelect.addEventListener('change', (e) => {
+    state.mixMode = e.target.value;
+    updateOutput();
+});
+
+els.downloadBtn.addEventListener('click', () => {
+    // Get options
+    const format = document.querySelector('input[name="dlFormat"]:checked').value; // 'png' or 'jpeg'
+    const useOriginal = els.dlOriginalCheck.checked;
+    const mime = `image/${format}`;
+    const filename = `convolution-result.${format === 'jpeg' ? 'jpg' : 'png'}`;
+
+    if (!useOriginal) {
+        // Simple: Download Canvas
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = els.outputCanvas.toDataURL(mime, 0.9);
+        link.click();
+    } else {
+        // Complex: Process Original Image
+        if (!state.sourceImage) return;
+
+        logDebug("Processing full resolution image...");
+        setTimeout(() => { // Timeout to allow UI to show log
+            const img = state.sourceImage;
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+
+            // Offscreen Canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            const rawData = ctx.getImageData(0, 0, w, h);
+
+            const processedPoly = convolveData(
+                rawData.data, w, h,
+                state.kernelMatrix,
+                state.kernelMatrixB,
+                state.useDual,
+                state.mixMode,
+                state.kernelSize
+            );
+
+            const finalImageData = new ImageData(processedPoly, w, h);
+            ctx.putImageData(finalImageData, 0, 0);
+
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL(mime, 0.9);
+            link.click();
+            logDebug("Download started.");
+        }, 100);
+    }
+});
+
 els.kernelSelect.addEventListener('change', updateKernel);
+
+els.kernelSizeSelect.addEventListener('change', updateKernelOptions);
 
 els.paddingCheck.addEventListener('change', (e) => {
     state.usePadding = e.target.checked;
@@ -809,8 +1018,8 @@ els.paddingCheck.addEventListener('change', (e) => {
    ========================================= */
 function init() {
     logDebug("Initializing Tool...");
-    updateKernel(); // Sets initial kernel
-    generateInputMatrix(); // Generates input and runs first conv
+    generateInputMatrix(); // Generates input first
+    updateKernelOptions(); // Sets kernels and triggers initial convolution
 }
 
 // Start

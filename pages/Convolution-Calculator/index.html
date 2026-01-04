@@ -49,6 +49,15 @@
             </div>
 
             <div class="control-group">
+                <label for="kernelSizeSelect">Kernel Size</label>
+                <select id="kernelSizeSelect">
+                    <option value="3" selected>3 x 3</option>
+                    <option value="5">5 x 5</option>
+                    <option value="7">7 x 7</option>
+                </select>
+            </div>
+
+            <div class="control-group">
                 <label for="modeSelect">Mode</label>
                 <select id="modeSelect">
                     <option value="numerical">Numerical Grid</option>
@@ -72,16 +81,26 @@
             <div class="control-group">
                 <label for="kernelSelect">Kernel / Filter</label>
                 <select id="kernelSelect">
-                    <option value="identity">Identity</option>
-                    <option value="shiftLeft">Shift Left</option>
-                    <option value="shiftRight">Shift Right</option>
-                    <option value="shiftUp">Shift Up</option>
-                    <option value="shiftDown">Shift Down</option>
-                    <option value="edge1">Edge Detection 1</option>
-                    <option value="edge2">Edge Detection 2</option>
-                    <option value="sharpen">Sharpen</option>
-                    <option value="boxBlur">Box Blur</option>
-                    <option value="gaussian">Gaussian Blur 3x3</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+
+            <!-- Dual Kernel Controls -->
+            <div class="control-group checkbox-group">
+                <input type="checkbox" id="dualKernelCheck">
+                <label for="dualKernelCheck">Enable 2nd Kernel</label>
+            </div>
+
+            <div class="control-group" id="dualKernelControls" style="display: none;">
+                <label for="kernelSelectB">2nd Kernel</label>
+                <select id="kernelSelectB">
+                    <!-- Populated by JS -->
+                </select>
+                <label for="mixModeSelect" style="margin-top: 5px;">Mix Mode</label>
+                <select id="mixModeSelect">
+                    <option value="magnitude">Magnitude (Sobel)</option>
+                    <option value="add">Add (A + B)</option>
+                    <option value="sub">Subtract (A - B)</option>
                 </select>
             </div>
 
@@ -91,6 +110,30 @@
             </div>
 
             <button id="refreshBtn" class="btn-action">Generate New Input</button>
+
+            <!-- Download Section -->
+            <div class="control-group" id="downloadGroup"
+                style="display: none; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                <label>Download Result</label>
+
+                <div style="margin-bottom: 10px; display: flex; gap: 15px; font-size: 0.9rem;">
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="radio" name="dlFormat" value="png" checked> PNG
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <input type="radio" name="dlFormat" value="jpeg"> JPG
+                    </label>
+                </div>
+
+                <div class="checkbox-group" style="margin-bottom: 10px;">
+                    <input type="checkbox" id="dlOriginalCheck">
+                    <label for="dlOriginalCheck">Process Original Resolution</label>
+                </div>
+
+                <div class="btn-row">
+                    <button id="downloadBtn" class="btn-small">Save Image</button>
+                </div>
+            </div>
         </section>
 
         <!-- Visualization Section -->
@@ -107,10 +150,16 @@
 
             <!-- Operator -->
             <div class="operator">
-                <span>*</span> <!-- Convolution Symbol -->
+                <span>*</span>
                 <div class="kernel-display glass-panel">
-                    <h4>Kernel</h4>
+                    <h4>Kernel A</h4>
                     <div id="kernelGrid" class="grid-kernel"></div>
+
+                    <div id="kernelWrapperB"
+                        style="display: none; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 5px;">
+                        <h4>Kernel B</h4>
+                        <div id="kernelGridB" class="grid-kernel"></div>
+                    </div>
                 </div>
                 <span>=</span>
             </div>
