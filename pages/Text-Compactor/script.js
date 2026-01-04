@@ -17,7 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
         padBoxVal: document.getElementById('pad-box-val'),
 
         removeBullets: document.getElementById('remove-bullets'),
-        showBrackets: document.getElementById('show-brackets'), // New
+        showBrackets: document.getElementById('show-brackets'),
+        bolderFormulas: document.getElementById('bolder-formulas'), // New
+        zoomLevel: document.getElementById('zoomLevel'),
+        zoomVal: document.getElementById('zoom-val'),
         exportFormat: document.getElementById('export-format'),
         btnRender: document.getElementById('btn-render'),
         btnDownload: document.getElementById('btn-download'),
@@ -164,39 +167,88 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Fit to Height Logic ---
+    // --- Manual Zoom Logic ---
+    function updateZoom() {
+        const scale = parseFloat(els.zoomLevel.value) || 1;
+        const sheetH = els.sheet.offsetHeight;
+
+        els.sheet.style.transform = `scale(${scale})`;
+        els.sheet.style.transformOrigin = 'top center';
+
+        if (sheetH > 0) {
+            const heightDiff = sheetH * (1 - scale);
+            els.sheet.style.marginBottom = `-${heightDiff}px`;
+        }
+    }
+
+    // --- Update CSS Variables ---
     // --- Update CSS Variables ---
     function updateStyles() {
-        els.fsVal.textContent = els.fontSize.value;
+        // Fix: Do NOT overwrite the number input values here.
+        // This breaks typing because it resets the cursor position and value if the listener hasn't fired yet or logic overlaps.
+
+        // Only update the VISUALS on the sheet.
         els.content.style.fontSize = `${els.fontSize.value}px`;
-
-        els.lhVal.textContent = els.lineHeight.value;
         els.content.style.lineHeight = els.lineHeight.value;
+        els.sheet.style.padding = `${els.padPage.value}mm`;
+        els.sheet.style.setProperty('--box-pad', `${els.padBox.value}px`);
 
-        const margin = els.padPage.value;
-        els.padPageVal.textContent = margin;
-        els.sheet.style.padding = `${margin}mm`;
+        if (els.bolderFormulas.checked) {
+            els.content.classList.add('bolder-math');
+        } else {
+            els.content.classList.remove('bolder-math');
+        }
 
-        const boxPad = els.padBox.value;
-        els.padBoxVal.textContent = boxPad;
-        els.sheet.style.setProperty('--box-pad', `${boxPad}px`);
+        // Update Zoom
+        setTimeout(updateZoom, 0);
     }
+
 
     // --- Event Listeners ---
 
-    // 1. Style Inputs
-    [els.fontSize, els.lineHeight, els.padPage, els.padBox].forEach(el => {
-        el.addEventListener('input', updateStyles);
+    // 1. Style Inputs (Sliders & Numbers)
+    // 1. Style Inputs (Sliders & Numbers)
+    const syncGroups = [
+        { range: els.fontSize, number: els.fsVal },
+        { range: els.lineHeight, number: els.lhVal },
+        { range: els.padPage, number: els.padPageVal },
+        { range: els.padBox, number: els.padBoxVal },
+        { range: els.zoomLevel, number: els.zoomVal } // New zoom group
+    ];
+
+    syncGroups.forEach(group => {
+        // Range -> Number
+        group.range.addEventListener('input', () => {
+            group.number.value = group.range.value;
+            if (group.range === els.zoomLevel) updateZoom();
+            else updateStyles();
+        });
+        // Number -> Range
+        group.number.addEventListener('input', () => {
+            group.range.value = group.number.value;
+            if (group.range === els.zoomLevel) updateZoom();
+            else updateStyles();
+        });
     });
 
     // 2. Toggles
-    [els.sectionStyle, els.removeBullets, els.showBrackets, els.orientation].forEach(el => {
-        el.addEventListener('change', (e) => {
-            if (e.target.id === 'orientation') {
-                els.sheet.className = `a4-sheet ${e.target.value}`;
-            }
-            render();
+    [els.sectionStyle, els.removeBullets, els.showBrackets, els.bolderFormulas, els.orientation]
+        .filter(el => el)
+        .forEach(el => {
+            el.addEventListener('change', (e) => {
+                if (e.target.id === 'orientation') {
+                    els.sheet.className = `a4-sheet ${e.target.value}`;
+                }
+                if (e.target.id === 'bolder-formulas') {
+                    updateStyles();
+                    return;
+                }
+                render();
+            });
         });
-    });
+
+    // Remove window resize listener for zoom since it's manual now
 
     // 3. Input
     let debounceTimer;
@@ -215,6 +267,12 @@ document.addEventListener('DOMContentLoaded', () => {
         els.btnDownload.disabled = true;
 
         try {
+            // Disable zoom for capture
+            const originalTransform = els.sheet.style.transform;
+            const originalMargin = els.sheet.style.marginBottom;
+            els.sheet.style.transform = 'none';
+            els.sheet.style.marginBottom = '0';
+
             els.sheet.style.boxShadow = 'none';
 
             // High resolution capture
@@ -229,6 +287,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             els.sheet.style.boxShadow = '';
+
+            // Restore zoom
+            els.sheet.style.transform = originalTransform;
+            els.sheet.style.marginBottom = originalMargin;
 
             if (format === 'pdf') {
                 // PDF Export

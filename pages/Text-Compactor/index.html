@@ -74,27 +74,39 @@ Double dollar $$x^2$$ equations supported."></textarea>
                     </select>
                 </div>
 
-                <!-- Font & Tightness -->
-                <div class="split-row">
-                    <div class="input-group">
-                        <label>Font: <span id="fs-val">10</span>px</label>
+                <!-- Font Size -->
+                <div class="input-group">
+                    <label>Font Size (px)</label>
+                    <div class="slider-input-row">
                         <input type="range" id="fontSize" min="4" max="32" step="0.2" value="10">
-                    </div>
-                    <div class="input-group">
-                        <label>Tightness: <span id="lh-val">1.0</span></label>
-                        <input type="range" id="lineHeight" min="0.8" max="1.5" step="0.05" value="1.0">
+                        <input type="number" id="fs-val" min="4" max="32" step="0.2" value="10">
                     </div>
                 </div>
 
-                <!-- Padding -->
-                <div class="split-row">
-                    <div class="input-group">
-                        <label>Page Margin: <span id="pad-page-val">5</span>mm</label>
-                        <input type="range" id="padPage" min="0" max="20" step="1" value="5">
+                <!-- Tightness -->
+                <div class="input-group">
+                    <label>Tightness</label>
+                    <div class="slider-input-row">
+                        <input type="range" id="lineHeight" min="0.8" max="1.5" step="0.05" value="1.0">
+                        <input type="number" id="lh-val" min="0.8" max="1.5" step="0.05" value="1.0">
                     </div>
-                    <div class="input-group">
-                        <label>Box Padding: <span id="pad-box-val">1</span>px</label>
+                </div>
+
+                <!-- Page Margin -->
+                <div class="input-group">
+                    <label>Page Margin (mm)</label>
+                    <div class="slider-input-row">
+                        <input type="range" id="padPage" min="0" max="20" step="1" value="5">
+                        <input type="number" id="pad-page-val" min="0" max="20" step="1" value="5">
+                    </div>
+                </div>
+
+                <!-- Box Padding -->
+                <div class="input-group">
+                    <label>Box Padding (px)</label>
+                    <div class="slider-input-row">
                         <input type="range" id="padBox" min="0" max="10" step="1" value="1">
+                        <input type="number" id="pad-box-val" min="0" max="10" step="1" value="1">
                     </div>
                 </div>
 
@@ -106,6 +118,20 @@ Double dollar $$x^2$$ equations supported."></textarea>
                 <div class="input-group checkbox-group">
                     <input type="checkbox" id="show-brackets">
                     <label for="show-brackets">Show Header Brackets [ ]</label>
+                </div>
+                <div class="input-group checkbox-group">
+                    <input type="checkbox" id="bolder-formulas" checked>
+                    <label for="bolder-formulas">Bolder Formulas</label>
+                </div>
+
+
+                <!-- Preview Scale -->
+                <div class="input-group" style="margin-top: 20px;">
+                    <label>Preview Scale</label>
+                    <div class="slider-input-row">
+                        <input type="range" id="zoomLevel" min="0.1" max="2.0" step="0.1" value="0.8">
+                        <input type="number" id="zoom-val" min="0.1" max="2.0" step="0.1" value="0.8">
+                    </div>
                 </div>
             </div>
 
