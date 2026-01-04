@@ -778,7 +778,7 @@ function showCalculation(outY, outX) {
             let classExtra = '';
 
             // In bounds check
-            if (inputY >= 0 && inputY < N && inputX >= 0 && inputX < N) {
+            if (inputY >= 0 && inputY < N_H && inputX >= 0 && inputX < N_W) {
                 val = state.inputMatrix[inputY][inputX];
                 valDisplay = Number.isInteger(val) ? val : val.toFixed(1);
             } else {
