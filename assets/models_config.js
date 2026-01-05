@@ -29,9 +29,8 @@ export const models = [
     {
         name: 'Bedroom',
         path: '/assets/models/Bedroom.glb'
-    },
-    {
-        name: 'Make Human',
-        path: '/assets/models/Make_Human.glb'
     }
 ];
+
+
+

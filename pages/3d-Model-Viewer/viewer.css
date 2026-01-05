@@ -206,3 +206,24 @@ input[type="range"] {
         margin-right: 10px;
     }
 }
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Modal Card */
+.modal-overlay .modal-card {
+    width: 320px;
+    /* Redefine specific props if needed, otherwise inherits glass-card */
+    pointer-events: auto;
+}

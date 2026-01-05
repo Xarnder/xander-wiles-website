@@ -120,6 +120,7 @@
 
             <div class="control-group">
                 <button id="add-light-btn" class="action-btn">Add Point Light</button>
+                <button id="toggle-helpers-btn" class="action-btn secondary">Hide Light Wireframes</button>
                 <button id="reset-cam-btn" class="action-btn secondary">Reset Camera</button>
             </div>
 
@@ -155,6 +156,19 @@
         <div id="debug-overlay" class="glass-card debug-card">
             <h4>System Log</h4>
             <div id="console-output">Ready...</div>
+        </div>
+    </div>
+
+    <!-- Light Retention Modal -->
+    <div id="light-retention-modal" class="modal-overlay" style="display: none;">
+        <div class="glass-card modal-card">
+            <h3>Existing Lights Found</h3>
+            <p style="margin-bottom: 20px; color: #ccc;">Would you like to keep the point lights you added, or clear
+                them for the new model?</p>
+            <div style="display: flex; gap: 10px;">
+                <button id="modal-keep-btn" class="action-btn" style="background: #007AFF;">Keep Lights</button>
+                <button id="modal-clear-btn" class="action-btn secondary">Clear All</button>
+            </div>
         </div>
     </div>
 

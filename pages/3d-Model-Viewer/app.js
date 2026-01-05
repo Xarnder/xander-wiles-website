@@ -238,64 +238,152 @@ function onModelLoaded(gltf) {
     // if (ssrPass) ssrPass.selects = [model];
 }
 
+// --- Light Retention Logic ---
+function confirmLightRetention(callback) {
+    // If we have custom lights (more than 0 in selectableObjects), ask user
+    if (selectableObjects.length > 0) {
+        const modal = document.getElementById('light-retention-modal');
+        const keepBtn = document.getElementById('modal-keep-btn');
+        const clearBtn = document.getElementById('modal-clear-btn');
+
+        // Show modal
+        modal.style.display = 'flex';
+
+        // One-time event handlers to avoid stacking
+        const onKeep = () => {
+            modal.style.display = 'none';
+            cleanup();
+            callback(); // Proceed without clearing
+        };
+
+        const onClear = () => {
+            modal.style.display = 'none';
+            clearUserLights();
+            cleanup();
+            callback(); // Proceed after clearing
+        };
+
+        const cleanup = () => {
+            keepBtn.removeEventListener('click', onKeep);
+            clearBtn.removeEventListener('click', onClear);
+        };
+
+        keepBtn.addEventListener('click', onKeep);
+        clearBtn.addEventListener('click', onClear);
+
+    } else {
+        // No lights to worry about, just proceed
+        callback();
+    }
+}
+
+function clearUserLights() {
+    // Clone array to avoid modification issues during iteration
+    const lightsToRemove = [...selectableObjects];
+    lightsToRemove.forEach(handle => {
+        const light = handle.userData.light;
+        const helper = handle.userData.helper;
+
+        scene.remove(light);
+        scene.remove(helper);
+        scene.remove(handle);
+    });
+
+    selectableObjects.length = 0; // Clear array
+    selectedLightHandle = null;
+    updateSelectionUI();
+    logToScreen('All custom lights cleared.', 'info');
+}
+
+// --- Wireframe Visibility Logic ---
+let helpersVisible = true;
+
+function toggleHelpers() {
+    helpersVisible = !helpersVisible;
+    const btn = document.getElementById('toggle-helpers-btn');
+
+    // Update Button Text
+    btn.textContent = helpersVisible ? 'Hide Light Wireframes' : 'Show Light Wireframes';
+
+    selectableObjects.forEach(handle => {
+        const helper = handle.userData.helper;
+        handle.visible = helpersVisible;
+        helper.visible = helpersVisible;
+    });
+
+    // Also toggle selection if hidden
+    if (!helpersVisible) {
+        deselect();
+    }
+
+    logToScreen(`Light Wireframes ${helpersVisible ? 'Visible' : 'Hidden'}`, 'info');
+}
+
+
+// --- Updated Load Functions ---
+
 function loadGLBFromUrl(url) {
-    const loadingBar = document.getElementById('loading-bar');
-    const loadingContainer = document.getElementById('loading-bar-container');
-    loadingContainer.style.display = 'block';
+    confirmLightRetention(() => {
+        const loadingBar = document.getElementById('loading-bar');
+        const loadingContainer = document.getElementById('loading-bar-container');
+        loadingContainer.style.display = 'block';
 
-    const loader = new GLTFLoader();
+        const loader = new GLTFLoader();
 
-    loader.load(url, function (gltf) {
-        try {
-            onModelLoaded(gltf);
-        } catch (error) {
-            logToScreen('Model Setup Error: ' + error.message, 'error');
+        loader.load(url, function (gltf) {
+            try {
+                onModelLoaded(gltf);
+            } catch (error) {
+                logToScreen('Model Setup Error: ' + error.message, 'error');
+                loadingContainer.style.display = 'none';
+            }
+        }, function (xhr) {
+            if (xhr.lengthComputable) {
+                const progress = (xhr.loaded / xhr.total) * 100;
+                loadingBar.style.width = progress + '%';
+            }
+        }, function (error) {
+            logToScreen('Error loading model: ' + error.message, 'error');
             loadingContainer.style.display = 'none';
-        }
-    }, function (xhr) {
-        if (xhr.lengthComputable) {
-            const progress = (xhr.loaded / xhr.total) * 100;
-            loadingBar.style.width = progress + '%';
-        }
-    }, function (error) {
-        logToScreen('Error loading model: ' + error.message, 'error');
-        loadingContainer.style.display = 'none';
+        });
     });
 }
 
 
 function loadGLB(file) {
-    const reader = new FileReader();
-    const loadingBar = document.getElementById('loading-bar');
-    const loadingContainer = document.getElementById('loading-bar-container');
+    confirmLightRetention(() => {
+        const reader = new FileReader();
+        const loadingBar = document.getElementById('loading-bar');
+        const loadingContainer = document.getElementById('loading-bar-container');
 
-    loadingContainer.style.display = 'block';
+        loadingContainer.style.display = 'block';
 
-    reader.onload = function (e) {
-        const contents = e.target.result;
-        const loader = new GLTFLoader();
+        reader.onload = function (e) {
+            const contents = e.target.result;
+            const loader = new GLTFLoader();
 
-        try {
-            loader.parse(contents, '', function (gltf) {
-                onModelLoaded(gltf);
-            }, function (err) {
-                logToScreen('Error parsing GLTF: ' + err, 'error');
+            try {
+                loader.parse(contents, '', function (gltf) {
+                    onModelLoaded(gltf);
+                }, function (err) {
+                    logToScreen('Error parsing GLTF: ' + err, 'error');
+                    loadingContainer.style.display = 'none';
+                });
+            } catch (error) {
+                logToScreen('Loader Error: ' + error.message, 'error');
                 loadingContainer.style.display = 'none';
-            });
-        } catch (error) {
-            logToScreen('Loader Error: ' + error.message, 'error');
-            loadingContainer.style.display = 'none';
-        }
-    };
+            }
+        };
 
-    reader.onprogress = function (data) {
-        if (data.lengthComputable) {
-            const progress = (data.loaded / data.total) * 100;
-            loadingBar.style.width = progress + '%';
-        }
-    };
+        reader.onprogress = function (data) {
+            if (data.lengthComputable) {
+                const progress = (data.loaded / data.total) * 100;
+                loadingBar.style.width = progress + '%';
+            }
+        };
 
-    reader.readAsArrayBuffer(file);
+        reader.readAsArrayBuffer(file);
+    });
 }
 
 // --- Camera Auto-Fit ---
@@ -396,6 +484,9 @@ function setupUI() {
     document.getElementById('add-light-btn').addEventListener('click', () => {
         addInteractableLight();
     });
+
+    // 5.5 Toggle Helpers Button (NEW)
+    document.getElementById('toggle-helpers-btn').addEventListener('click', toggleHelpers);
 
     // 6. Reset Camera
     document.getElementById('reset-cam-btn').addEventListener('click', () => {
@@ -508,6 +599,10 @@ function addInteractableLight(position = null) {
     scene.add(handle);
     selectableObjects.push(handle);
 
+    // RESPECT Helpers Visible state
+    handle.visible = helpersVisible;
+    helper.visible = helpersVisible;
+
     logToScreen('Interactable Point Light added', 'success');
 
     // Auto-select
@@ -535,6 +630,8 @@ function onPointerDown(event) {
 }
 
 function selectObject(handle) {
+    if (!handle.visible) return; // Don't select hidden things!
+
     if (selectedLightHandle) {
         // Reset previous visual state if needed (e.g. unhighlight)
         selectedLightHandle.material.wireframe = false;
