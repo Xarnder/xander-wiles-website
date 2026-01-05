@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Question Extractor</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Site Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Page Specific Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- PDF.js Library (Required for parsing) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- jsPDF Library (Required for PDF generation) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>
+        // Set the worker source for PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+</head>
+
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="container">
+        <header class="app-header">
+            <h1>Revision Helper</h1>
+            <p>Upload your Question Sheet PDF to start answering.</p>
+        </header>
+
+        <!-- Upload Section -->
+        <section class="upload-section">
+            <label for="file-upload" class="custom-file-upload">
+                <span id="file-name">Click to Select PDF</span>
+            </label>
+            <input id="file-upload" type="file" accept=".pdf" />
+        </section>
+
+        <!-- Controls (Hidden until file loaded) -->
+        <section id="controls" class="controls hidden">
+            <div class="view-toggles">
+                <button id="btn-list-view" class="active">List View</button>
+                <button id="btn-focus-view">Focused View</button>
+            </div>
+            <div class="action-buttons">
+                <button id="btn-download-pdf" class="action-btn primary">Download as PDF</button>
+                <button id="btn-download-txt" class="action-btn secondary">Download as Text</button>
+            </div>
+        </section>
+
+        <!-- Questions Container -->
+        <section id="questions-container" class="questions-list-view">
+            <!-- Dynamic Content Goes Here -->
+            <div class="placeholder-msg">Waiting for PDF upload...</div>
+        </section>
+
+        <!-- Focused View Navigation (Hidden by default) -->
+        <div id="focus-nav" class="focus-nav hidden">
+            <button id="prev-btn">← Previous</button>
+            <span id="progress-indicator">1 / 10</span>
+            <button id="next-btn">Next →</button>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
