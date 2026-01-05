@@ -6,7 +6,7 @@ import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // IMPORT CONFIG
-import { modelList } from './config.js';
+import { models } from '../../assets/models_config.js';
 
 // --- GLOBALS ---
 let camera, scene, renderer;
@@ -71,7 +71,7 @@ function init() {
         if (!container) throw new Error("Missing #ar-button-container");
 
         // 1. Prepare Menu Items
-        menuItems = ['Room Mode', 'Scaling: On', ...modelList];
+        menuItems = ['Room Mode', 'Scaling: On', ...models.map(m => m.name)];
 
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
@@ -368,7 +368,14 @@ function loadModel(name, positionMatrix) {
     updateLoadingBar(0.01);
     if (currentModel) { scene.remove(currentModel); currentModel = null; }
 
-    const assetPath = `assets/${name}`;
+    const selectedModel = models.find(m => m.name === name);
+    if (!selectedModel) {
+        console.error("Model not found in config:", name);
+        isLoading = false;
+        return;
+    }
+    const assetPath = selectedModel.path;
+
     const onProgress = (xhr) => { if (xhr.lengthComputable) updateLoadingBar(xhr.loaded / xhr.total); };
     const onError = (e) => {
         isLoading = false; loadingGroup.visible = false;
@@ -401,21 +408,17 @@ function loadModel(name, positionMatrix) {
         scoreValue += 10; updateStatusText(`Loaded! Score: ${scoreValue}`);
     };
 
-    const ext = name.split('.').pop().toLowerCase();
+    const ext = assetPath.split('.').pop().toLowerCase();
     if (ext === 'glb' || ext === 'gltf') {
         new GLTFLoader().load(assetPath, (g) => onLoad(g.scene), onProgress, onError);
     } else if (ext === 'obj') {
-        const mtl = name.replace('.obj', '.mtl');
-        new MTLLoader().load(`assets/${mtl}`,
-            (m) => { m.preload(); new OBJLoader().setMaterials(m).load(assetPath, onLoad, onProgress, onError); },
-            () => { },
-            () => {
-                new OBJLoader().load(assetPath, (o) => {
-                    o.traverse(c => { if (c.isMesh) c.material = new THREE.MeshStandardMaterial({ color: 0xffffff }) });
-                    onLoad(o);
-                }, onProgress, onError);
-            }
-        );
+        // Assume MTL is same base name if Obj, but current config only has GLBs. 
+        // Keeping basic logic if needed or just error.
+        // For now, assuming GLB primarily as per task.
+        new OBJLoader().load(assetPath, (o) => {
+            o.traverse(c => { if (c.isMesh) c.material = new THREE.MeshStandardMaterial({ color: 0xffffff }) });
+            onLoad(o);
+        }, onProgress, onError);
     }
 }
 
