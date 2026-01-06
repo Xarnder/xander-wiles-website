@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fontSizeValueSpan = document.getElementById('font-size-value');
     const textColorPicker = document.getElementById('text-color-picker');
     const autoScaleToggle = document.getElementById('auto-scale-toggle');
-    
+
     // New Main Export Controls (Format, Quality, Prefix/Suffix)
     const exportFormatSelect = document.getElementById('export-format-select');
     const mainQualityWrapper = document.getElementById('main-quality-wrapper');
@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const gridProgressContainer = document.getElementById('grid-progress-container');
     const gridProgressBar = document.getElementById('grid-progress-bar');
     const gridProgressText = document.getElementById('grid-progress-text');
-    
+
     // Grid Visual Controls
     const gridShowPreviewToggle = document.getElementById('grid-show-preview-toggle');
     const gridBorderWidthInput = document.getElementById('grid-border-width-input');
@@ -109,11 +109,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const downscaleErrorMessage = document.getElementById('downscale-error-message');
     const downscaleOriginalResolution = document.getElementById('downscale-original-resolution');
     const downscaleApplyTitlesToggle = document.getElementById('downscale-apply-titles-toggle');
+
     const downscaleUseSubfoldersToggle = document.getElementById('downscale-use-subfolders-toggle');
+
+    // PDF DOM
+    const pdfConversionPopup = document.getElementById('pdf-conversion-popup');
+    const pdfCountDisplay = document.getElementById('pdf-count-display');
+    const startPdfConversionBtn = document.getElementById('start-pdf-conversion-btn');
+    const skipPdfBtn = document.getElementById('skip-pdf-btn');
+    const pdfProgressContainer = document.getElementById('pdf-progress-container');
+    const pdfProgressBar = document.getElementById('pdf-progress-bar');
+    const pdfProgressStatus = document.getElementById('pdf-progress-status');
+    const pdfProgressPercent = document.getElementById('pdf-progress-percent');
 
     // --- State ---
     let imageFiles = [];
+    let pdfFiles = []; // [NEW] Store PDFs temporarily
     let imageTitles = [];
+
     let imageFolders = [];
     let availableFolders = ["(Root)"];
     let currentIndex = 0;
@@ -124,10 +137,21 @@ document.addEventListener('DOMContentLoaded', () => {
     csvUploadInput.addEventListener('change', handleCSVUpload);
     exportBtn.addEventListener('click', handleExport);
 
+    // PDF Listeners
+    startPdfConversionBtn.addEventListener('click', handlePdfConversion);
+    skipPdfBtn.addEventListener('click', () => {
+        pdfConversionPopup.classList.add('hidden');
+        if (imageFiles.length > 0) {
+            setupEditor();
+        } else {
+            showStatus(uploadStatus, 'No images to edit. Please upload images or convert PDFs.', true);
+        }
+    });
+
     // Main Control Listeners
     const allControls = [
-        titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker, 
-        bgColorPicker, positionToggle, addTitleToggle, underscoreToggle, 
+        titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker,
+        bgColorPicker, positionToggle, addTitleToggle, underscoreToggle,
         textPositionSlider, textOffsetSlider, autoScaleToggle
     ];
     allControls.forEach(el => el.addEventListener('input', handleControlsChange));
@@ -146,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
     nextBtn.addEventListener('click', navigateNext);
     titleInput.addEventListener('input', handleTitleChange);
     document.addEventListener('keydown', handleKeyPress);
-    
+
     // Folders
     addFolderBtn.addEventListener('click', handleAddFolder);
     folderSelect.addEventListener('change', handleFolderAssignment);
@@ -161,13 +185,13 @@ document.addEventListener('DOMContentLoaded', () => {
     gridMatchSmallestToggle.addEventListener('change', updateGridPreview);
     gridGroupFolderToggle.addEventListener('change', updateGridPreview);
     gridDrawBordersToggle.addEventListener('change', updateGridPreview);
-    
+
     // Grid Visual Listeners
-    gridShowPreviewToggle.addEventListener('change', updateGridPreview); 
+    gridShowPreviewToggle.addEventListener('change', updateGridPreview);
     gridBorderWidthInput.addEventListener('input', updateGridPreview);
     gridBorderColorInput.addEventListener('input', updateGridPreview);
     gridBgColorInput.addEventListener('input', updateGridPreview);
-    
+
     generateGridBtn.addEventListener('click', handleGenerateGrid);
 
     // Downscale Listeners
@@ -190,34 +214,128 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleDirectoryUpload(e) {
         const files = Array.from(e.target.files);
         console.log(`DEBUG: Upload started. Found ${files.length} files.`);
-        
-        imageFiles = []; imageTitles = []; imageFolders = [];
+
+        imageFiles = []; imageTitles = []; imageFolders = []; pdfFiles = [];
         availableFolders = ["(Root)"]; currentIndex = 0;
 
         const imageRegex = /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i;
-        imageFiles = files.filter(file => file.type.startsWith('image/') || imageRegex.test(file.name));
-        
-        console.log(`DEBUG: Filtered to ${imageFiles.length} images.`);
+        const pdfRegex = /\.pdf$/i;
 
-        if (imageFiles.length === 0) {
-            showStatus(uploadStatus, 'No valid image files found.', true);
+        // Separate Images and PDFs
+        imageFiles = files.filter(file => file.type.startsWith('image/') || imageRegex.test(file.name));
+        pdfFiles = files.filter(file => file.type === 'application/pdf' || pdfRegex.test(file.name));
+
+        console.log(`DEBUG: Found ${imageFiles.length} images and ${pdfFiles.length} PDFs.`);
+
+        // 1. If we have PDFs, interrupt flow
+        if (pdfFiles.length > 0) {
+            pdfCountDisplay.textContent = pdfFiles.length;
+            pdfConversionPopup.classList.remove('hidden');
+            // If we also have images, we can prep them in background, but don't show editor yet
+            if (imageFiles.length > 0) {
+                prepImages(false); // Prep but don't show
+            }
             return;
         }
 
-        imageFiles.sort((a, b) => a.name.localeCompare(b.name));
+        // 2. If only images
+        if (imageFiles.length > 0) {
+            prepImages(true);
+        } else {
+            showStatus(uploadStatus, 'No valid image or PDF files found.', true);
+        }
+    }
 
+    function prepImages(showEditor = true) {
+        imageFiles.sort((a, b) => a.name.localeCompare(b.name));
         imageFiles.forEach(file => {
+            // Only add if not already added (check logic later, for now we reset on upload so it's fine)
+            // But wait, if we are appending converted PDFs, we need to be careful?
+            // Actually handleDirectoryUpload resets arrays.
             imageTitles.push(formatTitle(file.name));
             imageFolders.push("(Root)");
         });
 
+        if (showEditor) setupEditor();
+    }
+
+    function setupEditor() {
         showStatus(uploadStatus, `Loaded ${imageFiles.length} images. You can now Upload a CSV or scroll down to customize.`, false);
         editorSection.classList.remove('hidden');
         previewControls.classList.remove('hidden');
-
         updateFolderDropdown();
         handleControlsChange();
         updateUIForCurrentIndex();
+    }
+
+    async function handlePdfConversion() {
+        if (typeof pdfjsLib === 'undefined') {
+            alert("PDF.js library not loaded. Please check your internet connection.");
+            return;
+        }
+
+        startPdfConversionBtn.disabled = true;
+        skipPdfBtn.classList.add('hidden');
+        pdfProgressContainer.classList.remove('hidden');
+
+        let totalPagesConverted = 0;
+
+        try {
+            for (let i = 0; i < pdfFiles.length; i++) {
+                const file = pdfFiles[i];
+                const arrayBuffer = await file.arrayBuffer();
+
+                // Load PDF
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                console.log(`Processing PDF: ${file.name} with ${pdf.numPages} pages.`);
+
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    // Status
+                    const percent = Math.round(((i) / pdfFiles.length) * 100); // Rough file progress
+                    pdfProgressStatus.textContent = `${file.name} (Page ${pageNum}/${pdf.numPages})`;
+                    pdfProgressBar.style.width = `${percent}%`;
+                    pdfProgressPercent.textContent = `${percent}%`;
+
+                    const page = await pdf.getPage(pageNum);
+                    const viewport = page.getViewport({ scale: 2.0 }); // High quality render
+
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                    // Convert to Blob/File
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                    const pageName = `${file.name.replace('.pdf', '')}_page_${pageNum}.png`;
+                    const imageFile = new File([blob], pageName, { type: 'image/png' });
+
+                    // Add to main arrays
+                    imageFiles.push(imageFile);
+                    imageTitles.push(formatTitle(pageName));
+                    imageFolders.push("(Root)");
+
+                    totalPagesConverted++;
+                }
+            }
+
+            // Done
+            pdfProgressBar.style.width = '100%';
+            pdfProgressPercent.textContent = '100%';
+            pdfProgressStatus.textContent = "Conversion Complete!";
+
+            setTimeout(() => {
+                pdfConversionPopup.classList.add('hidden');
+                setupEditor(); // Now load the editor with everything
+            }, 800);
+
+        } catch (error) {
+            console.error("PDF Conversion Error:", error);
+            alert(`Error converting PDF: ${error.message}`);
+            startPdfConversionBtn.disabled = false;
+            skipPdfBtn.classList.remove('hidden');
+        }
     }
 
     // --- CSV PARSING LOGIC ---
@@ -232,7 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = function(event) {
+        reader.onload = function (event) {
             const text = event.target.result;
             processCSV(text);
         };
@@ -250,12 +368,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const cols = line.split(',');
             if (cols.length < 3) continue;
 
-            const itemName = cols[1].trim(); 
-            const category = cols[2].trim(); 
+            const itemName = cols[1].trim();
+            const category = cols[2].trim();
 
             if (itemName && category) {
                 const index = imageTitles.findIndex(t => t.toLowerCase() === itemName.toLowerCase());
-                
+
                 if (index !== -1) {
                     imageFolders[index] = category;
                     if (!availableFolders.includes(category)) {
@@ -267,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         updateFolderDropdown();
-        updateUIForCurrentIndex(); 
+        updateUIForCurrentIndex();
         showStatus(uploadStatus, `CSV Map Applied! Matched ${matchCount} images to categories.`, false);
     }
 
@@ -281,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateTitleControlState();
         renderPreview();
     }
-    
+
     function updateControlVisibility() {
         const mode = titleModeSelect.value;
         headerHeightGroup.classList.toggle('hidden', mode === 'overlay');
@@ -296,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPreview();
         }
     }
-    
+
     function updateTitleControlState() {
         titleOptionsWrapper.classList.toggle('disabled', !addTitleToggle.checked);
     }
@@ -307,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getFileExtension(mimeType) {
-        switch(mimeType) {
+        switch (mimeType) {
             case 'image/jpeg': return '.jpg';
             case 'image/webp': return '.webp';
             case 'image/avif': return '.avif';
@@ -320,7 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const img = new Image();
             // Use object URL
             const url = URL.createObjectURL(imageFile);
-            
+
             img.onload = () => {
                 if (!options.addTitle) {
                     ctx.canvas.width = img.width;
@@ -334,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (options.mode === 'add-space' || options.mode === 'bleed') {
                     headerHeight = options.headerHeight;
                 }
-                
+
                 ctx.canvas.width = img.width;
                 ctx.canvas.height = (options.mode === 'add-space') ? img.height + headerHeight : img.height;
 
@@ -348,10 +466,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     ctx.drawImage(img, 0, 0);
                     if (options.mode === 'bleed') {
-                         const isBelow = options.position === 'below';
-                         const rectY = isBelow ? img.height - headerHeight : 0;
-                         ctx.fillStyle = options.bgColor;
-                         ctx.fillRect(0, rectY, ctx.canvas.width, headerHeight);
+                        const isBelow = options.position === 'below';
+                        const rectY = isBelow ? img.height - headerHeight : 0;
+                        ctx.fillStyle = options.bgColor;
+                        ctx.fillRect(0, rectY, ctx.canvas.width, headerHeight);
                     }
                 }
 
@@ -373,8 +491,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.textBaseline = 'middle';
 
                 if (options.mode === 'overlay') {
-                   ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-                   ctx.shadowBlur = 8;
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 8;
                 }
 
                 let textY;
@@ -393,17 +511,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.fillText(title, ctx.canvas.width / 2, textY);
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
-                
+
                 URL.revokeObjectURL(url); // Clean up memory
                 resolve();
             };
-            
+
             img.onerror = (e) => {
                 console.error("DEBUG: Image load failed", e);
                 URL.revokeObjectURL(url); // Clean up memory
                 reject(new Error(`Could not load image: ${imageFile.name}`));
             };
-            
+
             img.src = url;
         });
     }
@@ -415,7 +533,7 @@ document.addEventListener('DOMContentLoaded', () => {
         folderSelect.value = imageFolders[currentIndex];
         renderPreview();
     }
-    
+
     async function renderPreview() {
         if (imageFiles.length === 0) return;
         try {
@@ -427,8 +545,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleExport() {
         if (imageFiles.length === 0) return;
-        
-        exportBtn.disabled = true; 
+
+        exportBtn.disabled = true;
         exportBtn.textContent = 'Processing...';
         showStatus(exportStatus, `Processing ${imageFiles.length} images...`, false);
 
@@ -438,13 +556,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const progressBarContainer = document.getElementById('grid-progress-container');
         const progressBar = document.getElementById('grid-progress-bar');
         const progressText = document.getElementById('grid-progress-text');
-        
+
         // Use inline style to show it near the export button if we can, 
         // or just rely on the one in the popup? 
         // Actually, the user might not see it if it's inside the hidden grid popup.
         // But the previous request asked to fix the grid progress.
         // Let's rely on status text for now, but make the status updates frequent.
-        
+
         const zip = new JSZip();
         const options = getTitleOptionsFromUI();
         const processCanvas = document.createElement('canvas');
@@ -454,7 +572,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ext = getFileExtension(format);
         const prefix = filenamePrefixInput.value || "";
         const suffix = filenameSuffixInput.value || "";
-        
+
         let successCount = 0;
 
         try {
@@ -474,36 +592,36 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
                     const finalName = `${prefix}${baseName}${suffix}${ext}`;
 
-                    if (imageFolders[i] !== "(Root)") { 
-                        zip.folder(imageFolders[i]).file(finalName, blob); 
-                    } else { 
-                        zip.file(finalName, blob); 
+                    if (imageFolders[i] !== "(Root)") {
+                        zip.folder(imageFolders[i]).file(finalName, blob);
+                    } else {
+                        zip.file(finalName, blob);
                     }
                     successCount++;
-                    
+
                     // Explicitly clear canvas to help memory
-                    processCtx.clearRect(0,0,processCanvas.width, processCanvas.height);
-                    
+                    processCtx.clearRect(0, 0, processCanvas.width, processCanvas.height);
+
                 } catch (imgError) {
                     console.error(`Error processing image ${imageFiles[i].name}:`, imgError);
                     // Continue to next image
                 }
             }
-            
+
             showStatus(exportStatus, `Zipping ${successCount} images...`, false);
             const zipBlob = await zip.generateAsync({ type: 'blob' });
-            
+
             const link = document.createElement('a');
             link.href = URL.createObjectURL(zipBlob);
             link.download = 'processed_images.zip';
             document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            
+
             showStatus(exportStatus, `Download Started!`, false);
         } catch (error) {
             console.error("DEBUG: Export Error", error);
             showStatus(exportStatus, `Error: ${error.message}`, true);
         } finally {
-            exportBtn.disabled = false; 
+            exportBtn.disabled = false;
             exportBtn.textContent = 'Export All as .ZIP';
         }
     }
@@ -522,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleFolderAssignment() {
         if (imageFiles.length > 0) imageFolders[currentIndex] = folderSelect.value;
     }
-    
+
     function updateFolderDropdown() {
         folderSelect.innerHTML = '';
         availableFolders.forEach(folderName => {
@@ -546,7 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleKeyPress(e) {
         if (editorSection.classList.contains('hidden') || document.activeElement.tagName === 'INPUT' || !gridPopup.classList.contains('hidden') || !downscalePopup.classList.contains('hidden')) { return; }
-        if (e.key === 'ArrowLeft') { e.preventDefault(); navigatePrev(); } 
+        if (e.key === 'ArrowLeft') { e.preventDefault(); navigatePrev(); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); navigateNext(); }
     }
 
@@ -560,10 +678,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function openGridModal() {
         gridStatus.textContent = ''; gridStatus.classList.add('hidden');
         gridProgressContainer.classList.add('hidden'); // Hide progress bar on open
-        
+
         // Ensure preview toggle is unchecked by default to prevent immediate freeze
         gridShowPreviewToggle.checked = false;
-        
+
         // Reset/Clear canvas for clean slate
         const w = gridPreviewCanvas.clientWidth || 800;
         gridPreviewCanvas.width = w;
@@ -573,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gridPreviewCtx.fillStyle = '#71717a';
         gridPreviewCtx.textAlign = 'center';
         gridPreviewCtx.font = '20px Inter';
-        gridPreviewCtx.fillText("Preview Paused", w/2, 150);
+        gridPreviewCtx.fillText("Preview Paused", w / 2, 150);
 
         gridSourceSelect.innerHTML = '';
         ["All Images", ...new Set(imageFolders)].forEach(folder => {
@@ -583,7 +701,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.body.classList.add('popup-open');
         gridPopup.classList.remove('hidden');
-        
+
         // We do NOT call updateGridPreview() here because toggle is off. 
         // User must toggle ON to see it.
     }
@@ -661,8 +779,8 @@ document.addEventListener('DOMContentLoaded', () => {
             gridPreviewCtx.fillStyle = '#71717a';
             gridPreviewCtx.textAlign = 'center';
             gridPreviewCtx.font = '20px Inter';
-            gridPreviewCtx.fillText("Preview Paused", w/2, 150);
-            
+            gridPreviewCtx.fillText("Preview Paused", w / 2, 150);
+
             gridProgressContainer.classList.add('hidden');
             gridOutputSize.textContent = "0 x 0 px";
             gridOutputMegapixels.textContent = "0.0 MP";
@@ -674,7 +792,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const matchSmallest = gridMatchSmallestToggle.checked;
         const isGrouped = gridGroupFolderToggle.checked && source === "All Images";
         const drawBorders = gridDrawBordersToggle.checked;
-        
+
         // Visuals
         const borderWidth = parseInt(gridBorderWidthInput.value, 10) || 4;
         const borderColor = gridBorderColorInput.value;
@@ -708,7 +826,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const processedImages = await Promise.all(
                 filteredIndices.map(async i => {
                     const img = await getProcessedImage(imageFiles[i], imageTitles[i], titleOptions);
-                    
+
                     // Update Progress
                     completedCount++;
                     const percent = Math.round((completedCount / totalImages) * 100);
@@ -734,18 +852,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const rows = Math.ceil(processedImages.length / columns);
             const finalWidth = cellWidth * columns;
             const finalHeight = rows * cellHeight;
-            let layoutData = []; 
-            
+            let layoutData = [];
+
             processedImages.forEach((item, index) => {
                 const row = Math.floor(index / columns);
                 const col = index % columns;
-                layoutData.push({ 
-                    img: item.img, 
+                layoutData.push({
+                    img: item.img,
                     folder: item.folder,
-                    x: col * cellWidth, 
-                    y: row * cellHeight, 
-                    w: cellWidth, 
-                    h: cellHeight 
+                    x: col * cellWidth,
+                    y: row * cellHeight,
+                    w: cellWidth,
+                    h: cellHeight
                 });
             });
 
@@ -761,10 +879,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const scale = previewWidth / finalWidth;
             gridPreviewCanvas.width = previewWidth;
             gridPreviewCanvas.height = finalHeight * scale;
-            
+
             gridPreviewCtx.fillStyle = bgColor;
-            gridPreviewCtx.fillRect(0,0, gridPreviewCanvas.width, gridPreviewCanvas.height);
-            
+            gridPreviewCtx.fillRect(0, 0, gridPreviewCanvas.width, gridPreviewCanvas.height);
+
             // Draw Images
             layoutData.forEach(item => {
                 const aspect = item.img.width / item.img.height;
@@ -800,7 +918,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleGenerateGrid() {
         generateGridBtn.disabled = true; generateGridBtn.textContent = 'Generating...';
         showStatus(gridStatus, 'Preparing Grid...', false);
-        
+
         // Show Progress Bar
         gridProgressContainer.classList.remove('hidden');
         gridProgressBar.style.width = '0%';
@@ -812,7 +930,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isGrouped = gridGroupFolderToggle.checked && source === "All Images";
         const drawBorders = gridDrawBordersToggle.checked;
         const shouldDownscale = gridDownscaleToggle.checked;
-        
+
         // Visuals
         const borderWidth = parseInt(gridBorderWidthInput.value, 10) || 4;
         const borderColor = gridBorderColorInput.value;
@@ -835,7 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const processedImages = await Promise.all(
                 filteredIndices.map(async i => {
                     const img = await getProcessedImage(imageFiles[i], imageTitles[i], titleOptions);
-                    
+
                     // Update Progress
                     completedCount++;
                     const percent = Math.round((completedCount / totalImages) * 100);
@@ -863,18 +981,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const rows = Math.ceil(processedImages.length / columns);
             let finalWidth = cellWidth * columns;
             let finalHeight = rows * cellHeight;
-            let layoutData = []; 
-            
+            let layoutData = [];
+
             processedImages.forEach((item, index) => {
                 const row = Math.floor(index / columns);
                 const col = index % columns;
-                layoutData.push({ 
-                    img: item.img, 
+                layoutData.push({
+                    img: item.img,
                     folder: item.folder,
-                    x: col * cellWidth, 
-                    y: row * cellHeight, 
-                    w: cellWidth, 
-                    h: cellHeight 
+                    x: col * cellWidth,
+                    y: row * cellHeight,
+                    w: cellWidth,
+                    h: cellHeight
                 });
             });
 
@@ -901,7 +1019,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let dw = targetW, dh = targetW / aspect;
 
                 if (dh > targetH) { dh = targetH; dw = targetH * aspect; }
-                
+
                 const x = (item.x * scaleFactor) + (targetW - dw) / 2;
                 const y = (item.y * scaleFactor) + (targetH - dh) / 2;
                 finalCtx.drawImage(item.img, x, y, dw, dh);
@@ -964,7 +1082,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isPad = downscaleFitSelect.value === 'pad';
         downscalePadColorWrapper.classList.toggle('hidden', !isPad || isLocked || !isDimensions);
-        
+
         const format = downscaleFormatSelect.value;
         downscaleQualityWrapper.classList.toggle('hidden', format === 'image/png');
         downscaleQualityValue.textContent = downscaleQualitySlider.value;
@@ -993,7 +1111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const zip = new JSZip();
         const processCanvas = document.createElement('canvas');
         const processCtx = processCanvas.getContext('2d');
-        
+
         const format = downscaleFormatSelect.value;
         const quality = parseInt(downscaleQualitySlider.value, 10) / 100;
         const ext = getFileExtension(format);
@@ -1008,11 +1126,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             for (let i = 0; i < imageFiles.length; i++) {
                 showStatus(downscaleStatus, `Converting ${i + 1}/${imageFiles.length}...`, false);
-                
-                const sourceImage = applyTitles 
+
+                const sourceImage = applyTitles
                     ? await getProcessedImage(imageFiles[i], imageTitles[i], getTitleOptionsFromUI())
                     : await loadImage(imageFiles[i]);
-                
+
                 let targetWidth, targetHeight;
                 if (resizeMode === 'megapixels') {
                     const targetMP = parseFloat(downscaleMpInput.value) * 1000000;
@@ -1027,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 processCanvas.width = Math.round(targetWidth);
                 processCanvas.height = Math.round(targetHeight);
                 const fitMode = downscaleAspectLockToggle.checked ? 'stretch' : downscaleFitSelect.value;
-                
+
                 if (fitMode === 'pad') {
                     processCtx.fillStyle = document.getElementById('downscale-pad-color-picker').value;
                     processCtx.fillRect(0, 0, processCanvas.width, processCanvas.height);
@@ -1036,7 +1154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const imgAspectRatio = sourceImage.width / sourceImage.height;
                 const canvasAspectRatio = processCanvas.width / processCanvas.height;
                 let drawWidth, drawHeight, offsetX, offsetY;
-                
+
                 if (fitMode === 'stretch') {
                     drawWidth = processCanvas.width; drawHeight = processCanvas.height;
                     offsetX = 0; offsetY = 0;
@@ -1053,7 +1171,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 processCtx.drawImage(sourceImage, offsetX, offsetY, drawWidth, drawHeight);
 
                 const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
-                
+
                 let baseName = imageTitles[i];
                 if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
                 const finalName = `${prefix}${baseName}${suffix}${ext}`;

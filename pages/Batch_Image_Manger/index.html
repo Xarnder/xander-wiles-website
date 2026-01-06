@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Batch Image Manager</title>
 
     <!-- Fonts -->
@@ -14,7 +15,7 @@
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="/assets/css/style.css">
 
-   <!-- Theme-aware SVG icons (modern browsers) -->
+    <!-- Theme-aware SVG icons (modern browsers) -->
     <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
@@ -59,7 +60,8 @@
                 </div>
                 <!-- CSV UPLOAD -->
                 <div class="setup-csv">
-                    <label for="csv-upload" class="directory-btn secondary-btn-style">2. Upload CSV Map (Optional)</label>
+                    <label for="csv-upload" class="directory-btn secondary-btn-style">2. Upload CSV Map
+                        (Optional)</label>
                     <input type="file" id="csv-upload" accept=".csv" style="display:none;" />
                 </div>
             </div>
@@ -71,7 +73,7 @@
             <h2>2. Customize & Export</h2>
             <div class="comparison-tool">
                 <div class="controls export-controls">
-                    
+
                     <!-- Group 1: Text & Visuals -->
                     <div class="control-group-sub">
                         <div class="control-group">
@@ -81,7 +83,7 @@
                                 Add Title
                             </label>
                         </div>
-                        
+
                         <div id="title-options-wrapper">
                             <div class="control-group">
                                 <label for="title-mode-select">Mode</label>
@@ -103,16 +105,17 @@
                                 <label for="bg-color-picker">Background</label>
                                 <input type="color" id="bg-color-picker" value="#111115" />
                             </div>
-                             <!-- Height/Pos Controls -->
-                             <div class="control-group" id="header-height-group">
-                                <label for="header-height-slider">Area: <span id="header-height-value">60</span>px</label>
+                            <!-- Height/Pos Controls -->
+                            <div class="control-group" id="header-height-group">
+                                <label for="header-height-slider">Area: <span
+                                        id="header-height-value">60</span>px</label>
                                 <input type="range" id="header-height-slider" min="20" max="200" value="60" step="1" />
                             </div>
                             <div class="control-group" id="text-offset-group">
                                 <label for="text-offset-slider">Offset: <span id="text-offset-value">0</span>px</label>
                                 <input type="range" id="text-offset-slider" min="-50" max="50" value="0" step="1" />
                             </div>
-                             <div class="control-group hidden" id="text-pos-group">
+                            <div class="control-group hidden" id="text-pos-group">
                                 <label for="text-position-slider">Pos: <span id="text-position-value">90</span>%</label>
                                 <input type="range" id="text-position-slider" min="0" max="100" value="90" step="1" />
                             </div>
@@ -138,12 +141,12 @@
                     <!-- Group 2: File Naming & Format -->
                     <div class="control-group-sub">
                         <div class="control-group">
-                             <label>Filename Format</label>
-                             <div class="filename-inputs">
+                            <label>Filename Format</label>
+                            <div class="filename-inputs">
                                 <input type="text" id="filename-prefix" placeholder="Prefix_" title="Prefix" />
                                 <span style="color:var(--text-muted)">+ Name +</span>
                                 <input type="text" id="filename-suffix" placeholder="_Suffix" title="Suffix" />
-                             </div>
+                            </div>
                         </div>
                         <div class="control-group">
                             <label for="underscore-toggle" class="checkbox-label toggle-switch">
@@ -162,8 +165,8 @@
                             </select>
                         </div>
                         <div class="control-group hidden" id="main-quality-wrapper">
-                             <label for="main-quality-slider">Quality: <span id="main-quality-value">90</span>%</label>
-                             <input type="range" id="main-quality-slider" min="1" max="100" value="90" step="1" />
+                            <label for="main-quality-slider">Quality: <span id="main-quality-value">90</span>%</label>
+                            <input type="range" id="main-quality-slider" min="1" max="100" value="90" step="1" />
                         </div>
                     </div>
 
@@ -186,7 +189,7 @@
                         <button id="prev-btn" class="nav-btn">&larr;</button>
                         <div class="editor-main">
                             <div class="title-control">
-                                 <input type="text" id="title-input" placeholder="Image Title" />
+                                <input type="text" id="title-input" placeholder="Image Title" />
                             </div>
                             <div class="subfolder-controls">
                                 <div class="subfolder-assign">
@@ -214,10 +217,11 @@
             <h3>Create Image Grid</h3>
             <div class="grid-controls-layout">
                 <div class="grid-settings">
-                    
+
                     <!-- NEW SHOW PREVIEW TOGGLE -->
                     <div class="control-group">
-                        <label for="grid-show-preview-toggle" class="checkbox-label toggle-switch" style="color: var(--accent-cyan);">
+                        <label for="grid-show-preview-toggle" class="checkbox-label toggle-switch"
+                            style="color: var(--accent-cyan);">
                             <input type="checkbox" id="grid-show-preview-toggle" />
                             <span class="toggle-knob"></span>
                             Show Preview
@@ -234,7 +238,7 @@
                         <input type="number" id="grid-columns-input" value="3" min="1" max="20" />
                     </div>
                     <div class="control-group">
-                         <label for="grid-add-titles-toggle" class="checkbox-label toggle-switch">
+                        <label for="grid-add-titles-toggle" class="checkbox-label toggle-switch">
                             <input type="checkbox" id="grid-add-titles-toggle" />
                             <span class="toggle-knob"></span>
                             Add Titles
@@ -242,15 +246,15 @@
                     </div>
                     <div class="control-group">
                         <label for="grid-match-smallest-toggle" class="checkbox-label toggle-switch">
-                           <input type="checkbox" id="grid-match-smallest-toggle" checked />
-                           <span class="toggle-knob"></span>
-                           Match Smallest
-                       </label>
-                   </div>
-                   
-                   <div class="control-group-divider"></div>
-                   
-                   <div class="control-group">
+                            <input type="checkbox" id="grid-match-smallest-toggle" checked />
+                            <span class="toggle-knob"></span>
+                            Match Smallest
+                        </label>
+                    </div>
+
+                    <div class="control-group-divider"></div>
+
+                    <div class="control-group">
                         <label for="grid-group-folder-toggle" class="checkbox-label toggle-switch">
                             <input type="checkbox" id="grid-group-folder-toggle" />
                             <span class="toggle-knob"></span>
@@ -270,7 +274,8 @@
                     <div class="control-group">
                         <label>Outline Style</label>
                         <div class="filename-inputs">
-                            <input type="number" id="grid-border-width-input" value="10" min="1" max="100" title="Width px">
+                            <input type="number" id="grid-border-width-input" value="10" min="1" max="100"
+                                title="Width px">
                             <input type="color" id="grid-border-color-input" value="#06b6d4" title="Border Color">
                         </div>
                     </div>
@@ -279,7 +284,7 @@
                         <input type="color" id="grid-bg-color-input" value="#111115">
                     </div>
                 </div>
-                
+
                 <div id="grid-info" class="grid-info-box">
                     <p id="grid-output-size">0 x 0 px</p>
                     <p id="grid-output-megapixels">0.0 MP</p>
@@ -295,10 +300,11 @@
             <div class="grid-preview-container">
                 <canvas id="grid-preview-canvas"></canvas>
             </div>
-            
+
             <!-- PROGRESS BAR CONTAINER -->
             <div id="grid-progress-container" class="hidden" style="width: 100%; margin-top: 1rem;">
-                <div style="display:flex; justify-content:space-between; color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.3rem;">
+                <div
+                    style="display:flex; justify-content:space-between; color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.3rem;">
                     <span>Processing images...</span>
                     <span id="grid-progress-text">0%</span>
                 </div>
@@ -313,16 +319,16 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Batch Downscale Popup -->
     <div id="downscale-popup" class="popup-overlay hidden">
         <div class="popup-card glass-card">
             <button class="popup-close-btn">&times;</button>
             <h3>Batch Downscale & Convert</h3>
-            
+
             <div class="popup-main-content">
                 <p id="downscale-original-resolution" class="status-message" style="margin: -1rem 0 1rem 0;"></p>
-                
+
                 <div class="inline-controls">
                     <div class="control-group">
                         <label for="downscale-mode-select">Resize By</label>
@@ -331,7 +337,7 @@
                             <option value="megapixels">Megapixels (MP)</option>
                         </select>
                     </div>
-                    
+
                     <!-- Dimensions -->
                     <div id="downscale-dimensions-controls" class="inline-controls" style="gap: 0.5rem;">
                         <div class="control-group">
@@ -342,8 +348,9 @@
                             <label>H</label>
                             <input type="number" id="downscale-height-input" min="1" value="1080" />
                         </div>
-                         <div class="control-group">
-                            <label for="downscale-aspect-lock-toggle" class="checkbox-label toggle-switch" title="Lock Aspect Ratio">
+                        <div class="control-group">
+                            <label for="downscale-aspect-lock-toggle" class="checkbox-label toggle-switch"
+                                title="Lock Aspect Ratio">
                                 <input type="checkbox" id="downscale-aspect-lock-toggle" checked />
                                 <span class="toggle-knob"></span>
                                 Lock
@@ -360,8 +367,9 @@
                     </div>
                 </div>
 
-                <div id="downscale-fit-controls" class="control-group hidden" style="width:100%; justify-content: center; margin-top: 1rem;">
-                     <div class="inline-controls">
+                <div id="downscale-fit-controls" class="control-group hidden"
+                    style="width:100%; justify-content: center; margin-top: 1rem;">
+                    <div class="inline-controls">
                         <div class="control-group">
                             <label for="downscale-fit-select">Fit Mode</label>
                             <select id="downscale-fit-select">
@@ -373,21 +381,21 @@
                             <label for="downscale-pad-color-picker">Pad Color</label>
                             <input type="color" id="downscale-pad-color-picker" value="#000000" />
                         </div>
-                     </div>
+                    </div>
                 </div>
 
                 <div class="control-group-divider" style="width: 100%; height: 1px; margin: 1.5rem 0;"></div>
 
                 <!-- Output Controls -->
                 <div class="inline-controls">
-                     <!-- Filename Modifiers for Downscale -->
-                     <div class="control-group">
+                    <!-- Filename Modifiers for Downscale -->
+                    <div class="control-group">
                         <label>Prefix / Suffix</label>
                         <div class="filename-inputs">
-                           <input type="text" id="downscale-prefix" placeholder="Prefix_" style="width: 80px;" />
-                           <input type="text" id="downscale-suffix" placeholder="_Suffix" style="width: 80px;" />
+                            <input type="text" id="downscale-prefix" placeholder="Prefix_" style="width: 80px;" />
+                            <input type="text" id="downscale-suffix" placeholder="_Suffix" style="width: 80px;" />
                         </div>
-                   </div>
+                    </div>
 
                     <div class="control-group">
                         <label for="downscale-format-select">Format</label>
@@ -399,12 +407,13 @@
                         </select>
                     </div>
                     <div id="downscale-quality-wrapper" class="control-group hidden">
-                        <label for="downscale-quality-slider">Quality: <span id="downscale-quality-value">92</span>%</label>
+                        <label for="downscale-quality-slider">Quality: <span
+                                id="downscale-quality-value">92</span>%</label>
                         <input type="range" id="downscale-quality-slider" min="1" max="100" value="92" step="1" />
                     </div>
                 </div>
-                
-                 <div class="inline-controls" style="margin-top: 1rem;">
+
+                <div class="inline-controls" style="margin-top: 1rem;">
                     <div class="control-group">
                         <label for="downscale-apply-titles-toggle" class="checkbox-label toggle-switch">
                             <input type="checkbox" id="downscale-apply-titles-toggle" checked />
@@ -412,7 +421,7 @@
                             Apply Titles
                         </label>
                     </div>
-                     <div class="control-group">
+                    <div class="control-group">
                         <label for="downscale-use-subfolders-toggle" class="checkbox-label toggle-switch">
                             <input type="checkbox" id="downscale-use-subfolders-toggle" checked />
                             <span class="toggle-knob"></span>
@@ -431,9 +440,43 @@
         </div>
     </div>
 
+    <!-- PDF Conversion Modal -->
+    <div id="pdf-conversion-popup" class="popup-overlay hidden">
+        <div class="popup-card glass-card" style="max-width: 500px">
+            <h3>PDFs Detected</h3>
+            <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem;">
+                Found <span id="pdf-count-display">0</span> PDF(s). Convert them to images to continue.
+            </p>
+
+            <!-- Progress -->
+            <div id="pdf-progress-container" class="hidden" style="width: 100%; margin-bottom: 1rem;">
+                <div
+                    style="display:flex; justify-content:space-between; color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.3rem;">
+                    <span id="pdf-progress-status">Converting page 1...</span>
+                    <span id="pdf-progress-percent">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div id="pdf-progress-bar" class="progress-fill"></div>
+                </div>
+            </div>
+
+            <div class="popup-actions" style="flex-direction: column; gap: 0.5rem;">
+                <button id="start-pdf-conversion-btn" class="popup-generate-btn" style="width: 100%">Convert PDFs to
+                    PNG</button>
+                <button id="skip-pdf-btn" class="secondary-btn" style="width: 100%; border: none;">Skip PDFs</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Libs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Set worker src immediately
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
     <script src="script.js" defer></script>
     <script src="/assets/js/nav-loader.js"></script>
 </body>
+
 </html>
