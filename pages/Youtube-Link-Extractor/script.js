@@ -2,6 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const extractBtn = document.getElementById('extractBtn');
     const statusDiv = document.getElementById('statusMessage');
     const playlistInput = document.getElementById('playlistUrl');
+    const resultsContainer = document.getElementById('resultsContainer');
+    const resultsTableBody = document.querySelector('#resultsTable tbody');
 
     // TODO: Replace with your actual API Key and restrict it in Google Cloud Console
     const API_KEY = 'AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk';
@@ -14,7 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Basic Validation
 
-
         if (!playlistUrl) {
             showStatus("Please enter a Playlist URL.", "error");
             console.warn("Validation Error: Missing URL");
@@ -23,8 +24,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const playlistId = extractPlaylistId(playlistUrl);
         if (!playlistId) {
-            showStatus("Invalid YouTube Playlist URL.", "error");
-            console.error("Validation Error: Could not parse Playlist ID from", playlistUrl);
+            // Specific check for video URLs to give better feedback
+            if (playlistUrl.includes('youtu.be') || playlistUrl.includes('watch?v=')) {
+                showStatus("It looks like you pasted a video link. Please use a Playlist URL (must contain 'list=').", "error");
+                console.warn("Validation Error: User pasted a video link URL.");
+            } else {
+                showStatus("Invalid YouTube Playlist URL.", "error");
+                console.error("Validation Error: Could not parse Playlist ID from", playlistUrl);
+            }
             return;
         }
 
@@ -40,7 +47,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn("API returned 0 videos.");
             } else {
                 console.log(`Successfully fetched ${videos.length} videos.`);
+
+                // 1. Generate CSV
                 generateAndDownloadCSV(videos);
+
+                // 2. Display Table
+                displayResults(videos);
+
                 showStatus(`Success! Exported ${videos.length} videos.`, "success");
             }
 
@@ -92,10 +105,12 @@ document.addEventListener('DOMContentLoaded', () => {
             data.items.forEach(item => {
                 const title = item.snippet.title;
                 const videoId = item.snippet.resourceId.videoId;
+                const channel = item.snippet.videoOwnerChannelTitle || item.snippet.channelTitle || 'Unknown';
                 // Exclude "Private video" or "Deleted video" entries usually lacking IDs
                 if (videoId) {
                     videos.push({
                         title: title,
+                        channel: channel,
                         url: `https://www.youtube.com/watch?v=${videoId}`
                     });
                 }
@@ -113,12 +128,13 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Generating CSV...");
 
         // CSV Header
-        let csvContent = "Title,URL\n";
+        let csvContent = "Title,Channel,URL\n";
 
         videoList.forEach(video => {
             // Escape quotes in titles by doubling them, wrap title in quotes
             const safeTitle = `"${video.title.replace(/"/g, '""')}"`;
-            csvContent += `${safeTitle},${video.url}\n`;
+            const safeChannel = `"${video.channel.replace(/"/g, '""')}"`;
+            csvContent += `${safeTitle},${safeChannel},${video.url}\n`;
         });
 
         // Create Blob
@@ -137,6 +153,45 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("CSV Download triggered.");
     }
 
+    // Helper: Display Results Table
+    function displayResults(videoList) {
+        // Clear previous
+        resultsTableBody.innerHTML = '';
+
+        if (videoList.length === 0) {
+            resultsContainer.classList.add('hidden');
+            return;
+        }
+
+        // Populate
+        videoList.forEach(video => {
+            const row = document.createElement('tr');
+
+            const titleCell = document.createElement('td');
+            titleCell.textContent = video.title;
+
+            const channelCell = document.createElement('td');
+            channelCell.textContent = video.channel;
+
+            const linkCell = document.createElement('td');
+            const link = document.createElement('a');
+            link.href = video.url;
+            link.textContent = "Watch"; // Or "Link" or SVG icon
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+
+            linkCell.appendChild(link);
+            row.appendChild(titleCell);
+            row.appendChild(channelCell);
+            row.appendChild(linkCell);
+
+            resultsTableBody.appendChild(row);
+        });
+
+        // Show container
+        resultsContainer.classList.remove('hidden');
+    }
+
     // UI Helpers
     function showStatus(msg, type) {
         statusDiv.textContent = msg;
@@ -148,6 +203,8 @@ document.addEventListener('DOMContentLoaded', () => {
             extractBtn.disabled = true;
             extractBtn.textContent = "Extracting...";
             showStatus("Fetching data from YouTube... This might take a moment.", "loading");
+            // Hide previous results while loading new ones?
+            resultsContainer.classList.add('hidden');
         } else {
             extractBtn.disabled = false;
             extractBtn.textContent = "Extract & Download CSV";

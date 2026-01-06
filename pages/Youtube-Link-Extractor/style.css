@@ -167,3 +167,100 @@ body {
         /* Prevents iOS zoom on focus */
     }
 }
+
+/* Results Table */
+.results-container {
+    margin-top: 30px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 20px;
+    animation: fadeIn 0.5s ease;
+}
+
+.results-container h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+    font-weight: 400;
+    color: #ddd;
+}
+
+.table-wrapper {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+/* Custom Scrollbar for Table */
+.table-wrapper::-webkit-scrollbar {
+    width: 8px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+th,
+td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+th {
+    background: rgba(0, 0, 0, 0.3);
+    position: sticky;
+    top: 0;
+    font-weight: 600;
+    color: #eee;
+    backdrop-filter: blur(5px);
+}
+
+td {
+    color: #ccc;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tr:hover td {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+td a {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+td a:hover {
+    text-decoration: underline;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
