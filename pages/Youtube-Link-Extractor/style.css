@@ -112,6 +112,18 @@ body {
     transition: background-color 0.3s, transform 0.1s;
 }
 
+.action-btn.secondary {
+    background-color: transparent;
+    border: 2px solid var(--accent-color);
+    color: var(--accent-color);
+}
+
+.action-btn.secondary:hover {
+    background-color: rgba(0, 188, 212, 0.1);
+    color: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
 .action-btn:hover {
     background-color: var(--accent-hover);
 }
