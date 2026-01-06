@@ -184,28 +184,99 @@ input[type="range"] {
     color: #4dff88;
 }
 
+/* Mobile Toggle Button */
+#mobile-menu-toggle {
+    display: none;
+    /* Hidden on desktop */
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 100;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(30, 30, 35, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: white;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, background 0.2s;
+}
+
+#mobile-menu-toggle:active {
+    transform: scale(0.95);
+    background: rgba(50, 50, 55, 0.95);
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 600px) {
+    #mobile-menu-toggle {
+        display: flex;
+    }
+
     .ui-container {
         left: 0;
         bottom: 0;
         top: auto;
-        /* Unset top for mobile */
         width: 100%;
-        max-height: 50vh;
-        flex-direction: row;
-        overflow-x: auto;
-        padding: 10px;
+        max-height: 60vh;
+
+        /* Flex Logic for vertical list on mobile (changed from row for better stacking) */
+        flex-direction: column;
+        align-items: center;
+        /* Center items */
+
+        overflow-y: auto;
+        /* Scroll vertically */
+        padding: 20px;
         box-sizing: border-box;
-        background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+
+        /* Glass effect for the whole container background on mobile */
+        background: rgba(10, 10, 12, 0.85);
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+        /* Transition for show/hide */
+        transition: transform 0.3s ease-in-out, opacity 0.3s;
+        transform: translateY(110%);
+        /* Hidden by default (pushed down) */
+        opacity: 0;
+        pointer-events: none;
+        /* Don't block clicks when hidden */
+    }
+
+    .ui-container.open {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: auto;
     }
 
     .ui-container .glass-card {
-        width: 80vw;
-        flex-shrink: 0;
-        margin-right: 10px;
+        width: 100%;
+        max-width: 400px;
+        margin-right: 0;
+        margin-bottom: 15px;
+        /* Spacing between cards */
+        background: none;
+        /* Container has background now, cards can be transparent-ish or same */
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        /* Let container handle padding */
+    }
+
+    /* Slightly distinct style for cards inside the mobile drawer if needed, 
+       but removing borders/bg makes it feel like one cohesive sheet */
+    .ui-container .glass-card h3 {
+        margin-top: 10px;
     }
 }
+
 /* Modal Overlay */
 .modal-overlay {
     position: fixed;
@@ -226,4 +297,57 @@ input[type="range"] {
     width: 320px;
     /* Redefine specific props if needed, otherwise inherits glass-card */
     pointer-events: auto;
+}
+
+/* Movement Controls */
+.movement-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.d-pad {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.d-pad-row {
+    display: flex;
+    gap: 4px;
+}
+
+.move-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.2rem;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.move-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.move-btn:active:not(:disabled) {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.move-btn.center-btn {
+    font-size: 0.6rem;
+    cursor: default;
+    border: none;
+    background: transparent;
+    color: #888;
 }

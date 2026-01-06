@@ -539,6 +539,17 @@ function setupUI() {
         }
     });
 
+    // 8. Movement Buttons (Touch/Click)
+    const moveStep = 0.5;
+
+    // Helper to add repeat on hold (optional but good for touch) - keeping simple click for now
+    document.getElementById('move-x-left').addEventListener('click', () => moveSelectedLight(-moveStep, 0, 0));
+    document.getElementById('move-x-right').addEventListener('click', () => moveSelectedLight(moveStep, 0, 0));
+    document.getElementById('move-z-fwd').addEventListener('click', () => moveSelectedLight(0, 0, moveStep));
+    document.getElementById('move-z-back').addEventListener('click', () => moveSelectedLight(0, 0, -moveStep));
+    document.getElementById('move-y-up').addEventListener('click', () => moveSelectedLight(0, moveStep, 0));
+    document.getElementById('move-y-down').addEventListener('click', () => moveSelectedLight(0, -moveStep, 0));
+
     // --- NEW: Rendering Effects Toggles ---
 
     // A. Ambient Occlusion (SSAO)
@@ -568,6 +579,31 @@ function setupUI() {
             logToScreen(`Ray Tracing ${e.target.checked ? 'Enabled' : 'Disabled'}`, 'info');
         }
     });
+
+    // --- Mobile Toggle Logic ---
+    const mobileToggleBtn = document.getElementById('mobile-menu-toggle');
+    const uiContainer = document.querySelector('.ui-container');
+
+    if (mobileToggleBtn) {
+        mobileToggleBtn.addEventListener('click', () => {
+            uiContainer.classList.toggle('open');
+            // Optional: Toggle icon state if we want X vs Menu icon
+            const isOpen = uiContainer.classList.contains('open');
+            if (isOpen) {
+                mobileToggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`; // X icon
+            } else {
+                mobileToggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>`; // Menu icon
+            }
+        });
+
+        // Close menu when clicking strictly outside cards on the backdrop (optional polish)
+        uiContainer.addEventListener('click', (e) => {
+            if (e.target === uiContainer) {
+                uiContainer.classList.remove('open');
+                mobileToggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>`;
+            }
+        });
+    }
 }
 
 
@@ -667,42 +703,51 @@ function updateSelectionUI() {
     }
 }
 
-function onKeyDown(event) {
+function moveSelectedLight(xDelta, yDelta, zDelta) {
     if (!selectedLightHandle) return;
 
-    const moveStep = 0.5; // Meters per keypress
     const light = selectedLightHandle.userData.light;
     const handle = selectedLightHandle;
     const helper = selectedLightHandle.userData.helper;
 
-    switch (event.key) {
-        case 'ArrowUp':
-            if (event.shiftKey) {
-                light.position.y += moveStep;
-            } else {
-                light.position.z -= moveStep;
-            }
-            break;
-        case 'ArrowDown':
-            if (event.shiftKey) {
-                light.position.y -= moveStep;
-            } else {
-                light.position.z += moveStep;
-            }
-            break;
-        case 'ArrowLeft':
-            light.position.x -= moveStep;
-            break;
-        case 'ArrowRight':
-            light.position.x += moveStep;
-            break;
-        default:
-            return; // Exit if not a navigation key
-    }
+    light.position.x += xDelta;
+    light.position.y += yDelta;
+    light.position.z += zDelta;
 
     // Sync handle and helper
     handle.position.copy(light.position);
     helper.update();
+}
+
+function onKeyDown(event) {
+    if (!selectedLightHandle) return;
+
+    const moveStep = 0.5; // Meters per keypress
+
+    switch (event.key) {
+        case 'ArrowUp':
+            if (event.shiftKey) {
+                moveSelectedLight(0, moveStep, 0);
+            } else {
+                moveSelectedLight(0, 0, -moveStep);
+            }
+            break;
+        case 'ArrowDown':
+            if (event.shiftKey) {
+                moveSelectedLight(0, -moveStep, 0);
+            } else {
+                moveSelectedLight(0, 0, moveStep);
+            }
+            break;
+        case 'ArrowLeft':
+            moveSelectedLight(-moveStep, 0, 0);
+            break;
+        case 'ArrowRight':
+            moveSelectedLight(moveStep, 0, 0);
+            break;
+        default:
+            return; // Exit if not a navigation key
+    }
 }
 
 function onWindowResize() {
