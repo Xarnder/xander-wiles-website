@@ -13,10 +13,15 @@ const P2_LAYER = 2;
 let isMenuOpen = false;
 
 // --- Scene Configuration ---
+const NATURE_GRASS_DENSITY = 1000000; // Experiment with this density
+const NATURE_GRASS_SCALE = 0.6;     // Experiment with this scale
+const NATURE_TREE_SCALE = 0.5;      // Experiment with this scale
+const NATURE_SHADOW_RADIUS = 50;     // Experiment with shadow softness (Requires PCFSoftShadowMap)
 const SCENES = [
-  { name: 'Condo', path: './assets/scenes/Condo/', spawnPoint: { x: -8, y: 2, z: 12 } },
-  { name: 'Bedroom', path: './assets/scenes/Bedroom/', spawnPoint: { x: 2, y: 1.5, z: 4 } },
-  { name: 'House', path: './assets/scenes/House/', spawnPoint: { x: 30, y: 2, z: 0 } },
+  { name: 'Condo', path: './assets/scenes/Condo/', spawnPoint: { x: -8, y: 2, z: 12 }, exposure: 0.003 },
+  { name: 'Bedroom', path: './assets/scenes/Bedroom/', spawnPoint: { x: 2, y: 1.5, z: 4 }, exposure: 0.3 },
+  { name: 'House', path: './assets/scenes/House/', spawnPoint: { x: 30, y: 2, z: 0 }, exposure: 0.3 },
+  { name: 'Nature Scene', type: 'procedural', spawnPoint: { x: 0, y: 1, z: 0 }, exposure: 0.15 },
 ];
 let currentSceneConfig = null;
 
@@ -103,8 +108,20 @@ let exposure = parseFloat(LS.getItem(LS_EXPOSURE) ?? '0.25');
 exposureSlider.value = exposure; exposureValue.textContent = exposure.toFixed(2);
 let cameraFov = parseInt(LS.getItem(LS_FOV) ?? '75', 10);
 fovSlider.value = cameraFov; fovValue.textContent = cameraFov;
-let lightScale = parseFloat(LS.getItem(LS_LIGHT_SCALE) ?? '0.0020');
-lightScaleSlider.value = lightScale; lightScaleValue.textContent = lightScale.toFixed(4);
+// Fix: Must be 'let' to allow reassignment by slider
+let lightScale = parseFloat(LS.getItem(LS_LIGHT_SCALE) ?? '0.00200');
+let ambientIntensity = parseFloat(LS.getItem('AmbientIntensity') ?? '0.5'); // Restored default
+let sunIntensity = parseFloat(LS.getItem('SunIntensity') ?? '8.5'); // Default 8.5
+
+// Sync UI
+lightScaleSlider.value = lightScale; lightScaleValue.textContent = lightScale.toFixed(5);
+const ambientSlider = document.getElementById('ambientIntensity');
+const ambientValueEl = document.getElementById('ambientValue');
+if (ambientSlider) { ambientSlider.value = ambientIntensity; ambientValueEl.textContent = ambientIntensity; }
+const sunSlider = document.getElementById('sunIntensity');
+const sunValueEl = document.getElementById('sunValue');
+if (sunSlider) { sunSlider.value = sunIntensity; sunValueEl.textContent = sunIntensity; }
+
 const SHADOW_QUALITY_LABELS = ['Off', 'Low', 'Medium', 'High'];
 let hqLighting = LS.getItem(LS_HQ_LIGHTING) !== 'false';
 toggleHQLightingEl.checked = hqLighting;
@@ -127,14 +144,17 @@ gamepadSensValue.textContent = gamepadSensitivity.toFixed(1);
 function toggleUIPanel() { uiPanel.classList.toggle('collapsed'); LS.setItem(LS_UI_COLLAPSED, uiPanel.classList.contains('collapsed')); }
 btnCollapse.addEventListener('click', toggleUIPanel);
 btnDebug.addEventListener('click', () => toggleDebug());
-exposureSlider.addEventListener('input', () => { exposure = parseFloat(exposureSlider.value); exposureValue.textContent = exposure.toFixed(2); LS.setItem(LS_EXPOSURE, exposure); applyExposure(); });
+exposureSlider.addEventListener('input', () => { exposure = parseFloat(exposureSlider.value); exposureValue.textContent = exposure.toFixed(3); LS.setItem(LS_EXPOSURE, exposure); applyExposure(); });
 fovSlider.addEventListener('input', () => {
   cameraFov = parseInt(fovSlider.value, 10);
   fovValue.textContent = cameraFov; LS.setItem(LS_FOV, cameraFov);
   camera.fov = cameraFov; camera.updateProjectionMatrix();
   if (camera2) { camera2.fov = cameraFov; camera2.updateProjectionMatrix(); }
 });
-lightScaleSlider.addEventListener('input', () => { lightScale = parseFloat(lightScaleSlider.value); lightScaleValue.textContent = lightScale.toFixed(4); LS.setItem(LS_LIGHT_SCALE, lightScale); applyLightScale(); });
+lightScaleSlider.addEventListener('input', () => { lightScale = parseFloat(lightScaleSlider.value); lightScaleValue.textContent = lightScale.toFixed(5); LS.setItem(LS_LIGHT_SCALE, lightScale); applyLightScale(); });
+if (ambientSlider) ambientSlider.addEventListener('input', () => { ambientIntensity = parseFloat(ambientSlider.value); ambientValueEl.textContent = ambientIntensity; LS.setItem('AmbientIntensity', ambientIntensity); applyLightScale(); });
+if (sunSlider) sunSlider.addEventListener('input', () => { sunIntensity = parseFloat(sunSlider.value); sunValueEl.textContent = sunIntensity; LS.setItem('SunIntensity', sunIntensity); applyLightScale(); });
+
 toggleHQLightingEl.addEventListener('change', e => { hqLighting = e.target.checked; LS.setItem(LS_HQ_LIGHTING, hqLighting); updateLightingSettings(); });
 shadowQualitySlider.addEventListener('input', () => { shadowQuality = parseInt(shadowQualitySlider.value, 10); LS.setItem(LS_SHADOW_QUALITY, shadowQuality); updateLightingSettings(); });
 moveSpeedSlider.addEventListener('input', () => { baseMoveSpeed = parseFloat(moveSpeedSlider.value); moveSpeedValue.textContent = baseMoveSpeed.toFixed(1); LS.setItem(LS_MOVE_SPEED, baseMoveSpeed); });
@@ -359,6 +379,7 @@ async function loadHDRWithFallback(localPath, fallbackUrl) {
 const importedLights = [];
 const defaultLights = [hemi, dir];
 const allLights = [];
+const allEmissives = [];
 let storedEnvMap = null;
 let ambientFallback = null;
 const SHADOW_MAP_SIZES = [0, 512, 1024, 2048];
@@ -379,19 +400,56 @@ function updateLightingSettings() {
   }
   if (shadowQualityValue) shadowQualityValue.textContent = SHADOW_QUALITY_LABELS[shadowQuality];
 }
-function applyLightScale() { for (const l of allLights) { if (l._baseIntensity === undefined) l._baseIntensity = l.intensity; l.intensity = l._baseIntensity * lightScale; } }
+function applyLightScale() {
+  // log('Applying scale:', lightScale); // Debug
+  for (const l of allLights) {
+    if (l.isHemisphereLight || l.isAmbientLight) {
+      // Controlled by Ambient Slider
+      l.intensity = ambientIntensity;
+    } else if (l.isDirectionalLight) {
+      // Controlled by Sun Slider (Sun)
+      l.intensity = sunIntensity;
+    } else {
+      // Point/Spot/Rect -> Controlled by Light Scale Slider
+      if (l._baseIntensity === undefined) l._baseIntensity = l.intensity;
+      l.intensity = l._baseIntensity * lightScale;
+    }
+  }
+  for (const mat of allEmissives) {
+    if (mat._baseEmissive === undefined) mat._baseEmissive = mat.emissiveIntensity;
+    // Map lightScale (approx 0.002) to Emissive (~1.0) -> x500
+    mat.emissiveIntensity = mat._baseEmissive * (lightScale * 500);
+  }
+}
 let currentVisualScene = null;
 let currentCollisionBodies = [];
 function clearCurrentScene() {
   if (currentVisualScene) { scene.remove(currentVisualScene); currentVisualScene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (Array.isArray(o.material)) o.material.forEach(m => m.dispose()); else o.material.dispose(); } }); currentVisualScene = null; }
   if (collisionSceneGroup) { scene.remove(collisionSceneGroup); collisionSceneGroup = null; }
   currentCollisionBodies.forEach(body => world.removeBody(body)); currentCollisionBodies = [];
-  importedLights.forEach(light => scene.remove(light)); importedLights.length = 0; allLights.length = 0;
+  importedLights.forEach(light => scene.remove(light)); importedLights.length = 0; allLights.length = 0; allEmissives.length = 0;
   scene.remove(hemi, dir); if (ambientFallback) scene.remove(ambientFallback);
 }
 async function loadScene(sceneConfig) {
   clearCurrentScene();
   currentSceneConfig = sceneConfig;
+
+  // Use VSMShadowMap for Nature Scene (supports soft radius), PCFSoft for others
+  if (sceneConfig.name === 'Nature Scene') {
+    renderer.shadowMap.type = THREE.VSMShadowMap;
+  } else {
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  }
+  renderer.shadowMap.needsUpdate = true;
+
+  // Apply per-scene exposure defaults
+  exposure = (sceneConfig.exposure !== undefined) ? sceneConfig.exposure : 0.3;
+  if (exposureSlider) {
+    exposureSlider.value = exposure;
+    if (exposureValue) exposureValue.textContent = exposure.toFixed(3);
+  }
+  applyExposure();
+
   statusEl.textContent = `Loading ${sceneConfig.name}...`;
   // Ensure loading screen is shown when manually switching scenes
   loadingScreen.classList.remove('fade-out');
@@ -403,21 +461,49 @@ async function loadScene(sceneConfig) {
       hdrTex.mapping = THREE.EquirectangularReflectionMapping; const pmrem = new THREE.PMREMGenerator(renderer);
       storedEnvMap = pmrem.fromEquirectangular(hdrTex).texture; hdrTex.dispose(); pmrem.dispose();
     }
-    const [visualGLTF, collisionGLTF] = await Promise.all([
-      loader.loadAsync(`${sceneConfig.path}Visual_Scene.glb`),
-      loader.loadAsync(`${sceneConfig.path}Collision_Scene.glb`)
-    ]);
-    currentVisualScene = visualGLTF.scene || visualGLTF.scenes?.[0];
-    scene.add(currentVisualScene);
-    currentVisualScene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    currentVisualScene.traverse(o => { if (o.isLight) { importedLights.push(o); if (o.shadow) { o.shadow.bias = -0.0005; o.shadow.normalBias = 0.02; } } });
-    if (importedLights.length > 0) { allLights.push(...importedLights); } else { scene.add(hemi, dir); allLights.push(...defaultLights); }
-    applyExposure(); applyLightScale(); updateLightingSettings();
-    const colRoot = collisionGLTF.scene || collisionGLTF.scenes?.[0];
-    collisionSceneGroup = colRoot.clone(true);
-    collisionSceneGroup.traverse(o => { if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ color: 0xff0077, wireframe: true, transparent: true, opacity: 0.35 }); });
-    collisionSceneGroup.visible = toggleCollisionEl.checked; scene.add(collisionSceneGroup);
-    buildPhysicsFromCollision(colRoot);
+    if (sceneConfig.type === 'procedural') {
+      if (sceneConfig.name === 'Nature Scene') {
+        await generateNatureScene();
+      }
+    } else {
+      scene.background = new THREE.Color(0x0b0f14); // Reset background for other scenes
+      const [visualGLTF, collisionGLTF] = await Promise.all([
+        loader.loadAsync(`${sceneConfig.path}Visual_Scene.glb`),
+        loader.loadAsync(`${sceneConfig.path}Collision_Scene.glb`)
+      ]);
+      currentVisualScene = visualGLTF.scene || visualGLTF.scenes?.[0];
+      scene.add(currentVisualScene);
+      currentVisualScene.traverse(o => {
+        if (o.isMesh) {
+          o.castShadow = true; o.receiveShadow = true;
+          // Track emissive materials (handle single or array)
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach(m => {
+            if (m && m.emissive && (m.emissive.r > 0 || m.emissive.g > 0 || m.emissive.b > 0)) {
+              allEmissives.push(m);
+              log('Collected emissive material:', m.name || 'unnamed', m.emissive.getHex());
+            }
+          });
+        }
+      });
+      currentVisualScene.traverse(o => { if (o.isLight) { importedLights.push(o); if (o.shadow) { o.shadow.bias = -0.0005; o.shadow.normalBias = 0.02; } } });
+
+      if (importedLights.length > 0) {
+        allLights.push(...importedLights);
+      } else {
+        scene.add(hemi, dir);
+        allLights.push(...defaultLights);
+      }
+      applyExposure();
+      applyLightScale();
+      updateLightingSettings();
+
+      const colRoot = collisionGLTF.scene || collisionGLTF.scenes?.[0];
+      collisionSceneGroup = colRoot.clone(true);
+      collisionSceneGroup.traverse(o => { if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ color: 0xff0077, wireframe: true, transparent: true, opacity: 0.35 }); });
+      collisionSceneGroup.visible = toggleCollisionEl.checked; scene.add(collisionSceneGroup);
+      buildPhysicsFromCollision(colRoot);
+    }
     statusEl.textContent = 'Loaded. Click canvas to play.';
     respawn();
   } catch (err) { console.error(err); statusEl.textContent = 'Error loading GLBs.'; log('Loader error:', err?.message || err); }
@@ -444,6 +530,370 @@ function setupSceneSwitcher() {
   loadScene(SCENES[initialSceneIndex]);
 }
 setupSceneSwitcher();
+
+// --- Procedural Nature Scene ---
+async function generateNatureScene() {
+  scene.background = new THREE.Color(0x87CEEB); // Light blue sky
+  currentVisualScene = new THREE.Group();
+  scene.add(currentVisualScene);
+
+  // Helper: Height function for hills
+  function searchHeight(x, z) {
+    // Simple waves + secondary noise using sin/cos
+    const large = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 8;
+    const small = Math.sin(x * 0.2) * Math.cos(z * 0.2) * 2;
+    return large + small;
+  }
+
+  // 1. Landscape (Hills)
+  // Higher resolution for hills
+  const groundGeo = new THREE.PlaneGeometry(200, 200, 64, 64);
+  const posAttr = groundGeo.attributes.position;
+
+  // Displace vertices
+  for (let i = 0; i < posAttr.count; i++) {
+    const x = posAttr.getX(i);
+    const y = posAttr.getY(i); // This is Z in 2D plane logic before rotation, but PlaneGeometry is XY. 
+    // Wait, PlaneGeometry default is in XY plane. 
+    // usage: rotation.x = -Math.PI/2 puts it in XZ.
+    // So 'y' in buffer is 'z' in world.
+
+    // Actually, let's keep it simple: Access raw values.
+    // PlaneGeometry(w, h, ...) creates verts in X-Y.
+    // We want to displace Z (which becomes Y world).
+    const worldX = x;
+    const worldZ = -y; // Because of rotation -PI/2, world Z maps to local Y, but inverted?
+    // Let's just do displacement AFTER rotation logic or just treat 'z' as 'height' in local space.
+    // Local Z is height (0). We displace Z.
+
+    // Actually, standard practice:
+    // Displace Z coordinate of geometry.
+    const h = searchHeight(x, -y); // Map local y to world z
+    posAttr.setZ(i, h);
+  }
+
+  groundGeo.computeVertexNormals();
+
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x79a80a, // Significantly lighter to match grass brightness
+    map: null,
+    roughness: 1,
+    side: THREE.DoubleSide
+  });
+
+  // Load texture for ground if we want? Use simple color for now as per previous plan, but maybe mix color?
+  // Let's stick to color.
+
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2; // Lie flat
+  ground.receiveShadow = true;
+  currentVisualScene.add(ground);
+
+  // Physics for Hills (Heightfield) - smoother than Trimesh
+  const hfShape = 64;
+  const hfSize = 200;
+  const elementSize = hfSize / hfShape;
+  const heightData = [];
+
+  // Cannon Heightfield orientation with -90 X rotation:
+  // Local X -> World X
+  // Local Y -> World -Z (Backwards)
+  // Local Z -> World Y (Up)
+
+  // We position body at (-100, 0, +100).
+  // j=0 (Local Y=0) -> World Z = 100.
+  // j=64 (Local Y=200) -> World Z = 100 - 200 = -100.
+
+  for (let i = 0; i <= hfShape; i++) {
+    const row = [];
+    const x = -hfSize / 2 + i * elementSize; // -100 to +100
+    for (let j = 0; j <= hfShape; j++) {
+      // We scan Local Y (0..200).
+      // Since Local Y maps to decreasing World Z, we MUST sample the height function
+      // at the corresponding decreasing World Z coordinate.
+      const z = hfSize / 2 - j * elementSize; // +100 to -100
+
+      const h = searchHeight(x, z);
+      row.push(h);
+    }
+    heightData.push(row);
+  }
+
+  const sectionsH = heightData[0].length - 1;
+
+  const groundShape = new CANNON.Heightfield(heightData, {
+    elementSize: elementSize
+  });
+
+  const groundBody = new CANNON.Body({ mass: 0, material: worldMat });
+  groundBody.addShape(groundShape);
+
+  // Align with visual mesh
+  // Position: Bottom-Left corner relative to traversal direction
+  // X starts at -100.
+  // Z (mapped from Y) starts at +100.
+
+  groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+  groundBody.position.set(-hfSize / 2, 0, hfSize / 2); // X=-100, Z=+100
+
+  world.addBody(groundBody);
+  currentCollisionBodies.push(groundBody);
+
+  // 2. Grass Texture
+  const texLoader = new THREE.TextureLoader(manager);
+  const grassTex = await texLoader.loadAsync('./assets/textures/grass.png');
+
+  // 3. Grass Generation (PURE BILLBOARDS)
+  const grassCount = NATURE_GRASS_DENSITY;
+  const dummy = new THREE.Object3D();
+
+  // Geometry: Simple Plane translated up
+  const grassGeo = new THREE.PlaneGeometry(1, 1);
+  grassGeo.translate(0, 0.5, 0);
+
+  const grassMat = new THREE.MeshStandardMaterial({
+    color: 0xaaaaaa, // Tint grey to reduce blowout
+    map: grassTex,
+    alphaTest: 0.5,
+    side: THREE.DoubleSide,
+    emissive: 0x000000,
+    roughness: 1,
+    metalness: 0
+  });
+
+  // GPU Billboarding logic (Always face camera)
+  grassMat.onBeforeCompile = (shader) => {
+    // 1. Force normals to point UP (like the ground) so lighting matches the terrain
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <beginnormal_vertex>',
+      'vec3 objectNormal = vec3(0.0, 1.0, 0.0);'
+    );
+    // 2. Billboarding logic
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `
+      #include <begin_vertex>
+      
+      // Billboard logic: Rotate around Y axis to face camera
+      vec3 vPos = vec3(instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0));
+      vec3 target = cameraPosition;
+      target.y = vPos.y; // Keep vertical
+      
+      vec3 forward = normalize(target - vPos);
+      vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), forward));
+      vec3 up = vec3(0.0, 1.0, 0.0);
+      
+      // Extract scale from instance matrix (assuming uniform scale)
+      // Length of the first column vector of upper 3x3
+      float scaleX = length(vec3(instanceMatrix[0][0], instanceMatrix[0][1], instanceMatrix[0][2]));
+      float scaleY = length(vec3(instanceMatrix[1][0], instanceMatrix[1][1], instanceMatrix[1][2]));
+
+      // Position is already local 'position' (which is a plane 1x1 base).
+      // Construct world rotation basis
+      
+      // We need to apply the generic "Billboard" rotation to the 'position' BEFORE adding it to vPos.
+      // And we must respect the instance scale.
+      
+      vec3 transformedPos = (position.x * scaleX) * right + (position.y * scaleY) * up;
+      
+      // We override 'transformed' which usually is 'position' (local)
+      // But Since instances usually apply a matrix, we need to be careful.
+      // With InstancedMesh, Three.js applies 'instanceMatrix' in the vertex shader default logic.
+      // If we *replace* projected vertex logic, we might double apply or miss apply.
+      // Three.js chunk <begin_vertex> defines 'vec3 transformed = vec3( position );'
+      //
+      // If we modify 'transformed', later <project_vertex> will use 'modelMatrix * vec4( transformed, 1.0 )'.
+      // For InstancedMesh, it uses 'instanceMatrix * vec4(transformed, 1.0)'.
+      //
+      // PROBLEM: If we use instanceMatrix to get vPos, we are essentially doing the transform ourselves.
+      // If we leave 'transformed' as is, it gets rotated by instanceMatrix (random rotation) which we DON'T want for billboards.
+      // We want the position to be: vPos + billboardOffset
+      //
+      // SO: We should effectively CANCEL the rotation of the instanceMatrix but KEEP the translation/scale?
+      // Or just set the instance rotation to Identity in JS and only use Translation.
+      // 
+      // BETTER APPROACH:
+      // In JS, set dummy.rotation to (0,0,0).
+      // Then in shader, 'instanceMatrix' only contains Translation and Scale.
+      // Then standard vertex shader applies it.
+      // BUT we want rotation to camera.
+      //
+      // So, if we compute billboard rotation here, we can set 'transformed' to that rotated vector.
+      // And if instanceMatrix has NO rotation, then 'instanceMatrix * rotatedVector' = 'translation + rotatedVector'.
+      // EXACTLY.
+      
+      transformed = transformedPos;
+      
+      // Note: We need to verify 'scaleX' extraction.
+      // If we just generated instances with .scale.set(s,s,s) and rotation(0,0,0), 
+      // the columns are (s,0,0), (0,s,0), (0,0,s).
+      // So correct.
+      `
+    );
+  };
+
+  const grassInstances = [];
+
+  for (let i = 0; i < grassCount; i++) {
+    const x = (Math.random() - 0.5) * 180; // Spread within 180x180 (avoid edges)
+    const z = (Math.random() - 0.5) * 180;
+
+    const y = searchHeight(x, z);
+
+    // Scale randomization
+    const s = NATURE_GRASS_SCALE * (0.8 + Math.random() * 0.7);
+
+    dummy.position.set(x, y, z);
+    dummy.rotation.set(0, 0, 0); // No rotation here, handled by shader
+    dummy.scale.set(s, s, s);
+    dummy.updateMatrix();
+    grassInstances.push(dummy.matrix.clone());
+  }
+
+  const meshBillboard = new THREE.InstancedMesh(grassGeo, grassMat, grassInstances.length);
+  meshBillboard.castShadow = true;
+  meshBillboard.receiveShadow = true;
+
+  for (let i = 0; i < grassInstances.length; i++) {
+    meshBillboard.setMatrixAt(i, grassInstances[i]);
+  }
+  meshBillboard.instanceMatrix.needsUpdate = true;
+  currentVisualScene.add(meshBillboard);
+
+
+  // 4. Tree Generation
+  try {
+    // console.log('Loading tree...');
+    const treeGltf = await loader.loadAsync('./assets/glb_models/Tree.glb');
+    const treeModel = treeGltf.scene || treeGltf.scenes[0];
+
+    // Switch to CLONING for robustness (handles multi-mesh trees)
+    const treeCount = 200;
+    let treesPlaced = 0;
+
+    while (treesPlaced < treeCount) {
+      const r = 20 + Math.random() * 30; // 20m to 30m radius ring
+      const theta = Math.random() * Math.PI * 2;
+      const x = r * Math.cos(theta);
+      const z = r * Math.sin(theta);
+
+      const y = searchHeight(x, z);
+
+      // Create Instance
+      const clone = treeModel.clone();
+
+      // Scale controlled by constant
+      const s = NATURE_TREE_SCALE * (0.8 + Math.random() * 0.6);
+      clone.position.set(x, y, z);
+      clone.rotation.set(0, Math.random() * Math.PI * 2, 0);
+      clone.scale.set(s, s, s);
+
+      // Enable Shadows
+      clone.traverse(o => {
+        if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+      });
+
+      currentVisualScene.add(clone);
+
+      // Physics (Cylinder)
+      const treeShape = new CANNON.Cylinder(0.5 * s, 0.5 * s, 4 * s, 8); // Scale physics too
+      const treeBody = new CANNON.Body({ mass: 0 });
+      // Offset (Cylinder is centered) -> move up by half height
+      const yOffset = 2 * s;
+      treeBody.addShape(treeShape, new CANNON.Vec3(0, yOffset, 0));
+      treeBody.position.copy(clone.position);
+      world.addBody(treeBody);
+      currentCollisionBodies.push(treeBody);
+
+      treesPlaced++;
+    }
+    // console.log('Trees placed:', treesPlaced);
+
+  } catch (err) {
+    console.warn('Could not load Tree.glb:', err);
+  }
+
+  // Lighting (Custom Sun for Nature Scene)
+  const sunLight = new THREE.DirectionalLight(0xfffaed, 8.5); // Strong Sun (8.5)
+  sunLight.position.set(50, 100, 50);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.left = -150;
+  sunLight.shadow.camera.right = 150;
+  sunLight.shadow.camera.top = 150;
+  sunLight.shadow.camera.bottom = -150;
+  sunLight.shadow.camera.near = 1;
+  sunLight.shadow.camera.far = 400;
+  sunLight.shadow.bias = -0.0005;
+  sunLight.shadow.radius = NATURE_SHADOW_RADIUS; // Soft shadows for clouds
+
+  // Enable Layer 1? No, making them visible again.
+  // sunLight.shadow.camera.layers.enable(1); 
+
+  // Restore Ambient Light (Hemi)
+  const hemiNature = hemi.clone();
+  hemiNature.intensity = ambientIntensity;
+
+  scene.add(hemiNature, sunLight);
+  allLights.push(hemiNature, sunLight);
+
+  // 5. Visible Clouds (Shadow Casters)
+  const cloudGeo = new THREE.DodecahedronGeometry(15, 0);
+  // Store clouds for animation
+  currentVisualScene.userData.clouds = [];
+
+  const cloudCount = 6; // Reduced count
+  for (let i = 0; i < cloudCount; i++) {
+    // Unique material for individual fading
+    const cloudMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.9,
+      roughness: 0.4,
+      flatShading: true
+    });
+    const cloud = new THREE.Mesh(cloudGeo, cloudMat);
+
+    // Higher Up (80m to 120m)
+    // Start "further back" (Left side, moving Right) - Initial Offset
+    const posX = -200 - (Math.random() * 200); // Start -200 to -400
+    const posZ = (Math.random() - 0.5) * 300;
+
+    cloud.position.set(posX, 80 + Math.random() * 40, posZ);
+
+    // Scale 
+    const sX = 2 + Math.random() * 2;
+    const sZ = 2 + Math.random() * 2;
+    cloud.scale.set(sX, 0.6, sZ);
+
+    cloud.castShadow = true;
+    cloud.receiveShadow = false;
+
+    // Animation data
+    cloud.userData.speed = 2 + Math.random() * 3; // Move speed
+
+    currentVisualScene.add(cloud);
+    currentVisualScene.userData.clouds.push(cloud);
+  }
+
+  // Visual Sun
+  const sunGeo = new THREE.SphereGeometry(20, 32, 32);
+  const sunMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+  const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+  sunMesh.position.copy(sunLight.position);
+  currentVisualScene.add(sunMesh);
+
+  applyExposure(); applyLightScale(); updateLightingSettings();
+
+  // Spawn player higher so they don't fall through immediately if spawn is low
+  // Or query height at (0,0)
+  const spawnY = searchHeight(0, 0) + 2;
+  currentSceneConfig.spawnPoint = { x: 0, y: spawnY, z: 0 };
+
+  statusEl.textContent = 'Nature Scene Generated (Hills).';
+  respawn();
+}
+
 
 // --- GAMEPAD ---
 let gamepad = null;
@@ -489,30 +939,60 @@ const fpsSamples = []; const FPS_N = 60;
 
 function animate() {
   requestAnimationFrame(animate);
+  const rawDt = clock.getDelta();
+  // Cap dt for physics safety
+  const dt = Math.min(0.05, rawDt);
 
-  if (gamepad) {
-    gamepad = navigator.getGamepads()[gamepadIndex];
-    if (isSplitScreen && gamepad) {
-      const rightStickX = gamepad.axes[2];
-      const rightStickY = gamepad.axes[3];
-      const deadzone = 0.15;
-      const rotateSpeed = gamepadSensitivity * FIXED; // --- SENSITIVITY SLIDER ---
+  //  // Cloud Animation
+  if (currentVisualScene && currentVisualScene.userData.clouds) {
+    const limit = 200; // Tighter boundary
+    const fadeStart = 150; // Tighter fade
+    currentVisualScene.userData.clouds.forEach(cloud => {
+      // Move clouds
+      cloud.position.x += cloud.userData.speed * rawDt;
 
-      if (Math.abs(rightStickX) > deadzone) {
-        euler2.y -= rightStickX * rotateSpeed;
+      // Wrap around
+      if (cloud.position.x > limit) {
+        cloud.position.x = -limit;
       }
-      if (Math.abs(rightStickY) > deadzone) {
-        euler2.x -= rightStickY * rotateSpeed;
+
+      // Fading Logic
+      const absX = Math.abs(cloud.position.x);
+      let targetOpacity = 0.9;
+      if (absX > fadeStart) {
+        const dist = absX - fadeStart;
+        const range = limit - fadeStart;
+        const factor = 1.0 - (dist / range);
+        targetOpacity = 0.9 * Math.max(0, factor);
       }
+      cloud.material.opacity = targetOpacity;
+    });
+  }
+
+  // --- Gamepad Input (Split Screen P2) ---
+  gamepad = (gamepadIndex !== null) ? navigator.getGamepads()[gamepadIndex] : null;
+  if (isSplitScreen && gamepad) {
+    const rightStickX = gamepad.axes[2];
+    const rightStickY = gamepad.axes[3];
+    const deadzone = 0.15;
+    const rotateSpeed = gamepadSensitivity * FIXED;
+
+    if (Math.abs(rightStickX) > deadzone) {
+      euler2.y -= rightStickX * rotateSpeed;
+    }
+    if (Math.abs(rightStickY) > deadzone) {
+      euler2.x -= rightStickY * rotateSpeed;
     }
   }
 
+  // --- Keyboard Input (Split Screen P2) ---
   if (isSplitScreen && !gamepad) {
     const rotateSpeed = 1.5 * FIXED;
     if (keys2.left) euler2.y += rotateSpeed;
     if (keys2.right) euler2.y -= rotateSpeed;
   }
 
+  // --- Touch Input ---
   if (isTouchDevice && touchState.look.active && !isMenuOpen) {
     const LOOK_SENSITIVITY = 0.003;
     const dx = touchState.look.currentX - touchState.look.startX;
@@ -525,8 +1005,14 @@ function animate() {
     touchState.look.startY = touchState.look.currentY;
   }
 
-  const dt = Math.min(0.05, clock.getDelta()); accum += dt; while (accum >= FIXED) { step(FIXED); accum -= FIXED; }
+  // --- Physics Step ---
+  accum += dt;
+  while (accum >= FIXED) {
+    step(FIXED);
+    accum -= FIXED;
+  }
 
+  // --- Sync Visuals with Physics ---
   const eye = new THREE.Vector3(0, HALF + PLAYER_RADIUS, 0);
   camera.position.copy(playerBody.position).add(eye);
   playerCapsule.position.copy(playerBody.position).add(new THREE.Vector3(0, (PLAYER_HEIGHT / 2) - HALF, 0));
@@ -542,10 +1028,12 @@ function animate() {
 
   handleResize();
 
+  // --- Stats / FPS ---
   const now = performance.now(); const instFps = 1000 / (now - lastTime); lastTime = now;
   fpsSamples.push(instFps); if (fpsSamples.length > FPS_N) fpsSamples.shift();
   const avgFps = fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length;
   fpsEl.textContent = avgFps.toFixed(0);
+
   const p1_pos = playerBody.position;
   let statusText = `P1: pos(${p1_pos.x.toFixed(1)}, ${p1_pos.y.toFixed(1)}, ${p1_pos.z.toFixed(1)})`;
   if (isSplitScreen && playerBody2) {

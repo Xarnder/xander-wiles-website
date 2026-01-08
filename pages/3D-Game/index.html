@@ -107,8 +107,8 @@
         <summary><strong>Visual Settings</strong></summary>
         <div class="row">
           <label for="exposure"><strong>Exposure</strong> <span class="small">(dims all lighting)</span></label><br />
-          <input id="exposure" type="range" min="0.01" max="2.00" step="0.01" value="0.25" />
-          <span id="exposureValue" class="small">0.25</span>
+          <input id="exposure" type="range" min="0.001" max="2.000" step="0.001" value="0.250" />
+          <span id="exposureValue" class="small">0.250</span>
         </div>
         <div class="row">
           <label for="fovSlider">Field of View (FOV)</label><br />
@@ -118,9 +118,18 @@
         <details class="row" open>
           <summary><strong>Advanced lighting</strong></summary>
           <div class="row">
-            <label for="lightScale">Light Intensity Scale <span class="small">(0 → 0.01)</span></label><br />
-            <input id="lightScale" type="range" min="0.0000" max="0.0100" step="0.0001" value="0.0020" />
-            <span id="lightScaleValue" class="small">0.0020</span>
+            <label for="ambientIntensity">Ambient Light <span class="small">(Contrast)</span></label><br />
+            <input id="ambientIntensity" type="range" min="0.0" max="2.0" step="0.1" value="0.4" />
+            <span id="ambientValue" class="small">0.4</span>
+            <br />
+            <label for="sunIntensity">Sun Intensity <span class="small">(Shadows)</span></label><br />
+            <input id="sunIntensity" type="range" min="0.0" max="10.0" step="0.1" value="3.0" />
+            <span id="sunValue" class="small">3.0</span>
+            <br />
+            <label for="lightScale">Light Intensity Scale <span class="small">(Lamps/Emissives 0 →
+                0.01)</span></label><br />
+            <input id="lightScale" type="range" min="0.00000" max="0.01000" step="0.00001" value="0.00200" />
+            <span id="lightScaleValue" class="small">0.00200</span>
           </div>
         </details>
         <details class="row" open>
