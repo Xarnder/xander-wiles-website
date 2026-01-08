@@ -5,26 +5,26 @@ document.addEventListener('DOMContentLoaded', () => {
         originalFilename: 'image',
         editedImage: null,
         cropRect: null, // { x, y, width, height }
-        
+
         // Layers for Step 4 (Masking)
-        maskCanvas: null,   
+        maskCanvas: null,
         maskCtx: null,
-        userPaintLayer: null, 
-        tempStrokeLayer: null, 
-        
+        userPaintLayer: null,
+        tempStrokeLayer: null,
+
         // Layers for Step 3.5 (Paint Editor)
         paintEditorCanvas: null,
         paintEditorCtx: null,
         peUserLayer: null, // NEW: Holds the paint separately from the image
-        
+
         // Drawing State (Shared)
-        lastPoint: null, 
+        lastPoint: null,
         currentTool: 'brush', // 'brush' or 'eraser'
-        
+
         // Settings - Mask Tool
         brushSize: 50,
         brushSoftness: 25,
-        cropFeather: 0,    
+        cropFeather: 0,
 
         // Settings - Paint Editor
         peBrushSize: 20,
@@ -45,14 +45,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const reUploadStep = document.getElementById('re-upload-step');
     const paintEditorStep = document.getElementById('paint-editor-step'); // Step 3.5
     const maskStep = document.getElementById('mask-step'); // Step 4
-    
+
     // Step 1
     const initialUploadContainer = document.getElementById('initial-upload-container');
     const step1Actions = document.getElementById('step1-actions');
     const startNewCropBtn = document.getElementById('start-new-crop-btn');
     const imageUploadInput = document.getElementById('image-upload');
     const jsonUploadInput = document.getElementById('json-upload');
-    
+
     // Step 2
     const cropCanvas = document.getElementById('crop-canvas');
     const cropCtx = cropCanvas.getContext('2d');
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const savePaintBtn = document.getElementById('save-paint-btn');
 
     // Step 4
-    const maskCanvas = document.getElementById('mask-canvas'); 
+    const maskCanvas = document.getElementById('mask-canvas');
     const maskCtx = maskCanvas.getContext('2d');
     const saveFinalBtn = document.getElementById('save-final-btn');
     const backToStep3Btn = document.getElementById('back-to-step3-btn');
@@ -94,11 +94,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const brushSizeSlider = document.getElementById('brush-size-slider');
     const brushSoftnessSlider = document.getElementById('brush-softness-slider');
     const featherSlider = document.getElementById('feather-slider');
-    
+
     const brushSizeValue = document.getElementById('brush-size-value');
     const brushSoftnessValue = document.getElementById('brush-softness-value');
     const featherValue = document.getElementById('feather-value');
-    
+
     const showMaskToggle = document.getElementById('show-mask-toggle');
     const showCropGuideToggle = document.getElementById('show-crop-guide-toggle');
     const touchModeToggle = document.getElementById('touch-mode-toggle');
@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = JSON.parse(event.target.result);
                 if (data.cropRect && typeof data.cropRect.x === 'number') {
                     state.cropRect = data.cropRect;
-                    
+
                     if (state.cropRect.width <= 0 || state.cropRect.height <= 0) {
                         throw new Error("Invalid crop dimensions in JSON");
                     }
@@ -170,24 +170,71 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsText(file);
     });
 
+    // 3.5 ACTION: SKIP CROP & UPLOAD OVERLAY
+    const overlayUploadSkipInput = document.getElementById('overlay-upload-skip');
+    if (overlayUploadSkipInput) {
+        overlayUploadSkipInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (!state.originalImage) {
+                alert("Please upload an original image first.");
+                return;
+            }
+
+            // 1. Set Crop Rect to Full Image
+            state.cropRect = {
+                x: 0,
+                y: 0,
+                width: state.originalImage.width,
+                height: state.originalImage.height
+            };
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    // 2. Create Edited Image (resized to fit original)
+                    const resizeCanvas = document.createElement('canvas');
+                    resizeCanvas.width = state.cropRect.width;
+                    resizeCanvas.height = state.cropRect.height;
+                    const resizeCtx = resizeCanvas.getContext('2d');
+                    resizeCtx.drawImage(img, 0, 0, state.cropRect.width, state.cropRect.height);
+
+                    state.editedImage = resizeCanvas;
+
+                    // 3. Skip to Masking Step
+                    uploadStep.classList.add('hidden');
+                    // Ensure other steps are hidden just in case
+                    cropStep.classList.add('hidden');
+                    reUploadStep.classList.add('hidden');
+
+                    setupMasking();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
     // 4. STEP 2 & 3: EXPORT BUTTONS
-    if(step2DlImg) step2DlImg.addEventListener('click', () => downloadCropImage());
-    if(step2DlJson) step2DlJson.addEventListener('click', () => downloadCropJSON());
-    if(step2Next) step2Next.addEventListener('click', () => {
+    if (step2DlImg) step2DlImg.addEventListener('click', () => downloadCropImage());
+    if (step2DlJson) step2DlJson.addEventListener('click', () => downloadCropJSON());
+    if (step2Next) step2Next.addEventListener('click', () => {
         if (!state.cropRect) return;
         cropStep.classList.add('hidden');
         reUploadStep.classList.remove('hidden');
         setupStep3Previews();
     });
 
-    if(step3DlImg) step3DlImg.addEventListener('click', () => downloadCropImage());
-    if(step3DlJson) step3DlJson.addEventListener('click', () => downloadCropJSON());
+    if (step3DlImg) step3DlImg.addEventListener('click', () => downloadCropImage());
+    if (step3DlJson) step3DlJson.addEventListener('click', () => downloadCropJSON());
 
     // 5. EDITED IMAGE UPLOAD (External)
     editedUploadInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        
+
         if (!state.cropRect) {
             alert("Error: Crop area missing.");
             return;
@@ -203,7 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const resizeCtx = resizeCanvas.getContext('2d');
                 resizeCtx.drawImage(img, 0, 0, state.cropRect.width, state.cropRect.height);
                 state.editedImage = resizeCanvas;
-                
+
                 setupMasking();
             };
             img.src = event.target.result;
@@ -228,15 +275,15 @@ document.addEventListener('DOMContentLoaded', () => {
         finalPaint.width = state.cropRect.width;
         finalPaint.height = state.cropRect.height;
         const ctx = finalPaint.getContext('2d');
-        
+
         // 1. Draw Original Crop
-        ctx.drawImage(state.originalImage, 
+        ctx.drawImage(state.originalImage,
             state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height,
             0, 0, state.cropRect.width, state.cropRect.height
         );
         // 2. Draw User Paint on top
         ctx.drawImage(state.peUserLayer, 0, 0);
-        
+
         state.editedImage = finalPaint;
         setupMasking(); // Go to Step 4
     });
@@ -257,13 +304,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     peColorPicker.addEventListener('input', (e) => {
         state.peColor = e.target.value;
-        if(state.peTool === 'brush') brushCursor.style.borderColor = state.peColor;
+        if (state.peTool === 'brush') brushCursor.style.borderColor = state.peColor;
     });
 
     peSizeSlider.addEventListener('input', (e) => {
         state.peBrushSize = parseInt(e.target.value, 10);
         peSizeValue.textContent = state.peBrushSize;
-        updateCursorSize(); 
+        updateCursorSize();
     });
 
     peSoftnessSlider.addEventListener('input', (e) => {
@@ -272,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     peFillBtn.addEventListener('click', () => {
-        if(confirm("Fill entire image with selected color?")) {
+        if (confirm("Fill entire image with selected color?")) {
             const ctx = state.peUserLayer.getContext('2d');
             ctx.globalCompositeOperation = 'source-over';
             ctx.fillStyle = state.peColor;
@@ -282,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     peClearBtn.addEventListener('click', () => {
-        if(confirm("Reset to original cropped image (Clear Paint)?")) {
+        if (confirm("Reset to original cropped image (Clear Paint)?")) {
             const ctx = state.peUserLayer.getContext('2d');
             ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             composePaintEditor();
@@ -299,13 +346,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     brushBtn.addEventListener('click', () => setMaskTool('brush'));
     eraserBtn.addEventListener('click', () => setMaskTool('eraser'));
-    
+
     brushSizeSlider.addEventListener('input', (e) => {
         state.brushSize = parseInt(e.target.value, 10);
         brushSizeValue.textContent = state.brushSize;
         updateCursorSize();
     });
-    
+
     brushSoftnessSlider.addEventListener('input', (e) => {
         state.brushSoftness = parseInt(e.target.value, 10);
         brushSoftnessValue.textContent = state.brushSoftness;
@@ -332,8 +379,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     fillMaskBtn.addEventListener('click', () => {
-        if(!state.userPaintLayer) return;
-        if(confirm("Fill brush area (Paint entire image white)?")) {
+        if (!state.userPaintLayer) return;
+        if (confirm("Fill brush area (Paint entire image white)?")) {
             const ctx = state.userPaintLayer.getContext('2d');
             ctx.globalCompositeOperation = 'source-over';
             ctx.fillStyle = '#FFFFFF';
@@ -343,8 +390,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     clearMaskBtn.addEventListener('click', () => {
-        if(!state.userPaintLayer) return;
-        if(confirm("Clear all paint (Hide edited image)?")) {
+        if (!state.userPaintLayer) return;
+        if (confirm("Clear all paint (Hide edited image)?")) {
             const ctx = state.userPaintLayer.getContext('2d');
             ctx.clearRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
             composeMaskAndDraw();
@@ -417,7 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tempCanvas.height = height;
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.drawImage(state.originalImage, x, y, width, height, 0, 0, width, height);
-        
+
         handleImageExport(tempCanvas, `${baseName}-cropped.png`);
     }
 
@@ -496,14 +543,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const signY = Math.sign(height || 1);
                 height = (Math.abs(width) / ratio) * signY;
             }
-            
+
             tempRect = {
                 x: width > 0 ? startX : startX + width,
                 y: height > 0 ? startY : startY + height,
                 width: Math.abs(width),
                 height: Math.abs(height)
             };
-            
+
             cropCtx.drawImage(state.originalImage, 0, 0);
             cropCtx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
             cropCtx.lineWidth = 4;
@@ -526,10 +573,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 state.cropRect = { x: finalX, y: finalY, width: finalW, height: finalH };
 
-                if(state.cropRect.width > 0 && state.cropRect.height > 0) {
-                    if(step2DlImg) step2DlImg.disabled = false;
-                    if(step2DlJson) step2DlJson.disabled = false;
-                    if(step2Next) step2Next.disabled = false;
+                if (state.cropRect.width > 0 && state.cropRect.height > 0) {
+                    if (step2DlImg) step2DlImg.disabled = false;
+                    if (step2DlJson) step2DlJson.disabled = false;
+                    if (step2Next) step2Next.disabled = false;
                 }
             }
         };
@@ -546,13 +593,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupStep3Previews() {
         const originalPreviewCanvas = document.getElementById('original-preview-canvas');
         const croppedPreviewCanvas = document.getElementById('cropped-preview-canvas');
-        if(!originalPreviewCanvas || !croppedPreviewCanvas) return;
-        
+        if (!originalPreviewCanvas || !croppedPreviewCanvas) return;
+
         const originalPreviewCtx = originalPreviewCanvas.getContext('2d');
         const croppedPreviewCtx = croppedPreviewCanvas.getContext('2d');
         const { originalImage, cropRect } = state;
 
-        if(!originalImage || !cropRect) return;
+        if (!originalImage || !cropRect) return;
 
         originalPreviewCanvas.width = originalImage.width;
         originalPreviewCanvas.height = originalImage.height;
@@ -564,7 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
         originalPreviewCtx.lineWidth = Math.max(5, originalImage.width * 0.005);
         originalPreviewCtx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
 
-        if(cropRect.width > 0 && cropRect.height > 0) {
+        if (cropRect.width > 0 && cropRect.height > 0) {
             croppedPreviewCtx.drawImage(originalImage, cropRect.x, cropRect.y, cropRect.width, cropRect.height, 0, 0, cropRect.width, cropRect.height);
         }
     }
@@ -586,7 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.peUserLayer.width = state.cropRect.width;
         state.peUserLayer.height = state.cropRect.height;
         // Clear it in case of re-entry
-        state.peUserLayer.getContext('2d').clearRect(0,0, state.peUserLayer.width, state.peUserLayer.height);
+        state.peUserLayer.getContext('2d').clearRect(0, 0, state.peUserLayer.width, state.peUserLayer.height);
 
         // Temp layer for stroke
         if (!state.tempStrokeLayer) {
@@ -599,32 +646,32 @@ document.addEventListener('DOMContentLoaded', () => {
         attachPaintEditorEvents();
         updateCursorSize();
     }
-    
+
     function composePaintEditor() {
         const ctx = state.paintEditorCtx;
-        
+
         // 1. Draw Original Crop (Background)
         ctx.globalCompositeOperation = 'source-over';
-        ctx.drawImage(state.originalImage, 
+        ctx.drawImage(state.originalImage,
             state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height,
             0, 0, state.cropRect.width, state.cropRect.height
         );
-        
+
         // 2. Prepare Paint Layer Composite
         const paintComposite = document.createElement('canvas');
         paintComposite.width = ctx.canvas.width;
         paintComposite.height = ctx.canvas.height;
         const pCtx = paintComposite.getContext('2d');
-        
+
         // Draw confirmed paint
         pCtx.drawImage(state.peUserLayer, 0, 0);
-        
+
         // Draw active stroke (Live Preview)
         if (state.isDrawing && state.tempStrokeLayer) {
             pCtx.save();
             const blurAmount = (state.peBrushSize * (state.peBrushSoftness / 100)) / 2;
             if (blurAmount > 0) pCtx.filter = `blur(${blurAmount}px)`;
-            
+
             if (state.peTool === 'brush') {
                 pCtx.globalCompositeOperation = 'source-over';
             } else {
@@ -633,14 +680,14 @@ document.addEventListener('DOMContentLoaded', () => {
             pCtx.drawImage(state.tempStrokeLayer, 0, 0);
             pCtx.restore();
         }
-        
+
         // 3. Draw Paint on Top
         ctx.drawImage(paintComposite, 0, 0);
     }
 
     function attachPaintEditorEvents() {
         const canvas = state.paintEditorCanvas;
-        
+
         const getPos = (e) => {
             const rect = canvas.getBoundingClientRect();
             const cx = e.clientX || e.touches[0].clientX;
@@ -658,10 +705,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const tmpCtx = state.tempStrokeLayer.getContext('2d');
             tmpCtx.clearRect(0, 0, state.tempStrokeLayer.width, state.tempStrokeLayer.height);
-            
+
             const pos = getPos(e);
             state.lastPoint = pos;
-            
+
             tmpCtx.beginPath();
             tmpCtx.moveTo(pos.x, pos.y);
             tmpCtx.lineCap = 'round';
@@ -670,7 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tmpCtx.strokeStyle = state.peTool === 'brush' ? state.peColor : '#ffffff';
             tmpCtx.lineTo(pos.x + 0.01, pos.y);
             tmpCtx.stroke();
-            
+
             composePaintEditor();
         };
 
@@ -678,10 +725,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!state.isDrawing) return;
             if (e.type === 'touchmove' && !state.isTouchMode) return;
             e.preventDefault();
-            
+
             const newPoint = getPos(e);
             const tmpCtx = state.tempStrokeLayer.getContext('2d');
-            
+
             tmpCtx.beginPath();
             tmpCtx.moveTo(state.lastPoint.x, state.lastPoint.y);
             tmpCtx.lineTo(newPoint.x, newPoint.y);
@@ -690,7 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tmpCtx.lineWidth = state.peBrushSize;
             tmpCtx.strokeStyle = state.peTool === 'brush' ? state.peColor : '#ffffff';
             tmpCtx.stroke();
-            
+
             state.lastPoint = newPoint;
             composePaintEditor();
         };
@@ -698,14 +745,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const stopPaint = () => {
             if (!state.isDrawing) return;
             state.isDrawing = false;
-            
+
             // Commit stroke to peUserLayer
             const ctx = state.peUserLayer.getContext('2d');
             const blurAmount = (state.peBrushSize * (state.peBrushSoftness / 100)) / 2;
-            
+
             ctx.save();
             if (blurAmount > 0) ctx.filter = `blur(${blurAmount}px)`;
-            
+
             if (state.peTool === 'brush') {
                 ctx.globalCompositeOperation = 'source-over';
             } else {
@@ -713,7 +760,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             ctx.drawImage(state.tempStrokeLayer, 0, 0);
             ctx.restore();
-            
+
             // Clear temp
             state.tempStrokeLayer.getContext('2d').clearRect(0, 0, state.tempStrokeLayer.width, state.tempStrokeLayer.height);
             composePaintEditor();
@@ -739,7 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.maskCanvas.width = state.originalImage.width;
         state.maskCanvas.height = state.originalImage.height;
         state.maskCtx = state.maskCanvas.getContext('2d');
-        
+
         requestAnimationFrame(updateCursorSize);
 
         // User Paint Layer (Mask)
@@ -749,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.userPaintLayer.width = state.originalImage.width;
         state.userPaintLayer.height = state.originalImage.height;
         // Reset mask layer if new edit
-        state.userPaintLayer.getContext('2d').clearRect(0,0, state.userPaintLayer.width, state.userPaintLayer.height);
+        state.userPaintLayer.getContext('2d').clearRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
 
         // Temp Stroke Layer
         if (!state.tempStrokeLayer) {
@@ -773,18 +820,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 y: (cy - rect.top) * (canvas.height / rect.height)
             };
         };
-        
+
         const startPaint = (e) => {
             if (e.type === 'touchstart' && !state.isTouchMode) return;
             e.preventDefault();
             state.isDrawing = true;
-            
+
             const tmpCtx = state.tempStrokeLayer.getContext('2d');
             tmpCtx.clearRect(0, 0, state.tempStrokeLayer.width, state.tempStrokeLayer.height);
-            
+
             const pos = getPos(e);
             state.lastPoint = pos;
-            
+
             tmpCtx.beginPath();
             tmpCtx.moveTo(pos.x, pos.y);
             tmpCtx.lineCap = 'round';
@@ -796,15 +843,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             composeMaskAndDraw();
         };
-        
+
         const doPaint = (e) => {
             if (!state.isDrawing) return;
             if (e.type === 'touchmove' && !state.isTouchMode) return;
             e.preventDefault();
-            
+
             const newPoint = getPos(e);
             const tmpCtx = state.tempStrokeLayer.getContext('2d');
-            
+
             tmpCtx.beginPath();
             tmpCtx.moveTo(state.lastPoint.x, state.lastPoint.y);
             tmpCtx.lineTo(newPoint.x, newPoint.y);
@@ -813,9 +860,9 @@ document.addEventListener('DOMContentLoaded', () => {
             tmpCtx.lineWidth = state.brushSize;
             tmpCtx.strokeStyle = 'white';
             tmpCtx.stroke();
-            
+
             state.lastPoint = newPoint;
-            composeMaskAndDraw(); 
+            composeMaskAndDraw();
         };
 
         const stopPaint = () => {
@@ -824,10 +871,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const ctx = state.userPaintLayer.getContext('2d');
             const blurAmount = (state.brushSize * (state.brushSoftness / 100)) / 2;
-            
+
             ctx.save();
             if (blurAmount > 0) ctx.filter = `blur(${blurAmount}px)`;
-            
+
             if (state.currentTool === 'brush') {
                 ctx.globalCompositeOperation = 'source-over';
             } else {
@@ -848,10 +895,10 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.ontouchmove = doPaint;
         canvas.ontouchend = stopPaint;
     }
-    
+
     function composeMaskAndDraw() {
         const ctx = state.maskCtx;
-        
+
         // 1. Draw Background
         ctx.globalCompositeOperation = 'source-over';
         ctx.drawImage(state.originalImage, 0, 0);
@@ -868,7 +915,7 @@ document.addEventListener('DOMContentLoaded', () => {
             maskCtx.save();
             const blurAmount = (state.brushSize * (state.brushSoftness / 100)) / 2;
             if (blurAmount > 0) maskCtx.filter = `blur(${blurAmount}px)`;
-            
+
             if (state.currentTool === 'brush') {
                 maskCtx.globalCompositeOperation = 'source-over';
             } else {
@@ -892,9 +939,9 @@ document.addEventListener('DOMContentLoaded', () => {
             constraintCtx.filter = `blur(${effectiveFeather / 2}px)`;
             constraintCtx.fillStyle = 'white';
             constraintCtx.fillRect(
-                state.cropRect.x + effectiveFeather, 
-                state.cropRect.y + effectiveFeather, 
-                state.cropRect.width - (effectiveFeather * 2), 
+                state.cropRect.x + effectiveFeather,
+                state.cropRect.y + effectiveFeather,
+                state.cropRect.width - (effectiveFeather * 2),
                 state.cropRect.height - (effectiveFeather * 2)
             );
         } else {
@@ -911,14 +958,14 @@ document.addEventListener('DOMContentLoaded', () => {
         revealedEditCanvas.width = ctx.canvas.width;
         revealedEditCanvas.height = ctx.canvas.height;
         const revealedEditCtx = revealedEditCanvas.getContext('2d');
-        
+
         revealedEditCtx.drawImage(state.editedImage, state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
-        
+
         revealedEditCtx.globalCompositeOperation = 'destination-in';
         revealedEditCtx.drawImage(combinedMaskCanvas, 0, 0);
-        
+
         ctx.drawImage(revealedEditCanvas, 0, 0);
-        
+
         // 5. Overlays
         if (state.showMaskOverlay) {
             const overlayCanvas = document.createElement('canvas');
@@ -929,7 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
             overlayCtx.globalCompositeOperation = 'source-in';
             overlayCtx.fillStyle = 'rgba(255, 0, 0, 0.5)';
             overlayCtx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-            
+
             ctx.globalCompositeOperation = 'source-over';
             ctx.drawImage(overlayCanvas, 0, 0);
         }
@@ -947,7 +994,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.restore();
         }
     }
-    
+
     function setMaskTool(tool) {
         state.currentTool = tool;
         brushBtn.classList.toggle('active', tool === 'brush');
@@ -965,7 +1012,7 @@ document.addEventListener('DOMContentLoaded', () => {
             scale = getCanvasScale(state.maskCanvas);
             size = state.brushSize * scale;
         }
-        
+
         brushCursor.style.left = `${e.pageX - size / 2}px`;
         brushCursor.style.top = `${e.pageY - size / 2}px`;
     }
@@ -982,7 +1029,7 @@ document.addEventListener('DOMContentLoaded', () => {
         brushCursor.style.width = `${size}px`;
         brushCursor.style.height = `${size}px`;
     }
-    
+
     function getCanvasScale(canvas) {
         if (!canvas || canvas.width === 0) return 1;
         const rect = canvas.getBoundingClientRect();
