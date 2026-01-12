@@ -71,12 +71,16 @@ function updateInputVisibility() {
 function toMeters(value, unit) {
     if (unit === "mm") return value / 1000;
     if (unit === "cm") return value / 100;
+    if (unit === "in") return value * 0.0254;
+    if (unit === "ft") return value * 0.3048;
     return value;
 }
 
 function fromMeters(value, unit) {
     if (unit === "mm") return value * 1000;
     if (unit === "cm") return value * 100;
+    if (unit === "in") return value / 0.0254;
+    if (unit === "ft") return value / 0.3048;
     return value;
 }
 
@@ -434,6 +438,7 @@ function applyDiagonalSize(diagInches) {
         if (unit === 'mm') return inches * 25.4;
         if (unit === 'cm') return inches * 2.54;
         if (unit === 'm') return inches * 0.0254;
+        if (unit === 'ft') return inches / 12;
         return inches;
     };
 
