@@ -222,3 +222,36 @@ select:focus {
         /* Minimum height backup */
     }
 }
+/* Size Presets */
+.size-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.size-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.size-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: var(--accent);
+}
+
+.size-btn:active {
+    background: var(--accent);
+    color: white;
+}
+
+/* Hide templates in Size Needed mode since we calculate size there */
+#common-sizes.hidden {
+    display: none !important;
+}

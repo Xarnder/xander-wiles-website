@@ -20,6 +20,7 @@ const rowHeight = document.getElementById("row-height");
 const rowAspect = document.getElementById("row-aspect");
 const rowDistance = document.getElementById("row-distance");
 const rowFov = document.getElementById("row-fov");
+const commonSizesGroup = document.getElementById("common-sizes");
 
 // Inputs
 const screenWidthInput = document.getElementById("screenWidth");
@@ -48,7 +49,9 @@ function updateInputVisibility() {
     rowHeight.classList.remove("hidden");
     rowAspect.classList.remove("hidden"); // Always show Aspect Ratio
     rowDistance.classList.remove("hidden");
+    rowDistance.classList.remove("hidden");
     rowFov.classList.remove("hidden");
+    commonSizesGroup.classList.remove("hidden");
 
     if (mode === "fov") {
         rowFov.classList.add("hidden");
@@ -56,8 +59,10 @@ function updateInputVisibility() {
         rowDistance.classList.add("hidden");
     } else if (mode === "size") {
         rowWidth.classList.add("hidden");
+        rowWidth.classList.add("hidden");
         // For screen size calculation, we hide manual height and show aspect ratio
         rowHeight.classList.add("hidden");
+        commonSizesGroup.classList.add("hidden");
     }
 
     calculateAndRender();
@@ -404,6 +409,41 @@ screenHeightInput.addEventListener('input', updateAspectRatioFromDimensions);
 
 // Mode Switch
 modeSelect.addEventListener("change", updateInputVisibility);
+
+// Size Template Buttons
+document.querySelectorAll('.size-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const diag = parseFloat(e.target.dataset.diag);
+        if (diag > 0) applyDiagonalSize(diag);
+    });
+});
+
+function applyDiagonalSize(diagInches) {
+    const rW = parseFloat(ratioWInput.value) || 16;
+    const rH = parseFloat(ratioHInput.value) || 9;
+
+    // Angle of diagonal
+    const angle = Math.atan(rH / rW);
+
+    // W and H in inches
+    const wInches = diagInches * Math.cos(angle);
+    const hInches = diagInches * Math.sin(angle);
+
+    // Helper to convert FROM inches to target unit
+    const toUnit = (inches, unit) => {
+        if (unit === 'mm') return inches * 25.4;
+        if (unit === 'cm') return inches * 2.54;
+        if (unit === 'm') return inches * 0.0254;
+        return inches;
+    };
+
+    // Update Inputs
+    screenWidthInput.value = parseFloat(toUnit(wInches, widthUnitSelect.value).toFixed(1));
+    screenHeightInput.value = parseFloat(toUnit(hInches, heightUnitSelect.value).toFixed(1));
+
+    // Trigger Calc
+    calculateAndRender();
+}
 
 // Boot up
 updateInputVisibility();
