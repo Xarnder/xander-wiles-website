@@ -503,7 +503,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const svg64 = btoa(unescape(encodeURIComponent(svgStr)));
             const b64Start = 'data:image/svg+xml;base64,';
             img.onload = () => {
-                ctx.drawImage(img, 0, 0, size, size);
+                const scale = Math.min(size / img.width, size / img.height);
+                const newWidth = img.width * scale;
+                const newHeight = img.height * scale;
+                const x = (size - newWidth) / 2;
+                const y = (size - newHeight) / 2;
+
+                ctx.drawImage(img, x, y, newWidth, newHeight);
                 canvas.toBlob(resolve, 'image/png');
             };
             img.onerror = reject;
