@@ -22,6 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
         zoomLevel: document.getElementById('zoomLevel'),
         zoomVal: document.getElementById('zoom-val'),
         exportFormat: document.getElementById('export-format'),
+        exportFormat: document.getElementById('export-format'),
+        renderTables: document.getElementById('render-tables'),
+        compactTables: document.getElementById('compact-tables'), // New
         btnRender: document.getElementById('btn-render'),
         btnDownload: document.getElementById('btn-download'),
 
@@ -46,7 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
         padBox: 1,
         removeBullets: true,
         showBrackets: false,
-        bolderFormulas: true
+        bolderFormulas: true,
+        bolderFormulas: true,
+        renderTables: true,
+        compactTables: false // New logic
     };
 
     let filesData = [];
@@ -102,6 +108,46 @@ document.addEventListener('DOMContentLoaded', () => {
         return html;
     }
 
+    function renderTable(lines) {
+        if (!lines || lines.length === 0) return '';
+
+        const isCompact = els.compactTables.checked;
+        let html = `<table class="sheet-table ${isCompact ? 'compact' : ''}">`;
+
+        // Helper to split row by pipe, handling escaped pipes if necessary (ignoring for now for simplicity)
+        const processRow = (line) => {
+            let content = line.trim();
+            // Remove outer pipes if they exist
+            if (content.startsWith('|')) content = content.substring(1);
+            if (content.endsWith('|')) content = content.substring(0, content.length - 1);
+            return content.split('|').map(c => c.trim());
+        };
+
+        const headers = processRow(lines[0]);
+        html += '<thead><tr>';
+        headers.forEach(h => html += `<th>${processMath(parseMarkdown(h))}</th>`);
+        html += '</tr></thead><tbody>';
+
+        // Check for separator line (usually index 1)
+        let startIndex = 1;
+        if (lines.length > 1 && lines[1].trim().match(/^\|?(\s*:?-+:?\s*\|?)+\s*$/)) {
+            startIndex = 2;
+        }
+
+        for (let i = startIndex; i < lines.length; i++) {
+            const rowText = lines[i].trim();
+            if (!rowText) continue;
+
+            const cols = processRow(rowText);
+            html += '<tr>';
+            cols.forEach(c => html += `<td>${processMath(parseMarkdown(c))}</td>`);
+            html += '</tr>';
+        }
+
+        html += '</tbody></table>';
+        return html;
+    }
+
     // --- Main Render ---
     function render() {
         try {
@@ -112,11 +158,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const lines = rawText.split('\n');
             const shouldCleanBullets = els.removeBullets.checked;
             const shouldShowBrackets = els.showBrackets.checked;
+            const shouldRenderTables = els.renderTables.checked;
 
             let finalHTML = "";
             let fontColorIdx = 0;
             let sectionIdx = 0;
             let currentBoxBuffer = "";
+            let tableBuffer = [];
 
             const flushBox = () => {
                 if (styleMode === 'box' && currentBoxBuffer) {
@@ -126,8 +174,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
 
+            const flushTable = () => {
+                if (tableBuffer.length > 0) {
+                    const tableHTML = renderTable(tableBuffer);
+                    if (styleMode === 'box') {
+                        currentBoxBuffer += tableHTML;
+                    } else {
+                        finalHTML += tableHTML;
+                    }
+                    tableBuffer = [];
+                }
+            };
+
             lines.forEach((line) => {
                 let text = line.trim();
+
+                // Table Detection
+                if (shouldRenderTables && text.startsWith('|')) {
+                    tableBuffer.push(text);
+                    return; // Skip normal processing
+                } else {
+                    flushTable();
+                }
+
                 if (text.length === 0 || text.match(/^---+$/)) return;
 
                 const headerMatch = text.match(/^(#+)\s+(.*)/);
@@ -170,6 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
+            flushTable(); // Flush any remaining table
             flushBox();
             els.content.innerHTML = finalHTML;
 
@@ -220,7 +290,14 @@ document.addEventListener('DOMContentLoaded', () => {
             padBox: parseInt(els.padBox.value),
             removeBullets: els.removeBullets.checked,
             showBrackets: els.showBrackets.checked,
-            bolderFormulas: els.bolderFormulas.checked
+            removeBullets: els.removeBullets.checked,
+            showBrackets: els.showBrackets.checked,
+            bolderFormulas: els.bolderFormulas.checked,
+            removeBullets: els.removeBullets.checked,
+            showBrackets: els.showBrackets.checked,
+            bolderFormulas: els.bolderFormulas.checked,
+            renderTables: els.renderTables.checked,
+            compactTables: els.compactTables.checked
         };
     }
 
@@ -250,7 +327,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         els.removeBullets.checked = s.removeBullets;
         els.showBrackets.checked = s.showBrackets;
+        els.removeBullets.checked = s.removeBullets;
+        els.showBrackets.checked = s.showBrackets;
         els.bolderFormulas.checked = s.bolderFormulas;
+        els.bolderFormulas.checked = s.bolderFormulas;
+        els.renderTables.checked = (s.renderTables !== undefined) ? s.renderTables : true;
+        els.compactTables.checked = (s.compactTables !== undefined) ? s.compactTables : false;
 
         // Force orientation update on sheet class
         els.sheet.className = `a4-sheet ${s.orientation}`;
@@ -363,7 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // `saveCurrentState` is called on switch, so we are good.
     // However, we should listen to changes to update the view live.
 
-    [els.sectionStyle, els.removeBullets, els.showBrackets, els.bolderFormulas].forEach(el => {
+    [els.sectionStyle, els.removeBullets, els.showBrackets, els.bolderFormulas, els.renderTables, els.compactTables].forEach(el => {
         el.addEventListener('change', (e) => {
             if (e.target.id === 'bolder-formulas') updateStyles();
             else render();

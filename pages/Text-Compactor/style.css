@@ -323,7 +323,9 @@ textarea:focus {
     padding-bottom: var(--box-pad);
     padding-left: 2px;
     padding-right: 2px;
-    display: block;
+    padding-right: 2px;
+    display: flow-root;
+    /* Contains floats (compact tables) */
     page-break-inside: avoid;
 }
 
@@ -385,4 +387,46 @@ textarea:focus {
 #file-info {
     font-family: monospace;
     color: var(--text-muted);
+}
+
+/* --- Table Styles --- */
+.sheet-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0;
+    font-size: 0.9em;
+    page-break-inside: avoid;
+}
+
+.sheet-table th,
+.sheet-table td {
+    border: 1px solid #444;
+    padding: 2px 4px;
+    text-align: left;
+    color: #000;
+    /* Force black text */
+}
+
+.sheet-table.compact {
+    width: auto;
+    float: left;
+    margin-right: 15px;
+    margin-bottom: 5px;
+    max-width: 60%;
+}
+
+.sheet-table th {
+    background-color: rgba(0, 0, 0, 0.1);
+    font-weight: bold;
+    text-align: center;
+}
+
+.sheet-table tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Specific adjustments for section styles if needed */
+.section-box .sheet-table th,
+.section-box .sheet-table td {
+    border-color: inherit;
 }
