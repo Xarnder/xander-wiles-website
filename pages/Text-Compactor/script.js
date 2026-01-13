@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Inline LaTeX (Single Dollar)
-        text = text.replace(/\$([^$]+)\$/g, (match, latex) => {
+        text = text.replace(/\$([^$\n]+)\$/g, (match, latex) => {
             try {
                 const html = katex.renderToString(latex, { throwOnError: false, displayMode: false });
                 const token = `___MATH_ENTRY_${mathStore.length}___`;
