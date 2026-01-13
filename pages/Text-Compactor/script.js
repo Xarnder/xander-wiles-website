@@ -163,25 +163,42 @@ document.addEventListener('DOMContentLoaded', () => {
             let finalHTML = "";
             let fontColorIdx = 0;
             let sectionIdx = 0;
-            let currentBoxBuffer = "";
+            // Buffer to hold structural items for the current section (tables vs text spans)
+            // Item: { type: 'text' | 'table', html: string }
+            let currentSectionItems = [];
             let tableBuffer = [];
 
             const flushBox = () => {
-                if (styleMode === 'box' && currentBoxBuffer) {
+                // Only render if we have items or if it's an empty box we want to keep? Usually skip empty.
+                if (styleMode === 'box' && currentSectionItems.length > 0) {
+
+                    // IF compact tables are on, we want to HOIST tables to the top of the buffer
+                    // so that the float affects preceding text.
+                    if (els.compactTables.checked) {
+                        currentSectionItems.sort((a, b) => {
+                            if (a.type === 'table' && b.type !== 'table') return -1;
+                            if (a.type !== 'table' && b.type === 'table') return 1;
+                            return 0;
+                        });
+                    }
+
+                    const innerHTML = currentSectionItems.map(x => x.html).join('');
+
                     const bg = bgColors[sectionIdx % bgColors.length];
-                    finalHTML += `<div class="section-box" style="background-color:${bg}; border-color:${fontColors[sectionIdx % fontColors.length]}">${currentBoxBuffer}</div>`;
-                    currentBoxBuffer = "";
+                    finalHTML += `<div class="section-box" style="background-color:${bg}; border-color:${fontColors[sectionIdx % fontColors.length]}">${innerHTML}</div>`;
+
+                    currentSectionItems = [];
+                } else if (styleMode !== 'box' && currentSectionItems.length > 0) {
+                    // Flush flat
+                    finalHTML += currentSectionItems.map(x => x.html).join('');
+                    currentSectionItems = [];
                 }
             };
 
             const flushTable = () => {
                 if (tableBuffer.length > 0) {
                     const tableHTML = renderTable(tableBuffer);
-                    if (styleMode === 'box') {
-                        currentBoxBuffer += tableHTML;
-                    } else {
-                        finalHTML += tableHTML;
-                    }
+                    currentSectionItems.push({ type: 'table', html: tableHTML });
                     tableBuffer = [];
                 }
             };
@@ -232,10 +249,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     fontColorIdx++;
                 }
 
-                if (styleMode === 'box') {
-                    currentBoxBuffer += spanHTML;
+                if (styleMode === 'box' || true) {
+                    // Always buffer now to support hoisting even in non-box mode if we wanted, 
+                    // though hoisting is mostly relevant for section boxes.
+                    // But our logic above cleans up 'currentSectionItems' correctly for both modes.
+                    currentSectionItems.push({ type: 'text', html: spanHTML });
                 } else {
-                    finalHTML += spanHTML;
+                    // Legacy direct append caught by "|| true" above, 
+                    // but effectively we are using the buffer for everything now.
                 }
             });
 
