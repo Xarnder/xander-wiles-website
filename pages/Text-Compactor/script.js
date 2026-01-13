@@ -86,18 +86,45 @@ document.addEventListener('DOMContentLoaded', () => {
     log("System initialized.");
 
     // --- Formatters ---
-    function processMath(text) {
-        text = text.replace(/\$\$([^$]+)\$\$/g, (match, latex) => {
+    // --- Formatters ---
+
+    // Helper to escape regex special characters
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function preprocessMath(text) {
+        const mathStore = [];
+
+        // Block LaTeX (Double Dollar): Support multiline with [\s\S]
+        // We render it immediately and store the HTML to protect it from line splitting
+        text = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, latex) => {
             try {
-                return katex.renderToString(latex, { throwOnError: false, displayMode: false });
+                const html = katex.renderToString(latex, { throwOnError: false, displayMode: true });
+                const token = `___MATH_ENTRY_${mathStore.length}___`;
+                mathStore.push(html);
+                return token;
             } catch (e) { return match; }
         });
+
+        // Inline LaTeX (Single Dollar)
         text = text.replace(/\$([^$]+)\$/g, (match, latex) => {
             try {
-                return katex.renderToString(latex, { throwOnError: false, displayMode: false });
+                const html = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+                const token = `___MATH_ENTRY_${mathStore.length}___`;
+                mathStore.push(html);
+                return token;
             } catch (e) { return match; }
         });
-        return text;
+
+        return { text, mathStore };
+    }
+
+    function restoreMath(text, mathStore) {
+        // Replace tokens properly. We use a regex for the token pattern.
+        return text.replace(/___MATH_ENTRY_(\d+)___/g, (match, index) => {
+            return mathStore[parseInt(index)] || match;
+        });
     }
 
     function parseMarkdown(text) {
@@ -108,16 +135,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return html;
     }
 
-    function renderTable(lines) {
+    function renderTable(lines, mathStore) {
         if (!lines || lines.length === 0) return '';
 
         const isCompact = els.compactTables.checked;
         let html = `<table class="sheet-table ${isCompact ? 'compact' : ''}">`;
 
-        // Helper to split row by pipe, handling escaped pipes if necessary (ignoring for now for simplicity)
+        // Helper to split row by pipe
         const processRow = (line) => {
             let content = line.trim();
-            // Remove outer pipes if they exist
             if (content.startsWith('|')) content = content.substring(1);
             if (content.endsWith('|')) content = content.substring(0, content.length - 1);
             return content.split('|').map(c => c.trim());
@@ -125,10 +151,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const headers = processRow(lines[0]);
         html += '<thead><tr>';
-        headers.forEach(h => html += `<th>${processMath(parseMarkdown(h))}</th>`);
+        // Restore math in headers
+        headers.forEach(h => html += `<th>${restoreMath(parseMarkdown(h), mathStore)}</th>`);
         html += '</tr></thead><tbody>';
 
-        // Check for separator line (usually index 1)
         let startIndex = 1;
         if (lines.length > 1 && lines[1].trim().match(/^\|?(\s*:?-+:?\s*\|?)+\s*$/)) {
             startIndex = 2;
@@ -140,7 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const cols = processRow(rowText);
             html += '<tr>';
-            cols.forEach(c => html += `<td>${processMath(parseMarkdown(c))}</td>`);
+            // Restore math in cells
+            cols.forEach(c => html += `<td>${restoreMath(parseMarkdown(c), mathStore)}</td>`);
             html += '</tr>';
         }
 
@@ -152,10 +179,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function render() {
         try {
             const rawText = els.input.value;
-            // Always render even if empty to clear view, but logic below skips empty lines
+            // 1. Preprocess Math: Extract all math formulas (including multiline) into tokens
+            // This prevents line splitting from preserving the internal structure of multiline math.
+            const { text: processedText, mathStore } = preprocessMath(rawText);
 
             const styleMode = els.sectionStyle.value;
-            const lines = rawText.split('\n');
+            // 2. Split lines based on the text *where math is already tokenized*
+            const lines = processedText.split('\n');
+
             const shouldCleanBullets = els.removeBullets.checked;
             const shouldShowBrackets = els.showBrackets.checked;
             const shouldRenderTables = els.renderTables.checked;
@@ -163,17 +194,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let finalHTML = "";
             let fontColorIdx = 0;
             let sectionIdx = 0;
-            // Buffer to hold structural items for the current section (tables vs text spans)
-            // Item: { type: 'text' | 'table', html: string }
             let currentSectionItems = [];
             let tableBuffer = [];
 
             const flushBox = () => {
-                // Only render if we have items or if it's an empty box we want to keep? Usually skip empty.
                 if (styleMode === 'box' && currentSectionItems.length > 0) {
-
-                    // IF compact tables are on, we want to HOIST tables to the top of the buffer
-                    // so that the float affects preceding text.
                     if (els.compactTables.checked) {
                         currentSectionItems.sort((a, b) => {
                             if (a.type === 'table' && b.type !== 'table') return -1;
@@ -181,15 +206,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             return 0;
                         });
                     }
-
                     const innerHTML = currentSectionItems.map(x => x.html).join('');
-
                     const bg = bgColors[sectionIdx % bgColors.length];
                     finalHTML += `<div class="section-box" style="background-color:${bg}; border-color:${fontColors[sectionIdx % fontColors.length]}">${innerHTML}</div>`;
-
                     currentSectionItems = [];
                 } else if (styleMode !== 'box' && currentSectionItems.length > 0) {
-                    // Flush flat
                     finalHTML += currentSectionItems.map(x => x.html).join('');
                     currentSectionItems = [];
                 }
@@ -197,7 +218,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const flushTable = () => {
                 if (tableBuffer.length > 0) {
-                    const tableHTML = renderTable(tableBuffer);
+                    // Pass mathStore to table renderer
+                    const tableHTML = renderTable(tableBuffer, mathStore);
                     currentSectionItems.push({ type: 'table', html: tableHTML });
                     tableBuffer = [];
                 }
@@ -206,10 +228,9 @@ document.addEventListener('DOMContentLoaded', () => {
             lines.forEach((line) => {
                 let text = line.trim();
 
-                // Table Detection
                 if (shouldRenderTables && text.startsWith('|')) {
                     tableBuffer.push(text);
-                    return; // Skip normal processing
+                    return;
                 } else {
                     flushTable();
                 }
@@ -230,8 +251,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     text = text.replace(/^(\*|-|\+)\s+/, '');
                 }
 
-                text = processMath(text);
+                // Parse markdown first (bold/italic)
                 text = parseMarkdown(text);
+                // Then restore math tokens to HTML
+                text = restoreMath(text, mathStore);
 
                 const fColor = fontColors[fontColorIdx % fontColors.length];
                 let bgColor = 'transparent';
@@ -250,17 +273,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (styleMode === 'box' || true) {
-                    // Always buffer now to support hoisting even in non-box mode if we wanted, 
-                    // though hoisting is mostly relevant for section boxes.
-                    // But our logic above cleans up 'currentSectionItems' correctly for both modes.
                     currentSectionItems.push({ type: 'text', html: spanHTML });
-                } else {
-                    // Legacy direct append caught by "|| true" above, 
-                    // but effectively we are using the buffer for everything now.
                 }
             });
 
-            flushTable(); // Flush any remaining table
+            flushTable();
             flushBox();
             els.content.innerHTML = finalHTML;
 

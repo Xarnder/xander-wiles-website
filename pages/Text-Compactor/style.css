@@ -369,6 +369,15 @@ textarea:focus {
     font-weight: bold;
 }
 
+/* Float Display Math for Tight Text Wrapping */
+.katex-display {
+    display: block;
+    float: left;
+    margin: 4px 12px 4px 0 !important;
+    max-width: 100%;
+    width: auto;
+}
+
 /* Navigation Controls */
 .btn-micro {
     background: var(--bg-dark);
