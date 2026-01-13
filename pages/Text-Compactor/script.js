@@ -25,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
         exportFormat: document.getElementById('export-format'),
         renderTables: document.getElementById('render-tables'),
         compactTables: document.getElementById('compact-tables'), // New
+        compactText: document.getElementById('compact-text'), // New rendering mode
+        preserveNewlines: document.getElementById('preserve-newlines'), // New option
         btnRender: document.getElementById('btn-render'),
         btnDownload: document.getElementById('btn-download'),
 
@@ -64,7 +66,9 @@ document.addEventListener('DOMContentLoaded', () => {
         bolderFormulas: true,
         bolderFormulas: true,
         renderTables: true,
-        compactTables: false // New logic
+        compactTables: false, // New logic
+        compactText: true, // Default to compact mode
+        preserveNewlines: false // Default to inline
     };
 
     let filesData = [];
@@ -210,7 +214,10 @@ document.addEventListener('DOMContentLoaded', () => {
             let tableBuffer = [];
 
             const flushBox = () => {
-                if (styleMode === 'box' && currentSectionItems.length > 0) {
+                // Override box style if Compact Text is disabled
+                const effectiveStyle = els.compactText.checked ? styleMode : 'none';
+
+                if (effectiveStyle === 'box' && currentSectionItems.length > 0) {
                     if (els.compactTables.checked) {
                         currentSectionItems.sort((a, b) => {
                             if (a.type === 'table' && b.type !== 'table') return -1;
@@ -222,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const bg = bgColors[sectionIdx % bgColors.length];
                     finalHTML += `<div class="section-box" style="background-color:${bg}; border-color:${fontColors[sectionIdx % fontColors.length]}">${innerHTML}</div>`;
                     currentSectionItems = [];
-                } else if (styleMode !== 'box' && currentSectionItems.length > 0) {
+                } else if (effectiveStyle !== 'box' && currentSectionItems.length > 0) {
                     finalHTML += currentSectionItems.map(x => x.html).join('');
                     currentSectionItems = [];
                 }
@@ -275,21 +282,58 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 let spanHTML = "";
+                const isCompact = els.compactText.checked; // Check mode
+                const shouldPreserveNewlines = els.preserveNewlines.checked;
+
                 if (isHeader) {
                     const headerContent = shouldShowBrackets ? `[${text}]` : text;
-                    spanHTML = `<span class="sheet-span sheet-header" style="color: #000; background-color: ${bgColor};">${headerContent}</span>`;
+                    // Header logic:
+                    // If compact & inline: inline-block, auto width.
+                    // If compact & preserve-newlines: block, 100% width (to force new line), but inside box
+                    // If normal (!compact): block.
+                    const isInline = isCompact && !shouldPreserveNewlines;
+                    const marginTop = isCompact ? '2px' : '10px';
+
+                    spanHTML = `<span class="sheet-span sheet-header" style="color: #000; background-color: ${bgColor}; display: ${isInline ? 'inline-block' : 'block'}; width: ${isInline ? 'auto' : '100%'}; margin-top: ${marginTop};">${headerContent}</span>`;
                     fontColorIdx = 0;
                 } else {
-                    spanHTML = `<span class="sheet-span" style="color: ${fColor}; background-color: ${bgColor};">${text} </span>`;
+                    // Normal Mode: Force black text, block display (new line), no bg cycling
+                    // Compact + Preserve Newlines: Color cycling, block display
+                    // Compact + !Preserve Newlines: Color cycling, inline display
+
+                    const finalColor = isCompact ? fColor : '#000000';
+                    const displayStyle = (isCompact && !shouldPreserveNewlines) ? 'inline' : 'block';
+
+                    spanHTML = `<span class="sheet-span" style="color: ${finalColor}; background-color: ${bgColor}; display: ${displayStyle};">${text} </span>`;
                     fontColorIdx++;
                 }
 
-                if (styleMode === 'box' || true) {
+                if ((styleMode === 'box' && isCompact) || true) {
+                    // Logic hack: if not compact, we technically don't need 'box' behavior, 
+                    // but flushing handles non-box items too. 
+                    // The flushBox function handles 'box' vs 'non-box' styleMode.
+                    // If we are in "Normal Mode" (isCompact=false), we effectively want 'none' behavior for boxing 
+                    // BUT without changing the user's dropdown setting.
+                    // We can handle this by ensuring isCompact=false treats items as 'text' and flushBox handles them.
                     currentSectionItems.push({ type: 'text', html: spanHTML });
                 }
             });
 
             flushTable();
+            // If not compact, we might want to ensure flushBox doesn't wrap in a border box
+            // We can treat 'isCompact=false' as an override to forcing direct output in flushBox logic?
+            // Actually, let's modify flushBox to respect compactText.
+            // But flushBox is defined above. Let's just override styleMode for the flush logic if needed
+            // or simply rely on the fact that if isCompact is false, we rendered block elements.
+            // However, flushBox wraps in <div class="section-box"> if styleMode is 'box'.
+            // WE MUST PREVENT THAT if !isCompact.
+
+            // Re-defining flushBox logic dynamically inside render isn't easy with replace_row.
+            // Let's modify flushBox definition in a separate chunk or rely on a hack.
+            // Better: update flushBox definition in the loop provided it was captured? 
+            // It was not captured in this chunk.
+            // Let's modify the line calling flushBox to wrap it or modify styleMode variable early.
+
             flushBox();
             els.content.innerHTML = finalHTML;
 
@@ -347,7 +391,9 @@ document.addEventListener('DOMContentLoaded', () => {
             showBrackets: els.showBrackets.checked,
             bolderFormulas: els.bolderFormulas.checked,
             renderTables: els.renderTables.checked,
-            compactTables: els.compactTables.checked
+            compactTables: els.compactTables.checked,
+            compactText: els.compactText.checked,
+            preserveNewlines: els.preserveNewlines.checked
         };
     }
 
@@ -383,6 +429,8 @@ document.addEventListener('DOMContentLoaded', () => {
         els.bolderFormulas.checked = s.bolderFormulas;
         els.renderTables.checked = (s.renderTables !== undefined) ? s.renderTables : true;
         els.compactTables.checked = (s.compactTables !== undefined) ? s.compactTables : false;
+        els.compactText.checked = (s.compactText !== undefined) ? s.compactText : true;
+        els.preserveNewlines.checked = (s.preserveNewlines !== undefined) ? s.preserveNewlines : false;
 
         // Force orientation update on sheet class
         els.sheet.className = `a4-sheet ${s.orientation}`;
@@ -677,7 +725,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // `saveCurrentState` is called on switch, so we are good.
     // However, we should listen to changes to update the view live.
 
-    [els.sectionStyle, els.removeBullets, els.showBrackets, els.bolderFormulas, els.renderTables, els.compactTables].forEach(el => {
+    [els.sectionStyle, els.removeBullets, els.showBrackets, els.bolderFormulas, els.renderTables, els.compactTables, els.compactText, els.preserveNewlines].forEach(el => {
         el.addEventListener('change', (e) => {
             if (e.target.id === 'bolder-formulas') updateStyles();
             else render();
