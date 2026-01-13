@@ -36,7 +36,19 @@ document.addEventListener('DOMContentLoaded', () => {
         btnNextFile: document.getElementById('btn-next-file'),
         btnBatchExport: document.getElementById('btn-batch-export'),
 
-        debug: document.getElementById('debug-content')
+        debug: document.getElementById('debug-content'),
+
+        // Reload & Clear
+        btnReloadFolder: document.getElementById('btn-reload-folder'),
+        btnClearMd: document.getElementById('btn-clear-md'),
+        quickClear: document.getElementById('quick-clear'),
+
+        // Modal
+        modal: document.getElementById('custom-modal'),
+        modalTitle: document.getElementById('modal-title'),
+        modalMessage: document.getElementById('modal-message'),
+        modalBtnCancel: document.getElementById('modal-btn-cancel'),
+        modalBtnConfirm: document.getElementById('modal-btn-confirm')
     };
 
     // --- State Management ---
@@ -44,9 +56,9 @@ document.addEventListener('DOMContentLoaded', () => {
         orientation: 'portrait',
         sectionStyle: 'box',
         fontSize: 10,
-        lineHeight: 1.0,
-        padPage: 5,
-        padBox: 1,
+        lineHeight: 0.8,
+        padPage: 1,
+        padBox: 0,
         removeBullets: true,
         showBrackets: false,
         bolderFormulas: true,
@@ -403,17 +415,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Folder Upload ---
-    els.folderInput.addEventListener('change', async (e) => {
-        const files = Array.from(e.target.files).filter(f => f.name.endsWith('.md') || f.name.endsWith('.txt'));
-        if (files.length === 0) {
-            alert("No markdown files found in selection.");
-            return;
+    // --- Folder Upload & Reload ---
+    let folderHandle = null;
+
+    // Helper to process loaded file objects and merge settings if reloading
+    async function processLoadedFiles(filesInput, fromHandle = false) {
+        let loadedFiles = [];
+        let fileEntries = [];
+
+        // Different processing based on source
+        if (fromHandle) {
+            // Using File System Access API
+            for await (const entry of filesInput.values()) {
+                if (entry.kind === 'file' && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
+                    const file = await entry.getFile();
+                    fileEntries.push(file);
+                }
+            }
+        } else {
+            // Using legacy input
+            fileEntries = Array.from(filesInput).filter(f => f.name.endsWith('.md') || f.name.endsWith('.txt'));
         }
 
         // Sort files alphabetically to ensure consistent order
-        files.sort((a, b) => a.name.localeCompare(b.name));
+        fileEntries.sort((a, b) => a.name.localeCompare(b.name));
 
-        const loadedFiles = [];
+        if (fileEntries.length === 0) return [];
 
         // Helper to read file
         const readFileStr = (file) => new Promise((resolve) => {
@@ -422,19 +449,186 @@ document.addEventListener('DOMContentLoaded', () => {
             reader.readAsText(file);
         });
 
-        for (const file of files) {
-            const content = await readFileStr(file);
-            loadedFiles.push({
-                name: file.name,
-                content: content,
-                settings: { ...defaultSettings } // Start with defaults
+        // Create a map of existing settings if reloading (filesData is global)
+        const existingSettingsMap = new Map();
+        if (filesData.length > 0) { // Assume reloading if we have data
+            // Must save current state of the active file first
+            saveCurrentState();
+            filesData.forEach(f => {
+                existingSettingsMap.set(f.name, f.settings);
             });
         }
 
-        filesData = loadedFiles;
-        currentIndex = 0;
-        loadState(0);
-        log(`Loaded folder: ${files.length} files.`);
+        for (const file of fileEntries) {
+            const content = await readFileStr(file);
+
+            // Preserve settings if filename matches
+            let settings = { ...defaultSettings };
+            if (existingSettingsMap.has(file.name)) {
+                settings = existingSettingsMap.get(file.name);
+            }
+
+            loadedFiles.push({
+                name: file.name,
+                content: content,
+                settings: settings
+            });
+        }
+
+        return loadedFiles;
+    }
+
+    // Modern Directory Picker (Reloadable)
+    async function openDirectory() {
+        try {
+            const handle = await window.showDirectoryPicker();
+            folderHandle = handle;
+            const newFiles = await processLoadedFiles(handle, true);
+            loadFilesIntoApp(newFiles);
+            // Hide "Upload Folder" native input label if successful? No, keep both just in case.
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                log(`Folder Access Error: ${err.message}`, 'error');
+                // Fallback or user just cancelled
+            }
+        }
+    }
+
+    // Legacy Directory Picker (Input Change)
+    els.folderInput.addEventListener('change', async (e) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const newFiles = await processLoadedFiles(e.target.files, false);
+        loadFilesIntoApp(newFiles);
+        els.folderInput.value = ''; // Reset
+    });
+
+    // Core Load Logic
+    function loadFilesIntoApp(newFilesData) {
+        if (newFilesData.length === 0) {
+            showModalInfo("No Files Found", "The selected folder contains no .md or .txt files.", "OK");
+            return;
+        }
+
+        filesData = newFilesData;
+        if (currentIndex >= filesData.length) currentIndex = 0;
+
+        loadState(currentIndex);
+        log(`Loaded folder: ${filesData.length} files.`);
+
+        showModalInfo("Success", `Successfully loaded ${filesData.length} files from folder.`, "Awesome");
+    }
+
+    // Reload Click Handler
+    els.btnReloadFolder.addEventListener('click', async (e) => {
+        // If we have a handle, use it!
+        if (folderHandle) {
+            try {
+                // Verify permission
+                const opts = { mode: 'read' };
+                if ((await folderHandle.queryPermission(opts)) !== 'granted') {
+                    if ((await folderHandle.requestPermission(opts)) !== 'granted') {
+                        throw new Error('Permission denied');
+                    }
+                }
+
+                const newFiles = await processLoadedFiles(folderHandle, true);
+                loadFilesIntoApp(newFiles);
+            } catch (err) {
+                log(`Reload Error: ${err.message}`, 'error');
+                showModalInfo("Reload Failed", "Could not access the folder. Please re-upload.", "OK");
+                folderHandle = null; // Reset handle
+            }
+        } else {
+            // No handle (maybe legacy upload or first time), try to open modern picker
+            // If legacy input was used, we can't 'reload' it programmatically without user action.
+            // We'll prompt them to pick the folder again using the modern picker if supported,
+            // or trigger the legacy input if they want to 'reload' (re-upload).
+
+            if ('showDirectoryPicker' in window) {
+                await openDirectory();
+            } else {
+                els.folderInput.click();
+            }
+        }
+    });
+
+    // Override the label click for "Upload Folder" to use modern API if available
+    // We need to prevent the default label->input behavior if we use the API
+    const lblUpload = els.folderInput.closest('label');
+    if (lblUpload) {
+        lblUpload.addEventListener('click', async (e) => {
+            if ('showDirectoryPicker' in window) {
+                e.preventDefault(); // Stop file input from opening
+                await openDirectory();
+            }
+        });
+    }
+
+    // --- Modal Logic ---
+    let pendingModalAction = null;
+
+    function showModalConfirm(title, message, confirmText, action) {
+        els.modalTitle.textContent = title;
+        els.modalMessage.textContent = message;
+        els.modalBtnConfirm.textContent = confirmText;
+        els.modalBtnConfirm.className = "btn btn-danger"; // Red for danger/confirm
+        els.modalBtnCancel.style.display = "block";
+
+        pendingModalAction = action;
+        els.modal.classList.add('active');
+    }
+
+    function showModalInfo(title, message, btnText) {
+        els.modalTitle.textContent = title;
+        els.modalMessage.textContent = message;
+        els.modalBtnConfirm.textContent = btnText;
+        els.modalBtnConfirm.className = "btn btn-primary"; // Blue for info
+        els.modalBtnCancel.style.display = "none"; // Hide cancel
+
+        pendingModalAction = null; // No action needed
+        els.modal.classList.add('active');
+    }
+
+    function closeModal() {
+        els.modal.classList.remove('active');
+        pendingModalAction = null;
+    }
+
+    els.modalBtnCancel.addEventListener('click', closeModal);
+
+    els.modalBtnConfirm.addEventListener('click', () => {
+        if (pendingModalAction) pendingModalAction();
+        closeModal();
+    });
+
+    // Close on backdrop click
+    els.modal.addEventListener('click', (e) => {
+        if (e.target === els.modal) closeModal();
+    });
+
+    els.btnClearMd.addEventListener('click', () => {
+        // Quick Clear Check
+        if (els.quickClear.checked) {
+            els.input.value = "";
+            render();
+            if (filesData[currentIndex]) {
+                filesData[currentIndex].content = "";
+            }
+            return;
+        }
+
+        showModalConfirm(
+            "Clear Document?",
+            "Are you sure you want to clear all text from this document? This action cannot be undone.",
+            "Confirm Clear",
+            () => {
+                els.input.value = "";
+                render();
+                if (filesData[currentIndex]) {
+                    filesData[currentIndex].content = "";
+                }
+            }
+        );
     });
 
     // --- Interaction Listeners ---

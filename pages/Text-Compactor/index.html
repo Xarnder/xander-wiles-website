@@ -53,12 +53,28 @@
             </div>
 
             <!-- Batch Upload Controls -->
-            <div class="file-load-controls" style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
-                <label class="btn btn-secondary" style="cursor: pointer; display: inline-block;">
-                    📂 Upload Folder
-                    <input type="file" id="folder-input" webkitdirectory multiple style="display: none;">
-                </label>
-                <div style="font-size: 0.85em; color: #888;">Select a folder containing .md files</div>
+            <div class="file-load-controls" style="margin-bottom: 20px;">
+                <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                    <label class="btn btn-secondary"
+                        style="cursor: pointer; display: inline-block; flex: 1; text-align: center;">
+                        📂 Upload Folder
+                        <input type="file" id="folder-input" webkitdirectory multiple style="display: none;">
+                    </label>
+                    <button id="btn-reload-folder" class="btn btn-secondary" style="flex: 1;"
+                        title="Reload files updating content but keeping settings">
+                        ↻ Reload Folder
+                    </button>
+                </div>
+                <div style="font-size: 0.85em; color: #888; margin-bottom: 12px; text-align: center;">Select a folder
+                    containing .md files</div>
+
+                <button id="btn-clear-md" class="btn btn-danger" style="width: 100%;">
+                    🗑 Clear Markdown
+                </button>
+                <div class="checkbox-group" style="margin-top: 10px; justify-content: center;">
+                    <input type="checkbox" id="quick-clear">
+                    <label for="quick-clear">Quick Clear (No Confirm)</label>
+                </div>
             </div>
 
             <textarea id="input-text" placeholder="### Section Title
@@ -107,8 +123,8 @@ Double dollar $$x^2$$ equations supported."></textarea>
                 <div class="input-group">
                     <label>Tightness</label>
                     <div class="slider-input-row">
-                        <input type="range" id="lineHeight" min="0.8" max="1.5" step="0.05" value="1.0">
-                        <input type="number" id="lh-val" min="0.8" max="1.5" step="0.05" value="1.0">
+                        <input type="range" id="lineHeight" min="0.8" max="1.5" step="0.05" value="0.8">
+                        <input type="number" id="lh-val" min="0.8" max="1.5" step="0.05" value="0.8">
                     </div>
                 </div>
 
@@ -116,8 +132,8 @@ Double dollar $$x^2$$ equations supported."></textarea>
                 <div class="input-group">
                     <label>Page Margin (mm)</label>
                     <div class="slider-input-row">
-                        <input type="range" id="padPage" min="0" max="20" step="1" value="5">
-                        <input type="number" id="pad-page-val" min="0" max="20" step="1" value="5">
+                        <input type="range" id="padPage" min="0" max="20" step="1" value="1">
+                        <input type="number" id="pad-page-val" min="0" max="20" step="1" value="1">
                     </div>
                 </div>
 
@@ -125,8 +141,8 @@ Double dollar $$x^2$$ equations supported."></textarea>
                 <div class="input-group">
                     <label>Box Padding (px)</label>
                     <div class="slider-input-row">
-                        <input type="range" id="padBox" min="0" max="10" step="1" value="1">
-                        <input type="number" id="pad-box-val" min="0" max="10" step="1" value="1">
+                        <input type="range" id="padBox" min="0" max="10" step="1" value="0">
+                        <input type="number" id="pad-box-val" min="0" max="10" step="1" value="0">
                     </div>
                 </div>
 
@@ -194,6 +210,18 @@ Double dollar $$x^2$$ equations supported."></textarea>
         </section>
 
     </main>
+
+    <!-- Custom Generic Modal -->
+    <div id="custom-modal" class="modal-backdrop">
+        <div class="modal-content">
+            <h3 id="modal-title">Title</h3>
+            <p id="modal-message">Message body...</p>
+            <div class="modal-buttons">
+                <button id="modal-btn-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="modal-btn-confirm" class="btn btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>
