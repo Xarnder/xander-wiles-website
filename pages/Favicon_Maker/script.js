@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsCard = document.getElementById('results-card');
     const resultsContent = document.getElementById('results-content');
     const generateStatus = document.getElementById('generate-status');
+    const resetBtn = document.getElementById('reset-btn');
 
     // --- State Variables ---
     let sourceFile = null;
@@ -57,6 +58,12 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn.addEventListener('click', handleFinalGeneration);
     resultsContent.addEventListener('click', handleResultsClick);
 
+    resetBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleReset();
+    });
+
     // --- Main Functions ---
     function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
 
@@ -68,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadLabel.classList.add('uploaded');
         document.getElementById('upload-prompt').classList.add('hidden');
         document.getElementById('image-preview-container').classList.remove('hidden');
+        resetBtn.classList.remove('hidden');
         imageFilename.textContent = file.name;
 
         // Detect Type
@@ -88,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     svgControlsCard.classList.remove('hidden');
                     generateBtn.disabled = false;
                     await updateSvgPreviews();
+                    generateBtn.classList.add('glow-animation');
                 };
                 textReader.readAsText(file);
 
@@ -100,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     svgControlsCard.classList.remove('hidden');
                     generateBtn.disabled = false;
                     await updateSvgPreviews();
+                    generateBtn.classList.add('glow-animation');
                 } catch (error) { console.error(error); alert("Could not process image."); }
             }
         };
@@ -133,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleSliderChange(slider, valueSpan, fixed = 0) {
         valueSpan.textContent = parseFloat(slider.value).toFixed(fixed);
         debouncedUpdate();
+        generateBtn.classList.add('glow-animation');
     }
 
     async function updateSvgPreviews() {
@@ -388,6 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Final Generation & Output ---
     async function handleFinalGeneration() {
         if (!sourceFile) return;
+        generateBtn.classList.remove('glow-animation');
         generateBtn.disabled = true; generateBtn.textContent = 'Generating...'; resultsCard.classList.remove('hidden'); updateStatus('Processing icons...');
         try {
             const iconSizes = [16, 32, 180, 192, 512];
@@ -471,7 +483,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleResultsClick(e) {
         const downloadBtn = e.target.closest('#download-zip-btn');
         if (downloadBtn && downloadBlob) {
-            const a = document.createElement('a'); a.href = URL.createObjectURL(downloadBlob); a.download = 'favicons.zip';
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(downloadBlob);
+
+            // Generate Filename
+            let zipFileName = 'favicons.zip';
+            if (sourceFile && sourceFile.name) {
+                const nameParts = sourceFile.name.split('.');
+                if (nameParts.length > 1) nameParts.pop();
+                const baseName = nameParts.join('.');
+                zipFileName = `${baseName}_icon_pack.zip`;
+            }
+            a.download = zipFileName;
+
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
         }
         const copyBtn = e.target.closest('.copy-btn');
@@ -515,5 +539,33 @@ document.addEventListener('DOMContentLoaded', () => {
             img.onerror = reject;
             img.src = b64Start + svg64;
         });
+    }
+
+    function handleReset() {
+        sourceFile = null;
+        isVectorMode = false;
+        sourceImageData = null;
+        sourceSvgText = null;
+        lightSvgString = null;
+        darkSvgString = null;
+        downloadBlob = null;
+
+        uploadInput.value = '';
+        uploadLabel.classList.remove('uploaded');
+        document.getElementById('upload-prompt').classList.remove('hidden');
+        document.getElementById('image-preview-container').classList.add('hidden');
+        resetBtn.classList.add('hidden');
+        imagePreview.src = '#';
+        imageFilename.textContent = '';
+
+        svgControlsCard.classList.add('hidden');
+        resultsCard.classList.add('hidden');
+        generateBtn.disabled = true;
+
+        svgPreviewWrapperLight.innerHTML = '';
+        svgPreviewWrapperDark.innerHTML = '';
+        resultsContent.innerHTML = '';
+        generateStatus.textContent = '';
+        generateBtn.textContent = 'Generate All Files';
     }
 });
