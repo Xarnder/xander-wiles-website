@@ -21,6 +21,7 @@ const dropZone = document.getElementById('dropZone');
 const imageCounter = document.getElementById('imageCounter');
 const previewCard = document.getElementById('previewCard');
 const previewCanvas = document.getElementById('previewCanvas');
+const previewLoader = document.getElementById('previewLoader');
 
 // Debug Logger
 function log(message, type = 'info') {
@@ -341,8 +342,19 @@ async function processImage(file, uniqueName) {
 
 // 4. Preview Logic (Optimized)
 // 4. Preview Logic (Optimized)
+// 4. Preview Logic (Optimized)
 async function setupPreview(filesToScan = loadedFiles) {
     log("Searching for a valid preview image...");
+
+    // Show preview card with loader immediately
+    previewCard.style.display = 'block';
+    if (previewLoader) previewLoader.style.display = 'flex';
+    // Clear previous canvas if any, or leave it? Clearing is better to show "working"
+    // previewCanvas.getContext('2d').clearRect(0, 0, previewCanvas.width, previewCanvas.height); 
+    // Actually, keep old one if appending? But user expects feedback for new batch.
+
+    // Tiny delay to allow UI to render spinner before heavy blocking task
+    await new Promise(r => setTimeout(r, 50));
 
     for (const file of filesToScan) {
         try {
@@ -361,13 +373,14 @@ async function setupPreview(filesToScan = loadedFiles) {
 
                 firstFaceBox = largestFace.box;
 
-                // Show Preview Card and update text
-                previewCard.style.display = 'block';
                 const title = previewCard.querySelector('h3');
                 if (title) title.innerText = `Preview (${file.name})`;
 
                 updatePreviewCanvas();
                 log(`Preview ready using ${file.name}. Adjust padding or Start Processing.`);
+
+                // Hide loader
+                if (previewLoader) previewLoader.style.display = 'none';
                 return; // Stop searching
             }
         } catch (err) {
@@ -376,6 +389,7 @@ async function setupPreview(filesToScan = loadedFiles) {
     }
 
     log("No faces detected in any of the uploaded images.", "error");
+    if (previewLoader) previewLoader.style.display = 'none';
 }
 
 function updatePreviewCanvas() {
@@ -590,6 +604,7 @@ downloadBtn.addEventListener('click', () => {
 
     zip.generateAsync({ type: "blob" })
         .then(function (content) {
+            // Use FileSaver.js for better cross-browser/mobile support
             saveAs(content, "cropped_faces.zip");
             log("Download started.");
         });
