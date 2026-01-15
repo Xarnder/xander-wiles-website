@@ -112,6 +112,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const downscaleUseSubfoldersToggle = document.getElementById('downscale-use-subfolders-toggle');
 
+    // Reorder DOM
+    const openReorderModalBtn = document.getElementById('open-reorder-modal-btn');
+    const reorderPopup = document.getElementById('reorder-popup');
+    const closeReorderPopupBtn = reorderPopup.querySelector('.popup-close-btn');
+    const reorderList = document.getElementById('reorder-list');
+    const saveReorderBtn = document.getElementById('save-reorder-btn');
+
     // PDF DOM
     const pdfConversionPopup = document.getElementById('pdf-conversion-popup');
     const pdfCountDisplay = document.getElementById('pdf-count-display');
@@ -208,6 +215,12 @@ document.addEventListener('DOMContentLoaded', () => {
         downscaleQualityValue.textContent = downscaleQualitySlider.value;
     });
     downscaleGenerateBtn.addEventListener('click', handleDownscaleGeneration);
+
+    // Reorder Listeners
+    openReorderModalBtn.addEventListener('click', openReorderModal);
+    closeReorderPopupBtn.addEventListener('click', closeReorderModal);
+    reorderPopup.addEventListener('click', (e) => { if (e.target === reorderPopup) closeReorderModal(); });
+    saveReorderBtn.addEventListener('click', saveReorder);
 
     // --- Functions ---
 
@@ -709,6 +722,120 @@ document.addEventListener('DOMContentLoaded', () => {
     function closeGridModal() {
         document.body.classList.remove('popup-open');
         gridPopup.classList.add('hidden');
+    }
+
+    // --- Reorder Feature ---
+    let dragStartIndex;
+
+    function openReorderModal() {
+        if (imageFiles.length === 0) {
+            alert("No images loaded to reorder.");
+            return;
+        }
+
+        reorderList.innerHTML = '';
+        imageFiles.forEach((file, index) => {
+            const li = document.createElement('li');
+            li.setAttribute('data-index', index); // Current visual index
+            li.setAttribute('data-original-index', index); // Track origin for saving
+            li.classList.add('reorder-item');
+            li.draggable = true;
+
+            li.innerHTML = `
+                <span style="pointer-events:none;">${file.name}</span>
+                <span style="color:var(--text-secondary); pointer-events:none;">☰</span>
+            `;
+
+            addDragEvents(li);
+            reorderList.appendChild(li);
+        });
+
+        document.body.classList.add('popup-open');
+        reorderPopup.classList.remove('hidden');
+    }
+
+    function closeReorderModal() {
+        document.body.classList.remove('popup-open');
+        reorderPopup.classList.add('hidden');
+    }
+
+    function addDragEvents(item) {
+        item.addEventListener('dragstart', dragStart);
+        item.addEventListener('dragenter', dragEnter);
+        item.addEventListener('dragover', dragOver);
+        item.addEventListener('dragleave', dragLeave);
+        item.addEventListener('drop', dragDrop);
+    }
+
+    function dragStart() {
+        dragStartIndex = +this.getAttribute('data-index');
+        this.classList.add('dragging');
+    }
+
+    function dragEnter() {
+        this.classList.add('drag-over');
+    }
+
+    function dragLeave() {
+        this.classList.remove('drag-over');
+    }
+
+    function dragOver(e) {
+        e.preventDefault();
+    }
+
+    function dragDrop() {
+        const dragEndIndex = +this.getAttribute('data-index');
+        swapItems(dragStartIndex, dragEndIndex);
+        this.classList.remove('drag-over');
+        document.querySelector('.dragging') && document.querySelector('.dragging').classList.remove('dragging');
+    }
+
+    function swapItems(fromIndex, toIndex) {
+        const items = Array.from(reorderList.querySelectorAll('.reorder-item'));
+        const itemOne = items[fromIndex];
+        const itemTwo = items[toIndex];
+
+        if (fromIndex < toIndex) {
+            itemTwo.parentNode.insertBefore(itemOne, itemTwo.nextSibling);
+        } else {
+            itemTwo.parentNode.insertBefore(itemOne, itemTwo);
+        }
+
+        // Re-index attributes after swap
+        const newItems = Array.from(reorderList.querySelectorAll('.reorder-item'));
+        newItems.forEach((item, index) => {
+            item.setAttribute('data-index', index);
+        });
+    }
+
+    function saveReorder() {
+        const listItems = Array.from(reorderList.querySelectorAll('.reorder-item'));
+
+        // Rebuild arrays based on the original indices
+        const newImageFiles = [];
+        const newImageTitles = [];
+        const newImageFolders = [];
+
+        listItems.forEach(item => {
+            const oldIndex = parseInt(item.getAttribute('data-original-index'), 10);
+            newImageFiles.push(imageFiles[oldIndex]);
+            newImageTitles.push(imageTitles[oldIndex]);
+            newImageFolders.push(imageFolders[oldIndex]);
+        });
+
+        // Update Global State
+        imageFiles = newImageFiles;
+        imageTitles = newImageTitles;
+        imageFolders = newImageFolders;
+
+        // Reset View
+        currentIndex = 0;
+        updateUIForCurrentIndex();
+
+        // Feedback
+        showStatus(uploadStatus, "Images reordered successfully!", false);
+        closeReorderModal();
     }
 
     // Helper: Draw borders for "Tetris" style grouping

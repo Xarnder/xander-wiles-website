@@ -180,6 +180,7 @@
                     <div class="final-export-buttons">
                         <button id="export-btn">Export All as .ZIP</button>
                         <button id="open-grid-modal-btn" class="secondary-btn">Create Grid</button>
+                        <button id="open-reorder-modal-btn" class="secondary-btn">Reorder Images</button>
                         <button id="open-downscale-modal-btn" class="secondary-btn">Batch Downscale</button>
                     </div>
                 </div>
@@ -468,6 +469,25 @@
                 <button id="start-pdf-conversion-btn" class="popup-generate-btn" style="width: 100%">Convert PDFs to
                     PNG</button>
                 <button id="skip-pdf-btn" class="secondary-btn" style="width: 100%; border: none;">Skip PDFs</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reorder Modal -->
+    <div id="reorder-popup" class="popup-overlay hidden">
+        <div class="popup-card glass-card" style="max-width: 600px; max-height: 80vh;">
+            <button class="popup-close-btn">&times;</button>
+            <h3>Reorder Images</h3>
+            <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1rem;">
+                Drag and drop items to reorder them.
+            </p>
+
+            <ul id="reorder-list" class="reorder-list">
+                <!-- Items will be injected here -->
+            </ul>
+
+            <div class="popup-actions" style="margin-top: 1rem;">
+                <button id="save-reorder-btn" class="popup-generate-btn">Save New Order</button>
             </div>
         </div>
     </div>
