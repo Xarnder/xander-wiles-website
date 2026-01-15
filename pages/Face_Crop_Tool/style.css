@@ -97,6 +97,47 @@ input[type="file"] {
     background: rgba(255, 255, 255, 0.2);
 }
 
+/* Drop Zone */
+.drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.02);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    min-width: 250px;
+    flex: 1;
+}
+
+.input-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(74, 158, 255, 0.1);
+}
+
+.drop-hint {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.image-counter {
+    font-size: 0.9rem;
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: 5px;
+}
+
 /* Slider Styling */
 .setting-group {
     display: flex;

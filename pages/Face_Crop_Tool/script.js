@@ -17,6 +17,8 @@ const statusArea = document.getElementById('statusArea');
 const gallery = document.getElementById('gallery');
 const downloadBtn = document.getElementById('downloadBtn');
 const processBtn = document.getElementById('processBtn');
+const dropZone = document.getElementById('dropZone');
+const imageCounter = document.getElementById('imageCounter');
 const previewCard = document.getElementById('previewCard');
 const previewCanvas = document.getElementById('previewCanvas');
 
@@ -65,37 +67,74 @@ useOriginalRatioInput.addEventListener('change', (e) => {
 });
 
 imageInput.addEventListener('change', async (e) => {
+    handleNewFiles(e.target.files);
+});
+
+const fileInput = document.getElementById('fileInput');
+if (fileInput) {
+    fileInput.addEventListener('change', async (e) => {
+        handleNewFiles(e.target.files);
+    });
+}
+
+// Drag and Drop Logic
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const files = e.dataTransfer.files;
+    handleNewFiles(files);
+});
+
+async function handleNewFiles(fileList) {
     if (!modelsLoaded) {
         alert("Please wait for AI models to load.");
         return;
     }
 
-    const allFiles = Array.from(e.target.files);
+    const newFiles = Array.from(fileList);
     const validExtensions = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
-    loadedFiles = allFiles.filter(file => validExtensions.includes(file.type));
+    const validFiles = newFiles.filter(file => validExtensions.includes(file.type));
 
-    if (loadedFiles.length === 0) {
-        alert("No valid images found in the selected folder.");
+    if (validFiles.length === 0) {
+        if (loadedFiles.length === 0) alert("No valid images found.");
         return;
     }
 
-    // Reset UI
-    gallery.innerHTML = '';
-    processedBlobs = [];
+    // Append to existing
+    loadedFiles = [...loadedFiles, ...validFiles];
+
+    // Reset UI slightly (but don't clear everything if we are appending!)
+    // If we want to allow "Process" to run on the WHOLE batch:
     downloadBtn.disabled = true;
     processBtn.disabled = false;
     processBtn.innerText = `Process ${loadedFiles.length} Images`;
 
-    // Clear caches
-    firstImageCache = null;
-    firstFaceBox = null;
-    previewCard.style.display = 'none';
+    updateCounter();
 
-    log(`Found ${loadedFiles.length} images. Analyzing images for preview...`);
+    // If we haven't set up a preview yet, try to do it with new files
+    if (!firstImageCache) {
+        log(`Analyzing new images for preview...`);
+        // Only scan the NEW files for a preview if needed, or scan all?
+        // Scanning validFiles is enough if we just want A preview.
+        await setupPreview(validFiles);
+    } else {
+        log(`${validFiles.length} images added. Total: ${loadedFiles.length}`);
+    }
+}
 
-    // Trigger preview setup (scans for first face)
-    await setupPreview();
-});
+function updateCounter() {
+    imageCounter.textContent = `${loadedFiles.length} images ready`;
+}
 
 processBtn.addEventListener('click', async () => {
     if (loadedFiles.length === 0) return;
@@ -120,14 +159,25 @@ processBtn.addEventListener('click', async () => {
     const usedNames = new Set();
 
     for (const file of loadedFiles) {
+
+
         try {
-            // Unique Name Generation
+            // Unique Name Generation - moved inside loop
             let baseName = file.name;
             let uniqueName = baseName;
             let counter = 1;
             const parts = baseName.split('.');
             const ext = parts.length > 1 ? parts.pop() : '';
             const nameNoExt = parts.join('.');
+
+            // Check against both usedNames set AND previously processed names to be safe?
+            // actually just usedNames set is cleared at start of processBtn click??
+            // NO, we want to allow accumulative processing? 
+            // "allow the user to keep drainging in new images" -> usually implies we process ALL of them.
+            // But if I already processed some, should I re-process them? 
+            // The user probably wants to add more, then click process.
+            // So `processedBlobs` is cleared on processBtn click, implying a fresh batch run.
+            // That's fine.
 
             while (usedNames.has(uniqueName)) {
                 uniqueName = `${nameNoExt}_${counter}.${ext}`;
@@ -290,10 +340,11 @@ async function processImage(file, uniqueName) {
 }
 
 // 4. Preview Logic (Optimized)
-async function setupPreview() {
+// 4. Preview Logic (Optimized)
+async function setupPreview(filesToScan = loadedFiles) {
     log("Searching for a valid preview image...");
 
-    for (const file of loadedFiles) {
+    for (const file of filesToScan) {
         try {
             const img = await faceapi.bufferToImage(file);
             const detections = await faceapi.detectAllFaces(img);
