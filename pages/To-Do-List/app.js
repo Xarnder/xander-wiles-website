@@ -398,11 +398,21 @@ function createTaskElement(task, sourceListId, number) {
     const isLocked = appData.settings.sortMode !== 'custom';
     const isImportant = task.text.includes('!!');
 
+    // Check for multiple lists (Linked)
+    let listCount = 0;
+    appData.rawLists.forEach(l => {
+        if (l.taskIds && l.taskIds.includes(task.id) && l.id !== 'orphan-archive') {
+            listCount++;
+        }
+    });
+    const isLinked = listCount > 1;
+
     let classes = 'task-card';
     if (task.completed) classes += ' task-completed';
     if (task.archived) classes += ' archived-task';
     if (isImportant) classes += ' important';
     if (isLocked) classes += ' locked-sort';
+    if (isLinked) classes += ' linked-task';
 
     el.className = classes;
     el.dataset.taskId = task.id;
@@ -436,6 +446,7 @@ function createTaskElement(task, sourceListId, number) {
     }
 
     let numberHtml = appData.settings.showNumbers ? `<span class="task-number">${number}.</span>` : '';
+    let linkedIconHtml = isLinked ? `<i class="ph ph-link" style="font-size: 0.8em; margin-left: 5px; color: var(--accent-blue);" title="Linked to multiple lists"></i>` : '';
 
     el.innerHTML = `
         <input type="checkbox" class="task-checkbox" 
@@ -444,7 +455,7 @@ function createTaskElement(task, sourceListId, number) {
             onchange="toggleTaskComplete('${task.id}', this.checked)">
         ${numberHtml}
         <div class="task-content-wrapper">
-            <div class="task-text">${escapeHtml(task.text)}</div>
+            <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml}</div>
             ${imagesHtml}
         </div>
         <div class="task-actions">${actionsHtml}</div>
@@ -784,19 +795,152 @@ window.openEditModal = function (taskId, listId) {
     if (!task) return;
     document.getElementById('modal-task-input').value = task.text;
     modalOverlay.dataset.taskId = taskId;
+
+    // --- POPULATE LIST SELECT ---
+    const select = document.getElementById('manual-move-select');
+    select.innerHTML = '<option value="" disabled selected>Select Destination...</option>';
+
+    // Sort lists using same logic as board
+    const sortedLists = getSortedListObjects();
+    sortedLists.forEach(list => {
+        if (list.id === 'orphan-archive') return; // Skip orphan list in dropdown
+        const option = document.createElement('option');
+        option.value = list.id;
+        option.textContent = list.title;
+        select.appendChild(option);
+    });
+
+    // --- SHOW CURRENT LOCATIONS ---
+    renderCurrentLocations(taskId);
+
+    // --- GLOW COLOR SELECTION ---
+    const colorBtns = document.querySelectorAll('#glow-color-options .color-btn');
+    colorBtns.forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.color === (task.glowColor || 'none'));
+        btn.onclick = () => {
+            updateDoc(doc(db, "users", currentUser.uid, "tasks", taskId), { glowColor: btn.dataset.color })
+                .catch(e => handleSyncError(e));
+            // Update UI immediately (optional, or wait for listener)
+            colorBtns.forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        }
+    });
+
     modalOverlay.classList.remove('hidden');
 };
 
+function renderCurrentLocations(taskId) {
+    const container = document.getElementById('current-locations-list');
+    container.innerHTML = '';
+
+    const currentLists = appData.rawLists.filter(list => list.taskIds && list.taskIds.includes(taskId));
+
+    if (currentLists.length === 0) {
+        container.innerHTML = '<div class="location-item"><span class="location-name">Orphans / Archived</span></div>';
+        return;
+    }
+
+    currentLists.forEach(list => {
+        const div = document.createElement('div');
+        div.className = 'location-item';
+        div.innerHTML = `
+            <span class="location-name">${escapeHtml(list.title)}</span>
+            <button class="location-remove-btn" onclick="removeTaskFromList('${taskId}', '${list.id}')" title="Remove from this list">
+                <i class="ph ph-x"></i>
+            </button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// --- SAVE / CLOSE ---
 document.getElementById('modal-save-btn').onclick = () => {
     const taskId = modalOverlay.dataset.taskId;
     const text = document.getElementById('modal-task-input').value;
-    // Glow color logic?
-    // I'll skip complex glow UI recreation for brevity unless critical
-    // Let's just save text
     updateDoc(doc(db, "users", currentUser.uid, "tasks", taskId), { text: text }).catch(e => handleSyncError(e));
     modalOverlay.classList.add('hidden');
 };
 document.getElementById('modal-close-btn').onclick = () => modalOverlay.classList.add('hidden');
+
+// --- MOVE / LINK ACTIONS ---
+document.getElementById('manual-move-btn').onclick = () => {
+    const taskId = modalOverlay.dataset.taskId;
+    const targetListId = document.getElementById('manual-move-select').value;
+    if (!targetListId) {
+        showToast("Please select a destination list.");
+        return;
+    }
+
+    // MOVE = Remove from ALL current lists -> Add to Target
+    // Except if it's the same list, do nothing. But "ALL" implies it might be in multiple.
+    // "Cut" usually implies taking it out of context. Here we take it out of ALL contexts.
+
+    const batch = writeBatch(db);
+
+    // 1. Remove from all existing lists
+    appData.rawLists.forEach(list => {
+        if (list.taskIds && list.taskIds.includes(taskId)) {
+            batch.update(doc(db, "users", currentUser.uid, "lists", list.id), {
+                taskIds: arrayRemove(taskId)
+            });
+        }
+    });
+
+    // 2. Add to target list
+    batch.update(doc(db, "users", currentUser.uid, "lists", targetListId), {
+        taskIds: arrayUnion(taskId)
+    });
+
+    // 3. Ensure unarchived
+    batch.update(doc(db, "users", currentUser.uid, "tasks", taskId), { archived: false });
+
+    batch.commit()
+        .then(() => {
+            showToast("Task moved successfully.");
+            modalOverlay.classList.add('hidden');
+        })
+        .catch(e => handleSyncError(e));
+};
+
+document.getElementById('manual-link-btn').onclick = () => {
+    const taskId = modalOverlay.dataset.taskId;
+    const targetListId = document.getElementById('manual-move-select').value;
+    if (!targetListId) {
+        showToast("Please select a destination list.");
+        return;
+    }
+
+    // CHECK IF ALREADY IN TARGET
+    const targetList = appData.rawLists.find(l => l.id === targetListId);
+    if (targetList && targetList.taskIds && targetList.taskIds.includes(taskId)) {
+        showToast("Task is already in that list.");
+        return;
+    }
+
+    // LINK = Add to Target (Keep in others)
+    const batch = writeBatch(db);
+    batch.update(doc(db, "users", currentUser.uid, "lists", targetListId), {
+        taskIds: arrayUnion(taskId)
+    });
+    batch.update(doc(db, "users", currentUser.uid, "tasks", taskId), { archived: false });
+
+    batch.commit()
+        .then(() => {
+            showToast("Task linked successfully.");
+            renderCurrentLocations(taskId); // Update UI inside modal
+        })
+        .catch(e => handleSyncError(e));
+};
+
+window.removeTaskFromList = function (taskId, listId) {
+    if (confirm("Remove functionality from specific list?")) {
+        updateDoc(doc(db, "users", currentUser.uid, "lists", listId), {
+            taskIds: arrayRemove(taskId)
+        }).then(() => {
+            renderCurrentLocations(taskId);
+        }).catch(e => handleSyncError(e));
+    }
+};
 
 // Image Lightbox
 const imageModal = document.getElementById('image-modal-overlay');
