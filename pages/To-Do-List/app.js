@@ -217,6 +217,16 @@ function getSortedListObjects() {
 function renderBoard() {
     if (!currentUser) return;
 
+    // Capture Scroll Positions
+    const scrollMap = new Map();
+    document.querySelectorAll('.list-column').forEach(col => {
+        const listId = col.dataset.listId;
+        const taskList = col.querySelector('.task-list');
+        if (listId && taskList) {
+            scrollMap.set(listId, taskList.scrollTop);
+        }
+    });
+
     sortableInstances.forEach(s => s.destroy());
     sortableInstances = [];
     if (listSortable) listSortable.destroy();
@@ -241,6 +251,16 @@ function renderBoard() {
             renderListColumn(orphanList, true, false);
         }
     }
+
+    // Restore Scroll Positions
+    scrollMap.forEach((scrollTop, listId) => {
+        // Find by dataset because renderListColumn sets dataset.listId on the column
+        // But we can also look for the container ID directly since we know the format
+        const container = document.getElementById(`container-${listId}`);
+        if (container) {
+            container.scrollTop = scrollTop;
+        }
+    });
 
     // List Sorting (Reorder List Columns)
     listSortable = new Sortable(boardContainer, {
