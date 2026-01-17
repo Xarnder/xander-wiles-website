@@ -1391,3 +1391,115 @@ async function processTodoistCSV(csvText) {
         showToast("Import failed. See console.");
     }
 }
+
+/* --- SEARCH FEATURE --- */
+const searchModal = document.getElementById('search-modal-overlay');
+const searchInput = document.getElementById('search-input');
+const searchResultsContainer = document.getElementById('search-results-container');
+const searchEmptyState = document.getElementById('search-empty-state');
+
+// Open Search
+document.getElementById('search-btn').onclick = () => {
+    searchModal.classList.remove('hidden');
+    searchInput.focus();
+    searchInput.select();
+    performSearch(searchInput.value);
+};
+
+// Close Search
+document.getElementById('close-search-btn').onclick = () => {
+    searchModal.classList.add('hidden');
+};
+
+// Search Input Listener (Debounced)
+let searchTimeout;
+searchInput.addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        performSearch(e.target.value);
+    }, 300);
+});
+
+function performSearch(query) {
+    const term = query.trim().toLowerCase();
+    searchResultsContainer.innerHTML = '';
+
+    if (!term) {
+        searchEmptyState.classList.remove('hidden');
+        searchEmptyState.querySelector('p').textContent = "Type to search...";
+        return;
+    }
+
+    const matches = [];
+
+    // Iterate all tasks
+    Object.values(appData.tasks).forEach(task => {
+        if (!task) return;
+        // Check text match and archive visibility
+        if ((showArchived || !task.archived) && task.text.toLowerCase().includes(term)) {
+            // Find context
+            const context = getTaskContext(task.id);
+            if (context.length > 0) {
+                matches.push({ task, context });
+            } else if (showArchived && task.archived) {
+                matches.push({ task, context: [{ listName: 'Archived / Orphan', index: '-' }] });
+            } else if (getOrphanedTaskIds().includes(task.id)) {
+                matches.push({ task, context: [{ listName: 'Orphan', index: '-' }] });
+            }
+        }
+    });
+
+    if (matches.length === 0) {
+        searchEmptyState.classList.remove('hidden');
+        searchEmptyState.querySelector('p').textContent = "No tasks found.";
+    } else {
+        searchEmptyState.classList.add('hidden');
+        matches.forEach(match => {
+            renderSearchResultItem(match.task, match.context);
+        });
+    }
+}
+
+function getTaskContext(taskId) {
+    const contexts = [];
+    appData.lists.forEach(list => {
+        if (list.taskIds && list.taskIds.includes(taskId)) {
+            // Find index
+            const index = list.taskIds.indexOf(taskId) + 1;
+            contexts.push({
+                listName: list.title,
+                listId: list.id,
+                index: index
+            });
+        }
+    });
+    return contexts;
+}
+
+function renderSearchResultItem(task, contexts) {
+    const sourceListId = contexts[0]?.listId || 'orphan-archive';
+    // We pass index as 0 effectively to createTaskElement if it's unknown/orphan, 
+    // but the context badge will try to show real index.
+    const taskEl = createTaskElement(task, sourceListId, contexts[0]?.index || 0);
+
+    // Context Badges
+    const contextContainer = document.createElement('div');
+    contextContainer.style.marginBottom = '6px';
+    contextContainer.style.display = 'flex';
+    contextContainer.style.flexWrap = 'wrap';
+
+    contexts.forEach(ctx => {
+        const badge = document.createElement('span');
+        badge.className = 'search-context-badge';
+        badge.innerHTML = `<i class="ph ph-list-dashes"></i> ${ctx.listName} <span style="opacity:0.6; margin-left:3px;">#${ctx.index}</span>`;
+        contextContainer.appendChild(badge);
+    });
+
+    const wrapper = document.createElement('div');
+    wrapper.style.marginBottom = '12px';
+
+    wrapper.appendChild(contextContainer);
+    wrapper.appendChild(taskEl);
+
+    searchResultsContainer.appendChild(wrapper);
+}
