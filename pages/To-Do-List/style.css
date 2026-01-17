@@ -382,6 +382,26 @@ body {
     min-height: 50px;
 }
 
+/* Thicker Scrollbar for Lists */
+.task-list::-webkit-scrollbar {
+    width: 16px;
+}
+
+.task-list::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    border: 4px solid transparent;
+    background-clip: content-box;
+}
+
+.task-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+[data-theme="light"] .task-list::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
 /* TASK CARDS */
 .task-card {
     background: var(--card-bg);
@@ -462,12 +482,13 @@ body {
 
 .task-checkbox {
     appearance: none;
-    width: 16px;
-    height: 16px;
-    border: 2px solid var(--text-secondary);
-    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--text-secondary);
+    border-radius: 8px;
     cursor: pointer;
-    margin-top: 3px;
+    margin-top: 0;
+    /* Adjusted alignment for larger box */
     display: grid;
     place-content: center;
     flex-shrink: 0;
@@ -475,11 +496,11 @@ body {
 
 .task-checkbox::before {
     content: "";
-    width: 10px;
-    height: 10px;
+    width: 20px;
+    height: 20px;
     transform: scale(0);
     background: var(--accent-blue);
-    border-radius: 2px;
+    border-radius: 4px;
     transition: 0.1s;
 }
 
