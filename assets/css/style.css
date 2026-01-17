@@ -221,15 +221,118 @@ a:hover {
 }
 
 /* Make sure the featured card takes up full height */
-.top-section-grid .page-card {
+/* Make sure the featured card takes up full height */
+/* UPDATED: This selector was too broad and affected the nested cards. 
+   We only want this behavior if a page-card is a direct child of the grid (legacy support) 
+   or we can just remove it and style specific instances. 
+   For now, I'll restrict it to direct children or potential future uses. */
+.top-section-grid>.page-card {
     height: 100%;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    margin: 0;
     /* Override any potential margins */
 }
+
+/* New Right Column Stack */
+.hero-side-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    height: 100%;
+}
+
+.hero-side-stack .page-card {
+    /* To Do List card takes up natural space based on content */
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+.hero-side-stack .page-card .page-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 0;
+}
+
+.hero-side-stack .page-card h3 {
+    margin-bottom: 0.25rem;
+}
+
+.hero-side-stack .page-card p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+/* About Card Styles */
+.about-card {
+    flex: 1;
+    /* Takes up remaining vertical space */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 2rem;
+    text-align: left;
+}
+
+.about-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    width: fit-content;
+}
+
+.about-card .tagline {
+    font-style: italic;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.about-card .bio-text {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+.about-card .bio-text strong {
+    color: var(--text-primary);
+}
+
+.interests-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: auto;
+    /* Push to bottom if space allows */
+}
+
+.tag {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+}
+
+.tag:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border-color: var(--accent-cyan);
+    transform: translateY(-2px);
+}
+
 
 .page-card {
     transition: transform 0.3s ease, box-shadow 0.3s ease;
