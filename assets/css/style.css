@@ -211,6 +211,26 @@ a:hover {
     gap: 1.5rem;
 }
 
+/* --- Top Section Grid (Profile + Featured App) --- */
+.top-section-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+    align-items: stretch;
+    /* Make them same height */
+}
+
+/* Make sure the featured card takes up full height */
+.top-section-grid .page-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+    /* Override any potential margins */
+}
+
 .page-card {
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     text-align: center;
@@ -329,6 +349,11 @@ a:hover {
         padding: 0 1rem;
         margin-top: 1rem;
         gap: 1rem;
+    }
+
+    .top-section-grid {
+        grid-template-columns: 1fr;
+        /* Stack on mobile */
     }
 
     .site-header {

@@ -37,21 +37,30 @@
     <div id="main-nav-placeholder"></div>
 
     <main class="app-container">
-        <div class="hero-card glass-card">
-            <picture>
-                <!-- The browser tries to load this AVIF file first -->
-                <source srcset="assets/images/xander_Correted_Edited.avif" type="image/avif">
+        <div class="top-section-grid">
+            <div class="hero-card glass-card">
+                <picture>
+                    <!-- The browser tries to load this AVIF file first -->
+                    <source srcset="assets/images/xander_Correted_Edited.avif" type="image/avif">
 
-                <!-- If it can't, it tries this WebP file next -->
-                <source srcset="assets/images/Xander_Corrected_Edited.webp" type="image/webp">
+                    <!-- If it can't, it tries this WebP file next -->
+                    <source srcset="assets/images/Xander_Corrected_Edited.webp" type="image/webp">
 
-                <!-- This is the final fallback for older browsers. It also provides the alt text. -->
-                <img src="assets/images/Xander Corrected Edited.png" alt="A profile picture of Xander Wiles"
-                    class="profile-picture" width="300" height="300" loading="lazy">
-            </picture>
-            <h1>Welcome</h1>
-            <p>Select a game or page from the navigation menu below to get started. All projects are built with passion
-                and a lot of JavaScript.</p>
+                    <!-- This is the final fallback for older browsers. It also provides the alt text. -->
+                    <img src="assets/images/Xander Corrected Edited.png" alt="A profile picture of Xander Wiles"
+                        class="profile-picture" width="300" height="300" loading="lazy">
+                </picture>
+                <h1>Welcome</h1>
+                <p>Select a game or page from the navigation menu below to get started. All projects are built with
+                    passion
+                    and a lot of JavaScript.</p>
+            </div>
+
+            <a href="/pages/To-Do-List/" class="page-card glass-card">
+                <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon" loading="lazy">
+                <h3>To Do List</h3>
+                <p>A tool for managing tasks and to-dos with features like drag-and-drop and linked tasks.</p>
+            </a>
         </div>
 
         <!-- === GAMES === -->
