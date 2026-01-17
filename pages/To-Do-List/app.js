@@ -732,13 +732,159 @@ document.getElementById('close-options-btn').onclick = () => {
 
 // Reset Modal Triggers
 const resetModal = document.getElementById('reset-modal-overlay');
+const sliderHandle = document.getElementById('slider-handle');
+const sliderContainer = document.getElementById('slider-container');
+const sliderText = document.querySelector('.slider-text');
+let isDragging = false;
+let startX = 0;
+let currentX = 0;
+
 document.getElementById('trigger-reset-btn').onclick = () => {
     optionsModal.classList.add('hidden');
     resetModal.classList.remove('hidden');
+    resetSlider();
 };
+
 document.getElementById('reset-cancel-btn').onclick = () => {
     resetModal.classList.add('hidden');
 };
+
+// Slider Logic
+function resetSlider() {
+    sliderHandle.style.left = '2px';
+    sliderContainer.classList.remove('unlocked');
+    sliderText.style.opacity = '1';
+    sliderText.innerText = "Slide to Confirm";
+    currentX = 0;
+}
+
+function onDragStart(e) {
+    isDragging = true;
+    startX = (e.type.includes('mouse') ? e.clientX : e.touches[0].clientX) - currentX;
+    sliderHandle.style.cursor = 'grabbing';
+}
+
+function onDrag(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+
+    const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+    let x = clientX - startX;
+    const containerWidth = sliderContainer.offsetWidth;
+    const handleWidth = sliderHandle.offsetWidth;
+    const maxDrag = containerWidth - handleWidth - 6; // -6 for padding
+
+    if (x < 0) x = 0;
+    if (x > maxDrag) x = maxDrag;
+
+    currentX = x;
+    sliderHandle.style.left = `${2 + x}px`;
+
+    // Opacity of text
+    const opacity = 1 - (x / maxDrag);
+    sliderText.style.opacity = opacity;
+
+    // Check unlock
+    if (x >= maxDrag) {
+        sliderContainer.classList.add('unlocked');
+    } else {
+        sliderContainer.classList.remove('unlocked');
+    }
+}
+
+function onDragEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    sliderHandle.style.cursor = 'grab';
+
+    const containerWidth = sliderContainer.offsetWidth;
+    const handleWidth = sliderHandle.offsetWidth;
+    const maxDrag = containerWidth - handleWidth - 6;
+
+    if (currentX >= maxDrag * 0.9) {
+        // Trigger Reset
+        sliderHandle.style.left = `${2 + maxDrag}px`;
+        sliderText.innerText = "Resetting...";
+        sliderText.style.opacity = '1';
+        performAppReset();
+    } else {
+        // Snap back
+        sliderHandle.style.transition = 'left 0.3s ease';
+        sliderHandle.style.left = '2px';
+        sliderText.style.transition = 'opacity 0.3s ease';
+        sliderText.style.opacity = '1';
+        currentX = 0;
+
+        setTimeout(() => {
+            sliderHandle.style.transition = '';
+            sliderText.style.transition = '';
+        }, 300);
+    }
+}
+
+// Event Listeners for Slider
+sliderHandle.addEventListener('mousedown', onDragStart);
+sliderHandle.addEventListener('touchstart', onDragStart);
+
+document.addEventListener('mousemove', onDrag);
+document.addEventListener('touchmove', onDrag, { passive: false });
+
+document.addEventListener('mouseup', onDragEnd);
+document.addEventListener('touchend', onDragEnd);
+
+
+// --- PERFORM RESET ---
+async function performAppReset() {
+    if (!currentUser) return;
+
+    try {
+        let batch = writeBatch(db);
+        let opCount = 0;
+
+        const commitBatch = async () => {
+            if (opCount > 0) {
+                await batch.commit();
+                batch = writeBatch(db);
+                opCount = 0;
+            }
+        };
+
+        // 1. Delete all Lists
+        for (const list of appData.rawLists) {
+            batch.delete(doc(db, "users", currentUser.uid, "lists", list.id));
+            opCount++;
+            if (opCount >= 450) await commitBatch();
+        }
+
+        // 2. Delete all Tasks
+        const allTaskIds = Object.keys(appData.tasks);
+        for (const taskId of allTaskIds) {
+            batch.delete(doc(db, "users", currentUser.uid, "tasks", taskId));
+            opCount++;
+            if (opCount >= 450) await commitBatch();
+        }
+
+        // 3. Reset User Settings / Index
+        batch.update(doc(db, "users", currentUser.uid), {
+            listOrder: [],
+            "settings.sortMode": 'custom',
+            projectTitle: 'Task Master'
+        });
+        opCount++;
+
+        // Final commit
+        await commitBatch();
+
+        showToast("App Data Reset Successfully.");
+        resetModal.classList.add('hidden');
+        resetSlider();
+
+    } catch (e) {
+        handleSyncError(e);
+        sliderText.innerText = "Error!";
+        setTimeout(resetSlider, 2000);
+    }
+}
 
 // --- IMAGE & MODAL LOGIC (Simplified) ---
 window.triggerImageUpload = function (taskId) {
@@ -1048,4 +1194,200 @@ function updateSyncUI() {
     }
 
     syncStatusText.innerText = timeStr;
+}
+
+// --- IMPORT TODOIST CSV ---
+document.getElementById('import-todoist-csv').onchange = function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function (evt) {
+        const text = evt.target.result;
+        await processTodoistCSV(text);
+        e.target.value = ''; // Reset
+        document.getElementById('options-modal-overlay').classList.add('hidden');
+    };
+    reader.readAsText(file);
+};
+
+async function processTodoistCSV(csvText) {
+    console.log("[DEBUG] Starting CSV processing...");
+
+    // --- 1. PARSE CSV ---
+    const rows = [];
+    let currentRow = [];
+    let currentCell = '';
+    let inQuotes = false;
+
+    // Normalize newlines
+    const chars = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    for (let i = 0; i < chars.length; i++) {
+        const char = chars[i];
+        const nextChar = chars[i + 1];
+
+        if (char === '"') {
+            if (inQuotes && nextChar === '"') {
+                currentCell += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            currentRow.push(currentCell);
+            currentCell = '';
+        } else if (char === '\n' && !inQuotes) {
+            currentRow.push(currentCell);
+            rows.push(currentRow);
+            currentRow = [];
+            currentCell = '';
+        } else {
+            currentCell += char;
+        }
+    }
+    if (currentCell || currentRow.length > 0) {
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+    }
+
+    console.log(`[DEBUG] Parsed ${rows.length} rows.`);
+
+    if (rows.length < 2) {
+        showToast("Invalid CSV format or empty.");
+        return;
+    }
+
+    // --- 2. IDENTIFY HEADERS ---
+    const headers = rows[0].map(h => h.toLowerCase().trim());
+    const typeIdx = headers.indexOf('type');
+    const contentIdx = headers.indexOf('content');
+    const priorityIdx = headers.indexOf('priority');
+
+    if (contentIdx === -1) {
+        showToast("Error: Could not find 'Content' column.");
+        return;
+    }
+
+    // --- 3. GROUP INTO LISTS (SECTIONS) ---
+    const listsToCreate = [];
+    // Default list for tasks before any section
+    let currentList = {
+        title: "Todoist Import " + new Date().toLocaleDateString(),
+        tasks: []
+    };
+    listsToCreate.push(currentList);
+
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.length < headers.length) continue;
+
+        const type = typeIdx !== -1 ? row[typeIdx] : 'task';
+        const content = row[contentIdx];
+        const priority = priorityIdx !== -1 ? row[priorityIdx] : '1';
+
+        console.log(`[DEBUG] Row ${i}: Type=${type}, Content=${content}`);
+
+        if (type === 'section') {
+            // New List Section
+            currentList = {
+                title: content,
+                tasks: []
+            };
+            listsToCreate.push(currentList);
+        } else if (type === 'task' && content) {
+            // Add Task to Current List
+            let glow = 'none';
+            // Todoist Priority: 4(High/Red), 3(Orange), 2(Blue), 1(Grey)
+            if (priority == '4') glow = '#ef4444';
+            else if (priority == '3') glow = '#f97316';
+            else if (priority == '2') glow = '#3b82f6';
+
+            currentList.tasks.push({ text: content, glow: glow });
+        }
+    }
+
+    // Remove empty default list if it has no tasks and we found sections
+    if (listsToCreate[0].tasks.length === 0 && listsToCreate.length > 1) {
+        listsToCreate.shift();
+    }
+
+    if (listsToCreate.length === 0 || listsToCreate.every(l => l.tasks.length === 0)) {
+        showToast("No tasks found to import.");
+        return;
+    }
+
+    console.log(`[DEBUG] Prepared ${listsToCreate.length} lists to create.`);
+
+    // --- 4. BATCH CREATION (SAFE CHUNKING) ---
+    try {
+        let batch = writeBatch(db);
+        let opCount = 0;
+        const allNewListIds = [];
+
+        const commitBatch = async () => {
+            if (opCount > 0) {
+                console.log(`[DEBUG] Committing batch of ${opCount} operations...`);
+                await batch.commit();
+                batch = writeBatch(db);
+                opCount = 0;
+            }
+        };
+
+        // Process each list
+        for (const listData of listsToCreate) {
+            // Check if list has tasks (optional: import empty sections as empty lists? Yes, why not)
+
+            const listId = generateId();
+            allNewListIds.push(listId);
+
+            const newTaskIds = [];
+
+            // Create Tasks First
+            for (const taskData of listData.tasks) {
+                const newTaskId = 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+                const newTask = {
+                    text: taskData.text,
+                    completed: false,
+                    archived: false,
+                    createdAt: Date.now(),
+                    images: [],
+                    glowColor: taskData.glow
+                };
+
+                batch.set(doc(db, "users", currentUser.uid, "tasks", newTaskId), newTask);
+                newTaskIds.push(newTaskId);
+                opCount++;
+
+                if (opCount >= 450) await commitBatch();
+            }
+
+            // Create List Document
+            const newList = {
+                title: listData.title,
+                taskIds: newTaskIds
+            };
+            batch.set(doc(db, "users", currentUser.uid, "lists", listId), newList);
+            opCount++;
+            if (opCount >= 450) await commitBatch();
+        }
+
+        // Update User List Order (Add all new lists at once)
+        // We do this in a batch. If > 450, we might need to split it?
+        // Actually arrayUnion with many IDs counts as 1 write op, but the size of doc matters.
+        // ID list is small. 
+        batch.update(doc(db, "users", currentUser.uid), {
+            listOrder: arrayUnion(...allNewListIds)
+        });
+        opCount++;
+
+        await commitBatch();
+
+        showToast(`Import Successful. Created ${listsToCreate.length} lists.`);
+        console.log("[DEBUG] Import complete.");
+
+    } catch (err) {
+        handleSyncError(err);
+        showToast("Import failed. See console.");
+    }
 }

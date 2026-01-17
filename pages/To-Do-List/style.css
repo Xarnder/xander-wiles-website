@@ -888,6 +888,24 @@ input:checked+.slider-small:before {
     margin-top: 10px;
     overflow: hidden;
     touch-action: none;
+    transition: border-color 0.3s, background 0.3s;
+}
+
+.slider-container.unlocked {
+    border-color: var(--accent-red);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.slider-container.unlocked .slider-text {
+    color: var(--accent-red);
+    font-weight: bold;
+}
+
+.slider-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    pointer-events: none;
+    transition: opacity 0.2s;
 }
 
 .slider-track {
