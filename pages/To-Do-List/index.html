@@ -26,6 +26,16 @@
 
 <body>
 
+    <!-- LOGIN OVERLAY -->
+    <div id="login-overlay">
+        <h1>Task Master</h1>
+        <button id="google-login-btn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" height="24"
+                alt="G">
+            Login with Google
+        </button>
+    </div>
+
     <!-- GLOBAL HEADER PLACEHOLDER -->
     <div id="main-nav-placeholder"></div>
     <script src="/assets/js/nav-loader.js"></script>
@@ -68,6 +78,8 @@
                 <button id="add-list-btn" class="btn primary control-item">+ List</button>
 
                 <button id="options-btn" class="btn secondary control-item">Options</button>
+                <button id="logout-btn" class="btn secondary control-item"
+                    style="display:none; color: var(--accent-red); border-color: var(--accent-red);">Logout</button>
             </div>
         </header>
 
@@ -224,7 +236,15 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Sync Indicator -->
+    <div id="sync-console" class="sync-indicator hidden">
+        <div class="sync-pill glass-panel">
+            <div id="sync-dot" class="sync-dot"></div>
+            <span id="sync-status-text">Synced</span>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
 </body>
 
 </html>

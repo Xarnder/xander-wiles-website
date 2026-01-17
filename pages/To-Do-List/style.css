@@ -953,3 +953,111 @@ input:checked+.slider-small:before {
 .hidden {
     display: none !important;
 }
+/* --- LOGIN OVERLAY --- */
+#login-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: var(--bg-gradient);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+#login-overlay h1 {
+    font-size: 3rem;
+    margin: 0;
+    text-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+#google-login-btn {
+    background: white;
+    color: #333;
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+}
+
+#google-login-btn:hover {
+    transform: scale(1.05);
+}
+
+#logout-btn {
+    margin-left: 10px;
+    font-weight: bold;
+    color: var(--accent-red);
+}
+
+
+/* --- SYNC INDICATOR --- */
+.sync-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    transition: opacity 0.3s;
+}
+
+.sync-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 50px; /* Pill shape */
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.sync-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ccc;
+    box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    transition: background-color 0.3s, box-shadow 0.3s;
+}
+
+.sync-dot.active {
+    background: var(--accent-blue);
+    box-shadow: 0 0 8px var(--accent-blue);
+}
+
+.sync-dot.online {
+    background: #22c55e; /* Green */
+    box-shadow: 0 0 8px #22c55e;
+}
+
+.sync-dot.offline {
+    background: #ef4444; /* Red */
+    box-shadow: 0 0 8px #ef4444;
+}
+
+.sync-dot.syncing {
+    background: #eab308; /* Yellow */
+    box-shadow: 0 0 8px #eab308;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
