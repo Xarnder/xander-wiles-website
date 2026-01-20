@@ -337,8 +337,9 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     let headerButtons = isOrphan
         ? `<button class="icon-btn danger" onclick="emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
-             <button class="icon-btn" onclick="openBulkAddModal('${list.id}')" title="Bulk Add Tasks"><i class="ph ph-list-plus"></i></button>
-             <button class="icon-btn" onclick="deleteList('${list.id}')" title="Delete List"><i class="ph ph-trash"></i></button>
+             <button class="icon-btn multi-select-all-btn" onclick="selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
+             <button class="icon-btn list-action-btn" onclick="openBulkAddModal('${list.id}')" title="Bulk Add Tasks"><i class="ph ph-list-plus"></i></button>
+             <button class="icon-btn list-action-btn" onclick="deleteList('${list.id}')" title="Delete List"><i class="ph ph-trash"></i></button>
            </div>`;
 
     // Decide position of add form
@@ -841,6 +842,34 @@ const multiActionBtn = document.getElementById('multi-edit-action-btn');
 multiEditBtn.onclick = () => {
     multiEditMode = !multiEditMode;
     toggleMultiEditUI();
+};
+
+window.selectAllInList = function (listId) {
+    if (!multiEditMode) return;
+
+    const container = document.getElementById(`container-${listId}`);
+    if (!container) return;
+
+    const visibleCards = Array.from(container.querySelectorAll('.task-card'));
+    if (visibleCards.length === 0) return;
+
+    // Check if all are selected
+    const allSelected = visibleCards.every(card => selectedTaskIds.has(card.dataset.taskId));
+
+    visibleCards.forEach(card => {
+        const id = card.dataset.taskId;
+        if (allSelected) {
+            // Deselect all
+            selectedTaskIds.delete(id);
+            card.classList.remove('selected');
+        } else {
+            // Select all
+            selectedTaskIds.add(id);
+            card.classList.add('selected');
+        }
+    });
+
+    updateMultiFloatingBar();
 };
 
 function toggleMultiEditUI() {

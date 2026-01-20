@@ -1403,9 +1403,25 @@ input:checked+.slider-small:before {
     font-size: 1.1rem;
 }
 
+
 #multi-edit-btn.active {
     background: var(--accent-blue);
     color: white;
     border-color: var(--accent-blue);
     box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+/* Toggle Buttons for Multi-Edit */
+.multi-select-all-btn {
+    display: none;
+}
+
+.multi-edit-active .multi-select-all-btn {
+    display: inline-flex;
+    color: var(--accent-blue);
+}
+
+.multi-edit-active .list-action-btn {
+    display: none;
+    /* Hide Bulk Add / Delete List in multi mode */
 }
