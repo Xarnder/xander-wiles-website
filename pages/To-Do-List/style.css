@@ -40,6 +40,30 @@
     --input-text: #1f2937;
 }
 
+[data-theme="oled"] {
+    --bg-gradient: #000000;
+    --glass-bg: rgba(20, 20, 20, 0.6);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --text-primary: #ffffff;
+    --text-secondary: #bbbbbb;
+    --card-bg: #000000;
+    --card-linked-bg: rgba(59, 130, 246, 0.2);
+    --card-archived-bg: rgba(255, 255, 255, 0.05);
+    --card-important-bg: rgba(255, 215, 0, 0.1);
+    --card-important-border: rgba(255, 215, 0, 0.5);
+    --shadow: none;
+    --dropdown-bg: #000000;
+    --dropdown-bg-glass: #000000;
+    --input-bg: #111111;
+    --input-border: #333333;
+    --input-text: #ffffff;
+}
+
+[data-theme="oled"] body {
+    background: #000000;
+    animation: none;
+}
+
 body {
     background: var(--bg-gradient);
     background-size: 400% 400%;

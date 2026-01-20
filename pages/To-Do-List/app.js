@@ -153,8 +153,13 @@ function setupFirestoreListeners(uid) {
 
             // Init theme icon
             const icon = document.getElementById('theme-toggle').querySelector('i');
-            if (appData.settings.theme === 'light') icon.classList.replace('ph-sun', 'ph-moon');
-            else icon.classList.replace('ph-moon', 'ph-sun');
+            if (appData.settings.theme === 'light') {
+                icon.className = 'ph ph-sun';
+            } else if (appData.settings.theme === 'oled') {
+                icon.className = 'ph ph-circle'; // Or a more appropriate icon like 'ph-moon-stars' if avail, but circle implies 'pure' or 'void'
+            } else {
+                icon.className = 'ph ph-moon';
+            }
 
         } else {
             // Create initial user doc
@@ -766,7 +771,11 @@ document.getElementById('toggle-archive-view-btn').onclick = function () {
 
 // Theme Toggle
 document.getElementById('theme-toggle').onclick = () => {
-    const newTheme = appData.settings.theme === 'dark' ? 'light' : 'dark';
+    let newTheme;
+    if (appData.settings.theme === 'dark') newTheme = 'light';
+    else if (appData.settings.theme === 'light') newTheme = 'oled';
+    else newTheme = 'dark';
+
     updateDoc(doc(db, "users", currentUser.uid), { "settings.theme": newTheme }).catch(e => handleSyncError(e));
 };
 
