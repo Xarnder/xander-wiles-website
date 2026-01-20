@@ -48,7 +48,10 @@ let appData = {
         autoArchive: false,
         showNumbers: false,
         theme: 'dark',
-        sortMode: 'custom'
+        theme: 'dark',
+        sortMode: 'custom',
+        backupFreq: 10,
+        tasksSinceBackup: 0
     },
     listOrder: []
 };
@@ -136,7 +139,10 @@ function setupFirestoreListeners(uid) {
             projectTitleInput.value = appData.projectTitle;
             document.getElementById('auto-archive-toggle').checked = appData.settings.autoArchive;
             document.getElementById('show-numbers-toggle').checked = appData.settings.showNumbers;
+            document.getElementById('show-numbers-toggle').checked = appData.settings.showNumbers;
             document.getElementById('sort-select').value = appData.settings.sortMode;
+            document.getElementById('backup-frequency-input').value = appData.settings.backupFreq || 10;
+            document.getElementById('tasks-since-backup-display').textContent = appData.settings.tasksSinceBackup || 0;
 
             // Init theme icon
             const icon = document.getElementById('theme-toggle').querySelector('i');
@@ -507,6 +513,16 @@ window.handleAddTask = function (e, listId) {
         taskIds: arrayUnion(newId)
     });
 
+    // Backup Reminder Logic
+    const currentCount = appData.settings.tasksSinceBackup || 0;
+    const newCount = currentCount + 1;
+    batch.update(doc(db, "users", currentUser.uid), { "settings.tasksSinceBackup": newCount });
+
+    const freq = parseInt(appData.settings.backupFreq) || 10;
+    if (newCount >= freq) {
+        document.getElementById('backup-reminder-modal-overlay').classList.remove('hidden');
+    }
+
     batch.commit().catch(e => handleSyncError(e));
     input.value = '';
 };
@@ -726,6 +742,11 @@ document.getElementById('show-numbers-toggle').onchange = (e) => {
 document.getElementById('sort-select').onchange = (e) => {
     updateDoc(doc(db, "users", currentUser.uid), { "settings.sortMode": e.target.value }).catch(e => handleSyncError(e));
 };
+document.getElementById('backup-frequency-input').onchange = (e) => {
+    let val = parseInt(e.target.value);
+    if (val < 1) val = 1;
+    updateDoc(doc(db, "users", currentUser.uid), { "settings.backupFreq": val }).catch(e => handleSyncError(e));
+};
 
 // Mode Toggles
 document.getElementById('mode-cut-btn').onclick = function () {
@@ -755,9 +776,12 @@ const resetModal = document.getElementById('reset-modal-overlay');
 const sliderHandle = document.getElementById('slider-handle');
 const sliderContainer = document.getElementById('slider-container');
 const sliderText = document.querySelector('.slider-text');
+const backupReminder = document.getElementById('backup-reminder');
+const resetDownloadBtn = document.getElementById('reset-download-backup-btn');
 let isDragging = false;
 let startX = 0;
 let currentX = 0;
+let hasDownloadedBackup = false;
 
 document.getElementById('trigger-reset-btn').onclick = () => {
     optionsModal.classList.add('hidden');
@@ -769,12 +793,104 @@ document.getElementById('reset-cancel-btn').onclick = () => {
     resetModal.classList.add('hidden');
 };
 
+// Download Backup Button for Reset Modal
+// Reusable Backup Download Function
+function triggerBackupDownload() {
+    // Generate JSON backup data
+    const backupData = {
+        exportDate: new Date().toISOString(),
+        projectTitle: appData.projectTitle,
+        settings: appData.settings,
+        listOrder: appData.listOrder,
+        lists: appData.rawLists.map(list => ({
+            id: list.id,
+            title: list.title,
+            taskIds: list.taskIds || []
+        })),
+        tasks: Object.entries(appData.tasks).map(([id, task]) => ({
+            id: id,
+            text: task.text,
+            completed: task.completed,
+            archived: task.archived,
+            createdAt: task.createdAt,
+            glowColor: task.glowColor || 'none',
+            images: task.images || []
+        }))
+    };
+
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    // Format Date: YYYY-MM-DD_HH-mm
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-').slice(0, 5);
+
+    // Sanitize Project Title
+    const safeTitle = (appData.projectTitle || "Task_Master").replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeTitle}_backup_${dateStr}_${timeStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    // Reset Reminder Count
+    if (currentUser) {
+        updateDoc(doc(db, "users", currentUser.uid), { "settings.tasksSinceBackup": 0 }).catch(console.error);
+    }
+}
+
+// Download Backup Button for Reset Modal
+resetDownloadBtn.onclick = () => {
+    triggerBackupDownload();
+
+    // Enable slider logic
+    hasDownloadedBackup = true;
+    sliderContainer.classList.remove('disabled');
+    backupReminder.classList.add('hidden');
+    sliderText.innerText = "Slide to Confirm";
+    resetDownloadBtn.classList.add('downloaded');
+    resetDownloadBtn.innerHTML = '<i class="ph ph-check-circle"></i> Backup Downloaded';
+
+    showToast("Backup downloaded! Slider unlocked.");
+};
+
+document.getElementById('download-json-btn').onclick = () => {
+    triggerBackupDownload();
+};
+
+// Backup Reminder Modal Actions
+document.getElementById('reminder-download-btn').onclick = () => {
+    triggerBackupDownload();
+    document.getElementById('backup-reminder-modal-overlay').classList.add('hidden');
+};
+
+document.getElementById('reminder-skip-btn').onclick = () => {
+    // Reset the count even if they skip, so they aren't bugged immediately again
+    if (currentUser) {
+        updateDoc(doc(db, "users", currentUser.uid), { "settings.tasksSinceBackup": 0 }).catch(console.error);
+    }
+    document.getElementById('backup-reminder-modal-overlay').classList.add('hidden');
+};
+
 // Slider Logic
 function resetSlider() {
     sliderHandle.style.left = '2px';
     sliderContainer.classList.remove('unlocked');
     sliderText.style.opacity = '1';
-    sliderText.innerText = "Slide to Confirm";
+
+    // Reset backup state
+    hasDownloadedBackup = false;
+    sliderContainer.classList.add('disabled');
+    backupReminder.classList.remove('hidden');
+    sliderText.innerText = "Download backup first";
+    resetDownloadBtn.classList.remove('downloaded');
+    resetDownloadBtn.innerHTML = '<i class="ph ph-download-simple"></i> Download Backup';
+
     currentX = 0;
 }
 
@@ -1146,6 +1262,162 @@ document.getElementById('bulk-add-confirm-btn').onclick = () => {
     });
     batch.commit().catch(e => handleSyncError(e));
     bulkModal.classList.add('hidden');
+};
+
+// --- RESTORE JSON BACKUP ---
+document.getElementById('upload-json').onchange = function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.name.endsWith('.json')) {
+        showToast("Error: Please select a .json file.");
+        e.target.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+        showToast("Error: Could not read the file.");
+        e.target.value = '';
+    };
+
+    reader.onload = async function (evt) {
+        try {
+            // Parse JSON
+            let backupData;
+            try {
+                backupData = JSON.parse(evt.target.result);
+            } catch (parseErr) {
+                showToast("Error: Invalid JSON format. File is corrupted or not a valid backup.");
+                e.target.value = '';
+                return;
+            }
+
+            // Validate structure
+            if (!backupData.lists || !Array.isArray(backupData.lists)) {
+                showToast("Error: Backup missing 'lists' data.");
+                e.target.value = '';
+                return;
+            }
+            if (!backupData.tasks || !Array.isArray(backupData.tasks)) {
+                showToast("Error: Backup missing 'tasks' data.");
+                e.target.value = '';
+                return;
+            }
+
+            // Confirm restore
+            const listCount = backupData.lists.length;
+            const taskCount = backupData.tasks.length;
+            const confirmMsg = `Restore backup with ${listCount} lists and ${taskCount} tasks?\n\nThis will ADD to your existing data (not replace).`;
+
+            if (!confirm(confirmMsg)) {
+                e.target.value = '';
+                return;
+            }
+
+            // Perform restore
+            console.log("[Restore] Starting backup restore...");
+            console.log(`[Restore] Lists: ${listCount}, Tasks: ${taskCount}`);
+
+            let batch = writeBatch(db);
+            let opCount = 0;
+
+            const commitBatch = async () => {
+                if (opCount > 0) {
+                    await batch.commit();
+                    batch = writeBatch(db);
+                    opCount = 0;
+                }
+            };
+
+            // Restore tasks first
+            for (const task of backupData.tasks) {
+                if (!task.id || !task.text) {
+                    console.warn("[Restore] Skipping invalid task:", task);
+                    continue;
+                }
+
+                const taskData = {
+                    text: task.text,
+                    completed: task.completed || false,
+                    archived: task.archived || false,
+                    createdAt: task.createdAt || Date.now(),
+                    glowColor: task.glowColor || 'none',
+                    images: task.images || []
+                };
+
+                batch.set(doc(db, "users", currentUser.uid, "tasks", task.id), taskData);
+                opCount++;
+
+                if (opCount >= 450) await commitBatch();
+            }
+
+            // Restore lists
+            const newListIds = [];
+            for (const list of backupData.lists) {
+                if (!list.id || !list.title) {
+                    console.warn("[Restore] Skipping invalid list:", list);
+                    continue;
+                }
+
+                const listData = {
+                    title: list.title,
+                    taskIds: list.taskIds || []
+                };
+
+                batch.set(doc(db, "users", currentUser.uid, "lists", list.id), listData);
+                newListIds.push(list.id);
+                opCount++;
+
+                if (opCount >= 450) await commitBatch();
+            }
+
+            // Update list order
+            if (newListIds.length > 0) {
+                batch.update(doc(db, "users", currentUser.uid), {
+                    listOrder: arrayUnion(...newListIds)
+                });
+                opCount++;
+            }
+
+            // Restore project title and settings if present
+            if (backupData.projectTitle) {
+                batch.update(doc(db, "users", currentUser.uid), {
+                    projectTitle: backupData.projectTitle
+                });
+                opCount++;
+            }
+
+            await commitBatch();
+
+            showToast(`✓ Restore successful! Added ${listCount} lists and ${taskCount} tasks.`);
+            console.log("[Restore] Backup restored successfully.");
+
+            // Close options modal
+            document.getElementById('options-modal-overlay').classList.add('hidden');
+
+        } catch (err) {
+            console.error("[Restore] Error:", err);
+
+            let errMsg = "Error: Could not restore backup. ";
+            if (err.code === 'permission-denied') {
+                errMsg += "Permission denied.";
+            } else if (err.code === 'resource-exhausted') {
+                errMsg += "Quota exceeded. Backup too large.";
+            } else if (err.code === 'unavailable') {
+                errMsg += "Network issue. Check your connection.";
+            } else {
+                errMsg += err.message || "Unknown error.";
+            }
+
+            showToast(errMsg);
+        }
+
+        e.target.value = ''; // Reset input
+    };
+
+    reader.readAsText(file);
 };
 
 
