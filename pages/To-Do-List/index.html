@@ -71,6 +71,10 @@
                     <button id="mode-copy-btn" class="mode-btn">Copy</button>
                 </div>
 
+                <button id="multi-edit-btn" class="btn secondary control-item" title="Toggle Multi-Edit Mode">
+                    <i class="ph ph-checks"></i> Multi
+                </button>
+
                 <button id="toggle-archive-view-btn" class="icon-btn-large control-item"
                     title="Show/Hide Archived Tasks">
                     <i class="ph ph-eye-slash" id="archive-view-icon"></i>
@@ -115,6 +119,13 @@
                     <span>Auto-Archive Completed</span>
                     <div class="switch-small">
                         <input type="checkbox" id="auto-archive-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+                <label class="dropdown-item-toggle">
+                    <span>New Tasks at Bottom</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="add-bottom-toggle">
                         <span class="slider-small round"></span>
                     </div>
                 </label>
@@ -228,6 +239,59 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- MULTI EDIT ACTIONS MODAL -->
+    <div id="multi-edit-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2 id="multi-edit-title">Edit Selected Tasks</h2>
+                <button id="multi-edit-close-modal-btn" class="icon-btn-large">&times;</button>
+            </div>
+
+            <div class="color-picker-section">
+                <h3>Set Color for All:</h3>
+                <div class="color-options" id="multi-glow-color-options">
+                    <!-- Same colors as single edit -->
+                    <button class="color-btn" data-color="none" title="None"><i class="ph ph-prohibit"></i></button>
+                    <button class="color-btn" data-color="#ef4444" style="background:#ef4444;"></button>
+                    <button class="color-btn" data-color="#f97316" style="background:#f97316;"></button>
+                    <button class="color-btn" data-color="#eab308" style="background:#eab308;"></button>
+                    <button class="color-btn" data-color="#22c55e" style="background:#22c55e;"></button>
+                    <button class="color-btn" data-color="#3b82f6" style="background:#3b82f6;"></button>
+                    <button class="color-btn" data-color="#a855f7" style="background:#a855f7;"></button>
+                </div>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="manual-move-section">
+                <h3>Batch Move / Copy:</h3>
+                <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:10px;">
+                    Select a destination list or create a new one.
+                </p>
+                <div class="move-controls">
+                    <select id="multi-move-select" class="glass-select full-width">
+                        <option value="" disabled selected>Select Destination...</option>
+                    </select>
+                    <div class="move-buttons">
+                        <button id="multi-link-btn" class="btn secondary">Link (Copy)</button>
+                        <button id="multi-move-btn" class="btn secondary">Move (Cut)</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions-bar" style="margin-top: 15px;">
+                <button id="multi-delete-btn" class="btn danger" style="margin-right: auto;">Delete All</button>
+                <button id="multi-close-btn" class="btn secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Action Button for Multi Edit -->
+    <div id="multi-edit-floating-bar" class="floating-action-bar hidden">
+        <span id="multi-selected-count">0 Selected</span>
+        <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
     </div>
 
     <!-- Image Lightbox -->
