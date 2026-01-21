@@ -1,0 +1,330 @@
+:root {
+    --bg-dark: #111115;
+    --bg-card: rgba(30, 35, 45, 0.4);
+    --border-card: rgba(255, 255, 255, 0.1);
+    --accent-blue: #00d2ff;
+    --accent-glow: rgba(0, 210, 255, 0.2);
+    --text-main: #ffffff;
+    --text-muted: #b0b5c0;
+    --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Reset & Base */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-dark);
+    /* Subtle radial gradient background */
+    background-image: radial-gradient(circle at 50% 50%, #1a1f2e 0%, #111115 100%);
+    color: var(--text-main);
+    font-family: var(--font-family);
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.6;
+}
+
+/* Container */
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    padding-top: 20px;
+    /* Space for global nav */
+}
+
+/* Header */
+.page-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    animation: fadeInDown 1s ease-out;
+}
+
+.main-title {
+    font-size: 3rem;
+    font-weight: 700;
+    letter-spacing: -1px;
+    margin-bottom: 0.5rem;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 1.2rem;
+}
+
+/* Grid Layout */
+.layout-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    /* Mobile first */
+    gap: 20px;
+    position: relative;
+}
+
+/* Desktop Grid Configuration 
+   We place the "You" flower in the center and cards around it */
+@media (min-width: 1024px) {
+    .layout-grid {
+        grid-template-columns: 1fr 400px 1fr;
+        grid-template-rows: repeat(4, auto);
+        /* Define areas for visual alignment */
+        grid-template-areas:
+            "growth     sig-other   health"
+            "career     center      finances"
+            "env        .           play";
+    }
+
+    .center-piece {
+        grid-area: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 400px;
+    }
+
+    /* Specific positioning to mimic the circle */
+    .category-sig-other {
+        grid-area: sig-other;
+        transform: translateY(20px);
+    }
+
+    .category-growth {
+        grid-area: growth;
+    }
+
+    .category-health {
+        grid-area: health;
+    }
+
+    .category-career {
+        grid-area: career;
+        text-align: right;
+    }
+
+    .category-finances {
+        grid-area: finances;
+    }
+
+    .category-environment {
+        grid-area: env;
+        text-align: right;
+    }
+
+    .category-play {
+        grid-area: play;
+    }
+
+    /* Align text towards the center circle on desktop */
+    .category-growth,
+    .category-career,
+    .category-environment {
+        text-align: right;
+        align-items: flex-end;
+    }
+
+    .category-sig-other {
+        text-align: center;
+    }
+}
+
+/* Card Styling (Glassmorphism) */
+.card {
+    background: var(--bg-card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-card);
+    border-radius: 24px;
+    padding: 2rem;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+    opacity: 0;
+    /* Hidden initially for JS animation */
+    transform: translateY(20px);
+    animation: cardPulse 3s infinite alternate ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: 0 10px 40px rgba(0, 210, 255, 0.15);
+    background: rgba(40, 45, 60, 0.6);
+    border-color: var(--accent-blue);
+}
+
+.card h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: var(--accent-blue);
+    text-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
+}
+
+.card ul {
+    list-style: none;
+}
+
+.card li {
+    margin-bottom: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    transition: color 0.2s;
+}
+
+.card li:hover {
+    color: #fff;
+}
+
+/* The Animated Flower (Center Piece) */
+.center-piece {
+    /* Ensures the container has space */
+    min-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 0;
+}
+
+.flower-graphic {
+    position: relative;
+    width: 300px;
+    height: 300px;
+}
+
+.petals-container {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    animation: rotateSlow 60s linear infinite;
+}
+
+.petal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 160px;
+    /* Slightly larger for better overlap */
+    height: 160px;
+    border-radius: 50%;
+
+    /* Center the circle perfectly before moving it */
+    margin-left: -80px;
+    /* Half of width */
+    margin-top: -80px;
+    /* Half of height */
+
+    background: rgba(0, 210, 255, 0.15);
+    /* More visible color */
+    border: 1px solid rgba(0, 210, 255, 0.5);
+    box-shadow: 0 0 15px rgba(0, 210, 255, 0.2);
+
+    /* This creates the beautiful intersecting colors (Venn effect) */
+    mix-blend-mode: screen;
+    transition: transform 0.5s ease;
+}
+
+/* 
+   LOGIC: Rotate to the angle, then push OUT (translate) by 50px.
+   This guarantees they separate into a flower shape.
+*/
+.p1 {
+    transform: rotate(0deg) translate(50px);
+}
+
+.p2 {
+    transform: rotate(60deg) translate(50px);
+}
+
+.p3 {
+    transform: rotate(120deg) translate(50px);
+}
+
+.p4 {
+    transform: rotate(180deg) translate(50px);
+}
+
+.p5 {
+    transform: rotate(240deg) translate(50px);
+}
+
+.p6 {
+    transform: rotate(300deg) translate(50px);
+}
+
+.core {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    /* Keeps 'You' perfectly centered */
+    width: 90px;
+    height: 90px;
+    background: #ffffff;
+    color: #111115;
+    /* Dark text on light core */
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: 800;
+    font-size: 1.1rem;
+    box-shadow: 0 0 40px rgba(0, 210, 255, 0.6);
+    z-index: 10;
+    animation: pulse 3s infinite ease-in-out;
+}
+
+/* Animations */
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes rotateSlow {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0px rgba(0, 210, 255, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 20px rgba(0, 210, 255, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0px rgba(0, 210, 255, 0);
+    }
+}
+
+/* Animation trigger class */
+.fade-in-visible {
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+}
+
+@keyframes cardPulse {
+    0% {
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    100% {
+        box-shadow: 0 0 20px rgba(0, 210, 255, 0.2);
+        border-color: rgba(0, 210, 255, 0.3);
+    }
+}
