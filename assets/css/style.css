@@ -246,26 +246,17 @@ a:hover {
 .hero-side-stack .page-card {
     /* To Do List card takes up natural space based on content */
     flex: 0 0 auto;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    text-align: left;
-    gap: 1rem;
-    padding: 1.5rem;
+    /* Inherit grid display from .page-card */
 }
 
-.hero-side-stack .page-card .page-icon {
-    width: 48px;
-    height: 48px;
-    margin-bottom: 0;
-}
+/* Removed .hero-side-stack .page-card .page-icon override to use global 64px */
 
 .hero-side-stack .page-card h3 {
-    margin-bottom: 0.25rem;
+    margin-bottom: 0;
+    /* Align with global style */
 }
 
 .hero-side-stack .page-card p {
-    margin: 0;
     font-size: 0.9rem;
 }
 
@@ -336,7 +327,13 @@ a:hover {
 
 .page-card {
     transition: transform 0.3s ease, box-shadow 0.3s ease;
-    text-align: center;
+    text-align: left;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    gap: 0.5rem 1.5rem;
+    align-items: center;
+    padding: 1.5rem;
 }
 
 .page-card:hover {
@@ -346,21 +343,30 @@ a:hover {
 }
 
 .page-card h3 {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0;
     font-size: 1.25rem;
     color: var(--text-primary);
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
 }
 
 .page-card p {
     color: var(--text-muted);
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0;
+    align-self: start;
 }
 
 .page-icon {
-    width: 32px;
-    height: 32px;
-    margin-bottom: 0.5rem;
+    width: 64px;
+    height: 64px;
+    margin-bottom: 0;
     display: inline-block;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    grid-column: 1;
+    grid-row: 1 / -1;
 }
 
 .support-links-grid {
