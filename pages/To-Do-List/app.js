@@ -668,6 +668,17 @@ window.handleDragEnd = function (evt) {
 
     const taskId = evt.item.dataset.taskId;
 
+    // HELPER: Get hidden archived tasks for a list
+    const getHiddenArchivedIds = (listId) => {
+        if (showArchived) return []; // If visible, Sortable handles them
+        const listObj = appData.rawLists.find(l => l.id === listId);
+        if (!listObj || !listObj.taskIds) return [];
+        return listObj.taskIds.filter(tid => {
+            const task = appData.tasks[tid];
+            return task && task.archived;
+        });
+    };
+
     // Logic for Updating Lists
     // We need to read the new DOM order to get the correct new arrays.
     // ... Or we can trust Sortable's indices.
@@ -683,7 +694,11 @@ window.handleDragEnd = function (evt) {
             .filter(el => !el.classList.contains('sortable-ghost')) // filter ghosts just in case
             .map(el => el.dataset.taskId);
 
-        batch.update(doc(db, "users", currentUser.uid, "lists", toIdRaw), { taskIds: newToIds });
+        // MERGE: Visible IDs + Hidden Archived IDs
+        const hiddenToIds = getHiddenArchivedIds(toIdRaw);
+        const finalToIds = [...newToIds, ...hiddenToIds];
+
+        batch.update(doc(db, "users", currentUser.uid, "lists", toIdRaw), { taskIds: finalToIds });
 
         // If moved from orphan, unarchive
         if (fromIdRaw === 'orphan-archive') {
@@ -697,7 +712,12 @@ window.handleDragEnd = function (evt) {
         const fromContainer = document.getElementById(`container-${fromIdRaw}`);
         const newFromIds = Array.from(fromContainer.children)
             .map(el => el.dataset.taskId);
-        batch.update(doc(db, "users", currentUser.uid, "lists", fromIdRaw), { taskIds: newFromIds });
+
+        // MERGE: Visible IDs + Hidden Archived IDs
+        const hiddenFromIds = getHiddenArchivedIds(fromIdRaw);
+        const finalFromIds = [...newFromIds, ...hiddenFromIds];
+
+        batch.update(doc(db, "users", currentUser.uid, "lists", fromIdRaw), { taskIds: finalFromIds });
 
         // If dragMode is copy, current Sortable JS logic above would handle MOVE.
         // If we want COPY, Sortable would clone.
@@ -729,7 +749,12 @@ window.handleDragEnd = function (evt) {
     if (fromIdRaw === toIdRaw && fromIdRaw !== 'orphan-archive') {
         const container = document.getElementById(`container-${fromIdRaw}`);
         const newIds = Array.from(container.children).map(el => el.dataset.taskId);
-        batch.update(doc(db, "users", currentUser.uid, "lists", fromIdRaw), { taskIds: newIds });
+
+        // MERGE:
+        const hiddenIds = getHiddenArchivedIds(fromIdRaw);
+        const finalIds = [...newIds, ...hiddenIds];
+
+        batch.update(doc(db, "users", currentUser.uid, "lists", fromIdRaw), { taskIds: finalIds });
     }
 
     batch.commit().catch(e => handleSyncError(e));
