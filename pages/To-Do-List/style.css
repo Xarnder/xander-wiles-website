@@ -1449,3 +1449,60 @@ input:checked+.slider-small:before {
     display: none;
     /* Hide Bulk Add / Delete List in multi mode */
 }
+
+/* --- MOBILE SCROLLBAR OVERRIDES --- */
+@media (max-width: 600px) {
+
+    /* Force permanent and thick scrollbar on mobile lists */
+    .task-list::-webkit-scrollbar {
+        -webkit-appearance: none;
+        width: 20px;
+        /* Extra thick for easy touch */
+        display: block;
+        background: transparent;
+    }
+
+    .task-list::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.4);
+        border-radius: 10px;
+        border: 5px solid transparent;
+        background-clip: content-box;
+    }
+
+    .task-list::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    /* Light mode mobile scrollbar */
+    [data-theme="light"] .task-list::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.3);
+    }
+
+    /* OLED mode mobile scrollbar */
+    [data-theme="oled"] .task-list::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.5);
+    }
+
+    /* Board Horizontal Scrollbar (Mobile) */
+    .board-container::-webkit-scrollbar {
+        -webkit-appearance: none;
+        height: 12px;
+        display: block;
+        background: transparent;
+    }
+
+    .board-container::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.4);
+        border-radius: 6px;
+        border: 3px solid transparent;
+        background-clip: content-box;
+    }
+
+    [data-theme="light"] .board-container::-webkit-scrollbar-thumb {
+        background-color: rgba(0, 0, 0, 0.3);
+    }
+
+    [data-theme="oled"] .board-container::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.5);
+    }
+}
