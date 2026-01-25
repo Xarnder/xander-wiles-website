@@ -404,10 +404,12 @@ body {
     overflow-y: auto;
     flex-grow: 1;
     min-height: 50px;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Thicker Scrollbar for Lists */
 .task-list::-webkit-scrollbar {
+    -webkit-appearance: none;
     width: 16px;
 }
 
