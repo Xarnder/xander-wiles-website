@@ -158,10 +158,48 @@
 
                     <!-- Small Icons Toggle -->
                     <div class="control-group" style="justify-content: space-between;">
-                        <label for="padding-small-icons" style="flex: 1;">Apply to small icons</label>
+                        <label for="padding-small-icons" style="flex: 1;">Apply padding to small icons</label>
                         <div class="toggle-switch-wrapper">
                             <input type="checkbox" id="padding-small-icons" class="toggle-input">
                             <label for="padding-small-icons" class="toggle-label"></label>
+                        </div>
+                    </div>
+
+                    <!-- Background Color Controls -->
+                    <div class="divider"><span>Background Options</span></div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start;">
+                        <!-- Transparent Toggle -->
+                        <div class="control-group"
+                            style="grid-template-columns: 1fr 40px; gap: 0.5rem; margin-bottom: 0;">
+                            <label for="bg-transparent-toggle" style="font-size: 0.9rem;">Transparent</label>
+                            <div class="toggle-switch-wrapper"
+                                style="transform: scale(0.8); transform-origin: right center;">
+                                <input type="checkbox" id="bg-transparent-toggle" class="toggle-input" checked>
+                                <label for="bg-transparent-toggle" class="toggle-label"></label>
+                            </div>
+                        </div>
+
+                        <!-- Apply All Toggle -->
+                        <div class="control-group" id="bg-all-group"
+                            style="grid-template-columns: 1fr 40px; gap: 0.5rem; margin-bottom: 0; opacity: 0.5; pointer-events: none;">
+                            <label for="bg-apply-all" style="font-size: 0.9rem;">Apply to all</label>
+                            <div class="toggle-switch-wrapper"
+                                style="transform: scale(0.8); transform-origin: right center;">
+                                <input type="checkbox" id="bg-apply-all" class="toggle-input">
+                                <label for="bg-apply-all" class="toggle-label"></label>
+                            </div>
+                        </div>
+
+                        <!-- Color Picker (Full Width below) -->
+                        <div class="control-group" id="bg-color-group"
+                            style="grid-column: 1 / -1; grid-template-columns: auto 1fr; gap: 1rem; opacity: 0.5; pointer-events: none; justify-content: start;">
+                            <label for="bg-color-picker" style="font-size: 0.9rem;">Color:</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="color" id="bg-color-picker" value="#ffffff">
+                                <span id="bg-color-code"
+                                    style="font-size: 0.9rem; color: var(--text-muted);">#ffffff</span>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -26,6 +26,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const paddingSmallIconsCheckbox = document.getElementById('padding-small-icons');
     const paddingPreviewIcon = document.getElementById('padding-preview-icon');
 
+    // --- Background Elements ---
+    const bgTransparentToggle = document.getElementById('bg-transparent-toggle');
+    const bgColorPicker = document.getElementById('bg-color-picker');
+    const bgColorCode = document.getElementById('bg-color-code');
+    const bgApplyAllCheckbox = document.getElementById('bg-apply-all');
+    const bgColorGroup = document.getElementById('bg-color-group');
+    const bgAllGroup = document.getElementById('bg-all-group');
+
     const generateBtn = document.getElementById('generate-btn');
     const resultsCard = document.getElementById('results-card');
     const resultsContent = document.getElementById('results-content');
@@ -64,6 +72,29 @@ document.addEventListener('DOMContentLoaded', () => {
     paddingSlider.addEventListener('input', () => {
         paddingValue.textContent = paddingSlider.value + '%';
         updatePaddingPreview();
+    });
+
+    // Background Controls Listeners
+    bgTransparentToggle.addEventListener('change', () => {
+        const isTransparent = bgTransparentToggle.checked;
+        if (isTransparent) {
+            bgColorGroup.style.opacity = '0.5';
+            bgColorGroup.style.pointerEvents = 'none';
+            bgAllGroup.style.opacity = '0.5';
+            bgAllGroup.style.pointerEvents = 'none';
+            updatePaddingPreviewWrapperBg('transparent');
+        } else {
+            bgColorGroup.style.opacity = '1';
+            bgColorGroup.style.pointerEvents = 'auto';
+            bgAllGroup.style.opacity = '1';
+            bgAllGroup.style.pointerEvents = 'auto';
+            updatePaddingPreviewWrapperBg(bgColorPicker.value);
+        }
+    });
+
+    bgColorPicker.addEventListener('input', () => {
+        bgColorCode.textContent = bgColorPicker.value;
+        updatePaddingPreviewWrapperBg(bgColorPicker.value);
     });
 
     generateBtn.addEventListener('click', handleFinalGeneration);
@@ -438,7 +469,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Apply padding logic
                 // Apple Touch (180) and Android (192, 512) -> Default to user padding
-                if ([180, 192, 512].includes(size)) {
+                const isTouchIcon = [180, 192, 512].includes(size);
+                if (isTouchIcon) {
                     paddingPercent = userPadding;
                 } else {
                     // Small icons (16, 32) -> Checkbox dependent
@@ -447,7 +479,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                imageBlobs[size] = await convertToSquare(compressedFile, size, paddingPercent);
+                // Determine background color
+                let backgroundColor = null; // null triggers transparency in convertToSquare
+                if (!bgTransparentToggle.checked) {
+                    // Color mode active
+                    if (isTouchIcon || bgApplyAllCheckbox.checked) {
+                        backgroundColor = bgColorPicker.value;
+                    }
+                }
+
+                imageBlobs[size] = await convertToSquare(compressedFile, size, paddingPercent, backgroundColor);
             }
 
             updateStatus('Creating ZIP file...');
@@ -543,12 +584,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function getImageDataFromSrc(imgSrc) { return new Promise((resolve, reject) => { const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); resolve(ctx.getImageData(0, 0, img.width, img.height)); }; img.onerror = reject; img.src = imgSrc; }); }
     function traceImageDataToSvg(imageData, palette, settings) { const options = { pal: palette, numberofcolors: palette.length, ltres: settings.detail, qtres: settings.detail, roundcoords: settings.smoothing }; let svgString = ImageTracer.imagedataToSVG(imageData, options); const viewBox = `viewBox="0 0 ${imageData.width} ${imageData.height}"`; return svgString.replace('<svg ', `<svg ${viewBox} `); }
 
-    function convertToSquare(blob, size, paddingPercent = 0) {
+    function convertToSquare(blob, size, paddingPercent = 0, backgroundColor = null) {
         return new Promise((resolve, reject) => {
             const canvas = document.createElement('canvas');
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d');
+
+            if (backgroundColor) {
+                ctx.fillStyle = backgroundColor;
+                ctx.fillRect(0, 0, size, size);
+            }
+
             const img = new Image();
             img.onload = () => {
                 const availableSize = size * (1 - (paddingPercent * 2));
@@ -623,6 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Reset/Hide preview
         paddingPreviewIcon.style.backgroundImage = 'none';
+        updatePaddingPreviewWrapperBg('transparent');
 
         svgControlsCard.classList.add('hidden');
         resultsCard.classList.add('hidden');
@@ -633,5 +681,15 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContent.innerHTML = '';
         generateStatus.textContent = '';
         generateBtn.textContent = 'Generate All Files';
+    }
+
+    function updatePaddingPreviewWrapperBg(color) {
+        // The preview box is .padding-preview-box
+        const box = document.querySelector('.padding-preview-box');
+        if (box) {
+            box.style.backgroundColor = (color === 'transparent') ? '#000' : color;
+            // If transparent, we revert to default black or checkerboard. 
+            // The CSS default for .padding-preview-box is black (#000).
+        }
     }
 });
