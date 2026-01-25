@@ -20,6 +20,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const smoothingSlider = document.getElementById('smoothing-slider');
     const smoothingValue = document.getElementById('smoothing-value');
 
+    // --- Padding Elements ---
+    const paddingSlider = document.getElementById('padding-slider');
+    const paddingValue = document.getElementById('padding-value');
+    const paddingSmallIconsCheckbox = document.getElementById('padding-small-icons');
+    const paddingPreviewIcon = document.getElementById('padding-preview-icon');
+
     const generateBtn = document.getElementById('generate-btn');
     const resultsCard = document.getElementById('results-card');
     const resultsContent = document.getElementById('results-content');
@@ -55,6 +61,11 @@ document.addEventListener('DOMContentLoaded', () => {
     detailSlider.addEventListener('input', () => handleSliderChange(detailSlider, detailValue, 1));
     smoothingSlider.addEventListener('input', () => handleSliderChange(smoothingSlider, smoothingValue));
 
+    paddingSlider.addEventListener('input', () => {
+        paddingValue.textContent = paddingSlider.value + '%';
+        updatePaddingPreview();
+    });
+
     generateBtn.addEventListener('click', handleFinalGeneration);
     resultsContent.addEventListener('click', handleResultsClick);
 
@@ -67,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Main Functions ---
     function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
 
-    async function handleFile(file) {
+    function handleFile(file) {
         if (!file) return;
 
         // Reset state
@@ -84,6 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const reader = new FileReader();
         reader.onload = async (e) => {
             imagePreview.src = e.target.result;
+            // Update padding preview source
+            paddingPreviewIcon.style.backgroundImage = `url(${e.target.result})`;
+            updatePaddingPreview();
 
             if (isVectorMode) {
                 // Handle SVG Input
@@ -417,7 +431,23 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const size of iconSizes) {
                 const options = { maxSizeMB: 1, maxWidthOrHeight: size, useWebWorker: true };
                 const compressedFile = await imageCompression(pngSourceBlob, options);
-                imageBlobs[size] = await convertToSquare(compressedFile, size);
+
+                // Determine padding for this size
+                let paddingPercent = 0;
+                const userPadding = parseInt(paddingSlider.value) / 100;
+
+                // Apply padding logic
+                // Apple Touch (180) and Android (192, 512) -> Default to user padding
+                if ([180, 192, 512].includes(size)) {
+                    paddingPercent = userPadding;
+                } else {
+                    // Small icons (16, 32) -> Checkbox dependent
+                    if (paddingSmallIconsCheckbox.checked) {
+                        paddingPercent = userPadding;
+                    }
+                }
+
+                imageBlobs[size] = await convertToSquare(compressedFile, size, paddingPercent);
             }
 
             updateStatus('Creating ZIP file...');
@@ -512,7 +542,40 @@ document.addEventListener('DOMContentLoaded', () => {
     function debounce(func, delay) { let timeout; return function (...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; }
     function getImageDataFromSrc(imgSrc) { return new Promise((resolve, reject) => { const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); resolve(ctx.getImageData(0, 0, img.width, img.height)); }; img.onerror = reject; img.src = imgSrc; }); }
     function traceImageDataToSvg(imageData, palette, settings) { const options = { pal: palette, numberofcolors: palette.length, ltres: settings.detail, qtres: settings.detail, roundcoords: settings.smoothing }; let svgString = ImageTracer.imagedataToSVG(imageData, options); const viewBox = `viewBox="0 0 ${imageData.width} ${imageData.height}"`; return svgString.replace('<svg ', `<svg ${viewBox} `); }
-    function convertToSquare(blob, size) { return new Promise((resolve, reject) => { const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size; const ctx = canvas.getContext('2d'); const img = new Image(); img.onload = () => { const scale = Math.min(size / img.width, size / img.height); const newWidth = img.width * scale; const newHeight = img.height * scale; const x = (size - newWidth) / 2; const y = (size - newHeight) / 2; ctx.drawImage(img, x, y, newWidth, newHeight); canvas.toBlob(resolve, 'image/png'); }; img.onerror = reject; img.src = URL.createObjectURL(blob); }); }
+
+    function convertToSquare(blob, size, paddingPercent = 0) {
+        return new Promise((resolve, reject) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            img.onload = () => {
+                const availableSize = size * (1 - (paddingPercent * 2));
+                const offset = size * paddingPercent;
+
+                const scale = Math.min(availableSize / img.width, availableSize / img.height);
+                const newWidth = img.width * scale;
+                const newHeight = img.height * scale;
+                const x = offset + (availableSize - newWidth) / 2;
+                const y = offset + (availableSize - newHeight) / 2;
+
+                ctx.drawImage(img, x, y, newWidth, newHeight);
+                canvas.toBlob(resolve, 'image/png');
+            };
+            img.onerror = reject;
+            img.src = URL.createObjectURL(blob);
+        });
+    }
+
+    function updatePaddingPreview() {
+        const val = parseInt(paddingSlider.value);
+        // Calculate safe size: 100% - (padding * 2)
+        // If padding is 10%, size is 80%
+        const size = 100 - (val * 2);
+        paddingPreviewIcon.style.backgroundSize = `${size}%`;
+    }
+
     function updateStatus(message) { generateStatus.textContent = message; }
 
     // New: Rasterize SVG to a PNG blob
@@ -557,6 +620,9 @@ document.addEventListener('DOMContentLoaded', () => {
         resetBtn.classList.add('hidden');
         imagePreview.src = '#';
         imageFilename.textContent = '';
+
+        // Reset/Hide preview
+        paddingPreviewIcon.style.backgroundImage = 'none';
 
         svgControlsCard.classList.add('hidden');
         resultsCard.classList.add('hidden');

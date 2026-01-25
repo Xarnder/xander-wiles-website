@@ -145,6 +145,36 @@
             <h2>3. Generate Files</h2>
             <p class="description">Create the ZIP containing PNG fallbacks and your theme-aware SVGs.</p>
             <div class="controls">
+                <!-- Padding Controls -->
+                <!-- Padding Controls Refined -->
+                <div class="controls-grid" style="margin-bottom: 2rem;">
+
+                    <!-- Padding Slider -->
+                    <div class="control-group">
+                        <label for="padding-slider">Icon Padding</label>
+                        <input type="range" id="padding-slider" min="0" max="50" value="0" step="5">
+                        <span id="padding-value">0%</span>
+                    </div>
+
+                    <!-- Small Icons Toggle -->
+                    <div class="control-group" style="justify-content: space-between;">
+                        <label for="padding-small-icons" style="flex: 1;">Apply to small icons</label>
+                        <div class="toggle-switch-wrapper">
+                            <input type="checkbox" id="padding-small-icons" class="toggle-input">
+                            <label for="padding-small-icons" class="toggle-label"></label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Preview Area (Compact) -->
+                <div class="padding-preview-compact"
+                    style="margin-bottom: 2rem; display: flex; justify-content: center; align-items: center; gap: 1rem;">
+                    <div class="padding-preview-box">
+                        <div id="padding-preview-icon" class="preview-icon"></div>
+                    </div>
+                    <span class="preview-label">Padding Preview</span>
+                </div>
+
                 <button id="generate-btn" disabled>Generate All Files</button>
             </div>
         </section>
