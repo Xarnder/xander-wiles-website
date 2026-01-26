@@ -755,6 +755,16 @@ input:checked+.slider-small:before {
     backdrop-filter: blur(5px);
 }
 
+/* No Blur for Search List Modal so we can see reordered lists */
+#search-list-modal-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(0, 0, 0, 0.1);
+    /* Very subtle overlay to keep focus but allow visibility */
+    pointer-events: auto;
+    /* Ensure clicks still work */
+}
+
 .modal {
     width: 90%;
     max-width: 450px;

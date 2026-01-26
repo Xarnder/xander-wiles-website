@@ -55,6 +55,11 @@
                     <i class="ph ph-magnifying-glass"></i>
                 </button>
 
+                <!-- Search Lists Button -->
+                <button id="search-list-btn" class="icon-btn-large control-item" title="Search Lists">
+                    <i class="ph ph-list-magnifying-glass"></i>
+                </button>
+
                 <div class="sort-container control-item">
                     <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
                     <select id="sort-select" class="glass-select">
@@ -193,6 +198,26 @@
                 style="text-align: center; color: var(--text-secondary); padding: 20px;">
                 <i class="ph ph-magnifying-glass" style="font-size: 3rem; opacity: 0.5; margin-bottom: 10px;"></i>
                 <p>No tasks found.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SEARCH LIST MODAL -->
+    <div id="search-list-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2>Search Lists</h2>
+                <button id="close-search-list-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px;">
+                Type a list name. Matching lists will be moved to the start of the board.
+            </p>
+            <input type="text" id="search-list-input" class="add-task-input" placeholder="List Name..."
+                style="font-size: 1.1rem; padding: 12px; margin-bottom: 10px;">
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="view-reordered-btn" class="btn primary">View Reordered Lists</button>
+                <button id="clear-list-search-btn" class="btn secondary">Clear & Close</button>
             </div>
         </div>
     </div>

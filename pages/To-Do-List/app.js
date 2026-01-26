@@ -66,6 +66,7 @@ let listSortable = null;
 // Multi-Edit State
 let multiEditMode = false;
 let selectedTaskIds = new Set();
+let listSearchTerm = "";
 
 
 // --- DOM ELEMENTS (Global references) ---
@@ -252,6 +253,22 @@ function renderBoard() {
     boardContainer.innerHTML = '';
 
     appData.lists = getSortedListObjects();
+
+    // LIST SEARCH OVERRIDE
+    if (listSearchTerm) {
+        const term = listSearchTerm.toLowerCase();
+        const matches = [];
+        const others = [];
+        appData.lists.forEach(l => {
+            if (l.title.toLowerCase().includes(term)) {
+                matches.push(l);
+            } else {
+                others.push(l);
+            }
+        });
+        appData.lists = [...matches, ...others];
+    }
+
     const isCustomSort = appData.settings.sortMode === 'custom';
 
     // Render Lists
@@ -803,6 +820,38 @@ document.getElementById('theme-toggle').onclick = () => {
 
     updateDoc(doc(db, "users", currentUser.uid), { "settings.theme": newTheme }).catch(e => handleSyncError(e));
 };
+
+// --- SEARCH LISTS ---
+const searchListModal = document.getElementById('search-list-modal-overlay');
+const searchListInput = document.getElementById('search-list-input');
+
+document.getElementById('search-list-btn').onclick = () => {
+    searchListModal.classList.remove('hidden');
+    searchListInput.value = listSearchTerm; // show current if any
+    searchListInput.focus();
+};
+
+document.getElementById('close-search-list-btn').onclick = () => {
+    searchListModal.classList.add('hidden');
+    // We do NOT clear search here, allowing user to keep filter active while working
+};
+
+document.getElementById('view-reordered-btn').onclick = () => {
+    searchListModal.classList.add('hidden');
+};
+
+document.getElementById('clear-list-search-btn').onclick = () => {
+    listSearchTerm = "";
+    searchListInput.value = "";
+    renderBoard();
+    searchListModal.classList.add('hidden');
+};
+
+searchListInput.oninput = (e) => {
+    listSearchTerm = e.target.value.trim();
+    renderBoard();
+};
+
 
 // Project Title
 projectTitleInput.onchange = () => {
