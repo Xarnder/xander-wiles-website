@@ -205,11 +205,27 @@ function escapeHtml(text) {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function showToast(msg) {
+function showToast(msg, type = 'warning') {
     const toast = document.getElementById('toast');
     const toastMessage = document.getElementById('toast-message');
+    const icon = toast.querySelector('i');
+
+    toast.className = `toast ${type}`; // Reset classes
     toastMessage.innerText = msg;
+
+    // Icon logic
+    if (type === 'success') {
+        icon.className = 'ph ph-check-circle';
+    } else if (type === 'warning') {
+        icon.className = 'ph ph-warning';
+    } else {
+        icon.className = 'ph ph-info';
+    }
+
     toast.classList.remove('hidden');
+
+    // Clear previous timeout if exists (simple hack: just set new one, might flicker but ok for now)
+    // For better robustness we could store the timeout ID
     setTimeout(() => { toast.classList.add('hidden'); }, 3000);
 }
 
@@ -611,7 +627,7 @@ window.unarchiveTask = function (taskId) {
         batch.update(doc(db, "users", currentUser.uid, "lists", appData.lists[0].id), {
             taskIds: arrayUnion(taskId)
         });
-        showToast("Restored to first list.");
+        showToast("Restored to first list.", "success");
     }
     batch.commit().catch(e => handleSyncError(e));
 };
@@ -793,7 +809,11 @@ document.getElementById('add-list-btn').onclick = () => {
     batch.update(doc(db, "users", currentUser.uid), {
         listOrder: arrayUnion(outputId)
     });
-    batch.commit().catch(e => handleSyncError(e));
+    batch.commit()
+        .then(() => {
+            showToast("New List Added!", "success");
+        })
+        .catch(e => handleSyncError(e));
 };
 
 // Toggle Archive View
