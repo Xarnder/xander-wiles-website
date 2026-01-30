@@ -175,14 +175,14 @@
                             <label for="bg-transparent-toggle" style="font-size: 0.9rem;">Transparent</label>
                             <div class="toggle-switch-wrapper"
                                 style="transform: scale(0.8); transform-origin: right center;">
-                                <input type="checkbox" id="bg-transparent-toggle" class="toggle-input" checked>
+                                <input type="checkbox" id="bg-transparent-toggle" class="toggle-input">
                                 <label for="bg-transparent-toggle" class="toggle-label"></label>
                             </div>
                         </div>
 
                         <!-- Apply All Toggle -->
                         <div class="control-group" id="bg-all-group"
-                            style="grid-template-columns: 1fr 40px; gap: 0.5rem; margin-bottom: 0; opacity: 0.5; pointer-events: none;">
+                            style="grid-template-columns: 1fr 40px; gap: 0.5rem; margin-bottom: 0; opacity: 1; pointer-events: auto;">
                             <label for="bg-apply-all" style="font-size: 0.9rem;">Apply to all</label>
                             <div class="toggle-switch-wrapper"
                                 style="transform: scale(0.8); transform-origin: right center;">
@@ -193,13 +193,51 @@
 
                         <!-- Color Picker (Full Width below) -->
                         <div class="control-group" id="bg-color-group"
-                            style="grid-column: 1 / -1; grid-template-columns: auto 1fr; gap: 1rem; opacity: 0.5; pointer-events: none; justify-content: start;">
+                            style="grid-column: 1 / -1; grid-template-columns: auto 1fr; gap: 1rem; opacity: 1; pointer-events: auto; justify-content: start;">
                             <label for="bg-color-picker" style="font-size: 0.9rem;">Color:</label>
                             <div style="display: flex; gap: 10px; align-items: center;">
                                 <input type="color" id="bg-color-picker" value="#ffffff">
                                 <span id="bg-color-code"
                                     style="font-size: 0.9rem; color: var(--text-muted);">#ffffff</span>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Beta Overlay Controls -->
+                    <div class="divider"><span>Beta Overlay Options</span></div>
+
+                    <!-- Overlay Type -->
+                    <div class="control-group">
+                        <label for="overlay-type">Overlay</label>
+                        <select id="overlay-type"
+                            style="padding: 0.5rem; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--bg-secondary); color: var(--text-primary);">
+                            <option value="none" selected>None</option>
+                            <option value="colour">Beta Colour</option>
+                            <option value="grayscale">Beta Grayscale</option>
+                        </select>
+                        <!-- <span>Type</span> removed for layout -->
+                    </div>
+
+                    <div id="overlay-controls" class="hidden">
+                        <!-- Size Slider -->
+                        <div class="control-group">
+                            <label for="overlay-size-slider">Size</label>
+                            <input type="range" id="overlay-size-slider" min="10" max="100" value="40" step="5">
+                            <span id="overlay-size-value">40%</span>
+                        </div>
+
+                        <!-- Position X Slider -->
+                        <div class="control-group">
+                            <label for="overlay-x-slider">Position X</label>
+                            <input type="range" id="overlay-x-slider" min="0" max="100" value="100" step="5">
+                            <span id="overlay-x-value">100%</span>
+                        </div>
+
+                        <!-- Position Y Slider -->
+                        <div class="control-group">
+                            <label for="overlay-y-slider">Position Y</label>
+                            <input type="range" id="overlay-y-slider" min="0" max="100" value="0" step="5">
+                            <span id="overlay-y-value">0%</span>
                         </div>
                     </div>
                 </div>

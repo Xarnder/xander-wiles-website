@@ -1,4 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
+
+    // --- Embedded Assets ---
+    const BETA_COLOUR_SVG = `data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMiIgZGF0YS1uYW1lPSJMYXllciAyIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgOTEwLjk5IDQyNy42MiI+PGRlZnM+PHN0eWxlPi5jbHMtMXtsZXR0ZXItc3BhY2luZzowZW19LmNscy0ye2ZvbnQtZmFtaWx5Olhlbm9pc1NvZnRXMDEtTWVkaXVtLFhlbm9pc1NvZnRXMDEtTWVkaXVtO2ZvbnQtc2l6ZToyNjguNDlweDtmb250LXdlaWdodDo1MDB9LmNscy0ze2ZpbGw6dXJsKCNsaW5lYXItZ3JhZGllbnQtMil9LmNscy00e2ZpbGw6dXJsKCNsaW5lYXItZ3JhZGllbnQpfS5jbHMtNXtsZXR0ZXItc3BhY2luZzotLjA2ZW19PC9zdHlsZT48bGluZWFyR3JhZGllbnQgaWQ9ImxpbmVhci1ncmFkaWVudCIgeDE9IjE4My40NyIgeTE9IjQ4NS44NCIgeDI9IjcyNy41MiIgeTI9Ii01OC4yMiIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2UwZTBlMCIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJsaW5lYXItZ3JhZGllbnQtMiIgeDE9IjE2MC44MyIgeTE9IjIwNS42OSIgeDI9Ijc2NS43MyIgeTI9IjIwNS42OSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzAwODBjOCIvPjxzdG9wIG9mZnNldD0iLjQ5IiBzdG9wLWNvbG9yPSIjODMzNTk0Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZjI5ODFmIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PGcgaWQ9IkxheWVyXzEtMiIgZGF0YS1uYW1lPSJMYXllciAxIj48Zz48cmVjdCBjbGFzcz0iY2xzLTQiIHg9IjAiIHk9IjAiIHdpZHRoPSI5MTAuOTkiIGhlaWdodD0iNDI3LjYyIiByeD0iMjEzLjgxIiByeT0iMjEzLjgxIi8+PGc+PHRleHQgY2xhc3M9ImNscy0yIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMzcuMjEgMjk3LjExKSI+PHRzcGFuIHg9IjAiIHk9IjAiPkJFPC90c3Bhbj48dHNwYW4gY2xhc3M9ImNscy01IiB4PSIzMjYuNDgiIHk9IjAiPlQ8L3RzcGFuPjx0c3BhbiBjbGFzcz0iY2xzLTEiIHg9IjQ2MC45OSIgeT0iMCI+QTwvdHNwYW4+PC90ZXh0PjxnPjxwYXRoIGNsYXNzPSJjbHMtMyIgZD0iTTI5NCwyNDcuNzFjMCwxMC4wMy0xLjc1LDE4LjI2LTUuMjQsMjQuNy0zLjQ5LDYuNDQtOC4xNSwxMS41LTEzLjk2LDE1LjE3LTUuODIsMy42Ny0xMi40OCw2LjE3LTIwLDcuNTJzLTE1LjQsMi4wMS0yMy42MywyLjAxaC01My45N2MtNS45MSwwLTEwLjExLTEuMjUtMTIuNjItMy43Ni0yLjUxLTIuNS0zLjc2LTYuMDgtMy43Ni0xMC43NHYtMTUzLjU4YzAtNC42NSwxLjI1LTguMjMsMy43Ni0xMC43NCwyLjUtMi41LDYuNzEtMy43NiwxMi42Mi0zLjc2aDUzLjQzYzguNTksMCwxNi40Ny42NywyMy42MywyLjAxLDcuMTYsMS4zNCwxMy4yOSwzLjcyLDE4LjM5LDcuMTIsNS4xLDMuNCw5LjA4LDguMDEsMTEuOTUsMTMuODMsMi44Niw1LjgyLDQuMywxMy4yOSw0LjMsMjIuNDIsMCwxMS45OS0zLjE4LDIxLjU3LTkuNTMsMjguNzMtNi4zNiw3LjE2LTE1LjQ0LDExLjczLTI3LjI1LDEzLjY5LDE0LjE0LDEuNDMsMjQuNjUsNS43MywzMS41NSwxMi44OSw2Ljg5LDcuMTYsMTAuMzQsMTcuOTksMTAuMzQsMzIuNDlaTTI1OC41NiwxNjMuNGMwLTEwLjAyLTIuNDYtMTcuMDUtNy4zOC0yMS4wOC00LjkyLTQuMDMtMTMuMjktNi4wNC0yNS4xLTYuMDRoLTM1LjE3bC0uMjcsNTYuNjVoMzcuNTljNS45MSwwLDEwLjgzLS43NiwxNC43Ny0yLjI4LDMuOTQtMS41Miw3LjAyLTMuNjIsOS4yNi02LjMxLDIuMjQtMi42OCwzLjg1LTUuODEsNC44My05LjQuOTgtMy41OCwxLjQ4LTcuNDIsMS40OC0xMS41NFpNMjYzLjEzLDI0NS4wMmMwLTYuMDgtLjgxLTExLjE0LTIuNDItMTUuMTdzLTMuODktNy4yNS02Ljg1LTkuNjdjLTIuOTUtMi40Mi02LjU0LTQuMDctMTAuNzQtNC45Ny00LjIxLS44OS04LjgyLTEuMzQtMTMuODMtMS4zNGgtMzguNjZsLjI3LDYxLjQ4aDMzLjgzYzYuNjIsMCwxMi4zOS0uNDUsMTcuMzItMS4zNCw0LjkyLS44OSw4LjktMi40NiwxMS45NS00LjcsMy4wNC0yLjI0LDUuMzItNS4zMiw2Ljg1LTkuMjYsMS41Mi0zLjk0LDIuMjgtOC45NSwyLjI4LTE1LjA0WiIvPjxwYXRoIGNsYXNzPSJjbHMtMyIgZD0iTTQ0OS4xOSwyODUuMDNjMCwzLjc2LTEuMTcsNi43MS0zLjQ5LDguODYtMi4zMywyLjE1LTYuMTgsMy4yMi0xMS41NCwzLjIyaC04My43N2MtNS45MSwwLTEwLjExLTEuMjUtMTIuNjItMy43Ni0yLjUxLTIuNS0zLjc2LTYuMDgtMy43Ni0xMC43NHYtMTUzLjU4YzAtNC42NSwxLjI1LTguMjMsMy43Ni0xMC43NCwyLjUtMi41LDYuNzEtMy43NiwxMi42Mi0zLjc2aDgwLjU1YzUuMzcsMCw5LjIyLDEuMDMsMTEuNTQsMy4wOSwyLjMyLDIuMDYsMy40OSw0Ljk3LDMuNDksOC43M3MtMS4xNyw2LjcxLTMuNDksOC44NmMtMi4zMywyLjE1LTYuMTgsMy4yMi0xMS41NCwzLjIyaC02Ni44NXY1NC4yM2g2Mi4wMmM1LjM3LDAsOS4yMi45NCwxMS41NCwyLjgyLDIuMzIsMS44OCwzLjQ5LDQuNywzLjQ5LDguNDZzLTEuMTcsNi42Mi0zLjQ5LDguNTljLTIuMzMsMS45Ny02LjE4LDIuOTUtMTEuNTQsMi45NWgtNjIuMDJ2NTcuNzJoNzAuMDhjNS4zNywwLDkuMjIsMS4wMywxMS41NCwzLjA5LDIuMzIsMi4wNiwzLjQ5LDQuOTcsMy40OSw4LjczWiIvPjxwYXRoIGNsYXNzPSJjbHMtMyIgZD0iTTYwNi43OSwxMjcuMTZjMCwzLjc2LTEuMTcsNi44NS0zLjQ5LDkuMjYtMi4zMywyLjQyLTYuMTcsMy42Mi0xMS41NCwzLjYyaC0zNy41OXYxNDYuMzNjMCw0LjEyLTEuMTcsNy4zNC0zLjQ5LDkuNjctMi4zMywyLjMyLTYuMTgsMy40OS0xMS41NCwzLjQ5cy05LjIyLTEuMTctMTEuNTQtMy40OWMtMi4zMy0yLjMyLTMuNDktNS41NS0zLjQ5LTkuNjd2LTE0Ni4zM2gtMzcuODZjLTUuMzcsMC05LjIyLTEuMjEtMTEuNTQtMy42Mi0yLjMzLTIuNDItMy40OS01LjUtMy40OS05LjI2czEuMTYtNi44LDMuNDktOS4xMyw2LjE4LTMuNDksMTEuNTQtMy40OWgxMDUuNTJjNS4zNywwLDkuMjIsMS4xNywxMS41NCwzLjQ5LDIuMzIsMi4zMywzLjQ5LDUuMzcsMy40OSw5LjEzWiIvPjxwYXRoIGNsYXNzPSJjbHMtMyIgZD0iTTc2NS43MywyODcuOThjMCw0LjEyLTEuMzksNy4wNy00LjE2LDguODYtMi43OCwxLjc5LTYuMzEsMi42OC0xMC42LDIuNjgtNy43LDAtMTIuNjItMy40OS0xNC43Ny0xMC40N2wtMTIuODktMzguOTNoLTc2LjUybC0xMy4xNiwzOS43NGMtMi4xNSw2LjQ0LTYuOCw5LjY3LTEzLjk2LDkuNjdjLTguOTUsMC0xMy40Mi0zLjU4LTEzLjQyLTEwLjc0LDAtMS45Ny40NS00LjMsMS4zNC02Ljk4bDU1Ljg0LTE1Ny4wN2MxLjI1LTMuNTgsMy40OS02LjYyLDYuNzEtOS4xMywzLjIyLTIuNSw4LjUtMy43NiwxNS44NC0zLjc2czEyLjYyLDEuMjUsMTUuODQsMy43NmMzLjIyLDIuNTEsNS41NSw1LjU1LDYuOTgsOS4xM2w1NS44NCwxNTYuNTNjLjM2LjkuNjIsMi4wNi44MSwzLjQ5LjE4LDEuNDMuMjcsMi41MS4yNywzLjIyWk03MTYuMDYsMjI3LjMwbC0zMS4xNC05Mi4wOS0zMC44OCw5Mi4wOWg2Mi4wMloiLz48L2c+PC9nPjwvZz48L2c+PC9zdmc+`;
+    const BETA_GRAYSCALE_SVG = `data:image/svg+xml;base64,PHN2ZyBpZD0iTGF5ZXJfMiIgZGF0YS1uYW1lPSJMYXllciAyIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgOTEwLjk5IDQyNy42MiI+PGRlZnM+PHN0eWxlPi5jbHMtMXtsZXR0ZXItc3BhY2luZzowZW19LmNscy0ye2ZvbnQtZmFtaWx5Olhlbm9pc1NvZnRXMDEtTWVkaXVtLFhlbm9pc1NvZnRXMDEtTWVkaXVtO2ZvbnQtc2l6ZToyNjguNDlweDtmb250LXdlaWdodDo1MDB9LmNscy0ze2ZpbGw6dXJsKCNsaW5lYXItZ3JhZGllbnQtMil9LmNscy00e2ZpbGw6dXJsKCNsaW5lYXItZ3JhZGllbnQpfS5jbHMtNXtsZXR0ZXItc3BhY2luZzotLjA2ZW19PC9zdHlsZT48bGluZWFyR3JhZGllbnQgaWQ9ImxpbmVhci1ncmFkaWVudCIgeDE9IjE4My40NyIgeTE9IjQ4NS44NCIgeDI9IjcyNy41MiIgeTI9Ii01OC4yMiIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2ZmZiIvPjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2UwZTBlMCIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJsaW5lYXItZ3JhZGllbnQtMiIgeDE9IjM1MS40IiB5MT0iNDAxLjU4IiB4Mj0iNTYyLjg5IiB5Mj0iMzUuMjciIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMwMDAiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImdyYXkiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48ZyBpZD0iTGF5ZXJfMS0yIiBkYXRhLW5hbWU9IkxheWVyIDEiPjxnPjxyZWN0IGNsYXNzPSJjbHMtNCIgeD0iMCIgeT0iMCIgd2lkdGg9IjkxMC45OSIgaGVpZ2h0PSI0MjcuNjIiIHJ4PSIyMTMuODEiIHJ5PSIyMTMuODEiLz48Zz48dGV4dCBjbGFzcz0iY2xzLTIiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDEzNy4yMSAyOTcuMTEpIj48dHNwYW4geD0iMCIgeT0iMCI+QkU8L3RzcGFuPjx0c3BhbiBjbGFzcz0iY2xzLTUiIHg9IjMyNi40OCIgeT0iMCI+VDwvdHNwYW4+PHRzcGFuIGNsYXNzPSJjbHMtMSIgeD0iNDYwLjk5IiB5PSIwIj5BPC90c3Bhbj48L3RleHQ+PGc+PHBhdGggY2xhc3M9ImNscy0zIiBkPSJNMjk0LDI0Ny43MWMwLDEwLjAzLTEuNzUsMTguMjYtNS4yNCwyNC43LTMuNDksNi40NC04.MTUsMTEuNS0xMy45NiwxNS4xNy01LjgyLDMuNjctMTIuNDgsNi4xNy0yMCw3LjUycy0xNS40LDIuMDEtMjMuNjMsMi4wMWgtNTMuOTdjLTUuOTEsMC0xMC4xMS0xLjI1LTEyLjYyLTMuNzYtMi41MS0yLjUtMy43Ni02LjA4LTMuNzYtMTAuNzR2LTE1My41N2MwLTQuNjUsMS4yNS04LjIzLDMuNzYtMTAuNzRzNi43MS0zLjc2LDEyLjYyLTMuNzZoNTMuNDNjOC41OSwwLDE2LjQ3LjY3LDIzLjYzLDIuMDEsNy4xNiwxLjM0LDEzLjI5LDMuNzIsMTguMzksNy4xMiw1LjEsMy40LDkuMDgsOC4wMSwxMS45NSwxMy44MywyLjg2LDUuODIsNC4zLDEzLjI5LDQuMywyMi40MiwwLDExLjk5LTMuMTgsMjEuNTctOS41MywyOC43My02LjM2LDcuMTYtMTUuNDQsMTEuNzMtMjcuMjUsMTMuNjksMTQuMTQsMS40MywyNC42NSw1LjczLDMxLjU1LDEyLjg5LDYuODksNy4xNiwxMC4zNCwxNy45OSwxMC4zNCwzMi40OVpNMjU4LjU2LDE2My40YzAtMTAuMDItMi40Ni0xNy4wNS03LjM4LTIxLjA4LTQuOTItNC4wMy0xMy4yOS02LjA0LTI1LjEtNi4wNGgtMzUuMTdsLS4yNyw1Ni42NWgzNy41OWM1LjkxLDAsMTAuODMtLjc2LDE0Ljc3LTIuMjgsMy45NC0xLjUyLDcuMDItMy42Miw5LjI2LTYuMzEsMi4yNC0yLjY4LDMuODUtNS44MSw0LjgzLTkuNC45OC0zLjU4LDEuNDgtNy40MywxLjQ4LTExLjU0Wk0yNjMuMTMsMjQ1LjAyYzAtNi4wOC0uODEtMTEuMTQtMi40Mi0xNS4xN3MtMy44OS03LjI1LTYuODUtOS42N2MtMi45NS0yLjQyLTYuNTQtNC4wNy0xMC43NC00Ljk3LTQuMjEtLjg5LTguODItMS4zNC0xMy44My0xLjM0aC0zOC42NmwuMjcsNjEuNDhoMzMuODNjNi42MiwwLDEyMzktLjQ1LDE3LjMyLTEuMzQsNC45Mi0uODksOC45LTIuNDYsMTEuOTUtNC43LDMuMDQtMi4yNCw1LjMyLTUuMzIsNi44NS05LjI2LDEuNTItMy45NCwyLjI4LTguOTUsMi4yOC0xNS4wNFoiLz48cGF0aCBjbGFzcz0iY2xzLTMiIGQ9Ik00NDkuMTksMjg1LjAzYzAsMy43Ni0xLjE3LDYuNzEtMy40OSw4Ljg2LTIuMzMsMi4xNS02LjE4LDMuMjItMTEuNTQsMy4yMmgtODMuNzdjLTUuOTEsMC0xMC4xMS0xLjI1LTEyLjYyLTMuNzYtMi41MS0yLjUtMy43Ni02LjA4LTMuNzYtMTAuNzR2LTE1My41N2MwLTQuNjUsMS4yNS04LjIzLDMuNzYtMTAuNzRzNi43MS0zLjc2LDEyLjYyLTMuNzZoODAuNTVjNS4zNywwLDkuMjIsMS4wMywxMS41NCwzLjA5LDIuMzIsMi4wNiwzLjQ5LDQuOTcsMy40OSw4Ljczcy0xLjE3LDYuNzEtMy40OSw4Ljg2Yy0yLjMzLDIuMTUtNi4xOCwzLjIyLTExLjU0LDMuMjJoLTY2Ljg1djU0LjIzaDYyLjAyYzUuMzcsMCw5LjIyLjk0LDExLjU0LDIuODIsMi4zMiwxLjg4LDMuNDksNC43LDMuNDksOC40NnMtMS4xNyw2LjYyLTMuNDksOC41OWMtMi4zMywxLjk3LTYuMTgsMi45NS0xMS41NCwyLjk1aC02Mi4wMnY1Ny43Mmg3MC4wOGM1LjM3LDAsOS4yMiwxLjAzLDExLjU0LDMuMDksMi4zMiwyLjA2LDMuNDksNC45NywzLjQ5LDguNzNaIi8+PHBhdGggY2xhc3M9ImNscy0zIiBkPSJNNjA2Ljc5LDEyNy4xNmMwLDMuNzYtMS4xNyw2Ljg1LTMuNDksOS4yNi0yLjMzLDIuNDItNi4xNywzLjYyLTExLjU0LDMuNjJoLTM3LjU5djE0Ni4zM2MwLDQuMTItMS4xNyw3LjM0LTMuNDksOS42Ny0yLjMzLDIuMzItNi4xOCwzLjQ5LTExLjU0LDMuNDlzLTkuMjItMS4xNy0xMS41NC0zLjQ5Yy0yLjMzLTIuMzItMy40OS01LjU1LTMuNDktOS42N3YtMTQ2LjMzaC0zNy44NmMtNS4zNywwLTkuMjItMS4yMS0xMS41NC0zLjYyLTIuMzMtMi40Mi0zLjQ5LTUuNS0zLjQ5LTkuMjZzMS4xNi02LjgsMy40OS05LjEzLDYuMTgtMy40OSwxMS41NC0zLjQ5aDEwNS41MmM1LjM3LDAsOS4yMiwxLjE3LDExLjU0LDMuNDksMi4zMiwyLjMzLDMuNDksNS4zNywzLjQ5LDkuMTNaIi8+PHBhdGggY2xhc3M9ImNscy0zIiBkPSJNNzY1LjczLDI4Ny45OGMwLDQuMTItMS4zOSw3LjA3LTQuMTYsOC44Ni0yLjc4LDEuNzktNi4zMSwyLjY4LTEwLjYsMi42OC03LjcsMC0xMi42Mi0zLjQ5LTE0Ljc3LTEwLjQ3bC0xMi44OS0zOC45M2gtNzYuNTJsLTEzLjE2LDM5Ljc0Yy0yLjE1LDYuNDQtNi44LDkuNjctMTMuOTYsOS42N2MtOC45NSwwLTEzLjQyLTMuNTgtMTMuNDItMTAuNzQsMC0xLjk3LjQ1LTQuMywxLjM0LTYuOThsNTUuODQtMTU3LjA2YzEuMjUtMy41OCwzLjQ5LTYuNjIsNi43MS05LjEzLDMuMjItMi41LDguNS0zLjc2LDE1Ljg0LTMuNzZzMTIuNjIsMS4yNSwxNS44NCwzLjc2YzMuMjIsMi41MSw1LjU1LDUuNTUsNi45OCw5LjEzbDU1Ljg0LDE1Ni41M2MuMzYuOS42MiwyLjA2LjgxLDMuNDkuMTgsMS40My4yNywyLjUxLjI3LDMuMjJaTTcxNi4wNiwyMjcuMzBsLTMxLjE0LTkyLjA5LTMwLjg4LDkyLjA5aDYyLjAyWiIvPjwvZz48L2c+PC9nPjwvZz48L3N2Zz4=`;
+
+
     // --- DOM Elements ---
     const uploadInput = document.getElementById('image-upload');
     const uploadLabel = document.getElementById('upload-label');
@@ -33,6 +39,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const bgApplyAllCheckbox = document.getElementById('bg-apply-all');
     const bgColorGroup = document.getElementById('bg-color-group');
     const bgAllGroup = document.getElementById('bg-all-group');
+
+    // --- Beta Overlay Elements ---
+    const overlayType = document.getElementById('overlay-type');
+    const overlayControls = document.getElementById('overlay-controls');
+    const overlaySizeSlider = document.getElementById('overlay-size-slider');
+    const overlaySizeValue = document.getElementById('overlay-size-value');
+    const overlayXSlider = document.getElementById('overlay-x-slider');
+    const overlayXValue = document.getElementById('overlay-x-value');
+    const overlayYSlider = document.getElementById('overlay-y-slider');
+    const overlayYValue = document.getElementById('overlay-y-value');
 
     const generateBtn = document.getElementById('generate-btn');
     const resultsCard = document.getElementById('results-card');
@@ -97,6 +113,31 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePaddingPreviewWrapperBg(bgColorPicker.value);
     });
 
+    // --- Overlay Event Listeners ---
+    overlayType.addEventListener('change', () => {
+        if (overlayType.value === 'none') {
+            overlayControls.classList.add('hidden');
+        } else {
+            overlayControls.classList.remove('hidden');
+        }
+        updatePaddingPreview();
+    });
+
+    overlaySizeSlider.addEventListener('input', () => {
+        overlaySizeValue.textContent = overlaySizeSlider.value + '%';
+        updatePaddingPreview();
+    });
+
+    overlayXSlider.addEventListener('input', () => {
+        overlayXValue.textContent = overlayXSlider.value + '%';
+        updatePaddingPreview();
+    });
+
+    overlayYSlider.addEventListener('input', () => {
+        overlayYValue.textContent = overlayYSlider.value + '%';
+        updatePaddingPreview();
+    });
+
     generateBtn.addEventListener('click', handleFinalGeneration);
     resultsContent.addEventListener('click', handleResultsClick);
 
@@ -127,7 +168,12 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onload = async (e) => {
             imagePreview.src = e.target.result;
             // Update padding preview source
+            imagePreview.src = e.target.result;
             paddingPreviewIcon.style.backgroundImage = `url(${e.target.result})`;
+            // Force update bg to match current controls 
+            // (fixes issue where re-upload might not respect current bg selection)
+            const isTransparent = bgTransparentToggle.checked;
+            updatePaddingPreviewWrapperBg(isTransparent ? 'transparent' : bgColorPicker.value);
             updatePaddingPreview();
 
             if (isVectorMode) {
@@ -481,11 +527,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Determine background color
                 let backgroundColor = null; // null triggers transparency in convertToSquare
-                if (!bgTransparentToggle.checked) {
-                    // Color mode active
-                    if (isTouchIcon || bgApplyAllCheckbox.checked) {
-                        backgroundColor = bgColorPicker.value;
-                    }
+
+                // Only apply background if "Apply to all" is explicitly checked
+                // The user requested that the preview background (which defaults to white) 
+                // should NOT automatically apply to output images.
+                if (!bgTransparentToggle.checked && bgApplyAllCheckbox.checked) {
+                    backgroundColor = bgColorPicker.value;
                 }
 
                 imageBlobs[size] = await convertToSquare(compressedFile, size, paddingPercent, backgroundColor);
@@ -501,8 +548,24 @@ document.addEventListener('DOMContentLoaded', () => {
             zip.file('favicon.ico', imageBlobs[32]);
 
             // Add the SVGs currently displayed in preview
-            if (lightSvgString) zip.file('favicon-light.svg', lightSvgString);
-            if (darkSvgString) zip.file('favicon-dark.svg', darkSvgString);
+            // Add the SVGs currently displayed in preview
+            // Inject Beta Overlay if selected
+            let finalLightSvg = lightSvgString;
+            let finalDarkSvg = darkSvgString;
+
+            if (overlayType.value !== 'none') {
+                const settings = {
+                    type: overlayType.value,
+                    size: parseInt(overlaySizeSlider.value),
+                    x: parseInt(overlayXSlider.value),
+                    y: parseInt(overlayYSlider.value)
+                };
+                if (finalLightSvg) finalLightSvg = addOverlayToSvg(finalLightSvg, settings);
+                if (finalDarkSvg) finalDarkSvg = addOverlayToSvg(finalDarkSvg, settings);
+            }
+
+            if (finalLightSvg) zip.file('favicon-light.svg', finalLightSvg);
+            if (finalDarkSvg) zip.file('favicon-dark.svg', finalDarkSvg);
 
             downloadBlob = await zip.generateAsync({ type: 'blob' });
 
@@ -597,7 +660,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
                 const availableSize = size * (1 - (paddingPercent * 2));
                 const offset = size * paddingPercent;
 
@@ -608,22 +671,150 @@ document.addEventListener('DOMContentLoaded', () => {
                 const y = offset + (availableSize - newHeight) / 2;
 
                 ctx.drawImage(img, x, y, newWidth, newHeight);
-                canvas.toBlob(resolve, 'image/png');
+
+                // --- Draw Beta Overlay ---
+                const overlaySelection = overlayType.value;
+                if (overlaySelection !== 'none') {
+                    const overlaySrc = (overlaySelection === 'colour') ? BETA_COLOUR_SVG : BETA_GRAYSCALE_SVG;
+                    const overlayImg = new Image();
+                    overlayImg.onload = () => {
+                        // Calculate overlay size
+                        const overlayScale = parseInt(overlaySizeSlider.value) / 100;
+                        const overlayW = size * overlayScale * 2; // Beta tag is wide (approx 2:1), maximize width influence
+                        const overlayH = overlayW * (427 / 911); // Aspect ratio from SVG viewbox
+
+                        // Calculate position based on sliders (which are %)
+                        // 0% = Left/Top edge, 100% = Right/Bottom edge
+                        // We center anchor the overlay at that position for better control?
+                        // Or just simplistic top-left coordinate mapping?
+                        // Let's do: PositionSlider determines CENTER of overlay relative to canvas
+
+                        // Revised: Let's make 100% X mean "Right aligned" and 0% X mean "Left aligned"
+                        // But sticking to simple x/y percentage of canvas size is more standard.
+
+                        const posX = (parseInt(overlayXSlider.value) / 100) * size - (overlayW / 2);
+                        const posY = (parseInt(overlayYSlider.value) / 100) * size - (overlayH / 2);
+
+                        ctx.drawImage(overlayImg, posX, posY, overlayW, overlayH);
+                        canvas.toBlob(resolve, 'image/png');
+                    };
+                    overlayImg.onerror = () => {
+                        // Fallback if overlay fails, just return icon
+                        canvas.toBlob(resolve, 'image/png');
+                    }
+                    overlayImg.src = overlaySrc;
+                } else {
+                    canvas.toBlob(resolve, 'image/png');
+                }
             };
             img.onerror = reject;
             img.src = URL.createObjectURL(blob);
         });
     }
 
-    function updatePaddingPreview() {
+    async function updatePaddingPreview() {
         const val = parseInt(paddingSlider.value);
-        // Calculate safe size: 100% - (padding * 2)
-        // If padding is 10%, size is 80%
-        const size = 100 - (val * 2);
-        paddingPreviewIcon.style.backgroundSize = `${size}%`;
+        // We will generate a temporary single blob for the preview to show exactly what's going on
+        // Use a decent size for preview, e.g. 128px
+        const previewSize = 128;
+        const paddingPercent = val / 100;
+
+        let fileToUse = sourceFile;
+        // If vector mode, we need a blob from the SVG text (using the Light version currently)
+        if (isVectorMode && lightSvgString) {
+            fileToUse = await svgToPngBlob(lightSvgString, 256);
+        } else if (!fileToUse && sourceImageData) {
+            // Should not happen as sourceFile is set on upload, but for safety
+        }
+
+        if (!fileToUse) return;
+
+        // Background handling for preview
+        let backgroundColor = null;
+        if (!bgTransparentToggle.checked) {
+            backgroundColor = bgColorPicker.value;
+        }
+
+        try {
+            const blob = await convertToSquare(fileToUse, previewSize, paddingPercent, backgroundColor);
+            const url = URL.createObjectURL(blob);
+            paddingPreviewIcon.style.backgroundImage = `url(${url})`;
+            paddingPreviewIcon.style.backgroundSize = 'contain'; // now the image itself contains the padding/overlay
+        } catch (e) {
+            console.error("Preview update error", e);
+        }
     }
 
     function updateStatus(message) { generateStatus.textContent = message; }
+    // New: Add Overlay to SVG String
+    function addOverlayToSvg(svgStr, settings) {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svgStr, "image/svg+xml");
+            const svgEl = doc.querySelector('svg');
+            if (!svgEl) return svgStr;
+
+            // Determine ViewBox / Size
+            let vb = svgEl.getAttribute('viewBox');
+            let minX = 0, minY = 0, width, height;
+
+            if (vb) {
+                // Robust parsing of "min-x min-y width height"
+                // Match numbers including decimals and negatives
+                const parts = vb.match(/-?[\d\.]+(?:e-?\d+)?/gi)?.map(parseFloat);
+                if (parts && parts.length >= 4) {
+                    minX = parts[0];
+                    minY = parts[1];
+                    width = parts[2];
+                    height = parts[3];
+                }
+            }
+
+            // Fallback to width/height attributes if ViewBox failed or missing
+            if (width === undefined || height === undefined) {
+                width = parseFloat(svgEl.getAttribute('width')) || 100;
+                height = parseFloat(svgEl.getAttribute('height')) || 100;
+                // If we fallback, assume 0,0 origin unless we force a new viewBox
+                if (!vb) {
+                    svgEl.setAttribute('viewBox', `0 0 ${width} ${height}`);
+                }
+            }
+
+            // Calculate Overlay position/size
+            const canvasSize = Math.max(width, height);
+            const overlayScale = settings.size / 100;
+            const overlayW = canvasSize * overlayScale * 2;
+            const overlayH = overlayW * (427 / 911);
+
+            // Position relative to minX/minY (ViewBox origin)
+            const posX = minX + (settings.x / 100) * canvasSize - (overlayW / 2);
+            const posY = minY + (settings.y / 100) * canvasSize - (overlayH / 2);
+
+            const overlaySrc = (settings.type === 'colour') ? BETA_COLOUR_SVG : BETA_GRAYSCALE_SVG;
+
+            // Create Image Element
+            const imgEl = doc.createElementNS("http://www.w3.org/2000/svg", "image");
+            imgEl.setAttributeNS(null, "x", posX);
+            imgEl.setAttributeNS(null, "y", posY);
+            imgEl.setAttributeNS(null, "width", overlayW);
+            imgEl.setAttributeNS(null, "height", overlayH);
+            // Redundant style for robustness in some viewers
+            imgEl.style.width = `${overlayW}px`;
+            imgEl.style.height = `${overlayH}px`;
+
+            imgEl.setAttributeNS(null, "preserveAspectRatio", "xMidYMid meet");
+
+            imgEl.setAttributeNS("http://www.w3.org/1999/xlink", "href", overlaySrc);
+            imgEl.setAttribute("href", overlaySrc);
+
+            svgEl.appendChild(imgEl);
+
+            return new XMLSerializer().serializeToString(doc);
+        } catch (e) {
+            console.error("Failed to add SVG overlay", e);
+            return svgStr;
+        }
+    }
 
     // New: Rasterize SVG to a PNG blob
     function svgToPngBlob(svgStr, size) {
@@ -670,7 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Reset/Hide preview
         paddingPreviewIcon.style.backgroundImage = 'none';
-        updatePaddingPreviewWrapperBg('transparent');
+        updatePaddingPreviewWrapperBg('#ffffff'); // Default to white
 
         svgControlsCard.classList.add('hidden');
         resultsCard.classList.add('hidden');
@@ -681,6 +872,13 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContent.innerHTML = '';
         generateStatus.textContent = '';
         generateBtn.textContent = 'Generate All Files';
+
+        // Reset overlay controls
+        overlayType.value = 'none';
+        overlayControls.classList.add('hidden');
+        overlaySizeSlider.value = 40; overlaySizeValue.textContent = '40%';
+        overlayXSlider.value = 100; overlayXValue.textContent = '100%';
+        overlayYSlider.value = 0; overlayYValue.textContent = '0%';
     }
 
     function updatePaddingPreviewWrapperBg(color) {

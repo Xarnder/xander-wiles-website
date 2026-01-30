@@ -578,3 +578,63 @@ a:hover {
     /* Add this line for the glow effect */
     text-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
 }
+
+/* --- Hidden Pages Toggle --- */
+.hidden-pages-toggle-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+}
+
+.toggle-button {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-radius: var(--radius-xl);
+}
+
+.toggle-button:hover {
+    background: var(--glass-bg);
+    color: var(--text-primary);
+    border-color: var(--accent-purple);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* --- Hidden Beta Section Styling --- */
+.hidden-pages-container {
+    padding: 3rem 1.5rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-xl);
+    border: 1px dashed var(--glass-border);
+    margin: 2rem 0;
+}
+
+.hidden-pages-container .section-title {
+    margin-top: 0;
+    border-left-color: var(--accent-orange);
+    /* Orange accent for beta */
+    color: var(--accent-orange);
+}
+
+.hidden-pages-container .page-card {
+    background: rgba(40, 40, 45, 0.6);
+    /* Slightly different dark background */
+    border-color: rgba(245, 158, 11, 0.3);
+    /* Subtle orange border */
+}
+
+.hidden-pages-container .page-card:hover {
+    background: rgba(40, 40, 45, 0.8);
+    border-color: var(--accent-orange);
+    box-shadow: 0 10px 25px rgba(245, 158, 11, 0.15);
+    /* Orange glow */
+}
+
+.hidden-pages-container .page-card h3 {
+    color: var(--accent-orange) !important;
+}

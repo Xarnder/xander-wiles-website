@@ -565,9 +565,9 @@ button:disabled {
 }
 
 .padding-preview-box {
-    width: 64px;
-    height: 64px;
-    background: #000;
+    width: 256px;
+    height: 256px;
+    background: #ffffff;
     border-radius: 12px;
     overflow: hidden;
     position: relative;
@@ -663,4 +663,11 @@ input[type="color"]::-webkit-color-swatch {
     border: 2px solid var(--glass-border);
     border-radius: 50%;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+#overlay-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1rem;
 }

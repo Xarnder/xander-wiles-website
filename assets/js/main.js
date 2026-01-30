@@ -23,4 +23,22 @@ document.addEventListener('DOMContentLoaded', () => {
             profilePic.addEventListener('load', unblurImage);
         }
     }
+
+
+    // --- Hidden Test Pages Toggle ---
+    const toggleButton = document.getElementById('toggle-hidden-pages');
+    const hiddenSection = document.getElementById('hidden-test-pages');
+
+    if (toggleButton && hiddenSection) {
+        toggleButton.addEventListener('click', () => {
+            const isHidden = hiddenSection.style.display === 'none';
+            hiddenSection.style.display = isHidden ? 'block' : 'none';
+            toggleButton.textContent = isHidden ? 'Hide Hidden Test Pages' : 'Show Hidden Test Pages';
+
+            // Optional: Scroll to the section when opening
+            if (isHidden) {
+                // hiddenSection.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    }
 });
