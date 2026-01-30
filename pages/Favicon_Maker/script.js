@@ -781,14 +781,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Calculate Overlay position/size
-            const canvasSize = Math.max(width, height);
+            // Use Math.min for consistent behavior with PNG generation (convertToSquare)
+            // This ensures the overlay scales properly relative to the smaller dimension
+            const canvasSize = Math.min(width, height);
             const overlayScale = settings.size / 100;
             const overlayW = canvasSize * overlayScale * 2;
-            const overlayH = overlayW * (427 / 911);
+            const overlayH = overlayW * (427 / 911); // Maintain aspect ratio from SVG viewbox
 
             // Position relative to minX/minY (ViewBox origin)
-            const posX = minX + (settings.x / 100) * canvasSize - (overlayW / 2);
-            const posY = minY + (settings.y / 100) * canvasSize - (overlayH / 2);
+            // Use width/height for positioning to map 0-100% correctly across the full canvas
+            const posX = minX + (settings.x / 100) * width - (overlayW / 2);
+            const posY = minY + (settings.y / 100) * height - (overlayH / 2);
 
             const overlaySrc = (settings.type === 'colour') ? BETA_COLOUR_SVG : BETA_GRAYSCALE_SVG;
 
