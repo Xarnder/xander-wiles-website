@@ -189,6 +189,16 @@
                 <h2>Search Tasks</h2>
                 <button id="close-search-btn" class="icon-btn-large">&times;</button>
             </div>
+            <div style="margin-bottom: 10px; display: flex; justify-content: flex-end;">
+                <label class="dropdown-item-toggle"
+                    style="padding: 6px 12px; font-size: 0.9rem; background: rgba(0,0,0,0.2);">
+                    <span style="margin-right: 10px;">Show Archived</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="search-show-archived-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+            </div>
             <input type="text" id="search-input" class="add-task-input" placeholder="Type to search..."
                 style="margin-bottom: 15px; font-size: 1.1rem; padding: 12px;">
             <div id="search-results-container" class="task-list" style="overflow-y: auto; max-height: 60vh;">

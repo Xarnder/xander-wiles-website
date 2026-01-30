@@ -493,6 +493,11 @@ body {
     opacity: 0.9;
 }
 
+.task-card.archived-task .task-text {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
 .task-card.important {
     background: var(--card-important-bg);
     border: 1px solid var(--card-important-border);

@@ -68,6 +68,9 @@ let multiEditMode = false;
 let selectedTaskIds = new Set();
 let listSearchTerm = "";
 
+// Search State
+let searchShowArchived = false;
+
 
 // --- DOM ELEMENTS (Global references) ---
 const boardContainer = document.getElementById('board-container');
@@ -192,6 +195,11 @@ function setupFirestoreListeners(uid) {
             appData.tasks[doc.id] = { id: doc.id, ...doc.data() };
         });
         renderBoard();
+
+        // Auto-refresh search if open
+        if (!document.getElementById('search-modal-overlay').classList.contains('hidden')) {
+            performSearch(document.getElementById('search-input').value);
+        }
     }, (error) => handleSyncError(error)));
 }
 
@@ -2078,6 +2086,13 @@ const searchModal = document.getElementById('search-modal-overlay');
 const searchInput = document.getElementById('search-input');
 const searchResultsContainer = document.getElementById('search-results-container');
 const searchEmptyState = document.getElementById('search-empty-state');
+const searchShowArchivedToggle = document.getElementById('search-show-archived-toggle');
+
+// Archive Toggle in Search
+searchShowArchivedToggle.onchange = (e) => {
+    searchShowArchived = e.target.checked;
+    performSearch(searchInput.value);
+};
 
 // Open Search
 document.getElementById('search-btn').onclick = () => {
@@ -2117,7 +2132,7 @@ function performSearch(query) {
     Object.values(appData.tasks).forEach(task => {
         if (!task) return;
         // Check text match and archive visibility
-        if ((showArchived || !task.archived) && task.text.toLowerCase().includes(term)) {
+        if ((searchShowArchived || !task.archived) && task.text.toLowerCase().includes(term)) {
             // Find context
             const context = getTaskContext(task.id);
             if (context.length > 0) {
