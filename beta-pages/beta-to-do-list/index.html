@@ -150,14 +150,27 @@
                 <input type="file" id="import-todoist-csv" accept=".csv" style="display: none;">
 
                 <hr class="dropdown-divider">
-                <div class="menu-action-item" style="cursor: default; padding-right: 0;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                        <span><i class="ph ph-bell-ringing"></i> Backup Reminder</span>
-                        <input type="number" id="backup-frequency-input" value="10" min="1" max="1000"
-                            style="width: 60px; padding: 4px; border-radius: 4px; border: 1px solid var(--glass-border); background: rgba(0,0,0,0.2); color: var(--text-primary); text-align: center;">
+                <div class="menu-action-item" style="cursor: default; flex-direction: column; align-items: flex-start;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 12px;">
+                        <span><i class="ph ph-bell-ringing"></i> Backup Freq</span>
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <input type="number" id="backup-frequency-input" value="10" min="1" max="1000"
+                                class="add-task-input"
+                                style="width: 60px; padding: 4px 8px; font-size: 0.9rem; text-align: center; height: 32px; box-sizing: border-box;">
+                            <button id="confirm-backup-freq-btn" class="btn secondary" title="Save Limit"
+                                style="padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"><i
+                                    class="ph ph-check"></i></button>
+                        </div>
                     </div>
-                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">Current Count: <span
-                            id="tasks-since-backup-display">0</span></div>
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; width: 100%; font-size: 0.85rem; color: var(--text-secondary);">
+                        <span>Current Count: <span id="tasks-since-backup-display"
+                                style="font-weight: bold; color: var(--text-primary);">0</span></span>
+                        <button id="reset-backup-count-btn" class="btn secondary" title="Reset Count"
+                            style="padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"><i
+                                class="ph ph-arrow-counter-clockwise"></i></button>
+                    </div>
                 </div>
 
                 <hr class="dropdown-divider">
@@ -369,7 +382,7 @@
                 <i class="ph ph-download-simple"></i> Download Backup
             </button>
             <div class="slider-container disabled" id="slider-container">
-                <div class="slider-track"><span class="slider-text">Download backup first</span></div>
+                <div class="slider-track" id="slider-track"><span class="slider-text">Download backup first</span></div>
                 <div class="slider-handle" id="slider-handle"><i class="ph ph-caret-right"></i></div>
             </div>
             <button id="reset-cancel-btn" class="btn secondary" style="margin-top: 15px; width: 100%;">Cancel</button>
@@ -402,7 +415,21 @@
         </div>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <!-- BACKUP MODAL -->
+    <div id="backup-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box">
+            <div class="confirm-icon-area" style="color: var(--accent-orange);"><i class="ph ph-warning-circle"></i>
+            </div>
+            <h2>Time to Backup?</h2>
+            <p>You've made a lot of changes since your last backup.</p>
+            <div class="modal-actions centered-actions">
+                <button id="backup-later-btn" class="btn secondary">I'll do it later</button>
+                <button id="backup-now-btn" class="btn primary">Backup Now</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
 </body>
 
 </html>
