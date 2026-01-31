@@ -35,7 +35,10 @@ export const state = {
     listSearchTerm: "",
 
     // Search State
-    searchShowArchived: false
+    searchShowArchived: false,
+
+    // Sync State
+    hasPendingWrites: false
 };
 
 // State Getters/Setters to maintain reference integrity if needed
