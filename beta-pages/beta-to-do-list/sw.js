@@ -13,7 +13,10 @@ const ASSETS_TO_CACHE = [
     './favicon-light.svg',
     './favicon-dark.svg',
     'https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js',
-    'https://unpkg.com/@phosphor-icons/web'
+    'https://unpkg.com/@phosphor-icons/web',
+    'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js',
+    'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js',
+    'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 ];
 
 // Install Event
@@ -45,15 +48,12 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Event - Cache First, then Network
 self.addEventListener('fetch', (event) => {
-    // Skip cross-origin requests like Firebase SDKs or API calls initially
-    // We want to rely on Firebase's persistence for data.
-    // However, we DO want to cache our static assets and the specific CDNs we listed.
-
-    // Check if the request is for an item in our asset list (by simple string match or domain)
+    // Check if the request is for an item in our asset list
     const isStaticAsset = ASSETS_TO_CACHE.some(asset => event.request.url.includes(asset.replace('./', '')));
     const isSelf = event.request.url.startsWith(self.location.origin);
+    const isFirebase = event.request.url.includes('gstatic.com/firebasejs');
 
-    if (isSelf || isStaticAsset) {
+    if (isSelf || isStaticAsset || isFirebase) {
         event.respondWith(
             caches.match(event.request)
                 .then((response) => {
@@ -64,7 +64,7 @@ self.addEventListener('fetch', (event) => {
                     return fetch(event.request).then(
                         (response) => {
                             // Check if we received a valid response
-                            if (!response || response.status !== 200 || response.type !== 'basic') {
+                            if (!response || response.status !== 200 || response.type !== 'basic' && response.type !== 'cors') {
                                 return response;
                             }
 
