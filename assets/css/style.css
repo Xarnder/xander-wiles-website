@@ -607,7 +607,7 @@ a:hover {
 
 /* --- Hidden Beta Section Styling --- */
 .hidden-pages-container {
-    padding: 3rem 1.5rem;
+    padding: 2rem;
     background: rgba(255, 255, 255, 0.02);
     border-radius: var(--radius-xl);
     border: 1px dashed var(--glass-border);
@@ -623,6 +623,7 @@ a:hover {
 
 .hidden-pages-container .page-card {
     background: rgba(40, 40, 45, 0.6);
+    padding: 1.5rem;
     /* Slightly different dark background */
     border-color: rgba(245, 158, 11, 0.3);
     /* Subtle orange border */

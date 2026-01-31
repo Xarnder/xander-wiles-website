@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #121212;
+  --color-surface: #1e1e1e;
+  --color-primary: #bb86fc;
+  --color-primary-variant: #3700b3;
+  --color-secondary: #03dac6;
+  --color-text: #e0e0e0;
+  --color-text-muted: #8e8e8e;
+  --color-border: #333333;
+
+  --font-body: 'Inter', sans-serif;
+  --font-serif: 'Lora', serif;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-text font-body;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-serif;
+  }
+}
+
+/* Custom markdown styles */
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  @apply text-secondary mt-6 mb-2;
+}
+
+.markdown-content strong {
+  @apply text-secondary font-bold;
+}
+
+.markdown-content p {
+  @apply mb-4;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  @apply pl-6 mb-4 list-disc;
+}
+
+.markdown-content a {
+  @apply text-primary no-underline hover:underline;
+}
+
+.markdown-content code {
+  @apply bg-bg px-1.5 py-0.5 rounded font-mono text-sm;
+}
