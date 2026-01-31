@@ -357,19 +357,44 @@ export function updateSyncUI() {
         return;
     }
 
-    if (diff < 5) {
-        dot.classList.add('online');
-        timeStr = 'Synced';
-    } else if (diff < 60) {
-        dot.classList.add('online');
-        timeStr = 'Synced ' + diff + 's ago';
-    } else {
-        if (navigator.onLine) {
-            dot.classList.add('syncing');
-            timeStr = Math.floor(diff / 60) + 'm ago';
+    if (!navigator.onLine) {
+        if (state.hasPendingWrites) {
+            dot.classList.add('offline'); // You might want a different color for "Offline with Changes"
+            // For now, let's say offline with changes is 'syncing' style or a new 'warning' style if we had one.
+            // But requirement was "Offline (Changes Queued)".
+            // Let's modify CSS for a new class if needed, or re-use existing.
+            // Let's assume 'offline' means red, maybe we want Orange.
+            dot.style.backgroundColor = 'var(--accent-orange)';
+            timeStr = 'Offline (Changes Queued)';
         } else {
             dot.classList.add('offline');
             timeStr = 'Offline';
+            dot.style.backgroundColor = ''; // Reset inline style
+        }
+    } else {
+        // ONLINE
+        dot.style.backgroundColor = ''; // Reset inline
+
+        if (state.hasPendingWrites) {
+            dot.classList.add('syncing');
+            timeStr = 'Syncing...';
+        } else {
+            if (diff < 5) {
+                dot.classList.add('online');
+                timeStr = 'Synced';
+            } else if (diff < 60) {
+                dot.classList.add('online');
+                timeStr = 'Synced ' + diff + 's ago';
+            } else {
+                dot.classList.add('syncing'); // Idle but old sync? No, kept original logic for "old sync" maybe?
+                // Actually original logic:
+                // if (navigator.onLine) { dot.classList.add('syncing'); timeStr = ...m ago }
+                // That seems to imply "Active but not synced recently".
+                // I will improve this: If no pending writes, and online, it is Synced.
+                // The time diff is just informational.
+                dot.classList.add('online');
+                timeStr = diff < 60 ? 'Synced ' + diff + 's ago' : 'Synced ' + Math.floor(diff / 60) + 'm ago';
+            }
         }
     }
 

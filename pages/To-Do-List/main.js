@@ -15,6 +15,19 @@ window.onerror = function (msg, url, line, col, error) {
     console.error("Global Error:", error);
 };
 
+// --- SERVICE WORKER REGISTRATION ---
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(registration => {
+                console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            })
+            .catch(err => {
+                console.log('ServiceWorker registration failed: ', err);
+            });
+    });
+}
+
 // ... existing code ...
 
 // --- EXPOSE TO WINDOW FOR INLINE HTML ---
@@ -134,7 +147,9 @@ function stopSyncTimer() {
 function setupFirestoreListeners(uid) {
     // 1. User Settings & Project Title
     const userDocRef = doc(db, "users", uid);
-    state.listeners.push(onSnapshot(userDocRef, (docSnap) => {
+
+    state.listeners.push(onSnapshot(userDocRef, { includeMetadataChanges: true }, (docSnap) => {
+        state.hasPendingWrites = docSnap.metadata.hasPendingWrites;
         if (!docSnap.metadata.fromCache) updateLastSync();
         if (docSnap.exists()) {
             const data = docSnap.data();
@@ -174,7 +189,9 @@ function setupFirestoreListeners(uid) {
 
     // 2. Lists
     const listsColRefReal = collection(db, "users", uid, "lists");
-    state.listeners.push(onSnapshot(listsColRefReal, (snapshot) => {
+
+    state.listeners.push(onSnapshot(listsColRefReal, { includeMetadataChanges: true }, (snapshot) => {
+        state.hasPendingWrites = snapshot.metadata.hasPendingWrites;
         if (!snapshot.metadata.fromCache) updateLastSync();
         const lists = [];
         snapshot.forEach(doc => lists.push({ id: doc.id, ...doc.data() }));
@@ -184,7 +201,9 @@ function setupFirestoreListeners(uid) {
 
     // 3. Tasks
     const tasksColRef = collection(db, "users", uid, "tasks");
-    state.listeners.push(onSnapshot(tasksColRef, (snapshot) => {
+
+    state.listeners.push(onSnapshot(tasksColRef, { includeMetadataChanges: true }, (snapshot) => {
+        state.hasPendingWrites = snapshot.metadata.hasPendingWrites;
         if (!snapshot.metadata.fromCache) updateLastSync();
         state.appData.tasks = {};
         snapshot.forEach(doc => {
@@ -205,6 +224,10 @@ function setupFirestoreListeners(uid) {
 document.addEventListener('DOMContentLoaded', () => {
     // Add List
     document.getElementById('add-list-btn').onclick = API.addNewList;
+
+    // Network Status Listeners
+    window.addEventListener('online', UI.updateSyncUI);
+    window.addEventListener('offline', UI.updateSyncUI);
 
     // Toggle Archive View
     document.getElementById('toggle-archive-view-btn').onclick = function () {
