@@ -1,4 +1,10 @@
 {
     "buildCommand": "cd pages/journal-pwa && npm install && npm run build && cp -r dist/* .",
-    "outputDirectory": "."
+    "outputDirectory": ".",
+    "rewrites": [
+        {
+            "source": "/pages/journal-pwa/:path*",
+            "destination": "/pages/journal-pwa/index.html"
+        }
+    ]
 }
