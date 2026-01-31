@@ -21,9 +21,10 @@ export function AuthProvider({ children }) {
     }
 
     useEffect(() => {
+        const allowedEmails = ['xanderwiles@gmail.com'];
         const unsubscribe = onAuthStateChanged(auth, (user) => {
-            if (user && !user.email.endsWith('@xanderwiles.com')) {
-                alert('Access restricted to xanderwiles.com domain only.');
+            if (user && !user.email.endsWith('@xanderwiles.com') && !allowedEmails.includes(user.email)) {
+                alert('Access restricted to authorized users only.');
                 signOut(auth);
                 setCurrentUser(null);
             } else {
