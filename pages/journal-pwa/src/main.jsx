@@ -7,7 +7,7 @@ import { AuthProvider } from './context/AuthContext'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter basename="/pages/journal-pwa">
+    <BrowserRouter basename={import.meta.env.DEV ? '/' : '/pages/journal-pwa'}>
       <AuthProvider>
         <App />
       </AuthProvider>
