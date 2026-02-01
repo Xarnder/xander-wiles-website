@@ -107,14 +107,35 @@ export default function BackupOptions() {
         }
     };
 
+    // Helper: Clean title from formatted header lines
+    const cleanTitle = (rawTitle) => {
+        if (!rawTitle) return '';
+
+        // Pattern: **++Date - Name: Actual Title++** or similar variations
+        // Try to extract just the title part after the colon
+        const colonMatch = rawTitle.match(/:\s*(.+?)(?:\+\+|\*\*|$)/);
+        if (colonMatch && colonMatch[1]) {
+            return colonMatch[1].replace(/[\*\+]+/g, '').trim();
+        }
+
+        // If no colon pattern, try to extract from ++ markers with dash separator
+        const dashMatch = rawTitle.match(/\+\+[^-]+-\s*(.+?)\+\+/);
+        if (dashMatch && dashMatch[1]) {
+            return dashMatch[1].replace(/[\*\+]+/g, '').trim();
+        }
+
+        // Fallback: just strip formatting chars
+        return rawTitle.replace(/[\*\+#]+/g, '').trim();
+    };
+
     // Helper: Format Content
     const formatEntryContent = (entry, fmt) => {
-        const title = entry.title || entry.id;
+        const title = cleanTitle(entry.title) || entry.id;
         const body = entry.content || '';
         const date = entry.id;
 
         if (fmt === 'json') {
-            return JSON.stringify(entry, null, 2);
+            return JSON.stringify({ ...entry, title: cleanTitle(entry.title) }, null, 2);
         } else if (fmt === 'md') {
             return `---\ndate: ${date}\ntitle: ${title}\n---\n\n${body}`;
         } else { // txt
