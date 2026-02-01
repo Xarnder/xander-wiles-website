@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { LogOut, Book, Calendar as CalendarIcon } from 'lucide-react';
+import DirectoryImporter from './DirectoryImporter';
 
 export default function Layout() {
     const { currentUser, logout } = useAuth();
@@ -33,6 +34,8 @@ export default function Layout() {
                             <span className="text-sm text-text-muted hidden md:block">
                                 {currentUser?.email}
                             </span>
+
+                            <DirectoryImporter />
 
                             <button
                                 onClick={() => navigate('/')}

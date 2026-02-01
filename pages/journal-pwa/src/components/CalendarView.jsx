@@ -138,7 +138,7 @@ export default function CalendarView() {
                             <h3 className="text-center font-serif text-primary font-bold mb-4">{format(monthDate, 'MMMM')}</h3>
 
                             <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2 text-text-muted font-bold">
-                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => <div key={d}>{d}</div>)}
+                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
                             </div>
 
                             <div className="grid grid-cols-7 gap-1 text-center text-sm">
