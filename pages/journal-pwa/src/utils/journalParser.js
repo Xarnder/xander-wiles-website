@@ -1,3 +1,5 @@
+import { format } from 'date-fns';
+
 export const correctCommonTypos = (text) => {
     const corrections = { "Uagast": "August", "Des": "Dec", "Fr": "Fri", "Tues": "Tue" };
     let corrected = text;
@@ -122,7 +124,8 @@ export const parseJournalEntries = (fileContent, sourceFilename) => {
         const title = block.split('\n')[0];
 
         // Format date key YYYY-MM-DD
-        const dateKey = entryDate.toISOString().split('T')[0];
+        // Format date key YYYY-MM-DD using local time
+        const dateKey = format(entryDate, 'yyyy-MM-dd');
 
         entries.push({
             date: dateKey,

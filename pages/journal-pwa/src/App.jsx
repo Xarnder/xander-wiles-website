@@ -22,8 +22,9 @@ function App() {
           <Layout />
         </PrivateRoute>
       }>
-        <Route index element={<CalendarView />} />
-        <Route path="entry/:date" element={<EntryEditor />} />
+        <Route path="/" element={<CalendarView />}>
+          <Route path="entry/:date" element={<EntryEditor />} />
+        </Route>
       </Route>
     </Routes>
   );

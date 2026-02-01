@@ -18,6 +18,7 @@ export default function EntryEditor() {
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [showRawHeader, setShowRawHeader] = useState(false);
 
     // Parse date for display
     const displayDate = useMemo(() => {
@@ -27,6 +28,14 @@ export default function EntryEditor() {
             return date;
         }
     }, [date]);
+
+    // Prepare content for display by stripping the header
+    const displayContent = useMemo(() => {
+        if (!content) return '';
+        if (showRawHeader) return content;
+        // Match optional ** before and after ++
+        return content.replace(/(?:\*\*)?\+\+.*?\+\+(?:\*\*)?/g, '').trim();
+    }, [content, showRawHeader]);
 
     useEffect(() => {
         async function fetchEntry() {
@@ -55,7 +64,34 @@ export default function EntryEditor() {
 
         fetchEntry();
         fetchEntry();
+        fetchEntry();
     }, [date, currentUser]);
+
+    // Parse title from content pattern **++Date - Title++**
+    useEffect(() => {
+        if (!content) return;
+
+        const match = content.match(/(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/);
+        if (match && match[1]) {
+            const fullHeader = match[1];
+            // Split by " - " (space hyphen space) to separate Date and Title
+            const parts = fullHeader.split(' - ');
+
+            if (parts.length >= 2) {
+                // Determine date and title
+                // Assuming format "DateString - TitleString"
+                // The date part might be "Sunday 25 January 2026"
+                // The title part is everything after the first " - "
+                const titlePart = parts.slice(1).join(' - ').trim();
+                if (titlePart !== title) {
+                    setTitle(titlePart);
+                }
+            } else if (parts.length === 1 && parts[0].trim() !== title) {
+                // Fallback if only one part found inside tags
+                setTitle(parts[0].trim());
+            }
+        }
+    }, [content]);
 
     async function handleSave() {
         if (!currentUser) return;
@@ -113,7 +149,7 @@ export default function EntryEditor() {
                     </button>
                     <div>
                         <h2 className="text-2xl font-serif font-bold text-primary">{displayDate}</h2>
-                        {title && !isEditing && <p className="text-text-muted text-sm">{title}</p>}
+                        {title && !isEditing && <p className="text-blue-500 font-bold text-lg">{title}</p>}
                     </div>
                 </div>
 
@@ -138,13 +174,24 @@ export default function EntryEditor() {
                             </button>
                         </>
                     ) : (
-                        <button
-                            onClick={() => setIsEditing(true)}
-                            className="flex items-center px-4 py-2 rounded bg-primary hover:bg-primary-variant text-white font-bold transition shadow-lg shadow-primary/20"
-                        >
-                            <Edit2 className="w-4 h-4 mr-2" />
-                            Edit
-                        </button>
+                        <>
+                            <label className="flex items-center space-x-2 text-sm text-text-muted mr-4 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={showRawHeader}
+                                    onChange={(e) => setShowRawHeader(e.target.checked)}
+                                    className="rounded border-border bg-surface text-primary focus:ring-primary"
+                                />
+                                <span className="hidden sm:inline">Raw Header</span>
+                            </label>
+                            <button
+                                onClick={() => setIsEditing(true)}
+                                className="flex items-center px-4 py-2 rounded bg-primary hover:bg-primary-variant text-white font-bold transition shadow-lg shadow-primary/20"
+                            >
+                                <Edit2 className="w-4 h-4 mr-2" />
+                                Edit
+                            </button>
+                        </>
                     )}
                 </div>
             </div>
@@ -161,8 +208,8 @@ export default function EntryEditor() {
                     </div>
                 ) : (
                     <div className="markdown-content prose prose-invert max-w-none">
-                        {content ? (
-                            <ReactMarkdown>{content}</ReactMarkdown>
+                        {displayContent ? (
+                            <ReactMarkdown>{displayContent}</ReactMarkdown>
                         ) : (
                             <div className="text-center py-20 text-text-muted italic">
                                 No entry for this day. Click Edit to write one.

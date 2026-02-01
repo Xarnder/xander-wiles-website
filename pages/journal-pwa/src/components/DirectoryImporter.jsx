@@ -18,6 +18,10 @@ export default function DirectoryImporter() {
             return;
         }
 
+        if (!window.confirm("WARNING: This will overwrite any existing entries with the same date. Do you want to continue?")) {
+            return;
+        }
+
         try {
             setErrorMessage('');
             setStatus('scanning');

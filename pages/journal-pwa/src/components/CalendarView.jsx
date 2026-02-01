@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, getDocs, query, where, documentId } from 'firebase/firestore';
+import { collection, getDocs, query, where, documentId, getCountFromServer } from 'firebase/firestore';
 import { format, getYear, setYear, startOfYear, endOfYear, eachMonthOfInterval, startOfMonth, endOfMonth, getDay, getDaysInMonth } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -12,8 +12,11 @@ export default function CalendarView() {
     const { currentUser } = useAuth();
     const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
     const [entries, setEntries] = useState(new Set());
+    const [totalEntries, setTotalEntries] = useState(0);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+    const location = useLocation();
+    const isEntrySelected = location.pathname.includes('/entry/');
 
     // Fetch entries for the selected year
     useEffect(() => {
@@ -46,7 +49,23 @@ export default function CalendarView() {
         }
 
         fetchEntriesForYear();
+        fetchEntriesForYear();
     }, [currentYear, currentUser]);
+
+    // Fetch total count (all time)
+    useEffect(() => {
+        async function fetchTotal() {
+            if (!currentUser) return;
+            try {
+                const coll = collection(db, 'users', currentUser.uid, 'entries');
+                const snapshot = await getCountFromServer(coll);
+                setTotalEntries(snapshot.data().count);
+            } catch (e) {
+                console.error("Error fetching total count:", e);
+            }
+        }
+        fetchTotal();
+    }, [currentUser]);
 
     // Keyboard Navigation
     useEffect(() => {
@@ -88,94 +107,125 @@ export default function CalendarView() {
 
     return (
         <div className="space-y-6">
-            {/* UID Helper - Temporary for migration */}
-            {currentUser && (
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-center mb-6">
-                    <p className="text-sm text-text-muted mb-1">Your User UID (needed for migration):</p>
-                    <code className="bg-black/20 px-2 py-1 rounded text-primary font-mono select-all">
-                        {currentUser.uid}
-                    </code>
-                    <p className="text-xs text-text-muted mt-2">
-                        Querying year: {currentYear} | Entries found: {entries.size}
-                    </p>
+            {/* Stats Header */}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between bg-surface border border-border rounded-lg p-4 mb-6">
+                <div>
+                    <h2 className="text-lg font-bold text-primary">Journal Overview</h2>
                 </div>
-            )}
+                <div className="flex space-x-6 mt-2 md:mt-0 text-sm">
+                    <div className="text-center md:text-right">
+                        <p className="text-text-muted">In {currentYear}</p>
+                        <p className="text-xl font-serif font-bold text-text">{entries.size}</p>
+                    </div>
+                    <div className="text-center md:text-right border-l border-border pl-6">
+                        <p className="text-text-muted">Total Entries</p>
+                        <p className="text-xl font-serif font-bold text-secondary">{totalEntries}</p>
+                    </div>
+                </div>
+            </div>
 
             {/* Controls */}
             <div className="flex items-center justify-center space-x-4 mb-8">
                 <button
-                    onClick={() => setCurrentYear(y => y - 1)}
-                    className="p-2 rounded-full hover:bg-surface border border-transparent hover:border-border transition"
+                    onClick={() => setCurrentYear(prev => prev - 1)}
+                    className="p-2 rounded-full hover:bg-surface text-text-muted hover:text-white transition"
                 >
-                    <ChevronLeft className="w-6 h-6 text-text-muted" />
+                    <ChevronLeft className="w-6 h-6" />
                 </button>
-
-                <select
-                    value={currentYear}
-                    onChange={handleYearChange}
-                    className="bg-surface text-2xl font-serif font-bold py-2 px-4 rounded border border-border focus:outline-none focus:border-primary text-secondary appearance-none cursor-pointer"
-                >
-                    {/* Generate a range of years, e.g., 2010 to Next Year */}
-                    {Array.from({ length: 20 }, (_, i) => new Date().getFullYear() + 1 - i).map(y => (
-                        <option key={y} value={y}>{y}</option>
-                    ))}
-                </select>
-
+                <h2 className="text-3xl font-serif font-bold text-primary">{currentYear}</h2>
                 <button
-                    onClick={() => setCurrentYear(y => y + 1)}
-                    className="p-2 rounded-full hover:bg-surface border border-transparent hover:border-border transition"
+                    onClick={() => setCurrentYear(prev => prev + 1)}
+                    className="p-2 rounded-full hover:bg-surface text-text-muted hover:text-white transition"
                 >
-                    <ChevronRight className="w-6 h-6 text-text-muted" />
+                    <ChevronRight className="w-6 h-6" />
                 </button>
             </div>
 
-            {loading ? (
-                <div className="text-center text-text-muted py-20">Loading calendar...</div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {monthsInYear.map((monthDate) => (
-                        <div key={monthDate.toString()} className="month-container bg-surface rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition duration-300">
-                            <h3 className="text-center font-serif text-primary font-bold mb-4">{format(monthDate, 'MMMM')}</h3>
+            {/* Main Layout: Calendar + Editor Split */}
+            <div className={`flex flex-col-reverse md:flex-row gap-6 h-full transition-all duration-300`}>
+                {/* Calendar Grid */}
+                <div className={`transition-all duration-300 ${isEntrySelected ? 'w-full md:w-5/12 lg:w-1/3 h-[calc(100vh-200px)] overflow-y-auto pr-2' : 'w-full'}`}>
 
-                            <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2 text-text-muted font-bold">
-                                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
-                            </div>
+                    {loading ? (
+                        <div className="text-center text-text-muted py-20">Loading calendar...</div>
+                    ) : (
+                        <div className={`grid gap-8 transition-all duration-300 ${isEntrySelected
+                                ? 'grid-cols-1'
+                                : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+                            }`}>
+                            {monthsInYear.map((monthDate) => {
+                                const monthIndex = monthDate.getMonth();
+                                // Get days for this month
+                                const daysInMonth = getDaysInMonth(monthDate);
+                                const firstDayOfMonth = getDay(startOfMonth(monthDate));
+                                // 0=Sun, 1=Mon...6=Sat. 
+                                // We want Mon=0, Sun=6.
+                                // formula: (day + 6) % 7
+                                const startOffset = (firstDayOfMonth + 6) % 7;
 
-                            <div className="grid grid-cols-7 gap-1 text-center text-sm">
-                                {/* Empty slots for start of month */}
-                                {Array.from({ length: getDay(startOfMonth(monthDate)) }).map((_, i) => (
-                                    <div key={`empty-${i}`} />
-                                ))}
+                                return (
+                                    <div key={monthDate.toString()} className="month-container bg-surface rounded-xl border border-border p-4 shadow-sm hover:shadow-md transition duration-300">
+                                        <h3 className="text-center font-serif text-primary font-bold mb-4">{format(monthDate, 'MMMM')}</h3>
 
-                                {/* Days */}
-                                {Array.from({ length: getDaysInMonth(monthDate) }).map((_, i) => {
-                                    const day = i + 1;
-                                    const dateStr = format(new Date(currentYear, monthDate.getMonth(), day), 'yyyy-MM-dd');
-                                    const hasEntry = entries.has(dateStr);
-                                    const isToday = dateStr === format(new Date(), 'yyyy-MM-dd');
+                                        <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2 text-text-muted font-bold">
+                                            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                                                <div key={i}>{d}</div>
+                                            ))}
 
-                                    return (
-                                        <div
-                                            key={day}
-                                            onClick={() => navigate(`/entry/${dateStr}`)}
-                                            className={`
-                        h-8 w-8 flex items-center justify-center rounded-full cursor-pointer transition-all duration-200
-                        ${hasEntry
-                                                    ? 'font-bold text-secondary hover:bg-secondary/20 hover:text-secondary'
-                                                    : 'text-text-muted opacity-50 hover:opacity-100 hover:bg-white/5'}
-                        ${isToday ? 'border-2 border-primary' : ''}
-                      `}
-                                        >
-                                            {day}
-                                            {hasEntry && <div className="absolute w-1 h-1 bg-secondary rounded-full bottom-1" />}
+                                            {/* Empty slots for start of month (Monday start) */}
+                                            {Array.from({ length: startOffset }).map((_, i) => (
+                                                <div key={`empty-${i}`} />
+                                            ))}
+
+                                            {/* Days */}
+                                            {Array.from({ length: daysInMonth }).map((_, i) => {
+                                                const day = i + 1;
+                                                const dateObj = new Date(currentYear, monthIndex, day);
+                                                const isToday = day === new Date().getDate() && monthIndex === new Date().getMonth() && currentYear === new Date().getFullYear();
+                                                const dateKey = format(dateObj, 'yyyy-MM-dd');
+                                                const hasEntry = entries.has(dateKey);
+                                                const isSelected = location.pathname.includes(dateKey);
+
+                                                return (
+                                                    <button
+                                                        key={day}
+                                                        onClick={() => navigate(`entry/${dateKey}`)}
+                                                        className={`
+                                                        aspect-square flex items-center justify-center rounded-full transition-all duration-200 text-sm
+                                                        ${hasEntry
+                                                                ? 'bg-primary/20 text-primary font-bold hover:bg-primary hover:text-white ring-1 ring-primary/50'
+                                                                : 'text-text-muted hover:bg-surface hover:text-text'
+                                                            }
+                                                        ${isSelected ? 'ring-2 ring-secondary ring-offset-2 ring-offset-bg z-10' : ''}
+                                                        ${isToday ? 'bg-secondary text-black font-bold' : ''}
+                                                    `}
+                                                    >
+                                                        {day}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
-                                    );
-                                })}
-                            </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    ))}
+                    )}
                 </div>
-            )}
+
+                {/* Entry Viewer / Editor Panel */}
+                {isEntrySelected && (
+                    <div className="w-full md:w-7/12 lg:w-2/3 animation-fade-in border-t md:border-t-0 md:border-l border-border md:pl-6 pt-6 md:pt-0">
+                        <Outlet />
+                    </div>
+                )}
+            </div>
+
+            {/* Footer UID Display */}
+            <div className="mt-12 pt-6 border-t border-border text-center">
+                <p className="text-xs text-text-muted">
+                    User ID: <code className="bg-black/20 px-1 rounded select-all hover:text-text cursor-pointer" title="ID needed for migration">{currentUser?.uid}</code>
+                </p>
+            </div>
         </div>
     );
 }

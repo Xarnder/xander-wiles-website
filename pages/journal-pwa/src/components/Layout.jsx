@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { LogOut, Book, Calendar as CalendarIcon } from 'lucide-react';
 import DirectoryImporter from './DirectoryImporter';
+import DataRepair from './DataRepair';
 
 export default function Layout() {
     const { currentUser, logout } = useAuth();
@@ -36,6 +37,8 @@ export default function Layout() {
                             </span>
 
                             <DirectoryImporter />
+
+                            <DataRepair />
 
                             <button
                                 onClick={() => navigate('/')}
