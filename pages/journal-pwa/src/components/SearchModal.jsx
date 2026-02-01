@@ -287,15 +287,15 @@ export default function SearchModal({ isOpen, onClose }) {
                                     className="w-full text-left p-2 rounded-lg hover:bg-white/5 transition-colors group border border-transparent hover:border-white/5"
                                 >
                                     <div className="flex justify-between items-center gap-2">
-                                        <h3 className="font-bold text-white group-hover:text-primary transition-colors truncate text-sm" style={{ maxWidth: '60%' }}>
-                                            {truncateTitle(entry.title)}
+                                        <h3 className="font-medium text-white group-hover:text-primary transition-colors truncate">
+                                            {cleanTitle(entry.title)}
                                         </h3>
                                         <span className="text-xs text-text-muted flex items-center shrink-0">
                                             <Calendar className="w-3 h-3 mr-1" />
                                             {format(parseISO(entry.id), 'MMM d, yyyy')}
                                         </span>
                                     </div>
-                                    <p className="text-xs text-text-muted truncate mt-1">
+                                    <p className="text-xs text-text-muted mt-1 line-clamp-1">
                                         <HighlightedSnippet
                                             content={entry.content}
                                             query={queryText}
@@ -415,10 +415,28 @@ function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Truncate title to a reasonable length for search results
-function truncateTitle(title) {
-    if (!title) return 'Untitled';
-    const clean = title.trim();
-    if (clean.length <= 50) return clean;
-    return clean.slice(0, 50) + '...';
+// Extract clean title from formatted header like **++Date - Name: Actual Title++**
+function cleanTitle(rawTitle) {
+    if (!rawTitle) return 'Untitled';
+
+    // Pattern: **++Date - Name: Actual Title++** or similar variations
+    // Try to extract just the title part after the colon
+    const colonMatch = rawTitle.match(/:\s*(.+?)(?:\+\+|\*\*|$)/);
+    if (colonMatch && colonMatch[1]) {
+        const title = colonMatch[1].replace(/[\*\+]+/g, '').trim();
+        if (title) return title.length > 60 ? title.slice(0, 60) + '...' : title;
+    }
+
+    // If no colon pattern, try to extract from ++ markers with dash separator
+    const dashMatch = rawTitle.match(/\+\+[^-]+-\s*(.+?)\+\+/);
+    if (dashMatch && dashMatch[1]) {
+        const title = dashMatch[1].replace(/[\*\+]+/g, '').trim();
+        if (title) return title.length > 60 ? title.slice(0, 60) + '...' : title;
+    }
+
+    // Fallback: just strip formatting chars
+    const stripped = rawTitle.replace(/[\*\+#]+/g, '').trim();
+    if (stripped) return stripped.length > 60 ? stripped.slice(0, 60) + '...' : stripped;
+
+    return 'Untitled';
 }
