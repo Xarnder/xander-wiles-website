@@ -51,6 +51,7 @@ export default function EntryEditor() {
                     const data = docSnap.data();
                     setContent(data.content || '');
                     setTitle(data.title || '');
+                    setIsEditing(false); // Ensure we start in view mode for existing entries
                 } else {
                     // New entry
                     setIsEditing(true);
