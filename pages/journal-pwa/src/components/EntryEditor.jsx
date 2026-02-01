@@ -55,6 +55,7 @@ export default function EntryEditor() {
                     // New entry
                     setIsEditing(true);
                     setContent('');
+                    setTitle('');
                 }
             } catch (error) {
                 console.error("Error fetching entry:", error);
@@ -183,14 +184,18 @@ export default function EntryEditor() {
                     ) : (
                         <>
                             <div className="hidden sm:flex items-center mr-2">
-                                <label className="flex items-center space-x-2 text-xs text-text-muted cursor-pointer hover:text-white transition-colors">
-                                    <input
-                                        type="checkbox"
-                                        checked={showRawHeader}
-                                        onChange={(e) => setShowRawHeader(e.target.checked)}
-                                        className="rounded border-white/20 bg-black/30 text-primary focus:ring-primary focus:ring-offset-0"
-                                    />
-                                    <span>Raw Header</span>
+                                <label className="flex items-center space-x-2 text-xs text-text-muted cursor-pointer hover:text-white transition-colors group">
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            checked={showRawHeader}
+                                            onChange={(e) => setShowRawHeader(e.target.checked)}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-primary/30 peer-checked:border-primary/50 transition-all duration-300"></div>
+                                        <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-text-muted rounded-full transition-all duration-300 peer-checked:translate-x-4 peer-checked:bg-primary peer-checked:shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
+                                    </div>
+                                    <span className="group-hover:text-white transition-colors">Raw Header</span>
                                 </label>
                             </div>
                             <button
