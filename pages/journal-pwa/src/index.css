@@ -1,22 +1,36 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #121212;
-  --color-surface: #1e1e1e;
-  --color-primary: #bb86fc;
-  --color-primary-variant: #3700b3;
-  --color-secondary: #03dac6;
-  --color-text: #e0e0e0;
-  --color-text-muted: #8e8e8e;
-  --color-border: #333333;
+  --color-bg: #0a0a0b;
+  --color-surface: #111115;
+  --color-glass-bg: rgba(26, 26, 32, 0.5);
+  --color-glass-border: rgba(255, 255, 255, 0.08);
+  --color-primary: #8b5cf6;
+  --color-primary-variant: #7c3aed;
+  --color-secondary: #06b6d4;
+  --color-accent: #f59e0b;
+  --color-text: #ffffff;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+  --color-border: rgba(255, 255, 255, 0.08);
 
   --font-body: 'Inter', sans-serif;
   --font-serif: 'Lora', serif;
+
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-3xl: 32px;
+
+  --image-gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
 }
 
 @layer base {
   body {
-    @apply bg-bg text-text font-body;
+    @apply bg-bg text-text font-body antialiased selection:bg-primary selection:text-white;
+    background-image:
+      radial-gradient(circle at 15% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 25%),
+      radial-gradient(circle at 85% 30%, rgba(6, 182, 212, 0.08) 0%, transparent 25%);
+    background-attachment: fixed;
   }
 
   h1,
@@ -29,30 +43,127 @@
   }
 }
 
-/* Custom markdown styles */
+@layer components {
+  .glass-card {
+    @apply bg-glass-bg backdrop-blur-xl border border-glass-border rounded-xl shadow-lg;
+  }
+
+  .glass-button {
+    @apply bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-300 backdrop-blur-sm rounded-lg;
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  }
+}
+
+/* Custom markdown styles override */
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
-  @apply text-secondary mt-6 mb-2;
+  @apply text-text mt-8 mb-4 font-bold;
+}
+
+.markdown-content h1 {
+  @apply text-3xl border-b border-border pb-2;
+}
+
+.markdown-content h2 {
+  @apply text-2xl;
+}
+
+.markdown-content h3 {
+  @apply text-xl;
 }
 
 .markdown-content strong {
-  @apply text-secondary font-bold;
+  @apply text-text font-bold;
 }
 
 .markdown-content p {
-  @apply mb-4;
+  @apply mb-4 leading-relaxed text-text-secondary;
 }
 
 .markdown-content ul,
 .markdown-content ol {
-  @apply pl-6 mb-4 list-disc;
+  @apply pl-6 mb-4 list-disc marker:text-primary;
 }
 
 .markdown-content a {
-  @apply text-primary no-underline hover:underline;
+  @apply text-secondary no-underline hover:text-primary transition-colors;
 }
 
 .markdown-content code {
-  @apply bg-bg px-1.5 py-0.5 rounded font-mono text-sm;
+  @apply bg-black/30 px-1.5 py-0.5 rounded font-mono text-sm text-accent border border-white/5;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 border-primary pl-4 italic text-text-muted my-4;
+}
+
+/* Animation utilities */
+.animation-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- EasyMDE Dark Theme Overrides --- */
+.EasyMDEContainer .editor-toolbar {
+  @apply bg-white/5 border-white/10 rounded-t-lg;
+}
+
+.EasyMDEContainer .editor-toolbar button {
+  @apply text-text-secondary hover:bg-white/10 border-transparent rounded-md transition-colors;
+}
+
+.EasyMDEContainer .editor-toolbar button.active,
+.EasyMDEContainer .editor-toolbar button:hover {
+  @apply bg-white/10 border-white/20 text-primary;
+}
+
+.EasyMDEContainer .CodeMirror {
+  @apply bg-black/20 border-white/10 text-text-secondary rounded-b-lg;
+  font-family: 'Inter', monospace;
+}
+
+.EasyMDEContainer .CodeMirror-cursor {
+  border-left-color: #8b5cf6 !important;
+}
+
+.EasyMDEContainer .editor-preview {
+  @apply bg-surface text-text;
+}
+
+.EasyMDEContainer .editor-statusbar {
+  @apply hidden;
+}
+
+/* --- Custom Scrollbar --- */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
