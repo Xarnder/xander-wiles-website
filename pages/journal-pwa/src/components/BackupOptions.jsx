@@ -8,9 +8,11 @@ import JSZip from 'jszip';
 import { Download, X, FileText, Calendar, Layers, Archive, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 
+import { useBackup } from '../context/BackupContext';
+
 export default function BackupOptions() {
     const { currentUser } = useAuth();
-    const [isOpen, setIsOpen] = useState(false);
+    const { isBackupOpen: isOpen, closeBackup, backupMessage, openBackup } = useBackup();
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState(null); // { type: 'success' | 'error', message: string }
 
@@ -163,7 +165,7 @@ export default function BackupOptions() {
     return (
         <>
             <button
-                onClick={() => setIsOpen(true)}
+                onClick={() => openBackup()}
                 className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
                 title="Backup Options"
             >
@@ -174,17 +176,42 @@ export default function BackupOptions() {
                 <div className="fixed inset-0 z-[100] flex flex-col items-center overflow-y-auto p-4 bg-black/80 backdrop-blur-md animation-fade-in">
                     <div className="glass-card w-full max-w-lg p-6 relative overflow-hidden flex flex-col max-h-[85vh] my-auto bg-[#1a1b1e]/95 shadow-2xl">
                         {/* Header */}
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-serif font-bold text-white flex items-center gap-2">
                                 <Archive className="w-5 h-5 text-primary" />
                                 Export & Backup
                             </h2>
                             <button
-                                onClick={() => setIsOpen(false)}
+                                onClick={closeBackup}
                                 className="p-2 rounded-full hover:bg-white/10 text-text-muted hover:text-white transition-colors"
                             >
                                 <X className="w-5 h-5" />
                             </button>
+                        </div>
+
+                        {/* Backup Reminder Message */}
+                        {backupMessage && (
+                            <div className="mb-6 p-4 bg-primary/20 border border-primary/30 rounded-lg flex items-start gap-4 animate-bounce-in">
+                                <div className="p-2 bg-primary/20 rounded-full shrink-0">
+                                    <AlertCircle className="w-6 h-6 text-primary" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-white mb-1">Weekly Check-in</h3>
+                                    <p className="text-sm text-gray-200">{backupMessage}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Instructions */}
+                        <div className="bg-white/5 rounded-lg p-4 mb-6 text-sm text-text-muted">
+                            <h3 className="font-bold text-white mb-2 flex items-center gap-2">
+                                <FileText className="w-4 h-4" /> How to Backup
+                            </h3>
+                            <ul className="list-disc list-inside space-y-1 ml-1 opacity-90">
+                                <li>Select <strong>All Time</strong> to backup everything.</li>
+                                <li>Choose <strong>Separate Files</strong> to keep days distinct.</li>
+                                <li>Click <strong>Download Backup</strong> to save a ZIP file.</li>
+                            </ul>
                         </div>
 
                         <div className="space-y-6 overflow-y-auto custom-scrollbar pr-2 flex-1">

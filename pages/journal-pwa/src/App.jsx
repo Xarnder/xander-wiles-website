@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { BackupProvider } from './context/BackupContext';
 import Login from './components/Login';
 import Layout from './components/Layout';
 // Placeholders for now, will create next
@@ -16,19 +17,23 @@ function PrivateRoute({ children }) {
 function App() {
   return (
     <ToastProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
+      <div className="text-text font-body">
+        <BackupProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
 
-        <Route path="/" element={
-          <PrivateRoute>
-            <Layout />
-          </PrivateRoute>
-        }>
-          <Route path="/" element={<CalendarView />}>
-            <Route path="entry/:date" element={<EntryEditor />} />
-          </Route>
-        </Route>
-      </Routes>
+            <Route path="/" element={
+              <PrivateRoute>
+                <Layout />
+              </PrivateRoute>
+            }>
+              <Route path="/" element={<CalendarView />}>
+                <Route path="entry/:date" element={<EntryEditor />} />
+              </Route>
+            </Route>
+          </Routes>
+        </BackupProvider>
+      </div>
     </ToastProvider>
   );
 }

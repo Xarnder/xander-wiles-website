@@ -7,12 +7,14 @@ import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firest
 import ReactMarkdown from 'react-markdown';
 import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, getDay } from 'date-fns';
+import { useBackup } from '../context/BackupContext';
 import { ArrowLeft, Edit2, Save, X, Calendar, PenTool } from 'lucide-react';
 
 export default function EntryEditor() {
     const { currentUser } = useAuth();
     const { success, error: toastError } = useToast();
+    const { openBackup } = useBackup();
     const { date } = useParams();
     const navigate = useNavigate();
     const [content, setContent] = useState('');
@@ -105,6 +107,14 @@ export default function EntryEditor() {
 
             setIsEditing(false);
             success('Entry saved successfully');
+
+            // Check if it's Sunday (0)
+            const dateObj = parseISO(date);
+            if (getDay(dateObj) === 0) {
+                setTimeout(() => {
+                    openBackup("It's Sunday! Great time to reflect and download a backup of your entries.");
+                }, 1500);
+            }
         } catch (err) {
             console.error("Error saving entry:", err);
 
