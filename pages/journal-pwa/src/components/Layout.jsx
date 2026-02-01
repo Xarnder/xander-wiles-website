@@ -4,6 +4,7 @@ import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { LogOut, Book, Calendar as CalendarIcon } from 'lucide-react';
 import DirectoryImporter from './DirectoryImporter';
 import DataRepair from './DataRepair';
+import BackupOptions from './BackupOptions';
 
 export default function Layout() {
     const { currentUser, logout } = useAuth();
@@ -42,6 +43,7 @@ export default function Layout() {
                         <div className="flex items-center gap-2">
                             <DirectoryImporter />
                             <DataRepair />
+                            <BackupOptions />
                         </div>
 
                         <button
