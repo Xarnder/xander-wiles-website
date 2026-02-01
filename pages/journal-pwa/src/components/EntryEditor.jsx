@@ -40,6 +40,11 @@ export default function EntryEditor() {
         return content.replace(/(?:\*\*)?\+\+.*?\+\+(?:\*\*)?/g, '').trim();
     }, [content, showRawHeader]);
 
+    const wordCount = useMemo(() => {
+        if (!displayContent) return 0;
+        return displayContent.trim().split(/\s+/).filter(word => word.length > 0).length;
+    }, [displayContent]);
+
     useEffect(() => {
         async function fetchEntry() {
             setLoading(true);
@@ -205,8 +210,9 @@ export default function EntryEditor() {
                             <Calendar className="w-3 h-3 mr-1 shrink-0" />
                             {date}
                         </div>
-                        <h2 className="text-xl sm:text-2xl font-serif font-bold text-white truncate max-w-[200px] sm:max-w-md">{displayDate}</h2>
+                        <h2 className="text-xl sm:text-2xl font-serif font-bold text-white break-words">{displayDate}</h2>
                         {title && !isEditing && <p className="text-secondary font-medium opacity-90 break-words">{title}</p>}
+                        {!isEditing && <p className="text-xs text-text-muted mt-1">{wordCount} words</p>}
                     </div>
 
                     {/* Navigation Arrows (Right / Next) */}

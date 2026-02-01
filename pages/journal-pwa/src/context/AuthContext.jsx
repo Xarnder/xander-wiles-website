@@ -21,9 +21,12 @@ export function AuthProvider({ children }) {
     }
 
     useEffect(() => {
+        console.log("AuthProvider: useEffect triggered");
         const allowedEmails = ['xanderwiles@gmail.com'];
         const unsubscribe = onAuthStateChanged(auth, (user) => {
+            console.log("AuthProvider: onAuthStateChanged triggered", user ? "User found" : "No user");
             if (user && !user.email.endsWith('@xanderwiles.com') && !allowedEmails.includes(user.email)) {
+                console.warn("Unauthorized user attempted login:", user.email);
                 alert('Access restricted to authorized users only.');
                 signOut(auth);
                 setCurrentUser(null);
@@ -31,6 +34,7 @@ export function AuthProvider({ children }) {
                 setCurrentUser(user);
             }
             setLoading(false);
+            console.log("AuthProvider: Loading set to false");
         });
 
         return unsubscribe;
