@@ -29,7 +29,7 @@ export default function Layout() {
                         <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors mr-3">
                             <Book className="h-6 w-6 text-primary" />
                         </div>
-                        <h1 className="text-xl font-serif font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
+                        <h1 className="hidden sm:block text-xl font-serif font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
                             Digital Journal
                         </h1>
                     </div>
@@ -48,7 +48,7 @@ export default function Layout() {
 
                         <button
                             onClick={() => navigate('/')}
-                            className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
+                            className="hidden sm:block p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
                             title="Calendar"
                         >
                             <CalendarIcon className="h-5 w-5" />

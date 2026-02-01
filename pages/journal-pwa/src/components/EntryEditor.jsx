@@ -7,9 +7,9 @@ import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firest
 import ReactMarkdown from 'react-markdown';
 import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
-import { format, parseISO, getDay } from 'date-fns';
+import { format, parseISO, getDay, addDays } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function EntryEditor() {
     const { currentUser } = useAuth();
@@ -143,6 +143,21 @@ export default function EntryEditor() {
         };
     }, []);
 
+    // Navigation handlers
+    const handlePrevDay = () => {
+        const currentDate = parseISO(date);
+        const prevDate = addDays(currentDate, -1);
+        const prevDateString = format(prevDate, 'yyyy-MM-dd');
+        navigate(`/entry/${prevDateString}`);
+    };
+
+    const handleNextDay = () => {
+        const currentDate = parseISO(date);
+        const nextDate = addDays(currentDate, 1);
+        const nextDateString = format(nextDate, 'yyyy-MM-dd');
+        navigate(`/entry/${nextDateString}`);
+    };
+
     if (loading) return (
         <div className="glass-card p-8 flex flex-col items-center justify-center min-h-[400px] text-text-muted animate-pulse">
             <PenTool className="w-12 h-12 mb-4 opacity-50" />
@@ -154,25 +169,67 @@ export default function EntryEditor() {
         <div className="h-full flex flex-col animation-fade-in">
             {/* Header / Actions */}
             <div className="glass-card p-4 mb-6 sticky top-0 z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center space-x-3 w-full sm:w-auto">
+                <div className="flex items-center w-full sm:w-auto overflow-hidden">
                     <button
                         onClick={() => navigate('/')}
-                        className="glass-button p-2 text-text-muted hover:text-white md:hidden"
+                        className="glass-button p-2 text-text-muted hover:text-white md:hidden mr-2 shrink-0"
                         title="Back to Calendar"
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <div className="flex-1 min-w-0">
+
+                    {/* Navigation Arrows (View Mode Only) */}
+                    {!isEditing && (
+                        <button
+                            onClick={handlePrevDay}
+                            className="glass-button p-2 text-text-muted hover:text-white mr-2 shrink-0 hidden sm:flex"
+                            title="Previous Day"
+                        >
+                            <ChevronLeft className="w-5 h-5" />
+                        </button>
+                    )}
+
+                    <div className="flex-1 min-w-0 overflow-hidden">
                         <div className="flex items-center text-primary text-sm font-bold mb-1 uppercase tracking-wider">
-                            <Calendar className="w-3 h-3 mr-1" />
+                            <Calendar className="w-3 h-3 mr-1 shrink-0" />
                             {date}
                         </div>
                         <h2 className="text-xl sm:text-2xl font-serif font-bold text-white truncate max-w-[200px] sm:max-w-md">{displayDate}</h2>
-                        {title && !isEditing && <p className="text-secondary font-medium truncate opacity-90">{title}</p>}
+                        {title && !isEditing && <p className="text-secondary font-medium opacity-90 break-words">{title}</p>}
                     </div>
+
+                    {/* Navigation Arrows (Right / Next) */}
+                    {!isEditing && (
+                        <button
+                            onClick={handleNextDay}
+                            className="glass-button p-2 text-text-muted hover:text-white ml-2 shrink-0 hidden sm:flex"
+                            title="Next Day"
+                        >
+                            <ChevronRight className="w-5 h-5" />
+                        </button>
+                    )}
                 </div>
 
-                <div className="flex space-x-2 w-full sm:w-auto justify-end">
+                <div className="flex space-x-2 w-full sm:w-auto justify-end shrink-0">
+                    {/* Mobile Navigation Arrows */}
+                    {!isEditing && (
+                        <div className="flex sm:hidden mr-auto">
+                            <button
+                                onClick={handlePrevDay}
+                                className="glass-button p-2 text-text-muted hover:text-white mr-2"
+                                title="Previous Day"
+                            >
+                                <ChevronLeft className="w-5 h-5" />
+                            </button>
+                            <button
+                                onClick={handleNextDay}
+                                className="glass-button p-2 text-text-muted hover:text-white"
+                                title="Next Day"
+                            >
+                                <ChevronRight className="w-5 h-5" />
+                            </button>
+                        </div>
+                    )}
                     {isEditing ? (
                         <>
                             <button
@@ -194,7 +251,7 @@ export default function EntryEditor() {
                         </>
                     ) : (
                         <>
-                            <div className="hidden sm:flex items-center mr-2">
+                            <div className="flex items-center mr-2">
                                 <label className="flex items-center space-x-2 text-xs text-text-muted cursor-pointer hover:text-white transition-colors group">
                                     <div className="relative">
                                         <input
@@ -206,7 +263,7 @@ export default function EntryEditor() {
                                         <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-primary/30 peer-checked:border-primary/50 transition-all duration-300"></div>
                                         <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-text-muted rounded-full transition-all duration-300 peer-checked:translate-x-4 peer-checked:bg-primary peer-checked:shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
                                     </div>
-                                    <span className="group-hover:text-white transition-colors">Raw Header</span>
+                                    <span className="hidden sm:inline group-hover:text-white transition-colors">Raw Header</span>
                                 </label>
                             </div>
                             <button
