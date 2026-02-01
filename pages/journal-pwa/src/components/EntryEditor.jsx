@@ -126,7 +126,7 @@ export default function EntryEditor() {
     // Custom options for SimpleMDE to match dark theme
     const mdeOptions = useMemo(() => {
         return {
-            autofocus: true,
+            autofocus: false,
             spellChecker: false,
             status: false,
             placeholder: "Write your thoughts...",
@@ -200,6 +200,14 @@ export default function EntryEditor() {
             <div className="bg-surface rounded-xl border border-border p-6 md:p-10 shadow-lg min-h-[60vh]">
                 {isEditing ? (
                     <div className="prose prose-invert max-w-none">
+                        <input
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="Entry Title"
+                            className="w-full bg-transparent text-3xl font-serif font-bold text-primary border-none focus:ring-0 placeholder-gray-600 mb-6 p-0"
+                            autoFocus
+                        />
                         <SimpleMdeReact
                             value={content}
                             onChange={setContent}
