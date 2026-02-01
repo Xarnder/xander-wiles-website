@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
@@ -11,6 +12,7 @@ import { ArrowLeft, Edit2, Save, X, Calendar, PenTool } from 'lucide-react';
 
 export default function EntryEditor() {
     const { currentUser } = useAuth();
+    const { success, error: toastError } = useToast();
     const { date } = useParams();
     const navigate = useNavigate();
     const [content, setContent] = useState('');
@@ -100,9 +102,20 @@ export default function EntryEditor() {
             }
 
             setIsEditing(false);
-        } catch (error) {
-            console.error("Error saving entry:", error);
-            alert("Failed to save entry");
+            success('Entry saved successfully');
+        } catch (err) {
+            console.error("Error saving entry:", err);
+
+            // Handle specific Firestore errors
+            if (err.code === 'resource-exhausted') {
+                toastError('Storage quota exceeded. Please check your plan.');
+            } else if (err.code === 'permission-denied') {
+                toastError('You do not have permission to save this entry.');
+            } else if (err.code === 'unavailable') {
+                toastError('Network unavailable. Please check your connection.');
+            } else {
+                toastError('Failed to save entry. Please try again.');
+            }
         } finally {
             setSaving(false);
         }
