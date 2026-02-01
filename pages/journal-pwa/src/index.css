@@ -118,6 +118,22 @@
   }
 }
 
+.animation-scale-in {
+  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* --- EasyMDE Dark Theme Overrides --- */
 .EasyMDEContainer .editor-toolbar {
   @apply bg-white/5 border-white/10 rounded-t-lg;

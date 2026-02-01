@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
-import { LogOut, Book, Calendar as CalendarIcon } from 'lucide-react';
+import { LogOut, Book, Calendar as CalendarIcon, Search } from 'lucide-react';
 import DirectoryImporter from './DirectoryImporter';
 import DataRepair from './DataRepair';
 import BackupOptions from './BackupOptions';
+import SearchModal from './SearchModal';
 
 export default function Layout() {
     const { currentUser, logout } = useAuth();
     const navigate = useNavigate();
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
 
     async function handleLogout() {
         try {
@@ -21,6 +23,8 @@ export default function Layout() {
 
     return (
         <div className="min-h-screen flex flex-col font-body text-text">
+            <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+
             {/* Glass Header */}
             <header className="sticky top-0 z-50 px-4 pt-4 pb-2">
                 <div className="glass-card max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center transition-all duration-300">
@@ -41,6 +45,13 @@ export default function Layout() {
                         </span>
 
                         <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setIsSearchOpen(true)}
+                                className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
+                                title="Search (Cmd+K)"
+                            >
+                                <Search className="h-5 w-5" />
+                            </button>
                             <DirectoryImporter />
                             <DataRepair />
                             <BackupOptions />
