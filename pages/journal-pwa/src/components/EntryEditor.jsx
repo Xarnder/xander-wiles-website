@@ -9,7 +9,7 @@ import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
 import { format, parseISO, getDay, addDays } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
 
 export default function EntryEditor() {
     const { currentUser } = useAuth();
@@ -132,6 +132,17 @@ export default function EntryEditor() {
             setSaving(false);
         }
     }
+
+    const handleCopy = async () => {
+        try {
+            const textToCopy = `${displayDate} - ${title} - ${displayContent}`;
+            await navigator.clipboard.writeText(textToCopy);
+            success('Entry copied to clipboard');
+        } catch (err) {
+            console.error('Failed to copy:', err);
+            toastError('Failed to copy to clipboard');
+        }
+    };
 
     const mdeOptions = useMemo(() => {
         return {
@@ -266,6 +277,14 @@ export default function EntryEditor() {
                                     <span className="hidden sm:inline group-hover:text-white transition-colors">Raw Header</span>
                                 </label>
                             </div>
+                            <button
+                                onClick={handleCopy}
+                                className="glass-button px-5 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center mr-2"
+                                title="Copy to Clipboard"
+                            >
+                                <Copy className="w-4 h-4 mr-2" />
+                                <span className="hidden sm:inline">Copy</span>
+                            </button>
                             <button
                                 onClick={() => setIsEditing(true)}
                                 className="glass-button px-5 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center"
