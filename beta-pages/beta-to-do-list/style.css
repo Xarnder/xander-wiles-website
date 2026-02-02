@@ -1523,6 +1523,26 @@ input:checked+.slider-small:before {
     [data-theme="oled"] .board-container::-webkit-scrollbar-thumb {
         background-color: rgba(255, 255, 255, 0.5);
     }
+
+    /* --- ARCHIVED TASK MOBILE FIXES --- */
+    .task-card.archived-task .task-actions {
+        opacity: 1 !important;
+        visibility: visible !important;
+        pointer-events: auto;
+    }
+
+    .task-card.archived-task .icon-btn {
+        padding: 12px;
+        /* Larger touch target */
+        margin-left: 5px;
+        background: rgba(255, 255, 255, 0.1);
+        /* Slight background to make it obvious it's a button */
+        border-radius: 8px;
+    }
+
+    [data-theme="light"] .task-card.archived-task .icon-btn {
+        background: rgba(0, 0, 0, 0.05);
+    }
 }
 
 /* --- TOAST NOTIFICATION --- */

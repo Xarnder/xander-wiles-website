@@ -491,11 +491,39 @@ body {
     background: var(--card-archived-bg);
     border: 1px dashed var(--text-secondary);
     opacity: 0.9;
+    /* Allow touch interactions for archived tasks since they need the unarchive button */
+    touch-action: auto;
+    cursor: default;
 }
 
 .task-card.archived-task .task-text {
     text-decoration: line-through;
     opacity: 0.7;
+}
+
+/* Ensure archived task action buttons are always visible and touchable */
+.task-card.archived-task .task-actions {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    z-index: 10;
+    /* Ensure it sits above any overlays */
+}
+
+.task-card.archived-task .icon-btn {
+    pointer-events: auto !important;
+    touch-action: manipulation;
+    /* Prevent zoom delay but allow tap */
+
+    /* Make buttons larger and more distinct everywhere for archived tasks */
+    padding: 10px;
+    margin-left: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+[data-theme="light"] .task-card.archived-task .icon-btn {
+    background: rgba(0, 0, 0, 0.05);
 }
 
 .task-card.important {
@@ -1522,6 +1550,9 @@ input:checked+.slider-small:before {
     [data-theme="oled"] .board-container::-webkit-scrollbar-thumb {
         background-color: rgba(255, 255, 255, 0.5);
     }
+
+    /* --- ARCHIVED TASK MOBILE FIXES --- */
+    /* Handled globally now for better touch support on all devices */
 }
 
 /* --- TOAST NOTIFICATION --- */

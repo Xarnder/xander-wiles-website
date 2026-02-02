@@ -53,7 +53,7 @@ self.addEventListener('fetch', (event) => {
     const isSelf = event.request.url.startsWith(self.location.origin);
     const isFirebase = event.request.url.includes('gstatic.com/firebasejs');
 
-    if (isSelf || isStaticAsset || isFirebase) {
+    if ((isSelf || isStaticAsset || isFirebase) && event.request.method === 'GET') {
         event.respondWith(
             caches.match(event.request)
                 .then((response) => {
