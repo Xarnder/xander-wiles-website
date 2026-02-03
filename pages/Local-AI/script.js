@@ -103,8 +103,7 @@ async function init() {
 
         // CHECK GPU
         log("Checking GPU Support...");
-        // FORCE MODAL FOR TESTING
-        if (true || !navigator.gpu) {
+        if (!navigator.gpu) {
             log("WebGPU not available. Falling back to CPU (Slow).", 'error');
             updateStatus('error', 'WebGPU Missing');
             showErrorModal(
