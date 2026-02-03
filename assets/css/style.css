@@ -432,6 +432,74 @@ a:hover {
     transform: translateY(-5px);
 }
 
+/* --- Best Pages Special Styling --- */
+.best-pages-grid .page-card {
+    position: relative;
+    border-color: transparent;
+    /* Hide default border */
+    background-clip: padding-box;
+    /* Ensure z-index is handled correctly for pseudo-elements */
+    z-index: 1;
+}
+
+/* Background of the card (Masking the center of the gradient) */
+.best-pages-grid .page-card::after {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    /* Controls border thickness */
+    background: var(--bg-primary);
+    /* Dark background to improve contrast */
+    border-radius: inherit;
+    z-index: -1;
+    opacity: 0.9;
+}
+
+/* Animated Gradient Border/Glow */
+.best-pages-grid .page-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: -2;
+    background: linear-gradient(45deg,
+            var(--accent-purple),
+            var(--accent-cyan),
+            var(--accent-orange),
+            var(--accent-purple));
+    background-size: 300% 300%;
+    border-radius: inherit;
+    animation: best-pages-gradient 4s ease infinite;
+    opacity: 0.7;
+    transition: all 0.3s ease;
+}
+
+.best-pages-grid .page-card:hover::before {
+    opacity: 1;
+    filter: blur(10px);
+    /* Outer glow effect */
+    inset: -3px;
+    /* Expand slightly */
+}
+
+/* Add a spotlight/sheen effect on hover */
+.best-pages-grid .page-card:hover {
+    transform: translateY(-5px) scale(1.02);
+}
+
+@keyframes best-pages-gradient {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
 
 /* Optional: Gradient text for headers if preferred
 .section-title {
