@@ -390,6 +390,45 @@ a:hover {
     color: var(--text-primary);
 }
 
+/* --- Contact Card --- */
+.contact-card {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.5rem 2rem;
+    margin-top: 2rem;
+}
+
+.contact-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
+.contact-content h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    width: fit-content;
+}
+
+.contact-content p {
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.contact-content a {
+    color: var(--accent-cyan);
+    font-weight: 600;
+    transition: color 0.3s ease;
+}
+
+.contact-content a:hover {
+    color: var(--text-primary);
+}
+
 /* --- Section Headers --- */
 .section-title {
     font-size: 1.8rem;
