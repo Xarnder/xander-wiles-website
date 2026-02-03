@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen 3 - Local Browser Chat</title>
+
+    <!-- Theme-aware SVG icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#111115">
+
+    <!-- Global Website Header Assets -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <!-- Local App Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="lai-app-container">
+        <div class="lai-glass-card">
+            <header class="lai-card-header">
+                <div class="lai-header-info">
+                    <h1>Qwen 3 <span>4B Instruct</span></h1>
+                    <p class="lai-subtitle">Running locally in-browser</p>
+                </div>
+                <div class="lai-status-badge" id="status-badge">
+                    <span class="lai-status-dot"></span>
+                    <span id="status-text">Starting...</span>
+                </div>
+            </header>
+
+            <!-- PROGRESS SECTION (Visible during load) -->
+            <div id="progress-panel" class="lai-progress-panel">
+
+                <!-- Stage 1: Downloading -->
+                <div id="download-stage" class="lai-stage-container">
+                    <div class="lai-stage-label">
+                        <span>Downloading Weights</span>
+                        <span id="dl-percent">0%</span>
+                    </div>
+                    <div class="lai-progress-track">
+                        <div id="dl-bar" class="lai-progress-fill" style="width: 0%"></div>
+                    </div>
+                    <small id="dl-filename" class="lai-file-name">Waiting to start...</small>
+                </div>
+
+                <!-- Stage 2: Initializing (Hidden by default) -->
+                <div id="init-stage" class="lai-stage-container hidden">
+                    <div class="lai-stage-label">
+                        <span>Initializing Device (WebGPU)</span>
+                    </div>
+                    <div class="lai-infinite-track">
+                        <div class="lai-infinite-bar"></div>
+                    </div>
+                    <small class="lai-file-name">Compiling shaders & loading engine...</small>
+                </div>
+
+            </div>
+
+            <div id="chat-container" class="lai-chat-area">
+                <div class="lai-message lai-system">
+                    <div class="lai-bubble">
+                        Welcome. The model is loading above. <br>
+                        This downloads ~2.5GB once. Future reloads will be instant.
+                    </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS PANEL -->
+            <div class="lai-settings-panel">
+                <button id="settings-toggle" class="lai-settings-toggle-btn">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                        </path>
+                    </svg>
+                    Settings
+                </button>
+                <div id="settings-content" class="lai-settings-content hidden">
+                    <div class="lai-setting-row">
+                        <label for="thinking-mode">Thinking Mode</label>
+                        <label class="lai-toggle-switch">
+                            <input type="checkbox" id="thinking-mode">
+                            <span class="lai-toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="lai-setting-row">
+                        <label for="system-prompt">System Prompt</label>
+                        <textarea id="system-prompt" rows="3"
+                            placeholder="You are a helpful assistant.">You are a helpful assistant.</textarea>
+                    </div>
+                    <div class="lai-setting-row lai-cache-row">
+                        <div class="lai-cache-info">
+                            <label>Model Storage</label>
+                            <small id="cache-location">Browser Cache (Cache API)</small>
+                        </div>
+                        <button id="clear-cache-btn" class="lai-icon-btn lai-danger-btn">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path
+                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                </path>
+                            </svg>
+                            Clear Cache
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lai-controls-area">
+                <div class="lai-input-wrapper">
+                    <textarea id="user-input" rows="1" placeholder="Wait for model to load..." disabled></textarea>
+                    <button id="send-btn" class="lai-send-btn" disabled>
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="lai-debug-wrapper">
+                    <div class="lai-debug-header">
+                        <span>Debug Console</span>
+                        <button id="copy-log-btn" class="lai-icon-btn" title="Copy Log">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            Copy
+                        </button>
+                    </div>
+                    <div id="debug-log" class="lai-debug-console">Debug: System Start</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>

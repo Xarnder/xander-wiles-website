@@ -1,0 +1,806 @@
+/* === LOCAL AI CHAT STYLES === */
+/* All classes prefixed with lai- to avoid conflicts with site-wide styles */
+
+:root {
+    --lai-bg-dark: #0f0f12;
+    --lai-text-primary: #ffffff;
+    --lai-text-secondary: #a1a1aa;
+    --lai-accent: #8b5cf6;
+    --lai-accent-glow: rgba(139, 92, 246, 0.4);
+    --lai-glass-bg: rgba(25, 25, 30, 0.6);
+    --lai-glass-border: rgba(255, 255, 255, 0.08);
+    --lai-user-bubble: #27272a;
+    --lai-bot-bubble: rgba(139, 92, 246, 0.2);
+    --lai-success: #22c55e;
+    --lai-danger: #ef4444;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    /* Override global padding */
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    /* Move gradient here to cover full page including behind header */
+    background: radial-gradient(circle at top left, #1a1a2e 0%, #000000 100%);
+    background-color: var(--lai-bg-dark);
+    color: var(--lai-text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#main-nav-placeholder {
+    width: 100%;
+    z-index: 100;
+}
+
+/* === APP CONTAINER === */
+.lai-app-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background: transparent;
+    /* Gradient moved to body */
+}
+
+.lai-glass-card {
+    width: 100%;
+    max-width: 900px;
+    height: 85vh;
+    background: var(--lai-glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--lai-glass-border);
+    border-radius: 24px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+}
+
+/* === HEADER === */
+.lai-card-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--lai-glass-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.lai-header-info h1 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.lai-header-info h1 span {
+    color: var(--lai-accent);
+    font-weight: 400;
+}
+
+.lai-subtitle {
+    margin: 2px 0 0 0;
+    font-size: 0.8rem;
+    color: var(--lai-text-secondary);
+}
+
+/* === STATUS BADGE === */
+.lai-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 6px 12px;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    border: 1px solid var(--lai-glass-border);
+}
+
+.lai-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #eab308;
+    box-shadow: 0 0 8px rgba(234, 179, 8, 0.5);
+}
+
+.lai-status-ready .lai-status-dot {
+    background-color: var(--lai-success);
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+
+.lai-status-busy .lai-status-dot {
+    background-color: var(--lai-accent);
+    animation: lai-pulse 1s infinite;
+}
+
+@keyframes lai-pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+/* === PROGRESS PANEL === */
+.lai-progress-panel {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 15px 24px;
+    border-bottom: 1px solid var(--lai-glass-border);
+    transition: max-height 0.5s ease;
+}
+
+.lai-progress-panel.collapsed {
+    display: none;
+}
+
+.lai-stage-container {
+    margin-bottom: 10px;
+}
+
+.lai-stage-container.hidden {
+    display: none;
+}
+
+.lai-stage-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.lai-progress-track {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.lai-progress-fill {
+    height: 100%;
+    background: var(--lai-accent);
+    width: 0%;
+    transition: width 0.2s ease;
+    box-shadow: 0 0 10px var(--lai-accent-glow);
+}
+
+.lai-file-name {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: #666;
+    font-family: monospace;
+}
+
+/* Indeterminate Loading Animation */
+.lai-infinite-track {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.lai-infinite-bar {
+    position: absolute;
+    height: 100%;
+    width: 40%;
+    background: var(--lai-success);
+    border-radius: 3px;
+    animation: lai-slide 1.5s infinite ease-in-out;
+}
+
+@keyframes lai-slide {
+    0% {
+        left: -40%;
+    }
+
+    100% {
+        left: 100%;
+    }
+}
+
+/* === CHAT AREA === */
+.lai-chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+}
+
+.lai-message {
+    display: flex;
+    flex-direction: column;
+    max-width: 85%;
+    animation: lai-slideUp 0.3s ease-out;
+}
+
+.lai-message.lai-user {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+.lai-message.lai-bot {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.lai-message.lai-system {
+    align-self: center;
+    max-width: 100%;
+}
+
+.lai-bubble {
+    padding: 12px 18px;
+    border-radius: 18px;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.lai-message.lai-user .lai-bubble {
+    background-color: var(--lai-user-bubble);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.lai-message.lai-bot .lai-bubble {
+    background-color: var(--lai-bot-bubble);
+    color: #ffffff;
+    /* User requested white text */
+    border-bottom-left-radius: 4px;
+    border: 1px solid rgba(139, 92, 246, 0.1);
+    position: relative;
+    /* For copy button positioning */
+}
+
+.lai-message.lai-user .lai-bubble {
+    background-color: var(--lai-user-bubble);
+    color: white;
+    border-bottom-right-radius: 4px;
+    position: relative;
+}
+
+.lai-message.lai-system .lai-bubble {
+    background: transparent;
+    color: var(--lai-text-secondary);
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+/* Copy Button in Message */
+.lai-msg-copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    color: var(--lai-text-secondary);
+    cursor: pointer;
+    opacity: 0;
+    /* Hidden until hover */
+    transition: opacity 0.2s, color 0.2s;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lai-bubble:hover .lai-msg-copy-btn {
+    opacity: 0.6;
+}
+
+.lai-msg-copy-btn:hover {
+    opacity: 1 !important;
+    color: var(--lai-accent);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Context Toggle Styles */
+.lai-context-details {
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+}
+
+.lai-context-summary {
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: var(--lai-text-secondary);
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    user-select: none;
+    outline: none;
+}
+
+.lai-context-summary:hover {
+    opacity: 1;
+    color: var(--lai-accent);
+}
+
+.lai-context-content {
+    margin: 8px 0 0 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.7rem;
+    color: var(--lai-text-secondary);
+    white-space: pre-wrap;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px;
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* Markdown Rendering Styles */
+.lai-bubble p {
+    margin: 0.5em 0;
+}
+
+.lai-bubble p:first-child {
+    margin-top: 0;
+}
+
+.lai-bubble p:last-child {
+    margin-bottom: 0;
+}
+
+.lai-bubble code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+.lai-bubble pre {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+
+.lai-bubble pre code {
+    background: transparent;
+    padding: 0;
+}
+
+.lai-bubble ul,
+.lai-bubble ol {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+}
+
+.lai-bubble h1,
+.lai-bubble h2,
+.lai-bubble h3 {
+    margin: 0.5em 0;
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+/* Metrics Footer */
+.lai-message-metrics {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.65rem;
+    color: var(--lai-text-secondary);
+    display: flex;
+    gap: 8px;
+    opacity: 0.8;
+    font-family: monospace;
+}
+
+@keyframes lai-slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* === SETTINGS PANEL === */
+.lai-settings-panel {
+    padding: 0 20px;
+    border-bottom: 1px solid var(--lai-glass-border);
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.lai-settings-toggle-btn {
+    background: transparent;
+    color: var(--lai-text-secondary);
+    border: none;
+    width: 100%;
+    height: 36px;
+    padding: 0;
+    border-radius: 0;
+    font-size: 0.8rem;
+    gap: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    cursor: pointer;
+}
+
+.lai-settings-toggle-btn:hover {
+    color: var(--lai-text-primary);
+}
+
+.lai-settings-content {
+    padding: 12px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.lai-settings-content.hidden {
+    display: none;
+}
+
+.lai-setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.lai-setting-row label {
+    font-size: 0.8rem;
+    color: var(--lai-text-secondary);
+    flex-shrink: 0;
+}
+
+.lai-setting-row textarea {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--lai-glass-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    min-height: 60px;
+    resize: vertical;
+    color: var(--lai-text-primary);
+    font-family: inherit;
+}
+
+.lai-setting-row textarea:focus {
+    outline: none;
+    border-color: var(--lai-accent);
+}
+
+/* Cache Row */
+.lai-cache-row {
+    align-items: center;
+}
+
+.lai-cache-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lai-cache-info small {
+    font-size: 0.7rem;
+    color: var(--lai-text-secondary);
+    font-family: monospace;
+}
+
+/* Toggle Switch */
+.lai-toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.lai-toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.lai-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: 0.3s;
+    border-radius: 24px;
+    border: 1px solid var(--lai-glass-border);
+}
+
+.lai-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--lai-text-secondary);
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.lai-toggle-switch input:checked+.lai-toggle-slider {
+    background-color: var(--lai-accent);
+    border-color: var(--lai-accent);
+}
+
+.lai-toggle-switch input:checked+.lai-toggle-slider:before {
+    transform: translateX(20px);
+    background-color: white;
+}
+
+/* === CONTROLS AREA === */
+.lai-controls-area {
+    padding: 20px;
+    border-top: 1px solid var(--lai-glass-border);
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.lai-input-wrapper {
+    display: flex;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 8px;
+    border-radius: 16px;
+    border: 1px solid var(--lai-glass-border);
+}
+
+.lai-input-wrapper textarea {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: white;
+    padding: 10px;
+    resize: none;
+    font-family: inherit;
+    font-size: 1rem;
+    max-height: 120px;
+    outline: none;
+}
+
+.lai-send-btn {
+    background: var(--lai-accent);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.lai-send-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    background: #555;
+}
+
+.lai-send-btn:hover:not(:disabled) {
+    background: #7c4ddb;
+}
+
+/* === DEBUG AREA === */
+.lai-debug-wrapper {
+    margin-top: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    border: 1px solid var(--lai-glass-border);
+    overflow: hidden;
+}
+
+.lai-debug-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--lai-glass-border);
+    font-size: 0.75rem;
+    color: var(--lai-text-secondary);
+}
+
+.lai-debug-console {
+    font-family: 'Courier New', monospace;
+    font-size: 0.7rem;
+    color: #a1a1aa;
+    text-align: left;
+    height: 120px;
+    overflow-y: auto;
+    padding: 10px;
+    white-space: pre-wrap;
+    border: none;
+    background: transparent;
+    border-radius: 0;
+}
+
+/* === BUTTONS === */
+.lai-icon-btn {
+    background: transparent;
+    color: var(--lai-accent);
+    border: 1px solid var(--lai-accent);
+    width: auto;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    gap: 6px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.lai-icon-btn:hover {
+    background: var(--lai-accent);
+    color: white;
+}
+
+.lai-danger-btn {
+    color: var(--lai-danger);
+    border-color: var(--lai-danger);
+}
+
+.lai-danger-btn:hover {
+    background: var(--lai-danger);
+    color: white;
+}
+
+/* === MOBILE === */
+@media (max-width: 600px) {
+    .lai-glass-card {
+        height: 100vh;
+        border-radius: 0;
+        border: none;
+    }
+
+    .lai-setting-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .lai-cache-row {
+        flex-direction: row;
+        align-items: center;
+    }
+}
+
+/* === CUSTOM MODAL === */
+.lai-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: lai-fadeIn 0.3s ease-out;
+}
+
+.lai-modal-overlay.fade-out {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.lai-modal {
+    background: rgba(30, 30, 35, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    padding: 32px;
+    border-radius: 24px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    color: white;
+    transform: translateY(0);
+    animation: lai-slideUpModal 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lai-modal-icon {
+    width: 64px;
+    height: 64px;
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--lai-danger);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+}
+
+.lai-modal h2 {
+    margin: 0 0 12px;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.lai-modal-body {
+    margin: 0 0 24px;
+    color: var(--lai-text-secondary);
+    line-height: 1.6;
+    font-size: 0.95rem;
+}
+
+.lai-modal-body code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+    color: var(--lai-accent);
+}
+
+.lai-modal-body strong {
+    color: white;
+}
+
+.lai-modal-btn {
+    background: white;
+    color: black;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    width: 100%;
+    transition: transform 0.2s, opacity 0.2s;
+}
+
+.lai-modal-btn:hover {
+    transform: scale(1.02);
+    opacity: 0.9;
+}
+
+@keyframes lai-fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes lai-slideUpModal {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
