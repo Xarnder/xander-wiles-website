@@ -9,18 +9,19 @@ function createImageFallback(imageElement, type = 'carousel') {
     fallback.style.justifyContent = 'center';
     fallback.style.backgroundColor = 'rgba(125,125,125,0.2)';
     fallback.style.color = 'var(--text-secondary)';
+    fallback.style.opacity = '1'; // Ensure fallback is visible (overrides fade-in styles)
 
     if (type === 'list') {
-        fallback.className = 'list-item-thumb';
+        fallback.className = 'list-item-thumb loaded';
         fallback.textContent = '?';
     } else if (type === 'grid') {
-        fallback.className = 'grid-item-image';
+        fallback.className = 'grid-item-image loaded';
         fallback.style.border = '1px dashed var(--glass-border)';
         fallback.innerHTML = '<span style="font-size: 2rem;">?</span>';
     } else {
         // Carousel
         console.log(`Debug: Image source failed for "${altText}". Displaying fallback text.`);
-        fallback.className = 'carousel-item-image';
+        fallback.className = 'carousel-item-image loaded';
         fallback.style.backgroundColor = 'rgba(0,0,0,0.1)';
         fallback.style.border = '1px dashed var(--text-secondary)';
         fallback.style.height = '200px';
@@ -60,9 +61,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const prevButton = document.getElementById('prev-item');
     const nextButton = document.getElementById('next-item');
 
-    // Loading Screen Elements
-    const loadingOverlay = document.getElementById('app-loading-overlay');
-    const loadingBar = document.getElementById('loading-progress-bar');
+    // Loading Bar Elements
+    const loadingBar = document.getElementById('app-loading-bar');
+    const loadingProgressBar = document.getElementById('loading-progress-bar');
     const loadingText = document.getElementById('loading-status-text');
 
     let allItems = [];
@@ -74,19 +75,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cache for preloaded images to prevent garbage collection
     const preloadCache = new Map();
 
-    // --- Loading Screen Logic ---
+    // --- Loading Bar Logic ---
     function updateLoadingStatus(message, percent) {
-        if (loadingText) loadingText.textContent = message;
-        if (loadingBar) loadingBar.style.width = `${percent}%`;
+        // Update progress bar width via CSS custom property (for ::after pseudo-element)
+        if (loadingProgressBar) {
+            loadingProgressBar.style.setProperty('--progress', `${percent}%`);
+        }
+        // Update loading text
+        if (loadingText) {
+            loadingText.textContent = message;
+        }
     }
 
-    function hideLoadingScreen() {
-        console.log("Debug: Hiding loading screen.");
-        loadingOverlay.classList.add('hidden');
-        setTimeout(() => {
-            loadingOverlay.style.display = 'none';
-        }, 500);
+    function hideLoadingBar() {
+        console.log("Debug: Hiding loading bar.");
+        if (loadingBar) {
+            loadingBar.classList.add('hidden');
+            setTimeout(() => {
+                loadingBar.style.display = 'none';
+            }, 500);
+        }
     }
+
+
 
     // --- Theme Management ---
     function toggleTheme() {
@@ -136,15 +147,24 @@ document.addEventListener('DOMContentLoaded', () => {
             loadState();
             populateCategories(allItems);
 
+            // Render skeleton views immediately (before image verification)
+            // Pass true to ignore "onlyImages" filter so that skeletons show up
+            updateItemsToRender(true);
+            renderListViewWithSkeletons();
+            renderCarouselViewWithSkeleton();
+            renderGridViewWithSkeletons();
+            updateProgress();
+
+            // Verify images in background and update UI progressively
             await verifyImages(allItems);
 
-            console.log("Debug: All operations complete. Rendering.");
+            console.log("Debug: All operations complete. Final render.");
             updateAndRenderAll();
-            hideLoadingScreen();
+            hideLoadingBar();
 
         } catch (error) {
             console.error("Debug: Error loading data:", error);
-            updateLoadingStatus("Error loading data. Check console.", 0);
+            updateLoadingStatus("Error loading data.", 0);
             carouselView.innerHTML = `<div class="carousel-placeholder"><p>Error: Could not load data. check console.</p></div>`;
         }
     }
@@ -242,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateProgress();
     }
 
-    function updateItemsToRender() {
+    function updateItemsToRender(ignoreVerification = false) {
         const category = categoryFilter.value;
         const sort = sortOrder.value;
         const status = statusFilter.value;
@@ -258,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tempItems = tempItems.filter(item => !checkedItems.has(item.id));
         }
 
-        if (onlyImages) {
+        if (onlyImages && !ignoreVerification) {
             tempItems = tempItems.filter(item => item.imageVerified === true);
         }
 
@@ -273,6 +293,111 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentIndex >= itemsToRender.length) {
             currentIndex = 0;
         }
+    }
+
+    // --- SKELETON RENDERING (shows layout with shimmer while images load) ---
+    function renderListViewWithSkeletons() {
+        checklistContainer.innerHTML = '';
+        if (allItems.length === 0) {
+            checklistContainer.innerHTML = `<p style="text-align: center; padding: 1rem; color: var(--text-secondary);">Loading items...</p>`;
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        itemsToRender.forEach((item, index) => {
+            const itemElement = createListItemElementWithSkeleton(item, index);
+            fragment.appendChild(itemElement);
+        });
+        checklistContainer.appendChild(fragment);
+        updateListHighlight();
+    }
+
+    function createListItemElementWithSkeleton(item, index) {
+        const div = document.createElement('div');
+        div.className = 'checklist-item';
+        div.dataset.id = item.id;
+        div.dataset.index = index;
+
+        const isChecked = checkedItems.has(item.id);
+        if (isChecked) div.classList.add('checked');
+
+        // Show skeleton placeholder for image
+        div.innerHTML = `
+            <div class="skeleton-image list-item-thumb"></div>
+            <div class="item-details">
+                <h3>${item.name}</h3>
+                <p>${item.category}</p>
+            </div>
+            <input type="checkbox" class="checkbox" ${isChecked ? 'checked' : ''} data-id="${item.id}">
+        `;
+
+        div.addEventListener('click', (e) => {
+            if (e.target.type !== 'checkbox') {
+                currentIndex = index;
+                renderCarouselViewWithSkeleton();
+            }
+        });
+
+        div.querySelector('.checkbox').addEventListener('change', () => {
+            toggleItemCheck(item.id);
+        });
+
+        return div;
+    }
+
+    function renderCarouselViewWithSkeleton() {
+        if (itemsToRender.length === 0) {
+            carouselView.innerHTML = `<div class="carousel-placeholder"><p>Loading items...</p></div>`;
+            return;
+        }
+
+        const item = itemsToRender[currentIndex];
+        const isChecked = checkedItems.has(item.id);
+
+        carouselView.innerHTML = `
+            <div class="skeleton-image carousel-item-image"></div>
+            <h2 class="carousel-item-title">${item.name}</h2>
+            <p class="carousel-item-category">${item.category}</p>
+            <label class="carousel-item-checkbox-label">
+                <input type="checkbox" class="carousel-item-checkbox" data-id="${item.id}" ${isChecked ? 'checked' : ''}>
+                <span>${isChecked ? 'Completed' : 'Mark as Complete'}</span>
+            </label>
+        `;
+
+        carouselView.querySelector('.carousel-item-checkbox').addEventListener('change', () => {
+            toggleItemCheck(item.id);
+        });
+
+        updateListHighlight();
+    }
+
+    function renderGridViewWithSkeletons() {
+        gridViewContainer.innerHTML = '';
+        if (allItems.length === 0) {
+            gridViewContainer.innerHTML = `<p style="color: var(--text-secondary); text-align: center; grid-column: 1/-1;">Loading items...</p>`;
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        itemsToRender.forEach(item => {
+            const isChecked = checkedItems.has(item.id);
+            const gridItem = document.createElement('div');
+            gridItem.className = `grid-item ${isChecked ? 'checked' : ''}`;
+            gridItem.dataset.id = item.id;
+
+            gridItem.innerHTML = `
+                <div class="skeleton-image grid-item-image"></div>
+                <h3>${item.name}</h3>
+                <p>${item.category}</p>
+            `;
+
+            gridItem.addEventListener('click', () => {
+                toggleItemCheck(item.id);
+            });
+
+            fragment.appendChild(gridItem);
+        });
+        gridViewContainer.appendChild(fragment);
     }
 
     function renderListView() {
@@ -303,6 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         carouselView.innerHTML = `
             <img src="${webpPath}" class="carousel-item-image" alt="${item.name}" 
+                onload="this.classList.add('loaded');"
                 onerror="createImageFallback(this, 'carousel');">
             <h2 class="carousel-item-title">${item.name}</h2>
             <p class="carousel-item-category">${item.category}</p>
@@ -340,6 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             gridItem.innerHTML = `
                 <img src="${webpPath}" class="grid-item-image" alt="${item.name}" loading="lazy"
+                     onload="this.classList.add('loaded');"
                      onerror="createImageFallback(this, 'grid');">
                 <h3>${item.name}</h3>
                 <p>${item.category}</p>
@@ -367,6 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         div.innerHTML = `
             <img src="${webpPath}" class="list-item-thumb" alt="${item.name}" loading="lazy"
+                 onload="this.classList.add('loaded');"
                  onerror="createImageFallback(this, 'list');">
             <div class="item-details">
                 <h3>${item.name}</h3>

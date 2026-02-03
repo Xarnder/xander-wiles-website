@@ -35,16 +35,10 @@
 <body>
     <div class="background-overlay"></div>
 
-    <!-- LOADING SCREEN OVERLAY -->
-    <div id="app-loading-overlay" class="loading-overlay">
-        <div class="glass-card loading-card">
-            <div class="spinner"></div>
-            <h2>Loading Checklist</h2>
-            <div class="loading-progress-track">
-                <div id="loading-progress-bar"></div>
-            </div>
-            <p id="loading-status-text">Connecting to database...</p>
-        </div>
+    <!-- TOP LOADING BAR (non-blocking) -->
+    <div id="app-loading-bar" class="top-loading-bar">
+        <div id="loading-progress-bar"></div>
+        <span id="loading-status-text" class="loading-status-text">Loading...</span>
     </div>
 
     <div id="main-nav-placeholder"></div>

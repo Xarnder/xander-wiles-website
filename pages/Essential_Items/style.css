@@ -56,76 +56,124 @@ body {
         radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.15), transparent 40%);
 }
 
-/* --- LOADING SCREEN STYLES --- */
-.loading-overlay {
+/* --- TOP LOADING BAR STYLES --- */
+.top-loading-bar {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
-    height: 100%;
-    background-color: var(--bg-main);
-    z-index: 9999;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: opacity 0.5s ease, visibility 0.5s ease;
-}
-
-.loading-overlay.hidden {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-}
-
-.loading-card {
-    text-align: center;
-    max-width: 400px;
-    width: 90%;
-    padding: 3rem;
+    height: auto;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 10000;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1.5rem;
+    padding: 8px 0;
+    transition: opacity 0.5s ease, visibility 0.5s ease, transform 0.5s ease;
 }
 
-.spinner {
-    width: 50px;
-    height: 50px;
-    border: 4px solid var(--glass-border);
-    border-top: 4px solid var(--accent-primary);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
-.loading-progress-track {
-    width: 100%;
-    height: 8px;
-    background: var(--glass-border);
-    border-radius: 4px;
-    overflow: hidden;
-    margin-top: 0.5rem;
+.top-loading-bar.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-100%);
 }
 
 #loading-progress-bar {
-    width: 0%;
-    height: 100%;
-    background: var(--accent-gradient);
-    transition: width 0.1s linear;
+    width: 90%;
+    max-width: 600px;
+    height: 6px;
+    background: var(--glass-border);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
 }
 
-#loading-status-text {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
+#loading-progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: var(--progress, 0%);
+    background: var(--accent-gradient);
+    box-shadow: 0 0 10px var(--accent-primary), 0 0 20px var(--accent-secondary);
+    transition: width 0.15s ease-out;
+    border-radius: 3px;
+}
+
+.loading-status-text {
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-top: 6px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* --- SKELETON SHIMMER ANIMATION --- */
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.skeleton-image {
+    background: linear-gradient(90deg,
+            rgba(139, 92, 246, 0.15) 0%,
+            rgba(6, 182, 212, 0.3) 25%,
+            rgba(139, 92, 246, 0.4) 50%,
+            rgba(6, 182, 212, 0.3) 75%,
+            rgba(139, 92, 246, 0.15) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+/* Skeleton for list item thumbnails */
+.skeleton-image.list-item-thumb {
+    width: calc(var(--image-base-size) * var(--item-scale));
+    height: calc(var(--image-base-size) * var(--item-scale));
+    border-radius: 6px;
+    margin-right: calc(var(--margin-base-size) * var(--item-scale));
+    flex-shrink: 0;
+}
+
+/* Skeleton for carousel image */
+.skeleton-image.carousel-item-image {
+    width: 100%;
+    max-width: 400px;
+    height: 40vh;
+    max-height: 300px;
+    margin-bottom: 1rem;
+}
+
+/* Skeleton for grid item image */
+.skeleton-image.grid-item-image {
+    width: 100%;
+    aspect-ratio: 1;
+    margin-bottom: 0.75rem;
+    border-radius: 8px;
+}
+
+/* Image fade-in when loaded */
+img.list-item-thumb,
+img.carousel-item-image,
+img.grid-item-image {
+    opacity: 0;
+    transition: opacity 0.3s ease-in;
+}
+
+.list-item-thumb.loaded,
+.carousel-item-image.loaded,
+.grid-item-image.loaded {
+    opacity: 1;
 }
 
 /* --- App Layout --- */
