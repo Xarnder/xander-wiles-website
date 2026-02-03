@@ -407,6 +407,17 @@ h3 {
     border-top: 1px solid var(--glass-border);
 }
 
+.privacy-footer a {
+    color: #27c93f;
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+}
+
+.privacy-footer a:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+}
+
 /* --- Footer --- */
 footer {
     text-align: center;
