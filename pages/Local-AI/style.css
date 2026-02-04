@@ -223,6 +223,32 @@ body {
     scroll-behavior: smooth;
 }
 
+/* Custom Scrollbar for Chat Area */
+.lai-chat-area::-webkit-scrollbar {
+    width: 8px;
+}
+
+.lai-chat-area::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.lai-chat-area::-webkit-scrollbar-thumb {
+    background: var(--lai-accent);
+    border-radius: 4px;
+    box-shadow: 0 0 6px var(--lai-accent-glow);
+}
+
+.lai-chat-area::-webkit-scrollbar-thumb:hover {
+    background: #9d6ff7;
+}
+
+/* Firefox scrollbar */
+.lai-chat-area {
+    scrollbar-width: thin;
+    scrollbar-color: var(--lai-accent) rgba(255, 255, 255, 0.05);
+}
+
 .lai-message {
     display: flex;
     flex-direction: column;
@@ -568,6 +594,38 @@ body {
     padding: 8px;
     border-radius: 16px;
     border: 1px solid var(--lai-glass-border);
+}
+
+/* Example Prompts Row */
+.lai-prompt-examples-row {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.lai-example-btn {
+    background: rgba(139, 92, 246, 0.1);
+    color: var(--lai-accent);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.lai-example-btn:hover {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: var(--lai-accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--lai-accent-glow);
+}
+
+.lai-example-btn:active {
+    transform: translateY(0px);
 }
 
 .lai-input-wrapper textarea {

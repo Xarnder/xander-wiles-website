@@ -596,6 +596,46 @@ if (settingsToggle && settingsContent) {
     });
 }
 
+// === EXAMPLE PROMPTS ===
+const examplePrompts = [
+    "Explain quantum computing in simple terms",
+    "Write a haiku about programming",
+    "What are the benefits of meditation?",
+    "How do I make the perfect cup of coffee?",
+    "Explain the theory of relativity like I'm 10",
+    "What are 5 creative date ideas for a rainy day?",
+    "Write a short story about a robot learning to love",
+    "What's the difference between machine learning and AI?",
+    "Give me a workout routine I can do at home",
+    "Explain blockchain technology without using jargon",
+    "What are some tips for better sleep?",
+    "Write a poem about the ocean",
+    "How do I start learning a new language effectively?",
+    "What are the most important soft skills for career success?",
+    "Explain how vaccines work",
+    "Give me 3 healthy breakfast ideas",
+    "What's the history behind the internet?",
+    "How can I be more productive while working from home?",
+    "Write a motivational quote about perseverance",
+    "Explain the water cycle to a child",
+    "What are some eco-friendly lifestyle changes I can make?",
+    "How do neural networks learn?"
+];
+let currentPromptIndex = 0;
+
+const examplePromptBtn = document.getElementById('example-prompt-btn');
+if (examplePromptBtn) {
+    examplePromptBtn.addEventListener('click', () => {
+        if (userInput) {
+            userInput.value = examplePrompts[currentPromptIndex];
+            userInput.style.height = 'auto';
+            userInput.style.height = (userInput.scrollHeight) + 'px';
+            userInput.focus();
+            currentPromptIndex = (currentPromptIndex + 1) % examplePrompts.length;
+        }
+    });
+}
+
 // Clear Cache Button
 if (clearCacheBtn) {
     clearCacheBtn.addEventListener('click', async () => {
@@ -613,8 +653,14 @@ if (clearCacheBtn) {
 
             if (deleted) {
                 log('Cache cleared successfully!', 'success');
-                alert('Cache cleared! The page will now reload.');
-                window.location.reload();
+                appendMessage('system', 'Cache cleared! The model will be re-downloaded on your next message.');
+                clearCacheBtn.disabled = false;
+                clearCacheBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Clear Cache`;
             } else {
                 log('No cache found to delete.', 'info');
                 alert('No cached models found.');
