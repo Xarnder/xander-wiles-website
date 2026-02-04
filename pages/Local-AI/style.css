@@ -804,3 +804,112 @@ body {
         transform: translateY(0) scale(1);
     }
 }
+
+/* === THINKING INDICATOR === */
+.lai-thinking-bubble {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 120px;
+}
+
+/* Timer at the top of thinking bubble */
+.lai-thinking-timer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    color: var(--lai-accent);
+    font-family: 'Courier New', monospace;
+    opacity: 0.9;
+}
+
+.lai-thinking-timer::before {
+    content: '⏱️';
+    font-size: 0.8rem;
+}
+
+/* Animated dots container */
+.lai-thinking-dots {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+}
+
+.lai-thinking-dots span {
+    width: 10px;
+    height: 10px;
+    background: var(--lai-accent);
+    border-radius: 50%;
+    animation: lai-bounce 1.4s ease-in-out infinite;
+    box-shadow: 0 0 8px var(--lai-accent-glow);
+}
+
+.lai-thinking-dots span:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.lai-thinking-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.lai-thinking-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes lai-bounce {
+
+    0%,
+    60%,
+    100% {
+        transform: translateY(0);
+        opacity: 0.4;
+    }
+
+    30% {
+        transform: translateY(-10px);
+        opacity: 1;
+    }
+}
+
+/* Thinking status text */
+.lai-thinking-status {
+    font-size: 0.75rem;
+    color: var(--lai-text-secondary);
+    font-style: italic;
+    animation: lai-textPulse 2s ease-in-out infinite;
+}
+
+@keyframes lai-textPulse {
+
+    0%,
+    100% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+/* Pulsing border on the bubble while thinking */
+.lai-message.lai-thinking .lai-bubble {
+    border: 1px solid var(--lai-accent);
+    animation: lai-borderPulse 2s ease-in-out infinite;
+}
+
+@keyframes lai-borderPulse {
+
+    0%,
+    100% {
+        border-color: var(--lai-accent);
+        box-shadow: 0 0 5px var(--lai-accent-glow);
+    }
+
+    50% {
+        border-color: rgba(139, 92, 246, 0.3);
+        box-shadow: 0 0 15px var(--lai-accent-glow);
+    }
+}

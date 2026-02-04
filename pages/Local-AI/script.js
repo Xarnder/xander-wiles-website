@@ -34,6 +34,81 @@ const cacheLocationText = document.getElementById('cache-location');
 let generator = null;
 let isGenerating = false;
 let isLoaded = false;
+let thinkingTimerInterval = null;
+let thinkingStartTime = null;
+let thinkingMessageElement = null;
+
+// === THINKING BUBBLE ===
+function showThinkingBubble() {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'lai-message lai-bot lai-thinking';
+    msgDiv.id = 'lai-thinking-message';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'lai-bubble';
+
+    const thinkingContent = document.createElement('div');
+    thinkingContent.className = 'lai-thinking-bubble';
+
+    // Timer at the top
+    const timer = document.createElement('div');
+    timer.className = 'lai-thinking-timer';
+    timer.id = 'lai-thinking-timer';
+    timer.textContent = '0.0s';
+
+    // Animated dots
+    const dots = document.createElement('div');
+    dots.className = 'lai-thinking-dots';
+    dots.innerHTML = '<span></span><span></span><span></span>';
+
+    // Status text
+    const status = document.createElement('div');
+    status.className = 'lai-thinking-status';
+    status.id = 'lai-thinking-status';
+    status.textContent = 'Thinking...';
+
+    thinkingContent.appendChild(timer);
+    thinkingContent.appendChild(dots);
+    thinkingContent.appendChild(status);
+    bubble.appendChild(thinkingContent);
+    msgDiv.appendChild(bubble);
+
+    chatContainer.appendChild(msgDiv);
+    chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+
+    thinkingMessageElement = msgDiv;
+    thinkingStartTime = performance.now();
+
+    // Start live timer
+    thinkingTimerInterval = setInterval(() => {
+        const elapsed = ((performance.now() - thinkingStartTime) / 1000).toFixed(1);
+        const timerEl = document.getElementById('lai-thinking-timer');
+        if (timerEl) {
+            timerEl.textContent = `${elapsed}s`;
+        }
+    }, 100);
+
+    return msgDiv;
+}
+
+function removeThinkingBubble() {
+    if (thinkingTimerInterval) {
+        clearInterval(thinkingTimerInterval);
+        thinkingTimerInterval = null;
+    }
+    if (thinkingMessageElement) {
+        thinkingMessageElement.remove();
+        thinkingMessageElement = null;
+    }
+    thinkingStartTime = null;
+}
+
+function updateThinkingStatus(text) {
+    const statusEl = document.getElementById('lai-thinking-status');
+    if (statusEl) {
+        statusEl.textContent = text;
+    }
+}
 
 // === DEBUGGING ===
 function log(msg, type = 'info') {
@@ -240,10 +315,14 @@ async function handleSend() {
     updateStatus('busy', 'Thinking...');
     sendBtn.disabled = true;
 
+    // Show the animated thinking bubble with timer
+    showThinkingBubble();
+
     // Timeout warning for slow generations
     const timeoutWarning = setTimeout(() => {
         if (isGenerating) {
-            updateStatus('busy', 'This is taking a while, don\'t worry we are still working on it...');
+            updateStatus('busy', 'Still working on it...');
+            updateThinkingStatus('Still processing, please wait...');
             log("Generation is taking longer than usual...", 'info');
         }
     }, 8000); // 8 seconds
@@ -295,10 +374,15 @@ ${text}<|im_end|>
             outputTokens
         };
 
+        // Remove thinking bubble before showing actual response
+        removeThinkingBubble();
+
         appendMessage('bot', response, context, metrics);
         log("Generation Complete.", 'success');
 
     } catch (err) {
+        // Remove thinking bubble on error too
+        removeThinkingBubble();
         log(err.message, 'error');
     } finally {
         clearTimeout(timeoutWarning);
