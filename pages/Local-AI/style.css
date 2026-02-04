@@ -70,6 +70,385 @@ body {
     background: rgba(0, 0, 0, 0.2);
 }
 
+/* Header Action Buttons */
+.lai-header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.lai-header-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--lai-glass-border);
+    color: var(--lai-text-secondary);
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.lai-header-btn:hover {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: var(--lai-accent);
+    color: var(--lai-accent);
+}
+
+/* === CHAT HISTORY SIDEBAR === */
+.lai-history-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 360px;
+    height: 100vh;
+    background: rgba(15, 15, 18, 0.95);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--lai-glass-border);
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.lai-history-sidebar.open {
+    transform: translateX(0);
+}
+
+.lai-sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.lai-sidebar-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.lai-sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--lai-glass-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.lai-sidebar-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--lai-text-primary);
+}
+
+.lai-sidebar-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--lai-text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.lai-sidebar-close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+/* Chat List */
+.lai-chat-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.lai-chat-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.lai-chat-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.lai-chat-list::-webkit-scrollbar-thumb {
+    background: var(--lai-accent);
+    border-radius: 3px;
+}
+
+.lai-chat-item {
+    padding: 12px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: all 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    border: 1px solid transparent;
+}
+
+.lai-chat-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.lai-chat-item.active {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: rgba(139, 92, 246, 0.3);
+}
+
+.lai-chat-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.lai-chat-item-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--lai-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+.lai-chat-item-date {
+    font-size: 0.7rem;
+    color: var(--lai-text-secondary);
+}
+
+.lai-chat-item-delete {
+    background: transparent;
+    border: none;
+    color: var(--lai-text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.lai-chat-item:hover .lai-chat-item-delete {
+    opacity: 1;
+}
+
+.lai-chat-item-delete:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--lai-danger);
+}
+
+.lai-empty-history {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--lai-text-secondary);
+    font-size: 0.85rem;
+}
+
+.lai-empty-history svg {
+    margin-bottom: 12px;
+    opacity: 0.5;
+}
+
+/* Sidebar Footer */
+.lai-sidebar-footer {
+    padding: 16px;
+    border-top: 1px solid var(--lai-glass-border);
+}
+
+.lai-delete-all-btn {
+    width: 100%;
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--lai-danger);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.lai-delete-all-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: var(--lai-danger);
+}
+
+/* === CONFIRMATION MODAL === */
+.lai-confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: lai-fadeIn 0.3s ease-out;
+}
+
+.lai-confirm-overlay.fade-out {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.lai-confirm-modal {
+    background: rgba(30, 30, 35, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    padding: 32px;
+    border-radius: 24px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    color: white;
+    animation: lai-slideUpModal 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lai-confirm-icon {
+    width: 64px;
+    height: 64px;
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--lai-danger);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+}
+
+.lai-confirm-modal h2 {
+    margin: 0 0 12px;
+    font-size: 1.3rem;
+    font-weight: 600;
+}
+
+.lai-confirm-modal p {
+    margin: 0 0 24px;
+    color: var(--lai-text-secondary);
+    line-height: 1.6;
+    font-size: 0.95rem;
+}
+
+/* Slider Confirmation */
+.lai-slider-confirm {
+    margin-bottom: 20px;
+}
+
+.lai-slider-label {
+    font-size: 0.8rem;
+    color: var(--lai-text-secondary);
+    margin-bottom: 10px;
+    display: block;
+}
+
+.lai-slider-track {
+    width: 100%;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 24px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--lai-glass-border);
+}
+
+.lai-slider-thumb {
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    width: 60px;
+    height: 40px;
+    background: var(--lai-danger);
+    border-radius: 20px;
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: left 0.1s ease, background 0.2s;
+    user-select: none;
+}
+
+.lai-slider-thumb:active {
+    cursor: grabbing;
+}
+
+.lai-slider-thumb svg {
+    color: white;
+}
+
+.lai-slider-text {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--lai-text-secondary);
+    font-size: 0.85rem;
+    pointer-events: none;
+}
+
+.lai-slider-track.confirmed .lai-slider-thumb {
+    background: var(--lai-success);
+}
+
+/* Confirm Modal Buttons */
+.lai-confirm-buttons {
+    display: flex;
+    gap: 12px;
+}
+
+.lai-confirm-btn {
+    flex: 1;
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.lai-confirm-btn.cancel {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--lai-text-secondary);
+}
+
+.lai-confirm-btn.cancel:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+}
+
+.lai-confirm-btn.danger {
+    background: var(--lai-danger);
+    color: white;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.lai-confirm-btn.danger.enabled {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.lai-confirm-btn.danger.enabled:hover {
+    background: #dc2626;
+}
+
 .lai-header-info h1 {
     margin: 0;
     font-size: 1.25rem;

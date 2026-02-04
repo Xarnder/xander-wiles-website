@@ -30,8 +30,50 @@
     <script src="/assets/js/nav-loader.js"></script>
 
     <main class="lai-app-container">
+        <!-- Chat History Sidebar -->
+        <aside id="history-sidebar" class="lai-history-sidebar">
+            <div class="lai-sidebar-header">
+                <h2>Chat History</h2>
+                <button id="close-sidebar-btn" class="lai-sidebar-close-btn" title="Close">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div id="chat-list" class="lai-chat-list">
+                <!-- Chat items will be rendered here -->
+            </div>
+            <div class="lai-sidebar-footer">
+                <button id="delete-all-chats-btn" class="lai-delete-all-btn">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Delete All Chats
+                </button>
+            </div>
+        </aside>
+        <div id="sidebar-overlay" class="lai-sidebar-overlay"></div>
+
         <div class="lai-glass-card">
             <header class="lai-card-header">
+                <div class="lai-header-actions">
+                    <button id="history-toggle-btn" class="lai-header-btn" title="Chat History">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 8v4l3 3"></path>
+                            <circle cx="12" cy="12" r="10"></circle>
+                        </svg>
+                    </button>
+                    <button id="new-chat-btn" class="lai-header-btn" title="New Chat">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </button>
+                </div>
                 <div class="lai-header-info">
                     <h1>Qwen 3 <span>4B Instruct</span></h1>
                     <p class="lai-subtitle">Running locally in-browser</p>

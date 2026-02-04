@@ -38,6 +38,386 @@ let thinkingTimerInterval = null;
 let thinkingStartTime = null;
 let thinkingMessageElement = null;
 
+// === CHAT HISTORY STATE ===
+const STORAGE_KEY = 'lai-chat-history';
+let chatHistory = { chats: [], currentChatId: null };
+
+// Chat History DOM Elements
+const historySidebar = document.getElementById('history-sidebar');
+const sidebarOverlay = document.getElementById('sidebar-overlay');
+const historyToggleBtn = document.getElementById('history-toggle-btn');
+const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+const newChatBtn = document.getElementById('new-chat-btn');
+const chatListContainer = document.getElementById('chat-list');
+
+// === CHAT HISTORY FUNCTIONS ===
+function generateChatId() {
+    return 'chat-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+}
+
+function saveChatsToStorage() {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(chatHistory));
+    } catch (e) {
+        console.error('Failed to save chat history:', e);
+    }
+}
+
+function loadChatsFromStorage() {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            chatHistory = JSON.parse(saved);
+        }
+    } catch (e) {
+        console.error('Failed to load chat history:', e);
+        chatHistory = { chats: [], currentChatId: null };
+    }
+}
+
+function createNewChat(silent = false) {
+    // Save current chat first if it has messages
+    const currentChat = getCurrentChat();
+    if (currentChat && currentChat.messages.length > 1) {
+        saveChatsToStorage();
+    }
+
+    const newChat = {
+        id: generateChatId(),
+        title: 'New Chat',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: []
+    };
+
+    chatHistory.chats.unshift(newChat);
+    chatHistory.currentChatId = newChat.id;
+    saveChatsToStorage();
+
+    // Clear the chat UI
+    clearChatUI();
+    renderChatList();
+
+    if (!silent) {
+        log('New chat created', 'info');
+    }
+
+    return newChat;
+}
+
+function getCurrentChat() {
+    if (!chatHistory.currentChatId) return null;
+    return chatHistory.chats.find(c => c.id === chatHistory.currentChatId);
+}
+
+function loadChat(chatId) {
+    const chat = chatHistory.chats.find(c => c.id === chatId);
+    if (!chat) return;
+
+    chatHistory.currentChatId = chatId;
+    saveChatsToStorage();
+
+    // Clear and render messages
+    clearChatUI();
+    chat.messages.forEach(msg => {
+        renderMessageFromData(msg);
+    });
+
+    renderChatList();
+    closeSidebar();
+    log(`Loaded chat: ${chat.title}`, 'info');
+}
+
+function deleteChat(chatId) {
+    const index = chatHistory.chats.findIndex(c => c.id === chatId);
+    if (index === -1) return;
+
+    const wasCurrentChat = chatHistory.currentChatId === chatId;
+    chatHistory.chats.splice(index, 1);
+
+    if (wasCurrentChat) {
+        if (chatHistory.chats.length > 0) {
+            loadChat(chatHistory.chats[0].id);
+        } else {
+            createNewChat(true);
+        }
+    }
+
+    saveChatsToStorage();
+    renderChatList();
+    log('Chat deleted', 'info');
+}
+
+function updateChatTitle(chatId, firstMessage) {
+    const chat = chatHistory.chats.find(c => c.id === chatId);
+    if (!chat) return;
+
+    // Generate title from first 40 chars of first user message
+    const title = firstMessage.substring(0, 40) + (firstMessage.length > 40 ? '...' : '');
+    chat.title = title;
+    chat.updatedAt = Date.now();
+    saveChatsToStorage();
+    renderChatList();
+}
+
+function addMessageToCurrentChat(role, text, context = null, metrics = null) {
+    let chat = getCurrentChat();
+    if (!chat) {
+        chat = createNewChat(true);
+    }
+
+    const message = { role, text };
+    if (context) message.context = context;
+    if (metrics) message.metrics = metrics;
+
+    chat.messages.push(message);
+    chat.updatedAt = Date.now();
+
+    // Update title from first user message
+    if (role === 'user' && chat.messages.filter(m => m.role === 'user').length === 1) {
+        updateChatTitle(chat.id, text);
+    }
+
+    saveChatsToStorage();
+}
+
+function clearChatUI() {
+    chatContainer.innerHTML = `
+        <div class="lai-message lai-system">
+            <div class="lai-bubble">
+                Welcome. The model is loading above. <br>
+                This downloads ~2.5GB once. Future reloads will be instant.
+            </div>
+        </div>`;
+}
+
+function renderMessageFromData(msg) {
+    appendMessage(msg.role, msg.text, msg.context || null, msg.metrics || null, false);
+}
+
+function renderChatList() {
+    if (!chatListContainer) return;
+
+    if (chatHistory.chats.length === 0) {
+        chatListContainer.innerHTML = `
+            <div class="lai-empty-history">
+                <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <p>No chats yet.<br>Start a conversation!</p>
+            </div>`;
+        return;
+    }
+
+    chatListContainer.innerHTML = chatHistory.chats.map(chat => {
+        const isActive = chat.id === chatHistory.currentChatId;
+        const date = new Date(chat.updatedAt).toLocaleDateString(undefined, {
+            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+        return `
+            <div class="lai-chat-item ${isActive ? 'active' : ''}" data-chat-id="${chat.id}">
+                <div class="lai-chat-item-info">
+                    <div class="lai-chat-item-title">${escapeHtml(chat.title)}</div>
+                    <div class="lai-chat-item-date">${date}</div>
+                </div>
+                <button class="lai-chat-item-delete" data-delete-id="${chat.id}" title="Delete">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </div>`;
+    }).join('');
+
+    // Add event listeners
+    chatListContainer.querySelectorAll('.lai-chat-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            if (e.target.closest('.lai-chat-item-delete')) return;
+            loadChat(item.dataset.chatId);
+        });
+    });
+
+    chatListContainer.querySelectorAll('.lai-chat-item-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const chatId = btn.dataset.deleteId;
+            showConfirmModal(
+                'Delete Chat',
+                'Are you sure you want to delete this chat? This action cannot be undone.',
+                () => deleteChat(chatId)
+            );
+        });
+    });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function openSidebar() {
+    historySidebar?.classList.add('open');
+    sidebarOverlay?.classList.add('visible');
+}
+
+function closeSidebar() {
+    historySidebar?.classList.remove('open');
+    sidebarOverlay?.classList.remove('visible');
+}
+// === STYLED CONFIRMATION MODALS ===
+function showConfirmModal(title, message, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.className = 'lai-confirm-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'lai-confirm-modal';
+
+    modal.innerHTML = `
+        <div class="lai-confirm-icon">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+        </div>
+        <h2>${title}</h2>
+        <p>${message}</p>
+        <div class="lai-confirm-buttons">
+            <button class="lai-confirm-btn cancel">Cancel</button>
+            <button class="lai-confirm-btn danger enabled">Delete</button>
+        </div>
+    `;
+
+    const closeModal = () => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => overlay.remove(), 300);
+    };
+
+    modal.querySelector('.cancel').onclick = closeModal;
+    modal.querySelector('.danger').onclick = () => {
+        closeModal();
+        onConfirm();
+    };
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+}
+
+function showSliderConfirmModal(title, message, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.className = 'lai-confirm-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'lai-confirm-modal';
+
+    modal.innerHTML = `
+        <div class="lai-confirm-icon">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+        </div>
+        <h2>${title}</h2>
+        <p>${message}</p>
+        <div class="lai-slider-confirm">
+            <span class="lai-slider-label">Slide to confirm</span>
+            <div class="lai-slider-track" id="slider-track">
+                <span class="lai-slider-text">→ Slide to delete →</span>
+                <div class="lai-slider-thumb" id="slider-thumb">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </div>
+            </div>
+        </div>
+        <div class="lai-confirm-buttons">
+            <button class="lai-confirm-btn cancel">Cancel</button>
+            <button class="lai-confirm-btn danger" id="confirm-delete-btn">Delete All</button>
+        </div>
+    `;
+
+    const closeModal = () => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => overlay.remove(), 300);
+    };
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Setup slider
+    const track = modal.querySelector('#slider-track');
+    const thumb = modal.querySelector('#slider-thumb');
+    const confirmBtn = modal.querySelector('#confirm-delete-btn');
+    let isDragging = false;
+    let confirmed = false;
+    const trackWidth = 360 - 32; // Approximate track width minus padding
+    const thumbWidth = 60;
+    const maxLeft = trackWidth - thumbWidth - 8;
+
+    const handleMove = (clientX) => {
+        if (!isDragging || confirmed) return;
+        const rect = track.getBoundingClientRect();
+        let newLeft = clientX - rect.left - thumbWidth / 2;
+        newLeft = Math.max(4, Math.min(newLeft, maxLeft));
+        thumb.style.left = newLeft + 'px';
+
+        if (newLeft >= maxLeft - 10) {
+            confirmed = true;
+            track.classList.add('confirmed');
+            confirmBtn.classList.add('enabled');
+        }
+    };
+
+    thumb.addEventListener('mousedown', (e) => { isDragging = true; e.preventDefault(); });
+    thumb.addEventListener('touchstart', (e) => { isDragging = true; });
+
+    document.addEventListener('mousemove', (e) => handleMove(e.clientX));
+    document.addEventListener('touchmove', (e) => handleMove(e.touches[0].clientX));
+
+    document.addEventListener('mouseup', () => { isDragging = false; if (!confirmed) resetSlider(); });
+    document.addEventListener('touchend', () => { isDragging = false; if (!confirmed) resetSlider(); });
+
+    function resetSlider() {
+        thumb.style.left = '4px';
+    }
+
+    modal.querySelector('.cancel').onclick = closeModal;
+    confirmBtn.onclick = () => {
+        if (!confirmed) return;
+        closeModal();
+        onConfirm();
+    };
+}
+
+function deleteAllChats() {
+    chatHistory.chats = [];
+    chatHistory.currentChatId = null;
+    saveChatsToStorage();
+    createNewChat(true);
+    renderChatList();
+    closeSidebar();
+    log('All chats deleted', 'info');
+    appendMessage('system', 'All chat history has been deleted.', null, null, false);
+}
+
+// Initialize chat history event listeners
+function initChatHistoryEvents() {
+    historyToggleBtn?.addEventListener('click', openSidebar);
+    closeSidebarBtn?.addEventListener('click', closeSidebar);
+    sidebarOverlay?.addEventListener('click', closeSidebar);
+    newChatBtn?.addEventListener('click', () => createNewChat());
+
+    const deleteAllBtn = document.getElementById('delete-all-chats-btn');
+    deleteAllBtn?.addEventListener('click', () => {
+        showSliderConfirmModal(
+            'Delete All Chats',
+            'This will permanently delete all your chat history. This action cannot be undone.',
+            deleteAllChats
+        );
+    });
+}
+
 // === THINKING BUBBLE ===
 function showThinkingBubble() {
     const msgDiv = document.createElement('div');
@@ -472,7 +852,12 @@ function parseChatOutput(raw, originalPrompt) {
 }
 
 // === UI HELPERS ===
-function appendMessage(role, text, context = null, metrics = null) {
+function appendMessage(role, text, context = null, metrics = null, saveToHistory = true) {
+    // Save to chat history if requested (not when reloading from storage)
+    if (saveToHistory && role !== 'system') {
+        addMessageToCurrentChat(role, text, context, metrics);
+    }
+
     const msgDiv = document.createElement('div');
     msgDiv.className = `lai-message lai-${role}`;
 
@@ -713,4 +1098,22 @@ function showErrorModal(title, message) {
     document.body.appendChild(overlay);
 }
 
-window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('DOMContentLoaded', () => {
+    // Initialize chat history
+    loadChatsFromStorage();
+    initChatHistoryEvents();
+    renderChatList();
+
+    // Load current chat if exists, otherwise create new one
+    const currentChat = getCurrentChat();
+    if (currentChat && currentChat.messages.length > 0) {
+        clearChatUI();
+        currentChat.messages.forEach(msg => renderMessageFromData(msg));
+    } else if (!currentChat && chatHistory.chats.length === 0) {
+        // First visit - create initial chat silently
+        createNewChat(true);
+    }
+
+    // Initialize the AI model
+    init();
+});
