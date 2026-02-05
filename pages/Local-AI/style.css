@@ -68,6 +68,58 @@ body {
     justify-content: space-between;
     align-items: center;
     background: rgba(0, 0, 0, 0.2);
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+/* Model Selector in Header */
+.lai-model-selector-wrapper {
+    display: flex;
+    align-items: center;
+}
+
+.lai-model-selector-wrapper .lai-select {
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    border-radius: 8px;
+    padding: 6px 28px 6px 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--lai-accent);
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238b5cf6' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    transition: all 0.2s ease;
+}
+
+.lai-model-selector-wrapper .lai-select:hover {
+    background: rgba(139, 92, 246, 0.25);
+    border-color: var(--lai-accent);
+}
+
+.lai-model-selector-wrapper .lai-select:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
+/* Fallback Mode Badge (shown when WebGPU unavailable) */
+.lai-fallback-badge {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    background: rgba(234, 179, 8, 0.15);
+    border: 1px solid rgba(234, 179, 8, 0.4);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #eab308;
+}
+
+.lai-fallback-icon {
+    font-size: 0.85rem;
 }
 
 /* Header Action Buttons */
@@ -510,6 +562,49 @@ body {
     }
 }
 
+/* === PLATFORM BADGE (macOS/Apple Silicon) === */
+.lai-platform-badge {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, rgba(100, 100, 110, 0.2) 0%, rgba(80, 80, 90, 0.15) 100%);
+    padding: 6px 12px;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--lai-text-secondary);
+    transition: all 0.3s ease;
+}
+
+.lai-platform-badge.visible {
+    display: flex;
+    animation: lai-slideInRight 0.4s ease-out;
+}
+
+.lai-platform-badge .lai-apple-logo {
+    flex-shrink: 0;
+}
+
+/* Apple gradient effect when Apple Silicon detected */
+.lai-platform-badge:has(.lai-apple-logo) {
+    background: linear-gradient(135deg, rgba(147, 147, 155, 0.15) 0%, rgba(100, 100, 110, 0.1) 100%);
+    border-color: rgba(180, 180, 190, 0.2);
+    color: #e5e5ea;
+}
+
+@keyframes lai-slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
 /* === PROGRESS PANEL === */
 .lai-progress-panel {
     background: rgba(0, 0, 0, 0.3);
@@ -891,6 +986,48 @@ body {
 .lai-setting-row textarea:focus {
     outline: none;
     border-color: var(--lai-accent);
+}
+
+/* Model Selector Row */
+.lai-model-row {
+    background: rgba(139, 92, 246, 0.05);
+    margin: -12px -16px 12px -16px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px dashed rgba(139, 92, 246, 0.3);
+}
+
+.lai-select {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--lai-glass-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: var(--lai-text-primary);
+    font-family: inherit;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+}
+
+.lai-select:hover {
+    border-color: var(--lai-accent);
+}
+
+.lai-select:focus {
+    outline: none;
+    border-color: var(--lai-accent);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
+.lai-select option {
+    background: #1e1e23;
+    color: var(--lai-text-primary);
+    padding: 8px;
 }
 
 /* Cache Row */

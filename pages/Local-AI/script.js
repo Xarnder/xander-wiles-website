@@ -2,8 +2,34 @@
 // import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest';
 
 // === CONFIGURATION ===
-// Switched to Qwen 3 (4B) - ONNX Community version
-const MODEL_ID = 'onnx-community/Qwen3-4B-ONNX';
+// Model options for WebGPU (macOS with WebGPU enabled)
+const WEBGPU_MODELS = {
+    'qwen3-4b': {
+        id: 'onnx-community/Qwen3-4B-ONNX',
+        name: 'Qwen 3 (4B Instruct)',
+        size: '~2.5GB',
+        description: 'Fast, balanced performance'
+    },
+    'qwen3-8b': {
+        id: 'onnx-community/Qwen3-8B-ONNX',
+        name: 'Qwen 3 (8B Instruct)',
+        size: '~5GB',
+        description: 'More capable, requires more VRAM'
+    }
+};
+
+// Default WebGPU model
+const DEFAULT_WEBGPU_MODEL = 'qwen3-4b';
+
+// WASM fallback model: Qwen 2.5 1.5B (better quality, works on CPU)
+const WASM_MODEL_ID = 'onnx-community/Qwen2.5-1.5B-Instruct';
+const WASM_MODEL_NAME = 'Qwen 2.5 (1.5B Instruct)';
+
+// Storage key for selected model
+const MODEL_SELECTION_KEY = 'lai-selected-model';
+
+let MODEL_ID = WEBGPU_MODELS[DEFAULT_WEBGPU_MODEL].id;
+let MODEL_NAME = WEBGPU_MODELS[DEFAULT_WEBGPU_MODEL].name;
 let env, pipeline; // Will be loaded dynamically
 
 // === DOM ELEMENTS ===
@@ -29,6 +55,7 @@ const thinkingModeToggle = document.getElementById('thinking-mode');
 const systemPromptInput = document.getElementById('system-prompt');
 const clearCacheBtn = document.getElementById('clear-cache-btn');
 const cacheLocationText = document.getElementById('cache-location');
+const modelSelector = document.getElementById('model-selector');
 
 // === STATE ===
 let generator = null;
@@ -37,6 +64,171 @@ let isLoaded = false;
 let thinkingTimerInterval = null;
 let thinkingStartTime = null;
 let thinkingMessageElement = null;
+
+// === PLATFORM DETECTION STATE ===
+let platformInfo = {
+    isMacOS: false,
+    isAppleSilicon: false,
+    gpuName: 'Unknown',
+    chipName: null,
+    osVersion: null,
+    webGPUAvailable: false  // Track WebGPU availability for fallback
+};
+
+// === PLATFORM DETECTION FUNCTIONS ===
+function detectPlatform() {
+    const ua = navigator.userAgent;
+    const platform = navigator.platform;
+
+    // Detect macOS
+    platformInfo.isMacOS = platform.includes('Mac') ||
+        ua.includes('Macintosh') ||
+        ua.includes('Mac OS X');
+
+    // Extract macOS version if available
+    const macVersionMatch = ua.match(/Mac OS X (\d+[._]\d+[._]?\d*)/);
+    if (macVersionMatch) {
+        platformInfo.osVersion = macVersionMatch[1].replace(/_/g, '.');
+    }
+
+    // Initial Apple Silicon check from user agent (ARM-based Mac)
+    if (platformInfo.isMacOS) {
+        // Safari on Apple Silicon often reports ARM or has specific markers
+        const isARM = ua.includes('ARM') || ua.includes('arm');
+        // Modern Macs with Apple Silicon don't report x86 in certain contexts
+        const notIntel = !ua.includes('Intel');
+
+        // This is a preliminary check; GPU adapter will give us definitive info
+        if (isARM || (notIntel && platform === 'MacIntel')) {
+            // Could be Apple Silicon - WebGPU check will confirm
+        }
+    }
+
+    return platformInfo;
+}
+
+async function detectGPU() {
+    if (!navigator.gpu) {
+        log("WebGPU not available for GPU detection", 'error');
+        return null;
+    }
+
+    try {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) {
+            log("No GPU adapter available", 'error');
+            return null;
+        }
+
+        // Get adapter info - this gives us GPU name
+        const info = await adapter.requestAdapterInfo();
+        platformInfo.gpuName = info.description || info.device || 'Unknown GPU';
+
+        // Detect Apple Silicon from GPU name
+        const gpuLower = platformInfo.gpuName.toLowerCase();
+        if (gpuLower.includes('apple')) {
+            platformInfo.isAppleSilicon = true;
+
+            // Extract chip name (M1, M2, M3, M4, etc.)
+            const chipMatch = platformInfo.gpuName.match(/Apple\s+(M\d+(?:\s+(?:Pro|Max|Ultra))?)/i);
+            if (chipMatch) {
+                platformInfo.chipName = chipMatch[1];
+            }
+        }
+
+        return adapter;
+    } catch (e) {
+        log(`GPU detection failed: ${e.message}`, 'error');
+        return null;
+    }
+}
+
+function getPlatformDisplayString() {
+    let parts = [];
+
+    if (platformInfo.isMacOS) {
+        if (platformInfo.isAppleSilicon && platformInfo.chipName) {
+            parts.push(`Apple ${platformInfo.chipName}`);
+        } else if (platformInfo.isAppleSilicon) {
+            parts.push('Apple Silicon Mac');
+        } else {
+            parts.push('macOS');
+        }
+    }
+
+    if (platformInfo.gpuName && !platformInfo.gpuName.toLowerCase().includes('unknown')) {
+        // Don't duplicate if already showing Apple chip
+        if (!platformInfo.isAppleSilicon) {
+            parts.push(platformInfo.gpuName);
+        }
+    }
+
+    return parts.length > 0 ? parts.join(' • ') : null;
+}
+
+function updatePlatformBadge() {
+    const badge = document.getElementById('platform-badge');
+    if (!badge) return;
+
+    if (platformInfo.isMacOS) {
+        badge.classList.add('visible');
+
+        if (platformInfo.isAppleSilicon && platformInfo.chipName) {
+            badge.innerHTML = `
+                <svg class="lai-apple-logo" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                </svg>
+                ${platformInfo.chipName}`;
+        } else if (platformInfo.isAppleSilicon) {
+            badge.innerHTML = `
+                <svg class="lai-apple-logo" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                </svg>
+                Apple Silicon`;
+        } else {
+            badge.innerHTML = `
+                <svg class="lai-apple-logo" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                </svg>
+                macOS`;
+        }
+    }
+}
+
+// Update the header to show which model is currently loaded
+function updateModelDisplay() {
+    const headerTitle = document.getElementById('model-title');
+    const headerSubtitle = document.querySelector('.lai-subtitle');
+    const modelSelector = document.getElementById('model-selector');
+
+    if (headerTitle) {
+        // Parse the model name to extract base name and size
+        const modelParts = MODEL_NAME.split(' ');
+        const baseName = modelParts.slice(0, 2).join(' '); // e.g., "Qwen 3" or "Qwen 2.5"
+        const sizeInfo = modelParts.slice(2).join(' '); // e.g., "(4B Instruct)"
+
+        headerTitle.innerHTML = `${baseName} <span>${sizeInfo}</span>`;
+    }
+
+    // Update page title
+    document.title = `${MODEL_NAME} - Local AI Chat`;
+
+    if (headerSubtitle) {
+        const deviceMode = platformInfo.webGPUAvailable ? 'WebGPU (GPU)' : 'WASM (CPU)';
+        headerSubtitle.textContent = `Running locally in-browser • ${deviceMode}`;
+    }
+
+    // Sync dropdown selector with current model
+    if (modelSelector && platformInfo.webGPUAvailable) {
+        // Find which model key matches the current MODEL_ID
+        for (const [key, model] of Object.entries(WEBGPU_MODELS)) {
+            if (model.id === MODEL_ID) {
+                modelSelector.value = key;
+                break;
+            }
+        }
+    }
+}
 
 // === CHAT HISTORY STATE ===
 const STORAGE_KEY = 'lai-chat-history';
@@ -526,6 +718,14 @@ async function init() {
         log(`User Agent: ${navigator.userAgent}`);
         log(`Device Memory (RAM): ${navigator.deviceMemory ? '~' + navigator.deviceMemory + 'GB' : 'Unknown'}`);
 
+        // Detect platform early
+        detectPlatform();
+        if (platformInfo.isMacOS) {
+            log(`Platform: macOS${platformInfo.osVersion ? ' ' + platformInfo.osVersion : ''}`, 'success');
+        } else {
+            log(`Platform: ${navigator.platform}`);
+        }
+
         if (dlFilename) dlFilename.innerText = "Loading Libraries...";
 
         // DYNAMIC IMPORT
@@ -559,44 +759,78 @@ async function init() {
         // CHECK GPU
         log("Checking GPU Support...");
         if (!navigator.gpu) {
-            log("WebGPU not available. Falling back to CPU (Slow).", 'error');
-            updateStatus('error', 'WebGPU Missing');
+            log("WebGPU not available. Will use WASM (slower but works).", 'info');
+            platformInfo.webGPUAvailable = false;
+
+            // Show info modal (non-blocking) with instructions to enable WebGPU
             showErrorModal(
-                "WebGPU Not Supported",
-                `This browser does not support WebGPU, which is required for fast local inference.
-                <br><br>
-                <div style="text-align: left; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
-                    <strong>Enable on macOS (Chrome/Edge):</strong>
-                    <ol style="margin: 8px 0 0 20px; padding: 0;">
-                        <li>Open <code>chrome://flags</code> in a new tab</li>
-                        <li>Search for <strong>"Unsafe WebGPU"</strong></li>
-                        <li>Set it to <strong>Enabled</strong></li>
-                        <li>Relaunch the browser</li>
-                    </ol>
-                </div>
-                Alternatively, try using the latest version of <b>Google Chrome Canary</b>.`
+                "WebGPU Not Available - Using CPU Fallback",
+                `<div style="text-align: left;">
+                    <p style="margin-bottom: 12px;">WebGPU is not available in your browser. The model will run using <strong>WASM (CPU)</strong> which is slower but still works!</p>
+                    
+                    <div style="background: rgba(139, 92, 246, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(139, 92, 246, 0.3);">
+                        <strong>⚡ For faster performance on macOS, enable WebGPU:</strong>
+                        <ol style="margin: 8px 0 0 20px; padding: 0;">
+                            <li>Open <code>chrome://flags</code> in a new tab</li>
+                            <li>Search for <strong>"WebGPU"</strong></li>
+                            <li>Enable <strong>"Unsafe WebGPU Support"</strong></li>
+                            <li>Relaunch Chrome</li>
+                        </ol>
+                    </div>
+                    
+                    <p style="color: #a1a1aa; font-size: 0.9em;">Alternatively, try <b>Safari</b> on macOS which has native WebGPU support, or the latest <b>Chrome Canary</b>.</p>
+                </div>`
             );
         } else {
-            const adapter = await navigator.gpu.requestAdapter();
+            // Use our enhanced GPU detection
+            const adapter = await detectGPU();
             if (!adapter) {
-                log("No WebGPU adapter found.", 'error');
-                updateStatus('error', 'No GPU Adapter');
-                showErrorModal("No GPU Adapter Found", "WebGPU is supported, but no suitable graphics adapter was found.<br><br>Please check your <b>Graphics Drivers</b> and ensure hardware acceleration is enabled.");
+                log("No WebGPU adapter found. Using WASM fallback.", 'info');
+                platformInfo.webGPUAvailable = false;
             } else {
-                // Show real limits
-                log(`GPU Adapter: ${JSON.stringify(adapter.limits)}`);
+                platformInfo.webGPUAvailable = true;
+                // Log GPU info
+                log(`GPU: ${platformInfo.gpuName}`, 'success');
+                if (platformInfo.isAppleSilicon) {
+                    log(`Detected Apple Silicon: ${platformInfo.chipName || 'Yes'}`, 'success');
+                }
+                log("WebGPU is available - using GPU acceleration!", 'success');
+                // Update the platform badge in the UI
+                updatePlatformBadge();
             }
         }
 
-        updateStatus('busy', 'Starting Pipeline...');
+        // Determine device, model, and dtype based on WebGPU availability
+        const useDevice = platformInfo.webGPUAvailable ? 'webgpu' : 'wasm';
+
+        // Select model based on device and user preference
+        if (platformInfo.webGPUAvailable) {
+            // Check for saved model preference
+            const savedModel = localStorage.getItem(MODEL_SELECTION_KEY);
+            const selectedKey = (savedModel && WEBGPU_MODELS[savedModel]) ? savedModel : DEFAULT_WEBGPU_MODEL;
+
+            MODEL_ID = WEBGPU_MODELS[selectedKey].id;
+            MODEL_NAME = WEBGPU_MODELS[selectedKey].name;
+        } else {
+            MODEL_ID = WASM_MODEL_ID;
+            MODEL_NAME = WASM_MODEL_NAME;
+            log("Using CPU-compatible model (Qwen2.5-1.5B) for WASM mode", 'info');
+        }
+
+        log(`Using device: ${useDevice}`);
+        log(`Model: ${MODEL_NAME}`);
+        updateStatus('busy', `Loading ${MODEL_NAME}...`);
+
+        // Update the UI header to show the current model
+        updateModelDisplay();
+
         log(`Starting Pipeline for: ${MODEL_ID}`);
 
         if (dlFilename) dlFilename.innerText = "Initializing Model...";
 
-        // Start Pipeline
-        generator = await pipeline('text-generation', MODEL_ID, {
-            device: 'webgpu',
-            dtype: 'q4f16', // CRITICAL: Use 4-bit quantization with fp16 activations
+        // Build pipeline options
+        const pipelineOptions = {
+            device: useDevice,
             progress_callback: (data) => {
                 // detailed logging
                 if (data.status === 'initiate') {
@@ -634,7 +868,15 @@ async function init() {
                     }
                 }
             }
-        });
+        };
+
+        // Add dtype for WebGPU mode (better quantization)
+        if (platformInfo.webGPUAvailable) {
+            pipelineOptions.dtype = 'q4f16';
+        }
+
+        // Start Pipeline
+        generator = await pipeline('text-generation', MODEL_ID, pipelineOptions);
 
         // Setup Complete
         isLoaded = true;
@@ -675,8 +917,33 @@ function finishLoading() {
     updateStatus('ready', 'Ready');
     userInput.disabled = false;
     sendBtn.disabled = false;
-    userInput.placeholder = "Ask Qwen something...";
-    appendMessage('system', "System Online. Model loaded on your device.");
+    userInput.placeholder = `Ask ${MODEL_NAME.split(' ')[0]} something...`;
+
+    // Build context-aware welcome message that includes model name
+    let welcomeMsg = `✅ System Online. ${MODEL_NAME} loaded on your device.`;
+
+    if (platformInfo.webGPUAvailable) {
+        // WebGPU is available - show GPU acceleration message
+        if (platformInfo.isMacOS) {
+            if (platformInfo.isAppleSilicon && platformInfo.chipName) {
+                welcomeMsg = `✅ ${MODEL_NAME} is ready! Running on your Apple ${platformInfo.chipName} with WebGPU acceleration.`;
+            } else if (platformInfo.isAppleSilicon) {
+                welcomeMsg = `✅ ${MODEL_NAME} is ready! Running on your Apple Silicon Mac with WebGPU.`;
+            } else {
+                welcomeMsg = `✅ ${MODEL_NAME} is ready! Running on your Mac with WebGPU.`;
+            }
+        } else {
+            welcomeMsg = `✅ ${MODEL_NAME} is ready! Using WebGPU acceleration.`;
+        }
+    } else {
+        // WASM fallback - show CPU message with tips
+        if (platformInfo.isMacOS) {
+            welcomeMsg = `✅ ${MODEL_NAME} is ready! Running on your Mac using WASM (CPU). Enable WebGPU in Chrome flags for the larger 4B model!`;
+        } else {
+            welcomeMsg = `✅ ${MODEL_NAME} is ready! Using WASM (CPU mode). Responses may be slower.`;
+        }
+    }
+    appendMessage('system', welcomeMsg);
 }
 
 // === CHAT LOGIC ===
@@ -725,6 +992,17 @@ ${text}<|im_end|>
         // Metrics: Input calculation
         const inputWords = countWords(text);
         const inputTokens = countTokens(prompt);
+
+        // Use a small delay to allow the UI (thinking bubble) to render before heavy computation
+        // This prevents the page from appearing frozen
+        updateThinkingStatus('Starting inference...');
+
+        // Wait for next frame to ensure UI is painted
+        await new Promise(resolve => requestAnimationFrame(() => {
+            requestAnimationFrame(resolve);
+        }));
+
+        updateThinkingStatus('Processing...');
 
         const output = await generator(prompt, {
             max_new_tokens: 2048,
@@ -1024,39 +1302,52 @@ if (examplePromptBtn) {
 // Clear Cache Button
 if (clearCacheBtn) {
     clearCacheBtn.addEventListener('click', async () => {
-        if (!confirm('This will delete all cached model files (~2.5GB). You will need to re-download them. Continue?')) {
+        if (!confirm('This will delete ALL cached model files (4B and 8B models). You will need to re-download them. Continue?')) {
             return;
         }
 
         try {
-            log('Clearing model cache...', 'info');
+            log('Clearing all model caches...', 'info');
             clearCacheBtn.disabled = true;
-            clearCacheBtn.textText = 'Clearing...';
+            clearCacheBtn.textContent = 'Clearing...';
 
-            // Delete the transformers cache
-            const deleted = await caches.delete('transformers-cache');
+            // Get all cache names and delete any that look like transformers/model caches
+            const cacheNames = await caches.keys();
+            let deletedCount = 0;
 
-            if (deleted) {
-                log('Cache cleared successfully!', 'success');
-                appendMessage('system', 'Cache cleared! The model will be re-downloaded on your next message.');
-                clearCacheBtn.disabled = false;
-                clearCacheBtn.innerHTML = `
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                    Clear Cache`;
-            } else {
-                log('No cache found to delete.', 'info');
-                alert('No cached models found.');
-                clearCacheBtn.disabled = false;
-                clearCacheBtn.innerHTML = `
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                    Clear Cache`;
+            for (const cacheName of cacheNames) {
+                // Delete transformers cache and any other model-related caches
+                if (cacheName.includes('transformers') ||
+                    cacheName.includes('onnx') ||
+                    cacheName.includes('huggingface') ||
+                    cacheName.includes('model')) {
+                    const deleted = await caches.delete(cacheName);
+                    if (deleted) {
+                        log(`Deleted cache: ${cacheName}`, 'success');
+                        deletedCount++;
+                    }
+                }
             }
+
+            // Also try the main transformers-cache directly
+            const mainCacheDeleted = await caches.delete('transformers-cache');
+            if (mainCacheDeleted) deletedCount++;
+
+            if (deletedCount > 0) {
+                log(`Cleared ${deletedCount} cache(s) successfully!`, 'success');
+                appendMessage('system', `Cleared ${deletedCount} model cache(s)! Models will be re-downloaded on next use.`);
+            } else {
+                log('No model caches found to delete.', 'info');
+                appendMessage('system', 'No cached models found.');
+            }
+
+            clearCacheBtn.disabled = false;
+            clearCacheBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                Clear Cache`;
         } catch (err) {
             log(`Failed to clear cache: ${err.message}`, 'error');
             clearCacheBtn.disabled = false;
@@ -1104,6 +1395,9 @@ window.addEventListener('DOMContentLoaded', () => {
     initChatHistoryEvents();
     renderChatList();
 
+    // Initialize model selector (always visible in header)
+    initModelSelector();
+
     // Load current chat if exists, otherwise create new one
     const currentChat = getCurrentChat();
     if (currentChat && currentChat.messages.length > 0) {
@@ -1117,3 +1411,108 @@ window.addEventListener('DOMContentLoaded', () => {
     // Initialize the AI model
     init();
 });
+
+// === MODEL SELECTOR ===
+function initModelSelector() {
+    const modelSelectorWrapper = document.getElementById('model-selector-wrapper');
+    const modelSelector = document.getElementById('model-selector');
+    const fallbackBadge = document.getElementById('fallback-badge');
+
+    if (!modelSelector) return;
+
+    // Check if WebGPU is available (navigator.gpu exists)
+    // Note: Full WebGPU check happens in init(), this is just for UI
+    const hasWebGPU = !!navigator.gpu;
+
+    if (hasWebGPU) {
+        // Show model selector for WebGPU users
+        if (modelSelectorWrapper) modelSelectorWrapper.style.display = 'flex';
+        if (fallbackBadge) fallbackBadge.style.display = 'none';
+
+        // Load saved preference and set MODEL_NAME/MODEL_ID immediately
+        const savedModel = localStorage.getItem(MODEL_SELECTION_KEY);
+        const selectedKey = (savedModel && WEBGPU_MODELS[savedModel]) ? savedModel : DEFAULT_WEBGPU_MODEL;
+
+        // Set the dropdown value
+        modelSelector.value = selectedKey;
+
+        // Set global MODEL_NAME and MODEL_ID to show correct name immediately
+        MODEL_ID = WEBGPU_MODELS[selectedKey].id;
+        MODEL_NAME = WEBGPU_MODELS[selectedKey].name;
+
+        // Update the display immediately
+        updateModelDisplay();
+
+        // Handle model change
+        modelSelector.addEventListener('change', (e) => {
+            const newModel = e.target.value;
+            const currentModel = localStorage.getItem(MODEL_SELECTION_KEY) || DEFAULT_WEBGPU_MODEL;
+
+            if (newModel !== currentModel) {
+                localStorage.setItem(MODEL_SELECTION_KEY, newModel);
+
+                // Show confirmation and reload
+                showModelChangeModal(
+                    'Model Changed',
+                    `Switching to <strong>${WEBGPU_MODELS[newModel].name}</strong> (${WEBGPU_MODELS[newModel].size}).<br><br>The page will reload to load the new model.`,
+                    () => window.location.reload()
+                );
+            }
+        });
+
+        log(`Model selector initialized (${MODEL_NAME})`, 'success');
+    } else {
+        // Hide model selector, show fallback badge for WASM/CPU users
+        if (modelSelectorWrapper) modelSelectorWrapper.style.display = 'none';
+        if (fallbackBadge) fallbackBadge.style.display = 'flex';
+
+        // Set to WASM model
+        MODEL_ID = WASM_MODEL_ID;
+        MODEL_NAME = WASM_MODEL_NAME;
+
+        // Update the display to show the WASM model
+        updateModelDisplay();
+
+        log(`WebGPU not available - using ${MODEL_NAME} (CPU mode)`, 'info');
+    }
+}
+
+function showModelChangeModal(title, message, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.className = 'lai-modal-overlay';
+
+    const modal = document.createElement('div');
+    modal.className = 'lai-modal';
+
+    modal.innerHTML = `
+        <div class="lai-modal-icon" style="color: #8b5cf6;">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                <rect x="9" y="9" width="6" height="6"></rect>
+                <line x1="9" y1="1" x2="9" y2="4"></line>
+                <line x1="15" y1="1" x2="15" y2="4"></line>
+                <line x1="9" y1="20" x2="9" y2="23"></line>
+                <line x1="15" y1="20" x2="15" y2="23"></line>
+                <line x1="20" y1="9" x2="23" y2="9"></line>
+                <line x1="20" y1="14" x2="23" y2="14"></line>
+                <line x1="1" y1="9" x2="4" y2="9"></line>
+                <line x1="1" y1="14" x2="4" y2="14"></line>
+            </svg>
+        </div>
+        <h2>${title}</h2>
+        <div class="lai-modal-body">${message}</div>
+        <button class="lai-modal-btn">Reload Now</button>
+    `;
+
+    const btn = modal.querySelector('.lai-modal-btn');
+    btn.onclick = () => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => {
+            overlay.remove();
+            onConfirm();
+        }, 300);
+    };
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+}

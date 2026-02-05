@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Qwen 3 - Local Browser Chat</title>
+    <title>Local AI Chat</title>
 
     <!-- Theme-aware SVG icons -->
     <link rel="icon" href="favicon.ico" sizes="any">
@@ -75,12 +75,27 @@
                     </button>
                 </div>
                 <div class="lai-header-info">
-                    <h1>Qwen 3 <span>4B Instruct</span></h1>
+                    <h1 id="model-title">Loading... <span></span></h1>
                     <p class="lai-subtitle">Running locally in-browser</p>
                 </div>
                 <div class="lai-status-badge" id="status-badge">
                     <span class="lai-status-dot"></span>
                     <span id="status-text">Starting...</span>
+                </div>
+                <div class="lai-platform-badge" id="platform-badge">
+                    <!-- Populated by JavaScript when macOS/Apple Silicon detected -->
+                </div>
+                <!-- Model selector: hidden by default, shown by JS when WebGPU available -->
+                <div class="lai-model-selector-wrapper" id="model-selector-wrapper" style="display: none;">
+                    <select id="model-selector" class="lai-select">
+                        <option value="qwen3-4b">4B (~2.5GB)</option>
+                        <option value="qwen3-8b">8B (~5GB)</option>
+                    </select>
+                </div>
+                <!-- Fallback mode indicator: shown when WebGPU not available -->
+                <div class="lai-fallback-badge" id="fallback-badge" style="display: none;">
+                    <span class="lai-fallback-icon">⚡</span>
+                    <span>CPU Mode</span>
                 </div>
             </header>
 
