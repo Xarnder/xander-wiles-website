@@ -1487,3 +1487,146 @@ body {
         box-shadow: 0 0 15px var(--lai-accent-glow);
     }
 }
+
+/* === HARDWARE SELECTION MODAL === */
+.lai-hardware-modal .lai-modal {
+    max-width: 480px;
+}
+
+.lai-hardware-selection h2 {
+    margin: 0 0 8px;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: white;
+}
+
+.lai-hardware-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.lai-hardware-option {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    color: white;
+}
+
+.lai-hardware-option:hover {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(139, 92, 246, 0.4);
+    transform: translateX(4px);
+}
+
+.lai-hardware-option:active {
+    transform: translateX(2px);
+    background: rgba(139, 92, 246, 0.15);
+}
+
+.lai-hw-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--lai-accent);
+    flex-shrink: 0;
+}
+
+.lai-hw-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lai-hw-info strong {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.lai-hw-info span {
+    font-size: 0.8rem;
+    color: var(--lai-text-secondary);
+}
+
+.lai-hw-tag {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.lai-hw-tag.fast {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--lai-success);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.lai-hw-tag.slow {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.lai-remember-choice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--lai-text-secondary);
+    cursor: pointer;
+    justify-content: center;
+}
+
+.lai-remember-choice input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--lai-accent);
+    cursor: pointer;
+}
+
+.lai-remember-choice:hover {
+    color: white;
+}
+
+/* Animation for options appearing */
+.lai-hardware-option {
+    animation: lai-slideInOption 0.4s ease-out backwards;
+}
+
+.lai-hardware-option:nth-child(1) {
+    animation-delay: 0.1s;
+}
+
+.lai-hardware-option:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.lai-hardware-option:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+@keyframes lai-slideInOption {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}

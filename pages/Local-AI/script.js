@@ -56,6 +56,7 @@ const systemPromptInput = document.getElementById('system-prompt');
 const clearCacheBtn = document.getElementById('clear-cache-btn');
 const cacheLocationText = document.getElementById('cache-location');
 const modelSelector = document.getElementById('model-selector');
+const resetHardwareBtn = document.getElementById('reset-hardware-btn');
 
 // === STATE ===
 let generator = null;
@@ -759,28 +760,57 @@ async function init() {
         // CHECK GPU
         log("Checking GPU Support...");
         if (!navigator.gpu) {
-            log("WebGPU not available. Will use WASM (slower but works).", 'info');
-            platformInfo.webGPUAvailable = false;
+            log("WebGPU not available via browser API.", 'info');
 
-            // Show info modal (non-blocking) with instructions to enable WebGPU
-            showErrorModal(
-                "WebGPU Not Available - Using CPU Fallback",
-                `<div style="text-align: left;">
-                    <p style="margin-bottom: 12px;">WebGPU is not available in your browser. The model will run using <strong>WASM (CPU)</strong> which is slower but still works!</p>
-                    
-                    <div style="background: rgba(139, 92, 246, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(139, 92, 246, 0.3);">
-                        <strong>⚡ For faster performance on macOS, enable WebGPU:</strong>
-                        <ol style="margin: 8px 0 0 20px; padding: 0;">
-                            <li>Open <code>chrome://flags</code> in a new tab</li>
-                            <li>Search for <strong>"WebGPU"</strong></li>
-                            <li>Enable <strong>"Unsafe WebGPU Support"</strong></li>
-                            <li>Relaunch Chrome</li>
-                        </ol>
-                    </div>
-                    
-                    <p style="color: #a1a1aa; font-size: 0.9em;">Alternatively, try <b>Safari</b> on macOS which has native WebGPU support, or the latest <b>Chrome Canary</b>.</p>
-                </div>`
-            );
+            // Show hardware selection modal to let user choose
+            const hardwareChoice = await showHardwareSelectionModal();
+
+            if (hardwareChoice.hasGPU) {
+                // User claims they have GPU but browser doesn't support WebGPU
+                log(`User selected: ${hardwareChoice.isAppleSilicon ? 'Apple Silicon' : 'Dedicated GPU'}`, 'info');
+                log("WebGPU not enabled in browser - showing instructions.", 'info');
+
+                // Update platform info based on user selection
+                platformInfo.isMacOS = hardwareChoice.isMacOS;
+                platformInfo.isAppleSilicon = hardwareChoice.isAppleSilicon;
+                platformInfo.webGPUAvailable = false; // Still can't use WebGPU without browser support
+
+                // Show instructions to enable WebGPU
+                showErrorModal(
+                    "Enable WebGPU for Best Performance",
+                    `<div style="text-align: left;">
+                        <p style="margin-bottom: 12px;">You have <strong>${hardwareChoice.isAppleSilicon ? 'Apple Silicon' : 'a dedicated GPU'}</strong> but WebGPU isn't enabled in your browser. The model will run using <strong>WASM (CPU)</strong> which is slower.</p>
+                        
+                        <div style="background: rgba(139, 92, 246, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(139, 92, 246, 0.3);">
+                            <strong>⚡ Enable WebGPU for 10x faster performance:</strong>
+                            <ol style="margin: 8px 0 0 20px; padding: 0;">
+                                ${hardwareChoice.isMacOS ?
+                        `<li>Open <code>chrome://flags</code> in Chrome</li>
+                                    <li>Search for <strong>"WebGPU"</strong></li>
+                                    <li>Enable <strong>"Unsafe WebGPU Support"</strong></li>
+                                    <li>Relaunch Chrome</li>
+                                    <li style="margin-top: 8px;"><em>Or try Safari which has native WebGPU support!</em></li>`
+                        :
+                        `<li>Open <code>chrome://flags</code> in Chrome</li>
+                                    <li>Search for <strong>"WebGPU"</strong></li>
+                                    <li>Enable <strong>"WebGPU Developer Features"</strong></li>
+                                    <li>Relaunch Chrome</li>`
+                    }
+                            </ol>
+                        </div>
+                    </div>`
+                );
+
+                // Update badge to show user's selection
+                if (hardwareChoice.isAppleSilicon) {
+                    platformInfo.chipName = 'Apple Silicon';
+                    updatePlatformBadge();
+                }
+            } else {
+                // User has no GPU - just use WASM
+                log("User selected CPU only - using WASM mode.", 'info');
+                platformInfo.webGPUAvailable = false;
+            }
         } else {
             // Use our enhanced GPU detection
             const adapter = await detectGPU();
@@ -1355,6 +1385,16 @@ if (clearCacheBtn) {
     });
 }
 
+// Reset Hardware Choice Button
+if (resetHardwareBtn) {
+    resetHardwareBtn.addEventListener('click', () => {
+        if (confirm('This will clear your saved hardware preference and reload the page to detect hardware again. Continue?')) {
+            clearHardwareSelection();
+            location.reload();
+        }
+    });
+}
+
 function showErrorModal(title, message) {
     // Create Overlay
     const overlay = document.createElement('div');
@@ -1387,6 +1427,138 @@ function showErrorModal(title, message) {
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+}
+
+// Hardware Selection Modal - shown when auto-detection fails
+const HARDWARE_SELECTION_KEY = 'lai-hardware-selection';
+
+function showHardwareSelectionModal() {
+    return new Promise((resolve) => {
+        // Check if user has previously made a selection
+        const savedSelection = localStorage.getItem(HARDWARE_SELECTION_KEY);
+        if (savedSelection) {
+            const parsed = JSON.parse(savedSelection);
+            resolve(parsed);
+            return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'lai-modal-overlay lai-hardware-modal';
+
+        const modal = document.createElement('div');
+        modal.className = 'lai-modal lai-hardware-selection';
+
+        modal.innerHTML = `
+            <div class="lai-modal-icon" style="background: rgba(139, 92, 246, 0.15); color: var(--lai-accent);">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                    <rect x="9" y="9" width="6" height="6"></rect>
+                    <line x1="9" y1="1" x2="9" y2="4"></line>
+                    <line x1="15" y1="1" x2="15" y2="4"></line>
+                    <line x1="9" y1="20" x2="9" y2="23"></line>
+                    <line x1="15" y1="20" x2="15" y2="23"></line>
+                    <line x1="20" y1="9" x2="23" y2="9"></line>
+                    <line x1="20" y1="14" x2="23" y2="14"></line>
+                    <line x1="1" y1="9" x2="4" y2="9"></line>
+                    <line x1="1" y1="14" x2="4" y2="14"></line>
+                </svg>
+            </div>
+            <h2>Select Your Hardware</h2>
+            <p style="color: var(--lai-text-secondary); margin-bottom: 20px; font-size: 0.9rem;">
+                We couldn't automatically detect your hardware. Please select your device type for the best performance:
+            </p>
+            
+            <div class="lai-hardware-options">
+                <button class="lai-hardware-option" data-type="apple-silicon">
+                    <div class="lai-hw-icon">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                        </svg>
+                    </div>
+                    <div class="lai-hw-info">
+                        <strong>Apple Silicon Mac</strong>
+                        <span>M1, M2, M3, M4 chip</span>
+                    </div>
+                    <div class="lai-hw-tag fast">⚡ Fast</div>
+                </button>
+                
+                <button class="lai-hardware-option" data-type="dedicated-gpu">
+                    <div class="lai-hw-icon">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                            <line x1="6" y1="12" x2="6" y2="12.01"></line>
+                            <line x1="10" y1="12" x2="10" y2="12.01"></line>
+                            <line x1="14" y1="12" x2="14" y2="12.01"></line>
+                            <line x1="18" y1="12" x2="18" y2="12.01"></line>
+                        </svg>
+                    </div>
+                    <div class="lai-hw-info">
+                        <strong>Dedicated GPU</strong>
+                        <span>NVIDIA/AMD graphics card</span>
+                    </div>
+                    <div class="lai-hw-tag fast">⚡ Fast</div>
+                </button>
+                
+                <button class="lai-hardware-option" data-type="cpu-only">
+                    <div class="lai-hw-icon">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                            <rect x="9" y="9" width="6" height="6"></rect>
+                        </svg>
+                    </div>
+                    <div class="lai-hw-info">
+                        <strong>CPU Only</strong>
+                        <span>No dedicated GPU / Intel Mac</span>
+                    </div>
+                    <div class="lai-hw-tag slow">🐢 Slower</div>
+                </button>
+            </div>
+            
+            <label class="lai-remember-choice">
+                <input type="checkbox" id="remember-hardware" checked>
+                <span>Remember my choice</span>
+            </label>
+        `;
+
+        const closeAndResolve = (selection) => {
+            const remember = modal.querySelector('#remember-hardware').checked;
+            if (remember) {
+                localStorage.setItem(HARDWARE_SELECTION_KEY, JSON.stringify(selection));
+            }
+            overlay.classList.add('fade-out');
+            setTimeout(() => {
+                overlay.remove();
+                resolve(selection);
+            }, 300);
+        };
+
+        // Handle option clicks
+        modal.querySelectorAll('.lai-hardware-option').forEach(btn => {
+            btn.onclick = () => {
+                const type = btn.dataset.type;
+                let selection = { hasGPU: false, isAppleSilicon: false, isMacOS: false };
+
+                if (type === 'apple-silicon') {
+                    selection = { hasGPU: true, isAppleSilicon: true, isMacOS: true };
+                } else if (type === 'dedicated-gpu') {
+                    selection = { hasGPU: true, isAppleSilicon: false, isMacOS: false };
+                } else {
+                    selection = { hasGPU: false, isAppleSilicon: false, isMacOS: false };
+                }
+
+                closeAndResolve(selection);
+            };
+        });
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+    });
+}
+
+// Clear saved hardware selection (useful for settings)
+function clearHardwareSelection() {
+    localStorage.removeItem(HARDWARE_SELECTION_KEY);
+    log('Hardware selection cleared. Will ask on next load.', 'info');
 }
 
 window.addEventListener('DOMContentLoaded', () => {
