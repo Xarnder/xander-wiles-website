@@ -459,7 +459,7 @@ function closeSidebar() {
     sidebarOverlay?.classList.remove('visible');
 }
 // === STYLED CONFIRMATION MODALS ===
-function showConfirmModal(title, message, onConfirm) {
+function showConfirmModal(title, message, onConfirm, confirmText = 'Delete', confirmClass = 'danger') {
     const overlay = document.createElement('div');
     overlay.className = 'lai-confirm-overlay';
 
@@ -477,7 +477,7 @@ function showConfirmModal(title, message, onConfirm) {
         <p>${message}</p>
         <div class="lai-confirm-buttons">
             <button class="lai-confirm-btn cancel">Cancel</button>
-            <button class="lai-confirm-btn danger enabled">Delete</button>
+            <button class="lai-confirm-btn ${confirmClass} enabled">${confirmText}</button>
         </div>
     `;
 
@@ -487,7 +487,7 @@ function showConfirmModal(title, message, onConfirm) {
     };
 
     modal.querySelector('.cancel').onclick = closeModal;
-    modal.querySelector('.danger').onclick = () => {
+    modal.querySelector(`.${confirmClass}`).onclick = () => {
         closeModal();
         onConfirm();
     };
@@ -1331,67 +1331,81 @@ if (examplePromptBtn) {
 
 // Clear Cache Button
 if (clearCacheBtn) {
-    clearCacheBtn.addEventListener('click', async () => {
-        if (!confirm('This will delete ALL cached model files (4B and 8B models). You will need to re-download them. Continue?')) {
-            return;
-        }
+    clearCacheBtn.addEventListener('click', () => {
+        showConfirmModal(
+            'Clear Model Cache?',
+            'This will delete ALL cached model files (4B and 8B models). You will need to re-download them.',
+            async () => {
+                try {
+                    log('Clearing all model caches...', 'info');
+                    clearCacheBtn.disabled = true;
+                    clearCacheBtn.textContent = 'Clearing...';
 
-        try {
-            log('Clearing all model caches...', 'info');
-            clearCacheBtn.disabled = true;
-            clearCacheBtn.textContent = 'Clearing...';
-
-            // Get all cache names and delete any that look like transformers/model caches
-            const cacheNames = await caches.keys();
-            let deletedCount = 0;
-
-            for (const cacheName of cacheNames) {
-                // Delete transformers cache and any other model-related caches
-                if (cacheName.includes('transformers') ||
-                    cacheName.includes('onnx') ||
-                    cacheName.includes('huggingface') ||
-                    cacheName.includes('model')) {
-                    const deleted = await caches.delete(cacheName);
-                    if (deleted) {
-                        log(`Deleted cache: ${cacheName}`, 'success');
-                        deletedCount++;
+                    if (!window.caches) {
+                        throw new Error("Cache API not available (requires HTTPS or localhost)");
                     }
-                }
-            }
 
-            // Also try the main transformers-cache directly
-            const mainCacheDeleted = await caches.delete('transformers-cache');
-            if (mainCacheDeleted) deletedCount++;
+                    // Get all cache names and delete any that look like transformers/model caches
+                    const cacheNames = await window.caches.keys();
+                    let deletedCount = 0;
 
-            if (deletedCount > 0) {
-                log(`Cleared ${deletedCount} cache(s) successfully!`, 'success');
-                appendMessage('system', `Cleared ${deletedCount} model cache(s)! Models will be re-downloaded on next use.`);
-            } else {
-                log('No model caches found to delete.', 'info');
-                appendMessage('system', 'No cached models found.');
-            }
+                    for (const cacheName of cacheNames) {
+                        // Delete transformers cache and any other model-related caches
+                        if (cacheName.includes('transformers') ||
+                            cacheName.includes('onnx') ||
+                            cacheName.includes('huggingface') ||
+                            cacheName.includes('model')) {
+                            const deleted = await window.caches.delete(cacheName);
+                            if (deleted) {
+                                log(`Deleted cache: ${cacheName}`, 'success');
+                                deletedCount++;
+                            }
+                        }
+                    }
 
-            clearCacheBtn.disabled = false;
-            clearCacheBtn.innerHTML = `
+                    // Also try the main transformers-cache directly
+                    const mainCacheDeleted = await window.caches.delete('transformers-cache');
+                    if (mainCacheDeleted) deletedCount++;
+
+                    if (deletedCount > 0) {
+                        log(`Cleared ${deletedCount} cache(s) successfully!`, 'success');
+                        appendMessage('system', `Cleared ${deletedCount} model cache(s)! Models will be re-downloaded on next use.`);
+                    } else {
+                        log('No model caches found to delete.', 'info');
+                        appendMessage('system', 'No cached models found.');
+                    }
+
+                    clearCacheBtn.disabled = false;
+                    clearCacheBtn.innerHTML = `
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
                 Clear Cache`;
-        } catch (err) {
-            log(`Failed to clear cache: ${err.message}`, 'error');
-            clearCacheBtn.disabled = false;
-        }
+                } catch (err) {
+                    log(`Failed to clear cache: ${err.message}`, 'error');
+                    clearCacheBtn.disabled = false;
+                }
+            },
+            'Clear Cache',
+            'danger'
+        );
     });
 }
 
 // Reset Hardware Choice Button
 if (resetHardwareBtn) {
     resetHardwareBtn.addEventListener('click', () => {
-        if (confirm('This will clear your saved hardware preference and reload the page to detect hardware again. Continue?')) {
-            clearHardwareSelection();
-            location.reload();
-        }
+        showConfirmModal(
+            'Reset Hardware Choice?',
+            'This will clear your saved preference and reload the page to detect hardware again.',
+            () => {
+                clearHardwareSelection();
+                location.reload();
+            },
+            'Reset & Reload',
+            'danger'
+        );
     });
 }
 
