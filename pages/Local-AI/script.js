@@ -24,12 +24,14 @@ const DEFAULT_WEBGPU_MODEL = 'qwen3-4b';
 // WASM fallback model: Qwen 2.5 1.5B (better quality, works on CPU)
 const WASM_MODEL_ID = 'onnx-community/Qwen2.5-1.5B-Instruct';
 const WASM_MODEL_NAME = 'Qwen 2.5 (1.5B Instruct)';
+const WASM_MODEL_SIZE = '~1.5GB';
 
 // Storage key for selected model
 const MODEL_SELECTION_KEY = 'lai-selected-model';
 
 let MODEL_ID = WEBGPU_MODELS[DEFAULT_WEBGPU_MODEL].id;
 let MODEL_NAME = WEBGPU_MODELS[DEFAULT_WEBGPU_MODEL].name;
+let MODEL_SIZE = WEBGPU_MODELS[DEFAULT_WEBGPU_MODEL].size;
 let env, pipeline; // Will be loaded dynamically
 
 // === DOM ELEMENTS ===
@@ -57,10 +59,16 @@ const clearCacheBtn = document.getElementById('clear-cache-btn');
 const cacheLocationText = document.getElementById('cache-location');
 const modelSelector = document.getElementById('model-selector');
 const resetHardwareBtn = document.getElementById('reset-hardware-btn');
+const stopDownloadBtn = document.getElementById('stop-download-btn');
+const restartDownloadBtn = document.getElementById('restart-download-btn');
+const enableWebGPUBtn = document.getElementById('enable-webgpu-btn');
+const toggleDebugBtn = document.getElementById('toggle-debug-btn');
+const debugWrapper = document.querySelector('.lai-debug-wrapper');
 
 // === STATE ===
 let generator = null;
 let isGenerating = false;
+let isDownloadStopped = false;
 let isLoaded = false;
 let thinkingTimerInterval = null;
 let thinkingStartTime = null;
@@ -379,7 +387,7 @@ function clearChatUI() {
         <div class="lai-message lai-system">
             <div class="lai-bubble">
                 Welcome. The model is loading above. <br>
-                This downloads ~2.5GB once. Future reloads will be instant.
+                This downloads ${MODEL_SIZE} once. Future reloads will be instant.
             </div>
         </div>`;
 }
@@ -779,34 +787,39 @@ async function init() {
             platformInfo.webGPUAvailable = false;
 
             if (hardwareChoice.hasGPU) {
-                // User has GPU but browser blocks it -> Show instructions
+                // User has GPU but browser blocks it -> Show instructions via button (don't auto-popup)
                 log("WebGPU not available via browser API.", 'info');
                 log(`User selected: ${hardwareChoice.isAppleSilicon ? 'Apple Silicon' : 'Dedicated GPU'}`, 'info');
 
-                showErrorModal(
-                    "Enable WebGPU for Best Performance",
-                    `<div style="text-align: left;">
-                        <p style="margin-bottom: 12px;">You have <strong>${hardwareChoice.isAppleSilicon ? 'Apple Silicon' : 'a dedicated GPU'}</strong> but WebGPU isn't enabled in your browser. The model will run using <strong>WASM (CPU)</strong> which is slower.</p>
-                        
-                        <div style="background: rgba(139, 92, 246, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(139, 92, 246, 0.3);">
-                            <strong>⚡ Enable WebGPU for 10x faster performance:</strong>
-                            <ol style="margin: 8px 0 0 20px; padding: 0;">
-                                ${hardwareChoice.isMacOS ?
-                        `<li>Open <code>chrome://flags</code> in Chrome</li>
-                                    <li>Search for <strong>"WebGPU"</strong></li>
-                                    <li>Enable <strong>"Unsafe WebGPU Support"</strong></li>
-                                    <li>Relaunch Chrome</li>
-                                    <li style="margin-top: 8px;"><em>Or try Safari which has native WebGPU support!</em></li>`
-                        :
-                        `<li>Open <code>chrome://flags</code> in Chrome</li>
-                                    <li>Search for <strong>"WebGPU"</strong></li>
-                                    <li>Enable <strong>"WebGPU Developer Features"</strong></li>
-                                    <li>Relaunch Chrome</li>`
-                    }
-                            </ol>
-                        </div>
-                    </div>`
-                );
+                if (enableWebGPUBtn) {
+                    enableWebGPUBtn.style.display = 'inline-flex';
+                    enableWebGPUBtn.onclick = () => {
+                        showErrorModal(
+                            "Enable WebGPU for Best Performance",
+                            `<div style="text-align: left;">
+                                <p style="margin-bottom: 12px;">You have <strong>${hardwareChoice.isAppleSilicon ? 'Apple Silicon' : 'a dedicated GPU'}</strong> but WebGPU isn't enabled in your browser. The model will run using <strong>WASM (CPU)</strong> which is slower.</p>
+                                
+                                <div style="background: rgba(139, 92, 246, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(139, 92, 246, 0.3);">
+                                    <strong>⚡ Enable WebGPU for 10x faster performance:</strong>
+                                    <ol style="margin: 8px 0 0 20px; padding: 0;">
+                                        ${platformInfo.isMacOS ?
+                                `<li>Open <code>chrome://flags</code> in Chrome</li>
+                                            <li>Search for <strong>"WebGPU"</strong></li>
+                                            <li>Enable <strong>"Unsafe WebGPU Support"</strong></li>
+                                            <li>Relaunch Chrome</li>
+                                            <li style="margin-top: 8px;"><em>Or try Safari which has native WebGPU support!</em></li>`
+                                :
+                                `<li>Open <code>chrome://flags</code> in Chrome</li>
+                                            <li>Search for <strong>"WebGPU"</strong></li>
+                                            <li>Enable <strong>"WebGPU Developer Features"</strong></li>
+                                            <li>Relaunch Chrome</li>`
+                            }
+                                    </ol>
+                                </div>
+                            </div>`
+                        );
+                    };
+                }
 
                 updatePlatformBadge();
             } else {
@@ -845,9 +858,11 @@ async function init() {
 
             MODEL_ID = WEBGPU_MODELS[selectedKey].id;
             MODEL_NAME = WEBGPU_MODELS[selectedKey].name;
+            MODEL_SIZE = WEBGPU_MODELS[selectedKey].size;
         } else {
             MODEL_ID = WASM_MODEL_ID;
             MODEL_NAME = WASM_MODEL_NAME;
+            MODEL_SIZE = WASM_MODEL_SIZE;
             log("Using CPU-compatible model (Qwen2.5-1.5B) for WASM mode", 'info');
         }
 
@@ -918,6 +933,12 @@ async function init() {
         finishLoading();
 
     } catch (err) {
+        // If user stopped the download, suppress the error
+        if (isDownloadStopped) {
+            log("Download process terminated by user.", 'info');
+            return;
+        }
+
         console.error("CRITICAL ERROR OBJECT:", err);
         const errMsg = err?.message || err?.toString() || "Unknown Error";
         const errStack = err?.stack || "No stack trace";
@@ -944,8 +965,10 @@ function switchToInitStage() {
 }
 
 function finishLoading() {
-    // Hide all progress bars
-    progressPanel.classList.add('collapsed');
+    // Show success message
+    progressPanel.classList.remove('collapsed');
+    progressPanel.style.display = 'block';
+    progressPanel.innerHTML = '<div style="color: var(--lai-success); font-weight: 700; text-align: center; padding: 10px;">Model Downloaded Successfully</div>';
 
     // Enable Chat
     updateStatus('ready', 'Ready');
@@ -1410,6 +1433,52 @@ if (resetHardwareBtn) {
             'Reset & Reload',
             'danger'
         );
+    });
+}
+
+// Download Control Buttons
+if (stopDownloadBtn) {
+    stopDownloadBtn.addEventListener('click', () => {
+        log('Stopping download by user request...', 'info');
+        isDownloadStopped = true;
+        window.stop(); // Stops network activity
+
+        // Update UI
+        if (typeof statusText !== 'undefined') statusText.innerText = 'Download Cancelled';
+        if (typeof dlFilename !== 'undefined') dlFilename.innerText = 'Download stopped by user.';
+
+        stopDownloadBtn.classList.add('hidden');
+        if (restartDownloadBtn) restartDownloadBtn.classList.remove('hidden');
+
+        // Disable loaders
+        const bar = document.querySelector('.lai-infinite-bar');
+        if (bar) bar.style.animation = 'none';
+    });
+}
+
+if (restartDownloadBtn) {
+    restartDownloadBtn.addEventListener('click', () => {
+        location.reload();
+    });
+}
+
+if (restartDownloadBtn) {
+    restartDownloadBtn.addEventListener('click', () => {
+        location.reload();
+    });
+}
+
+// Debug Console Toggle
+if (toggleDebugBtn) {
+    toggleDebugBtn.addEventListener('click', () => {
+        // Toggle the entire debug wrapper (header + log)
+        if (debugWrapper) {
+            const isHidden = debugWrapper.style.display === 'none';
+            debugWrapper.style.display = isHidden ? 'block' : 'none';
+
+            // Update icon opacity
+            toggleDebugBtn.style.opacity = isHidden ? '1' : '0.6';
+        }
     });
 }
 

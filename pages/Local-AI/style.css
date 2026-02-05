@@ -927,23 +927,32 @@ body {
 }
 
 .lai-settings-toggle-btn {
-    background: transparent;
+    background: rgba(30, 30, 35, 0.6);
     color: var(--lai-text-secondary);
-    border: none;
-    width: 100%;
-    height: 36px;
-    padding: 0;
-    border-radius: 0;
-    font-size: 0.8rem;
+    border: 1px solid var(--lai-glass-border);
+    width: fit-content;
+    min-width: 120px;
+    height: auto;
+    min-height: 40px;
+    padding: 8px 16px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 500;
     gap: 8px;
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
 }
 
 .lai-settings-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
     color: var(--lai-text-primary);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .lai-settings-content {
