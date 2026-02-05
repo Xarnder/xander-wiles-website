@@ -757,25 +757,32 @@ async function init() {
             env.useBrowserCache = false;
         }
 
-        // CHECK GPU
-        log("Checking GPU Support...");
-        if (!navigator.gpu) {
-            log("WebGPU not available via browser API.", 'info');
+        // CHECK GPU & HARDWARE PREFERENCE
+        log("Checking Hardware...");
 
-            // Show hardware selection modal to let user choose
-            const hardwareChoice = await showHardwareSelectionModal();
+        // 1. Always check for user preference (or ask if new user)
+        // This ensures the modal appears for first-time users regardless of auto-detection
+        const hardwareChoice = await showHardwareSelectionModal();
+
+        // 2. Adjust platform info based on user choice
+        if (hardwareChoice.isAppleSilicon) {
+            platformInfo.isMacOS = true;
+            platformInfo.isAppleSilicon = true;
+            platformInfo.chipName = 'Apple Silicon';
+        } else if (hardwareChoice.isMacOS) {
+            platformInfo.isMacOS = true;
+        }
+
+        // 3. Check browser capabilities
+        if (!navigator.gpu) {
+            // Browser doesn't support WebGPU
+            platformInfo.webGPUAvailable = false;
 
             if (hardwareChoice.hasGPU) {
-                // User claims they have GPU but browser doesn't support WebGPU
+                // User has GPU but browser blocks it -> Show instructions
+                log("WebGPU not available via browser API.", 'info');
                 log(`User selected: ${hardwareChoice.isAppleSilicon ? 'Apple Silicon' : 'Dedicated GPU'}`, 'info');
-                log("WebGPU not enabled in browser - showing instructions.", 'info');
 
-                // Update platform info based on user selection
-                platformInfo.isMacOS = hardwareChoice.isMacOS;
-                platformInfo.isAppleSilicon = hardwareChoice.isAppleSilicon;
-                platformInfo.webGPUAvailable = false; // Still can't use WebGPU without browser support
-
-                // Show instructions to enable WebGPU
                 showErrorModal(
                     "Enable WebGPU for Best Performance",
                     `<div style="text-align: left;">
@@ -801,32 +808,29 @@ async function init() {
                     </div>`
                 );
 
-                // Update badge to show user's selection
-                if (hardwareChoice.isAppleSilicon) {
-                    platformInfo.chipName = 'Apple Silicon';
+                updatePlatformBadge();
+            } else {
+                log("User selected CPU only - using WASM mode.", 'info');
+            }
+        } else {
+            // Browser SUPPORTS WebGPU
+            if (hardwareChoice.hasGPU) {
+                // User wants GPU + Browser has GPU -> Great!
+                // Still allow detectGPU to refine info (get exact GPU name)
+                const adapter = await detectGPU();
+
+                if (!adapter) {
+                    log("WebGPU supported but no adapter found. Using WASM fallback.", 'info');
+                    platformInfo.webGPUAvailable = false;
+                } else {
+                    platformInfo.webGPUAvailable = true;
+                    log("WebGPU is available - using GPU acceleration!", 'success');
                     updatePlatformBadge();
                 }
             } else {
-                // User has no GPU - just use WASM
-                log("User selected CPU only - using WASM mode.", 'info');
+                // User explicitly selected CPU-only even though browser supports WebGPU
+                log("User selected CPU-only mode (overriding WebGPU availability).", 'info');
                 platformInfo.webGPUAvailable = false;
-            }
-        } else {
-            // Use our enhanced GPU detection
-            const adapter = await detectGPU();
-            if (!adapter) {
-                log("No WebGPU adapter found. Using WASM fallback.", 'info');
-                platformInfo.webGPUAvailable = false;
-            } else {
-                platformInfo.webGPUAvailable = true;
-                // Log GPU info
-                log(`GPU: ${platformInfo.gpuName}`, 'success');
-                if (platformInfo.isAppleSilicon) {
-                    log(`Detected Apple Silicon: ${platformInfo.chipName || 'Yes'}`, 'success');
-                }
-                log("WebGPU is available - using GPU acceleration!", 'success');
-                // Update the platform badge in the UI
-                updatePlatformBadge();
             }
         }
 
