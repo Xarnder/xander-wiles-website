@@ -66,7 +66,7 @@ const toggleDebugBtn = document.getElementById('toggle-debug-btn');
 const debugWrapper = document.querySelector('.lai-debug-wrapper');
 
 // === STATE ===
-let generator = null;
+let worker = null;
 let isGenerating = false;
 let isDownloadStopped = false;
 let isLoaded = false;
@@ -735,34 +735,17 @@ async function init() {
             log(`Platform: ${navigator.platform}`);
         }
 
-        if (dlFilename) dlFilename.innerText = "Loading Libraries...";
+        if (dlFilename) dlFilename.innerText = "Checking Hardware...";
 
-        // DYNAMIC IMPORT
-        log("Importing Transformers.js...");
-        try {
-            // Updated to @latest for modern model support (e.g. Qwen 3, Gemma 3)
-            const module = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest');
-            pipeline = module.pipeline;
-            env = module.env;
-            log("Library Loaded Successfully.", 'success');
-            log(`Version: ${module.env.version}`, 'info');
-        } catch (loadErr) {
-            throw new Error(`Failed to load Transformers.js: ${loadErr.message}. Check Internet/AdBlock.`);
-        }
+        // REMOVED: Main thread Transformers.js import (Worker handles this now)
+        log("Using background Worker for AI engine.");
 
         // === BROWSER CACHE CONFIG ===
-        env.allowLocalModels = false;
-        env.allowRemoteModels = true;
-
         try {
             if (!window.caches) throw new Error("Cache API missing");
-            // use generic cache name
-            await window.caches.open('transformers-cache');
-            env.useBrowserCache = true;
-            log("Browser Cache enabled.");
+            log("Browser Cache available.");
         } catch (e) {
             console.warn("Cache blocked.");
-            env.useBrowserCache = false;
         }
 
         // CHECK GPU & HARDWARE PREFERENCE
@@ -877,60 +860,74 @@ async function init() {
 
         if (dlFilename) dlFilename.innerText = "Initializing Model...";
 
-        // Build pipeline options
+        // Build pipeline options (Worker will handle progress_callback logic via messages)
         const pipelineOptions = {
             device: useDevice,
-            progress_callback: (data) => {
-                // detailed logging
-                if (data.status === 'initiate') {
-                    log(`Initiating download: ${data.file}`);
-                    if (dlFilename) dlFilename.innerText = `Preparing: ${data.file}`;
-                } else if (data.status === 'download') {
-                    // NO-OP
-                } else if (data.status === 'done') {
-                    log(`Finished: ${data.file}`, 'success');
-                }
-
-                // Handle Download Progress
-                if (data.status === 'progress') {
-                    const percent = Math.round(data.progress || 0);
-                    const loaded = data.loaded || 0;
-                    const total = data.total || 0;
-                    const fileName = data.file;
-
-                    // Update UI
-                    if (dlBar) dlBar.style.width = `${percent}%`;
-                    if (dlPercent) dlPercent.innerText = `${percent}%`;
-
-                    const sizeText = total > 0
-                        ? `(${Math.round(loaded / 1024 / 1024)}MB / ${Math.round(total / 1024 / 1024)}MB)`
-                        : '';
-
-                    if (dlFilename) dlFilename.innerText = `Downloading: ${fileName} ${sizeText}`;
-
-                    if (percent % 10 === 0 && percent > 0) {
-                        log(`[${fileName}] ${percent}%`);
-                    }
-
-                    if ((fileName.endsWith('.onnx') || fileName.includes('model')) && percent >= 99.5) {
-                        // Almost done
-                    }
-                }
-            }
+            // progress_callback: implicitly handled by worker
         };
 
-        // Add dtype for WebGPU mode (better quantization)
+        // Add dtype for WebGPU mode
         if (platformInfo.webGPUAvailable) {
             pipelineOptions.dtype = 'q4f16';
         }
 
-        // Start Pipeline
-        generator = await pipeline('text-generation', MODEL_ID, pipelineOptions);
+        // Initialize Worker
+        worker = new Worker('worker.js', { type: 'module' });
 
-        // Setup Complete
-        isLoaded = true;
-        log("Pipeline creation complete.", 'success');
-        finishLoading();
+        // Add detailed error logging for Worker startup
+        worker.onerror = (err) => {
+            console.error("Worker Error Event:", err);
+            log(`Worker Startup Error: ${err.message || 'Check console for details'}`, 'error');
+            if (dlFilename) {
+                dlFilename.innerText = "Worker Initialization Failed";
+                dlFilename.style.color = "red";
+            }
+        };
+
+        // Define Message Handler
+        worker.onmessage = (e) => {
+            const { type, data, error, output, partial, status } = e.data;
+
+            if (type === 'progress') {
+                handleDownloadProgress(data);
+            }
+            else if (type === 'ready') {
+                isLoaded = true;
+                log("Pipeline creation complete (Worker).", 'success');
+                finishLoading();
+            }
+            else if (type === 'error') {
+                log(`Worker Error: ${error}`, 'error');
+                if (dlFilename) {
+                    dlFilename.innerText = `Error: ${error}`;
+                    dlFilename.style.color = "red";
+                }
+                removeThinkingBubble();
+                isGenerating = false;
+                sendBtn.disabled = false;
+            }
+            else if (type === 'output') {
+                // Partial output (if implemented in worker)
+            }
+            else if (type === 'complete') {
+                // Generation Complete
+                handleGenerationComplete(output);
+            }
+            else if (type === 'status') {
+                if (data.status === 'initiate') {
+                    log(`Initiating download: ${data.file}`);
+                    if (dlFilename) dlFilename.innerText = `Preparing: ${data.file}`;
+                } else if (data.status === 'done') {
+                    log(`Finished: ${data.file}`, 'success');
+                }
+            }
+        };
+
+        log("Worker initialized. Sending init command...", 'info');
+        worker.postMessage({
+            type: 'init',
+            data: { model: MODEL_ID, options: pipelineOptions }
+        });
 
     } catch (err) {
         // If user stopped the download, suppress the error
@@ -1006,7 +1003,7 @@ function finishLoading() {
 // === CHAT LOGIC ===
 async function handleSend() {
     const text = userInput.value.trim();
-    if (!text || isGenerating || !generator) return;
+    if (!text || isGenerating || !worker) return;
 
     // Metrics: Start Time
     const startTime = performance.now();
@@ -1023,7 +1020,7 @@ async function handleSend() {
     showThinkingBubble();
 
     // Timeout warning for slow generations
-    const timeoutWarning = setTimeout(() => {
+    window.genTimeoutWarning = setTimeout(() => {
         if (isGenerating) {
             updateStatus('busy', 'Still working on it...');
             updateThinkingStatus('Still processing, please wait...');
@@ -1031,80 +1028,101 @@ async function handleSend() {
         }
     }, 8000); // 8 seconds
 
-    try {
-        log("Generating response...");
-        // Get settings values
-        const systemPrompt = systemPromptInput?.value?.trim() || 'You are a helpful assistant.';
-        const thinkingEnabled = thinkingModeToggle?.checked || false;
-        const thinkingDirective = thinkingEnabled ? '' : ' /no_think';
+    log("Generating response...");
+    // Get settings values
+    const systemPrompt = systemPromptInput?.value?.trim() || 'You are a helpful assistant.';
+    const thinkingEnabled = thinkingModeToggle?.checked || false;
+    const thinkingDirective = thinkingEnabled ? '' : ' /no_think';
 
-        // Qwen3 uses ChatML format
-        const prompt = `<|im_start|>system
+    // Qwen3 uses ChatML format
+    const prompt = `<|im_start|>system
 ${systemPrompt}${thinkingDirective}<|im_end|>
 <|im_start|>user
 ${text}<|im_end|>
 <|im_start|>assistant
 `;
 
-        // Metrics: Input calculation
-        const inputWords = countWords(text);
-        const inputTokens = countTokens(prompt);
+    // Store stats for current generation and update metrics (approx)
+    window.currentGenStartTime = startTime;
+    window.currentGenInputText = text;
+    window.currentGenPrompt = prompt;
+    window.currentGenInputTokens = countTokens(prompt);
 
-        // Use a small delay to allow the UI (thinking bubble) to render before heavy computation
-        // This prevents the page from appearing frozen
-        updateThinkingStatus('Starting inference...');
+    updateThinkingStatus('Starting inference (Worker)...');
 
-        // Wait for next frame to ensure UI is painted
-        await new Promise(resolve => requestAnimationFrame(() => {
-            requestAnimationFrame(resolve);
-        }));
+    worker.postMessage({
+        type: 'generate',
+        data: {
+            prompt: prompt,
+            config: {
+                max_new_tokens: 2048,
+                temperature: 0.7,
+                do_sample: true,
+                top_k: 50,
+            }
+        }
+    });
 
-        updateThinkingStatus('Processing...');
+    // Cleanup logic (timeout) remains in main thread, but handling success is now in worker.onmessage
+}
 
-        const output = await generator(prompt, {
-            max_new_tokens: 2048,
-            temperature: 0.7,
-            do_sample: true,
-            top_k: 50,
-        });
+// === WORKER HANDLERS ===
+function handleGenerationComplete(outputRaw) {
+    if (!isGenerating) return;
 
-        // Metrics: End Time
-        const endTime = performance.now();
-        const duration = ((endTime - startTime) / 1000).toFixed(2);
+    clearTimeout(window.genTimeoutWarning);
 
-        const raw = output[0].generated_text;
+    const startTime = window.currentGenStartTime;
+    const prompt = window.currentGenPrompt;
 
-        // Parse the output to separate context from the actual response
-        const { context, response } = parseChatOutput(raw, prompt);
+    const endTime = performance.now();
+    const duration = ((endTime - startTime) / 1000).toFixed(2);
 
-        // Metrics: Output calculation
-        const outputWords = countWords(response);
-        const outputTokens = countTokens(response); // Approximation or precise if using tokenizer
+    // Parse output
+    const { context, response } = parseChatOutput(outputRaw, prompt);
 
-        const metrics = {
-            duration,
-            inputWords,
-            inputTokens,
-            outputWords,
-            outputTokens
-        };
+    // Metrics
+    const inputWords = countWords(window.currentGenInputText);
+    const inputTokens = window.currentGenInputTokens;
+    const outputWords = countWords(response);
+    const outputTokens = countTokens(response);
 
-        // Remove thinking bubble before showing actual response
-        removeThinkingBubble();
+    const metrics = {
+        duration,
+        inputWords,
+        inputTokens,
+        outputWords,
+        outputTokens
+    };
 
-        appendMessage('bot', response, context, metrics);
-        log("Generation Complete.", 'success');
+    removeThinkingBubble();
+    appendMessage('bot', response, context, metrics);
+    log("Generation Complete.", 'success');
 
-    } catch (err) {
-        // Remove thinking bubble on error too
-        removeThinkingBubble();
-        log(err.message, 'error');
-    } finally {
-        clearTimeout(timeoutWarning);
-        isGenerating = false;
-        updateStatus('ready', 'Ready');
-        sendBtn.disabled = false;
-        userInput.focus();
+    isGenerating = false;
+    updateStatus('ready', 'Ready');
+    sendBtn.disabled = false;
+    userInput.focus();
+}
+
+function handleDownloadProgress(data) {
+    // Reused logic from original progress_callback
+    const percent = Math.round(data.progress || 0);
+    const loaded = data.loaded || 0;
+    const total = data.total || 0;
+    const fileName = data.file;
+
+    if (dlBar) dlBar.style.width = `${percent}%`;
+    if (dlPercent) dlPercent.innerText = `${percent}%`;
+
+    const sizeText = total > 0
+        ? `(${Math.round(loaded / 1024 / 1024)}MB / ${Math.round(total / 1024 / 1024)}MB)`
+        : '';
+
+    if (dlFilename) dlFilename.innerText = `Downloading: ${fileName} ${sizeText}`;
+
+    if (percent % 10 === 0 && percent > 0) {
+        log(`[${fileName}] ${percent}%`);
     }
 }
 
@@ -1115,16 +1133,6 @@ function countWords(str) {
 
 function countTokens(str) {
     if (!str) return 0;
-    // Accurate count if tokenizer is exposed, otherwise approximation
-    if (generator && generator.tokenizer) {
-        try {
-            const encoded = generator.tokenizer(str);
-            return encoded.input_ids.size || encoded.input_ids.length;
-        } catch (e) {
-            // Fallback
-            return Math.ceil(str.length / 4);
-        }
-    }
     // Fallback approximation (rule of thumb: 4 chars per token)
     return Math.ceil(str.length / 4);
 }
