@@ -1449,7 +1449,13 @@ if (stopDownloadBtn) {
     stopDownloadBtn.addEventListener('click', () => {
         log('Stopping download by user request...', 'info');
         isDownloadStopped = true;
-        window.stop(); // Stops network activity
+
+        // Terminate the worker to immediately kill all fetches and processing
+        if (worker) {
+            worker.terminate();
+            worker = null;
+            log('Worker process terminated.', 'error');
+        }
 
         // Update UI
         if (typeof statusText !== 'undefined') statusText.innerText = 'Download Cancelled';
