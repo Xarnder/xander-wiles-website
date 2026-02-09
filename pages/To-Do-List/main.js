@@ -322,10 +322,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state.multiEditMode) return;
         const card = e.target.closest('.task-card');
         if (!card) return;
+        // Allow normal button/input interactions - don't interfere with onclick handlers
+        // This is critical for touch devices where preventDefault() blocks button clicks
         if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.icon-btn')) {
-            // allow normal interaction
-            e.preventDefault();
-            e.stopPropagation();
+            return; // Exit early to let the button's onclick handler work
         }
         const taskId = card.dataset.taskId;
         if (state.selectedTaskIds.has(taskId)) {
