@@ -235,6 +235,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             animation: 150,
             disabled: !isCustomSort,
             filter: '.archived-task',
+            preventOnFilter: false, // CRITICAL: Allow touch events on filtered (archived) elements so buttons work
             forceFallback: true,
             fallbackOnBody: true,
             onEnd: handleDragEnd
