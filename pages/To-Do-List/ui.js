@@ -209,7 +209,10 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     sortedIds.forEach((taskId) => {
         const task = state.appData.tasks[taskId];
         if (task) {
-            if (state.showArchived || !task.archived) {
+            // Exclusive Mode Logic
+            const show = state.showArchived ? task.archived === true : !task.archived;
+
+            if (show) {
                 taskListContainer.appendChild(createTaskElement(task, list.id, visibleIndex));
                 visibleIndex++;
                 visibleCount++;
@@ -291,9 +294,18 @@ export function createTaskElement(task, sourceListId, number) {
 
     let actionsHtml = '';
     if (task.archived) {
+        // Archived Task: Click whole card to open modal
+        el.setAttribute('onclick', `window.openArchivedTaskModal('${task.id}')`);
+        el.style.cursor = 'pointer';
+
+        // Minimal actions (redundant but kept for desktop ease)
+        // Hidden in CSS maybe or kept small? User said "allows me to press any archived task", 
+        // implies the card click is the primary interaction.
+        // We will keep actionsHtml but ensuring they stop propagation.
+
         actionsHtml = `
-            <button class="icon-btn" title="Restore" onclick="window.unarchiveTask('${task.id}')" ontouchstart="event.stopPropagation(); window.unarchiveTask('${task.id}')"><i class="ph ph-arrow-u-up-left"></i></button>
-            <button class="icon-btn danger" title="Delete Forever" onclick="window.deleteTaskForever('${task.id}')" ontouchstart="event.stopPropagation(); window.deleteTaskForever('${task.id}')"><i class="ph ph-trash"></i></button>
+            <button class="icon-btn" title="Restore" onclick="event.stopPropagation(); window.unarchiveTask('${task.id}')" ontouchstart="event.stopPropagation(); window.unarchiveTask('${task.id}')"><i class="ph ph-arrow-u-up-left"></i></button>
+            <button class="icon-btn danger" title="Delete Forever" onclick="event.stopPropagation(); window.deleteTaskForever('${task.id}')" ontouchstart="event.stopPropagation(); window.deleteTaskForever('${task.id}')"><i class="ph ph-trash"></i></button>
         `;
     } else {
         actionsHtml = `
@@ -310,7 +322,8 @@ export function createTaskElement(task, sourceListId, number) {
         <input type="checkbox" class="task-checkbox" 
             ${task.completed ? 'checked' : ''} 
             onchange="window.toggleTaskComplete('${task.id}', this.checked)"
-            ontouchstart="event.stopPropagation();">
+            onclick="event.stopPropagation()"
+            ontouchstart="event.stopPropagation()">
         ${numberHtml}
         <div class="task-content-wrapper">
             <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml}</div>
@@ -698,4 +711,22 @@ function renderSearchResultItem(task, contexts) {
     wrapper.appendChild(taskEl);
 
     searchResultsContainer.appendChild(wrapper);
+}
+
+// --- ARCHIVED TASK INTERACTION ---
+
+export function openArchivedTaskModal(taskId) {
+    const task = state.appData.tasks[taskId];
+    if (!task) return;
+
+    const modal = document.getElementById('archived-task-modal-overlay');
+    if (!modal) return; // Guard clause if modal not yet in DOM
+
+    modal.dataset.taskId = taskId;
+
+    // Set text logic could go here if we wanted to show task preview
+    const previewEl = document.getElementById('archived-task-preview');
+    if (previewEl) previewEl.textContent = task.text;
+
+    modal.classList.remove('hidden');
 }

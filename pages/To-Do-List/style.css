@@ -501,6 +501,16 @@ body {
     opacity: 0.7;
 }
 
+/* Hover effect to hint interactivity */
+.task-card.archived-task:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--glass-border);
+}
+
+[data-theme="light"] .task-card.archived-task:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
 /* Ensure archived task action buttons are always visible and touchable */
 .task-card.archived-task .task-actions {
     opacity: 1 !important;
@@ -796,6 +806,19 @@ input:checked+.slider-small:before {
     /* Very subtle overlay to keep focus but allow visibility */
     pointer-events: auto;
     /* Ensure clicks still work */
+}
+
+/* VERSION INDICATOR */
+.app-version {
+    position: fixed;
+    bottom: 5px;
+    right: 5px;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    z-index: 9999;
+    pointer-events: none;
+    font-family: monospace;
 }
 
 .modal {

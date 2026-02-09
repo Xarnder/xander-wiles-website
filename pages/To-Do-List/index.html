@@ -80,9 +80,8 @@
                     <i class="ph ph-checks"></i> Multi
                 </button>
 
-                <button id="toggle-archive-view-btn" class="icon-btn-large control-item"
-                    title="Show/Hide Archived Tasks">
-                    <i class="ph ph-eye-slash" id="archive-view-icon"></i>
+                <button id="archive-mode-btn" class="icon-btn-large control-item" title="Open Archived Tasks">
+                    <i class="ph ph-archive-box"></i>
                 </button>
 
                 <button id="theme-toggle" class="icon-btn-large control-item" title="Toggle Theme">
@@ -427,6 +426,37 @@
                 <button id="backup-now-btn" class="btn primary">Backup Now</button>
             </div>
         </div>
+    </div>
+
+    <!-- ARCHIVED TASK ACTION MODAL -->
+    <div id="archived-task-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box">
+            <div class="confirm-icon-area" style="color: var(--text-secondary);"><i class="ph ph-archive-box"></i></div>
+            <h2>Archived Task</h2>
+            <p id="archived-task-preview" style="margin-bottom: 20px; font-style: italic; opacity: 0.8;"></p>
+
+            <div class="modal-actions centered-actions"
+                style="display: flex; flex-direction: column; width: 100%; gap: 32px;">
+                <button id="archived-unarchive-btn" class="btn primary"
+                    style="width: 100%; justify-content: center; padding: 16px;">
+                    <i class="ph ph-arrow-u-up-left" style="margin-right: 8px; font-size: 1.2rem;"></i> Put Back
+                    (Unarchive)
+                </button>
+                <button id="archived-delete-btn" class="btn danger"
+                    style="width: 100%; justify-content: center; padding: 16px;">
+                    <i class="ph ph-trash" style="margin-right: 8px; font-size: 1.2rem;"></i> Delete Forever
+                </button>
+                <button id="archived-cancel-btn" class="btn secondary"
+                    style="width: 100%; justify-content: center; padding: 16px;">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VERSION INDICATOR -->
+    <div id="app-version" class="app-version">
+        v1.5 <!-- UPDATE THIS ON EVERY CHANGE -->
     </div>
 
     <script type="module" src="main.js"></script>

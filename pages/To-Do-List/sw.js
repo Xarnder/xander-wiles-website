@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-v1';
+const CACHE_NAME = 'taskmaster-v3';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -21,6 +21,9 @@ const ASSETS_TO_CACHE = [
 
 // Install Event
 self.addEventListener('install', (event) => {
+    // Force this service worker to become the active service worker
+    self.skipWaiting();
+
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then((cache) => {
@@ -32,6 +35,9 @@ self.addEventListener('install', (event) => {
 
 // Activate Event - Cleanup old caches
 self.addEventListener('activate', (event) => {
+    // Force this service worker to become the controller for all clients
+    event.waitUntil(clients.claim());
+
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(

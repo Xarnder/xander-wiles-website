@@ -7,7 +7,7 @@ import * as API from './api.js';
 import * as UI from './ui.js';
 import * as Utils from './utils.js';
 
-console.log("[DEBUG] Main Module Initialized.");
+console.log("[DEBUG] Main Module Initialized - v1.2 CHECK");
 
 // GLOBAL ERROR HANDLER FOR DEBUGGING
 window.onerror = function (msg, url, line, col, error) {
@@ -70,6 +70,7 @@ window.openBulkAddModal = UI.openBulkAddModal;
 window.selectAllInList = UI.selectAllInList;
 window.removeTaskFromList = UI.removeTaskFromList;
 // window.handleDragEnd is not called by HTML mostly, but by Sortable configs which are inside UI.js
+window.openArchivedTaskModal = UI.openArchivedTaskModal;
 
 // --- DOM ELEMENTS ---
 const loginOverlay = document.getElementById('login-overlay');
@@ -230,16 +231,16 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('offline', UI.updateSyncUI);
 
     // Toggle Archive View
-    document.getElementById('toggle-archive-view-btn').onclick = function () {
+    document.getElementById('archive-mode-btn').onclick = function () {
         state.showArchived = !state.showArchived;
         const btn = this;
-        const icon = document.getElementById('archive-view-icon');
+
         if (state.showArchived) {
-            icon.classList.replace('ph-eye-slash', 'ph-eye');
             btn.classList.add('active');
+            Utils.showToast("Viewing Archived Tasks");
         } else {
-            icon.classList.replace('ph-eye', 'ph-eye-slash');
             btn.classList.remove('active');
+            Utils.showToast("Viewing Active Tasks");
         }
         UI.renderBoard();
     };
@@ -705,6 +706,41 @@ document.addEventListener('DOMContentLoaded', () => {
         API.updateSetting('tasksSinceBackup', 0);
         document.getElementById('backup-reminder-modal-overlay').classList.add('hidden');
     };
+
+    // Archived Task Modal Listeners
+    const archivedModal = document.getElementById('archived-task-modal-overlay');
+    if (archivedModal) {
+        document.getElementById('archived-cancel-btn').onclick = () => {
+            archivedModal.classList.add('hidden');
+        };
+        document.getElementById('archived-unarchive-btn').onclick = () => {
+            const taskId = archivedModal.dataset.taskId;
+            if (taskId) {
+                API.unarchiveTask(taskId);
+                archivedModal.classList.add('hidden');
+                Utils.showToast("Task unarchived");
+            }
+        };
+        document.getElementById('archived-delete-btn').onclick = () => {
+            const taskId = archivedModal.dataset.taskId;
+            if (taskId) {
+                // Confirm delete logic is inside deleteTaskForever usually, but here we can just call it.
+                // However, API.deleteTaskForever usually asks for confirmation? 
+                // Let's check API.js ... Wait, I don't want double confirmation if the modal itself acts as one.
+                // But the modal is a selection menu.
+                // Let's call API.deleteTaskForever.
+                // Actually, API.deleteTaskForever likely has a confirm().
+                // To have a smooth flow, maybe we close this modal first.
+                archivedModal.classList.add('hidden');
+                // Small delay to allow modal close animation? No need.
+                API.deleteTaskForever(taskId);
+            }
+        };
+        // Close on clicking outside content
+        archivedModal.onclick = (e) => {
+            if (e.target === archivedModal) archivedModal.classList.add('hidden');
+        }
+    }
 
 });
 
