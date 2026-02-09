@@ -292,8 +292,8 @@ export function createTaskElement(task, sourceListId, number) {
     let actionsHtml = '';
     if (task.archived) {
         actionsHtml = `
-            <button class="icon-btn" title="Restore" onclick="window.unarchiveTask('${task.id}')"><i class="ph ph-arrow-u-up-left"></i></button>
-            <button class="icon-btn danger" title="Delete Forever" onclick="window.deleteTaskForever('${task.id}')"><i class="ph ph-trash"></i></button>
+            <button class="icon-btn" title="Restore" onclick="window.unarchiveTask('${task.id}')" ontouchstart="event.stopPropagation(); window.unarchiveTask('${task.id}')"><i class="ph ph-arrow-u-up-left"></i></button>
+            <button class="icon-btn danger" title="Delete Forever" onclick="window.deleteTaskForever('${task.id}')" ontouchstart="event.stopPropagation(); window.deleteTaskForever('${task.id}')"><i class="ph ph-trash"></i></button>
         `;
     } else {
         actionsHtml = `
@@ -309,8 +309,8 @@ export function createTaskElement(task, sourceListId, number) {
     el.innerHTML = `
         <input type="checkbox" class="task-checkbox" 
             ${task.completed ? 'checked' : ''} 
-            ${task.archived ? 'disabled' : ''} 
-            onchange="window.toggleTaskComplete('${task.id}', this.checked)">
+            onchange="window.toggleTaskComplete('${task.id}', this.checked)"
+            ontouchstart="event.stopPropagation();">
         ${numberHtml}
         <div class="task-content-wrapper">
             <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml}</div>
