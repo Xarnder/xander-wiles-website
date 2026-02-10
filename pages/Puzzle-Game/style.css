@@ -51,14 +51,15 @@ body.in-love {
 }
 
 body {
-    background-color: var(--bg-color);
+    background: var(--bg-color);
     color: var(--text-main);
     font-family: var(--font-family);
     height: 100vh;
     width: 100vw;
     overflow: hidden;
     /* Prevent scrolling while dragging */
-    transition: background-color 2s ease;
+    transition: background 2s ease;
+    padding: 0 !important;
 }
 
 /* Header Spacer to prevent overlap */
@@ -66,6 +67,7 @@ body {
     min-height: 80px;
     /* Increased to ensure clearance */
     width: 100%;
+    background: transparent;
 }
 
 #game-container {
@@ -322,4 +324,22 @@ input[type="range"]::-webkit-slider-thumb {
     color: #aaa;
     text-decoration: underline;
     cursor: pointer;
+}
+
+/* Specific fix for Puzzle Game Header to match page aesthetics */
+#main-nav-placeholder .site-header {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding-top: 10px;
+}
+
+#main-nav-placeholder .site-header .logo {
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+#main-nav-placeholder .nav-links a {
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
 }
