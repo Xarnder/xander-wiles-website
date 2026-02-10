@@ -343,3 +343,29 @@ input[type="range"]::-webkit-slider-thumb {
 #main-nav-placeholder .nav-links a {
     text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
 }
+
+/* Music Attribution */
+.music-attribution {
+    position: fixed;
+    bottom: 10px;
+    right: 15px;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: right;
+    z-index: 40;
+    pointer-events: none;
+    line-height: 1.4;
+    font-family: var(--font-family);
+}
+
+.music-attribution a {
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: none;
+    pointer-events: auto;
+    transition: color 0.2s;
+}
+
+.music-attribution a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+}
