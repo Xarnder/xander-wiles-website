@@ -136,9 +136,10 @@ function startGame() {
     }
 
     // UI Update
-    document.querySelector('.slider-group').classList.add('hidden');
-    btnStart.classList.add('hidden');
+    document.querySelector('.controls-col').classList.add('hidden');
+    document.getElementById('title-text').classList.add('hidden'); // Hide Title
     uiControls.classList.remove('hidden');
+    canvas.classList.remove('hidden'); // Show Puzzle Canvas
 
     // Inverted Logic: Larger Number = Larger Pieces = Fewer Cols
     // Slider Range: 3 to 15.
@@ -166,8 +167,14 @@ function startGame() {
 // --- Canvas Setup ---
 function initCanvas() {
     // Responsive Sizing
-    const maxWidth = window.innerWidth * 0.95;
-    const maxHeight = window.innerHeight * 0.8;
+    // We need to fit within the container, accounting for the controls bar
+    const container = document.getElementById('game-container');
+    const controlsHeight = uiControls.classList.contains('hidden') ? 0 : uiControls.clientHeight;
+
+    // Use container dimensions
+    const maxWidth = container.clientWidth;
+    // container height is calc(100vh - 80px), minus the controls bar
+    const maxHeight = container.clientHeight - controlsHeight;
 
     let renderWidth = img.width;
     let renderHeight = img.height;
@@ -370,18 +377,23 @@ function gameLoop() {
 
     // Draw UI Areas
     // 0. Draw Backgrounds for Bin and Board
+
+    // Bin Area (Left)
     ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
     ctx.fillRect(0, 0, state.binWidth, canvas.height);
 
+    // Board Area (Right) - Constrain to ACTUAL Puzzle Size
+    const totalBoardW = state.gridCols * state.pieceWidth;
+    const totalBoardH = state.gridRows * state.pieceHeight;
+
     ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-    ctx.fillRect(state.binWidth, 0, canvas.width - state.binWidth, canvas.height); // Board Area
+    // Use the calculated offsets and dimensions, not the full remaining canvas
+    ctx.fillRect(state.boardOffsetX, state.boardOffsetY, totalBoardW, totalBoardH);
 
     // Draw "Board" outline/placeholder
     // We know where the puzzle SHOULD be:
     ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
     ctx.lineWidth = 2;
-    const totalBoardW = state.gridCols * state.pieceWidth;
-    const totalBoardH = state.gridRows * state.pieceHeight;
     ctx.strokeRect(state.boardOffsetX, state.boardOffsetY, totalBoardW, totalBoardH);
 
     // 1. Draw "Locked" pieces (Background layer essentially)
@@ -442,22 +454,15 @@ function drawPiece(p) {
     ctx.restore();
 
     // Stroke / Outline
-    // User requested "clean image at the end", so remove border if locked
-    if (!p.locked) {
+    // User requested removal of border outline
+    // We only keep the highlight if active
+    if (!p.locked && p.highlight) {
         ctx.save();
         drawPuzzlePiecePath(ctx, p, p.currentX, p.currentY);
-        ctx.lineWidth = 2;
-
-        if (p.highlight) {
-            ctx.strokeStyle = "#FFFF00"; // Bright Yellow helper
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = "white";
-        } else {
-            ctx.strokeStyle = "rgba(200, 200, 200, 0.8)"; // Grey
-            ctx.shadowBlur = 4;
-            ctx.shadowColor = "black";
-        }
-
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#FFFF00"; // Bright Yellow helper
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "white";
         ctx.stroke();
         ctx.restore();
     }
@@ -473,8 +478,11 @@ canvas.addEventListener('touchend', handleInputUp);
 
 function handleInputDown(e) {
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
     // Check click on pieces (reverse order of DRAWING to get top one)
     // We must use the same sort order as drawing to ensure we click what we see on top
@@ -513,8 +521,11 @@ function handleInputMove(e) {
     if (!state.isDragging || !state.selectedPiece) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
     // Move current piece
     const dx = x - state.offsetX - state.selectedPiece.currentX;
@@ -652,8 +663,8 @@ function updateAtmosphere() {
 }
 
 function createHeart() {
-    const heart = document.createElement('div');
-    heart.innerHTML = '❤';
+    const heart = document.createElement('img');
+    heart.src = 'heart.svg'; // User provided SVG
     heart.classList.add('heart');
     heart.style.left = Math.random() * 100 + 'vw';
     heart.style.bottom = '-50px';
@@ -738,6 +749,15 @@ function resetGame() {
     audio.pause();
     audio.currentTime = 0;
 
-    // Re-initialize
-    startGame();
+    // Return to Start Screen
+    document.querySelector('.controls-col').classList.remove('hidden');
+    document.getElementById('title-text').classList.remove('hidden');
+    document.getElementById('title-text').innerText = "Select puzzle piece size"; // Reset Text
+    uiControls.classList.add('hidden');
+    canvas.classList.add('hidden'); // Hide Puzzle Canvas
+
+    // We don't call startGame() immediately. User must press Initialize.
+    // But we might want to clear the canvas or show the preview again?
+    // Drawing the preview is a good idea.
+    if (img.complete) drawPreview();
 }
