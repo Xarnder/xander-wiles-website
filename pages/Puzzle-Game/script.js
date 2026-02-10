@@ -56,7 +56,8 @@ const img = new Image();
 
 img.onload = () => {
     console.log("Image loaded successfully:", img.width, "x", img.height);
-    // Draw initial preview
+    // Initialize preview canvas size once to prevent lag
+    initPreviewCanvas();
     drawPreview();
 };
 img.onerror = () => {
@@ -67,11 +68,29 @@ img.onerror = () => {
 img.src = CONFIG.imageSrc;
 
 // Safety check for cached images
-if (img.complete) drawPreview();
+if (img.complete) {
+    initPreviewCanvas();
+    drawPreview();
+}
 img.onerror = () => {
     console.error("Error loading image. Check if puzzle.webp exists in root.");
     alert("Debug: puzzle.webp not found!");
 };
+
+// --- Preview Initialization ---
+function initPreviewCanvas() {
+    if (!img.complete || img.naturalWidth === 0) return;
+
+    const aspectRatio = img.height / img.width;
+    const maxWidth = 800;
+    const height = maxWidth * aspectRatio;
+
+    // Only set dimensions if they differ to avoid partial clears/resets
+    if (previewCanvas.width !== maxWidth || previewCanvas.height !== height) {
+        previewCanvas.width = maxWidth;
+        previewCanvas.height = height;
+    }
+}
 
 // --- Initialization ---
 let isPreviewUpdating = false;
@@ -89,16 +108,13 @@ rangeDifficulty.addEventListener('input', (e) => {
 function drawPreview() {
     if (!img.complete || img.naturalWidth === 0) return;
 
+    // Clear previous drawing instead of resizing (which causes lag)
+    pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+
     const cols = 18 - parseInt(rangeDifficulty.value);
     const aspectRatio = img.height / img.width;
     let rows = Math.round(cols * aspectRatio);
     if (rows < 2) rows = 2;
-
-    // Scale canvas to match aspect ratio
-    const maxWidth = 800; // Increased even further (was 600)
-    const height = maxWidth * aspectRatio;
-    previewCanvas.width = maxWidth;
-    previewCanvas.height = height;
 
     // Draw Image
     pCtx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
@@ -414,6 +430,68 @@ function drawPuzzlePiecePath(ctx, piece, x, y, sizeMultiplier = 1) {
     ctx.closePath();
 }
 
+// --- Gap Filler: Fills gaps between locked pieces caused by rounded corners ---
+function drawGapFillers() {
+    // At every grid junction point (where up to 4 pieces meet),
+    // check if adjacent pieces are locked. If so, draw a small image patch
+    // to fill the gap left by rounded corners.
+    const s = Math.min(state.pieceWidth, state.pieceHeight);
+    const cornerRadius = s * 0.1; // Must match the cornerRadius in drawPuzzlePiecePath
+    const patchSize = cornerRadius * 2; // Cover the full rounded area
+
+    // Iterate over all interior junction points (where pieces meet)
+    // Junctions exist at grid intersections: col from 0..gridCols, row from 0..gridRows
+    for (let jRow = 0; jRow <= state.gridRows; jRow++) {
+        for (let jCol = 0; jCol <= state.gridCols; jCol++) {
+            // The 4 pieces that could surround this junction:
+            // Top-Left: (jCol-1, jRow-1), Top-Right: (jCol, jRow-1)
+            // Bottom-Left: (jCol-1, jRow), Bottom-Right: (jCol, jRow)
+            const tl = getPieceAt(jCol - 1, jRow - 1);
+            const tr = getPieceAt(jCol, jRow - 1);
+            const bl = getPieceAt(jCol - 1, jRow);
+            const br = getPieceAt(jCol, jRow);
+
+            // Only fill when ALL pieces around this junction are locked.
+            // For interior junctions that's 4 pieces, for edges 2-3, for corners 2.
+            const surrounding = [tl, tr, bl, br].filter(p => p !== null);
+            const lockedCount = surrounding.filter(p => p.locked).length;
+
+            // Skip if any surrounding piece is not yet locked
+            if (lockedCount < surrounding.length) continue;
+
+            // Junction position in canvas coords
+            const jx = state.boardOffsetX + jCol * state.pieceWidth;
+            const jy = (state.boardOffsetY || 0) + jRow * state.pieceHeight;
+
+            // Draw a small image patch centered on the junction point
+            const patchX = jx - patchSize / 2;
+            const patchY = jy - patchSize / 2;
+
+            ctx.save();
+
+            // Clip to just the patch area
+            ctx.beginPath();
+            ctx.rect(patchX, patchY, patchSize, patchSize);
+            ctx.clip();
+
+            // Draw the full image translated so the correct region aligns
+            ctx.drawImage(img,
+                0, 0, img.width, img.height,
+                state.boardOffsetX, (state.boardOffsetY || 0),
+                img.width * state.scaleRatio, img.height * state.scaleRatio
+            );
+
+            ctx.restore();
+        }
+    }
+}
+
+function getPieceAt(col, row) {
+    if (col < 0 || col >= state.gridCols || row < 0 || row >= state.gridRows) return null;
+    // Pieces are stored in row-major order (row * cols + col)
+    return state.pieces[row * state.gridCols + col] || null;
+}
+
 // --- Main Render Loop ---
 function gameLoop() {
     // clear
@@ -448,13 +526,21 @@ function gameLoop() {
     }
 
     // 1. Draw "Locked" pieces (Background layer essentially)
-    // 2. Draw "Loose" pieces on top
-    // 3. Draw dragging piece on VERY top
+    // 2. Draw gap fillers between locked pieces
+    // 3. Draw "Loose" pieces on top
+    // 4. Draw dragging piece on VERY top
 
     // Sort pieces: Locked first, then loose, then highlighted, then dragged
     const sorted = getSortedPieces();
 
-    sorted.forEach(p => drawPiece(p));
+    // Draw locked pieces first
+    sorted.filter(p => p.locked).forEach(p => drawPiece(p));
+
+    // Fill gaps between locked pieces (drawn on top of locked pieces)
+    drawGapFillers();
+
+    // Draw loose/dragging pieces on top
+    sorted.filter(p => !p.locked).forEach(p => drawPiece(p));
 
     requestAnimationFrame(gameLoop);
 }
