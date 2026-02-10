@@ -224,23 +224,23 @@ function initCanvas() {
     // Calculate ACTUAL dimensions required
     const actualBoardWidth = renderWidth * finalScale;
     const actualBoardHeight = renderHeight * finalScale;
-    
+
     // Bin Width is fixed based on screen width? Or proportional?
     // Let's keep it proportional to the *Screen* so dragging area feels generous, 
     // OR proportional to the board? 
     // Let's stick to the screen ratio for the bin size calculation to ensure touchable UI
-    state.binWidth = maxWidth * CONFIG.binRatio; 
+    state.binWidth = maxWidth * CONFIG.binRatio;
 
     // Resize Canvas to FIT
     canvas.width = state.binWidth + actualBoardWidth;
-    canvas.height = actualBoardHeight; 
-    
+    canvas.height = actualBoardHeight;
+
     // ensure min height for bin if puzzle is very flat?
-    if (canvas.height < 300) canvas.height = 300; 
+    if (canvas.height < 300) canvas.height = 300;
 
     // Board Offset is now simply the bin width (flush right)
     state.boardOffsetX = state.binWidth;
-    
+
     // Vertical centering of board if we forced min height
     state.boardOffsetY = (canvas.height - actualBoardHeight) / 2;
 }
@@ -296,93 +296,121 @@ function scramblePieces() {
 // --- Drawing Helper ---
 // Draws the puzzle shape path. used for both clipping image and stroking outline
 // Draws the puzzle shape path. used for both clipping image and stroking outline
+// --- Drawing Helper ---
+// Draws the puzzle shape path. used for both clipping image and stroking outline
 function drawPuzzlePiecePath(ctx, piece, x, y, sizeMultiplier = 1) {
     const w = piece.width * sizeMultiplier;
     const h = piece.height * sizeMultiplier;
     const s = Math.min(w, h);
-    const tab = s * CONFIG.tabSizePct; // Tab Size (Radius-ish)
 
-    // Neck width: logic to make it look like a circle.
-    // If we want a circle of radius 'tab', the neck is narrower.
-    // Let's use neck = tab * 0.8 or something consistent.
-    // Actually, to make it circular, we should center the tab on the edge.
-    // Edge center is w/2 or h/2.
-    // We want the tab to extend from (center - neck/2) to (center + neck/2).
+    // Config for shapes
+    const tabSize = s * CONFIG.tabSizePct;
+    const neck = tabSize * 0.8;
+    const cornerRadius = s * 0.1; // Round main corners (10% of size)
+    const fillet = tabSize * 0.2; // Fillet radius for tab connections
 
-    const neck = tab * 0.8;
+    // Helper to draw a tab (horizontal or vertical)
+    // side: 'top', 'right', 'bottom', 'left'
+    // type: 1 (out), -1 (in), 0 (flat)
 
     ctx.beginPath();
-    ctx.moveTo(x, y);
 
-    // Top
+    // Start at Top-Left (after corner radius)
+    ctx.moveTo(x + cornerRadius, y);
+
+    // --- TOP EDGE ---
     if (piece.shape.top !== 0) {
         const cx = x + w / 2;
-        ctx.lineTo(cx - neck, y);
-        // Cubic bezier for a circle-ish tab
-        // Control points need to go Up (negative Y) for tab -1 (Out? Wait. Code says -1 is In... let's check config)
-        // Original code: -1 = In, 1 = Out ? No.
-        // Let's re-read: left = -...right.
-        // Let's assume 1 is Out, -1 is In.
-        // If Top is 1 (Out): y goes negative.
+        const dir = -piece.shape.top; // Up is negative
 
-        const dir = -piece.shape.top; // Up is negative Y
-        const tabH = tab * 1.0;
+        // Line to start of neck fillet
+        ctx.lineTo(cx - neck - fillet, y);
+        // Fillet into neck
+        ctx.quadraticCurveTo(cx - neck, y, cx - neck, y + (dir * fillet));
+
+        // Tab Curve
+        // We use cubic bezier to create the bulb
+        // Start: cx - neck, y + fillet
+        // Control 1: cx - neck - (tabSize*0.2), y + (dir * tabSize * 1.3)
+        // Control 2: cx + neck + (tabSize*0.2), y + (dir * tabSize * 1.3)
+        // End: cx + neck, y + (dir * fillet)
 
         ctx.bezierCurveTo(
-            cx - neck, y + (dir * tabH),
-            cx + neck, y + (dir * tabH),
-            cx + neck, y
+            cx - neck - (tabSize * 0.2), y + (dir * tabSize * 1.2),
+            cx + neck + (tabSize * 0.2), y + (dir * tabSize * 1.2),
+            cx + neck, y + (dir * fillet)
         );
-    }
-    ctx.lineTo(x + w, y);
 
-    // Right
+        // Fillet out of neck
+        ctx.quadraticCurveTo(cx + neck, y, cx + neck + fillet, y);
+    }
+    // Line to Top-Right Corner
+    ctx.lineTo(x + w - cornerRadius, y);
+    // Draw Top-Right Corner
+    ctx.quadraticCurveTo(x + w, y, x + w, y + cornerRadius);
+
+    // --- RIGHT EDGE ---
     if (piece.shape.right !== 0) {
         const cy = y + h / 2;
-        ctx.lineTo(x + w, cy - neck);
+        const dir = piece.shape.right;
 
-        const dir = piece.shape.right; // Right is positive X
-        const tabH = tab * 1.0;
+        ctx.lineTo(x + w, cy - neck - fillet);
+        ctx.quadraticCurveTo(x + w, cy - neck, x + w + (dir * fillet), cy - neck);
 
         ctx.bezierCurveTo(
-            x + w + (dir * tabH), cy - neck,
-            x + w + (dir * tabH), cy + neck,
-            x + w, cy + neck
+            x + w + (dir * tabSize * 1.2), cy - neck - (tabSize * 0.2),
+            x + w + (dir * tabSize * 1.2), cy + neck + (tabSize * 0.2),
+            x + w + (dir * fillet), cy + neck
         );
-    }
-    ctx.lineTo(x + w, y + h);
 
-    // Bottom
+        ctx.quadraticCurveTo(x + w, cy + neck, x + w, cy + neck + fillet);
+    }
+    // Line to Bottom-Right Corner
+    ctx.lineTo(x + w, y + h - cornerRadius);
+    // Draw Bottom-Right Corner
+    ctx.quadraticCurveTo(x + w, y + h, x + w - cornerRadius, y + h);
+
+    // --- BOTTOM EDGE ---
     if (piece.shape.bottom !== 0) {
         const cx = x + w / 2;
-        ctx.lineTo(cx + neck, y + h);
+        const dir = piece.shape.bottom;
 
-        const dir = piece.shape.bottom; // Down is positive Y
-        const tabH = tab * 1.0;
+        ctx.lineTo(cx + neck + fillet, y + h);
+        ctx.quadraticCurveTo(cx + neck, y + h, cx + neck, y + h + (dir * fillet));
 
         ctx.bezierCurveTo(
-            cx + neck, y + h + (dir * tabH),
-            cx - neck, y + h + (dir * tabH),
-            cx - neck, y + h
+            cx + neck + (tabSize * 0.2), y + h + (dir * tabSize * 1.2),
+            cx - neck - (tabSize * 0.2), y + h + (dir * tabSize * 1.2),
+            cx - neck, y + h + (dir * fillet)
         );
-    }
-    ctx.lineTo(x, y + h);
 
-    // Left
+        ctx.quadraticCurveTo(cx - neck, y + h, cx - neck - fillet, y + h);
+    }
+    // Line to Bottom-Left Corner
+    ctx.lineTo(x + cornerRadius, y + h);
+    // Draw Bottom-Left Corner
+    ctx.quadraticCurveTo(x, y + h, x, y + h - cornerRadius);
+
+    // --- LEFT EDGE ---
     if (piece.shape.left !== 0) {
         const cy = y + h / 2;
-        ctx.lineTo(x, cy + neck);
+        const dir = -piece.shape.left;
 
-        const dir = -piece.shape.left; // Left is negative X
-        const tabH = tab * 1.0;
+        ctx.lineTo(x, cy + neck + fillet);
+        ctx.quadraticCurveTo(x, cy + neck, x + (dir * fillet), cy + neck);
 
         ctx.bezierCurveTo(
-            x + (dir * tabH), cy + neck,
-            x + (dir * tabH), cy - neck,
-            x, cy - neck
+            x + (dir * tabSize * 1.2), cy + neck + (tabSize * 0.2),
+            x + (dir * tabSize * 1.2), cy - neck - (tabSize * 0.2),
+            x + (dir * fillet), cy - neck
         );
+
+        ctx.quadraticCurveTo(x, cy - neck, x, cy - neck - fillet);
     }
-    ctx.lineTo(x, y);
+    // Line to Top-Left Corner start (close path)
+    ctx.lineTo(x, y + cornerRadius);
+    ctx.quadraticCurveTo(x, y, x + cornerRadius, y);
+
     ctx.closePath();
 }
 
@@ -413,14 +441,16 @@ function gameLoop() {
         // We know where the puzzle SHOULD be:
         ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
         ctx.lineWidth = 2;
-        ctx.strokeRect(state.boardOffsetX, state.boardOffsetY, totalBoardW, totalBoardH);
+        // Rounded rect for board too?
+        ctx.beginPath();
+        ctx.roundRect(state.boardOffsetX, state.boardOffsetY, totalBoardW, totalBoardH, 10);
+        ctx.stroke();
     }
 
     // 1. Draw "Locked" pieces (Background layer essentially)
     // 2. Draw "Loose" pieces on top
     // 3. Draw dragging piece on VERY top
 
-    // Sort pieces: Locked first, then loose, then highlighted, then dragged
     // Sort pieces: Locked first, then loose, then highlighted, then dragged
     const sorted = getSortedPieces();
 
@@ -445,26 +475,58 @@ function getSortedPieces() {
 }
 
 function drawPiece(p) {
+    const isDragging = (p === state.selectedPiece);
+    const isLocked = p.locked;
+
+    // 1. Draw Shadow (Behind the piece geometry)
     ctx.save();
 
-    // Logic to clip the image
+    // Define Shadow Style
+    if (isDragging) {
+        // Lifted: Large, soft shadow, offset downwards
+        ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
+        ctx.shadowBlur = 25;
+        ctx.shadowOffsetX = 10;
+        ctx.shadowOffsetY = 20;
+    } else if (!isLocked) {
+        // Resting loose: Small shadow
+        ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+    } else {
+        // Locked: Very subtle or no shadow (since it's 'inserted')
+        // Maybe a tiny inner shadow effect? 
+        // For performance, and 'flat' look when done, let's skip shadow for locked.
+        ctx.shadowColor = "transparent";
+    }
+
+    // Draw Shape for Shadow casting (and background fill)
+    drawPuzzlePiecePath(ctx, p, p.currentX, p.currentY);
+    ctx.fillStyle = "rgba(30,30,30,1)"; // Opaque backing avoids transparency issues
+    if (!isLocked) ctx.fill(); // Only fill if not locked to prevent double-draw over background if we want transparency effects? 
+    // Actually, we need to fill it to cast the shadow and provide backing for the image.
+    else ctx.fillStyle = "rgba(0,0,0,0.5)"; // Darker backing for locked bits
+
+    if (isLocked) {
+        // No shadow for locked, but we want the backing
+        ctx.fill();
+    }
+
+    ctx.restore();
+
+    // 2. Draw Image (Clipped)
+    ctx.save();
     drawPuzzlePiecePath(ctx, p, p.currentX, p.currentY);
     ctx.clip();
 
     // Draw the image segment
     // Source coords (unscaled), Destination coords (scaled)
     // We map the image part to the puzzle shape
-    const srcX = (p.col * (img.width / state.gridCols));
-    const srcY = (p.row * (img.height / state.gridRows));
-    const srcW = img.width / state.gridCols;
-    const srcH = img.height / state.gridRows;
+    // const srcX = (p.col * (img.width / state.gridCols));
+    // const srcY = (p.row * (img.height / state.gridRows));
 
-    // Need to account for tabs in the source image grab or it looks cut off
-    // However, simplest way is to draw the Whole Image translated
-
-    const scaledImgW = canvas.width;
-    const scaledImgH = canvas.height;
-
+    // Draw Whole Image Translated
     ctx.drawImage(img,
         0, 0, img.width, img.height, // Source
         p.currentX - (p.col * state.pieceWidth), p.currentY - (p.row * state.pieceHeight),
@@ -473,8 +535,7 @@ function drawPiece(p) {
 
     ctx.restore();
 
-    // Stroke / Outline
-    // User requested removal of border outline
+    // 3. Highlight / Stroke
     // We only keep the highlight if active
     if (!p.locked && p.highlight) {
         ctx.save();
@@ -486,6 +547,9 @@ function drawPiece(p) {
         ctx.stroke();
         ctx.restore();
     }
+
+    // Optional: Subtle white highlight on top/left edges for 3D effect?
+    // Let's keep it clean for now.
 }
 
 // --- Interaction (Mouse & Touch) ---
