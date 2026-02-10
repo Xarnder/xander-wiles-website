@@ -48,12 +48,12 @@
 
             <div class="controls-col">
                 <div class="slider-group">
-                    <label for="difficulty">Puzzple Peice Size: <span id="difficulty-val">4</span></label>
+                    <label for="difficulty">Puzzple Piece Size: <span id="difficulty-val">4</span></label>
                     <input type="range" id="difficulty" min="3" max="15" value="4">
                     <!-- Preview Canvas -->
-                    <div style="margin-top: 15px; display: flex; justify-content: center;">
-                        <canvas id="preview-canvas" width="600" height="450"
-                            style="border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></canvas>
+                    <div style="margin-top: 15px; display: flex; justify-content: center; width: 100%;">
+                        <canvas id="preview-canvas" width="800" height="600"
+                            style="border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 800px; height: auto;"></canvas>
                     </div>
                 </div>
                 <button id="btn-start" class="glass-btn">Initialize</button>
@@ -70,7 +70,7 @@
         </div>
 
         <!-- The Puzzle Canvas -->
-        <canvas id="puzzle-canvas"></canvas>
+        <canvas id="puzzle-canvas" class="hidden"></canvas>
 
         <!-- Floating Hearts Container -->
         <div id="hearts-container"></div>

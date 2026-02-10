@@ -27,7 +27,8 @@ let state = {
     scaleRatio: 1, // Canvas pixel to display ratio
     audioContextStarted: false,
     boardOffsetX: 0,
-    binWidth: 0
+    binWidth: 0,
+    isWon: false
 };
 
 // --- DOM Elements ---
@@ -73,9 +74,16 @@ img.onerror = () => {
 };
 
 // --- Initialization ---
+let isPreviewUpdating = false;
 rangeDifficulty.addEventListener('input', (e) => {
     valDifficulty.innerText = e.target.value;
-    drawPreview();
+    if (!isPreviewUpdating) {
+        requestAnimationFrame(() => {
+            drawPreview();
+            isPreviewUpdating = false;
+        });
+        isPreviewUpdating = true;
+    }
 });
 
 function drawPreview() {
@@ -87,7 +95,7 @@ function drawPreview() {
     if (rows < 2) rows = 2;
 
     // Scale canvas to match aspect ratio
-    const maxWidth = 600; // 3x larger (was 200)
+    const maxWidth = 800; // Increased even further (was 600)
     const height = maxWidth * aspectRatio;
     previewCanvas.width = maxWidth;
     previewCanvas.height = height;
@@ -202,27 +210,38 @@ function initCanvas() {
     canvas.height = maxHeight; // distinct from board height
 
     // Re-calculate scale to fit image into the right 75%
-    const maxBoardW = canvas.width * CONFIG.boardRatio;
-    const maxBoardH = canvas.height;
+    // Re-calculate scale to fit image into the right 75%
+    // Note: We use the maxAvailable dimensions to determine SCALE, but then we shrink the canvas to match result
+    const maxAvailableW = maxWidth * CONFIG.boardRatio;
+    const maxAvailableH = maxHeight; // 65vh constraint
 
-    const finalScale = Math.min(maxBoardW / renderWidth, maxBoardH / renderHeight);
+    const finalScale = Math.min(maxAvailableW / renderWidth, maxAvailableH / renderHeight);
 
     state.scaleRatio = finalScale;
     state.pieceWidth = (renderWidth / state.gridCols) * finalScale;
     state.pieceHeight = (renderHeight / state.gridRows) * finalScale;
 
-    // Calculate Offsets
-    // Center the board in the Right 75% area? Or just align left of that area?
-    // Let's simple-align: Bin is 0 to (width * binRatio). Board is rest.
-    state.binWidth = canvas.width * CONFIG.binRatio;
-
-    // Center the board within the remaining space
-    const boardAreaWidth = canvas.width - state.binWidth;
+    // Calculate ACTUAL dimensions required
     const actualBoardWidth = renderWidth * finalScale;
     const actualBoardHeight = renderHeight * finalScale;
+    
+    // Bin Width is fixed based on screen width? Or proportional?
+    // Let's keep it proportional to the *Screen* so dragging area feels generous, 
+    // OR proportional to the board? 
+    // Let's stick to the screen ratio for the bin size calculation to ensure touchable UI
+    state.binWidth = maxWidth * CONFIG.binRatio; 
 
-    // Center horizontally in the board area
-    state.boardOffsetX = state.binWidth + (boardAreaWidth - actualBoardWidth) / 2;
+    // Resize Canvas to FIT
+    canvas.width = state.binWidth + actualBoardWidth;
+    canvas.height = actualBoardHeight; 
+    
+    // ensure min height for bin if puzzle is very flat?
+    if (canvas.height < 300) canvas.height = 300; 
+
+    // Board Offset is now simply the bin width (flush right)
+    state.boardOffsetX = state.binWidth;
+    
+    // Vertical centering of board if we forced min height
     state.boardOffsetY = (canvas.height - actualBoardHeight) / 2;
 }
 
@@ -376,25 +395,26 @@ function gameLoop() {
     updateAtmosphere();
 
     // Draw UI Areas
-    // 0. Draw Backgrounds for Bin and Board
+    // 0. Draw Backgrounds for Bin and Board (Only if not won)
+    if (!state.isWon) {
+        // Bin Area (Left)
+        ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
+        ctx.fillRect(0, 0, state.binWidth, canvas.height);
 
-    // Bin Area (Left)
-    ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
-    ctx.fillRect(0, 0, state.binWidth, canvas.height);
+        // Board Area (Right) - Constrain to ACTUAL Puzzle Size
+        const totalBoardW = state.gridCols * state.pieceWidth;
+        const totalBoardH = state.gridRows * state.pieceHeight;
 
-    // Board Area (Right) - Constrain to ACTUAL Puzzle Size
-    const totalBoardW = state.gridCols * state.pieceWidth;
-    const totalBoardH = state.gridRows * state.pieceHeight;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+        // Use the calculated offsets and dimensions, not the full remaining canvas
+        ctx.fillRect(state.boardOffsetX, state.boardOffsetY, totalBoardW, totalBoardH);
 
-    ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-    // Use the calculated offsets and dimensions, not the full remaining canvas
-    ctx.fillRect(state.boardOffsetX, state.boardOffsetY, totalBoardW, totalBoardH);
-
-    // Draw "Board" outline/placeholder
-    // We know where the puzzle SHOULD be:
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(state.boardOffsetX, state.boardOffsetY, totalBoardW, totalBoardH);
+        // Draw "Board" outline/placeholder
+        // We know where the puzzle SHOULD be:
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(state.boardOffsetX, state.boardOffsetY, totalBoardW, totalBoardH);
+    }
 
     // 1. Draw "Locked" pieces (Background layer essentially)
     // 2. Draw "Loose" pieces on top
@@ -649,9 +669,9 @@ function updateAtmosphere() {
     overlay.style.opacity = pct * 0.8; // Pink overlay gets stronger
 
     // Spawn Hearts randomly based on progress
-    // Spawn Hearts randomly based on progress
     // Only spawn if progress is > 50%
-    if (pct > 0.5 && Math.random() < (pct * 0.05)) {
+    // Reduced spawn rate by 50% (was 0.05)
+    if (pct > 0.5 && Math.random() < (pct * 0.025)) {
         createHeart();
     }
 
@@ -666,10 +686,12 @@ function createHeart() {
     const heart = document.createElement('img');
     heart.src = 'heart.svg'; // User provided SVG
     heart.classList.add('heart');
+    // Ensure full width usage
     heart.style.left = Math.random() * 100 + 'vw';
-    heart.style.bottom = '-50px';
-    // Randomize size slightly
-    const scale = 0.5 + Math.random();
+    heart.style.bottom = '-20px'; // Start slightly below
+
+    // Randomize size slightly (smaller base size handled in CSS)
+    const scale = 0.8 + (Math.random() * 0.5);
     heart.style.transform = `scale(${scale})`;
 
     document.getElementById('hearts-container').appendChild(heart);
@@ -681,11 +703,35 @@ function createHeart() {
 }
 
 function triggerWin() {
-    document.getElementById('title-text').innerText = "I Love You"; // Or custom message
+    state.isWon = true; // Set win flag
+
+    // Show 'I Love You'
+    const title = document.getElementById('title-text');
+    title.innerText = "I Love You"; // Or custom message
+    title.classList.remove('hidden'); // Ensure it's visible
+
+    // Hide controls
     uiControls.classList.add('hidden');
-    // Burst of hearts
-    for (let i = 0; i < 50; i++) {
-        setTimeout(createHeart, i * 50);
+
+    // Center the Puzzle
+    // Calculate new centered offset
+    const totalBoardW = state.gridCols * state.pieceWidth;
+    // const totalBoardH = state.gridRows * state.pieceHeight;
+
+    const newOffsetX = (canvas.width - totalBoardW) / 2;
+    const deltaX = newOffsetX - state.boardOffsetX;
+
+    // Apply shift to all pieces
+    state.pieces.forEach(p => {
+        p.currentX += deltaX;
+        p.correctX += deltaX;
+    });
+
+    state.boardOffsetX = newOffsetX; // Update state offset
+
+    // Burst of hearts (Reduced from 50 to 25)
+    for (let i = 0; i < 25; i++) {
+        setTimeout(createHeart, i * 100);
     }
 }
 
@@ -703,17 +749,20 @@ let isSliding = false;
 sliderHandle.addEventListener('mousedown', startSlide);
 sliderHandle.addEventListener('touchstart', startSlide);
 
+// Cache track element
+let sliderTrack = null;
+
 function startSlide(e) {
     isSliding = true;
+    sliderTrack = document.querySelector('.slider-confirm-track');
 }
 
 window.addEventListener('mousemove', moveSlide);
 window.addEventListener('touchmove', (e) => moveSlide(e.touches[0]));
 
 function moveSlide(e) {
-    if (!isSliding) return;
-    const track = document.querySelector('.slider-confirm-track');
-    const rect = track.getBoundingClientRect();
+    if (!isSliding || !sliderTrack) return;
+    const rect = sliderTrack.getBoundingClientRect();
     let x = (e.clientX || e.pageX) - rect.left - 25; // 25 is half handle width
 
     const max = rect.width - 50;
@@ -742,6 +791,7 @@ function endSlide() {
 }
 
 function resetGame() {
+    state.isWon = false; // Reset win flag
     modal.classList.add('hidden');
     sliderHandle.style.left = '0px';
     document.body.classList.remove('in-love');
