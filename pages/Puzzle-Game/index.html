@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>A Little Puzzle</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Header CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- App Specific CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Main Game UI -->
+    <div id="game-container">
+
+        <!-- Controls Overlay -->
+        <div class="ui-panel" id="ui-panel">
+            <h1 id="title-text">Select puzzle piece size</h1>
+
+            <div class="controls-col">
+                <div class="slider-group">
+                    <label for="difficulty">Puzzple Peice Size: <span id="difficulty-val">4</span></label>
+                    <input type="range" id="difficulty" min="3" max="15" value="4">
+                    <!-- Preview Canvas -->
+                    <div style="margin-top: 15px; display: flex; justify-content: center;">
+                        <canvas id="preview-canvas" width="600" height="450"
+                            style="border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);"></canvas>
+                    </div>
+                </div>
+                <button id="btn-start" class="glass-btn">Initialize</button>
+            </div>
+
+            <div id="game-controls" class="hidden">
+                <button id="btn-help" class="glass-btn small">
+                    <span>?</span> Help
+                </button>
+                <button id="btn-reset" class="glass-btn small">
+                    <span>↺</span> Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- The Puzzle Canvas -->
+        <canvas id="puzzle-canvas"></canvas>
+
+        <!-- Floating Hearts Container -->
+        <div id="hearts-container"></div>
+
+        <!-- Background Overlay for darkening/tinting -->
+        <div id="ambient-overlay"></div>
+    </div>
+
+    <!-- Slide to Confirm Modal -->
+    <div id="modal-overlay" class="hidden">
+        <div class="glass-card modal">
+            <p>Confirm System Reset?</p>
+            <div class="slider-confirm-track">
+                <div id="slider-handle">>>></div>
+                <span class="slider-text">Slide to Reset</span>
+            </div>
+            <button id="btn-cancel" class="text-btn">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Audio Element -->
+    <audio id="bg-music" loop>
+        <source src="romantic_music.mp3" type="audio/mpeg">
+    </audio>
+    <!-- SFX -->
+    <audio id="sfx-pickup" src="pickup.mp3"></audio>
+    <audio id="sfx-drop" src="drop.mp3"></audio>
+    <audio id="sfx-snap" src="snap.mp3"></audio>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
