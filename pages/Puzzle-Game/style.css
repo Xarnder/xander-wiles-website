@@ -492,3 +492,44 @@ input:not(:checked)~.toggle-label {
 #ambient-overlay.blue-mode {
     background: radial-gradient(circle, rgba(100, 181, 246, 0.4) 0%, rgba(33, 150, 243, 0.2) 60%, transparent 100%);
 }
+
+/* Timer Display */
+.timer-display {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 5px 15px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    min-width: 80px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Toast Notification */
+.toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 64, 129, 0.9);
+    /* Pinkish alert */
+    color: white;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-10px);
+    /* Float up */
+}

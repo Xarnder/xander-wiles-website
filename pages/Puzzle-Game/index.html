@@ -80,7 +80,11 @@
                 <button id="btn-start" class="glass-btn">Initialize</button>
             </div>
 
-            <div id="game-controls" class="hidden">
+            <div id="game-controls">
+                <div id="timer-display" class="timer-display">00:00</div>
+                <button id="btn-pause" class="glass-btn small">
+                    <span>⏸️</span> Pause
+                </button>
                 <button id="btn-help" class="glass-btn small">
                     <span>?</span> Help
                 </button>
@@ -89,7 +93,6 @@
                 </button>
             </div>
         </div>
-
         <!-- The Puzzle Canvas -->
         <canvas id="puzzle-canvas" class="hidden"></canvas>
 
@@ -117,33 +120,35 @@
             </div>
             <button id="btn-cancel" class="text-btn">Cancel</button>
         </div>
-    </div>
 
-    <!-- Music Attribution -->
-    <div class="music-attribution" id="attribution-romance" style="display: none;">
-        Music from <a href="https://uppbeat.io/t/northwestern/all-i-need" target="_blank">#Uppbeat</a> (free for
-        Creators!)<br>
-        License code: ADGAFF68CSERJFFM
-    </div>
-    <div class="music-attribution" id="attribution-normal" style="display: none;">
-        Music from <a href="https://uppbeat.io/t/nicolas-kluzek/paros" target="_blank">#Uppbeat</a> (free for
-        Creators!)<br>
-        License code: BJQ38PTBJ0TQULPJ
-    </div>
+        <!-- Toast Notification -->
+        <div id="toast" class="toast hidden">Game Paused! Press Play to continue.</div>
 
-    <!-- Audio Element -->
-    <audio id="bg-music" loop>
-        <source src="romantic_music.mp3" type="audio/mpeg">
-    </audio>
-    <audio id="normal-music" loop>
-        <source src="normal_music.mp3" type="audio/mpeg">
-    </audio>
-    <!-- SFX -->
-    <audio id="sfx-pickup" src="pickup.mp3"></audio>
-    <audio id="sfx-drop" src="drop.mp3"></audio>
-    <audio id="sfx-snap" src="snap.mp3"></audio>
+        <!-- Music Attribution -->
+        <div class="music-attribution" id="attribution-romance" style="display: none;">
+            Music from <a href="https://uppbeat.io/t/northwestern/all-i-need" target="_blank">#Uppbeat</a> (free for
+            Creators!)<br>
+            License code: ADGAFF68CSERJFFM
+        </div>
+        <div class="music-attribution" id="attribution-normal" style="display: none;">
+            Music from <a href="https://uppbeat.io/t/nicolas-kluzek/paros" target="_blank">#Uppbeat</a> (free for
+            Creators!)<br>
+            License code: BJQ38PTBJ0TQULPJ
+        </div>
 
-    <script src="script.js"></script>
+        <!-- Audio Element -->
+        <audio id="bg-music" loop>
+            <source src="romantic_music.mp3" type="audio/mpeg">
+        </audio>
+        <audio id="normal-music" loop>
+            <source src="normal_music.mp3" type="audio/mpeg">
+        </audio>
+        <!-- SFX -->
+        <audio id="sfx-pickup" src="pickup.mp3"></audio>
+        <audio id="sfx-drop" src="drop.mp3"></audio>
+        <audio id="sfx-snap" src="snap.mp3"></audio>
+
+        <script src="script.js"></script>
 </body>
 
 </html>

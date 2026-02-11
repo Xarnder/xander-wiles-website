@@ -30,7 +30,12 @@ let state = {
     boardOffsetX: 0,
     binWidth: 0,
     isWon: false,
-    isRomanceMode: false // Default to Normal Mode
+    isRomanceMode: false, // Default to Normal Mode
+    // Timer State
+    isPaused: false,
+    startTime: 0,
+    elapsedTime: 0,
+    timerInterval: null
 };
 
 // --- DOM Elements ---
@@ -59,6 +64,14 @@ const fileInput = document.getElementById('image-upload');
 const btnResetImage = document.getElementById('btn-reset-image');
 const uploadError = document.getElementById('upload-error');
 
+// Timer & Pause Elements
+const timerDisplay = document.getElementById('timer-display');
+const btnPause = document.getElementById('btn-pause');
+const toastInfo = document.getElementById('toast');
+
+// Pause Button Listener
+btnPause.addEventListener('click', togglePause);
+
 // Image upload handling
 fileInput.addEventListener('change', handleImageUpload);
 btnResetImage.addEventListener('click', resetToDefaultImage);
@@ -78,8 +91,8 @@ function handleImageUpload(e) {
         return;
     }
 
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit check (optional but good)
-        showError("File is too large. Please upload an image under 5MB.");
+    if (file.size > 50 * 1024 * 1024) { // 50MB limit
+        showError("File is too large. Please upload an image under 50MB.");
         return;
     }
 
@@ -108,8 +121,8 @@ function handleImageUpload(e) {
             const ctx = canvas.getContext('2d');
             ctx.drawImage(tempImg, 0, 0, width, height);
 
-            // Set source
-            img.src = canvas.toDataURL(file.type);
+            // Set source - Compress to JPEG 0.85 to save memory
+            img.src = canvas.toDataURL('image/jpeg', 0.85);
 
             // Calculate Average Color immediately
             state.avgColor = getAverageColor(tempImg); // Use tempImg (or canvas) for color
@@ -323,6 +336,10 @@ function startGame() {
     // Let's keep it visible.
     uiControls.classList.remove('hidden');
     canvas.classList.remove('hidden'); // Show Puzzle Canvas
+
+    // START TIMER
+    state.elapsedTime = 0; // Reset timer
+    startTimer();
 
     // Inverted Logic: Larger Number = Larger Pieces = Fewer Cols
     // Slider Range: 3 to 15.
@@ -798,6 +815,79 @@ function drawPiece(p) {
 }
 
 // --- Interaction (Mouse & Touch) ---
+
+// Helper: Toast Notification
+function showToast(msg) {
+    toastInfo.innerText = msg;
+    toastInfo.classList.remove('hidden');
+    toastInfo.classList.add('show');
+
+    // Hide after 3 seconds
+    setTimeout(() => {
+        toastInfo.classList.remove('show');
+        setTimeout(() => toastInfo.classList.add('hidden'), 300); // Wait for fade out
+    }, 3000);
+}
+
+// --- Timer Logic ---
+function startTimer() {
+    stopTimer(); // Ensure no duplicates
+    state.isPaused = false;
+    state.startTime = performance.now() - state.elapsedTime;
+    state.timerInterval = setInterval(updateTimer, 1000);
+    updateTimer(); // Immediate update
+    updatePauseButtonUI();
+}
+
+function stopTimer() {
+    clearInterval(state.timerInterval);
+    state.timerInterval = null;
+}
+
+function updateTimer() {
+    if (state.isPaused) return;
+
+    const now = performance.now();
+    state.elapsedTime = now - state.startTime;
+
+    timerDisplay.innerText = formatTime(state.elapsedTime);
+}
+
+function formatTime(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function togglePause() {
+    if (state.isPaused) {
+        // Resume
+        startTimer();
+    } else {
+        // Pause
+        stopTimer();
+        state.isPaused = true;
+        updatePauseButtonUI();
+    }
+}
+
+function updatePauseButtonUI() {
+    if (state.isPaused) {
+        btnPause.innerHTML = `<span>▶️</span> Resume`;
+        btnPause.style.background = "rgba(255, 64, 129, 0.4)"; // Highlight active
+    } else {
+        btnPause.innerHTML = `<span>⏸️</span> Pause`;
+        btnPause.style.background = ""; // Reset
+    }
+}
+
+// Add interaction blocking to existing listeners (will be in the next chunk if I could, but I need to find where they are first)
+// Since I can't see them in the previous view_file (it cut off at line 800), I need to read the rest of the file first.
+// BUT, I can see "Interaction (Mouse & Touch)" header at line 800.
+// So I will just append a note here or do a separate read?
+// Wait, I can't modify what I haven't read safely.
+// I will submit these changes first, then read the rest of the file.
 canvas.addEventListener('mousedown', handleInputDown);
 canvas.addEventListener('mousemove', handleInputMove);
 canvas.addEventListener('mouseup', handleInputUp);
@@ -806,6 +896,11 @@ canvas.addEventListener('touchmove', (e) => { e.preventDefault(); handleInputMov
 canvas.addEventListener('touchend', handleInputUp);
 
 function handleInputDown(e) {
+    if (state.isPaused) {
+        showToast("Game Paused! Press Play to continue.");
+        return;
+    }
+
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
@@ -1098,6 +1193,7 @@ function createHeart() {
 
 function triggerWin() {
     state.isWon = true; // Set win flag
+    stopTimer(); // STOP TIMER
 
     // Hide controls BUT keep Reset visible
     // uiControls.classList.add('hidden'); // OLD
