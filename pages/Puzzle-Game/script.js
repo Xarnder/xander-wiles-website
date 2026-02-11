@@ -26,6 +26,7 @@ let state = {
     totalPieces: 0,
     scaleRatio: 1, // Canvas pixel to display ratio
     audioContextStarted: false,
+    avgColor: 'rgba(100, 181, 246, 0.4)', // Default Blue-ish
     boardOffsetX: 0,
     binWidth: 0,
     isWon: false,
@@ -54,15 +55,133 @@ const toggleRomance = document.getElementById('romance-toggle'); // New Toggle
 const labelRomance = document.getElementById('romance-label'); // Label
 const previewCanvas = document.getElementById('preview-canvas');
 const pCtx = previewCanvas.getContext('2d');
+const fileInput = document.getElementById('image-upload');
+const btnResetImage = document.getElementById('btn-reset-image');
+const uploadError = document.getElementById('upload-error');
+
+// Image upload handling
+fileInput.addEventListener('change', handleImageUpload);
+btnResetImage.addEventListener('click', resetToDefaultImage);
+
+function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Reset error
+    uploadError.innerText = "";
+    uploadError.classList.add('hidden');
+
+    // Validation
+    const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+        showError("Invalid file type. Please upload PNG, JPG, or WEBP.");
+        return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit check (optional but good)
+        showError("File is too large. Please upload an image under 5MB.");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const tempImg = new Image();
+        tempImg.onload = () => {
+            // Resize if too large
+            const MAX_SIZE = 2000;
+            let width = tempImg.width;
+            let height = tempImg.height;
+
+            if (width > MAX_SIZE || height > MAX_SIZE) {
+                if (width > height) {
+                    height *= MAX_SIZE / width;
+                    width = MAX_SIZE;
+                } else {
+                    width *= MAX_SIZE / height;
+                    height = MAX_SIZE;
+                }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(tempImg, 0, 0, width, height);
+
+            // Set source
+            img.src = canvas.toDataURL(file.type);
+
+            // Calculate Average Color immediately
+            state.avgColor = getAverageColor(tempImg); // Use tempImg (or canvas) for color
+
+            // We need to wait for img.src to actually update the 'img' object, 
+            // but since it's a data URL it should be nearly synchronous.
+            // However, img.onload will fire again. We should handle preview draw there.
+        };
+        tempImg.onerror = () => {
+            showError("Failed to load image data.");
+        };
+        tempImg.src = event.target.result;
+    };
+    reader.onerror = () => {
+        showError("Error reading file.");
+    };
+    reader.readAsDataURL(file);
+}
+
+function resetToDefaultImage() {
+    uploadError.innerText = "";
+    uploadError.classList.add('hidden');
+    fileInput.value = ""; // Clear input
+    img.src = 'puzzle.webp';
+    // avgColor will be recalculated in img.onload or we can set default
+    state.avgColor = 'rgba(100, 181, 246, 0.4)'; // Reset to default blue-ish just in case or let calc handle it
+}
+
+function showError(msg) {
+    uploadError.innerText = msg;
+    uploadError.classList.remove('hidden');
+}
+
+// Average Color Extraction
+function getAverageColor(imgEl) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 100; // Small size for performance
+    canvas.height = 100;
+    ctx.drawImage(imgEl, 0, 0, 100, 100);
+
+    const imageData = ctx.getImageData(0, 0, 100, 100);
+    const data = imageData.data;
+    let r = 0, g = 0, b = 0;
+
+    for (let i = 0; i < data.length; i += 4) {
+        r += data[i];
+        g += data[i + 1];
+        b += data[i + 2];
+    }
+
+    const count = data.length / 4;
+    r = Math.floor(r / count);
+    g = Math.floor(g / count);
+    b = Math.floor(b / count);
+
+    return `rgb(${r}, ${g}, ${b})`;
+}
 
 // --- Image Loading ---
 const img = new Image();
 
 img.onload = () => {
-    console.log("Image loaded successfully:", img.width, "x", img.height);
-    // Initialize preview canvas size once to prevent lag
-    initPreviewCanvas();
-    drawPreview();
+    // Initial Calc (if no upload yet)
+    if (img.src.includes('puzzle.webp')) {
+        state.avgColor = getAverageColor(img);
+    }
+    // Always init game AND redraw preview when image changes
+    // initGame calls logic that relies on dimensions
+    initPreviewCanvas(); // Ensure size is right
+    drawPreview(); // Draw immediately
+
 };
 img.onerror = () => {
     console.error("Error loading image. Check if puzzle.webp exists in root.");
@@ -86,13 +205,26 @@ function initPreviewCanvas() {
     if (!img.complete || img.naturalWidth === 0) return;
 
     const aspectRatio = img.height / img.width;
+    // Limit max width to container width (800px) or screen width
+    // Actually, we want it to be responsive. 
+    // Let's set the internal resolution to match the image (capped) or a fixed high res?
+    // Let's stick to a max width of 800 for internal res.
     const maxWidth = 800;
-    const height = maxWidth * aspectRatio;
+
+    let w = maxWidth;
+    let h = maxWidth * aspectRatio;
+
+    // If height exceeds max (e.g. portrait), scale by height instead?
+    // Maybe max height 600?
+    if (h > 600) {
+        h = 600;
+        w = h / aspectRatio;
+    }
 
     // Only set dimensions if they differ to avoid partial clears/resets
-    if (previewCanvas.width !== maxWidth || previewCanvas.height !== height) {
-        previewCanvas.width = maxWidth;
-        previewCanvas.height = height;
+    if (previewCanvas.width !== w || previewCanvas.height !== h) {
+        previewCanvas.width = w;
+        previewCanvas.height = h;
     }
 }
 
@@ -112,15 +244,29 @@ rangeDifficulty.addEventListener('input', (e) => {
 function drawPreview() {
     if (!img.complete || img.naturalWidth === 0) return;
 
+    // Ensure canvas size matches aspect ratio before drawing
+    initPreviewCanvas();
+
     // Clear previous drawing instead of resizing (which causes lag)
     pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
 
+    // Calculate Grid
+    // Difficulty is roughly "pieces per row/col base"
+    // Let's base it on total pieces or just cols?
+    // Current difficulty slider is min 3 max 15.
+    // Let's say difficulty = number of cols?
+    // Or difficulty = piece size approx?
+    // Existing logic: cols = 18 - value. High value = fewer cols = larger pieces.
+    // value 4 -> 14 cols.
+    // value 15 -> 3 cols.
     const cols = 18 - parseInt(rangeDifficulty.value);
+
     const aspectRatio = img.height / img.width;
     let rows = Math.round(cols * aspectRatio);
     if (rows < 2) rows = 2;
 
     // Draw Image
+    // Use the whole canvas
     pCtx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
 
     // Draw Grid
@@ -142,12 +288,9 @@ function drawPreview() {
         pCtx.lineTo(previewCanvas.width, r * cellH);
     }
     pCtx.stroke();
-
-    // Highlight one piece size?
-    // Maybe just the grid is enough to show "Scale"
-    // Let's add a small red box for "This Size"? 
-    // No, the grid is clearer.
 }
+
+
 
 btnStart.addEventListener('click', startGame);
 
@@ -894,7 +1037,30 @@ function updateAtmosphere(force = false) {
 
     } else {
         // Normal / Blue Theme
-        overlay.classList.add('blue-mode');
+        // overlay.classList.add('blue-mode'); // Remove static blue class logic if we rely on dynamic color
+
+        // Use Average Color formatted with opacity
+        // state.avgColor is 'rgb(r,g,b)'. We need rgba.
+        // Let's parse or just use opacity on the overlay div which has the color?
+        // The overlay has background-color.
+        // Let's set backgroundColor to the RGB value, and let opacity handle the "dimming/fade".
+        // Use a radial gradient for style?
+        // User asked: "change it to the avarge colour of the image"
+        // Let's set it as a solid or simple radial.
+
+        // overlay.style.background = `radial-gradient(circle, ${state.avgColor} 0%, transparent 100%)`; // Simple?
+        // Or just solid color with opacity?
+        // "slowly transitions to blue as the puzzle progresses" was the old logic.
+        // New logic: "change it to the avarge colour of the image"
+
+        // We can keep the gradient structure but inject the color.
+        const color = state.avgColor.replace('rgb', 'rgba').replace(')', '');
+        overlay.style.background = `radial-gradient(circle, ${color}, 0.8) 0%, ${color}, 0.4) 60%, transparent 100%)`;
+        // Simpler: Just set background-color and let opacity do its thing?
+        // But we want a "mode" feel.
+        // Let's set background to the color.
+        overlay.style.background = state.avgColor; // Solid color, opacity handled by overlay.style.opacity
+
         document.body.classList.remove('in-love');
 
         // Attribution

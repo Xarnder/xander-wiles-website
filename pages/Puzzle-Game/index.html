@@ -57,6 +57,18 @@
 
             <div class="controls-col">
                 <div class="slider-group">
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px; justify-content: center;">
+                        <label for="image-upload" class="glass-btn small" style="justify-content: center; flex: 1;">
+                            <span>📁</span> Upload Image
+                        </label>
+                        <button id="btn-reset-image" class="glass-btn small" style="justify-content: center; flex: 1;">
+                            <span>🖼️</span> Default
+                        </button>
+                    </div>
+                    <input type="file" id="image-upload" accept="image/png, image/jpeg, image/webp" class="hidden">
+                    <div id="upload-error" class="hidden"
+                        style="color: #ff4081; font-size: 0.8rem; margin-bottom: 10px; text-align: center;"></div>
+
                     <label for="difficulty">Puzzple Piece Size: <span id="difficulty-val">4</span></label>
                     <input type="range" id="difficulty" min="3" max="15" value="4">
                     <!-- Preview Canvas -->
