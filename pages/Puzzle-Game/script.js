@@ -30,6 +30,7 @@ let state = {
     boardOffsetX: 0,
     binWidth: 0,
     isWon: false,
+    isAnimatingWin: false, // Animation Flag
     isRomanceMode: false, // Default to Normal Mode
     // Timer State
     isPaused: false,
@@ -676,9 +677,37 @@ function gameLoop() {
     // Update Styles based on progress
     updateAtmosphere();
 
+    // --- WIN ANIMATION LOGIC ---
+    if (state.isAnimatingWin) {
+        const totalBoardW = state.gridCols * state.pieceWidth;
+        // Target is center
+        const targetX = (canvas.width - totalBoardW) / 2;
+
+        // Simple Lerp
+        const dx = (targetX - state.boardOffsetX) * 0.05;
+
+        if (Math.abs(dx) < 0.5) {
+            // Snap to finish
+            const finalDelta = targetX - state.boardOffsetX;
+            state.boardOffsetX = targetX;
+            state.pieces.forEach(p => {
+                p.currentX += finalDelta;
+                p.correctX += finalDelta;
+            });
+            state.isAnimatingWin = false;
+        } else {
+            // Move
+            state.boardOffsetX += dx;
+            state.pieces.forEach(p => {
+                p.currentX += dx;
+                p.correctX += dx;
+            });
+        }
+    }
+
     // Draw UI Areas
-    // 0. Draw Backgrounds for Bin and Board (Only if not won)
-    if (!state.isWon) {
+    // 0. Draw Backgrounds for Bin and Board (Only if not won OR animating)
+    if (!state.isWon || state.isAnimatingWin) {
         // Bin Area (Left)
         ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
         ctx.fillRect(0, 0, state.binWidth, canvas.height);
@@ -1195,32 +1224,19 @@ function triggerWin() {
     state.isWon = true; // Set win flag
     stopTimer(); // STOP TIMER
 
-    // Hide controls BUT keep Reset visible
-    // uiControls.classList.add('hidden'); // OLD
-
-    // Hide specific buttons instead
+    // Hide specific buttons
     document.getElementById('btn-help').classList.add('hidden');
-    // We keep btn-reset visible.
+    btnPause.classList.add('hidden'); // Hide Pause Button
 
-    // Force update atmosphere to apply win state logic (hide title, stop hearts)
+    // Update Timer Text
+    const timeText = timerDisplay.innerText;
+    timerDisplay.innerText = `Total Time: ${timeText}`;
+
+    // Force update atmosphere
     updateAtmosphere(true);
 
-    // Center the Puzzle
-    // Center the Puzzle
-    // Calculate new centered offset
-    const totalBoardW = state.gridCols * state.pieceWidth;
-    // const totalBoardH = state.gridRows * state.pieceHeight;
-
-    const newOffsetX = (canvas.width - totalBoardW) / 2;
-    const deltaX = newOffsetX - state.boardOffsetX;
-
-    // Apply shift to all pieces
-    state.pieces.forEach(p => {
-        p.currentX += deltaX;
-        p.correctX += deltaX;
-    });
-
-    state.boardOffsetX = newOffsetX; // Update state offset
+    // Start Animation
+    state.isAnimatingWin = true;
 
     // Burst of hearts ONLY in Romance Mode
     if (state.isRomanceMode) {
