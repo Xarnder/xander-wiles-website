@@ -840,15 +840,22 @@ function updateAtmosphere(force = false) {
             if (audio.paused) audio.play().catch(() => { });
             audioNormal.pause();
             audioNormal.currentTime = 0; // Reset normal music
-            audio.volume = Math.min(pct * CONFIG.maxVolume, 1);
-            // If just started/toggled, ensure volume is audible if desired, or ramped?
-            // Existing logic ramped volume. Let's keep it ramped by progress.
+
+            // Ensure audible if at least one piece is solved
+            let volume = pct * CONFIG.maxVolume;
+            if (state.solvedCount > 0 && volume < 0.1) volume = 0.1;
+
+            audio.volume = Math.min(volume, 1);
         } else {
             // Play Normal, Pause Romance
             if (audioNormal.paused) audioNormal.play().catch(() => { });
             audio.pause();
             audio.currentTime = 0;
-            audioNormal.volume = Math.min(pct * CONFIG.maxVolume, 1);
+
+            let volume = pct * CONFIG.maxVolume;
+            if (state.solvedCount > 0 && volume < 0.1) volume = 0.1;
+
+            audioNormal.volume = Math.min(volume, 1);
         }
     }
 
@@ -856,9 +863,17 @@ function updateAtmosphere(force = false) {
     // pct * 0.8 is max opacity.
     overlay.style.opacity = pct * 0.8;
 
+    // Attribution Control
+    const attrRomance = document.getElementById('attribution-romance');
+    const attrNormal = document.getElementById('attribution-normal');
+
     if (state.isRomanceMode) {
         // Pink / Romance Theme
         overlay.classList.remove('blue-mode');
+
+        // Attribution
+        if (attrRomance) attrRomance.style.display = 'block';
+        if (attrNormal) attrNormal.style.display = 'none';
 
         // Only spawn hearts if NOT WON
         if (!state.isWon && pct > 0.1 && Math.random() < (pct * 0.05)) {
@@ -881,6 +896,10 @@ function updateAtmosphere(force = false) {
         // Normal / Blue Theme
         overlay.classList.add('blue-mode');
         document.body.classList.remove('in-love');
+
+        // Attribution
+        if (attrRomance) attrRomance.style.display = 'none';
+        if (attrNormal) attrNormal.style.display = 'block';
 
         const title = document.getElementById('title-text');
         if (state.isWon) {
@@ -914,14 +933,17 @@ function createHeart() {
 function triggerWin() {
     state.isWon = true; // Set win flag
 
-    // Hide controls
-    uiControls.classList.add('hidden');
+    // Hide controls BUT keep Reset visible
+    // uiControls.classList.add('hidden'); // OLD
+
+    // Hide specific buttons instead
+    document.getElementById('btn-help').classList.add('hidden');
+    // We keep btn-reset visible.
 
     // Force update atmosphere to apply win state logic (hide title, stop hearts)
     updateAtmosphere(true);
 
     // Center the Puzzle
-
     // Center the Puzzle
     // Calculate new centered offset
     const totalBoardW = state.gridCols * state.pieceWidth;
@@ -1016,7 +1038,10 @@ function resetGame() {
     document.querySelector('.controls-col').classList.remove('hidden');
     document.getElementById('title-text').classList.remove('hidden');
     document.getElementById('title-text').innerText = "Puzzle Game"; // Reset Text to static
-    uiControls.classList.add('hidden'); // Hide IN-GAME buttons (Help/Reset)
+    uiControls.classList.add('hidden'); // Hide IN-GAME buttons (Help/Reset) until start
+
+    // Restore buttons visibility inside uiControls
+    document.getElementById('btn-help').classList.remove('hidden');
     uiControls.classList.add('hidden');
     canvas.classList.add('hidden'); // Hide Puzzle Canvas
 
