@@ -157,6 +157,7 @@ function resetToDefaultImage() {
     img.src = 'puzzle.webp';
     // avgColor will be recalculated in img.onload or we can set default
     state.avgColor = 'rgba(100, 181, 246, 0.4)'; // Reset to default blue-ish just in case or let calc handle it
+    clearSave(); // Ensure old save data doesn't persist with new default image
 }
 
 function showError(msg) {
@@ -1267,6 +1268,8 @@ function triggerWin() {
             setTimeout(createHeart, i * 100);
         }
     }
+
+    clearSave(); // Clear save on win so next load is fresh
 }
 
 // --- Reset Slider Logic ---
@@ -1345,9 +1348,153 @@ function resetGame() {
     document.getElementById('btn-help').classList.remove('hidden');
     uiControls.classList.add('hidden');
     canvas.classList.add('hidden'); // Hide Puzzle Canvas
-
     // We don't call startGame() immediately. User must press Initialize.
     // But we might want to clear the canvas or show the preview again?
     // Drawing the preview is a good idea.
     if (img.complete) drawPreview();
+
+    clearSave(); // Clear local storage on reset
 }
+
+// --- Save & Load System ---
+
+function saveGame() {
+    if (state.isWon) return; // Don't save if already won (start fresh next time)
+
+    // serializable state
+    const saveData = {
+        state: {
+            ...state,
+            pieces: state.pieces.map(p => ({
+                ...p,
+                group: null // Avoid circular refs where possible
+            })),
+            timerInterval: null // Don't save the interval ID
+        },
+        imgSrc: img.src,
+        timestamp: Date.now()
+    };
+
+    try {
+        localStorage.setItem('puzzle_save', JSON.stringify(saveData));
+    } catch (e) {
+        console.warn("Save failed (quota exceeded?)", e);
+    }
+}
+
+function loadGame() {
+    const data = localStorage.getItem('puzzle_save');
+    if (!data) return false;
+
+    try {
+        const parsed = JSON.parse(data);
+
+        // Restore Image First
+        if (parsed.imgSrc && parsed.imgSrc !== img.src) {
+            img.src = parsed.imgSrc;
+        }
+
+        // Restore State
+        const savedState = parsed.state;
+
+        // Merge saved state into current state
+        state = {
+            ...state,
+            ...savedState,
+            timerInterval: null // Reset interval handle
+        };
+
+        // Update UI Elements to match state
+        rangeDifficulty.value = 18 - state.gridCols; // Reverse mapping
+        valDifficulty.innerText = rangeDifficulty.value;
+        toggleRomance.checked = state.isRomanceMode;
+        toggleMusic.checked = state.isMusicMuted;
+        toggleSfx.checked = state.isSfxMuted;
+
+        // Restore Audio Mute State
+        audio.muted = state.isMusicMuted;
+        audioNormal.muted = state.isMusicMuted;
+
+        // Restore Timer Display
+        timerDisplay.innerText = formatTime(state.elapsedTime);
+        updatePauseButtonUI();
+
+        // Switch to Game View
+        document.querySelector('.controls-col').classList.add('hidden');
+        uiControls.classList.remove('hidden');
+        canvas.classList.remove('hidden');
+
+        // Init Canvas Dimensions
+        if (img.complete) {
+            initCanvas();
+            requestAnimationFrame(gameLoop);
+            if (!state.isPaused) startTimer();
+        } else {
+            // Wait for image
+            img.onload = () => {
+                state.avgColor = getAverageColor(img);
+                initPreviewCanvas();
+                drawPreview();
+
+                // NOW init game
+                initCanvas();
+                requestAnimationFrame(gameLoop);
+                if (!state.isPaused) startTimer();
+            };
+        }
+
+        console.log("Game Loaded from Save");
+        return true;
+
+    } catch (e) {
+        console.error("Load failed", e);
+        return false;
+    }
+}
+
+function clearSave() {
+    localStorage.removeItem('puzzle_save');
+    console.log("Save cleared");
+}
+
+// --- Auto-Save and Auto-Load triggers ---
+
+// Save on unload
+window.addEventListener('beforeunload', () => {
+    if (state.pieces.length > 0 && !state.isWon) {
+        saveGame();
+    }
+});
+
+// Also save on visibility change (mobile)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+        if (state.pieces.length > 0 && !state.isWon) {
+            saveGame();
+        }
+    }
+});
+
+// Hook into Toggle Changes to save settings immediately
+toggleRomance.addEventListener('change', saveGame);
+toggleMusic.addEventListener('change', saveGame);
+toggleSfx.addEventListener('change', saveGame);
+
+// Check for save on startup
+window.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('puzzle_save')) {
+        loadGame();
+    }
+});
+
+// Helper to save periodically or on moves
+// We already have 'handleInputUp' where we can trigger save. 
+// However, since handleInputUp is defined above, we can just append a call to saveGame in it?
+// Or we can proxy it here.
+const originalHandleInputUp = handleInputUp;
+handleInputUp = function () {
+    originalHandleInputUp(); // Call original logic
+    if (state.pieces.length > 0 && !state.isWon) {
+        saveGame();
+    }
+};
