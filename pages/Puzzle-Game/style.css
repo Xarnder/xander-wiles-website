@@ -520,12 +520,32 @@ input:checked+.slider:before {
 }
 
 input:checked~.toggle-label {
-    color: #ff4081;
-    text-shadow: 0 0 5px rgba(255, 64, 129, 0.5);
+    color: white;
+    /* Changed from pink to white */
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
 }
 
 input:not(:checked)~.toggle-label {
     color: #64b5f6;
+}
+
+/* Hide Image Toggle specific */
+#hide-image-toggle+.slider:after {
+    content: "👁️";
+    /* Eye icon for visible */
+    font-size: 12px;
+}
+
+#hide-image-toggle:checked+.slider:after {
+    content: "🚫";
+    /* Prohibition or hidden icon */
+    left: 8px;
+    right: auto;
+}
+
+#hide-image-toggle:checked+.slider {
+    background-color: #555;
+    /* Grey/Black for hidden state */
 }
 
 /* --- Normal Mode Blue Overlay --- */

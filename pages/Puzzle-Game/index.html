@@ -49,12 +49,24 @@
             <!-- Romance Mode Toggle (Visible Always) -->
             <div class="toggle-container"
                 style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;">
-                <!-- Romance Toggle -->
-                <label class="toggle-switch">
-                    <input type="checkbox" id="romance-toggle">
-                    <span class="slider round"></span>
-                    <span class="toggle-label" id="romance-label" style="margin-left: 15px;">Romance Mode: Off</span>
-                </label>
+
+                <!-- Row for Main Toggles -->
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+                    <!-- Romance Toggle -->
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="romance-toggle">
+                        <span class="slider round"></span>
+                        <span class="toggle-label" id="romance-label" style="margin-left: 15px;">Romance Mode:
+                            Off</span>
+                    </label>
+
+                    <!-- Hide Image Toggle (New Placement) -->
+                    <label id="hide-image-container" class="toggle-switch">
+                        <input type="checkbox" id="hide-image-toggle">
+                        <span class="slider round"></span>
+                        <span class="toggle-label" style="margin-left: 15px;">Hide Image</span>
+                    </label>
+                </div>
 
                 <!-- Audio Toggles Row -->
                 <div style="display: flex; gap: 20px; justify-content: center;">

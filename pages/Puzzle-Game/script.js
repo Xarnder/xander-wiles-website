@@ -287,9 +287,15 @@ function drawPreview() {
     let rows = Math.round(cols * aspectRatio);
     if (rows < 2) rows = 2;
 
-    // Draw Image
-    // Use the whole canvas
-    pCtx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
+    // Draw Image or Black Background based on Toggle
+    const hideImageToggle = document.getElementById('hide-image-toggle');
+    if (hideImageToggle && hideImageToggle.checked) {
+        pCtx.fillStyle = "black";
+        pCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+    } else {
+        // Use the whole canvas
+        pCtx.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
+    }
 
     // Draw Grid
     pCtx.strokeStyle = "rgba(255, 255, 255, 0.5)";
@@ -310,6 +316,12 @@ function drawPreview() {
         pCtx.lineTo(previewCanvas.width, r * cellH);
     }
     pCtx.stroke();
+}
+
+// Listener for Hide Image Toggle
+const hideImageToggle = document.getElementById('hide-image-toggle');
+if (hideImageToggle) {
+    hideImageToggle.addEventListener('change', drawPreview);
 }
 
 
@@ -339,6 +351,9 @@ function startGame() {
 
     // UI Update
     document.querySelector('.controls-col').classList.add('hidden');
+    // Hide the 'Hide Image' toggle during gameplay as it is only relevant for preview/setup
+    document.getElementById('hide-image-container').classList.add('hidden');
+
     // document.getElementById('title-text').classList.add('hidden'); // Keep title visible? Or hide? 
     // User said "make it just say puzzle game always".
     // If I hide it here, it won't say anything.
@@ -1340,6 +1355,7 @@ function resetGame() {
 
     // Return to Start Screen
     document.querySelector('.controls-col').classList.remove('hidden');
+    document.getElementById('hide-image-container').classList.remove('hidden'); // Show toggle again
     document.getElementById('title-text').classList.remove('hidden');
     document.getElementById('title-text').innerText = "Puzzle Game"; // Reset Text to static
     uiControls.classList.add('hidden'); // Hide IN-GAME buttons (Help/Reset) until start
@@ -1421,6 +1437,7 @@ function loadGame() {
 
         // Switch to Game View
         document.querySelector('.controls-col').classList.add('hidden');
+        document.getElementById('hide-image-container').classList.add('hidden'); // Ensure hidden on load
         uiControls.classList.remove('hidden');
         canvas.classList.remove('hidden');
 
