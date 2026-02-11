@@ -24,6 +24,8 @@ body.in-love {
     --card-bg: rgba(255, 192, 203, 0.15);
     --border: rgba(255, 100, 150, 0.3);
     /* Gradient Background */
+    background-color: #111115;
+    /* Fallback/Base to match normal mode dark */
     background: linear-gradient(135deg, #111115 0%, #2a0a12 50%, #4a1020 100%);
     background-size: 200% 200%;
     animation: gradientShift 10s ease infinite;
@@ -368,4 +370,125 @@ input[type="range"]::-webkit-slider-thumb {
 .music-attribution a:hover {
     color: var(--accent);
     text-decoration: underline;
+}
+
+/* --- Toggle Switch Styles --- */
+.toggle-switch {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50px;
+    padding: 5px 15px 5px 5px;
+    border: 1px solid var(--border);
+    transition: 0.3s;
+    height: 40px;
+}
+
+.toggle-switch:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.game-controls .toggle-label {
+    margin-left: 10px;
+    font-size: 0.9rem;
+    color: var(--text-main);
+    font-weight: 700;
+}
+
+/* The Slider */
+.slider {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    /* Wider for more space */
+    height: 28px;
+    /* Taller */
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 34px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+    /* Inner shadow for depth */
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 4px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    /* Drop shadow on knob */
+    z-index: 2;
+}
+
+/* Icons inside slider? Pseudo elements */
+.slider:after {
+    content: "❄️";
+    /* Cold/Blue/Normal icon */
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    opacity: 0.8;
+    transition: 0.4s;
+}
+
+input:checked+.slider {
+    background-color: #ff4081;
+    /* Pink for Romance */
+}
+
+input:checked+.slider:after {
+    content: "❤️";
+    /* Heart icon */
+    left: 8px;
+    /* Move icon to left */
+    right: auto;
+    color: white;
+    opacity: 1;
+}
+
+input:not(:checked)+.slider {
+    background-color: #64b5f6;
+    /* Blue for Normal */
+}
+
+input:focus+.slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked+.slider:before {
+    transform: translateX(20px);
+    /* Adjusted for wider slider */
+}
+
+.toggle-label {
+    transition: color 0.3s;
+}
+
+input:checked~.toggle-label {
+    color: #ff4081;
+    text-shadow: 0 0 5px rgba(255, 64, 129, 0.5);
+}
+
+input:not(:checked)~.toggle-label {
+    color: #64b5f6;
+}
+
+/* --- Normal Mode Blue Overlay --- */
+#ambient-overlay.blue-mode {
+    background: radial-gradient(circle, rgba(100, 181, 246, 0.4) 0%, rgba(33, 150, 243, 0.2) 60%, transparent 100%);
 }

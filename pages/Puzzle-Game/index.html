@@ -44,7 +44,16 @@
 
         <!-- Controls Overlay -->
         <div class="ui-panel" id="ui-panel">
-            <h1 id="title-text">Select puzzle piece size</h1>
+            <h1 id="title-text">Puzzle Game</h1>
+
+            <!-- Romance Mode Toggle (Visible Always) -->
+            <div class="toggle-container" style="margin-bottom: 20px;">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="romance-toggle">
+                    <span class="slider round"></span>
+                    <span class="toggle-label" id="romance-label">Romance Mode: Off</span>
+                </label>
+            </div>
 
             <div class="controls-col">
                 <div class="slider-group">
@@ -108,6 +117,9 @@
     <!-- Audio Element -->
     <audio id="bg-music" loop>
         <source src="romantic_music.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="normal-music" loop>
+        <source src="normal_music.mp3" type="audio/mpeg">
     </audio>
     <!-- SFX -->
     <audio id="sfx-pickup" src="pickup.mp3"></audio>

@@ -28,7 +28,8 @@ let state = {
     audioContextStarted: false,
     boardOffsetX: 0,
     binWidth: 0,
-    isWon: false
+    isWon: false,
+    isRomanceMode: false // Default to Normal Mode
 };
 
 // --- DOM Elements ---
@@ -41,6 +42,7 @@ const btnCancel = document.getElementById('btn-cancel');
 const rangeDifficulty = document.getElementById('difficulty');
 const valDifficulty = document.getElementById('difficulty-val');
 const audio = document.getElementById('bg-music');
+const audioNormal = document.getElementById('normal-music'); // New Normal Music
 const sfxPickup = document.getElementById('sfx-pickup');
 const sfxDrop = document.getElementById('sfx-drop');
 const sfxSnap = document.getElementById('sfx-snap');
@@ -48,6 +50,8 @@ const overlay = document.getElementById('ambient-overlay');
 const modal = document.getElementById('modal-overlay');
 const uiControls = document.getElementById('game-controls');
 const sliderHandle = document.getElementById('slider-handle');
+const toggleRomance = document.getElementById('romance-toggle'); // New Toggle
+const labelRomance = document.getElementById('romance-label'); // Label
 const previewCanvas = document.getElementById('preview-canvas');
 const pCtx = previewCanvas.getContext('2d');
 
@@ -153,15 +157,27 @@ function startGame() {
     // Audio Context Handling
     if (!state.audioContextStarted) {
         audio.volume = 0;
-        audio.play().then(() => {
+        audioNormal.volume = 0;
+
+        // Try playing both silently to unlock? Or just the active one?
+        // Let's just set the context flag. The updateAtmosphere loop will handle playing the correct track.
+        // But we need a user interaction to start audio usually.
+        // Let's try to start the one that matches the state.
+        const currentAudio = state.isRomanceMode ? audio : audioNormal;
+
+        currentAudio.play().then(() => {
             console.log("Audio started silently");
             state.audioContextStarted = true;
+            updateAtmosphere(true); // Trigger audio logic immediately
         }).catch(e => console.log("Audio play failed (will retry on interact)", e));
     }
 
     // UI Update
     document.querySelector('.controls-col').classList.add('hidden');
-    document.getElementById('title-text').classList.add('hidden'); // Hide Title
+    // document.getElementById('title-text').classList.add('hidden'); // Keep title visible? Or hide? 
+    // User said "make it just say puzzle game always".
+    // If I hide it here, it won't say anything.
+    // Let's keep it visible.
     uiControls.classList.remove('hidden');
     canvas.classList.remove('hidden'); // Show Puzzle Canvas
 
@@ -806,29 +822,72 @@ btnHelp.addEventListener('click', () => {
     console.log("No simple matches found to hint.");
 });
 
+// --- Toggle Logic ---
+toggleRomance.addEventListener('change', (e) => {
+    state.isRomanceMode = e.target.checked;
+    labelRomance.innerText = state.isRomanceMode ? "Romance Mode: On" : "Romance Mode: Off";
+    updateAtmosphere(true); // Force update
+});
+
 // --- Atmosphere & Surprise Logic ---
-function updateAtmosphere() {
+function updateAtmosphere(force = false) {
     const pct = state.solvedCount / state.totalPieces;
 
-    // Audio Volume Ramp
+    // Audio Control
     if (state.audioContextStarted) {
-        audio.volume = Math.min(pct * CONFIG.maxVolume, 1);
+        if (state.isRomanceMode) {
+            // Play Romance, Pause Normal
+            if (audio.paused) audio.play().catch(() => { });
+            audioNormal.pause();
+            audioNormal.currentTime = 0; // Reset normal music
+            audio.volume = Math.min(pct * CONFIG.maxVolume, 1);
+            // If just started/toggled, ensure volume is audible if desired, or ramped?
+            // Existing logic ramped volume. Let's keep it ramped by progress.
+        } else {
+            // Play Normal, Pause Romance
+            if (audioNormal.paused) audioNormal.play().catch(() => { });
+            audio.pause();
+            audio.currentTime = 0;
+            audioNormal.volume = Math.min(pct * CONFIG.maxVolume, 1);
+        }
     }
 
     // Visuals
-    overlay.style.opacity = pct * 0.8; // Pink overlay gets stronger
+    // pct * 0.8 is max opacity.
+    overlay.style.opacity = pct * 0.8;
 
-    // Spawn Hearts randomly based on progress
-    // Only spawn if progress is > 50%
-    // Reduced spawn rate by 50% (was 0.05)
-    if (pct > 0.5 && Math.random() < (pct * 0.025)) {
-        createHeart();
-    }
+    if (state.isRomanceMode) {
+        // Pink / Romance Theme
+        overlay.classList.remove('blue-mode');
 
-    // Change Theme at 50%
-    if (pct > 0.5 && !document.body.classList.contains('in-love')) {
-        document.body.classList.add('in-love');
-        document.getElementById('title-text').innerText = "System ... Feeling?";
+        // Only spawn hearts if NOT WON
+        if (!state.isWon && pct > 0.1 && Math.random() < (pct * 0.05)) {
+            createHeart();
+        }
+
+        if (!document.body.classList.contains('in-love')) {
+            document.body.classList.add('in-love');
+        }
+
+        // Title Text Logic: Only hide on win, do NOT change text
+        const title = document.getElementById('title-text');
+        if (state.isWon) {
+            title.classList.add('hidden'); // Hide on win
+        } else {
+            title.classList.remove('hidden');
+        }
+
+    } else {
+        // Normal / Blue Theme
+        overlay.classList.add('blue-mode');
+        document.body.classList.remove('in-love');
+
+        const title = document.getElementById('title-text');
+        if (state.isWon) {
+            title.classList.add('hidden'); // Hide on win
+        } else {
+            title.classList.remove('hidden');
+        }
     }
 }
 
@@ -855,13 +914,13 @@ function createHeart() {
 function triggerWin() {
     state.isWon = true; // Set win flag
 
-    // Show 'I Love You'
-    const title = document.getElementById('title-text');
-    title.innerText = "I Love You"; // Or custom message
-    title.classList.remove('hidden'); // Ensure it's visible
-
     // Hide controls
     uiControls.classList.add('hidden');
+
+    // Force update atmosphere to apply win state logic (hide title, stop hearts)
+    updateAtmosphere(true);
+
+    // Center the Puzzle
 
     // Center the Puzzle
     // Calculate new centered offset
@@ -879,9 +938,11 @@ function triggerWin() {
 
     state.boardOffsetX = newOffsetX; // Update state offset
 
-    // Burst of hearts (Reduced from 50 to 25)
-    for (let i = 0; i < 25; i++) {
-        setTimeout(createHeart, i * 100);
+    // Burst of hearts ONLY in Romance Mode
+    if (state.isRomanceMode) {
+        for (let i = 0; i < 25; i++) {
+            setTimeout(createHeart, i * 100);
+        }
     }
 }
 
@@ -948,11 +1009,14 @@ function resetGame() {
     overlay.style.opacity = 0;
     audio.pause();
     audio.currentTime = 0;
+    audioNormal.pause();
+    audioNormal.currentTime = 0;
 
     // Return to Start Screen
     document.querySelector('.controls-col').classList.remove('hidden');
     document.getElementById('title-text').classList.remove('hidden');
-    document.getElementById('title-text').innerText = "Select puzzle piece size"; // Reset Text
+    document.getElementById('title-text').innerText = "Puzzle Game"; // Reset Text to static
+    uiControls.classList.add('hidden'); // Hide IN-GAME buttons (Help/Reset)
     uiControls.classList.add('hidden');
     canvas.classList.add('hidden'); // Hide Puzzle Canvas
 
