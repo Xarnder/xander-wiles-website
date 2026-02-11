@@ -89,6 +89,8 @@ body {
 #game-controls {
     display: flex;
     width: 100%;
+    margin-top: 30px;
+    /* Spacing from Initialize button */
     justify-content: center;
     /* Centered buttons */
     padding: 0 40px;
