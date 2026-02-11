@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Texture Downsampler</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Website Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- App Specific Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Libraries (Loaded from CDN for Live Server compatibility) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+
+<body>
+
+    <!-- Global Nav Injection -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <div class="app-container">
+        <header class="app-header">
+            <h1>128x to 16x Texture Processor</h1>
+            <p>Upload a folder of textures. The app will thicken dark lines and downsample.</p>
+        </header>
+
+        <div class="controls-card glass-panel">
+            <div class="input-group">
+                <label for="fileInput" class="custom-file-upload">
+                    Select Images
+                </label>
+                <!-- accept image/* and multiple files -->
+                <input type="file" id="fileInput" multiple accept="image/*">
+                <span id="fileCount">No files selected</span>
+            </div>
+
+            <button id="processBtn" class="action-btn" disabled>Process Images</button>
+            <button id="downloadBtn" class="action-btn secondary" disabled>Download ZIP</button>
+        </div>
+
+        <div id="console-log" class="console-output glass-panel">
+            <div class="console-header">System Log</div>
+            <div id="log-content">Waiting for input...</div>
+        </div>
+
+        <div id="resultsGrid" class="results-grid">
+            <!-- Dynamic Result Cards go here -->
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
