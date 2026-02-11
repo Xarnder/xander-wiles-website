@@ -36,7 +36,10 @@ let state = {
     isPaused: false,
     startTime: 0,
     elapsedTime: 0,
-    timerInterval: null
+    timerInterval: null,
+    // Audio State
+    isMusicMuted: false,
+    isSfxMuted: false
 };
 
 // --- DOM Elements ---
@@ -53,11 +56,15 @@ const audioNormal = document.getElementById('normal-music'); // New Normal Music
 const sfxPickup = document.getElementById('sfx-pickup');
 const sfxDrop = document.getElementById('sfx-drop');
 const sfxSnap = document.getElementById('sfx-snap');
+const sfxWin = document.getElementById('sfx-win'); // Win Sound
+
 const overlay = document.getElementById('ambient-overlay');
 const modal = document.getElementById('modal-overlay');
 const uiControls = document.getElementById('game-controls');
 const sliderHandle = document.getElementById('slider-handle');
 const toggleRomance = document.getElementById('romance-toggle'); // New Toggle
+const toggleMusic = document.getElementById('mute-music-toggle'); // Music Toggle
+const toggleSfx = document.getElementById('mute-sfx-toggle'); // SFX Toggle
 const labelRomance = document.getElementById('romance-label'); // Label
 const previewCanvas = document.getElementById('preview-canvas');
 const pCtx = previewCanvas.getContext('2d');
@@ -964,6 +971,7 @@ function handleInputDown(e) {
 }
 
 function playSound(el) {
+    if (state.isSfxMuted) return;
     if (el) {
         el.currentTime = 0;
         el.play().catch(e => { /* Ignore auto-play blocks */ });
@@ -1092,14 +1100,26 @@ btnHelp.addEventListener('click', () => {
 // --- Toggle Logic ---
 toggleRomance.addEventListener('change', (e) => {
     state.isRomanceMode = e.target.checked;
-    labelRomance.innerText = state.isRomanceMode ? "Romance Mode: On" : "Romance Mode: Off";
-    updateAtmosphere(true); // Force update
+    updateAtmosphere();
+});
+
+// Audio Toggles
+toggleMusic.addEventListener('change', (e) => {
+    state.isMusicMuted = e.target.checked;
+    // Apply immediate mute/unmute
+    audio.muted = state.isMusicMuted;
+    audioNormal.muted = state.isMusicMuted;
+});
+
+toggleSfx.addEventListener('change', (e) => {
+    state.isSfxMuted = e.target.checked;
 });
 
 // --- Atmosphere & Surprise Logic ---
 function updateAtmosphere(force = false) {
     const pct = state.solvedCount / state.totalPieces;
 
+    if (state.isSfxMuted) return; // Mute Check
     // Audio Control
     if (state.audioContextStarted) {
         if (state.isRomanceMode) {
@@ -1237,6 +1257,9 @@ function triggerWin() {
 
     // Start Animation
     state.isAnimatingWin = true;
+
+    // Play Win Sound
+    playSound(sfxWin);
 
     // Burst of hearts ONLY in Romance Mode
     if (state.isRomanceMode) {

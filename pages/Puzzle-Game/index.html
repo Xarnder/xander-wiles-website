@@ -47,12 +47,28 @@
             <h1 id="title-text">Puzzle Game</h1>
 
             <!-- Romance Mode Toggle (Visible Always) -->
-            <div class="toggle-container" style="margin-bottom: 20px;">
+            <div class="toggle-container"
+                style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;">
+                <!-- Romance Toggle -->
                 <label class="toggle-switch">
                     <input type="checkbox" id="romance-toggle">
                     <span class="slider round"></span>
-                    <span class="toggle-label" id="romance-label">Romance Mode: Off</span>
+                    <span class="toggle-label" id="romance-label" style="margin-left: 15px;">Romance Mode: Off</span>
                 </label>
+
+                <!-- Audio Toggles Row -->
+                <div style="display: flex; gap: 20px; justify-content: center;">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="mute-music-toggle">
+                        <span class="slider round"></span>
+                        <span class="toggle-label" style="margin-left: 10px;">Mute Music</span>
+                    </label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="mute-sfx-toggle">
+                        <span class="slider round"></span>
+                        <span class="toggle-label" style="margin-left: 10px;">Mute SFX</span>
+                    </label>
+                </div>
             </div>
 
             <div class="controls-col">
@@ -147,6 +163,7 @@
         <audio id="sfx-pickup" src="pickup.mp3"></audio>
         <audio id="sfx-drop" src="drop.mp3"></audio>
         <audio id="sfx-snap" src="snap.mp3"></audio>
+        <audio id="sfx-win" src="win.mp3"></audio>
 
         <script src="script.js"></script>
 </body>

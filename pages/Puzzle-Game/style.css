@@ -479,6 +479,42 @@ input:checked+.slider:before {
     /* Adjusted for wider slider */
 }
 
+/* --- Specific Toggle Icons --- */
+
+/* Music Toggle */
+#mute-music-toggle+.slider:after {
+    content: "🎵";
+    font-size: 12px;
+}
+
+#mute-music-toggle:checked+.slider:after {
+    content: "🔇";
+    left: 8px;
+    right: auto;
+}
+
+#mute-music-toggle:checked+.slider {
+    background-color: #ff5252;
+    /* Red for muted */
+}
+
+/* SFX Toggle */
+#mute-sfx-toggle+.slider:after {
+    content: "🔊";
+    font-size: 12px;
+}
+
+#mute-sfx-toggle:checked+.slider:after {
+    content: "🔇";
+    left: 8px;
+    right: auto;
+}
+
+#mute-sfx-toggle:checked+.slider {
+    background-color: #ff5252;
+    /* Red for muted */
+}
+
 .toggle-label {
     transition: color 0.3s;
 }
