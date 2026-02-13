@@ -38,8 +38,11 @@ const STOP_WORDS = new Set([
     'get', 'got', 'going', 'go', 'know', 'think', 'thought', 'time', 'day'
 ]);
 
+import { useNavigate } from 'react-router-dom';
+
 export default function StatsView() {
     const { currentUser } = useAuth();
+    const navigate = useNavigate();
     const [timeRange, setTimeRange] = useState('month'); // week, month, 6months, year
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -98,16 +101,34 @@ export default function StatsView() {
         return () => unsubscribe();
     }, [currentUser, timeRange]);
 
+    // Helper to extract title from content using the standard pattern
+    const extractTitle = (content, storedTitle) => {
+        if (!content) return storedTitle || '';
+
+        // Match standard header pattern: **++Date - Title++** or ++Date - Title++
+        const match = content.match(/(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/);
+        if (match && match[1]) {
+            // Usually format is "Day Date - Title"
+            const parts = match[1].split(' - ');
+            if (parts.length >= 2) {
+                // Return everything after the first " - "
+                return parts.slice(1).join(' - ').trim();
+            }
+            // If no separator, return the whole thing minus markup
+            return match[1].trim();
+        }
+
+        // Fallback to stored title if no pattern found
+        return storedTitle || '';
+    };
+
     // Compute Statistics
     const stats = useMemo(() => {
         let totalWords = 0;
         const wordCounts = {};
         const chartData = [];
 
-        // Map entries to chart data, filling in gaps if needed could be an enhancement
-        // For now, let's just plot the entries we have to keep it simple and accurate to user data
-
-        // Create a map of date -> wordCount for easier lookup
+        // Map entries to chart data
         const entryMap = new Map();
 
         entries.forEach(entry => {
@@ -119,7 +140,10 @@ export default function StatsView() {
             const count = words.length;
 
             totalWords += count;
-            entryMap.set(entry.id, count);
+
+            // Extract title or use stored title
+            const displayTitle = extractTitle(text, entry.title);
+            entryMap.set(entry.id, { count, title: displayTitle });
 
             // Word frequency analysis
             words.forEach(word => {
@@ -129,17 +153,13 @@ export default function StatsView() {
             });
         });
 
-        // Generate chart data based on range to ensure X-axis continuity (optional)
-        // For simplicity, we'll plot the days that exist in the range or all days?
-        // User asked for "range can be changed...". A bar chart usually looks better with continuous dates.
-        // Let's generate a daily array from start to end of the range.
+        // Generate chart data based on range
         const data = [];
         const now = new Date();
         let iterDate = new Date();
 
-        // Determine start date again for iteration
         switch (timeRange) {
-            case 'week': iterDate = subDays(now, 6); break; // 7 days including today
+            case 'week': iterDate = subDays(now, 6); break;
             case 'month': iterDate = subDays(now, 29); break;
             case '6months': iterDate = subMonths(now, 6); break;
             case 'year': iterDate = subYears(now, 1); break;
@@ -151,37 +171,29 @@ export default function StatsView() {
 
         while (iterDate <= startOfDay(now)) {
             const dateKey = format(iterDate, 'yyyy-MM-dd');
-            const count = entryMap.get(dateKey) || 0;
+            const entryData = entryMap.get(dateKey) || { count: 0, title: '' };
+            const count = entryData.count;
 
             if (count > 0) {
                 cumulativeWords += count;
                 entryCount++;
             }
 
-            // Compute moving average? Or just cumulative average?
-            // Let's do a simple average of the entries so far in this period for the line
             const currentAvg = entryCount > 0 ? Math.round(cumulativeWords / entryCount) : 0;
-
-            // Simplify label based on range
-            let label = dateKey;
-            if (timeRange === 'year' || timeRange === '6months') {
-                // Show fewer labels on x-axis is handled by Recharts usually, but we can format the date object
-                // label = format(iterDate, 'MMM d'); 
-            }
 
             data.push({
                 date: dateKey,
                 displayDate: format(iterDate, timeRange === 'year' ? 'MMM d' : 'd MMM'),
                 words: count,
                 average: currentAvg,
+                title: entryData.title,
                 fullDate: iterDate.getTime()
             });
 
             iterDate.setDate(iterDate.getDate() + 1);
         }
 
-
-        // Top Words
+        // Top Words ... (same as before)
         const sortedWords = Object.entries(wordCounts)
             .sort(([, a], [, b]) => b - a)
             .slice(0, 10)
@@ -195,9 +207,36 @@ export default function StatsView() {
         };
     }, [entries, timeRange]);
 
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            // payload[0] is usually the bar (words), payload[1] might be line (avg)
+            // But checking payload[0].payload gives the full data object we passed
+            const data = payload[0].payload;
+            return (
+                <div className="bg-[#1a1b1e] border border-white/10 p-3 rounded shadow-xl text-white">
+                    {/* Date removed as requested */}
+                    {data.title && (
+                        <p className="font-bold text-sm mb-2 text-primary break-words whitespace-pre-wrap max-w-xs">
+                            {data.title}
+                        </p>
+                    )}
+                    <p className="text-sm">
+                        Word Count: <span className="font-mono text-purple-400">{data.words}</span>
+                    </p>
+                    {data.average > 0 && (
+                        <p className="text-xs text-text-muted mt-1">
+                            Average: <span className="text-pink-400">{data.average}</span>
+                        </p>
+                    )}
+                </div>
+            );
+        }
+        return null;
+    };
+
     return (
         <div className="space-y-6 animation-fade-in pb-10">
-            {/* Header controls */}
+            {/* Header controls ... (same) */}
             <div className="glass-card p-4 flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div>
                     <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -230,7 +269,10 @@ export default function StatsView() {
 
                 <div className="h-[300px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={stats.chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <ComposedChart
+                            data={stats.chartData}
+                            margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                        >
                             <defs>
                                 <linearGradient id="colorWords" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8} />
@@ -252,11 +294,7 @@ export default function StatsView() {
                                 tickLine={false}
                                 axisLine={false}
                             />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: '#1a1b1e', borderColor: 'rgba(255,255,255,0.1)', color: '#fff' }}
-                                itemStyle={{ color: '#fff' }}
-                                labelStyle={{ color: 'rgba(255,255,255,0.7)' }}
-                            />
+                            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                             <Legend />
                             <Bar
                                 dataKey="words"
@@ -264,6 +302,12 @@ export default function StatsView() {
                                 fill="url(#colorWords)"
                                 radius={[4, 4, 0, 0]}
                                 maxBarSize={50}
+                                onClick={(data) => {
+                                    if (data && data.date) {
+                                        navigate(`/entry/${data.date}`);
+                                    }
+                                }}
+                                style={{ cursor: 'pointer' }}
                             />
                             <Line
                                 type="monotone"
