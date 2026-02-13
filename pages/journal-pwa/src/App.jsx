@@ -7,6 +7,7 @@ import Login from './components/Login';
 import Layout from './components/Layout';
 // Placeholders for now, will create next
 import CalendarView from './components/CalendarView';
+import MonthView from './components/MonthView';
 import EntryEditor from './components/EntryEditor';
 
 function PrivateRoute({ children }) {
@@ -31,6 +32,7 @@ function App() {
               <Route path="/" element={<CalendarView />}>
                 <Route path="entry/:date" element={<EntryEditor />} />
               </Route>
+              <Route path="/month" element={<MonthView />} />
             </Route>
           </Routes>
         </BackupProvider>

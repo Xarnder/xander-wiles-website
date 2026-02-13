@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
-import { LogOut, Book, Calendar as CalendarIcon, Search } from 'lucide-react';
+import { LogOut, Book, Calendar as CalendarIcon, Search, List } from 'lucide-react';
 import DirectoryImporter from './DirectoryImporter';
 import DataRepair from './DataRepair';
 import BackupOptions from './BackupOptions';
@@ -63,6 +63,14 @@ export default function Layout() {
                             title="Calendar"
                         >
                             <CalendarIcon className="h-5 w-5" />
+                        </button>
+
+                        <button
+                            onClick={() => navigate('/month')}
+                            className="hidden sm:block p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
+                            title="Month List View"
+                        >
+                            <List className="h-5 w-5" />
                         </button>
 
                         <button
