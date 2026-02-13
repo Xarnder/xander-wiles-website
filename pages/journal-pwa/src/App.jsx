@@ -9,6 +9,7 @@ import Layout from './components/Layout';
 import CalendarView from './components/CalendarView';
 import MonthView from './components/MonthView';
 import EntryEditor from './components/EntryEditor';
+import StatsView from './components/StatsView';
 
 function PrivateRoute({ children }) {
   const { currentUser } = useAuth();
@@ -33,6 +34,7 @@ function App() {
                 <Route path="entry/:date" element={<EntryEditor />} />
               </Route>
               <Route path="/month" element={<MonthView />} />
+              <Route path="/stats" element={<StatsView />} />
             </Route>
           </Routes>
         </BackupProvider>
