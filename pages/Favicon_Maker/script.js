@@ -531,8 +531,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Only apply background if "Apply to all" is explicitly checked
                 // The user requested that the preview background (which defaults to white) 
                 // should NOT automatically apply to output images.
-                if (!bgTransparentToggle.checked && bgApplyAllCheckbox.checked) {
-                    backgroundColor = bgColorPicker.value;
+                // Updated Logic: Always apply background for Apple Touch Icon (180) unless explicitly transparent
+                // For other sizes, respect "Apply to all" checkbox
+                if (!bgTransparentToggle.checked) {
+                    if (size === 180 || bgApplyAllCheckbox.checked) {
+                        backgroundColor = bgColorPicker.value;
+                    }
                 }
 
                 imageBlobs[size] = await convertToSquare(compressedFile, size, paddingPercent, backgroundColor);
