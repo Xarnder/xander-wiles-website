@@ -187,126 +187,134 @@ export default function EntryEditor() {
     );
 
     return (
-        <div className="h-full flex flex-col animation-fade-in">
+        <div className="h-full flex flex-col">
             {/* Header / Actions */}
-            <div className="glass-card p-4 mb-6 sticky top-0 z-20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center w-full sm:w-auto overflow-hidden">
-                    <button
-                        onClick={() => navigate('/')}
-                        className="glass-button p-2 text-text-muted hover:text-white md:hidden mr-2 shrink-0"
-                        title="Back to Calendar"
-                    >
-                        <ArrowLeft className="w-5 h-5" />
-                    </button>
+            <div className="mb-6 sticky top-24 z-40 relative transition-all duration-300 isolate">
+                {/* Background Layer */}
+                <div
+                    className="absolute inset-0 bg-[#0a0a0b] -z-10 rounded-xl shadow-lg border border-white/10"
+                />
 
-                    {/* Navigation Arrows (View Mode Only) */}
-                    {!isEditing && (
+                <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center w-full sm:w-auto overflow-hidden">
                         <button
-                            onClick={handlePrevDay}
-                            className="glass-button p-2 text-text-muted hover:text-white mr-2 shrink-0 hidden sm:flex"
-                            title="Previous Day"
+                            onClick={() => navigate('/')}
+                            className="glass-button p-2 text-text-muted hover:text-white md:hidden mr-2 shrink-0"
+                            title="Back to Calendar"
                         >
-                            <ChevronLeft className="w-5 h-5" />
+                            <ArrowLeft className="w-5 h-5" />
                         </button>
-                    )}
 
-                    <div className="flex-1 min-w-0 overflow-hidden">
-                        <div className="flex items-center text-primary text-sm font-bold mb-1 uppercase tracking-wider">
-                            <Calendar className="w-3 h-3 mr-1 shrink-0" />
-                            {date}
-                        </div>
-                        <h2 className="text-xl sm:text-2xl font-serif font-bold text-white break-words">{displayDate}</h2>
-                        {title && !isEditing && <p className="text-secondary font-medium opacity-90 break-words">{title}</p>}
-                        {!isEditing && <p className="text-xs text-text-muted mt-1">{wordCount} words</p>}
-                    </div>
-
-                    {/* Navigation Arrows (Right / Next) */}
-                    {!isEditing && (
-                        <button
-                            onClick={handleNextDay}
-                            className="glass-button p-2 text-text-muted hover:text-white ml-2 shrink-0 hidden sm:flex"
-                            title="Next Day"
-                        >
-                            <ChevronRight className="w-5 h-5" />
-                        </button>
-                    )}
-                </div>
-
-                <div className="flex space-x-2 w-full sm:w-auto justify-end shrink-0">
-                    {/* Mobile Navigation Arrows */}
-                    {!isEditing && (
-                        <div className="flex sm:hidden mr-auto">
+                        {/* Navigation Arrows (View Mode Only) */}
+                        {!isEditing && (
                             <button
                                 onClick={handlePrevDay}
-                                className="glass-button p-2 text-text-muted hover:text-white mr-2"
+                                className="glass-button p-2 text-text-muted hover:text-white mr-2 shrink-0 hidden sm:flex"
                                 title="Previous Day"
                             >
                                 <ChevronLeft className="w-5 h-5" />
                             </button>
+                        )}
+
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                            <div className="flex items-center text-primary text-sm font-bold mb-1 uppercase tracking-wider">
+                                <Calendar className="w-3 h-3 mr-1 shrink-0" />
+                                {date}
+                            </div>
+                            <h2 className="text-xl sm:text-2xl font-serif font-bold text-white break-words">{displayDate}</h2>
+                            {title && !isEditing && <p className="text-secondary font-medium opacity-90 break-words">{title}</p>}
+                            {!isEditing && <p className="text-xs text-text-muted mt-1">{wordCount} words</p>}
+                        </div>
+
+                        {/* Navigation Arrows (Right / Next) */}
+                        {!isEditing && (
                             <button
                                 onClick={handleNextDay}
-                                className="glass-button p-2 text-text-muted hover:text-white"
+                                className="glass-button p-2 text-text-muted hover:text-white ml-2 shrink-0 hidden sm:flex"
                                 title="Next Day"
                             >
                                 <ChevronRight className="w-5 h-5" />
                             </button>
-                        </div>
-                    )}
-                    {isEditing ? (
-                        <>
-                            <button
-                                onClick={() => setIsEditing(false)}
-                                className="glass-button px-4 py-2 text-text hover:bg-white/10 flex items-center justify-center"
-                                disabled={saving}
-                            >
-                                <X className="w-4 h-4 mr-2" />
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                className="px-6 py-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-bold shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 flex items-center justify-center"
-                                disabled={saving}
-                            >
-                                <Save className="w-4 h-4 mr-2" />
-                                {saving ? 'Saving...' : 'Save'}
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            <div className="flex items-center mr-2">
-                                <label className="flex items-center space-x-2 text-xs text-text-muted cursor-pointer hover:text-white transition-colors group">
-                                    <div className="relative">
-                                        <input
-                                            type="checkbox"
-                                            checked={showRawHeader}
-                                            onChange={(e) => setShowRawHeader(e.target.checked)}
-                                            className="sr-only peer"
-                                        />
-                                        <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-primary/30 peer-checked:border-primary/50 transition-all duration-300"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-text-muted rounded-full transition-all duration-300 peer-checked:translate-x-4 peer-checked:bg-primary peer-checked:shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
-                                    </div>
-                                    <span className="hidden sm:inline group-hover:text-white transition-colors">Raw Header</span>
-                                </label>
+                        )}
+                    </div>
+
+                    <div className="flex space-x-2 w-full sm:w-auto justify-end shrink-0">
+                        {/* Mobile Navigation Arrows */}
+                        {!isEditing && (
+                            <div className="flex sm:hidden mr-auto">
+                                <button
+                                    onClick={handlePrevDay}
+                                    className="glass-button p-2 text-text-muted hover:text-white mr-2"
+                                    title="Previous Day"
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <button
+                                    onClick={handleNextDay}
+                                    className="glass-button p-2 text-text-muted hover:text-white"
+                                    title="Next Day"
+                                >
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
                             </div>
-                            <button
-                                onClick={handleCopy}
-                                className="glass-button px-5 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center mr-2"
-                                title="Copy to Clipboard"
-                            >
-                                <Copy className="w-4 h-4 mr-2" />
-                                <span className="hidden sm:inline">Copy</span>
-                            </button>
-                            <button
-                                onClick={() => setIsEditing(true)}
-                                className="glass-button px-5 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center"
-                            >
-                                <Edit2 className="w-4 h-4 mr-2" />
-                                Edit Entry
-                            </button>
-                        </>
-                    )}
+                        )}
+                        {isEditing ? (
+                            <>
+                                <button
+                                    onClick={() => setIsEditing(false)}
+                                    className="glass-button px-4 py-2 text-text hover:bg-white/10 flex items-center justify-center"
+                                    disabled={saving}
+                                >
+                                    <X className="w-4 h-4 mr-2" />
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSave}
+                                    className="px-6 py-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-bold shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 flex items-center justify-center"
+                                    disabled={saving}
+                                >
+                                    <Save className="w-4 h-4 mr-2" />
+                                    {saving ? 'Saving...' : 'Save'}
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <div className="flex items-center mr-2">
+                                    <label className="flex items-center space-x-2 text-xs text-text-muted cursor-pointer hover:text-white transition-colors group">
+                                        <div className="relative">
+                                            <input
+                                                type="checkbox"
+                                                checked={showRawHeader}
+                                                onChange={(e) => setShowRawHeader(e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-primary/30 peer-checked:border-primary/50 transition-all duration-300"></div>
+                                            <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-text-muted rounded-full transition-all duration-300 peer-checked:translate-x-4 peer-checked:bg-primary peer-checked:shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
+                                        </div>
+                                        <span className="hidden sm:inline group-hover:text-white transition-colors">Raw Header</span>
+                                    </label>
+                                </div>
+                                <button
+                                    onClick={handleCopy}
+                                    className="glass-button px-5 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center mr-2"
+                                    title="Copy to Clipboard"
+                                >
+                                    <Copy className="w-4 h-4 mr-2" />
+                                    <span className="hidden sm:inline">Copy</span>
+                                </button>
+                                <button
+                                    onClick={() => setIsEditing(true)}
+                                    className="glass-button px-5 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center"
+                                >
+                                    <Edit2 className="w-4 h-4 mr-2" />
+                                    Edit Entry
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
+
 
             {/* Content Container */}
             <div className={`glass-card flex-1 p-6 md:p-8 overflow-hidden flex flex-col relative ${isEditing ? 'ring-2 ring-primary/30' : ''}`}>
@@ -351,6 +359,6 @@ export default function EntryEditor() {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 }
