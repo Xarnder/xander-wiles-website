@@ -9,12 +9,18 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 export default function CalendarView() {
     const { currentUser } = useAuth();
     const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-    const [entries, setEntries] = useState(new Set());
+    const [entries, setEntries] = useState(new Map()); // Map<DateString, { wordCount: number }>
     const [totalEntries, setTotalEntries] = useState(0);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
     const location = useLocation();
     const isEntrySelected = location.pathname.includes('/entry/');
+
+    // Helper to count words
+    const countWords = (str) => {
+        if (!str) return 0;
+        return str.trim().split(/\s+/).length;
+    };
 
     // Fetch entries for the selected year with real-time listener
     useEffect(() => {
@@ -35,11 +41,14 @@ export default function CalendarView() {
                 );
 
                 unsubscribe = onSnapshot(q, (querySnapshot) => {
-                    const entryDates = new Set();
+                    const entryData = new Map();
                     querySnapshot.forEach((doc) => {
-                        entryDates.add(doc.id);
+                        const data = doc.data();
+                        entryData.set(doc.id, {
+                            wordCount: countWords(data.content || '')
+                        });
                     });
-                    setEntries(entryDates);
+                    setEntries(entryData);
                     setLoading(false);
                 }, (error) => {
                     console.error("Error fetching entries:", error);
@@ -142,6 +151,26 @@ export default function CalendarView() {
                                 const firstDayOfMonth = getDay(startOfMonth(monthDate));
                                 const startOffset = (firstDayOfMonth + 6) % 7; // Mon=0
 
+                                // Calculate min and max words for this month
+                                let minWords = Infinity;
+                                let maxWords = 0;
+                                let hasEntriesInMonth = false;
+
+                                for (let i = 1; i <= daysInMonth; i++) {
+                                    const dateKey = format(new Date(currentYear, monthIndex, i), 'yyyy-MM-dd');
+                                    const entry = entries.get(dateKey);
+                                    if (entry) {
+                                        hasEntriesInMonth = true;
+                                        if (entry.wordCount < minWords) minWords = entry.wordCount;
+                                        if (entry.wordCount > maxWords) maxWords = entry.wordCount;
+                                    }
+                                }
+
+                                if (!hasEntriesInMonth) {
+                                    minWords = 0;
+                                    maxWords = 0;
+                                }
+
                                 return (
                                     <div key={monthDate.toString()} className="glass-card p-5 hover:border-primary/30 transition duration-300 group">
                                         <h3 className="text-center font-serif text-white font-bold mb-4 text-lg border-b border-white/5 pb-2 group-hover:text-primary transition-colors">{format(monthDate, 'MMMM')}</h3>
@@ -164,22 +193,64 @@ export default function CalendarView() {
                                                 const dateObj = new Date(currentYear, monthIndex, day);
                                                 const isToday = day === new Date().getDate() && monthIndex === new Date().getMonth() && currentYear === new Date().getFullYear();
                                                 const dateKey = format(dateObj, 'yyyy-MM-dd');
-                                                const hasEntry = entries.has(dateKey);
+                                                const entry = entries.get(dateKey);
                                                 const isSelected = location.pathname.includes(dateKey);
+
+                                                // Calculate Intensity and Color
+                                                let style = {};
+                                                let className = `aspect-square flex items-center justify-center rounded-full transition-all duration-300 text-sm relative z-0 `;
+
+                                                if (isSelected) {
+                                                    className += 'ring-2 ring-secondary ring-offset-2 ring-offset-[#0a0a0b] z-10 scale-110 bg-primary text-white ';
+                                                } else if (entry) {
+                                                    // Normalize word count 0..1 relative to month
+                                                    let intensity = 0;
+                                                    if (maxWords > minWords) {
+                                                        intensity = (entry.wordCount - minWords) / (maxWords - minWords);
+                                                    } else if (maxWords === minWords && maxWords > 0) {
+                                                        intensity = 0.5; // If all entries have same length (and not 0), pick a middle ground
+                                                    }
+
+                                                    // Interpolate Lightness: High L (light purple) -> Low L (dark purple)
+                                                    // Primary Purple is roughly H=265
+                                                    // Light: L=95%, Dark: L=30%
+                                                    const minL = 30;
+                                                    const maxL = 95;
+                                                    const lightness = maxL - (intensity * (maxL - minL));
+
+                                                    const backgroundColor = `hsl(265, 85%, ${lightness}%)`;
+
+                                                    // Determine text color based on background lightness
+                                                    // If background is light (>60%), use dark text. Else white.
+                                                    const textColor = lightness > 60 ? '#1a1b1e' : '#ffffff';
+
+                                                    style = {
+                                                        backgroundColor: backgroundColor,
+                                                        color: textColor,
+                                                        boxShadow: `0 0 ${5 + intensity * 10}px ${backgroundColor}`
+                                                    };
+
+                                                    // Hover effect is handled by CSS or dynamic style? 
+                                                    // For inline styles, hover is tricky. Let's rely on standard hover classes but let inline bg override.
+                                                    // Actually, Tailwind hover classes won't override inline styles easily without !important.
+                                                    // We can use a group-hover or just let it be. 
+                                                    // Let's add a basic hover scale.
+                                                    className += 'hover:scale-110 font-bold ';
+
+                                                } else {
+                                                    className += 'text-text-muted hover:bg-white/10 hover:text-white ';
+                                                    if (isToday) {
+                                                        className += 'bg-white/10 text-white font-bold border border-white/20 ';
+                                                    }
+                                                }
 
                                                 return (
                                                     <button
                                                         key={day}
                                                         onClick={() => navigate(`entry/${dateKey}`)}
-                                                        className={`
-                                                        aspect-square flex items-center justify-center rounded-full transition-all duration-300 text-sm relative z-0
-                                                        ${hasEntry
-                                                                ? 'bg-primary/20 text-primary font-bold shadow-[0_0_10px_rgba(139,92,246,0.2)] hover:bg-primary hover:text-white hover:shadow-[0_0_15px_rgba(139,92,246,0.5)]'
-                                                                : 'text-text-muted hover:bg-white/10 hover:text-white'
-                                                            }
-                                                        ${isSelected ? 'ring-2 ring-secondary ring-offset-2 ring-offset-[#0a0a0b] z-10 scale-110 bg-primary text-white' : ''}
-                                                        ${isToday && !hasEntry ? 'bg-white/10 text-white font-bold border border-white/20' : ''}
-                                                    `}
+                                                        style={style}
+                                                        className={className}
+                                                        title={entry ? `${entry.wordCount} words` : ''}
                                                     >
                                                         {day}
                                                     </button>
