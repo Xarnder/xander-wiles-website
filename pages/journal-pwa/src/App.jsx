@@ -10,6 +10,7 @@ import CalendarView from './components/CalendarView';
 import MonthView from './components/MonthView';
 import EntryEditor from './components/EntryEditor';
 import StatsView from './components/StatsView';
+import PdfExportView from './components/PdfExportView';
 
 function PrivateRoute({ children }) {
   const { currentUser } = useAuth();
@@ -35,6 +36,7 @@ function App() {
               </Route>
               <Route path="/month" element={<MonthView />} />
               <Route path="/stats" element={<StatsView />} />
+              <Route path="/pdf-export" element={<PdfExportView />} />
             </Route>
           </Routes>
         </BackupProvider>

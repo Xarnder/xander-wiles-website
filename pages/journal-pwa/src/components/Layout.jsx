@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X } from 'lucide-react';
+import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown } from 'lucide-react';
 import DirectoryImporter from './DirectoryImporter';
 import DataRepair from './DataRepair';
 import BackupOptions from './BackupOptions';
@@ -32,8 +32,8 @@ export default function Layout() {
                     if (onClick) onClick();
                 }}
                 className={`flex items-center w-full px-4 py-3 rounded-lg transition-all duration-200 ${isActive
-                        ? 'bg-primary/20 text-white'
-                        : 'text-text-muted hover:bg-white/5 hover:text-white'
+                    ? 'bg-primary/20 text-white'
+                    : 'text-text-muted hover:bg-white/5 hover:text-white'
                     }`}
             >
                 <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-primary' : ''}`} />
@@ -103,6 +103,14 @@ export default function Layout() {
                         </button>
 
                         <button
+                            onClick={() => navigate('/pdf-export')}
+                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/pdf-export' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
+                            title="Export PDF"
+                        >
+                            <FileDown className="h-5 w-5" />
+                        </button>
+
+                        <button
                             onClick={handleLogout}
                             className="flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-red-500/10 hover:text-red-400 border border-transparent hover:border-red-500/20 transition-all duration-200"
                         >
@@ -135,6 +143,7 @@ export default function Layout() {
                                 <NavItem path="/" icon={CalendarIcon} label="Calendar" onClick={() => setIsMobileMenuOpen(false)} />
                                 <NavItem path="/month" icon={List} label="Month View" onClick={() => setIsMobileMenuOpen(false)} />
                                 <NavItem path="/stats" icon={BarChart} label="Stats" onClick={() => setIsMobileMenuOpen(false)} />
+                                <NavItem path="/pdf-export" icon={FileDown} label="PDF Export" onClick={() => setIsMobileMenuOpen(false)} />
                             </div>
 
                             <div className="h-px bg-white/10 my-2" />
