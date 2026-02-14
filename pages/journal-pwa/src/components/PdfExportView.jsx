@@ -26,8 +26,10 @@ export default function PdfExportView() {
 
     // Preview Pagination Logic
     const previewContainerRef = useRef(null);
+    const pageWrapperRef = useRef(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [previewScale, setPreviewScale] = useState(1);
 
     // Initial load check
     useEffect(() => {
@@ -142,6 +144,27 @@ export default function PdfExportView() {
         }
     }, [entries, fontSettings]);
 
+    // Calculate scale for mobile preview
+    useEffect(() => {
+        const container = previewContainerRef.current;
+        if (!container) return;
+
+        const A4_WIDTH_PX = 794; // 210mm at 96dpi
+
+        const updateScale = () => {
+            const containerWidth = container.clientWidth - 32; // subtract padding
+            if (containerWidth < A4_WIDTH_PX) {
+                setPreviewScale(containerWidth / A4_WIDTH_PX);
+            } else {
+                setPreviewScale(1);
+            }
+        };
+
+        updateScale();
+        const observer = new ResizeObserver(updateScale);
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, []);
 
     const handlePrint = () => {
         window.print();
@@ -167,7 +190,7 @@ export default function PdfExportView() {
     };
 
     return (
-        <div className="h-[calc(100vh-100px)] flex flex-col md:flex-row gap-6 p-4">
+        <div className="min-h-[calc(100vh-100px)] md:h-[calc(100vh-100px)] flex flex-col md:flex-row gap-6 p-4">
 
             {/* Sidebar Controls - Hidden on print */}
             <div className="w-full md:w-80 flex-shrink-0 flex flex-col gap-6 print:hidden overflow-y-auto custom-scrollbar">
@@ -306,7 +329,7 @@ export default function PdfExportView() {
             </div>
 
             {/* Preview Area */}
-            <div className="flex-1 bg-gray-900/50 rounded-xl overflow-hidden flex flex-col relative print:bg-white print:text-black print:overflow-visible print:h-auto border border-white/5">
+            <div className="flex-1 min-h-[80vh] md:min-h-0 bg-gray-900/50 rounded-xl overflow-hidden flex flex-col relative print:bg-white print:text-black print:overflow-visible print:h-auto border border-white/5">
 
                 {/* Preview Toolbar */}
                 <div className="h-12 bg-white/5 border-b border-white/10 flex items-center justify-between px-4 print:hidden shrink-0">
@@ -347,47 +370,60 @@ export default function PdfExportView() {
                         </div>
                     ) : (
                         <div
-                            className="bg-white text-black shadow-2xl w-full md:w-[210mm] mx-auto p-[20mm] print:shadow-none print:w-full print:min-h-0 print:p-0 pb-20 mb-8"
+                            ref={pageWrapperRef}
+                            className="mx-auto mb-8 print:!transform-none print:!w-full print:!h-auto"
                             style={{
-                                backgroundColor: 'white',
-                                minHeight: '297mm',
-                                height: 'fit-content'
+                                width: previewScale < 1 ? `${794 * previewScale}px` : undefined,
+                                height: previewScale < 1 ? 'fit-content' : undefined,
+                                overflow: previewScale < 1 ? 'hidden' : undefined,
                             }}
                         >
-                            {/* Content Rendering for Preview */}
-                            {entries.length > 0 ? (
-                                <div className="space-y-8">
-                                    {entries.map((entry, index) => (
-                                        <div key={entry.id} className="mb-8 break-inside-avoid">
-                                            <div
-                                                className="font-serif font-bold text-gray-900 mb-1"
-                                                style={{ fontSize: `${fontSettings.titleSize}px` }}
-                                            >
-                                                {entry.title}
+                            <div
+                                className="bg-white text-black shadow-2xl p-[20mm] print:shadow-none print:w-full print:min-h-0 print:p-0 pb-20"
+                                style={{
+                                    backgroundColor: 'white',
+                                    width: '210mm',
+                                    minHeight: '297mm',
+                                    height: 'fit-content',
+                                    transform: previewScale < 1 ? `scale(${previewScale})` : undefined,
+                                    transformOrigin: 'top left',
+                                }}
+                            >
+                                {/* Content Rendering for Preview */}
+                                {entries.length > 0 ? (
+                                    <div className="space-y-8">
+                                        {entries.map((entry, index) => (
+                                            <div key={entry.id} className="mb-8 break-inside-avoid">
+                                                <div
+                                                    className="font-serif font-bold text-gray-900 mb-1"
+                                                    style={{ fontSize: `${fontSettings.titleSize}px` }}
+                                                >
+                                                    {entry.title}
+                                                </div>
+                                                <div
+                                                    className="text-gray-500 font-medium mb-4"
+                                                    style={{ fontSize: `${fontSettings.dateSize}px` }}
+                                                >
+                                                    {format(parseISO(entry.date), 'EEEE, d MMMM yyyy')}
+                                                </div>
+                                                <div
+                                                    className="prose max-w-none text-gray-800"
+                                                    style={{ fontSize: `${fontSettings.bodySize}px` }}
+                                                >
+                                                    <ReactMarkdown>{entry.content}</ReactMarkdown>
+                                                </div>
+                                                {index < entries.length - 1 && (
+                                                    <hr className="my-8 border-gray-200" />
+                                                )}
                                             </div>
-                                            <div
-                                                className="text-gray-500 font-medium mb-4"
-                                                style={{ fontSize: `${fontSettings.dateSize}px` }}
-                                            >
-                                                {format(parseISO(entry.date), 'EEEE, d MMMM yyyy')}
-                                            </div>
-                                            <div
-                                                className="prose max-w-none text-gray-800"
-                                                style={{ fontSize: `${fontSettings.bodySize}px` }}
-                                            >
-                                                <ReactMarkdown>{entry.content}</ReactMarkdown>
-                                            </div>
-                                            {index < entries.length - 1 && (
-                                                <hr className="my-8 border-gray-200" />
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="flex items-center justify-center h-[500px] text-gray-400">
-                                    No entries found for this period.
-                                </div>
-                            )}
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-center h-[500px] text-gray-400">
+                                        No entries found for this period.
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -420,7 +456,7 @@ export default function PdfExportView() {
                     }
                 `}</style>
 
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }
