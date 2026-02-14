@@ -174,6 +174,11 @@ export default function EntryEditor() {
         navigate(`/entry/${nextDateString}`);
     };
 
+    // Check if title is inferred from content
+    const isInferredTitle = useMemo(() => {
+        return /(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/.test(content || '');
+    }, [content]);
+
     if (loading) return (
         <div className="glass-card p-8 flex flex-col items-center justify-center min-h-[400px] text-text-muted animate-pulse">
             <PenTool className="w-12 h-12 mb-4 opacity-50" />
@@ -307,13 +312,20 @@ export default function EntryEditor() {
             <div className={`glass-card flex-1 p-6 md:p-8 overflow-hidden flex flex-col relative ${isEditing ? 'ring-2 ring-primary/30' : ''}`}>
                 {isEditing ? (
                     <div className="h-full flex flex-col">
-                        <input
-                            type="text"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            placeholder="Give this day a title..."
-                            className="w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-6 p-0"
-                        />
+                        <div onClick={() => {
+                            if (isInferredTitle) {
+                                toastError("Title is inferred from content. Please edit it in the journal entry.");
+                            }
+                        }}>
+                            <input
+                                type="text"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                placeholder="Give this day a title..."
+                                readOnly={isInferredTitle}
+                                className={`w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-6 p-0 ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
+                            />
+                        </div>
                         <div className="flex-1 overflow-auto custom-scrollbar -mr-4 pr-4">
                             <SimpleMdeReact
                                 value={content}
