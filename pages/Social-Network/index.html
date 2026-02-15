@@ -175,13 +175,20 @@
             <h2>Export Data</h2>
             <p style="margin-bottom:20px; color:var(--text-muted)">Choose a format to download your network data.</p>
             <div class="modal-actions" style="flex-direction:column; gap:10px">
-                <button id="export-csv" class="btn primary-btn full-width">Export as CSV</button>
-                <button id="export-json" class="btn secondary-btn full-width">Export as JSON</button>
+                <button id="export-csv" class="btn secondary-btn full-width">Export CSV Only</button>
+                <button id="export-json" class="btn secondary-btn full-width">Export JSON Only</button>
+                <hr style="width:100%; border:0; border-top:1px solid var(--glass-border); margin:10px 0;">
+                <button id="export-zip-csv" class="btn primary-btn full-width">Export CSV Bundle (ZIP + Images)</button>
+                <button id="export-zip-html" class="btn primary-btn full-width">Export Offline Website (ZIP +
+                    Viewer)</button>
             </div>
+            <div id="export-status"
+                style="margin-top:10px; font-size:0.9rem; color:var(--text-main); text-align:center;"></div>
         </div>
     </div>
 
     <!-- Utilities -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 
     <!-- Firebase SDKs & Logic -->

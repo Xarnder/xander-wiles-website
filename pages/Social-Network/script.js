@@ -598,3 +598,169 @@ document.getElementById('export-csv').addEventListener('click', () => {
     downloadFile(csvContent, `my-network-${Date.now()}.csv`, 'text/csv');
     exportModal.classList.add('hidden');
 });
+
+// ZIP Export Logic
+async function fetchImageBlob(url) {
+    try {
+        const response = await fetch(url);
+        return await response.blob();
+    } catch (e) {
+        console.error("Failed to fetch image", url, e);
+        return null; // Return null if fetch fails (e.g., CORS or loose URL)
+    }
+}
+
+async function prepareZipImages(zip, statusEl) {
+    const imgFolder = zip.folder("images");
+    const idToPath = {};
+
+    let count = 0;
+    const total = allFriends.length;
+
+    for (const friend of allFriends) {
+        count++;
+        if (statusEl) statusEl.innerText = `Processing image ${count}/${total}...`;
+
+        // Skip default/placeholder if you want, or download them too.
+        // UI Avatars might work if fetch is allowed.
+        const url = friend.photoURL;
+        if (url) {
+            const blob = await fetchImageBlob(url);
+            if (blob) {
+                // Determine extension from blob type or default to webp
+                let ext = "webp";
+                if (blob.type === "image/jpeg") ext = "jpg";
+                else if (blob.type === "image/png") ext = "png";
+
+                const filename = `${friend.id}.${ext}`;
+                imgFolder.file(filename, blob);
+                idToPath[friend.id] = `images/${filename}`;
+            }
+        }
+    }
+    return idToPath;
+}
+
+document.getElementById('export-zip-csv').addEventListener('click', async () => {
+    const statusEl = document.getElementById('export-status');
+    statusEl.innerText = "Initializing ZIP...";
+
+    try {
+        const zip = new JSZip();
+
+        // 1. Download Images
+        const localPaths = await prepareZipImages(zip, statusEl);
+
+        // 2. Generate CSV with local paths
+        const headers = ["Name", "Met", "Origin", "Work", "Phone", "Frequency (Days)", "Last Contact", "Photo Path", "Notes"];
+        const rows = allFriends.map(f => [
+            `"${f.name || ''}"`,
+            `"${f.met || ''}"`,
+            `"${f.origin || ''}"`,
+            `"${f.work || ''}"`,
+            `"${f.phone || ''}"`,
+            f.freq,
+            `"${f.lastContact || ''}"`,
+            `"${localPaths[f.id] || ''}"`, // Local path
+            `"${(f.notes || '').replace(/"/g, '""')}"`
+        ]);
+
+        const csvContent = [
+            headers.join(","),
+            ...rows.map(r => r.join(","))
+        ].join("\n");
+
+        zip.file("data.csv", csvContent);
+
+        // 3. Generate ZIP
+        statusEl.innerText = "Generating ZIP file...";
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        downloadFile(zipBlob, `network-bundle-${Date.now()}.zip`, "application/zip");
+
+        statusEl.innerText = "";
+        exportModal.classList.add('hidden');
+    } catch (err) {
+        console.error(err);
+        statusEl.innerText = "Error exporting ZIP.";
+    }
+});
+
+document.getElementById('export-zip-html').addEventListener('click', async () => {
+    const statusEl = document.getElementById('export-status');
+    statusEl.innerText = "Initializing Offline Website...";
+
+    try {
+        const zip = new JSZip();
+
+        // 1. Download Images
+        const localPaths = await prepareZipImages(zip, statusEl);
+
+        // 2. Prepare Data for Offline Usage
+        // Create a data.js file that sets a global variable
+        const offlineData = allFriends.map(f => ({
+            ...f,
+            photoURL: localPaths[f.id] || f.photoURL // Use local path if downloaded, else keep original (might rely on internet)
+        }));
+
+        zip.file("data.js", `window.networkData = ${JSON.stringify(offlineData, null, 2)};`);
+
+        // 3. Create Viewer HTML
+        const viewerHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Network (Offline)</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #fff; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        .card { background: #2a2a2a; border-radius: 10px; overflow: hidden; padding: 15px; border: 1px solid #333; }
+        .card img { width: 100%; height: 200px; object-fit: contain; border-radius: 8px; background: #222; }
+        .card h3 { margin: 10px 0 5px; }
+        .card p { margin: 5px 0; font-size: 0.9rem; color: #ccc; }
+        .tag { background: #333; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <h1>My Network (Offline Archive)</h1>
+    <div id="grid" class="grid"></div>
+    
+    <!-- Load Data -->
+    <script src="data.js"></script>
+    <script>
+        const grid = document.getElementById('grid');
+        if (window.networkData) {
+            window.networkData.forEach(p => {
+                const el = document.createElement('div');
+                el.className = 'card';
+                el.innerHTML = \`
+                    <img src="\${p.photoURL}" loading="lazy">
+                    <h3>\${p.name}</h3>
+                    <p>📞 \${p.phone || '-'}</p>
+                    <p>📍 \${p.origin || '-'} | 💼 \${p.work || '-'}</p>
+                    <p>🗓 Met: \${p.met || '-'}</p>
+                    <p style="margin-top:10px; font-style:italic; color:#888">\${p.notes || ''}</p>
+                \`;
+                grid.appendChild(el);
+            });
+        }
+    </script>
+</body>
+</html>
+        `;
+
+        zip.file("index.html", viewerHTML);
+
+        // 4. Generate ZIP
+        statusEl.innerText = "Generating ZIP file...";
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        downloadFile(zipBlob, `network-offline-website-${Date.now()}.zip`, "application/zip");
+
+        statusEl.innerText = "";
+        exportModal.classList.add('hidden');
+    } catch (err) {
+        console.error(err);
+        statusEl.innerText = "Error exporting Offline Website.";
+    }
+});
