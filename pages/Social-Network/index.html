@@ -57,10 +57,28 @@
                     <span id="storage-stats" style="font-size:0.8rem; opacity:0.7; margin-left:10px"></span>
                 </div>
                 <div class="header-right">
-                    <button id="add-btn" class="btn primary-btn">+ Add Person</button>
-                    <button id="logout-btn" class="btn secondary-btn">Logout</button>
+                    <button id="mobile-menu-btn" class="btn icon-btn"
+                        style="display:none; font-size:1.5rem; padding:5px 10px;">☰</button>
+                    <div id="header-actions" class="header-actions">
+                        <button id="export-btn" class="btn secondary-btn" style="padding: 8px 15px;">Export</button>
+                        <button id="add-btn" class="btn primary-btn">+ Add Person</button>
+                        <button id="logout-btn" class="btn secondary-btn"
+                            style="border-color:var(--danger); color:var(--danger)">Logout</button>
+                    </div>
                 </div>
             </header>
+
+            <!-- Calendar Widget -->
+            <div id="calendar-widget" class="glass-card calendar-widget">
+                <div class="calendar-header">
+                    <button id="cal-prev" class="calendar-nav-btn">&lt;</button>
+                    <span id="cal-month-year">Month Year</span>
+                    <button id="cal-next" class="calendar-nav-btn">&gt;</button>
+                </div>
+                <div id="calendar-list" class="calendar-list">
+                    <!-- Top 5 items go here -->
+                </div>
+            </div>
 
             <!-- Search / Filter -->
             <div class="search-bar">
@@ -122,8 +140,16 @@
 
                 <div class="form-row">
                     <div class="input-group">
-                        <label>Keep in Touch (Days)</label>
-                        <input type="number" id="inp-freq" value="30" min="1">
+                        <label>Keep in Touch</label>
+                        <div style="display:flex; gap:10px;">
+                            <input type="number" id="inp-freq-val" value="1" min="1" style="flex:1">
+                            <select id="inp-freq-unit"
+                                style="flex:1; background:rgba(0,0,0,0.3); color:white; border:1px solid var(--glass-border); border-radius:8px; padding:10px;">
+                                <option value="1">Days</option>
+                                <option value="7">Weeks</option>
+                                <option value="30">Months</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="input-group">
                         <label>Last Caught Up</label>
@@ -139,6 +165,19 @@
                 <div id="status-msg"></div>
                 <button type="submit" class="btn primary-btn full-width">Save</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal hidden">
+        <div class="modal-content glass-card">
+            <span id="close-export" class="close">&times;</span>
+            <h2>Export Data</h2>
+            <p style="margin-bottom:20px; color:var(--text-muted)">Choose a format to download your network data.</p>
+            <div class="modal-actions" style="flex-direction:column; gap:10px">
+                <button id="export-csv" class="btn primary-btn full-width">Export as CSV</button>
+                <button id="export-json" class="btn secondary-btn full-width">Export as JSON</button>
+            </div>
         </div>
     </div>
 

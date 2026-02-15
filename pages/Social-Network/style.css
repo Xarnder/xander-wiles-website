@@ -91,6 +91,57 @@ body {
     margin-bottom: 25px;
     flex-wrap: wrap;
     gap: 15px;
+    position: relative;
+    /* For dropdown positioning */
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* Mobile Responsive Header */
+@media (max-width: 768px) {
+    #mobile-menu-btn {
+        display: block !important;
+        background: transparent;
+        border: 1px solid var(--glass-border);
+        color: white;
+    }
+
+    .header-actions {
+        display: none;
+        /* Hidden by default on mobile */
+        position: absolute;
+        top: 100%;
+        right: 0;
+        flex-direction: column;
+        background: rgba(20, 20, 20, 0.95);
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+        padding: 15px;
+        border-radius: 12px;
+        border: 1px solid var(--glass-border);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        width: 200px;
+        z-index: 100;
+    }
+
+    .header-actions.show {
+        display: flex;
+    }
+
+    .header-actions button {
+        width: 100%;
+        text-align: left;
+        justify-content: flex-start;
+    }
 }
 
 .search-bar input {
@@ -126,7 +177,6 @@ body {
     width: 100%;
     height: 220px;
     object-fit: contain;
-    background: #222;
 }
 
 .card-info {
@@ -262,6 +312,88 @@ body {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
+}
+
+/* Calendar Widget */
+.calendar-widget {
+    margin-bottom: 25px;
+    padding: 20px;
+}
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.calendar-nav-btn {
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.calendar-nav-btn:hover {
+    background: var(--glass-bg);
+}
+
+.calendar-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.calendar-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    border: 1px solid transparent;
+    /* reserved for potential hover border */
+    transition: background 0.2s;
+}
+
+.calendar-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.calendar-date-badge {
+    background: var(--primary);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    min-width: 40px;
+    text-align: center;
+}
+
+.calendar-details {
+    flex-grow: 1;
+}
+
+.calendar-details h4 {
+    margin: 0 0 2px 0;
+    font-size: 1rem;
+}
+
+.calendar-details p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
 }
 
 .debug-msg {

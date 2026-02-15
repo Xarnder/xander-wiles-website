@@ -30,6 +30,8 @@ try {
 // State
 let currentUser = null;
 let currentPhotoBlob = null; // Holds the processed 4MP image
+let allFriends = [];
+let currentCalendarDate = new Date();
 
 // DOM Elements
 const views = {
@@ -70,6 +72,24 @@ onAuthStateChanged(auth, (user) => {
         views.dashboard.classList.add('hidden');
     }
 });
+
+// Mobile Menu Logic
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+const headerActions = document.getElementById('header-actions');
+
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        headerActions.classList.toggle('show');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!headerActions.contains(e.target) && !mobileMenuBtn.contains(e.target)) {
+            headerActions.classList.remove('show');
+        }
+    });
+}
 
 // --- IMAGE PROCESSING (4MP WebP) ---
 // --- IMAGE PROCESSING (4MP WebP) ---
@@ -208,6 +228,10 @@ friendForm.addEventListener('submit', async (e) => {
             currentPhotoBlob = null;
         }
 
+        const val = parseInt(document.getElementById('inp-freq-val').value) || 1;
+        const unit = parseInt(document.getElementById('inp-freq-unit').value) || 1;
+        const freqDays = val * unit;
+
         const friendData = {
             userId: currentUser.uid,
             name: document.getElementById('inp-name').value,
@@ -215,7 +239,7 @@ friendForm.addEventListener('submit', async (e) => {
             origin: document.getElementById('inp-origin').value,
             work: document.getElementById('inp-work').value,
             phone: document.getElementById('inp-phone').value,
-            freq: parseInt(document.getElementById('inp-freq').value) || 30,
+            freq: freqDays,
             lastContact: document.getElementById('inp-last').value,
             notes: document.getElementById('inp-notes').value,
             updatedAt: new Date()
@@ -256,6 +280,8 @@ function loadFriends() {
         const friends = [];
         snapshot.forEach(doc => friends.push({ id: doc.id, ...doc.data() }));
 
+        allFriends = friends; // Store for calendar
+
         // Client-side sorting (easiest without complex Firestore indexes)
         // Sort by "Next Due Date" ascending
         friends.sort((a, b) => {
@@ -263,6 +289,8 @@ function loadFriends() {
             const dateB = getNextDueDate(b.lastContact, b.freq);
             return dateA - dateB;
         });
+
+        renderCalendar(); // Update calendar widget
 
         if (friends.length === 0) {
             friendsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#666">No friends added yet.</p>';
@@ -371,6 +399,11 @@ document.getElementById('add-btn').addEventListener('click', () => {
     statusMsg.innerText = ""; // Fix: Clear previous status
     document.getElementById('edit-id').value = "";
     document.getElementById('modal-title').innerText = "Add Person";
+
+    // Default: 1 Month
+    document.getElementById('inp-freq-val').value = 1;
+    document.getElementById('inp-freq-unit').value = 30;
+
     document.getElementById('photo-preview').style.backgroundImage = 'none';
     document.getElementById('photo-preview').innerHTML = '<span>Tap to Add Photo</span>';
     currentPhotoBlob = null;
@@ -388,7 +421,22 @@ function openEdit(data) {
     document.getElementById('inp-origin').value = data.origin;
     document.getElementById('inp-work').value = data.work;
     document.getElementById('inp-phone').value = data.phone;
-    document.getElementById('inp-freq').value = data.freq;
+
+    // Calculate best unit
+    let val = data.freq;
+    let unit = 1;
+
+    if (val % 30 === 0 && val !== 0) {
+        val = val / 30;
+        unit = 30;
+    } else if (val % 7 === 0 && val !== 0) {
+        val = val / 7;
+        unit = 7;
+    }
+
+    document.getElementById('inp-freq-val').value = val;
+    document.getElementById('inp-freq-unit').value = unit;
+
     document.getElementById('inp-last').value = data.lastContact;
     document.getElementById('inp-notes').value = data.notes;
 
@@ -413,4 +461,140 @@ searchInput.addEventListener('input', (e) => {
         const text = card.innerText.toLowerCase();
         card.style.display = text.includes(val) ? 'flex' : 'none';
     });
+});
+
+// Calendar Widget Logic
+function renderCalendar() {
+    const listEl = document.getElementById('calendar-list');
+    const headerEl = document.getElementById('cal-month-year');
+
+    // Display Month Year
+    const month = currentCalendarDate.toLocaleString('default', { month: 'long' });
+    const year = currentCalendarDate.getFullYear();
+    headerEl.innerText = `${month} ${year}`;
+
+    // Filter friends due in this month/year
+    const dueFriends = allFriends.filter(friend => {
+        const nextDue = getNextDueDate(friend.lastContact, friend.freq);
+        return nextDue.getMonth() === currentCalendarDate.getMonth() &&
+            nextDue.getFullYear() === currentCalendarDate.getFullYear();
+    });
+
+    // Sort by day (earliest first)
+    dueFriends.sort((a, b) => {
+        const dateA = getNextDueDate(a.lastContact, a.freq);
+        const dateB = getNextDueDate(b.lastContact, b.freq);
+        return dateA - dateB;
+    });
+
+    // Top 5
+    const top5 = dueFriends.slice(0, 5);
+
+    listEl.innerHTML = '';
+    if (top5.length === 0) {
+        listEl.innerHTML = '<p style="text-align:center;color:var(--text-muted)">No catch-ups due this month.</p>';
+        return;
+    }
+
+    top5.forEach(friend => {
+        const nextDue = getNextDueDate(friend.lastContact, friend.freq);
+        const day = nextDue.getDate();
+
+        let cycleText = friend.freq + 'd';
+        if (friend.freq >= 30 && friend.freq % 30 === 0) cycleText = (friend.freq / 30) + 'mo';
+        else if (friend.freq >= 7 && friend.freq % 7 === 0) cycleText = (friend.freq / 7) + 'w';
+
+        const item = document.createElement('div');
+        item.className = 'calendar-item';
+        // Make the whole item clickable
+        item.style.cursor = 'pointer';
+        item.onclick = () => openEdit(friend);
+
+        item.innerHTML = `
+            <div class="calendar-date-badge">${day}</div>
+            <div class="calendar-details">
+                <h4>${friend.name}</h4>
+                <p>Status: Due via ${cycleText} cycle</p>
+            </div>
+            <button class="btn secondary-btn" style="padding:5px 10px;font-size:0.8rem">View</button>
+        `;
+        listEl.appendChild(item);
+    });
+}
+
+document.getElementById('cal-prev').addEventListener('click', () => {
+    currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+    renderCalendar();
+});
+
+document.getElementById('cal-next').addEventListener('click', () => {
+    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+    renderCalendar();
+});
+
+// Export Logic
+const exportModal = document.getElementById('export-modal');
+const closeExportBtn = document.getElementById('close-export');
+
+document.getElementById('export-btn').addEventListener('click', () => {
+    exportModal.classList.remove('hidden');
+    // Close mobile menu if open
+    if (headerActions) headerActions.classList.remove('show');
+});
+
+closeExportBtn.addEventListener('click', () => {
+    exportModal.classList.add('hidden');
+});
+
+// Close export modal on outside click
+window.addEventListener('click', (e) => {
+    if (e.target == exportModal) {
+        exportModal.classList.add('hidden');
+    }
+});
+
+function downloadFile(content, fileName, contentType) {
+    const a = document.createElement("a");
+    const file = new Blob([content], { type: contentType });
+    a.href = URL.createObjectURL(file);
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+document.getElementById('export-json').addEventListener('click', () => {
+    const dataStr = JSON.stringify(allFriends, null, 2);
+    downloadFile(dataStr, `my-network-${Date.now()}.json`, 'application/json');
+    exportModal.classList.add('hidden');
+});
+
+document.getElementById('export-csv').addEventListener('click', () => {
+    if (allFriends.length === 0) {
+        alert("No data to export.");
+        return;
+    }
+
+    // Define columns
+    const headers = ["Name", "Met", "Origin", "Work", "Phone", "Frequency (Days)", "Last Contact", "Notes"];
+
+    // Convert data
+    const rows = allFriends.map(f => [
+        `"${f.name || ''}"`,
+        `"${f.met || ''}"`,
+        `"${f.origin || ''}"`,
+        `"${f.work || ''}"`,
+        `"${f.phone || ''}"`,
+        f.freq,
+        `"${f.lastContact || ''}"`,
+        `"${(f.notes || '').replace(/"/g, '""')}"` // Escape quotes in notes
+    ]);
+
+    // Combine
+    const csvContent = [
+        headers.join(","),
+        ...rows.map(r => r.join(","))
+    ].join("\n");
+
+    downloadFile(csvContent, `my-network-${Date.now()}.csv`, 'text/csv');
+    exportModal.classList.add('hidden');
 });
