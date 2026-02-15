@@ -326,8 +326,11 @@ function renderCard(data) {
     const diffDays = Math.ceil((nextDue - today) / (1000 * 60 * 60 * 24));
 
     let badgeClass = 'status-ok';
-    let badgeText = `Due in ${diffDays} days`;
+    let badgeText = `Due in ${formatDuration(diffDays)}`;
     let badgeHTML = '';
+
+    // Calculate integers for logic
+    const overdueDays = Math.abs(diffDays);
 
     if (!data.lastContact) {
         // No date set, no badge
@@ -335,12 +338,30 @@ function renderCard(data) {
     } else {
         if (diffDays < 0) {
             badgeClass = 'status-overdue';
-            badgeText = `Overdue by ${Math.abs(diffDays)} days`;
+            badgeText = `Overdue by ${formatDuration(overdueDays)}`;
         } else if (diffDays <= 7) {
             badgeClass = 'status-due';
-            badgeText = `Due soon (${diffDays} days)`;
+            badgeText = `Due soon (${formatDuration(diffDays)})`;
         }
         badgeHTML = `<span class="status-badge ${badgeClass}">${badgeText}</span>`;
+    }
+
+    // Calculate time since last contact
+    let lastSeenText = '';
+    if (data.lastContact) {
+        const lastDate = new Date(data.lastContact);
+        // Reset times to midnight for accurate day diff
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const then = new Date(lastDate);
+        then.setHours(0, 0, 0, 0);
+
+        const diffTime = now - then;
+        const daysSince = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        if (daysSince >= 0) {
+            lastSeenText = `<div>⏳ Last seen: ${formatDuration(daysSince)} ago</div>`;
+        }
     }
 
     const categoryBadge = data.category
@@ -364,6 +385,7 @@ function renderCard(data) {
                 <div>📍 ${data.origin || '-'} | 💼 ${data.work || '-'}</div>
                 <div>📞 <a href="tel:${data.phone}" style="color:inherit">${data.phone || '-'}</a></div>
                 <div>🗓 Met: ${data.met || '-'}</div>
+                ${lastSeenText}
             </div>
             <p style="font-size:0.85rem; margin-top:10px">${data.notes || ''}</p>
         </div>
@@ -440,6 +462,28 @@ toastUndoBtn.onclick = async () => {
 document.getElementById('btn-today-modal').onclick = () => {
     document.getElementById('inp-last').valueAsDate = new Date();
 };
+// Helpers
+function formatDuration(totalDays) {
+    if (totalDays === 0) return "today";
+
+    const years = Math.floor(totalDays / 365);
+    let remaining = totalDays % 365;
+
+    const months = Math.floor(remaining / 30);
+    remaining = remaining % 30;
+
+    const weeks = Math.floor(remaining / 7);
+    const days = remaining % 7;
+
+    const parts = [];
+    if (years > 0) parts.push(`${years}y`);
+    if (months > 0) parts.push(`${months}m`);
+    if (weeks > 0) parts.push(`${weeks}w`);
+    if (days > 0) parts.push(`${days}d`);
+
+    return parts.join(', ');
+}
+
 function getNextDueDate(lastContactStr, freqDays) {
     if (!lastContactStr) return new Date(); // If no date, due now
     const last = new Date(lastContactStr);
