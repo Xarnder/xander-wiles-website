@@ -115,9 +115,9 @@ document.getElementById('photo-file').addEventListener('change', (e) => {
 
         cropper = new Cropper(cropImage, {
             aspectRatio: 1,
-            viewMode: 1,
+            viewMode: 0,
             dragMode: 'move',
-            autoCropArea: 1,
+            autoCropArea: 0.8,
             restore: false,
             guides: true,
             center: true,
@@ -125,6 +125,8 @@ document.getElementById('photo-file').addEventListener('change', (e) => {
             cropBoxMovable: true,
             cropBoxResizable: true,
             toggleDragModeOnDblclick: false,
+            zoomOnTouch: true,
+            zoomOnWheel: true,
         });
         statusMsg.innerText = "";
     };
