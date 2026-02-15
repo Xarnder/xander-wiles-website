@@ -29,7 +29,8 @@ try {
 
 // State
 let currentUser = null;
-let currentPhotoBlob = null; // Holds the processed 4MP image
+let currentPhotoBlob = null; // Holds the processed image
+let cropper = null; // CropperJS instance
 let allFriends = [];
 let currentCalendarDate = new Date();
 
@@ -94,113 +95,106 @@ if (mobileMenuBtn) {
 // --- IMAGE PROCESSING (4MP WebP) ---
 // --- IMAGE PROCESSING (4MP WebP) ---
 // --- IMAGE PROCESSING (4MP WebP) ---
+// --- IMAGE CROPPING LOGIC ---
+const cropModal = document.getElementById('crop-modal');
+const cropImage = document.getElementById('crop-image');
+
 document.getElementById('photo-file').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    statusMsg.innerText = "Processing image...";
+    statusMsg.innerText = "Loading image for cropping...";
 
-    // Helper: Process loaded image to WebP
-    const processLoadedImage = (img) => {
-        // Downsample logic
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const MAX_SIZE = 2500; // ~4MP roughly
+    // Helper: Initialize Cropper
+    const startCropper = (url) => {
+        cropImage.src = url;
+        cropModal.classList.remove('hidden');
 
-        let width = img.width;
-        let height = img.height;
+        if (cropper) cropper.destroy();
 
-        if (width > height) {
-            if (width > MAX_SIZE) {
-                height *= MAX_SIZE / width;
-                width = MAX_SIZE;
-            }
-        } else {
-            if (height > MAX_SIZE) {
-                width *= MAX_SIZE / height;
-                height = MAX_SIZE;
-            }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Convert to WebP
-        canvas.toBlob((blob) => {
-            currentPhotoBlob = blob;
-            // Update Preview
-            const previewUrl = URL.createObjectURL(blob);
-            document.getElementById('photo-preview').style.backgroundImage = `url(${previewUrl})`;
-            document.getElementById('photo-preview').innerHTML = ''; // remove text
-            statusMsg.innerText = `Ready: ${(blob.size / 1024).toFixed(0)}KB`;
-        }, 'image/webp', 0.85);
+        cropper = new Cropper(cropImage, {
+            aspectRatio: 1,
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 1,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false,
+        });
+        statusMsg.innerText = "";
     };
 
-    // Strategy: Try Native Load -> If Fail, Try HEIC Conversion -> If Fail, Error
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-
-    img.onload = () => {
-        console.log("Image loaded natively");
-        processLoadedImage(img);
-        URL.revokeObjectURL(url);
-    };
-
-    img.onerror = async () => {
-        console.log("Native load failed, checking validity or HEIC...");
-
-        // Check if it might be HEIC
-        const isHeic = file.type === "image/heic" ||
-            file.type === "image/heif" ||
-            file.name.toLowerCase().endsWith('.heic') ||
-            file.name.toLowerCase().endsWith('.heif');
-
-        if (isHeic) {
+    // Helper: Handle HEIC or Standard Load
+    const handleFile = async () => {
+        // Check for HEIC
+        if (file.type === "image/heic" || file.type === "image/heif" || file.name.toLowerCase().endsWith('.heic')) {
             statusMsg.innerText = "Converting HEIC...";
-            if (typeof heic2any === 'undefined') {
-                statusMsg.innerText = "Error: HEIC converter library missing.";
-                return;
-            }
-
-            try {
-                const convertedBlob = await heic2any({
-                    blob: file,
-                    toType: "image/jpeg",
-                    quality: 0.8
-                });
-
-                const resultBlob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-                const convertedUrl = URL.createObjectURL(resultBlob);
-                const img2 = new Image();
-
-                img2.onload = () => {
-                    console.log("Converted HEIC loaded successfully");
-                    processLoadedImage(img2);
-                    URL.revokeObjectURL(convertedUrl);
-                };
-
-                img2.onerror = (e2) => {
-                    console.error("Converted image failed to load", e2);
-                    statusMsg.innerText = "Error: Could not display converted image.";
-                };
-
-                img2.src = convertedUrl;
-
-            } catch (err) {
-                console.error("HEIC Conversion Failed:", err);
-                // Show exact error to user for debugging
-                statusMsg.innerText = "HEIC Error: " + (err.message || err);
+            if (typeof heic2any !== 'undefined') {
+                try {
+                    const convertedBlob = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.8 });
+                    const resultBlob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+                    startCropper(URL.createObjectURL(resultBlob));
+                } catch (e) {
+                    console.error(e);
+                    statusMsg.innerText = "Error converting HEIC.";
+                }
+            } else {
+                statusMsg.innerText = "HEIC converter missing.";
             }
         } else {
-            // Not HEIC, just a broken file
-            statusMsg.innerText = "Error: Invalid image file.";
+            // Standard Image
+            const url = URL.createObjectURL(file);
+            startCropper(url);
         }
-
-        URL.revokeObjectURL(url); // Clean up original
     };
 
-    img.src = url;
+    handleFile();
+    // Reset input so same file can be selected again if cancelled
+    e.target.value = '';
+});
+
+// Crop & Save Button
+document.getElementById('crop-save').addEventListener('click', () => {
+    if (!cropper) return;
+
+    statusMsg.innerText = "Processing crop...";
+
+    // Get cropped canvas (resized to decent max dimension)
+    const canvas = cropper.getCroppedCanvas({
+        width: 1000,
+        height: 1000,
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+    });
+
+    canvas.toBlob((blob) => {
+        currentPhotoBlob = blob;
+
+        // Update Preview
+        const previewUrl = URL.createObjectURL(blob);
+        document.getElementById('photo-preview').style.backgroundImage = `url(${previewUrl})`;
+        document.getElementById('photo-preview').innerHTML = '';
+
+        // Cleanup
+        cropModal.classList.add('hidden');
+        cropper.destroy();
+        cropper = null;
+        statusMsg.innerText = `Ready: ${(blob.size / 1024).toFixed(0)}KB`;
+    }, 'image/webp', 0.85);
+});
+
+// Cancel Button
+document.getElementById('crop-cancel').addEventListener('click', () => {
+    cropModal.classList.add('hidden');
+    if (cropper) {
+        cropper.destroy();
+        cropper = null;
+    }
+    statusMsg.innerText = "Cancelled.";
 });
 
 // --- CRUD OPERATIONS ---
@@ -512,6 +506,7 @@ function renderCalendar() {
 
         item.innerHTML = `
             <div class="calendar-date-badge">${day}</div>
+            <img src="${friend.photoURL}" class="calendar-img" alt="${friend.name}">
             <div class="calendar-details">
                 <h4>${friend.name}</h4>
                 <p>Status: Due via ${cycleText} cycle</p>

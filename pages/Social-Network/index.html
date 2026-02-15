@@ -187,9 +187,26 @@
         </div>
     </div>
 
+    <!-- Crop Modal -->
+    <div id="crop-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 600px;">
+            <h3>Crop Photo</h3>
+            <div class="crop-container">
+                <img id="crop-image" src="" alt="Image to crop">
+            </div>
+            <div class="modal-actions" style="display:flex; gap:10px; justify-content:flex-end;">
+                <button id="crop-cancel" class="btn secondary-btn"
+                    style="color:var(--danger); border-color:var(--danger)">Cancel</button>
+                <button id="crop-save" class="btn primary-btn">Crop & Save</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Utilities -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 
     <!-- Firebase SDKs & Logic -->
     <script type="module" src="script.js"></script>
