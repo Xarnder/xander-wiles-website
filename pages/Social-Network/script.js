@@ -241,8 +241,10 @@ friendForm.addEventListener('submit', async (e) => {
             freq: freqDays,
             lastContact: document.getElementById('inp-last').value,
             notes: document.getElementById('inp-notes').value,
+            notes: document.getElementById('inp-notes').value,
             category: document.getElementById('inp-category').value.trim(),
             categoryColor: document.getElementById('inp-color').value,
+            isExempt: document.getElementById('inp-exempt').checked,
             updatedAt: new Date()
         };
 
@@ -332,7 +334,9 @@ function renderCard(data) {
     // Calculate integers for logic
     const overdueDays = Math.abs(diffDays);
 
-    if (!data.lastContact) {
+    if (data.isExempt) {
+        badgeHTML = `<span class="status-badge" style="background:#555; color:#ccc; border:1px solid #666">Not Tracked</span>`;
+    } else if (!data.lastContact) {
         // No date set, no badge
         badgeHTML = '';
     } else {
@@ -348,7 +352,9 @@ function renderCard(data) {
 
     // Calculate time since last contact
     let lastSeenText = '';
-    if (data.lastContact) {
+    if (data.isExempt) {
+        lastSeenText = `<div style="opacity:0.6; font-style:italic">⏳ Last seen: Not Tracked</div>`;
+    } else if (data.lastContact) {
         const lastDate = new Date(data.lastContact);
         // Reset times to midnight for accurate day diff
         const now = new Date();
@@ -372,9 +378,9 @@ function renderCard(data) {
     card.className = 'glass-card friend-card';
     card.dataset.category = data.category || ""; // Store for filtering
     card.innerHTML = `
-        <img src="${data.photoURL}" class="card-img" alt="${data.name}" loading="lazy">
+        <img src="${data.photoURL}" class="card-img" alt="${data.name}" loading="lazy" style="cursor:zoom-in" onclick="openImageViewer('${data.photoURL}', '${data.name.replace(/'/g, "\\'")}')">
         <div class="card-info">
-            <div style="display:flex;justify-content:space-between; align-items:flex-start">
+            <div style="display:flex;justify-content:space-between; align-items:flex-start; gap:15px">
                 <div>
                     <h3>${data.name}</h3>
                     ${categoryBadge}
@@ -462,6 +468,24 @@ toastUndoBtn.onclick = async () => {
 document.getElementById('btn-today-modal').onclick = () => {
     document.getElementById('inp-last').valueAsDate = new Date();
 };
+
+const exemptCheckbox = document.getElementById('inp-exempt');
+const freqRow = document.getElementById('freq-row');
+const lastRow = document.getElementById('last-contact-row');
+
+exemptCheckbox.addEventListener('change', (e) => toggleExemptFields(e.target.checked));
+
+function toggleExemptFields(isExempt) {
+    const opacity = isExempt ? '0.3' : '1';
+    const pointerEvents = isExempt ? 'none' : 'auto';
+
+    freqRow.style.opacity = opacity;
+    freqRow.style.pointerEvents = pointerEvents;
+
+    lastRow.style.opacity = opacity;
+    lastRow.style.pointerEvents = pointerEvents;
+}
+
 // Helpers
 function formatDuration(totalDays) {
     if (totalDays === 0) return "today";
@@ -492,14 +516,46 @@ function getNextDueDate(lastContactStr, freqDays) {
     return next;
 }
 
-async function deletePerson(id) {
-    if (confirm("Are you sure?")) {
-        await deleteDoc(doc(db, "friends", id));
-        // Note: Ideally we should delete the image too, but we need the path.
-        // For simplicity/safety, we'll implement that later or rely on lifecycle rules.
-        updateStorageStats(); // Refresh stats (though image remains, so unchanged technically unless we delete it)
+const deleteModal = document.getElementById('delete-modal');
+const deleteMsg = document.getElementById('delete-msg');
+let deleteTargetId = null;
+
+function deletePerson(id) {
+    // Find friend name for message
+    const friend = allFriends.find(f => f.id === id);
+    if (friend) {
+        deleteTargetId = id;
+        deleteMsg.innerHTML = `Are you sure you want to delete <strong>${friend.name}</strong>?<br>This cannot be undone.`;
+        deleteModal.classList.remove('hidden');
     }
 }
+
+document.getElementById('cancel-delete').addEventListener('click', () => {
+    deleteModal.classList.add('hidden');
+    deleteTargetId = null;
+});
+
+document.getElementById('confirm-delete').addEventListener('click', async () => {
+    if (!deleteTargetId) return;
+
+    const btn = document.getElementById('confirm-delete');
+    const originalText = btn.innerText;
+    btn.innerText = "Deleting...";
+    btn.disabled = true;
+
+    try {
+        await deleteDoc(doc(db, "friends", deleteTargetId));
+        updateStorageStats();
+        deleteModal.classList.add('hidden');
+    } catch (e) {
+        console.error("Delete Error", e);
+        alert("Error deleting: " + e.message);
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+        deleteTargetId = null;
+    }
+});
 
 // Storage Stats Logic
 async function updateStorageStats() {
@@ -538,6 +594,8 @@ document.getElementById('add-btn').addEventListener('click', () => {
     // Default: 1 Month
     document.getElementById('inp-freq-val').value = 1;
     document.getElementById('inp-freq-unit').value = 30;
+    document.getElementById('inp-exempt').checked = false;
+    toggleExemptFields(false);
 
     // Default Color
     document.getElementById('inp-category').value = '';
@@ -581,6 +639,9 @@ function openEdit(data) {
     document.getElementById('inp-category').value = data.category || '';
     document.getElementById('inp-color').value = data.categoryColor || '#4f46e5';
 
+    document.getElementById('inp-exempt').checked = data.isExempt || false;
+    toggleExemptFields(data.isExempt || false);
+
     document.getElementById('photo-preview').style.backgroundImage = `url(${data.photoURL})`;
     document.getElementById('photo-preview').innerHTML = '';
     currentPhotoBlob = null; // Reset blob unless they pick a new one
@@ -592,7 +653,26 @@ function closeModal() {
     modal.classList.add('hidden');
 }
 document.getElementById('close-modal').addEventListener('click', closeModal);
-window.onclick = (e) => { if (e.target == modal) closeModal(); }
+const imageViewerModal = document.getElementById('image-viewer-modal');
+const fullScreenImage = document.getElementById('full-screen-image');
+const imageCaption = document.getElementById('image-caption');
+const closeImageViewer = document.getElementById('close-image-viewer');
+
+window.openImageViewer = function (url, name) {
+    fullScreenImage.src = url;
+    imageCaption.innerText = name;
+    imageViewerModal.classList.remove('hidden');
+};
+
+closeImageViewer.onclick = () => {
+    imageViewerModal.classList.add('hidden');
+};
+
+imageViewerModal.onclick = (e) => {
+    if (e.target === imageViewerModal) {
+        imageViewerModal.classList.add('hidden');
+    }
+};
 
 // Filter Logic
 function filterGrid() {
@@ -624,14 +704,28 @@ function renderCalendar() {
     const year = currentCalendarDate.getFullYear();
     headerEl.innerText = `${month} ${year}`;
 
-    // Filter friends due in this month/year
+    // Filter friends due in this month/year (or overdue if current month)
+    const now = new Date();
+    const isCurrentMonth = currentCalendarDate.getMonth() === now.getMonth() &&
+        currentCalendarDate.getFullYear() === now.getFullYear();
+
     const dueFriends = allFriends.filter(friend => {
+        if (friend.isExempt) return false; // Exclude N/A
+
         const nextDue = getNextDueDate(friend.lastContact, friend.freq);
-        return nextDue.getMonth() === currentCalendarDate.getMonth() &&
-            nextDue.getFullYear() === currentCalendarDate.getFullYear();
+
+        if (isCurrentMonth) {
+            // Show anyone due before the end of this month (includes overdue)
+            const endOfMonth = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth() + 1, 0);
+            return nextDue <= endOfMonth;
+        } else {
+            // Standard month view
+            return nextDue.getMonth() === currentCalendarDate.getMonth() &&
+                nextDue.getFullYear() === currentCalendarDate.getFullYear();
+        }
     });
 
-    // Sort by day (earliest first)
+    // Sort by day (earliest first, so most overdue is top)
     dueFriends.sort((a, b) => {
         const dateA = getNextDueDate(a.lastContact, a.freq);
         const dateB = getNextDueDate(b.lastContact, b.freq);
@@ -649,7 +743,13 @@ function renderCalendar() {
 
     top5.forEach(friend => {
         const nextDue = getNextDueDate(friend.lastContact, friend.freq);
-        const day = nextDue.getDate();
+        let dayDisplay = nextDue.getDate();
+
+        // If overdue from previous months, show detailed date or "Overdue"
+        const isOverdue = nextDue < new Date(now.setHours(0, 0, 0, 0));
+        if (isOverdue && isCurrentMonth) {
+            dayDisplay = "!"; // Or maybe the date 
+        }
 
         let cycleText = friend.freq + 'd';
         if (friend.freq >= 30 && friend.freq % 30 === 0) cycleText = (friend.freq / 30) + 'mo';
@@ -661,8 +761,11 @@ function renderCalendar() {
         item.style.cursor = 'pointer';
         item.onclick = () => openEdit(friend);
 
+        // Style differently if overdue?
+        const badgeColor = isOverdue ? 'var(--danger)' : 'var(--primary)';
+
         item.innerHTML = `
-            <div class="calendar-date-badge">${day}</div>
+            <div class="calendar-date-badge" style="background:${badgeColor}">${dayDisplay}</div>
             <img src="${friend.photoURL}" class="calendar-img" alt="${friend.name}">
             <div class="calendar-details">
                 <h4>${friend.name}</h4>

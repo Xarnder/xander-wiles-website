@@ -157,6 +157,14 @@
                 </div>
 
                 <div class="form-row">
+                    <div
+                        style="display:flex; align-items:center; gap:12px; margin-bottom:15px; padding:5px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02)">
+                        <input type="checkbox" id="inp-exempt" class="custom-checkbox">
+                        <label for="inp-exempt" class="custom-checkbox-label">N/A (Don't track)</label>
+                    </div>
+                </div>
+
+                <div class="form-row" id="freq-row">
                     <div class="input-group">
                         <label>Keep in Touch</label>
                         <div style="display:flex; gap:10px;">
@@ -169,12 +177,15 @@
                             </select>
                         </div>
                     </div>
+                </div>
+
+                <div class="form-row" id="last-contact-row">
                     <div class="input-group">
                         <label>Last Caught Up</label>
                         <div style="display:flex; gap:5px;">
                             <input type="date" id="inp-last" style="flex:1">
                             <button type="button" id="btn-today-modal" class="btn secondary-btn"
-                                style="padding:0 10px;">Today</button>
+                                style="padding:0 10px;">Met Today</button>
                         </div>
                     </div>
                 </div>
@@ -228,6 +239,32 @@
     <div id="undo-toast" class="hidden">
         <span id="toast-msg">Marked as Today. Undo? (10)</span>
         <button id="toast-undo-btn">Undo</button>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 400px; text-align: center;">
+            <h3>Confirm Delete</h3>
+            <p id="delete-msg" style="color:var(--text-muted); margin: 20px 0;">Are you sure?</p>
+            <div class="modal-actions" style="display:flex; gap:10px; justify-content:center;">
+                <button id="cancel-delete" class="btn secondary-btn">Cancel</button>
+                <button id="confirm-delete" class="btn primary-btn"
+                    style="background-color:var(--danger);">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Viewer Modal -->
+    <div id="image-viewer-modal" class="modal hidden" style="background:rgba(0,0,0,0.9);">
+        <span id="close-image-viewer"
+            style="position:absolute; bottom:40px; right:30px; font-size:40px; line-height:1; padding-bottom:4px; color:white; cursor:pointer; z-index:1001; background:rgba(255,255,255,0.1); width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(5px);">&times;</span>
+        <div
+            style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; width:100%;">
+            <img id="full-screen-image" src=""
+                style="max-width:90%; max-height:80vh; object-fit:contain; border-radius:8px; box-shadow:0 0 50px rgba(0,0,0,0.5);">
+            <h2 id="image-caption"
+                style="color:white; margin-top:20px; font-size:1.5rem; text-shadow:0 2px 4px rgba(0,0,0,0.8);"></h2>
+        </div>
     </div>
 
     <!-- Utilities -->
