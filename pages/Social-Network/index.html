@@ -81,8 +81,12 @@
             </div>
 
             <!-- Search / Filter -->
-            <div class="search-bar">
-                <input type="text" id="search-input" placeholder="Search friends...">
+            <div class="search-bar" style="display:flex; gap:10px;">
+                <input type="text" id="search-input" placeholder="Search friends..." style="flex:1; margin-bottom:0;">
+                <select id="filter-category"
+                    style="padding:12px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:10px; color:white; min-width:150px;">
+                    <option value="">All Categories</option>
+                </select>
             </div>
 
             <!-- Grid -->
@@ -118,7 +122,8 @@
                     </div>
                     <div class="input-group">
                         <label>Where Met</label>
-                        <input type="text" id="inp-met" placeholder="e.g. Conference">
+                        <input type="text" id="inp-met" list="met-list" placeholder="e.g. Conference">
+                        <datalist id="met-list"></datalist>
                     </div>
                 </div>
 
@@ -136,6 +141,19 @@
                 <div class="input-group">
                     <label>Phone Number</label>
                     <input type="tel" id="inp-phone" placeholder="+1 234 567 8900">
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Category</label>
+                        <input type="text" id="inp-category" list="category-list" placeholder="e.g. Work, Family">
+                        <datalist id="category-list"></datalist>
+                    </div>
+                    <div class="input-group" style="flex: 0 0 80px;">
+                        <label>Color</label>
+                        <input type="color" id="inp-color" value="#4f46e5"
+                            style="padding: 2px; height: 42px; cursor: pointer;">
+                    </div>
                 </div>
 
                 <div class="form-row">

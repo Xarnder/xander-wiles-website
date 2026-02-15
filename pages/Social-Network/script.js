@@ -43,6 +43,7 @@ const modal = document.getElementById('modal');
 const friendForm = document.getElementById('friend-form');
 const friendsGrid = document.getElementById('friends-grid');
 const searchInput = document.getElementById('search-input');
+const filterCategory = document.getElementById('filter-category');
 const statusMsg = document.getElementById('status-msg');
 
 // --- AUTHENTICATION ---
@@ -236,6 +237,8 @@ friendForm.addEventListener('submit', async (e) => {
             freq: freqDays,
             lastContact: document.getElementById('inp-last').value,
             notes: document.getElementById('inp-notes').value,
+            category: document.getElementById('inp-category').value.trim(),
+            categoryColor: document.getElementById('inp-color').value,
             updatedAt: new Date()
         };
 
@@ -276,6 +279,22 @@ function loadFriends() {
 
         allFriends = friends; // Store for calendar
 
+        // Update Datalist with unique categories
+        const categories = [...new Set(friends.map(f => f.category).filter(Boolean))].sort();
+        const datalist = document.getElementById('category-list');
+        datalist.innerHTML = categories.map(c => `<option value="${c}">`).join('');
+
+        // Populate Category Filter
+        const currentFilter = filterCategory.value;
+        filterCategory.innerHTML = '<option value="">All Categories</option>' +
+            categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        filterCategory.value = currentFilter; // Restore selection
+
+        // Populate "Where Met" Datalist
+        const metPlaces = [...new Set(friends.map(f => f.met).filter(Boolean))].sort();
+        const metList = document.getElementById('met-list');
+        metList.innerHTML = metPlaces.map(m => `<option value="${m}">`).join('');
+
         // Client-side sorting (easiest without complex Firestore indexes)
         // Sort by "Next Due Date" ascending
         friends.sort((a, b) => {
@@ -313,13 +332,21 @@ function renderCard(data) {
         badgeText = `Due soon (${diffDays} days)`;
     }
 
+    const categoryBadge = data.category
+        ? `<span class="category-badge" style="background-color:${data.categoryColor || '#4f46e5'}">${data.category}</span>`
+        : '';
+
     const card = document.createElement('div');
     card.className = 'glass-card friend-card';
+    card.dataset.category = data.category || ""; // Store for filtering
     card.innerHTML = `
         <img src="${data.photoURL}" class="card-img" alt="${data.name}" loading="lazy">
         <div class="card-info">
-            <div style="display:flex;justify-content:space-between">
-                <h3>${data.name}</h3>
+            <div style="display:flex;justify-content:space-between; align-items:flex-start">
+                <div>
+                    <h3>${data.name}</h3>
+                    ${categoryBadge}
+                </div>
                 <span class="status-badge ${badgeClass}">${badgeText}</span>
             </div>
             <div class="card-details">
@@ -398,6 +425,10 @@ document.getElementById('add-btn').addEventListener('click', () => {
     document.getElementById('inp-freq-val').value = 1;
     document.getElementById('inp-freq-unit').value = 30;
 
+    // Default Color
+    document.getElementById('inp-category').value = '';
+    document.getElementById('inp-color').value = '#4f46e5';
+
     document.getElementById('photo-preview').style.backgroundImage = 'none';
     document.getElementById('photo-preview').innerHTML = '<span>Tap to Add Photo</span>';
     currentPhotoBlob = null;
@@ -433,6 +464,8 @@ function openEdit(data) {
 
     document.getElementById('inp-last').value = data.lastContact;
     document.getElementById('inp-notes').value = data.notes;
+    document.getElementById('inp-category').value = data.category || '';
+    document.getElementById('inp-color').value = data.categoryColor || '#4f46e5';
 
     document.getElementById('photo-preview').style.backgroundImage = `url(${data.photoURL})`;
     document.getElementById('photo-preview').innerHTML = '';
@@ -447,15 +480,25 @@ function closeModal() {
 document.getElementById('close-modal').addEventListener('click', closeModal);
 window.onclick = (e) => { if (e.target == modal) closeModal(); }
 
-// Search Filter
-searchInput.addEventListener('input', (e) => {
-    const val = e.target.value.toLowerCase();
+// Filter Logic
+function filterGrid() {
+    const textVal = searchInput.value.toLowerCase();
+    const catVal = filterCategory.value;
     const cards = document.querySelectorAll('.friend-card');
+
     cards.forEach(card => {
         const text = card.innerText.toLowerCase();
-        card.style.display = text.includes(val) ? 'flex' : 'none';
+        const cardCategory = card.dataset.category || ""; // We need to add this to renderCard
+
+        const matchesText = text.includes(textVal);
+        const matchesCategory = catVal === "" || cardCategory === catVal;
+
+        card.style.display = (matchesText && matchesCategory) ? 'flex' : 'none';
     });
-});
+}
+
+searchInput.addEventListener('input', filterGrid);
+filterCategory.addEventListener('change', filterGrid);
 
 // Calendar Widget Logic
 function renderCalendar() {
