@@ -171,7 +171,11 @@
                     </div>
                     <div class="input-group">
                         <label>Last Caught Up</label>
-                        <input type="date" id="inp-last">
+                        <div style="display:flex; gap:5px;">
+                            <input type="date" id="inp-last" style="flex:1">
+                            <button type="button" id="btn-today-modal" class="btn secondary-btn"
+                                style="padding:0 10px;">Today</button>
+                        </div>
                     </div>
                 </div>
 
@@ -218,6 +222,12 @@
                 <button id="crop-save" class="btn primary-btn">Crop & Save</button>
             </div>
         </div>
+    </div>
+
+    <!-- Undo Toast -->
+    <div id="undo-toast" class="hidden">
+        <span id="toast-msg">Marked as Today. Undo? (10)</span>
+        <button id="toast-undo-btn">Undo</button>
     </div>
 
     <!-- Utilities -->

@@ -33,6 +33,8 @@ let currentPhotoBlob = null; // Holds the processed image
 let cropper = null; // CropperJS instance
 let allFriends = [];
 let currentCalendarDate = new Date();
+let undoTimeout = null;
+let tempUndoData = null; // Store old date for undo
 
 // DOM Elements
 const views = {
@@ -325,13 +327,20 @@ function renderCard(data) {
 
     let badgeClass = 'status-ok';
     let badgeText = `Due in ${diffDays} days`;
+    let badgeHTML = '';
 
-    if (diffDays < 0) {
-        badgeClass = 'status-overdue';
-        badgeText = `Overdue by ${Math.abs(diffDays)} days`;
-    } else if (diffDays <= 7) {
-        badgeClass = 'status-due';
-        badgeText = `Due soon (${diffDays} days)`;
+    if (!data.lastContact) {
+        // No date set, no badge
+        badgeHTML = '';
+    } else {
+        if (diffDays < 0) {
+            badgeClass = 'status-overdue';
+            badgeText = `Overdue by ${Math.abs(diffDays)} days`;
+        } else if (diffDays <= 7) {
+            badgeClass = 'status-due';
+            badgeText = `Due soon (${diffDays} days)`;
+        }
+        badgeHTML = `<span class="status-badge ${badgeClass}">${badgeText}</span>`;
     }
 
     const categoryBadge = data.category
@@ -349,7 +358,7 @@ function renderCard(data) {
                     <h3>${data.name}</h3>
                     ${categoryBadge}
                 </div>
-                <span class="status-badge ${badgeClass}">${badgeText}</span>
+                ${badgeHTML}
             </div>
             <div class="card-details">
                 <div>📍 ${data.origin || '-'} | 💼 ${data.work || '-'}</div>
@@ -359,19 +368,78 @@ function renderCard(data) {
             <p style="font-size:0.85rem; margin-top:10px">${data.notes || ''}</p>
         </div>
         <div class="card-actions">
+            <!-- New Today Button -->
+            <button class="btn secondary-btn today-btn" style="color:var(--success); border-color:rgba(16,185,129,0.3)">Met Today</button>
             <button class="btn secondary-btn edit-btn">Edit</button>
             <button class="btn secondary-btn delete-btn" style="color:var(--danger);border-color:rgba(239,68,68,0.3)">Delete</button>
         </div>
     `;
 
     // Event Listeners for buttons
+    card.querySelector('.today-btn').addEventListener('click', () => markToday(data.id, data.lastContact));
     card.querySelector('.delete-btn').addEventListener('click', () => deletePerson(data.id));
     card.querySelector('.edit-btn').addEventListener('click', () => openEdit(data));
 
     friendsGrid.appendChild(card);
 }
 
-// Helpers
+// --- Quick Actions ---
+const undoToast = document.getElementById('undo-toast');
+const toastMsg = document.getElementById('toast-msg');
+const toastUndoBtn = document.getElementById('toast-undo-btn');
+
+async function markToday(id, oldDate) {
+    // 1. Save state for undo
+    tempUndoData = { id, oldDate };
+
+    // 2. Optimistic Update (or just simple wait)
+    const todayStr = new Date().toISOString().split('T')[0];
+    await updateDoc(doc(db, "friends", id), {
+        lastContact: todayStr,
+        updatedAt: new Date()
+    });
+
+    // 3. Show Toast
+    showUndoToast();
+}
+
+function showUndoToast() {
+    undoToast.classList.remove('hidden');
+    let timeLeft = 10;
+    toastMsg.innerText = `Marked as Today. Undo? (${timeLeft})`;
+
+    if (undoTimeout) clearInterval(undoTimeout);
+
+    undoTimeout = setInterval(() => {
+        timeLeft--;
+        toastMsg.innerText = `Marked as Today. Undo? (${timeLeft})`;
+        if (timeLeft <= 0) {
+            clearInterval(undoTimeout);
+            undoToast.classList.add('hidden');
+            tempUndoData = null; // Clear undo capability
+        }
+    }, 1000);
+}
+
+toastUndoBtn.onclick = async () => {
+    if (tempUndoData) {
+        clearInterval(undoTimeout);
+        undoToast.classList.add('hidden');
+
+        await updateDoc(doc(db, "friends", tempUndoData.id), {
+            lastContact: tempUndoData.oldDate,
+            updatedAt: new Date()
+        });
+
+        tempUndoData = null;
+        console.log("Action Undone");
+    }
+};
+
+// Modal Logic
+document.getElementById('btn-today-modal').onclick = () => {
+    document.getElementById('inp-last').valueAsDate = new Date();
+};
 function getNextDueDate(lastContactStr, freqDays) {
     if (!lastContactStr) return new Date(); // If no date, due now
     const last = new Date(lastContactStr);
