@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Manager</title>
+
+    <!-- Theme-aware SVG icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Header CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- App Specific CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="app-container">
+
+        <!-- Login View -->
+        <section id="login-view">
+            <div class="glass-card login-card">
+                <h1>Network Manager</h1>
+                <p>Track connections, manage friends.</p>
+                <button id="google-login-btn" class="btn primary-btn">
+                    Sign in with Google
+                </button>
+                <p class="debug-msg" id="auth-debug"></p>
+            </div>
+        </section>
+
+        <!-- Dashboard View (Hidden by default) -->
+        <section id="dashboard-view" class="hidden">
+            <header class="app-header">
+                <div class="header-left">
+                    <h2>My Network</h2>
+                    <span id="user-name"></span>
+                    <span id="storage-stats" style="font-size:0.8rem; opacity:0.7; margin-left:10px"></span>
+                </div>
+                <div class="header-right">
+                    <button id="add-btn" class="btn primary-btn">+ Add Person</button>
+                    <button id="logout-btn" class="btn secondary-btn">Logout</button>
+                </div>
+            </header>
+
+            <!-- Search / Filter -->
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="Search friends...">
+            </div>
+
+            <!-- Grid -->
+            <div id="friends-grid" class="friends-grid">
+                <!-- Javascript fills this -->
+                <div class="loader">Loading...</div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal Form -->
+    <div id="modal" class="modal hidden">
+        <div class="glass-card modal-content">
+            <span id="close-modal">&times;</span>
+            <h3 id="modal-title">Add Person</h3>
+
+            <form id="friend-form">
+                <input type="hidden" id="edit-id"> <!-- Stores ID if editing -->
+
+                <!-- Photo Upload -->
+                <div class="photo-upload-container">
+                    <label for="photo-file" id="photo-preview">
+                        <span>Tap to Add Photo</span>
+                    </label>
+                    <input type="file" id="photo-file"
+                        accept="image/png, image/jpeg, image/webp, image/avif, image/heic, image/heif" hidden>
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Name</label>
+                        <input type="text" id="inp-name" required placeholder="Full Name">
+                    </div>
+                    <div class="input-group">
+                        <label>Where Met</label>
+                        <input type="text" id="inp-met" placeholder="e.g. Conference">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Origin / Location</label>
+                        <input type="text" id="inp-origin" placeholder="e.g. London">
+                    </div>
+                    <div class="input-group">
+                        <label>Line of Work</label>
+                        <input type="text" id="inp-work" placeholder="e.g. Designer">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Phone Number</label>
+                    <input type="tel" id="inp-phone" placeholder="+1 234 567 8900">
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Keep in Touch (Days)</label>
+                        <input type="number" id="inp-freq" value="30" min="1">
+                    </div>
+                    <div class="input-group">
+                        <label>Last Caught Up</label>
+                        <input type="date" id="inp-last">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Notes</label>
+                    <textarea id="inp-notes" rows="3" placeholder="Interests, family info..."></textarea>
+                </div>
+
+                <div id="status-msg"></div>
+                <button type="submit" class="btn primary-btn full-width">Save</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Utilities -->
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+
+    <!-- Firebase SDKs & Logic -->
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>
