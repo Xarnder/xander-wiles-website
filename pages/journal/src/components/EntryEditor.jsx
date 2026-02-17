@@ -9,7 +9,11 @@ import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
 import { format, parseISO, getDay, addDays } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2 } from 'lucide-react';
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { compressImage } from '../utils/imageUtils';
+import StorageStats from './StorageStats';
+import ConfirmModal from './ConfirmModal';
 
 export default function EntryEditor() {
     const { currentUser } = useAuth();
@@ -23,6 +27,13 @@ export default function EntryEditor() {
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [showRawHeader, setShowRawHeader] = useState(false);
+
+    // Image State
+    const [imageFile, setImageFile] = useState(null);
+    const [imageUrl, setImageUrl] = useState('');
+    const [imageMetadata, setImageMetadata] = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     // Parse date for display
     const displayDate = useMemo(() => {
@@ -58,12 +69,33 @@ export default function EntryEditor() {
                     const data = docSnap.data();
                     setContent(data.content || '');
                     setTitle(data.title || '');
+
+                    // Handle new schema vs legacy schema
+                    if (data.imageUrl) {
+                        setImageUrl(data.imageUrl);
+                        setImageMetadata({
+                            size: data.imageSize || 0,
+                            path: data.imagePath // Optional: keep path for deletion if needed, though user didn't explicitly ask for it, it's good practice
+                        });
+                    } else if (data.imageMetadata) {
+                        // Legacy fallback
+                        setImageUrl(data.imageMetadata.url);
+                        setImageMetadata({
+                            size: data.imageMetadata.sizeInBytes,
+                            path: data.imageMetadata.path
+                        });
+                    } else {
+                        setImageUrl('');
+                        setImageMetadata(null);
+                    }
                     setIsEditing(false); // Ensure we start in view mode for existing entries
                 } else {
                     // New entry
                     setIsEditing(true);
                     setContent('');
                     setTitle('');
+                    setImageUrl('');
+                    setImageMetadata(null);
                 }
             } catch (error) {
                 console.error("Error fetching entry:", error);
@@ -90,6 +122,70 @@ export default function EntryEditor() {
         }
     }, [content]);
 
+    // Image Upload Handler
+    const handleImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setUploading(true);
+        try {
+            const compressedFile = await compressImage(file);
+            const storage = getStorage();
+            const storagePath = `users/${currentUser.uid}/images/${date}.webp`;
+            const storageRef = ref(storage, storagePath);
+
+            await uploadBytes(storageRef, compressedFile);
+            const downloadUrl = await getDownloadURL(storageRef);
+
+            setImageUrl(downloadUrl);
+            setImageMetadata({
+                size: compressedFile.size,
+                path: storagePath
+            });
+
+            success('Image uploaded successfully');
+        } catch (error) {
+            console.error("Error uploading image:", error);
+            toastError("Failed to upload image");
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleRemoveImage = () => {
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmRemoveImage = async () => {
+        setUploading(true);
+        try {
+            if (imageMetadata && imageMetadata.path) {
+                const storage = getStorage();
+                const storageRef = ref(storage, imageMetadata.path);
+                await deleteObject(storageRef);
+            } else if (imageUrl) {
+                // Try to construct path from URL if metadata missing (fallback)
+                try {
+                    const storage = getStorage();
+                    const path = decodeURIComponent(imageUrl.split('/o/')[1].split('?')[0]);
+                    const storageRef = ref(storage, path);
+                    await deleteObject(storageRef);
+                } catch (e) {
+                    console.warn("Could not derive storage path from URL", e);
+                }
+            }
+
+            setImageUrl('');
+            setImageMetadata(null);
+            success("Image removed");
+        } catch (error) {
+            console.error("Error removing image:", error);
+            toastError("Failed to remove image");
+        } finally {
+            setUploading(false);
+        }
+    };
+
     async function handleSave() {
         if (!currentUser) return;
         setSaving(true);
@@ -99,14 +195,20 @@ export default function EntryEditor() {
             const trimmedTitle = title.trim();
             const inferredTitle = content.split('\n')[0].replace('#', '').trim();
 
-            if (!trimmedContent && !trimmedTitle) {
+            if (!trimmedContent && !trimmedTitle && !imageUrl) {
                 await deleteDoc(docRef);
             } else {
+                const textSize = new Blob([content]).size;
+
                 await setDoc(docRef, {
                     date: parseISO(date),
                     title: trimmedTitle || inferredTitle,
                     content: content,
                     updatedAt: serverTimestamp(),
+                    imageUrl: imageUrl || null,
+                    imageSize: imageMetadata?.size || 0,
+                    imagePath: imageMetadata?.path || null, // Keep path for management
+                    textSize: textSize
                 }, { merge: true });
             }
 
@@ -194,6 +296,17 @@ export default function EntryEditor() {
                 <div
                     className="absolute inset-0 bg-[#0a0a0b] -z-10 rounded-xl shadow-lg border border-white/10"
                 />
+
+                {/* Background Image Overlay */}
+                {imageUrl && (
+                    <>
+                        <div
+                            className="absolute inset-0 z-[-5] rounded-xl opacity-20 bg-cover bg-center pointer-events-none transition-opacity duration-500"
+                            style={{ backgroundImage: `url(${imageUrl})` }}
+                        />
+                        <div className="absolute inset-0 z-[-4] bg-gradient-to-b from-[#0a0a0b]/80 via-[#0a0a0b]/90 to-[#0a0a0b] rounded-xl" />
+                    </>
+                )}
 
                 <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="flex items-center w-full sm:w-auto overflow-hidden">
@@ -318,6 +431,12 @@ export default function EntryEditor() {
 
             {/* Content Container */}
             <div className={`glass-card flex-1 p-6 md:p-8 overflow-hidden flex flex-col relative ${isEditing ? 'ring-2 ring-primary/30' : ''}`}>
+                {imageUrl && !isEditing && (
+                    <div className="mb-6 rounded-lg overflow-hidden border border-white/10 shadow-lg relative group">
+                        <img src={imageUrl} alt="Entry attachment" className="w-full object-cover max-h-[400px]" />
+                    </div>
+                )}
+
                 {isEditing ? (
                     <div className="h-full flex flex-col">
                         <div onClick={() => {
@@ -334,6 +453,51 @@ export default function EntryEditor() {
                                 className={`w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-6 p-0 ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
                             />
                         </div>
+
+                        {/* Image Upload Area */}
+                        <div className="mb-4">
+                            {imageUrl ? (
+                                <div className="relative rounded-lg overflow-hidden border border-white/10 group h-48 bg-black/40 flex items-center justify-center">
+                                    <img src={imageUrl} alt="Uploaded" className="h-full object-contain" />
+                                    <button
+                                        onClick={handleRemoveImage}
+                                        className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
+                                        title="Remove Image"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="relative group">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageUpload}
+                                        className="hidden"
+                                        id="image-upload"
+                                        disabled={uploading}
+                                    />
+                                    <label
+                                        htmlFor="image-upload"
+                                        className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/10 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-white/5 transition-all ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        {uploading ? (
+                                            <div className="flex flex-col items-center text-primary">
+                                                <Loader className="w-8 h-8 animate-spin mb-2" />
+                                                <span className="text-sm">Compressing & Uploading...</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center text-text-muted group-hover:text-white">
+                                                <ImageIcon className="w-8 h-8 mb-2" />
+                                                <span className="text-sm font-medium">Click to upload image</span>
+                                                <span className="text-xs mt-1 text-text-muted/60">Max 200KB (Auto-compressed)</span>
+                                            </div>
+                                        )}
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="flex-1 overflow-auto custom-scrollbar -mr-4 pr-4">
                             <SimpleMdeReact
                                 value={content}
@@ -344,21 +508,37 @@ export default function EntryEditor() {
                         </div>
                     </div>
                 ) : (
-                    <div className="h-full overflow-y-auto custom-scrollbar -mr-4 pr-4">
-                        <div className="markdown-content prose prose-invert max-w-none">
-                            {displayContent ? (
-                                <ReactMarkdown>{displayContent}</ReactMarkdown>
-                            ) : (
-                                <div className="flex flex-col items-center justify-center h-[40vh] text-text-muted opacity-60">
-                                    <Edit2 className="w-12 h-12 mb-4 opacity-30" />
-                                    <p className="text-lg">This page is empty.</p>
-                                    <p className="text-sm">Click Edit to start writing.</p>
-                                </div>
-                            )}
+                    <>
+                        <div className="flex-1 overflow-y-auto custom-scrollbar -mr-4 pr-4">
+                            <div className="markdown-content prose prose-invert max-w-none">
+                                {displayContent ? (
+                                    <ReactMarkdown>{displayContent}</ReactMarkdown>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-[40vh] text-text-muted opacity-60">
+                                        <Edit2 className="w-12 h-12 mb-4 opacity-30" />
+                                        <p className="text-lg">This page is empty.</p>
+                                        <p className="text-sm">Click Edit to start writing.</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                        <StorageStats
+                            entryTextSize={new Blob([content]).size}
+                            entryImageSize={imageMetadata?.size || 0}
+                        />
+                    </>
                 )}
             </div>
+
+            <ConfirmModal
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onConfirm={confirmRemoveImage}
+                title="Remove Image"
+                message="Are you sure you want to remove this image? This action cannot be undone."
+                confirmText="Remove"
+                isDangerous={true}
+            />
         </div >
     );
 }

@@ -9,7 +9,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       input: {
-        main: 'index.dev.html',
+        main: 'index.html',
       },
       output: {
         manualChunks: {

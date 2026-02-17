@@ -15,6 +15,7 @@ import {
     Legend,
     ResponsiveContainer
 } from 'recharts';
+import StorageStats from './StorageStats';
 
 // List of common stop words to exclude from analysis
 const STOP_WORDS = new Set([
@@ -356,19 +357,21 @@ export default function StatsView() {
                 </div>
 
                 {/* Quick Stats Cards */}
-                <div className="space-y-6">
-                    <div className="glass-card p-6 flex flex-col justify-center items-center text-center h-[48%]">
+                <div className="space-y-6 flex flex-col h-full">
+                    <div className="glass-card p-6 flex flex-col justify-center items-center text-center flex-1">
                         <Type className="w-8 h-8 text-blue-400 mb-2" />
                         <div className="text-3xl font-bold text-white mb-1">{stats.totalWords.toLocaleString()}</div>
                         <div className="text-sm text-text-muted">Total Words Written</div>
                         <div className="text-xs text-text-muted/60 mt-1">in selected range</div>
                     </div>
 
-                    <div className="glass-card p-6 flex flex-col justify-center items-center text-center h-[48%]">
+                    <div className="glass-card p-6 flex flex-col justify-center items-center text-center flex-1">
                         <TrendingUp className="w-8 h-8 text-pink-400 mb-2" />
                         <div className="text-3xl font-bold text-white mb-1">{stats.averageWordsPerEntry.toLocaleString()}</div>
                         <div className="text-sm text-text-muted">Average Words / Entry</div>
                     </div>
+
+                    <StorageStats variant="global" className="flex-1 flex flex-col justify-center items-center text-center" />
                 </div>
             </div>
         </div>
