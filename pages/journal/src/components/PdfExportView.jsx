@@ -107,7 +107,8 @@ export default function PdfExportView() {
                             title: title || 'Untitled Entry',
                             // Ensure date is a string YYYY-MM-DD for consistency
                             date: format(data.date.toDate(), 'yyyy-MM-dd'),
-                            content: content
+                            content: content,
+                            imageUrl: data.imageUrl || null
                         };
                     });
                     setEntries(fetchedEntries);
@@ -410,6 +411,15 @@ export default function PdfExportView() {
                                                     className="prose max-w-none text-gray-800"
                                                     style={{ fontSize: `${fontSettings.bodySize}px` }}
                                                 >
+                                                    {entry.imageUrl && (
+                                                        <div className="mb-4">
+                                                            <img
+                                                                src={entry.imageUrl}
+                                                                alt="Entry attachment"
+                                                                className="max-w-full max-h-[400px] object-contain rounded-lg border border-gray-200"
+                                                            />
+                                                        </div>
+                                                    )}
                                                     <ReactMarkdown>{entry.content}</ReactMarkdown>
                                                 </div>
                                                 {index < entries.length - 1 && (
@@ -452,6 +462,10 @@ export default function PdfExportView() {
                         }
                         .print\\:shadow-none {
                             box-shadow: none !important;
+                        }
+                        img {
+                            max-width: 100% !important;
+                            page-break-inside: avoid;
                         }
                     }
                 `}</style>
