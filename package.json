@@ -2,6 +2,6 @@
     "name": "xander-wiles-website",
     "version": "1.0.0",
     "scripts": {
-        "build": "rm -rf dist_final && mkdir -p dist_final && cp -r * dist_final 2>/dev/null || : && rm -rf dist_final/pages/journal && mkdir -p dist_final/pages/journal && cd pages/journal && npm install && npm run build && cp -r dist/* ../../../dist_final/pages/journal/"
+        "build": "rm -rf deploy_out && mkdir -p deploy_out && rsync -av --exclude='node_modules' --exclude='deploy_out' --exclude='.git' --exclude='pages/journal' . deploy_out/ && mkdir -p deploy_out/pages/journal && cd pages/journal && npm install && npm run build && cp -r dist/* ../../../deploy_out/pages/journal/"
     }
 }
