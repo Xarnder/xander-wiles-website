@@ -518,7 +518,7 @@ export default function EntryEditor() {
                                             <img src={img.url} alt={`Uploaded ${idx}`} className="w-full h-full object-cover" />
                                             <button
                                                 onClick={() => handleRemoveImage(idx)}
-                                                className="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                className="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
                                                 title="Remove Image"
                                             >
                                                 <Trash2 className="w-4 h-4" />
