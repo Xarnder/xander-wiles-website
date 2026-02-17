@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Life in Weeks</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Theme-aware SVG icons (modern browsers) -->
+  <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+  <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+  <!-- Fallback PNG icons -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+  <!-- Other essential links -->
+  <link rel="manifest" href="/site.webmanifest">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+</head>
+<div id="main-nav-placeholder"></div> 
+
+<body>
+
+  <div class="background-overlay"></div>
+  <div class="floating-shapes">
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+  </div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="glass-card hero-card">
+      <h1>Your Life in Weeks</h1>
+      <p>Each vertical column is one year of your life. Each box is one week.</p>
+    </header>
+
+    <!-- Main Grid Visualization -->
+    <main class="glass-card grid-card">
+      <div class="grid-layout">
+        <div class="week-markers">
+          <div class="week-title">Wk</div>
+          <div id="week-labels"></div>
+        </div>
+        <div class="grid-scroll-area">
+          <div id="age-labels"></div>
+          <div id="life-grid-container">
+             <div id="life-grid"></div>
+             <div id="current-week-line" class="red-line"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Settings and Stats Footer -->
+    <footer class="glass-card settings-stats-card">
+      <div class="settings-group">
+        <h2>Settings</h2>
+        <div class="input-row">
+           <div class="input-wrap">
+             <label for="dob">Date of Birth</label>
+             <input type="date" id="dob">
+           </div>
+           <div class="input-wrap">
+             <label for="lifespan">Est. Lifespan (Years)</label>
+             <input type="number" id="lifespan" value="90" min="1" max="120">
+           </div>
+        </div>
+        <button id="save-button">Generate Grid</button>
+      </div>
+
+      <div class="stats-group">
+        <h2>Your Journey</h2>
+        <ul id="stats-list">
+           <li id="weeks-since-birthday">Enter your details to begin.</li>
+           <li id="percentage-through-year">--</li>
+           <li id="percentage-completed">--</li>
+           <li id="total-lived">--</li>
+           <li id="total-left">--</li>
+        </ul>
+      </div>
+
+      <div class="theme-toggle-wrapper">
+        <button id="theme-toggle">Switch Theme</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+  <script src="/assets/js/nav-loader.js"></script> 
+</body>
+</html>

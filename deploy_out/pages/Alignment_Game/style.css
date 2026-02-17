@@ -1,0 +1,182 @@
+:root {
+    --primary-bg: #1a1a1a;
+    --secondary-bg: #2a2a2a;
+    --text-color: #e0e0e0;
+    --accent-color: #007bff;
+    --accent-color-hover: #0056b3;
+    --reset-color: #dc3545;
+    --reset-color-hover: #a71d2a;
+    --slider-track: #444;
+    --border-color: #333;
+}
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--primary-bg);
+    color: var(--text-color);
+    overflow: hidden; /* Prevents scrollbars from appearing */
+}
+
+#c {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.ui-container {
+    position: fixed;
+    top: 15px;
+    right: 15px;
+    width: 320px;
+    background: rgba(42, 42, 42, 0.85);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border: 1px solid var(--border-color);
+    max-height: calc(100vh - 30px);
+    overflow-y: auto;
+}
+
+/* NEW: Styles for header and reset button */
+.ui-header {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#reset-btn {
+    width: 100%;
+    padding: 12px;
+    background-color: var(--reset-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+}
+
+#reset-btn:hover {
+    background-color: var(--reset-color-hover);
+}
+
+
+.controls-group {
+    margin-bottom: 20px;
+}
+
+.controls-group h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 8px;
+}
+
+.model-selection {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.model-btn {
+    flex-grow: 1;
+    padding: 8px 12px;
+    background-color: var(--secondary-bg);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.model-btn:hover {
+    background-color: #3c3c3c;
+}
+
+.model-btn.active {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+    font-weight: 600;
+}
+
+
+.slider-container {
+    display: grid;
+    grid-template-columns: 60px 1fr 45px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.slider-container label {
+    font-weight: 500;
+    white-space: normal; 
+}
+
+.slider-container span {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: var(--slider-track);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent-color);
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--accent-color);
+    border-radius: 50%;
+    border: none;
+    transition: background 0.2s;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+    background: #009bff;
+}
+input[type="range"]:hover::-moz-range-thumb {
+    background: #009bff;
+}
+
+#auto-animate-btn {
+    width: 100%;
+    padding: 12px;
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+}
+
+#auto-animate-btn:hover {
+    background-color: var(--accent-color-hover);
+}

@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# VS Code
+.vscode/
+
+# Optional: ignore heavy source images you don't want in git
+# pages/Siewli/images/original/
+
+pages/exprimental_align_tool/
+
+pages/XR_Viewer/assets/Make_Human.glb
+
+

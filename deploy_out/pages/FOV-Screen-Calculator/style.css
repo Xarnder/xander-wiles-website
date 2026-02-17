@@ -1,0 +1,257 @@
+:root {
+    --bg-color: #111115;
+    --card-bg: rgba(30, 30, 35, 0.7);
+    --text-main: #ffffff;
+    --text-muted: #a0a0a0;
+    --accent: #3b82f6;
+    --border: rgba(255, 255, 255, 0.1);
+    --radius: 16px;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 80px;
+    /* Space for your global nav */
+    padding-bottom: 50px;
+}
+
+#main-nav-placeholder {
+    width: 100%;
+}
+
+.container {
+    width: 100%;
+    max-width: 600px;
+    padding: 20px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Glassmorphism Card */
+/* Glassmorphism Card */
+.container .glass-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 30px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    transition: height 0.3s ease;
+}
+
+h1 {
+    margin: 0 0 5px 0;
+    font-size: 1.8rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 25px;
+    font-size: 0.9rem;
+}
+
+.divider {
+    border: 0;
+    height: 1px;
+    background: var(--border);
+    margin: 20px 0;
+}
+
+/* Inputs */
+.input-group {
+    margin-bottom: 15px;
+}
+
+.input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.field.small {
+    flex-grow: 0;
+    width: 80px;
+}
+
+label {
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+    color: var(--text-muted);
+}
+
+input,
+select {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+input:focus,
+select:focus {
+    border-color: var(--accent);
+}
+
+/* Results */
+.result-box {
+    margin-top: 10px;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    border: 1px solid var(--accent);
+}
+
+.result-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+}
+
+.result-detail {
+    font-size: 0.9rem;
+    color: var(--text-main);
+    display: block;
+    margin-top: 5px;
+}
+
+.debug-text {
+    margin-top: 15px;
+    font-size: 0.75rem;
+    color: #555;
+    font-family: monospace;
+    text-align: center;
+}
+
+/* 3D Scene Specific */
+.scene-card h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+}
+
+#canvas-container {
+    width: 100%;
+    height: 350px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    margin-top: 15px;
+    border: 1px solid var(--border);
+}
+
+.hint {
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 10px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+@media (max-width: 480px) {
+    .container .glass-card {
+        padding: 20px;
+    }
+
+    #canvas-container {
+        height: 250px;
+    }
+}
+
+@media (min-width: 900px) {
+    .container {
+        max-width: 1200px;
+        flex-direction: row;
+        align-items: stretch;
+        /* Stretch to make both cards equal height */
+    }
+
+    .container .glass-card {
+        flex: 1;
+        width: 0;
+        /* Ensures flex works properly with content */
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Target the second card specifically if needed, or rely on common class */
+    .scene-card {
+        justify-content: space-between;
+    }
+
+    #canvas-container {
+        height: auto;
+        /* Remove fixed height */
+        flex-grow: 1;
+        /* Fill available space */
+        min-height: 400px;
+        /* Minimum height backup */
+    }
+}
+/* Size Presets */
+.size-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.size-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.size-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: var(--accent);
+}
+
+.size-btn:active {
+    background: var(--accent);
+    color: white;
+}
+
+/* Hide templates in Size Needed mode since we calculate size there */
+#common-sizes.hidden {
+    display: none !important;
+}

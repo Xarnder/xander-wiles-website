@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Me | Xander Wiles</title>
+
+    <!-- Favicon and App Icon Links -->
+    <link rel="apple-touch-icon" sizes="180x180" href="../../assets/images/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../../assets/images/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../../assets/images/favicon-16x16.png">
+    <link rel="manifest" href="../../assets/site.webmanifest">
+    <link rel="shortcut icon" href="../../assets/images/favicon.ico">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="msapplication-config" content="../../assets/browserconfig.xml">
+    <meta name="theme-color" content="#ffffff">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="../../assets/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        /* Specific styles for About page */
+        .about-container {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .profile-header {
+            text-align: center;
+        }
+
+        .about-content {
+            line-height: 1.6;
+            font-size: 1.1rem;
+        }
+
+        .social-links {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 2rem;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Background elements -->
+    <div class="background-overlay"></div>
+    <div class="floating-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+    </div>
+
+    <!-- Navigation Placeholder -->
+    <div id="main-nav-placeholder"></div>
+
+    <main class="app-container">
+        <div class="glass-card about-container">
+            <div class="profile-header">
+                <picture>
+                    <source srcset="../../assets/images/xander_Correted_Edited.avif" type="image/avif">
+                    <source srcset="../../assets/images/Xander_Corrected_Edited.webp" type="image/webp">
+                    <img src="../../assets/images/Xander Corrected Edited.png" alt="Xander Wiles"
+                        class="profile-picture" width="200" height="200" loading="lazy"
+                        style="border-radius: 50%; border: 4px solid rgba(255,255,255,0.2);">
+                </picture>
+                <h1>About Me</h1>
+            </div>
+
+            <div class="about-content">
+                <p>Hello! I'm Xander Wiles.</p>
+                <p>I'm a passionate developer who loves building web applications, games, and tools. My projects range
+                    from interactive 3D experiences to productivity utilities. I enjoy exploring new technologies and
+                    creating things that are both functional and visually appealing.</p>
+                <p>Feel free to explore my projects on the home page or connect with me via the links below.</p>
+            </div>
+
+            <div class="social-links">
+                <a href="https://github.com/Xarnder" target="_blank" rel="noopener noreferrer" class="btn">GitHub</a>
+                <a href="https://www.linkedin.com/in/xander-wiles-245999169/" target="_blank" rel="noopener noreferrer"
+                    class="btn">LinkedIn</a>
+                <a href="https://www.youtube.com/@XanderWiles" target="_blank" rel="noopener noreferrer"
+                    class="btn">YouTube</a>
+                <a href="https://www.instagram.com/xander.and.the.lens/" target="_blank" rel="noopener noreferrer"
+                    class="btn">Instagram</a>
+            </div>
+        </div>
+    </main>
+
+    <script src="../../assets/js/nav-loader.js"></script>
+</body>
+
+</html>

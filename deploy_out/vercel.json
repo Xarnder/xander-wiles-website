@@ -1,0 +1,12 @@
+{
+    "version": 2,
+    "buildCommand": "node build.js",
+    "outputDirectory": "deploy_out",
+    "rewrites": [
+        {
+            "source": "/pages/journal/(.*)",
+            "destination": "/pages/journal/index.html"
+        }
+    ],
+    "cleanUrls": true
+}

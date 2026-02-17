@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Page Culler</title>
+
+    <!-- Global Site Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Local App Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+</head>
+
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <div class="app-wrapper">
+        <!-- Control Panel -->
+        <aside class="control-panel glass-card">
+            <header>
+                <h1>PDF Culler</h1>
+                <p class="subtitle">Manual Page Removal Tool</p>
+            </header>
+
+            <div class="upload-section">
+                <label for="pdfInput" class="btn primary-outline full-width">📂 Open PDF</label>
+                <input type="file" id="pdfInput" accept="application/pdf" hidden>
+                <div id="fileName" class="file-name">No file selected</div>
+            </div>
+
+            <!-- Stats Dashboard -->
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span class="stat-label">Kept</span>
+                    <span id="countKept" class="stat-value success-text">0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Culled</span>
+                    <span id="countCulled" class="stat-value danger-text">0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">To Go</span>
+                    <span id="countRemaining" class="stat-value muted-text">0</span>
+                </div>
+            </div>
+
+            <hr class="divider">
+
+            <!-- Actions -->
+            <div class="action-section disabled" id="actionSection">
+                <div class="toggle-row">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="chkAutoAdvance" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Auto-Next after click</span>
+                </div>
+
+                <div class="button-grid">
+                    <button id="btnKeep" class="btn success big-btn">
+                        <span class="icon">✓</span> Keep
+                    </button>
+                    <button id="btnCull" class="btn danger big-btn">
+                        <span class="icon">✕</span> Remove
+                    </button>
+                </div>
+
+                <div class="nav-controls">
+                    <button id="btnPrev" class="btn secondary small-btn">◀ Prev</button>
+                    <span id="pageIndicator">Page 0 / 0</span>
+                    <button id="btnNext" class="btn secondary small-btn">Next ▶</button>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button id="btnDownload" class="btn primary full-width">Download Result PDF</button>
+                </div>
+
+                <p class="kb-hint">Tips: Use <strong>Left/Right</strong> arrows to nav.<br>Use <strong>K</strong> (Keep)
+                    and <strong>X</strong> (Remove) keys.</p>
+            </div>
+        </aside>
+
+        <!-- Viewer Area -->
+        <main class="viewer-area">
+            <div class="canvas-container glass-card" id="canvasContainer">
+                <div id="introMessage">Upload a PDF to start culling.</div>
+                <canvas id="theCanvas"></canvas>
+                <div id="cullOverlay" class="overlay hidden">
+                    <span>REMOVED</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

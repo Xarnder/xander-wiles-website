@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Playlist to CSV Exporter</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Site Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Local Page Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div>
+
+    <!-- Main Application Container -->
+    <main class="container">
+        <div class="glass-card">
+            <header class="card-header">
+                <h1>Playlist to CSV</h1>
+                <p>Extract video titles and links from any public YouTube playlist.</p>
+            </header>
+
+            <!-- API Key Input Removed: Key is now hardcoded in script.js -->
+
+            <div class="input-group">
+                <label for="playlistUrl">Playlist URL</label>
+                <input type="text" id="playlistUrl" placeholder="https://www.youtube.com/playlist?list=..."
+                    autocomplete="off">
+            </div>
+
+            <button id="extractBtn" class="action-btn">Extract & Download CSV</button>
+
+            <div id="statusMessage" class="status-box hidden"></div>
+
+            <div id="resultsContainer" class="results-container hidden">
+                <button id="downloadBtn" class="action-btn secondary" style="margin-bottom: 20px;">Download CSV</button>
+                <h3>Extracted Videos</h3>
+                <div class="table-wrapper">
+                    <table id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Channel</th>
+                                <th style="width: 100px;">Link</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Rows will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Global Nav Script -->
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Local App Script -->
+    <script src="script.js"></script>
+</body>
+
+</html>

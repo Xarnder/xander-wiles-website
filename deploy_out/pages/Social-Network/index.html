@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Manager</title>
+
+    <!-- Theme-aware SVG icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Header CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- App Specific CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="app-container">
+
+        <!-- Login View -->
+        <section id="login-view">
+            <div class="glass-card login-card">
+                <h1>Network Manager</h1>
+                <p>Track connections, manage friends.</p>
+                <button id="google-login-btn" class="btn primary-btn">
+                    Sign in with Google
+                </button>
+                <p class="debug-msg" id="auth-debug"></p>
+            </div>
+        </section>
+
+        <!-- Dashboard View (Hidden by default) -->
+        <section id="dashboard-view" class="hidden">
+            <header class="app-header">
+                <div class="header-left">
+                    <h2>My Network</h2>
+                    <span id="user-name"></span>
+                    <span id="storage-stats" style="font-size:0.8rem; opacity:0.7; margin-left:10px"></span>
+                </div>
+                <div class="header-right">
+                    <button id="mobile-menu-btn" class="btn icon-btn"
+                        style="display:none; font-size:1.5rem; padding:5px 10px;">☰</button>
+                    <div id="header-actions" class="header-actions">
+                        <button id="export-btn" class="btn secondary-btn" style="padding: 8px 15px;">Export</button>
+                        <!-- <button id="select-mode-btn" class="btn secondary-btn"
+                            style="padding: 8px 15px;">Select</button> -->
+                        <button id="add-btn" class="btn primary-btn">+ Add Person</button>
+                        <button id="logout-btn" class="btn secondary-btn"
+                            style="border-color:var(--danger); color:var(--danger)">Logout</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Calendar Widget -->
+            <div id="calendar-widget" class="glass-card calendar-widget">
+                <div class="calendar-header">
+                    <button id="cal-prev" class="calendar-nav-btn">&lt;</button>
+                    <span id="cal-month-year">Month Year</span>
+                    <button id="cal-next" class="calendar-nav-btn">&gt;</button>
+                </div>
+                <div id="calendar-list" class="calendar-list">
+                    <!-- Top 5 items go here -->
+                </div>
+            </div>
+
+            <!-- Search / Filter -->
+            <div class="search-bar" style="display:flex; gap:10px;">
+                <input type="text" id="search-input" placeholder="Search friends..." style="flex:1; margin-bottom:0;">
+                <select id="filter-category"
+                    style="padding:12px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:10px; color:white; min-width:150px;">
+                    <option value="">All Categories</option>
+                </select>
+            </div>
+
+            <!-- Grid -->
+            <div id="friends-grid" class="friends-grid">
+                <!-- Javascript fills this -->
+                <div class="loader">Loading...</div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Selection Action Toolbar -->
+    <div id="selection-toolbar" class="selection-toolbar hidden">
+        <div class="selection-info">
+            <span id="selection-count">0 Selected</span>
+            <button id="cancel-selection" class="btn secondary-btn">Cancel</button>
+        </div>
+        <div class="selection-actions">
+            <button id="export-grid-img" class="btn primary-btn">Export Image</button>
+            <button id="export-grid-pdf" class="btn primary-btn">Export PDF</button>
+        </div>
+    </div>
+
+    <!-- Hidden Container for Export Rendering -->
+    <div id="export-staging-area"
+        style="position:fixed; top:-9999px; left:-9999px; width:1200px; background:#111; padding:40px;">
+        <h1 style="color:white; text-align:center; margin-bottom:30px; font-family:sans-serif;">Network Export</h1>
+        <div id="export-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:20px;">
+            <!-- Cards will be cloned here -->
+        </div>
+    </div>
+
+    <!-- Modal Form -->
+    <div id="modal" class="modal hidden">
+        <div class="glass-card modal-content">
+            <span id="close-modal">&times;</span>
+            <h3 id="modal-title">Add Person</h3>
+
+            <form id="friend-form">
+                <input type="hidden" id="edit-id"> <!-- Stores ID if editing -->
+
+                <!-- Photo Upload -->
+                <div class="photo-upload-container">
+                    <label for="photo-file" id="photo-preview">
+                        <span>Tap to Add Photo</span>
+                    </label>
+                    <input type="file" id="photo-file"
+                        accept="image/png, image/jpeg, image/webp, image/avif, image/heic, image/heif" hidden>
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Name</label>
+                        <input type="text" id="inp-name" required placeholder="Full Name">
+                    </div>
+                    <div class="input-group">
+                        <label>Where Met</label>
+                        <input type="text" id="inp-met" list="met-list" placeholder="e.g. Conference">
+                        <datalist id="met-list"></datalist>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Origin / Location</label>
+                        <input type="text" id="inp-origin" placeholder="e.g. London">
+                    </div>
+                    <div class="input-group">
+                        <label>Line of Work</label>
+                        <input type="text" id="inp-work" placeholder="e.g. Designer">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Phone Number</label>
+                    <input type="tel" id="inp-phone" placeholder="+1 234 567 8900">
+                </div>
+
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Category</label>
+                        <input type="text" id="inp-category" list="category-list" placeholder="e.g. Work, Family">
+                        <datalist id="category-list"></datalist>
+                    </div>
+                    <div class="input-group" style="flex: 0 0 80px;">
+                        <label>Color</label>
+                        <input type="color" id="inp-color" value="#4f46e5"
+                            style="padding: 2px; height: 42px; cursor: pointer;">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div
+                        style="display:flex; align-items:center; gap:12px; margin-bottom:15px; padding:5px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); background:rgba(255,255,255,0.02)">
+                        <input type="checkbox" id="inp-exempt" class="custom-checkbox">
+                        <label for="inp-exempt" class="custom-checkbox-label">N/A (Don't track)</label>
+                    </div>
+                </div>
+
+                <div class="form-row" id="freq-row">
+                    <div class="input-group">
+                        <label>Keep in Touch</label>
+                        <div style="display:flex; gap:10px;">
+                            <input type="number" id="inp-freq-val" value="1" min="1" style="flex:1">
+                            <select id="inp-freq-unit"
+                                style="flex:1; background:rgba(0,0,0,0.3); color:white; border:1px solid var(--glass-border); border-radius:8px; padding:10px;">
+                                <option value="1">Days</option>
+                                <option value="7">Weeks</option>
+                                <option value="30">Months</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row" id="last-contact-row">
+                    <div class="input-group">
+                        <label>Last Caught Up</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="date" id="inp-last" style="flex:1">
+                            <button type="button" id="btn-today-modal" class="btn secondary-btn"
+                                style="padding:0 10px;">Met Today</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Notes</label>
+                    <textarea id="inp-notes" rows="3" placeholder="Interests, family info..."></textarea>
+                </div>
+
+                <div id="status-msg"></div>
+                <button type="submit" class="btn primary-btn full-width">Save</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal hidden">
+        <div class="modal-content glass-card">
+            <span id="close-export" class="close">&times;</span>
+            <h2>Export Data</h2>
+            <p style="margin-bottom:20px; color:var(--text-muted)">Choose a format to download your network data.</p>
+            <div class="modal-actions" style="flex-direction:column; gap:10px">
+                <button id="export-csv" class="btn secondary-btn full-width">Export CSV Only</button>
+                <button id="export-json" class="btn secondary-btn full-width">Export JSON Only</button>
+                <hr style="width:100%; border:0; border-top:1px solid var(--glass-border); margin:10px 0;">
+                <button id="export-zip-csv" class="btn primary-btn full-width">Export CSV Bundle (ZIP + Images)</button>
+                <button id="export-zip-html" class="btn primary-btn full-width">Export Offline Website (ZIP +
+                    Viewer)</button>
+            </div>
+            <div id="export-status"
+                style="margin-top:10px; font-size:0.9rem; color:var(--text-main); text-align:center;"></div>
+        </div>
+    </div>
+
+    <!-- Crop Modal -->
+    <div id="crop-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 600px;">
+            <h3>Crop Photo</h3>
+            <div class="crop-container">
+                <img id="crop-image" src="" alt="Image to crop">
+            </div>
+            <div class="modal-actions" style="display:flex; gap:10px; justify-content:flex-end;">
+                <button id="crop-cancel" class="btn secondary-btn"
+                    style="color:var(--danger); border-color:var(--danger)">Cancel</button>
+                <button id="crop-save" class="btn primary-btn">Crop & Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Undo Toast -->
+    <div id="undo-toast" class="hidden">
+        <span id="toast-msg">Marked as Today. Undo? (10)</span>
+        <button id="toast-undo-btn">Undo</button>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 400px; text-align: center;">
+            <h3>Confirm Delete</h3>
+            <p id="delete-msg" style="color:var(--text-muted); margin: 20px 0;">Are you sure?</p>
+            <div class="modal-actions" style="display:flex; gap:10px; justify-content:center;">
+                <button id="cancel-delete" class="btn secondary-btn">Cancel</button>
+                <button id="confirm-delete" class="btn primary-btn"
+                    style="background-color:var(--danger);">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Viewer Modal -->
+    <div id="image-viewer-modal" class="modal hidden" style="background:rgba(0,0,0,0.9);">
+        <span id="close-image-viewer"
+            style="position:absolute; bottom:40px; right:30px; font-size:40px; line-height:1; padding-bottom:4px; color:white; cursor:pointer; z-index:1001; background:rgba(255,255,255,0.1); width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(5px);">&times;</span>
+        <div
+            style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; width:100%;">
+            <img id="full-screen-image" src=""
+                style="max-width:90%; max-height:80vh; object-fit:contain; border-radius:8px; box-shadow:0 0 50px rgba(0,0,0,0.5);">
+            <h2 id="image-caption"
+                style="color:white; margin-top:20px; font-size:1.5rem; text-shadow:0 2px 4px rgba(0,0,0,0.8);"></h2>
+        </div>
+    </div>
+
+    <!-- Utilities -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Firebase SDKs & Logic -->
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>

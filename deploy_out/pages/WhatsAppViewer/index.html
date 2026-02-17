@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Securely view, read, and search your exported WhatsApp chat .txt files directly in your browser. No uploads, 100% offline and private WhatsApp chat viewer.">
+    <title>WhatsApp Chat Viewer - Modern Edition</title>
+    
+    <!-- Link to the new modern stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+
+    <!-- Icons and Meta -->
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <meta name="theme-color" content="#18181b"> 
+</head>
+<div id="main-nav-placeholder"></div> 
+
+<body>
+    <div class="background-overlay"></div>
+    <div class="app-container">
+
+        <!-- Header -->
+        <header class="hero-card">
+            <h1>WhatsApp Chat Viewer</h1>
+            <p>Upload your exported .txt chat file to view it securely and privately in your browser.</p>
+        </header>
+
+        <!-- Controls Card -->
+        <div class="glass-card">
+            <h2>Controls</h2>
+            <div class="controls-grid">
+                <!-- Upload Section -->
+                <div class="upload-section">
+                    <label for="chatFile" class="btn btn-primary">Upload Chat .txt File</label>
+                    <input type="file" id="chatFile" accept=".txt">
+                    <span id="fileName">No file selected</span>
+                </div>
+
+                <!-- Search Section -->
+                <div class="search-section">
+                    <input type="search" id="searchInput" placeholder="Search chat...">
+                    <div class="search-nav">
+                        <button id="searchPrev" title="Previous Match">&lt;</button>
+                        <button id="searchNext" title="Next Match">&gt;</button>
+                        <span id="searchResultCount"></span>
+                    </div>
+                </div>
+
+                <!-- View Options -->
+                <div class="view-options">
+                    <div class="size-controls">
+                        <label>Text Size:</label>
+                        <button id="decreaseSize" class="btn" title="Decrease Size">-</button>
+                        <button id="increaseSize" class="btn" title="Increase Size">+</button>
+                    </div>
+                    <a href="https://buymeacoffee.com/xarnder" target="_blank" rel="noopener noreferrer" class="btn bmc-button">
+                        ☕ Buy Me a Coffee
+                    </a>
+                    <button id="theme-toggle" class="btn">Toggle Theme</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Display Card -->
+        <div id="chat-display-area" class="glass-card">
+            <div id="chat-container">
+                <p class="placeholder">Upload a WhatsApp chat export (.txt) file to view the messages.</p>
+            </div>
+        </div>
+
+        <!-- Legend and Info Card -->
+        <div class="glass-card">
+            <div class="details-grid">
+                <!-- Legend -->
+                <div class="legend">
+                    <h3>Sender Colors & Options</h3>
+                    <div id="sender-legend">
+                        <!-- Legend items will be added here via JS -->
+                    </div>
+                </div>
+
+                <!-- Instructions -->
+                <div id="instructions-section" class="info-section">
+                    <h3>How to Export Your Chat</h3>
+                    <ol>
+                        <li>Open the chat you want to export.</li>
+                        <li>Go to Options > More > Export chat.</li>
+                        <li>Choose <strong>WITHOUT MEDIA</strong>.</li>
+                        <li>Save or send the .txt file to yourself.</li>
+                        <li>Upload the exported `.txt` file here.</li>
+                    </ol>
+                </div>
+
+                <!-- Privacy Disclaimer -->
+                <div id="disclaimer-section" class="info-section">
+                    <h3>Disclaimer & Privacy</h3>
+                    <p>Your privacy is paramount. This tool processes your chat file <strong>entirely within your browser</strong>. Your data is <strong>never uploaded or stored</strong> on any server.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/mark.min.js"></script>
+    <script src="script.js"></script>
+    <script src="/assets/js/nav-loader.js"></script> 
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lossless Image to PDF Converter</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Site Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- App Specific Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- jsPDF Library (CDN for Live Server compatibility) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body>
+
+    <!-- Global Nav Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Main App Container -->
+    <main class="app-container">
+        <div class="glass-card">
+            <h1>Lossless PNG to PDF</h1>
+            <p class="subtitle">Converts images using 1:1 pixel mapping. No scaling. No compression artifacts.</p>
+
+            <div class="upload-area" id="drop-zone">
+                <input type="file" id="file-input" accept="image/png, image/jpeg, image/jpg" multiple>
+                <div class="upload-content">
+                    <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <p>Drag & Drop images here<br>or <span>Click to Browse</span></p>
+                    <small>Supports PNG & JPG</small>
+                </div>
+            </div>
+
+            <div id="status-container" class="hidden">
+                <div class="progress-bar-bg">
+                    <div id="progress-bar-fill"></div>
+                </div>
+                <p id="status-text">Processing...</p>
+            </div>
+
+            <div id="resolution-warning" class="warning-box hidden">
+                <h3>⚠️ Resolution Loss Detected</h3>
+                <p id="warning-details"></p>
+            </div>
+
+            <button id="download-btn" class="hidden">Download PDF</button>
+
+            <div id="console-log-display">
+                <!-- Visual logs for user confirmation -->
+            </div>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

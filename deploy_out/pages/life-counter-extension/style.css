@@ -1,0 +1,253 @@
+/* --- Design Tokens --- */
+:root {
+    /* Dark Theme (Default) */
+    --bg-main: #09090b;
+    --bg-secondary: #18181b;
+    --glass-bg: rgba(24, 24, 27, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --accent-primary: #8b5cf6; /* Purple */
+    --accent-secondary: #06b6d4; /* Cyan */
+    --accent-gradient: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    --square-empty: rgba(255, 255, 255, 0.1);
+    --square-filled: #ffffff;
+    --square-border: #3f3f46;
+    --line-color: #f59e0b; /* Orange for visibility on dark */
+
+    /* Sizing */
+    --box-size: 8px; /* Slightly smaller for better fit on standard screens */
+    --gap-size: 3px;
+    --radius-md: 12px;
+    --radius-lg: 24px;
+}
+
+body.light-mode {
+    --bg-main: #f4f4f5;
+    --bg-secondary: #ffffff;
+    --glass-bg: rgba(255, 255, 255, 0.8);
+    --glass-border: rgba(0, 0, 0, 0.1);
+    --text-primary: #18181b;
+    --text-secondary: #52525b;
+    --square-empty: rgba(0, 0, 0, 0.05);
+    --square-filled: #18181b;
+    --square-border: #d4d4d8;
+    --line-color: #ef4444; /* Red for light mode */
+}
+
+/* --- Global Reset --- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 2rem 1rem;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* --- Background Effects --- */
+.background-overlay {
+    position: fixed; inset: 0; z-index: -2;
+    background: radial-gradient(circle at 15% 15%, rgba(139, 92, 246, 0.15), transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.15), transparent 40%);
+}
+
+/* --- Layout Container --- */
+.app-container {
+    max-width: 1300px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* --- Glass Card Standard --- */
+.glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* --- Typography & Inputs --- */
+h1 {
+    font-weight: 800;
+    font-size: 2.5rem;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
+h2 { font-size: 1.25rem; margin-bottom: 1rem; font-weight: 600; }
+p, li, label { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5; }
+
+/* --- Specific Card Styles --- */
+.hero-card { text-align: center; padding: 3rem 1rem; }
+
+/* --- THE GRID --- */
+.grid-layout {
+    display: flex;
+    gap: 1rem;
+}
+
+.week-markers {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+}
+.week-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    /* **FIX**: This height + margin matches the space taken by the age labels */
+    height: 1.1rem; /* Approx height of age labels */
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center; /* Center vertically in its own space */
+}
+/* **FIX**: This whole block is updated for alignment */
+.week-label {
+    height: var(--box-size); /* Set height to ONLY the box height */
+    margin-bottom: var(--gap-size); /* Use margin for the gap */
+    font-size: 0.6rem;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    display: flex; /* Use flexbox to center the text */
+    align-items: center; /* This now perfectly centers text in the 8px box height */
+}
+
+
+.grid-scroll-area {
+    flex-grow: 1;
+    overflow-x: auto; /* Horizontal scroll for small screens */
+    padding-bottom: 1rem;
+}
+
+#age-labels {
+    display: grid;
+    grid-template-rows: auto;
+    /* columns set in JS */
+    gap: var(--gap-size);
+    margin-bottom: 0.5rem;
+    height: 1.1rem; /* Give it an explicit height */
+}
+.age-label {
+    font-size: 0.6rem;
+    text-align: center;
+    color: var(--text-secondary);
+    width: var(--box-size);
+}
+
+#life-grid-container {
+    position: relative; /* Anchor for the red line */
+    display: inline-block; /* Shrink to fit grid content */
+}
+
+#life-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-rows: repeat(52, var(--box-size));
+    gap: var(--gap-size);
+}
+
+.square {
+    width: var(--box-size);
+    height: var(--box-size);
+    background-color: var(--square-empty);
+    border: 1px solid var(--square-border);
+    border-radius: 2px;
+}
+.square.filled {
+    background-color: var(--square-filled);
+    border-color: var(--square-filled);
+}
+
+.red-line {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background-color: var(--line-color);
+    pointer-events: none;
+    opacity: 0.8;
+    box-shadow: 0 0 8px var(--line-color);
+    z-index: 2;
+    transition: top 0.5s ease;
+}
+
+/* --- Footer Stats & Settings --- */
+.settings-stats-card {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+}
+
+.input-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.input-wrap { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; }
+
+input {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: inherit;
+}
+input:focus { outline: 2px solid var(--accent-primary); }
+
+#save-button, #theme-toggle {
+    width: 100%;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+#save-button {
+    background: var(--accent-gradient);
+    color: white;
+}
+#save-button:hover { opacity: 0.9; transform: translateY(-2px); }
+#theme-toggle {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--glass-border);
+}
+
+.stats-group ul { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
+.stats-group li {
+    background: var(--bg-secondary);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    font-weight: 500;
+}
+
+.theme-toggle-wrapper {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--glass-border);
+}
+#theme-toggle { max-width: 300px; }
+
+/* --- Mobile Responsiveness --- */
+@media (max-width: 768px) {
+    .settings-stats-card { grid-template-columns: 1fr; gap: 2rem; }
+    .hero-card h1 { font-size: 2rem; }
+    .input-row { flex-direction: column; }
+    .glass-card { padding: 1.5rem; }
+}

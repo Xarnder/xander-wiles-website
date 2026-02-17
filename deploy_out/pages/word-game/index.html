@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Grandma's Garden Word Game</title>
+
+    <!-- Icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="game.css">
+</head>
+<body>
+
+    <div id="main-nav-placeholder"></div> 
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- START SCREEN -->
+    <div id="start-screen" class="start-overlay">
+        <div class="glass-panel start-card">
+            <h1>🌸 Word Garden 🌸</h1>
+            
+            <div id="loading-container">
+                <div class="loading-spinner"></div>
+                <p id="loading-text" style="color: #4facfe; font-weight: bold; margin-bottom: 5px;">Initializing...</p>
+                <div class="progress-container">
+                    <div id="progress-bar" class="progress-bar"></div>
+                </div>
+            </div>
+
+            <div id="start-options" class="size-options" style="display:none; opacity: 0;">
+                <p>Select your grid size:</p>
+                <button class="action-btn success" onclick="startGame(5)">Large (Easy)</button>
+                <button class="action-btn info" onclick="startGame(4)">Normal (Medium)</button>
+                <button class="action-btn warning" onclick="startGame(3)">Small (Hard)</button>
+                <p class="instruction-text">
+                    • <b>Tap</b> a letter to add it.<br>
+                    • <b>Tap again</b> to remove it.<br>
+                    • <b>Longer words</b> grow <b>bigger flowers</b>!
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- CUSTOM CONFIRM MODAL -->
+    <div id="custom-modal" class="start-overlay" style="display:none; z-index: 1000;">
+        <div class="glass-panel start-card" style="max-width: 350px;">
+            <h2 style="margin-top:0; color:var(--text-color);">Return to Menu?</h2>
+            <p style="color:#ccc; margin-bottom: 20px;">Your current garden will be lost!</p>
+            <div class="button-row">
+                <button id="modal-yes" class="action-btn warning">Yes, Quit</button>
+                <button id="modal-no" class="action-btn info">No, Keep Playing</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN GAME -->
+    <main class="game-container" id="game-container" style="display:none;">
+        
+        <!-- SIDE PANEL (Left) -->
+        <aside class="side-panel">
+            <!-- 1. Garden -->
+            <section class="garden-area glass-panel">
+                <h3>Your Garden</h3>
+                <div id="garden-canvas-container">
+                    <canvas id="garden-canvas"></canvas>
+                </div>
+            </section>
+
+            <!-- 2. Word List -->
+            <section class="found-words glass-panel">
+                <h3>Words Found</h3>
+                <div id="found-words-list" class="words-list">
+                    <span class="placeholder-text">...</span>
+                </div>
+            </section>
+
+            <!-- 3. Controls -->
+            <section class="controls-area glass-panel">
+                <div class="button-row compact-row">
+                    <button id="clear-btn" class="action-btn warning icon-btn">❌</button>
+                    <button id="magic-btn" class="action-btn magic icon-btn">🌟</button>
+                    <button id="hint-btn" class="action-btn info icon-btn">💡</button>
+                    <button id="submit-btn" class="action-btn success wide-btn">✅ CHECK</button>
+                </div>
+                
+                <!-- Scroll Lock -->
+                <div style="margin-top: 8px;">
+                    <button id="scroll-lock-btn" class="action-btn" style="width: 100%; background: #7f8c8d; padding: 8px; font-size: 0.9rem;">🔓 Scroll: Free</button>
+                </div>
+
+                <!-- NEW: UI Scale Slider -->
+                <div class="slider-wrapper" style="margin-top: 12px; padding: 0 5px;">
+                    <div style="display:flex; justify-content: space-between; font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">
+                        <span>Size:</span>
+                        <span id="scale-val-display">100%</span>
+                    </div>
+                    <input type="range" id="ui-scale-slider" min="0.6" max="1.3" step="0.05" value="1" class="scale-slider">
+                </div>
+            </section>
+        </aside>
+
+        <!-- PLAY AREA (Right) -->
+        <div class="main-play-area">
+            <section class="info-card glass-panel header-card">
+                <div class="header-row">
+                    <div class="score-box">
+                        <span>Score: </span>
+                        <span id="current-score" class="score-val">0</span>
+                    </div>
+                    <button id="reset-btn" class="refresh-btn">🔄 Menu</button>
+                </div>
+                
+                <div id="clue-display" class="clue-box">Loading clue...</div>
+                
+                <div class="current-word-display" id="current-word">_ _ _</div>
+                
+                <div class="message-area" id="message-area">Tap letters to start</div>
+            </section>
+
+            <section class="grid-container" id="boggle-grid">
+                <!-- Tiles generated by JS -->
+            </section>
+        </div>
+
+    </main>
+
+    <!-- THREE.JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
+
+    <script src="script.js"></script>
+</body>
+</html>

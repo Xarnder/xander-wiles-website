@@ -1,0 +1,916 @@
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Elements ---
+    const els = {
+        input: document.getElementById('input-text'),
+        sheet: document.getElementById('sheet'),
+        content: document.getElementById('sheet-content'),
+        orientation: document.getElementById('orientation'),
+        sectionStyle: document.getElementById('section-style'),
+        fontSize: document.getElementById('fontSize'),
+        lineHeight: document.getElementById('lineHeight'),
+        fsVal: document.getElementById('fs-val'),
+        lhVal: document.getElementById('lh-val'),
+
+        padPage: document.getElementById('padPage'),
+        padBox: document.getElementById('padBox'),
+        padPageVal: document.getElementById('pad-page-val'),
+        padBoxVal: document.getElementById('pad-box-val'),
+
+        removeBullets: document.getElementById('remove-bullets'),
+        showBrackets: document.getElementById('show-brackets'),
+        bolderFormulas: document.getElementById('bolder-formulas'),
+        zoomLevel: document.getElementById('zoomLevel'),
+        zoomVal: document.getElementById('zoom-val'),
+        exportFormat: document.getElementById('export-format'),
+        exportFormat: document.getElementById('export-format'),
+        renderTables: document.getElementById('render-tables'),
+        compactTables: document.getElementById('compact-tables'), // New
+        compactText: document.getElementById('compact-text'), // New rendering mode
+        preserveNewlines: document.getElementById('preserve-newlines'), // New option
+        btnRender: document.getElementById('btn-render'),
+        btnDownload: document.getElementById('btn-download'),
+
+        // New Elements
+        folderInput: document.getElementById('folder-input'),
+        fileNav: document.getElementById('file-nav'),
+        fileInfo: document.getElementById('file-info'),
+        btnPrevFile: document.getElementById('btn-prev-file'),
+        btnNextFile: document.getElementById('btn-next-file'),
+        btnBatchExport: document.getElementById('btn-batch-export'),
+
+        debug: document.getElementById('debug-content'),
+
+        // Reload & Clear
+        btnReloadFolder: document.getElementById('btn-reload-folder'),
+        btnClearMd: document.getElementById('btn-clear-md'),
+        quickClear: document.getElementById('quick-clear'),
+
+        // Modal
+        modal: document.getElementById('custom-modal'),
+        modalTitle: document.getElementById('modal-title'),
+        modalMessage: document.getElementById('modal-message'),
+        modalBtnCancel: document.getElementById('modal-btn-cancel'),
+        modalBtnConfirm: document.getElementById('modal-btn-confirm')
+    };
+
+    // --- State Management ---
+    const defaultSettings = {
+        orientation: 'portrait',
+        sectionStyle: 'box',
+        fontSize: 10,
+        lineHeight: 0.8,
+        padPage: 1,
+        padBox: 0,
+        removeBullets: true,
+        showBrackets: false,
+        bolderFormulas: true,
+        bolderFormulas: true,
+        renderTables: true,
+        compactTables: false, // New logic
+        compactText: true, // Default to compact mode
+        preserveNewlines: false // Default to inline
+    };
+
+    let filesData = [];
+    let currentIndex = 0;
+
+    // Initialize with one empty file
+    function initState() {
+        filesData = [{
+            name: "untitled.md",
+            content: els.input.value, // Start with placeholder or empty
+            settings: { ...defaultSettings }
+        }];
+        currentIndex = 0;
+        updateFileNavUI();
+    }
+
+    // --- Palettes ---
+    const fontColors = ['#000000', '#c00000', '#00008b', '#005500', '#550055', '#663300'];
+    const bgColors = ['transparent', '#fff0f0', '#f0f8ff', '#f0fff0', '#fff0ff', '#fffff0', '#f0ffff', '#fff5e6'];
+
+    function log(msg, type = 'info') {
+        const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+        const entry = document.createElement('div');
+        entry.textContent = `[${time}] ${msg}`;
+        if (type === 'error') entry.style.color = '#ff5555';
+        els.debug.appendChild(entry);
+        els.debug.scrollTop = els.debug.scrollHeight;
+        console.log(`[${time}] ${msg}`);
+    }
+
+    log("System initialized.");
+
+    // --- Formatters ---
+    // --- Formatters ---
+
+    // Helper to escape regex special characters
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function preprocessMath(text) {
+        const mathStore = [];
+
+        // Block LaTeX (Double Dollar): Support multiline with [\s\S]
+        // We render it immediately and store the HTML to protect it from line splitting
+        text = text.replace(/\$\$([\s\S]+?)\$\$/g, (match, latex) => {
+            try {
+                const html = katex.renderToString(latex, { throwOnError: false, displayMode: true });
+                const token = `___MATH_ENTRY_${mathStore.length}___`;
+                mathStore.push(html);
+                return token;
+            } catch (e) { return match; }
+        });
+
+        // Inline LaTeX (Single Dollar)
+        text = text.replace(/\$([^$\n]+)\$/g, (match, latex) => {
+            try {
+                const html = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+                const token = `___MATH_ENTRY_${mathStore.length}___`;
+                mathStore.push(html);
+                return token;
+            } catch (e) { return match; }
+        });
+
+        return { text, mathStore };
+    }
+
+    function restoreMath(text, mathStore) {
+        // Replace tokens properly. We use a regex for the token pattern.
+        return text.replace(/___MATH_ENTRY_(\d+)___/g, (match, index) => {
+            return mathStore[parseInt(index)] || match;
+        });
+    }
+
+    function parseMarkdown(text) {
+        let html = text;
+        html = html.replace(/\*\*(.*?)\*\*/g, '<span class="md-bold">$1</span>');
+        html = html.replace(/\*(.*?)\*/g, '<span class="md-italic">$1</span>');
+        html = html.replace(/`(.*?)`/g, '<span class="md-code">$1</span>');
+        return html;
+    }
+
+    function renderTable(lines, mathStore) {
+        if (!lines || lines.length === 0) return '';
+
+        const isCompact = els.compactTables.checked;
+        let html = `<table class="sheet-table ${isCompact ? 'compact' : ''}">`;
+
+        // Helper to split row by pipe
+        const processRow = (line) => {
+            let content = line.trim();
+            if (content.startsWith('|')) content = content.substring(1);
+            if (content.endsWith('|')) content = content.substring(0, content.length - 1);
+            return content.split('|').map(c => c.trim());
+        };
+
+        const headers = processRow(lines[0]);
+        html += '<thead><tr>';
+        // Restore math in headers
+        headers.forEach(h => html += `<th>${restoreMath(parseMarkdown(h), mathStore)}</th>`);
+        html += '</tr></thead><tbody>';
+
+        let startIndex = 1;
+        if (lines.length > 1 && lines[1].trim().match(/^\|?(\s*:?-+:?\s*\|?)+\s*$/)) {
+            startIndex = 2;
+        }
+
+        for (let i = startIndex; i < lines.length; i++) {
+            const rowText = lines[i].trim();
+            if (!rowText) continue;
+
+            const cols = processRow(rowText);
+            html += '<tr>';
+            // Restore math in cells
+            cols.forEach(c => html += `<td>${restoreMath(parseMarkdown(c), mathStore)}</td>`);
+            html += '</tr>';
+        }
+
+        html += '</tbody></table>';
+        return html;
+    }
+
+    // --- Main Render ---
+    function render() {
+        try {
+            const rawText = els.input.value;
+            // 1. Preprocess Math: Extract all math formulas (including multiline) into tokens
+            // This prevents line splitting from preserving the internal structure of multiline math.
+            const { text: processedText, mathStore } = preprocessMath(rawText);
+
+            const styleMode = els.sectionStyle.value;
+            // 2. Split lines based on the text *where math is already tokenized*
+            const lines = processedText.split('\n');
+
+            const shouldCleanBullets = els.removeBullets.checked;
+            const shouldShowBrackets = els.showBrackets.checked;
+            const shouldRenderTables = els.renderTables.checked;
+
+            let finalHTML = "";
+            let fontColorIdx = 0;
+            let sectionIdx = 0;
+            let currentSectionItems = [];
+            let tableBuffer = [];
+
+            const flushBox = () => {
+                // Override box style if Compact Text is disabled
+                const effectiveStyle = els.compactText.checked ? styleMode : 'none';
+
+                if (effectiveStyle === 'box' && currentSectionItems.length > 0) {
+                    if (els.compactTables.checked) {
+                        currentSectionItems.sort((a, b) => {
+                            if (a.type === 'table' && b.type !== 'table') return -1;
+                            if (a.type !== 'table' && b.type === 'table') return 1;
+                            return 0;
+                        });
+                    }
+                    const innerHTML = currentSectionItems.map(x => x.html).join('');
+                    const bg = bgColors[sectionIdx % bgColors.length];
+                    finalHTML += `<div class="section-box" style="background-color:${bg}; border-color:${fontColors[sectionIdx % fontColors.length]}">${innerHTML}</div>`;
+                    currentSectionItems = [];
+                } else if (effectiveStyle !== 'box' && currentSectionItems.length > 0) {
+                    finalHTML += currentSectionItems.map(x => x.html).join('');
+                    currentSectionItems = [];
+                }
+            };
+
+            const flushTable = () => {
+                if (tableBuffer.length > 0) {
+                    // Pass mathStore to table renderer
+                    const tableHTML = renderTable(tableBuffer, mathStore);
+                    currentSectionItems.push({ type: 'table', html: tableHTML });
+                    tableBuffer = [];
+                }
+            };
+
+            lines.forEach((line) => {
+                let text = line.trim();
+
+                if (shouldRenderTables && text.startsWith('|')) {
+                    tableBuffer.push(text);
+                    return;
+                } else {
+                    flushTable();
+                }
+
+                if (text.length === 0 || text.match(/^---+$/)) return;
+
+                const headerMatch = text.match(/^(#+)\s+(.*)/);
+                let isHeader = false;
+
+                if (headerMatch) {
+                    isHeader = true;
+                    if (styleMode === 'box') flushBox();
+                    sectionIdx++;
+                    text = headerMatch[2];
+                }
+
+                if (shouldCleanBullets && !isHeader) {
+                    text = text.replace(/^(\*|-|\+)\s+/, '');
+                }
+
+                // Parse markdown first (bold/italic)
+                text = parseMarkdown(text);
+                // Then restore math tokens to HTML
+                text = restoreMath(text, mathStore);
+
+                const fColor = fontColors[fontColorIdx % fontColors.length];
+                let bgColor = 'transparent';
+                if (styleMode === 'highlight' && sectionIdx > 0) {
+                    bgColor = bgColors[sectionIdx % bgColors.length];
+                }
+
+                let spanHTML = "";
+                const isCompact = els.compactText.checked; // Check mode
+                const shouldPreserveNewlines = els.preserveNewlines.checked;
+
+                if (isHeader) {
+                    const headerContent = shouldShowBrackets ? `[${text}]` : text;
+                    // Header logic:
+                    // If compact & inline: inline-block, auto width.
+                    // If compact & preserve-newlines: block, 100% width (to force new line), but inside box
+                    // If normal (!compact): block.
+                    const isInline = isCompact && !shouldPreserveNewlines;
+                    const marginTop = isCompact ? '2px' : '10px';
+
+                    spanHTML = `<span class="sheet-span sheet-header" style="color: #000; background-color: ${bgColor}; display: ${isInline ? 'inline-block' : 'block'}; width: ${isInline ? 'auto' : '100%'}; margin-top: ${marginTop};">${headerContent}</span>`;
+                    fontColorIdx = 0;
+                } else {
+                    // Normal Mode: Force black text, block display (new line), no bg cycling
+                    // Compact + Preserve Newlines: Color cycling, block display
+                    // Compact + !Preserve Newlines: Color cycling, inline display
+
+                    const finalColor = isCompact ? fColor : '#000000';
+                    const displayStyle = (isCompact && !shouldPreserveNewlines) ? 'inline' : 'block';
+
+                    spanHTML = `<span class="sheet-span" style="color: ${finalColor}; background-color: ${bgColor}; display: ${displayStyle};">${text} </span>`;
+                    fontColorIdx++;
+                }
+
+                if ((styleMode === 'box' && isCompact) || true) {
+                    // Logic hack: if not compact, we technically don't need 'box' behavior, 
+                    // but flushing handles non-box items too. 
+                    // The flushBox function handles 'box' vs 'non-box' styleMode.
+                    // If we are in "Normal Mode" (isCompact=false), we effectively want 'none' behavior for boxing 
+                    // BUT without changing the user's dropdown setting.
+                    // We can handle this by ensuring isCompact=false treats items as 'text' and flushBox handles them.
+                    currentSectionItems.push({ type: 'text', html: spanHTML });
+                }
+            });
+
+            flushTable();
+            // If not compact, we might want to ensure flushBox doesn't wrap in a border box
+            // We can treat 'isCompact=false' as an override to forcing direct output in flushBox logic?
+            // Actually, let's modify flushBox to respect compactText.
+            // But flushBox is defined above. Let's just override styleMode for the flush logic if needed
+            // or simply rely on the fact that if isCompact is false, we rendered block elements.
+            // However, flushBox wraps in <div class="section-box"> if styleMode is 'box'.
+            // WE MUST PREVENT THAT if !isCompact.
+
+            // Re-defining flushBox logic dynamically inside render isn't easy with replace_row.
+            // Let's modify flushBox definition in a separate chunk or rely on a hack.
+            // Better: update flushBox definition in the loop provided it was captured? 
+            // It was not captured in this chunk.
+            // Let's modify the line calling flushBox to wrap it or modify styleMode variable early.
+
+            flushBox();
+            els.content.innerHTML = finalHTML;
+
+        } catch (error) {
+            log(`Render Error: ${error.message}`, 'error');
+        }
+    }
+
+    // --- View Logic ---
+    function updateZoom() {
+        const scale = parseFloat(els.zoomLevel.value) || 1;
+        const sheetH = els.sheet.offsetHeight;
+        els.sheet.style.transform = `scale(${scale})`;
+        els.sheet.style.transformOrigin = 'top center';
+        if (sheetH > 0) {
+            const heightDiff = sheetH * (1 - scale);
+            els.sheet.style.marginBottom = `-${heightDiff}px`;
+        }
+    }
+
+    function updateStyles() {
+        els.content.style.fontSize = `${els.fontSize.value}px`;
+        els.content.style.lineHeight = els.lineHeight.value;
+        els.sheet.style.padding = `${els.padPage.value}mm`;
+        els.sheet.style.setProperty('--box-pad', `${els.padBox.value}px`);
+
+        if (els.bolderFormulas.checked) els.content.classList.add('bolder-math');
+        else els.content.classList.remove('bolder-math');
+
+        setTimeout(updateZoom, 0);
+    }
+
+    // --- State Persistence & Navigation ---
+
+    function saveCurrentState() {
+        if (!filesData[currentIndex]) return;
+
+        // Save Content
+        filesData[currentIndex].content = els.input.value;
+
+        // Save Settings
+        filesData[currentIndex].settings = {
+            orientation: els.orientation.value,
+            sectionStyle: els.sectionStyle.value,
+            fontSize: parseFloat(els.fontSize.value),
+            lineHeight: parseFloat(els.lineHeight.value),
+            padPage: parseInt(els.padPage.value),
+            padBox: parseInt(els.padBox.value),
+            removeBullets: els.removeBullets.checked,
+            showBrackets: els.showBrackets.checked,
+            removeBullets: els.removeBullets.checked,
+            showBrackets: els.showBrackets.checked,
+            bolderFormulas: els.bolderFormulas.checked,
+            removeBullets: els.removeBullets.checked,
+            showBrackets: els.showBrackets.checked,
+            bolderFormulas: els.bolderFormulas.checked,
+            renderTables: els.renderTables.checked,
+            compactTables: els.compactTables.checked,
+            compactText: els.compactText.checked,
+            preserveNewlines: els.preserveNewlines.checked
+        };
+    }
+
+    function loadState(index) {
+        if (!filesData[index]) return;
+        const file = filesData[index];
+        const s = file.settings;
+
+        // Load Content
+        els.input.value = file.content;
+
+        // Load Settings to DOM
+        els.orientation.value = s.orientation;
+        els.sectionStyle.value = s.sectionStyle;
+
+        els.fontSize.value = s.fontSize;
+        els.fsVal.value = s.fontSize;
+
+        els.lineHeight.value = s.lineHeight;
+        els.lhVal.value = s.lineHeight;
+
+        els.padPage.value = s.padPage;
+        els.padPageVal.value = s.padPage;
+
+        els.padBox.value = s.padBox;
+        els.padBoxVal.value = s.padBox;
+
+        els.removeBullets.checked = s.removeBullets;
+        els.showBrackets.checked = s.showBrackets;
+        els.removeBullets.checked = s.removeBullets;
+        els.showBrackets.checked = s.showBrackets;
+        els.bolderFormulas.checked = s.bolderFormulas;
+        els.bolderFormulas.checked = s.bolderFormulas;
+        els.renderTables.checked = (s.renderTables !== undefined) ? s.renderTables : true;
+        els.compactTables.checked = (s.compactTables !== undefined) ? s.compactTables : false;
+        els.compactText.checked = (s.compactText !== undefined) ? s.compactText : true;
+        els.preserveNewlines.checked = (s.preserveNewlines !== undefined) ? s.preserveNewlines : false;
+
+        // Force orientation update on sheet class
+        els.sheet.className = `a4-sheet ${s.orientation}`;
+
+        // Render & Update UI
+        updateStyles();
+        render();
+        updateFileNavUI();
+    }
+
+    function updateFileNavUI() {
+        if (filesData.length > 1) {
+            els.fileNav.style.display = 'flex';
+            els.btnBatchExport.style.display = 'inline-block';
+        } else {
+            els.fileNav.style.display = 'none';
+            els.btnBatchExport.style.display = 'none';
+        }
+        els.fileInfo.textContent = `File ${currentIndex + 1} of ${filesData.length}: ${filesData[currentIndex].name}`;
+
+        els.btnPrevFile.disabled = currentIndex === 0;
+        els.btnNextFile.disabled = currentIndex === filesData.length - 1;
+    }
+
+    function switchFile(newIndex) {
+        if (newIndex < 0 || newIndex >= filesData.length) return;
+        saveCurrentState(); // Save old file settings
+        currentIndex = newIndex;
+        loadState(currentIndex); // Load new file settings
+    }
+
+    // --- Folder Upload ---
+    // --- Folder Upload & Reload ---
+    let folderHandle = null;
+
+    // Helper to process loaded file objects and merge settings if reloading
+    async function processLoadedFiles(filesInput, fromHandle = false) {
+        let loadedFiles = [];
+        let fileEntries = [];
+
+        // Different processing based on source
+        if (fromHandle) {
+            // Using File System Access API
+            for await (const entry of filesInput.values()) {
+                if (entry.kind === 'file' && (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))) {
+                    const file = await entry.getFile();
+                    fileEntries.push(file);
+                }
+            }
+        } else {
+            // Using legacy input
+            fileEntries = Array.from(filesInput).filter(f => f.name.endsWith('.md') || f.name.endsWith('.txt'));
+        }
+
+        // Sort files alphabetically to ensure consistent order
+        fileEntries.sort((a, b) => a.name.localeCompare(b.name));
+
+        if (fileEntries.length === 0) return [];
+
+        // Helper to read file
+        const readFileStr = (file) => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsText(file);
+        });
+
+        // Create a map of existing settings if reloading (filesData is global)
+        const existingSettingsMap = new Map();
+        if (filesData.length > 0) { // Assume reloading if we have data
+            // Must save current state of the active file first
+            saveCurrentState();
+            filesData.forEach(f => {
+                existingSettingsMap.set(f.name, f.settings);
+            });
+        }
+
+        for (const file of fileEntries) {
+            const content = await readFileStr(file);
+
+            // Preserve settings if filename matches
+            let settings = { ...defaultSettings };
+            if (existingSettingsMap.has(file.name)) {
+                settings = existingSettingsMap.get(file.name);
+            }
+
+            loadedFiles.push({
+                name: file.name,
+                content: content,
+                settings: settings
+            });
+        }
+
+        return loadedFiles;
+    }
+
+    // Modern Directory Picker (Reloadable)
+    async function openDirectory() {
+        try {
+            const handle = await window.showDirectoryPicker();
+            folderHandle = handle;
+            const newFiles = await processLoadedFiles(handle, true);
+            loadFilesIntoApp(newFiles);
+            // Hide "Upload Folder" native input label if successful? No, keep both just in case.
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                log(`Folder Access Error: ${err.message}`, 'error');
+                // Fallback or user just cancelled
+            }
+        }
+    }
+
+    // Legacy Directory Picker (Input Change)
+    els.folderInput.addEventListener('change', async (e) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const newFiles = await processLoadedFiles(e.target.files, false);
+        loadFilesIntoApp(newFiles);
+        els.folderInput.value = ''; // Reset
+    });
+
+    // Core Load Logic
+    function loadFilesIntoApp(newFilesData) {
+        if (newFilesData.length === 0) {
+            showModalInfo("No Files Found", "The selected folder contains no .md or .txt files.", "OK");
+            return;
+        }
+
+        filesData = newFilesData;
+        if (currentIndex >= filesData.length) currentIndex = 0;
+
+        loadState(currentIndex);
+        log(`Loaded folder: ${filesData.length} files.`);
+
+        showModalInfo("Success", `Successfully loaded ${filesData.length} files from folder.`, "Awesome");
+    }
+
+    // Reload Click Handler
+    els.btnReloadFolder.addEventListener('click', async (e) => {
+        // If we have a handle, use it!
+        if (folderHandle) {
+            try {
+                // Verify permission
+                const opts = { mode: 'read' };
+                if ((await folderHandle.queryPermission(opts)) !== 'granted') {
+                    if ((await folderHandle.requestPermission(opts)) !== 'granted') {
+                        throw new Error('Permission denied');
+                    }
+                }
+
+                const newFiles = await processLoadedFiles(folderHandle, true);
+                loadFilesIntoApp(newFiles);
+            } catch (err) {
+                log(`Reload Error: ${err.message}`, 'error');
+                showModalInfo("Reload Failed", "Could not access the folder. Please re-upload.", "OK");
+                folderHandle = null; // Reset handle
+            }
+        } else {
+            // No handle (maybe legacy upload or first time), try to open modern picker
+            // If legacy input was used, we can't 'reload' it programmatically without user action.
+            // We'll prompt them to pick the folder again using the modern picker if supported,
+            // or trigger the legacy input if they want to 'reload' (re-upload).
+
+            if ('showDirectoryPicker' in window) {
+                await openDirectory();
+            } else {
+                els.folderInput.click();
+            }
+        }
+    });
+
+    // Override the label click for "Upload Folder" to use modern API if available
+    // We need to prevent the default label->input behavior if we use the API
+    const lblUpload = els.folderInput.closest('label');
+    if (lblUpload) {
+        lblUpload.addEventListener('click', async (e) => {
+            if ('showDirectoryPicker' in window) {
+                e.preventDefault(); // Stop file input from opening
+                await openDirectory();
+            }
+        });
+    }
+
+    // --- Modal Logic ---
+    let pendingModalAction = null;
+
+    function showModalConfirm(title, message, confirmText, action) {
+        els.modalTitle.textContent = title;
+        els.modalMessage.textContent = message;
+        els.modalBtnConfirm.textContent = confirmText;
+        els.modalBtnConfirm.className = "btn btn-danger"; // Red for danger/confirm
+        els.modalBtnCancel.style.display = "block";
+
+        pendingModalAction = action;
+        els.modal.classList.add('active');
+    }
+
+    function showModalInfo(title, message, btnText) {
+        els.modalTitle.textContent = title;
+        els.modalMessage.textContent = message;
+        els.modalBtnConfirm.textContent = btnText;
+        els.modalBtnConfirm.className = "btn btn-primary"; // Blue for info
+        els.modalBtnCancel.style.display = "none"; // Hide cancel
+
+        pendingModalAction = null; // No action needed
+        els.modal.classList.add('active');
+    }
+
+    function closeModal() {
+        els.modal.classList.remove('active');
+        pendingModalAction = null;
+    }
+
+    els.modalBtnCancel.addEventListener('click', closeModal);
+
+    els.modalBtnConfirm.addEventListener('click', () => {
+        if (pendingModalAction) pendingModalAction();
+        closeModal();
+    });
+
+    // Close on backdrop click
+    els.modal.addEventListener('click', (e) => {
+        if (e.target === els.modal) closeModal();
+    });
+
+    els.btnClearMd.addEventListener('click', () => {
+        // Quick Clear Check
+        if (els.quickClear.checked) {
+            els.input.value = "";
+            render();
+            if (filesData[currentIndex]) {
+                filesData[currentIndex].content = "";
+            }
+            return;
+        }
+
+        showModalConfirm(
+            "Clear Document?",
+            "Are you sure you want to clear all text from this document? This action cannot be undone.",
+            "Confirm Clear",
+            () => {
+                els.input.value = "";
+                render();
+                if (filesData[currentIndex]) {
+                    filesData[currentIndex].content = "";
+                }
+            }
+        );
+    });
+
+    // --- Interaction Listeners ---
+
+    // 1. Navigation Buttons
+    els.btnPrevFile.addEventListener('click', () => switchFile(currentIndex - 1));
+    els.btnNextFile.addEventListener('click', () => switchFile(currentIndex + 1));
+
+    // 2. Keyboard Navigation
+    document.addEventListener('keydown', (e) => {
+        // Only navigate if NOT typing in inputs
+        const target = e.target;
+        const isInput = target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.tagName === 'SELECT';
+
+        if (!isInput) {
+            if (e.key === 'ArrowLeft') switchFile(currentIndex - 1);
+            if (e.key === 'ArrowRight') switchFile(currentIndex + 1);
+        }
+    });
+
+    // 3. Inputs Sync
+    const syncGroups = [
+        { range: els.fontSize, number: els.fsVal },
+        { range: els.lineHeight, number: els.lhVal },
+        { range: els.padPage, number: els.padPageVal },
+        { range: els.padBox, number: els.padBoxVal },
+        { range: els.zoomLevel, number: els.zoomVal }
+    ];
+
+    syncGroups.forEach(group => {
+        group.range.addEventListener('input', () => {
+            group.number.value = group.range.value;
+            if (group.range === els.zoomLevel) updateZoom();
+            else updateStyles();
+        });
+        group.number.addEventListener('input', () => {
+            group.range.value = group.number.value;
+            if (group.range === els.zoomLevel) updateZoom();
+            else updateStyles();
+        });
+    });
+
+    // 4. Input Changes (Text & Settings)
+    // We already have listeners for specific settings that call updateStyles/render.
+    // But we need to ensure state is saved if we switch away. 
+    // `saveCurrentState` is called on switch, so we are good.
+    // However, we should listen to changes to update the view live.
+
+    [els.sectionStyle, els.removeBullets, els.showBrackets, els.bolderFormulas, els.renderTables, els.compactTables, els.compactText, els.preserveNewlines].forEach(el => {
+        el.addEventListener('change', (e) => {
+            if (e.target.id === 'bolder-formulas') updateStyles();
+            else render();
+        });
+    });
+
+    els.orientation.addEventListener('change', (e) => {
+        els.sheet.className = `a4-sheet ${e.target.value}`;
+        updateZoom();
+    });
+
+    let debounceTimer;
+    els.input.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(render, 500);
+    });
+
+    els.btnRender.addEventListener('click', render);
+
+    // --- Export Logic ---
+
+    // Single Export
+    els.btnDownload.addEventListener('click', async () => {
+        saveCurrentState(); // Ensure state is fresh
+        await performExport(false);
+    });
+
+    // Batch Export
+    els.btnBatchExport.addEventListener('click', async () => {
+        saveCurrentState();
+        await performBatchExport();
+    });
+
+    async function captureSheet() {
+        // Disable zoom/margin for clean capture
+        const originalTransform = els.sheet.style.transform;
+        const originalMargin = els.sheet.style.marginBottom;
+        els.sheet.style.transform = 'none';
+        els.sheet.style.marginBottom = '0';
+        els.sheet.style.boxShadow = 'none';
+
+        try {
+            const canvas = await html2canvas(els.sheet, {
+                scale: 3,
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                onclone: (doc) => {
+                    doc.getElementById('sheet').style.fontFeatureSettings = '"liga" 0';
+                }
+            });
+            return canvas;
+        } finally {
+            // Restore
+            els.sheet.style.boxShadow = '';
+            els.sheet.style.transform = originalTransform;
+            els.sheet.style.marginBottom = originalMargin;
+        }
+    }
+
+    function getExportFilename(currentContent) {
+        const headerMatch = currentContent.match(/^#+\s+(.*)/m);
+        if (headerMatch && headerMatch[1]) {
+            let title = headerMatch[1].trim();
+            title = title.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_]/g, '');
+            if (title.length > 0) return title;
+        }
+        return `cheatsheet_${Date.now()}`;
+    }
+
+    async function performExport(isBatch = false, batchZip = null) {
+        const format = els.exportFormat.value;
+        const filename = getExportFilename(els.input.value);
+
+        if (!isBatch) {
+            els.btnDownload.textContent = "Processing...";
+            els.btnDownload.disabled = true;
+        }
+
+        try {
+            const canvas = await captureSheet();
+
+            if (format === 'pdf') {
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                const { jsPDF } = window.jspdf;
+                const isPortrait = els.orientation.value === 'portrait';
+                const pdf = new jsPDF(isPortrait ? 'p' : 'l', 'mm', 'a4');
+
+                const imgProps = pdf.getImageProperties(imgData);
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+                if (isBatch && batchZip) {
+                    batchZip.file(`${filename}.pdf`, pdf.output('blob'));
+                } else {
+                    pdf.save(`${filename}.pdf`);
+                }
+
+            } else {
+                // Image
+                const mime = format === 'png' ? 'image/png' : 'image/jpeg';
+                const imgData = canvas.toDataURL(mime, 1.0); // Base64
+
+                if (isBatch && batchZip) {
+                    const base64Data = imgData.split(',')[1];
+                    batchZip.file(`${filename}.${format}`, base64Data, { base64: true });
+                } else {
+                    const link = document.createElement('a');
+                    link.href = imgData;
+                    link.download = `${filename}.${format}`;
+                    link.click();
+                }
+            }
+        } catch (e) {
+            log(`Export Error: ${e.message}`, 'error');
+        } finally {
+            if (!isBatch) {
+                els.btnDownload.textContent = "Download Image";
+                els.btnDownload.disabled = false;
+            }
+        }
+    }
+
+    async function performBatchExport() {
+        if (!window.JSZip) {
+            alert("JSZip library not loaded.");
+            return;
+        }
+
+        if (filesData.length === 0) return;
+
+        els.btnBatchExport.textContent = "Packing...";
+        els.btnBatchExport.disabled = true;
+
+        const zip = new JSZip();
+        // Remember where we were
+        const originalIndex = currentIndex;
+
+        try {
+            // Iterate all files
+            for (let i = 0; i < filesData.length; i++) {
+                // Load file state into DOM/Vars
+                // We MUST update currentIndex so loadState references correct data
+                currentIndex = i;
+                loadState(i);
+
+                // Allow DOM to update (render is sync, but images might need a tick? 
+                // Math rendering is sync (katex). Should be fine.)
+                // Just in case, small delay to let browser paint/layout if needed by html2canvas? 
+                // html2canvas reads computed styles. 
+                await new Promise(r => setTimeout(r, 50));
+
+                log(`Exporting ${i + 1}/${filesData.length}: ${filesData[i].name}`);
+                await performExport(true, zip);
+            }
+
+            // Generate Zip
+            const content = await zip.generateAsync({ type: "blob" });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(content);
+            link.download = "cheatsheets_batch.zip";
+            link.click();
+            log("Batch export complete.");
+
+        } catch (e) {
+            log(`Batch Export Failed: ${e.message}`, 'error');
+        } finally {
+            // Restore original view
+            currentIndex = originalIndex;
+            loadState(currentIndex);
+
+            els.btnBatchExport.textContent = "Batch Export (ZIP)";
+            els.btnBatchExport.disabled = false;
+        }
+    }
+
+    // Init
+    initState();
+    // If text area had content initially (e.g. browser cache or placeholder), update first file
+    if (els.input.value && els.input.value !== filesData[0].content) {
+        filesData[0].content = els.input.value;
+    }
+    // Initial Render
+    updateStyles();
+    render();
+});

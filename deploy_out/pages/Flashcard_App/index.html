@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard Master Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" href="favicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+</head>
+<div id="main-nav-placeholder"></div> 
+
+<body>
+    <div class="background-overlay"></div>
+    <div class="floating-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+        <div class="shape shape-4"></div>
+        <div class="shape shape-5"></div>
+    </div>
+    
+    <div class="app-container">
+        <header class="glass-card">
+            <div class="header-content">
+                <div class="logo-section">
+                    <div class="logo-icon">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <h1>Flashcard Master Pro</h1>
+                </div>
+                <div class="score-container glass-element">
+                    <div class="score-label">Score</div>
+                    <div class="score-value" id="score">0</div>
+                </div>
+            </div>
+        </header>
+
+        <div class="upload-section glass-card">
+            <div class="upload-header">
+                <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                <h3>Import Your Flashcards</h3>
+            </div>
+            
+            <div class="upload-methods">
+                <div class="file-upload-wrapper">
+                    <label for="fileInput" class="modern-file-upload">
+                        <i class="fas fa-file-text"></i>
+                        <span>Upload TXT File</span>
+                        <div class="upload-shine"></div>
+                    </label>
+                    <input type="file" id="fileInput" accept=".txt">
+                </div>
+                
+                <div class="divider">
+                    <span>or</span>
+                </div>
+                
+                <div class="paste-section">
+                    <label class="input-label" for="pasteArea">Paste Content (Question ::: Answer per line):</label>
+                    <div class="textarea-wrapper">
+                        <textarea id="pasteArea" placeholder="Paste your Q&A data here..."></textarea>
+                        <div class="textarea-decoration"></div>
+                    </div>
+                    <button id="loadPastedData" class="modern-button primary">
+                        <i class="fas fa-play"></i>
+                        <span>Load Data</span>
+                        <!-- Removed structural .button-ripple, JS will create temporary ripple effect spans -->
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flashcard-area">
+            <div class="flashcard glass-card" id="flashcard">
+                <div class="card-face card-front">
+                    <div class="card-content">
+                        <div class="card-icon">
+                            <i class="fas fa-question-circle"></i>
+                        </div>
+                        <p id="questionText">Upload or paste data to start your learning journey!</p>
+                    </div>
+                    <div class="card-shimmer"></div>
+                </div>
+                <div class="card-face card-back">
+                    <div class="card-content">
+                        <div class="card-icon answer-icon">
+                            <i class="fas fa-lightbulb"></i>
+                        </div>
+                        <p id="answerText"></p>
+                    </div>
+                    <div class="card-shimmer"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls" style="display: none;"> <!-- Initially hidden -->
+            <button id="correctButton" class="modern-button success">
+                <i class="fas fa-check"></i>
+                <span>Correct</span>
+            </button>
+            <button id="nextButton" class="modern-button secondary">
+                <i class="fas fa-arrow-right"></i>
+                <span>Next</span>
+            </button>
+        </div>
+
+        <div class="progress-section glass-card" style="display: none;"> <!-- Initially hidden -->
+            <div class="progress-info">
+                <span class="progress-text">Card <span id="currentCardNumber">0</span> of <span id="totalCards">0</span></span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <!-- Audio elements -->
+        <audio id="flipSound" src="sounds/flip.mp3" preload="auto"></audio>
+        <audio id="correctSound" src="sounds/correct.mp3" preload="auto"></audio>
+        <audio id="nextSound" src="sounds/next.mp3" preload="auto"></audio>
+        <audio id="clickSound" src="sounds/click.mp3" preload="auto"></audio>
+    </div>
+    
+    <script src="script.js"></script>
+    <script src="/assets/js/nav-loader.js"></script> 
+
+</body>
+</html>

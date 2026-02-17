@@ -1,0 +1,353 @@
+/* viewer.css */
+
+/* Reset & Base */
+body,
+html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    /* Prevent scroll on the viewer page */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #111115;
+    color: white;
+}
+
+/* --- FIX FOR GLOBAL HEADER --- */
+#main-nav-placeholder {
+    position: fixed;
+    /* changed from absolute */
+    top: 0;
+    left: 0;
+    width: 100vw;
+    /* Force full viewport width */
+    height: auto;
+    z-index: 9999;
+    /* Ensure it sits on top of everything */
+    background: transparent;
+    /* Or set a color if needed */
+    box-sizing: border-box;
+}
+
+/* ----------------------------- */
+
+/* Canvas fills screen */
+#canvas-container {
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+/* UI Overlay Container */
+.ui-container {
+    position: absolute;
+    /* Move down to make room for the header */
+    top: 100px;
+    left: 20px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    pointer-events: none;
+}
+
+/* Glass Card Style */
+.ui-container .glass-card {
+    background: rgba(30, 30, 35, 0.75);
+    /* Slightly darker for better contrast */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 20px;
+    width: 280px;
+    pointer-events: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.ui-container .glass-card h3 {
+    margin: 0 0 15px 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #efefef;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 10px;
+}
+
+/* Inputs & Controls */
+.custom-file-upload {
+    display: inline-block;
+    padding: 10px 20px;
+    cursor: pointer;
+    background: #007AFF;
+    border-radius: 8px;
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+.custom-file-upload:hover {
+    background: #0063ce;
+}
+
+input[type="file"] {
+    display: none;
+}
+
+.control-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 5px;
+    color: #ccc;
+}
+
+input[type="range"] {
+    width: 100%;
+    accent-color: #007AFF;
+    cursor: pointer;
+}
+
+/* Buttons */
+.action-btn {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 8px;
+    border: none;
+    border-radius: 6px;
+    background: #333338;
+    color: white;
+    cursor: pointer;
+    font-weight: 500;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.action-btn:hover {
+    background: #444449;
+}
+
+.action-btn.secondary {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Loading Bar */
+#loading-bar-container {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    margin-top: 10px;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+#loading-bar {
+    width: 0%;
+    height: 100%;
+    background: #007AFF;
+    transition: width 0.2s;
+}
+
+/* Debug Log */
+.debug-card {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: #aaa;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.debug-entry {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 2px 0;
+    word-wrap: break-word;
+}
+
+.debug-error {
+    color: #ff4d4d;
+}
+
+.debug-success {
+    color: #4dff88;
+}
+
+/* Mobile Toggle Button */
+#mobile-menu-toggle {
+    display: none;
+    /* Hidden on desktop */
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 100;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(30, 30, 35, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: white;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, background 0.2s;
+}
+
+#mobile-menu-toggle:active {
+    transform: scale(0.95);
+    background: rgba(50, 50, 55, 0.95);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 600px) {
+    #mobile-menu-toggle {
+        display: flex;
+    }
+
+    .ui-container {
+        left: 0;
+        bottom: 0;
+        top: auto;
+        width: 100%;
+        max-height: 60vh;
+
+        /* Flex Logic for vertical list on mobile (changed from row for better stacking) */
+        flex-direction: column;
+        align-items: center;
+        /* Center items */
+
+        overflow-y: auto;
+        /* Scroll vertically */
+        padding: 20px;
+        box-sizing: border-box;
+
+        /* Glass effect for the whole container background on mobile */
+        background: rgba(10, 10, 12, 0.85);
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+        /* Transition for show/hide */
+        transition: transform 0.3s ease-in-out, opacity 0.3s;
+        transform: translateY(110%);
+        /* Hidden by default (pushed down) */
+        opacity: 0;
+        pointer-events: none;
+        /* Don't block clicks when hidden */
+    }
+
+    .ui-container.open {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .ui-container .glass-card {
+        width: 100%;
+        max-width: 400px;
+        margin-right: 0;
+        margin-bottom: 15px;
+        /* Spacing between cards */
+        background: none;
+        /* Container has background now, cards can be transparent-ish or same */
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        /* Let container handle padding */
+    }
+
+    /* Slightly distinct style for cards inside the mobile drawer if needed, 
+       but removing borders/bg makes it feel like one cohesive sheet */
+    .ui-container .glass-card h3 {
+        margin-top: 10px;
+    }
+}
+
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Modal Card */
+.modal-overlay .modal-card {
+    width: 320px;
+    /* Redefine specific props if needed, otherwise inherits glass-card */
+    pointer-events: auto;
+}
+
+/* Movement Controls */
+.movement-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.d-pad {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.d-pad-row {
+    display: flex;
+    gap: 4px;
+}
+
+.move-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.2rem;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.move-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.move-btn:active:not(:disabled) {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.move-btn.center-btn {
+    font-size: 0.6rem;
+    cursor: default;
+    border: none;
+    background: transparent;
+    color: #888;
+}

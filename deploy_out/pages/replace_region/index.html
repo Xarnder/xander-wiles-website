@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web Image Editor</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+</head>
+<div id="main-nav-placeholder"></div>
+
+<body>
+    <div class="background-overlay"></div>
+
+    <!-- Brush Cursor Overlay -->
+    <div id="brush-cursor" class="brush-cursor"></div>
+
+    <header class="site-header">
+        <div class="header-content">
+            <a href="#" class="logo">In-Browser Image Editor</a>
+            <label class="toggle-switch header-toggle">
+                Touch Mode
+                <input type="checkbox" id="touch-mode-toggle" />
+                <span class="toggle-knob"></span>
+            </label>
+        </div>
+    </header>
+
+    <main class="app-container">
+        <!-- Step 1: Upload Original Image -->
+        <section id="upload-step" class="glass-card">
+            <h2>Step 1: Start Project</h2>
+            <p>Select the full-size original image to begin.</p>
+
+            <div class="centered-content">
+                <!-- Initial Upload Button -->
+                <div id="initial-upload-container">
+                    <label for="image-upload" class="action-btn">Upload Original Image</label>
+                    <input type="file" id="image-upload" accept="image/*" style="display:none;" />
+                </div>
+
+                <!-- Post-Upload Actions (Hidden until image is selected) -->
+                <div id="step1-actions" class="hidden"
+                    style="display: flex; flex-direction: column; gap: 1rem; align-items: center; margin-top: 1.5rem;">
+                    <p style="color: var(--accent-cyan); font-weight: 600;">Image Loaded!</p>
+
+                    <button id="start-new-crop-btn" class="action-btn" style="width: 100%; max-width: 250px;">
+                        Start New Crop
+                    </button>
+
+                    <div style="display: flex; align-items: center; width: 100%; max-width: 250px; gap: 10px;">
+                        <span style="flex:1; height:1px; background:var(--glass-border);"></span>
+                        <span style="color:var(--text-secondary); font-size: 0.8rem;">OR</span>
+                        <span style="flex:1; height:1px; background:var(--glass-border);"></span>
+                    </div>
+
+                    <!-- NEW: Skip Crop Option -->
+                    <label for="overlay-upload-skip" class="action-btn"
+                        style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan); width: 100%; max-width: 250px;">
+                        Upload Overlay (Skip Crop)
+                    </label>
+                    <input type="file" id="overlay-upload-skip" accept="image/*" style="display:none;" />
+
+                    <div style="width: 100%; height: 1px; background: var(--glass-border); margin: 0.5rem 0;"></div>
+
+                    <p style="font-size: 0.9rem; color: var(--text-secondary);">Resume Project</p>
+                    <label for="json-upload" class="action-btn"
+                        style="background: var(--bg-secondary); border: 1px solid var(--glass-border); width: 100%; max-width: 250px;">
+                        Upload Project JSON
+                    </label>
+                    <input type="file" id="json-upload" accept=".json" style="display:none;" />
+                </div>
+            </div>
+            <p id="upload-status" class="status-message"></p>
+        </section>
+
+        <!-- Step 2: Crop Tool -->
+        <section id="crop-step" class="glass-card hidden">
+            <h2>Step 2: Select and Export Crop Area</h2>
+            <p>Click and drag on the image to select the area.</p>
+            <div class="canvas-container">
+                <canvas id="crop-canvas"></canvas>
+            </div>
+            <div class="controls-bar">
+                <div class="control-group">
+                    <label for="aspect-ratio-select">Aspect Ratio</label>
+                    <select id="aspect-ratio-select">
+                        <option value="0">Freeform</option>
+                        <option value="1">1:1 (Square)</option>
+
+                        <optgroup label="Landscape">
+                            <option value="1.3333">4:3 (Standard)</option>
+                            <option value="1.5">3:2 (Photography)</option>
+                            <option value="1.6">16:10 (Widescreen)</option>
+                            <option value="1.7777">16:9 (HD Video)</option>
+                            <option value="2.3333">21:9 (Cinema)</option>
+                        </optgroup>
+
+                        <optgroup label="Portrait">
+                            <option value="0.75">3:4 (Portrait Standard)</option>
+                            <option value="0.6666">2:3 (Portrait Photo)</option>
+                            <option value="0.625">16:10 (Portrait Wide)</option>
+                            <option value="0.5625">9:16 (Story/Reel)</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="btn-group-vertical">
+                    <div class="btn-group">
+                        <button id="step2-dl-img" class="action-btn small-btn" disabled>1. Download Image</button>
+                        <button id="step2-dl-json" class="action-btn small-btn" disabled>2. Download JSON</button>
+                    </div>
+                    <button id="step2-next" class="action-btn" disabled>3. Continue to Next Step &rarr;</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 3: Choose Source -->
+        <section id="re-upload-step" class="glass-card hidden">
+            <h2>Step 3: Prepare Edited Image</h2>
+
+            <div class="preview-container">
+                <div class="preview-box">
+                    <h3>Original with Crop Area</h3>
+                    <div class="canvas-container">
+                        <canvas id="original-preview-canvas"></canvas>
+                    </div>
+                </div>
+                <div class="preview-box">
+                    <h3>Your Cropped Image</h3>
+                    <div class="canvas-container">
+                        <canvas id="cropped-preview-canvas"></canvas>
+                    </div>
+                    <div class="btn-group">
+                        <button id="step3-dl-img" class="action-btn small-btn">Download Image</button>
+                        <button id="step3-dl-json" class="action-btn small-btn">Download JSON</button>
+                    </div>
+                </div>
+            </div>
+
+            <p>How would you like to edit the cropped image?</p>
+
+            <div class="centered-content"
+                style="display: flex; flex-direction: column; gap: 1rem; align-items: center;">
+                <!-- OPTION A: Edit Online -->
+                <button id="go-to-paint-editor-btn" class="action-btn"
+                    style="background: var(--accent-purple); color: white; width: 100%; max-width: 300px;">
+                    Edit Image Online (Paint Tool)
+                </button>
+
+                <div style="display: flex; align-items: center; width: 100%; max-width: 300px; gap: 10px;">
+                    <span style="flex:1; height:1px; background:var(--glass-border);"></span>
+                    <span style="color:var(--text-secondary); font-size: 0.9rem;">OR</span>
+                    <span style="flex:1; height:1px; background:var(--glass-border);"></span>
+                </div>
+
+                <!-- OPTION B: Upload External Edit -->
+                <label for="edited-upload" class="action-btn"
+                    style="background: var(--bg-secondary); border: 1px solid var(--glass-border); width: 100%; max-width: 300px;">
+                    Upload Externally Edited Image
+                </label>
+                <input type="file" id="edited-upload" accept="image/*" style="display:none;" />
+            </div>
+            <p id="re-upload-status" class="status-message"></p>
+        </section>
+
+        <!-- NEW Step 3.5: Paint Editor -->
+        <section id="paint-editor-step" class="glass-card hidden">
+            <h2>Step 3.5: Edit Crop</h2>
+            <p>Paint on your cropped image. Click "Save & Continue" when done.</p>
+
+            <div class="canvas-container" style="cursor: none;">
+                <canvas id="paint-editor-canvas"></canvas>
+            </div>
+
+            <div class="controls-bar">
+                <div class="tool-select">
+                    <button id="pe-brush-btn" class="tool-btn active">Brush</button>
+                    <button id="pe-eraser-btn" class="tool-btn">Eraser</button>
+                </div>
+
+                <div class="control-group">
+                    <label for="pe-color-picker">Color</label>
+                    <input type="color" id="pe-color-picker" value="#ff0000"
+                        style="height: 40px; width: 60px; cursor: pointer; background: transparent; border: none;">
+                </div>
+
+                <div class="control-group">
+                    <label for="pe-size-slider">Size: <span id="pe-size-value">20</span>px</label>
+                    <input type="range" id="pe-size-slider" min="1" max="200" value="20" step="1" />
+                </div>
+
+                <div class="control-group">
+                    <label for="pe-softness-slider">Softness: <span id="pe-softness-value">0</span>%</label>
+                    <input type="range" id="pe-softness-slider" min="0" max="100" value="0" step="1" />
+                </div>
+            </div>
+
+            <div class="controls-bar" style="margin-top: 10px;">
+                <div class="control-group">
+                    <button id="pe-fill-btn" class="action-btn small-btn"
+                        style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan);">Fill
+                        Color</button>
+                </div>
+                <div class="control-group">
+                    <button id="pe-clear-btn" class="action-btn small-btn"
+                        style="background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Clear All
+                        Paint</button>
+                </div>
+            </div>
+
+            <div class="controls-bar final-export">
+                <button id="cancel-paint-btn" class="action-btn small-btn"
+                    style="background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted);">Cancel</button>
+                <button id="save-paint-btn" class="action-btn">Save & Continue &rarr;</button>
+            </div>
+        </section>
+
+        <!-- Step 4: Masking Tool -->
+        <section id="mask-step" class="glass-card hidden">
+            <h2>Step 4: Blend Your Edits</h2>
+            <p>Brush to reveal edit, Eraser to hide.</p>
+            <div class="canvas-container" style="cursor: none;">
+                <canvas id="mask-canvas"></canvas>
+            </div>
+
+            <div class="controls-bar">
+                <div class="tool-select">
+                    <button id="brush-btn" class="tool-btn active">Brush</button>
+                    <button id="eraser-btn" class="tool-btn">Eraser</button>
+                </div>
+
+                <div class="control-group">
+                    <label for="brush-size-slider">Brush Size: <span id="brush-size-value">50</span>px</label>
+                    <input type="range" id="brush-size-slider" min="1" max="500" value="50" step="1" />
+                </div>
+
+                <div class="control-group">
+                    <label for="brush-softness-slider">Brush Softness: <span
+                            id="brush-softness-value">25</span>%</label>
+                    <input type="range" id="brush-softness-slider" min="0" max="100" value="25" step="1" />
+                </div>
+            </div>
+
+            <!-- Feather & Fill Controls -->
+            <div class="controls-bar" style="margin-top: 10px;">
+                <div class="control-group">
+                    <label for="feather-slider">Crop Edge Feather: <span id="feather-value">0</span>px</label>
+                    <input type="range" id="feather-slider" min="0" max="500" value="0" step="1" />
+                </div>
+
+                <div class="control-group">
+                    <button id="fill-mask-btn" class="action-btn small-btn"
+                        style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan);">Fill (Show
+                        All)</button>
+                </div>
+                <div class="control-group">
+                    <button id="clear-mask-btn" class="action-btn small-btn"
+                        style="background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Clear (Hide
+                        All)</button>
+                </div>
+            </div>
+
+            <div class="controls-bar" style="margin-top: 10px;">
+                <label class="toggle-switch">
+                    Show Mask
+                    <input type="checkbox" id="show-mask-toggle" />
+                    <span class="toggle-knob"></span>
+                </label>
+                <label class="toggle-switch">
+                    Show Crop Border
+                    <input type="checkbox" id="show-crop-guide-toggle" />
+                    <span class="toggle-knob"></span>
+                </label>
+            </div>
+
+            <div class="controls-bar final-export">
+                <button id="back-to-step3-btn" class="action-btn"
+                    style="background: var(--bg-secondary); border: 1px solid var(--glass-border);">Change Edited
+                    Image</button>
+                <button id="save-final-btn" class="action-btn">Download Final Image</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+    <script src="/assets/js/nav-loader.js"></script>
+
+</body>
+
+</html>

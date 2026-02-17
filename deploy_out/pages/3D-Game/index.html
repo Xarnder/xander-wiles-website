@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>3D Game</title>
+  <link rel="stylesheet" href="./style.css" />
+  <!-- Theme-aware SVG icons (modern browsers) -->
+  <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+  <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+  <!-- Fallback PNG icons -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+  <!-- Other essential links -->
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+</head>
+
+<body>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loader-content">
+      <div class="spinner"></div>
+      <div class="loading-text">Loading Assets...</div>
+      <div class="progress-container">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+      <div id="loading-percentage">0%</div>
+    </div>
+  </div>
+
+  <div id="ui" class="">
+    <div class="header">
+      <button id="btnCollapse" title="Collapse/expand menu (M)">▾</button>
+      <button id="btnCloseMenu" title="Close Menu">×</button>
+      <strong>Controls</strong>
+      <div class="spacer"></div>
+      <!-- ADDED THE SWITCH BUTTON HERE -->
+      <button id="btnSwitchControls"></button>
+      <div class="fps">FPS: <span id="fps">--</span></div>
+      <button id="btnDebug" title="Toggle debug panel (Backtick)">Debug</button>
+    </div>
+    <div class="body" id="ui-body">
+      <!-- Scene Selection -->
+      <details class="row" open>
+        <summary><strong>Scene Selection</strong></summary>
+        <div class="row">
+          <label for="sceneSelector">Current Scene</label><br />
+          <select id="sceneSelector"></select>
+        </div>
+      </details>
+
+      <!-- Main Toggles -->
+      <div class="row">
+        <label><input id="toggleSplitScreen" type="checkbox" /> Split Screen Mode (Use external controller to control
+          player 2)</label>
+      </div>
+      <div class="row">
+        <label><input id="toggleCollision" type="checkbox" /> Show collision scene <span class="small">
+            (H)</span></label>
+      </div>
+      <div class="row">
+        <label><input id="toggleFly" type="checkbox" /> Fly mode (no gravity) <span class="small"> (F)</span></label>
+      </div>
+
+      <!-- Player Settings Sub-menu -->
+      <details class="row">
+        <summary><strong>Player Settings</strong></summary>
+        <div class="row">
+          <label for="moveSpeed">Movement Speed</label><br />
+          <input id="moveSpeed" type="range" min="1" max="15" step="0.1" value="4.0" />
+          <span id="moveSpeedValue" class="small">4.0</span>
+        </div>
+        <div class="row">
+          <label for="jumpHeight">Jump Power</label><br />
+          <input id="jumpHeight" type="range" min="1" max="15" step="0.1" value="5.5" />
+          <span id="jumpHeightValue" class="small">5.5</span>
+        </div>
+        <div class="row">
+          <label for="playerHeight">Player Height</label><br />
+          <input id="playerHeight" type="range" min="1.0" max="3.0" step="0.05" value="1.6" />
+          <span id="playerHeightValue" class="small">1.60 m</span>
+        </div>
+        <div class="row">
+          <label for="playerWidth">Player Width (Radius)</label><br />
+          <input id="playerWidth" type="range" min="0.2" max="1.0" step="0.01" value="0.35" />
+          <span id="playerWidthValue" class="small">0.35 m</span>
+        </div>
+        <!-- ADD THIS SECTION -->
+        <div class="row" id="gamepad-settings" style="display: none;">
+          <label for="gamepadSens">Gamepad Look Sensitivity</label><br />
+          <input id="gamepadSens" type="range" min="0.5" max="5.0" step="0.1" value="1.8" />
+          <span id="gamepadSensValue" class="small">1.8</span>
+        </div>
+        <!-- END ADDED SECTION -->
+      </details>
+
+      <!-- Visual Settings Sub-menu -->
+      <details class="row">
+        <summary><strong>Visual Settings</strong></summary>
+        <div class="row">
+          <label for="exposure"><strong>Exposure</strong> <span class="small">(dims all lighting)</span></label><br />
+          <input id="exposure" type="range" min="0.001" max="2.000" step="0.001" value="0.250" />
+          <span id="exposureValue" class="small">0.250</span>
+        </div>
+        <div class="row">
+          <label for="fovSlider">Field of View (FOV)</label><br />
+          <input id="fovSlider" type="range" min="30" max="110" step="1" value="75" />
+          <span id="fovValue" class="small">75</span>
+        </div>
+        <details class="row" open>
+          <summary><strong>Advanced lighting</strong></summary>
+          <div class="row">
+            <label for="ambientIntensity">Ambient Light <span class="small">(Contrast)</span></label><br />
+            <input id="ambientIntensity" type="range" min="0.0" max="2.0" step="0.1" value="0.4" />
+            <span id="ambientValue" class="small">0.4</span>
+            <br />
+            <label for="sunIntensity">Sun Intensity <span class="small">(Shadows)</span></label><br />
+            <input id="sunIntensity" type="range" min="0.0" max="10.0" step="0.1" value="3.0" />
+            <span id="sunValue" class="small">3.0</span>
+            <br />
+            <label for="lightScale">Light Intensity Scale <span class="small">(Lamps/Emissives 0 →
+                0.01)</span></label><br />
+            <input id="lightScale" type="range" min="0.00000" max="0.01000" step="0.00001" value="0.00200" />
+            <span id="lightScaleValue" class="small">0.00200</span>
+          </div>
+        </details>
+        <details class="row" open>
+          <summary><strong>Performance &amp; Quality</strong></summary>
+          <div class="row">
+            <label><input id="toggleHQLighting" type="checkbox" checked /> High Quality Lighting <span
+                class="small">(shadows, env map)</span></label>
+          </div>
+          <div class="row">
+            <label for="shadowQuality">Shadow Quality</label><br />
+            <input id="shadowQuality" type="range" min="0" max="3" step="1" value="2" />
+            <span id="shadowQualityValue" class="small">Medium</span>
+          </div>
+        </details>
+      </details>
+
+      <div class="row small">
+        P1: WASD • P2: Arrows or Gamepad • R respawn • M menu • ` debug
+      </div>
+      <div class="row small">
+        <span id="status">Initializing...</span>
+      </div>
+    </div>
+  </div>
+
+  <pre id="debug"></pre>
+  <canvas id="c"></canvas>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.159.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.159.0/examples/jsm/",
+      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+  <script type="module" src="./main.js"></script>
+</body>
+
+</html>

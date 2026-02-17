@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Computer Project Setup Instructions</title>
+    
+    <!-- Favicon Links -->
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+    
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+</head>
+
+<div id="main-nav-placeholder"></div> 
+
+<body>
+
+    <div class="background-overlay"></div>
+
+    <header class="site-header">
+        <h1>Computer Project Setup Instructions</h1>
+        <p class="author">By Xander Wiles</p>
+    </header>
+
+    <div class="main-layout">
+        <nav class="sidebar-nav">
+            <h3>Contents</h3>
+            <ul>
+                <li><a href="#abstract">Abstract</a></li>
+                <li><a href="#introduction">Introduction</a></li>
+                <li><a href="#remote-desktop">Remote Desktop Setup</a></li>
+                <li><a href="#docker-environment">Docker Environment</a></li>
+                <li><a href="#wsl2">WSL2</a></li>
+                <li><a href="#docker-desktop">Docker Desktop</a></li>
+                <li><a href="#git-clone">Cloning Template</a></li>
+                <li><a href="#pycharm-concepts">PyCharm Concepts</a></li>
+                <li><a href="#pycharm-interpreter">Setting Interpreter</a></li>
+                <li><a href="#setting-up-container">Run Configuration</a></li>
+                <li><a href="#dockerfile-details">Dockerfile Details</a></li>
+                <li><a href="#using-docker">Using Docker</a></li>
+                <li><a href="#managing-data">Managing Project Data</a></li>
+                <li><a href="#backing-up-project">Backing Up with Git</a></li>
+                <li><a href="#using-template">Using Your Template</a></li>
+                <li><a href="#gitignore-details">.gitignore Details</a></li>
+            </ul>
+        </nav>
+
+        <main class="content">
+            <section id="abstract" class="glass-card">
+                <h2>Abstract</h2>
+                <p>This document provides a comprehensive, step-by-step guide for configuring a high-performance Windows 11 PC for advanced machine learning and data science projects. The instructions are divided into two key parts. The first part details the setup of a secure remote desktop solution using RustDesk, enabling full control of the host machine from a remote client, such as a MacBook. The second part provides a thorough walkthrough of establishing a reproducible, GPU-accelerated development environment using Docker. It covers the foundational concepts and installation of the Windows Subsystem for Linux (WSL2), the configuration of Docker Desktop to utilize an NVIDIA GPU, and the best practices for building and managing containerized Linux environments with PyCharm. The end result is a flexible, powerful, and portable workstation, optimized for demanding computational workflows.</p>
+            </section>
+
+            <section id="introduction" class="glass-card">
+                <h2>Introduction</h2>
+                <p>Welcome! This guide is your personal cheat sheet for transforming a powerful, NVIDIA-equipped Windows 11 PC into a professional-grade machine learning workstation. Whether you're working directly at your desk or connecting remotely from a MacBook, these instructions will ensure your setup is robust, efficient, and easy to manage.</p>
+                <p>We will tackle this in two main parts:</p>
+                <ol>
+                    <li><strong>Remote Desktop Setup:</strong> First, we'll configure RustDesk to give you secure and reliable "unattended access" to your Windows PC. This means you can be anywhere with your MacBook and have full control over your powerful hardware.</li>
+                    <li><strong>Docker Container Environment:</strong> Next, we'll dive into creating the perfect development environment using Docker. Using beginner-friendly analogies and clear instructions, this guide will demystify WSL2, show you how to give Docker full access to your GPU, and walk you through creating a clean, reproducible Linux environment for PyTorch, all managed seamlessly through PyCharm.</li>
+                </ol>
+                 <p>By the end of this guide, you will have a complete, professional setup that solves the "it works on my machine" problem forever, allowing you to focus on what really matters: building amazing things.</p>
+            </section>
+            
+            <section id="remote-desktop" class="glass-card">
+                <h2>Remote Desktop Setup</h2>
+                <h3>RuskDesk</h3>
+                <h4>RuskDesk Introduction</h4>
+                <p>We will install and configure RustDesk on two computers:</p>
+                <ol>
+                    <li><strong>The Host:</strong> Your Windows 11 desktop. This is the computer you want to control. We'll set a permanent password on it so you can connect without anyone needing to be there to approve the connection.</li>
+                    <li><strong>The Client:</strong> Your MacBook. This is the computer you will use to control the Windows desktop.</li>
+                </ol>
+
+                <h4>Part 1: Setting up Your Windows 11 PC (The Host)</h4>
+                <p>This is the most important part. We need to install RustDesk and configure it so it's always ready to accept your connection.</p>
+                <p><strong>Step 1: Download RustDesk on Windows</strong></p>
+                <ol>
+                    <li>On your Windows 11 desktop, open a web browser (like Chrome, Edge, or Firefox).</li>
+                    <li>Go to the official RustDesk website: <a href="https://rustdesk.com/" target="_blank">https://rustdesk.com/</a></li>
+                    <li>The website should automatically detect you're on Windows. Click the prominent Download button. It will download a file named something like <code>rustdesk-1.2.x-x86_64.exe</code>.</li>
+                </ol>
+                
+                <p><strong>Step 2: Install RustDesk for Unattended Access</strong></p>
+                <p>For unattended access to work reliably, you must install RustDesk, not just run the downloaded file. The portable version won't start automatically with your PC.</p>
+                <ol>
+                    <li>Find the downloaded file (usually in your Downloads folder) and double-click to run it.</li>
+                    <li>The RustDesk window will appear. On the left side, under your ID, you will see a message: "For better performance, please install RustDesk."</li>
+                    <li>Click the Install button.</li>
+                    <li>The Windows User Account Control (UAC) will pop up asking for permission. Click Yes.</li>
+                    <li>The installer will run quickly. Once it's finished, RustDesk will be installed as a service, meaning it will automatically start every time your PC boots up.</li>
+                </ol>
+
+                <p><strong>Step 3: Set a Permanent Password for Unattended Access</strong></p>
+                <p>This is the key to connecting without needing someone to click "Accept" on the Windows PC.</p>
+                <ol>
+                    <li>In the RustDesk window, look for your ID on the left. Next to it, you'll see a three-dot menu (...).</li>
+                    <li>Click the menu and select Security.</li>
+                    <li>The Security Settings window will open. Click on Unlock Security Settings.</li>
+                    <li>You will see two options for unattended access. For simplicity and the best result, choose the first one: "Set permanent password for unattended access"</li>
+                    <li>Click the Set permanent password... button.</li>
+                    <li>A box will appear. Enter a strong, unique password. This password is the key to your computer, so make it secure (e.g., a mix of upper/lowercase letters, numbers, and symbols).</li>
+                    <li><strong>WRITE THIS PASSWORD DOWN!</strong> You will need it on your MacBook.</li>
+                    <li>Click OK.</li>
+                </ol>
+
+                <p><strong>Step 4: Get Your RustDesk ID</strong></p>
+                <ol>
+                    <li>Look at the main RustDesk window again. On the left side, under "Your Desk," you will see a number labeled ID.</li>
+                    <li>This is the unique address for your Windows PC. Write this ID down or take a picture of it. You will need both the ID and the password you just created to connect from your MacBook.</li>
+                </ol>
+
+                <p><strong>Step 5: Check Windows Power & Sleep Settings (Important!)</strong></p>
+                <p>For unattended access to work, your Windows PC must be on and connected to the internet. It cannot be asleep or hibernating.</p>
+                <ol>
+                    <li>Click the Start Menu and type <code>Power plan</code>.</li>
+                    <li>Click on <code>Choose a power plan</code>.</li>
+                    <li>Next to your selected plan, click <code>Change plan settings</code>.</li>
+                    <li>Set "Put the computer to sleep" to <strong>Never</strong>.</li>
+                    <li>Click Save changes.</li>
+                </ol>
+
+                <h4>Part 2: Setting up Your MacBook (The Client)</h4>
+                <p><strong>Step 1: Download and Install RustDesk on macOS</strong></p>
+                <ol>
+                    <li>On your MacBook, open the Safari browser and go to the RustDesk website: <a href="https://rustdesk.com/" target="_blank">https://rustdesk.com/</a></li>
+                    <li>Click the Download button. It will download a <code>.dmg</code> file.</li>
+                    <li>Open the downloaded <code>.dmg</code> file. A window will appear showing the RustDesk icon and an Applications folder shortcut.</li>
+                    <li>Drag the RustDesk icon and drop it into the Applications folder. This installs the application.</li>
+                    <li>You can now eject the RustDesk disk image from your desktop.</li>
+                </ol>
+
+                <p><strong>Step 2: Grant Necessary Permissions on macOS</strong></p>
+                <p>macOS has strict security. You must manually give RustDesk permission to control your computer and see your screen. This step is critical.</p>
+                <ol>
+                    <li>Open RustDesk from your Applications folder.</li>
+                    <li>You will likely see a yellow or red warning banner inside the app about permissions. Click on the link in the banner, or follow these manual steps:</li>
+                    <li>Go to the Apple Menu > System Settings.</li>
+                    <li>In the sidebar, click on Privacy & Security.</li>
+                    <li>Find and click on <strong>Accessibility</strong>. Click the + button, navigate to your Applications folder, select RustDesk, and click Open. Make sure the toggle next to RustDesk is turned on (blue).</li>
+                    <li>Now, go back to the Privacy & Security settings and find <strong>Screen & System Audio Recording</strong>. Click it, and again, make sure the toggle next to RustDesk is turned on.</li>
+                    <li>RustDesk might ask you to quit and reopen to apply the settings. Do so.</li>
+                </ol>
+
+                <h4>Part 3: Connecting from Your MacBook to Your Windows PC</h4>
+                <p>This is the final step!</p>
+                <ol>
+                    <li>Open RustDesk on your MacBook.</li>
+                    <li>Look for the main input field at the top of the window that says "Enter Remote ID".</li>
+                    <li>Carefully type the ID of your Windows 11 PC that you wrote down earlier.</li>
+                    <li>Click the Connect button. A new window will appear, prompting you for a password.</li>
+                    <li>Enter the permanent password you set on your Windows PC in Part 1.</li>
+                    <li>You can check the box "Store password" if you don't want to type it in every time.</li>
+                    <li>Click OK.</li>
+                </ol>
+                <p><strong>Success!</strong> A window should now open on your MacBook showing the desktop of your Windows 11 PC. You can move your mouse and type on your keyboard to control it as if you were sitting right in front of it.</p>
+                
+                <h4>Important Security Considerations</h4>
+                <ul>
+                    <li><strong>Strong Password:</strong> Your unattended access password is the only thing protecting your PC from being controlled by anyone who knows your ID. Make it very strong and do not reuse it anywhere else.</li>
+                    <li><strong>Keep Software Updated:</strong> Regularly check for updates for RustDesk on both computers to ensure you have the latest security patches.</li>
+                    <li><strong>Do Not Share Your ID:</strong> Treat your RustDesk ID as private information.</li>
+                </ul>
+            </section>
+            
+            <section id="docker-environment" class="glass-card">
+                <h2>Docker Container Environment</h2>
+                <h3>Docker Introduction</h3>
+                <p>You can think of Docker as a massively more powerful, complete, and portable version of a venv. A venv creates a virtual environment for your Python packages. A Docker container creates a virtual environment for an entire operating system.</p>
+                <h4>The "Room vs. House" Analogy</h4>
+                <p>This is the easiest way to understand the difference:</p>
+                <ul>
+                    <li>A <strong>venv is like organizing a single room in your house</strong>. Imagine your Windows 11 PC is a big house. You decide to make one room your "Project Library." You create a venv. This is like putting up special shelves in that room. On these shelves, you can only place specific versions of your Python books (numpy, pandas, pytorch). The books in this room won't get mixed up with books in other rooms. However, the room still depends on the rest of the house. It uses the house's main electricity (your OS kernel), plumbing (system libraries like ffmpeg), and foundation (your hardware). You can't just pick up this "room" and move it to a friend's plot of land (a Mac or a Linux server) and expect it to work.</li>
+                    <li><strong>Docker is like building a complete, pre-fabricated, portable tiny house</strong>. A Docker container is a whole, self-contained house. It comes with its own walls (the Linux OS file system), its own plumbing (apt-get libraries like libgl1), its own electrical wiring (the specific Python version), and its own pre-stocked bookshelves (pip packages). This entire tiny house is self-sufficient. Because it's a standard container, you can pick it up and place it on any plot of land (any computer running Docker - Windows, Mac, or Linux) and it will work exactly the same way everywhere. It doesn't care what the main house looks like because it has everything it needs inside.</li>
+                </ul>
+                <h4>Verify Your NVIDIA Driver</h4>
+                <p>For Docker to access your Graphics Card, you need a recent NVIDIA driver installed on your Windows host.</p>
+                <ol>
+                    <li>Right-click your desktop and open the NVIDIA Control Panel.</li>
+                    <li>In the bottom-left, click "System Information".</li>
+                    <li>Under the "Details" tab, check your "Driver version". Anything from version 525.xx or newer is great. Your driver is likely up-to-date, but it's good to confirm.</li>
+                </ol>
+            </section>
+
+            <section id="wsl2" class="glass-card">
+                <h2>WSL2</h2>
+                <h3>WSL2 Introduction</h3>
+                <ul>
+                    <li>Imagine you speak only English (this is your Windows OS) but you need to work with someone who speaks only Japanese (this is a Linux program, like a Docker container).</li>
+                    <li>You could try to learn Japanese yourself (very hard), or you could hire a world-class, simultaneous translator who lives in your house and makes communication seamless.</li>
+                    <li><strong>WSL2 is that expert translator.</strong> It allows your English-speaking Windows to perfectly understand and run Japanese-speaking Linux programs at native speed.</li>
+                </ul>
+
+                <h4>1. What is WSL2?</h4>
+                <ul>
+                    <li>WSL stands for Windows Subsystem for Linux.</li>
+                    <li>It's an official feature from Microsoft, built directly into Windows 10 and 11. Its purpose is to let you run a real, full Linux environment directly on your Windows machine without needing to dual-boot or run a slow, clunky traditional virtual machine.</li>
+                    <li>WSL2 is the second, much more powerful version of this feature.</li>
+                </ul>
+
+                <h4>2. How Does it Work? (The Magic Inside)</h4>
+                <ul>
+                    <li>This is the coolest part.</li>
+                    <li>A traditional virtual machine (like VirtualBox) has to emulate an entire computer in software. This is like the translator having to build a fake Japanese office inside your English house—it's slow, separate, and uses a lot of resources.</li>
+                    <li>WSL2 works differently. Microsoft has integrated a real, complete Linux kernel directly into Windows. This isn't an emulation or a fake; it's the genuine article.</li>
+                    <li>Think of it this way: Windows and this new Linux kernel are running side-by-side as close partners. When a Linux command needs to be executed, Windows doesn't try to figure it out; it hands it directly to its expert Linux partner, who runs it at full speed and hands the result back. This deep integration is what makes it so fast and powerful.</li>
+                </ul>
+
+                <h4>3. Why Do We Need It?</h4>
+                <p>For decades, the world of software development, especially for servers, the cloud, and data science, has been dominated by Linux. The best tools are often built for Linux first. This created a problem for developers on Windows. We need WSL2 for three main reasons:</p>
+                <ol>
+                    <li><strong>Access to Linux Tools:</strong> It gives you direct access to the massive ecosystem of Linux command-line tools (apt-get, grep, ssh, etc.) that are standard in development.</li>
+                    <li><strong>Performance:</strong> Because it uses a real Linux kernel, it's incredibly fast, especially for operations that involve lots of files (like running git commands or building software).</li>
+                    <li><strong>Compatibility:</strong> Many programming scripts and applications are written with the assumption that they will be run on Linux. WSL2 provides the perfect environment for them to run on Windows without any changes.</li>
+                </ol>
+
+                <h4>4. How is it Related to Docker? (The Crucial Connection)</h4>
+                <p>This is the most important part for your project.</p>
+                <ul>
+                    <li><strong>The Problem:</strong> Docker was born on Linux. A Linux-based Docker container is fundamentally just an isolated process running on a Linux kernel. The Windows kernel is completely different and cannot run these processes directly.</li>
+                    <li><strong>The Solution:</strong> Docker Desktop on Windows doesn't try to reinvent the wheel. It uses WSL2 as its engine or backend.</li>
+                </ul>
+                
+                <h4>5. How to Set it Up as a Beginner? (The Easy Way)</h4>
+                <p>Microsoft has made this incredibly simple on modern Windows 11. If you already see VERSION 2 when you run `wsl -l -v`, you have already done this! But for completeness, here is the process from scratch. It's essentially a single command.</p>
+                <ol>
+                    <li>Open PowerShell as Administrator. (Click the Start Menu, Type "PowerShell", Right-click on "Windows PowerShell" and select "Run as administrator").</li>
+                    <li>Run the Magic Command. In the blue Administrator PowerShell window, type the following command and press Enter:</li>
+                </ol>
+                <div class="code-block-wrapper">
+                    <pre><code>wsl --install</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+                <p>After the command finishes, it will tell you to restart your PC. Do this. After rebooting, a Linux terminal window will pop up automatically to finish the Ubuntu installation. It will ask you to create a username and a password. This is only for your Linux environment; it has nothing to do with your Windows login.</p>
+                <h4>Verify WSL2</h4>
+                <ol>
+                    <li>Open PowerShell or Windows Terminal.</li>
+                    <li>Run the command: <code>wsl -l -v</code></li>
+                    <li>You should see an output with a distribution (like docker-desktop-data or ubuntu) that has STATE as Running and VERSION as 2. This confirms WSL2 is active.</li>
+                </ol>
+            </section>
+
+            <section id="docker-desktop" class="glass-card">
+                <h2>Docker Desktop</h2>
+                <h4>Check and Move Your Docker Data Location</h4>
+                <p>You want all Docker data on your 8TB HDD (let's assume it's the D: drive). If Docker is currently storing images and containers on your C: drive, it will fill up fast.</p>
+                <p><strong>How to Move Docker's Data to your D: Drive:</strong></p>
+                <ol>
+                    <li>Open Docker Desktop. Click the Settings gear icon in the top-right.</li>
+                    <li>Go to the "Resources" tab, and then "Advanced".</li>
+                    <li>Look for the "Disk image location" field. If it's on your C: drive, we must move it.</li>
+                    <li>Click the "Browse" button next to the disk image location.</li>
+                    <li>Navigate to your 8TB drive. I recommend creating a dedicated folder, for example: `D:\DockerData`. Select this new folder.</li>
+                    <li>Click the "Apply & restart" button.</li>
+                    <li>Docker will automatically move all its existing data. This might take a few minutes.</li>
+                </ol>
+            </section>
+
+            <section id="git-clone" class="glass-card">
+                <h2>Git Clone Docker Template</h2>
+                <p>Before starting the configuration, you need to download the project files to your local computer. This is called "Cloning".</p>
+                <p>Run the following command in your terminal (e.g., PowerShell or Git Bash) inside the folder where you want your projects to live (like <code>D:\Projects\</code>):</p>
+                <div class="code-block-wrapper">
+                    <pre><code>git clone https://github.com/Xarnder/docker-template.git</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+            </section>
+            
+            <section id="pycharm-concepts" class="glass-card">
+                <h2>PyCharm: Interpreter vs. Run Configuration</h2>
+                <p>Before we proceed, it is important to understand the difference between these two settings in PyCharm. It can be confusing because they both seem to "control" Docker.</p>
+                
+                <h4>1. Python Interpreter (The Engine)</h4>
+                <p><strong>File > Settings > Project > Python Interpreter</strong></p>
+                <p>Think of this as the <strong>engine</strong> under the hood of your car. It is a global setting for the entire project. By setting the interpreter to "Docker", you are telling PyCharm: "Do not use the Python installed on Windows. Use the Python installed inside the Docker Container." This allows PyCharm to index the libraries inside the container so that features like auto-complete and syntax highlighting work correctly.</p>
+                
+                <h4>2. Run Configuration (The Dashboard)</h4>
+                <p><strong>Edit Configurations (Top Right Dropdown)</strong></p>
+                <p>Think of this as the <strong>dashboard settings</strong> for a specific road trip. While the engine (Interpreter) stays the same, you might want to drive differently today. The Run Configuration controls <em>how</em> a specific script is launched. This is where you tell Docker to turn on the GPU, mount specific folders, or clean up after itself.</p>
+            </section>
+
+            <section id="pycharm-interpreter" class="glass-card">
+                <h2>Setting the PyCharm Interpreter</h2>
+                <p>You must set your PyCharm Interpreter to the Docker container so PyCharm knows where to find your libraries.</p>
+                <ol>
+                    <li>Open your project in PyCharm.</li>
+                    <li>Go to <strong>File > Settings > Project > Python Interpreter</strong>.</li>
+                    <li>Click the <strong>Add Interpreter</strong> link (or the gear icon) and select <strong>On Docker...</strong></li>
+                    <li>In the dialog that appears, select "Docker" as the server.</li>
+                    <li>Select <strong>Build from Dockerfile</strong> (this ensures the environment matches your code exactly).</li>
+                    <li>Click OK. PyCharm will take a few minutes to build the image and index the files.</li>
+                </ol>
+            </section>
+
+            <section id="setting-up-container" class="glass-card">
+                <h2>Setting Up Run Configuration (Docker Config)</h2>
+                <p>Now we need to configure the specific run options to ensure the container has access to your hardware. You do this by editing the configuration in the top-right of the PyCharm window.</p>
+                <p><strong>Docker Config Details:</strong></p>
+                <ul>
+                    <li><strong>Name:</strong> Docker (or any name you prefer)</li>
+                    <li><strong>Dockerfile:</strong> Dockerfile</li>
+                    <li><strong>Run options:</strong> You must copy and paste these exact flags into the "Run options" field (found under Modify Options):</li>
+                </ul>
+                <div class="code-block-wrapper">
+                    <pre><code>--gpus all --ipc=host --rm</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+                <p><strong>What do these flags mean?</strong></p>
+                <ul>
+                    <li><code>--gpus all</code>: This is critical. It punches a hole through the container walls to let the Linux system see and use your physical NVIDIA GPU. Without this, PyTorch will not be able to use CUDA.</li>
+                    <li><code>--ipc=host</code>: This stands for "Inter-Process Communication". Deep learning dataloaders use shared memory to speed up data transfer. The default Docker shared memory is too small, which causes PyTorch to crash unexpectedly. This flag allows the container to use the host's shared memory space, fixing that crash.</li>
+                    <li><code>--rm</code>: This stands for "Remove". It tells Docker to automatically delete the container as soon as the script finishes running. This keeps your system clean and prevents hundreds of "zombie" stopped containers from cluttering up your hard drive.</li>
+                </ul>
+                
+                <p>Don't forget to also set up your <strong>Bind Mounts</strong> (Volumes) in this same menu, which we discuss in the "Managing Project Data" section.</p>
+                <img src="assets/images/pycharm-config.png" alt="PyCharm run/debug configurations for Docker" class="responsive-img">
+            </section>
+            
+            <section id="dockerfile-details" class="glass-card">
+                <h2>Dockerfile or Requirements.txt</h2>
+                <p>The Dockerfile sets up the Operating System, and the requirements.txt installs Python libraries inside that operating system. Let's use a clear analogy to explain this.</p>
+                <h4>The "Smartphone and Apps" Analogy</h4>
+                <p>Think of your Docker container as a brand new smartphone that you are setting up from scratch.</p>
+                <p><strong>1. The Dockerfile = Setting Up the Smartphone Itself</strong></p>
+                <p>The Dockerfile is the set of instructions for preparing the phone's core operating system (like iOS or Android).</p>
+                <ul>
+                    <li><code>FROM pytorch/pytorch:...</code>: This is like choosing your phone model. You've chosen an "Ubuntu Phone, PyTorch Edition." It already has the basic OS (Ubuntu), the main camera hardware driver (CUDA), and the primary Camera App (PyTorch) pre-installed by the manufacturer.</li>
+                    <li><code>RUN apt-get install -y ffmpeg</code>: This is like going into the phone's system settings and installing a system-wide service or utility. ffmpeg is not a powerful, standalone program written in languages like C. It's like a core video processing service that any app on the phone can use. You are installing it using Ubuntu's "system installer," which is called apt-get.</li>
+                </ul>
+                <p><strong>2. The requirements.txt = Installing Apps from the App Store</strong></p>
+                <p>The requirements.txt file is your list of apps to download from the "Python App Store" (which is called PyPI). These apps run on top of the phone's operating system.</p>
+                <ul>
+                    <li><code>RUN pip install -r requirements.txt</code>: This command tells the phone, "Open the App Store (pip) and install all the apps on this list (requirements.txt)."</li>
+                    <li><code>numpy, pandas, opencv-python</code>: These are the "apps" you want to install. They are written in or for Python and are managed by Python's package installer, pip.</li>
+                </ul>
+                <h4>Why ffmpeg Must Go in the Dockerfile</h4>
+                <p>Now for the crucial connection. Why can't we just <code>pip install ffmpeg</code>? Because many Python libraries are just clever "wrappers" or "controllers" for more powerful system programs. Imagine you install a Python library called torchaudio (which comes with PyTorch). The torchaudio "app" doesn't know how to process an MP3 file from scratch. Instead, when your Python code tells torchaudio to load an MP3, torchaudio simply turns to the operating system and says: "Hey, Operating System! I have this MP3 file. Can you please use your built-in service to process it for me and give me back the raw audio data?"</p>
+                <ul>
+                    <li>If The OS says "Sure!", runs ffmpeg, and gives the data back to torchaudio. Everything works.</li>
+                    <li>If The OS says, "Sorry, I don't have a service called ffmpeg." The torchaudio app immediately crashes with an error.</li>
+                </ul>
+                <p>The Python library (torchaudio) depends on the system program (ffmpeg) being present.</p>
+            </section>
+            
+            <section id="using-docker" class="glass-card">
+                <h2>Using Docker</h2>
+                <h4>You Need to Rebuild From Scratch (The Real "Rebuild")</h4>
+                <p>This is the scenario you asked about. You need to do this when you have changed the "blueprint" of your environment.</p>
+                <p><strong>When to do a full rebuild:</strong></p>
+                <ul>
+                    <li>You edited your Dockerfile (e.g., added a new <code>RUN apt-get install</code> command).</li>
+                    <li>You edited your requirements.txt (e.g., added a new library like scikit-learn).</li>
+                </ul>
+                <p>A simple restart won't work here because your existing container was built from the old blueprint. You need to build a new image and then create a new container from it. Here is the best and easiest way to do this entirely within PyCharm:</p>
+                <ol>
+                    <li>Start Docker Desktop and open your project in PyCharm.</li>
+                    <li>Open the "Services" Tool Window (View -> Tool Windows -> Services).</li>
+                    <li>Find and Rebuild Your Image. In the Services window, expand the Docker connection, then expand the Images section. Find your image, which will be named `pytorch-gpu-project:latest`.</li>
+                    <li>Right-click on your image and select <strong>Build Image...</strong></li>
+                    <li>A dialog box will pop up. It will already be correctly configured. Just click the Build button at the bottom.</li>
+                    <li>Watch the Build Process. The "Build Log" tab will open, showing all the steps from your Dockerfile being executed. This overwrites the old image.</li>
+                    <li>Run Your Code. Once the build is finished, just run your Python script as normal. PyCharm will automatically delete the old, outdated container and create a brand new container based on your newly rebuilt image.</li>
+                </ol>
+                
+                <h4>The "Nuke it From Orbit" Method (For a truly fresh start)</h4>
+                <p>Sometimes things can get weird with Docker's caching, or you just want to be 100% sure you're starting from a completely clean slate. This method guarantees a fresh build.</p>
+                <ol>
+                    <li>Open the Services window in PyCharm.</li>
+                    <li><strong>Stop and Remove the Container:</strong> Expand Containers, find your project's container, right-click on it -> Stop, then right-click again -> Delete... and confirm.</li>
+                    <li><strong>Remove the Image:</strong> Expand Images, find your `pytorch-gpu-project:latest` image, right-click on it -> Delete Image... and confirm.</li>
+                    <li><strong>Run your Python script.</strong> Now, with no container and no image, just click the green "Run" arrow. PyCharm will see that nothing exists and will be forced to run a full, clean build from scratch.</li>
+                </ol>
+
+                <h4>Getting into Your Docker Container</h4>
+                <p><strong>Method 1: The Easy PyCharm Way (Recommended)</strong></p>
+                <p>PyCharm is aware of your running containers and gives you a one-click way to open a terminal inside them.</p>
+                <ol>
+                    <li>Make Sure Your Container is Running. The easiest way to do this is to simply run any Python script from your project. The container will stay running for a while afterwards.</li>
+                    <li>Open the "Services" Tool Window.</li>
+                    <li>Find Your Running Container. Expand Docker -> Containers. You will see your project's container with a green "play" icon.</li>
+                    <li>Right-click on your running container and select <strong>Exec...</strong>.</li>
+                    <li>A small dialog box will pop up. In the "Command" field, it will likely default to `/bin/bash`. This is what you want. Click the Create button.</li>
+                    <li>You're In! A new "Terminal" tab will open at the bottom of PyCharm with a prompt like `root@a1b2c3d4e5f6:/app#`. The `:/app` part is key, showing you're in the right directory.</li>
+                </ol>
+
+                <p><strong>Method 2: The Docker Command-Line Way</strong></p>
+                <p>This method uses the standard Docker command and can be run from any terminal on your PC (PowerShell, Windows Terminal, or PyCharm's built-in terminal).</p>
+                <ol>
+                    <li>Find Your Container's Name or ID. Open a terminal and type: <code>docker ps</code>. You can use either the CONTAINER ID or the NAMES.</li>
+                    <li>Execute the Command to Get Inside. The format is `docker exec -it <container_name_or_id> <command_to_run>`. So, you would type:</li>
+                </ol>
+                <div class="code-block-wrapper">
+                    <pre><code>docker exec -it quirky_einstein /bin/bash</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+            </section>
+            
+            <section id="managing-data" class="glass-card">
+                <h2>Managing Project Data with Docker Volumes (The Magic Portal)</h2>
+                <p>We have successfully created a perfect, self-contained Linux environment for our code. But this raises a critical question: Where do we put our data? What about our massive datasets, Jupyter notebooks, trained model checkpoints, and final output graphs? We absolutely do not want to put them inside the Docker image itself.</p>
+                <h4>What Happens If We Don't Use a Volume? (The Locked Room Problem)</h4>
+                <p>Imagine your Docker container is a perfectly clean, secure, locked room.</p>
+                <ol>
+                    <li><strong>Copying Files In:</strong> When you <code>COPY . .</code> in your Dockerfile, you are making a one-time copy of your Python scripts into this locked room when it's built.</li>
+                    <li><strong>Working Inside:</strong> Your Python script runs inside this room. It can create new files—let's say it trains a model and saves it as <code>model.pth</code>. This new file now exists only inside the locked room.</li>
+                    <li><strong>The Problem:</strong> When you are done, you might stop and remove the container (you "tear down" the room). Everything created inside that room is permanently deleted. Your <code>model.pth</code> is gone forever. There is no way to get it back.</li>
+                </ol>
+                <p>Without a volume, your container is a temporary black box. Data can't easily get in after it's been built, and anything created inside is destroyed along with the container.</p>
+                <h4>What is a Docker Volume? (The Solution: A Magic Portal)</h4>
+                <p>A Docker Volume—specifically a "bind mount" which we will use—is like opening a magic portal between a folder on your Windows PC and a folder inside your running container. It's a live, two-way link.</p>
+                <ul>
+                    <li>If you add a file to the folder on your Windows D: drive, it instantly appears inside the container.</li>
+                    <li>If your Python script inside the container saves a file to the linked folder, it instantly appears on your Windows D: drive.</li>
+                    <li>This connection is persistent. The data lives safely on your Windows hard drive. You can delete, rebuild, and recreate your container a hundred times, and your data will remain untouched and will immediately reconnect to the new container.</li>
+                </ul>
+                <p>This is the standard, professional way to manage data with Docker. It perfectly separates your temporary, disposable environment (the container) from your permanent, precious data (your files on the host machine).</p>
+
+                <h4>How to Set it Up in PyCharm (Step-by-Step)</h4>
+                <p><strong>Step 1: Create Your Data Folders on Windows</strong></p>
+                <p>First, let's create a clean folder structure on your host machine. Navigate to your main project folder, `D:\pytorch-gpu-project`, and create a new folder named `data`. Inside the `data` folder, create a few subfolders like `input`, `output`, and `notebooks`.</p>
+                <p>Your project structure on Windows should now look like this:</p>
+                <pre class="file-structure">
+D:\pytorch-gpu-project/
+├── data/
+│   ├── input/
+│   ├── output/
+│   └── notebooks/
+├── src/
+│   └── verify_gpu.py
+├── Dockerfile
+└── requirements.txt
+                </pre>
+
+                <p><strong>Step 2: Add the Bind Mount in PyCharm</strong></p>
+                <p>When you are setting up the Docker interpreter (as shown in the "Setting Up Container" section), in the "Modify options" dialog, add a bind mount:</p>
+                <ul>
+                    <li><strong>Host path:</strong> `D:\pytorch-gpu-project\data`</li>
+                    <li><strong>Container path:</strong> `/app/data`</li>
+                </ul>
+                
+                <p><strong>Step 3: Verify the Connection</strong></p>
+                <p>Create a file named `test.txt` inside `D:\pytorch-gpu-project\data\input` on Windows and write "Hello from Windows!" in it. Then, get a terminal inside your running container. Navigate to `/app/data/input` (`cd data/input`) and list the files (`ls`). You should see `test.txt`. Read its contents (`cat test.txt`), and it should print "Hello from Windows!".</p>
+            </section>
+            
+            <section id="backing-up-project" class="glass-card">
+                <h2>Backing Up Your Project with Git and GitHub</h2>
+                <p>Now that our development environment is set up, the final step is to create a secure backup and a version history of our work. We will use Git and GitHub for this.</p>
+                <p><strong>The Big Idea:</strong> We are backing up our project's blueprints (Dockerfile, .py scripts, requirements.txt), not the fully assembled "house" (the multi-gigabyte Docker image). This allows anyone with these small blueprint files to perfectly recreate the entire environment from scratch.</p>
+                <h4>Step 1: Create the "Do Not Pack" List (.gitignore)</h4>
+                <p>Before we save anything, we must tell Git which files and folders to ignore. We don't want to back up temporary cache files, PyCharm's local settings, or large datasets. This is done with a special file called `.gitignore`.</p>
+                <ol>
+                    <li>In PyCharm, right-click on the root folder of your project in the left-hand Project view.</li>
+                    <li>Select New -> File.</li>
+                    <li>Name the file exactly <strong>.gitignore</strong> (the dot at the beginning is crucial).</li>
+                    <li>Copy and paste the following text into the file. This is a robust template for Python and Docker projects.</li>
+                </ol>
+                <div class="code-block-wrapper">
+                    <pre><code># Python bytecode and cache
+__pycache__/
+*.pyc
+
+# PyCharm specific files (local settings)
+.idea/
+
+# Operating System generated files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Datasets and large output files.
+# We back up the CODE, not the DATA.
+# The asterisk (*) is a wildcard meaning "everything inside this folder".
+data/input/*
+data/output/*
+</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+
+                <h4>Step 2: Create an Empty Repository on GitHub</h4>
+                <p>Next, we need to create the empty project "safety deposit box" in the cloud.</p>
+                <ol>
+                    <li>Navigate to GitHub.com in your web browser and log in.</li>
+                    <li>In the top-right corner, click the + icon and select "New repository".</li>
+                    <li>Repository name: Give your project a name (e.g., `pytorch-gpu-docker-template`).</li>
+                    <li>Public / Private: Choose if you want the code to be visible to others.</li>
+                    <li><strong>CRITICAL STEP:</strong> Leave all the initialization checkboxes unchecked. Do NOT add a README, .gitignore, or license from the GitHub website, as we have already created these files on our computer.</li>
+                    <li>Click the green "Create repository" button.</li>
+                </ol>
+                
+                <h4>Step 3: Connect and Push Your Project from PyCharm</h4>
+                <p>GitHub will now display a page with instructions. We will use the "...or push an existing repository from the command line" section. In PyCharm, open the Terminal tab at the bottom of the window and type the following commands one by one, pressing Enter after each.</p>
+                <div class="code-block-wrapper">
+                    <pre><code># 1. Initialize Git in your project folder.
+git init
+
+# 2. Stage all your files (except those in .gitignore) for saving.
+git add .
+
+# 3. Save a snapshot of your files with a descriptive message.
+git commit -m "Initial commit: Setup Docker environment and project structure"
+
+# 4. Rename the primary branch to 'main' (the modern standard).
+git branch -M main
+
+# 5. Remove the old connection
+git remote remove origin
+
+# 6. Tell Git the address of your GitHub repository.
+# **COPY THIS FULL LINE FROM YOUR GITHUB PAGE. IT IS UNIQUE TO YOUR PROJECT!**
+git remote add origin https://github.com/YourUsername/YourRepositoryName.git
+
+# 7. Push (upload) your saved files to GitHub.
+git push -u origin main
+</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+                <p>After the last command completes, refresh your GitHub repository page in your browser. All of your project's "blueprint" files will now be safely stored in the cloud.</p>
+            </section>
+            
+            <section id="using-template" class="glass-card">
+                <h2>Using Your Template for a New Project</h2>
+                <p>Your docker-template repository is now a perfect starting point for any new project. The goal is to copy this template, but then connect it to a brand new GitHub repository for your new project. The Analogy: The House Blueprint. Think of your template on GitHub as the master blueprint for a house. You don't want to draw on the master blueprint. Instead, you take a copy of it to a new plot of land (your new project folder), and you file this new project under a new address (your new GitHub repository URL).</p>
+                <h4>Step 1: Create the New "Home" on GitHub</h4>
+                <p>First, create a new, completely empty repository on GitHub for your new project. Give it a name specific to your new project (e.g., `my-new-audio-analysis-project`). Crucially, do NOT initialize it with a README, .gitignore, or license. It must be completely empty. After creating it, copy its URL.</p>
+
+                <h4>Step 2: Clone the Template to Your Local Computer</h4>
+                <p>Now, go to your local machine. We will git clone your template into a new folder named after your new project.</p>
+                <div class="code-block-wrapper">
+                    <pre><code># Format: git clone <template_url> <new_folder_name>
+git clone https://github.com/Xarnder/docker-template.git my-new-audio-analysis-project
+</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+
+                <h4>Step 3: Change the Remote Address (The Most Important Step)</h4>
+                <p>Right now, the new local folder is still "wired" to point back to your original template. We need to rewire it to point to your new repository.</p>
+                <div class="code-block-wrapper">
+                    <pre><code># Navigate into your newly created project folder
+cd my-new-audio-analysis-project
+
+# Verify the current remote address
+git remote -v
+
+# Remove the old connection
+git remote remove origin
+
+# Add the new connection (Paste the URL of your NEW repository here)
+git remote add origin https://github.com/YourUsername/my-new-audio-analysis-project.git
+
+# Verify the new remote address again
+git remote -v
+</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+                
+                <h4>Step 4: Push to the New Repository</h4>
+                <p>Now you can push the code from your local machine up to its new home on GitHub.</p>
+                <div class="code-block-wrapper">
+                    <pre><code>git push -u origin main</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+            </section>
+            
+            <section id="gitignore-details" class="glass-card">
+                <h2>The "Do Not Pack" List (.gitignore)</h2>
+                <p>Think of your Git repository as a suitcase you are packing for a trip (to GitHub). Your .gitignore file is the "Do Not Pack" list you stick to the lid of the suitcase. Before Git packs anything into the suitcase, it first reads this list. If it sees a file or folder on the list, it will leave it on the floor and will not pack it.</p>
+                <h4>CRITICAL: What If You Already Uploaded It by Accident?</h4>
+                <p>This is a very common scenario. If you have already committed and pushed a folder (e.g., `image_output`) to GitHub, simply adding it to .gitignore is not enough. Git is already "tracking" those files, so it will continue to watch them for changes. You need to tell Git two things:</p>
+                <ol>
+                    <li>"Please stop tracking this folder."</li>
+                    <li>"Don't delete the folder from my computer, just from your tracking list."</li>
+                </ol>
+                <p>Here is the simple, safe command sequence to fix this.</p>
+                <div class="code-block-wrapper">
+                    <pre><code># 1. First, make sure your .gitignore is updated with the folder to ignore.
+#    (e.g., it contains the line "image_output/")
+
+# 2. Run this command to remove the folder from Git's tracking (but not from your disk):
+#    --cached is the most important part. It leaves the files untouched on your hard drive.
+git rm -r --cached image_output
+
+# 3. Now, commit this change. You have told Git to officially stop tracking the folder.
+git commit -m "Stop tracking image_output folder"
+
+# 4. Finally, push this update to GitHub.
+git push
+</code></pre>
+                    <button class="copy-btn" title="Copy to clipboard"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zM-1 1.5A1.5 1.5 0 0 1 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 1h-3z"/></svg></button>
+                </div>
+                <p>After this, the `image_output` folder will be removed from your GitHub repository, but it will still be safe on your local computer. And because it's now in your .gitignore file, Git will never try to upload it again.</p>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+    <script src="/assets/js/nav-loader.js"></script> 
+
+</body>
+</html>

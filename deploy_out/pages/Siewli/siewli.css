@@ -1,0 +1,148 @@
+/* Burgundy glass theme using your site's glass style as base */
+:root {
+  --burgundy: #6b1430;              /* deep burgundy */
+  --burgundy-2: #8e1d44;            /* accent */
+  --glass-burgundy: rgba(107, 20, 48, 0.22);
+  --glass-border-burgundy: rgba(255, 255, 255, 0.14);
+  --grad-burgundy: linear-gradient(135deg, #8e1d44 0%, #c8508f 100%);
+}
+
+/* Card tint */
+.burgundy {
+  background: linear-gradient(180deg, var(--glass-burgundy), rgba(26,26,32,0.55));
+  border: 1px solid var(--glass-border-burgundy);
+}
+
+/* Page container tweaks */
+.memorial-container {
+  max-width: 1100px;
+}
+
+/* Hero */
+.memorial-title {
+  font-size: clamp(2rem, 3.6vw, 3rem);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+.memorial-title span {
+  background: var(--grad-burgundy);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.memorial-subtitle {
+  margin-top: .5rem;
+  color: var(--text-secondary);
+}
+
+/* Responsive YouTube */
+.video-card { padding: 0; overflow: hidden; }
+.video-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; }
+.video-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Obituary cards */
+.obit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.2rem;
+}
+.obit-card h2 { margin-bottom: .4rem; }
+.obit-card p { color: var(--text-secondary); line-height: 1.7; }
+
+/* Gallery */
+.gallery-section { margin-top: .5rem; }
+.gallery-header { display:flex; align-items:baseline; gap:1rem; justify-content:space-between; }
+.gallery-header .gradient {
+  background: var(--grad-burgundy);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hint { color: var(--text-muted); }
+
+.gallery-grid {
+  margin-top: .8rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: .8rem;
+}
+
+/* Thumbs are 3:2 with cover crop; small, fast, lazy */
+.gallery-item {
+  position: relative;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: rgba(255,255,255,.02);
+  border: 1px solid var(--glass-border);
+}
+.gallery-item img {
+  width: 100%; height: 100%;
+  display: block;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  filter: saturate(1.02) contrast(1.02);
+  transition: transform .35s ease;
+}
+.gallery-item:hover img { transform: scale(1.03); }
+
+/* Lightbox */
+.lightbox[hidden] { display: none; }
+.lightbox {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: rgba(10,10,11,.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
+  animation: fadeIn .25s ease;
+}
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+.lightbox-figure { margin: 0; max-width: 92vw; max-height: 86vh; }
+.lightbox-figure img {
+  max-width: 100%; max-height: 80vh;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.4);
+  transform-origin: center center;
+  animation: zoomIn .25s ease;
+}
+@keyframes zoomIn { from { transform: scale(.95); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+
+#lightbox-caption {
+  margin-top: .6rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+/* Lightbox controls */
+.lightbox-close {
+  position: absolute; top: 14px; right: 18px;
+  font-size: 32px; line-height: 1;
+  background: rgba(0,0,0,.35);
+  color: white; border: 1px solid rgba(255,255,255,.2);
+  border-radius: 12px; width: 44px; height: 44px;
+  cursor: pointer;
+}
+.lightbox-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 48px; height: 64px; border-radius: 16px;
+  background: rgba(0,0,0,.35); color: white; border: 1px solid rgba(255,255,255,.2);
+  font-size: 36px; cursor: pointer;
+}
+.lightbox-nav.prev { left: 16px; }
+.lightbox-nav.next { right: 16px; }
+
+/* Lilies that bleed over sections */
+.lily {
+  position: fixed;
+  width: min(32vw, 380px);
+  opacity: 0.22;
+  filter: drop-shadow(0 8px 20px rgba(0,0,0,.35));
+  pointer-events: none;
+  z-index: 0;
+}
+.lily-top-left   { top: 6vh; left: -4vw; transform: rotate(-12deg); }
+.lily-bottom-right { bottom: -3vh; right: -4vw; transform: rotate(9deg); }
+
+/* Accessibility: reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .gallery-item img, .lightbox, .lightbox-figure img { animation: none !important; transition: none !important; }
+}

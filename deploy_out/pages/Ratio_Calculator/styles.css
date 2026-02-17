@@ -1,0 +1,183 @@
+:root {
+    --bg-color: #121212;
+    --text-color: #e0e0e0;
+    --card-bg: rgba(30, 30, 30, 0.6);
+    --primary: #4a90e2;
+    --secondary: #e2ae4a;
+    --danger: #e24a4a;
+    --glass-border: 1px solid rgba(255, 255, 255, 0.1);
+    --radius: 16px;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    background-image: radial-gradient(circle at 10% 20%, rgba(74, 144, 226, 0.1) 0%, transparent 20%),
+                      radial-gradient(circle at 90% 80%, rgba(226, 74, 74, 0.05) 0%, transparent 20%);
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.glass-panel {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: var(--radius);
+    border: var(--glass-border);
+    padding: 20px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* Header & Controls */
+.header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.controls h1 { margin: 0; font-size: 1.5rem; }
+.instruction { font-size: 0.9rem; opacity: 0.8; margin-bottom: 15px; }
+
+.button-group { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.1s;
+}
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.primary-btn { background-color: var(--primary); color: white; }
+.secondary-btn { background-color: var(--secondary); color: #121212; }
+.danger-btn { background-color: var(--danger); color: white; }
+input[type="file"] { display: none; }
+
+/* Magnifier Controls */
+.mag-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background: rgba(0,0,0,0.2);
+    padding: 8px 15px;
+    border-radius: 30px;
+}
+
+.range-wrapper { display: flex; align-items: center; gap: 8px; }
+.small-label { font-size: 0.8rem; font-weight: bold; }
+
+/* Toggle Switch */
+.toggle-switch { position: relative; display: flex; align-items: center; cursor: pointer; gap: 8px; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.slider-toggle {
+    width: 40px; height: 20px; background-color: #555; border-radius: 20px; position: relative; transition: .4s;
+}
+.slider-toggle:before {
+    content: ""; position: absolute; height: 16px; width: 16px; left: 2px; bottom: 2px;
+    background-color: white; border-radius: 50%; transition: .4s;
+}
+input:checked + .slider-toggle { background-color: var(--primary); }
+input:checked + .slider-toggle:before { transform: translateX(20px); }
+.label-text { font-size: 0.85rem; font-weight: 600; }
+
+/* Canvas Area */
+.canvas-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* We define a height constraint on the container, not the canvas */
+    height: 75vh; 
+    width: 100%;
+    overflow: hidden;
+    touch-action: none; 
+    background: rgba(0,0,0,0.2); /* Darker background to see image edges */
+    padding: 0;
+}
+
+canvas#imageCanvas {
+    /* Critical: We let JS handle the size. CSS just ensures it doesn't overflow unexpectedly */
+    display: block;
+    margin: 0;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    /* No width: 100% or height: auto here to prevent aspect ratio distortion */
+}
+
+#empty-state {
+    position: absolute;
+    color: rgba(255,255,255,0.2);
+    font-size: 1.5rem;
+    pointer-events: none;
+}
+
+/* Magnifier Popup */
+#magnifier {
+    position: absolute;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%; 
+    pointer-events: none;
+    display: none;
+    overflow: hidden;
+    padding: 0;
+    border: 3px solid rgba(255,255,255,1);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    z-index: 100;
+    background: #000;
+}
+
+#magCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.crosshair {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px; height: 8px;
+    border: 1px solid rgba(255, 0, 0, 0.8);
+    background-color: rgba(255, 0, 0, 0.2);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5); /* Double border for visibility */
+}
+
+.results {
+    display: flex; gap: 20px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px;
+}
+.result-item { display: flex; flex-direction: column; }
+.label { font-size: 0.8rem; opacity: 0.7; }
+.value { font-size: 1.2rem; font-weight: bold; }
+.blue-text { color: #4faeff; }
+.red-text { color: #ff6b6b; }
+
+.debug-panel {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    max-height: 150px;
+    overflow-y: auto;
+}
+#debug-log { display: flex; flex-direction: column-reverse; }
+.log-entry { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+
+@media (max-width: 600px) {
+    .header-row { flex-direction: column; align-items: flex-start; }
+    .mag-controls { width: 100%; justify-content: space-between; box-sizing: border-box;}
+    .results { flex-direction: column; }
+}

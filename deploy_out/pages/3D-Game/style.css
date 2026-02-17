@@ -1,0 +1,251 @@
+html, body {
+  margin: 0; padding: 0; height: 100%; overflow: hidden;
+  background: #0b0f14; color: #e6eef8; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  /* Prevent pull-to-refresh and double-tap zoom on mobile */
+  overscroll-behavior: none;
+  touch-action: none;
+}
+#c { display: block; width: 100vw; height: 100vh; }
+
+#ui {
+  position: fixed; top: 12px; left: 12px; z-index: 10;
+  background: rgba(10, 14, 20, 0.65);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  min-width: 360px;
+  color: #e6eef8;
+}
+#ui .header { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.08); }
+#ui .header .spacer { flex:1; }
+#ui .header button { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius:8px; padding:6px 10px; color:inherit; cursor:pointer; }
+#btnCollapse { width:34px; padding:4px 0; font-size:16px; }
+#ui .header .fps { font-size: 12px; opacity: 0.9; }
+#ui .body { padding: 8px 12px; }
+#ui .row { margin: 8px 0; }
+#ui .small { font-size: 12px; opacity: 0.85; }
+label { cursor: pointer; user-select: none; }
+input[type="checkbox"] { transform: translateY(1px); }
+select {
+  background: rgba(255,255,255,0.05);
+  color: #e6eef8;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  padding: 6px;
+  width: 100%;
+}
+
+
+#ui.collapsed .body { display: none; }
+#ui.collapsed #btnCollapse { transform: rotate(-90deg); }
+
+/* Debug panel */
+#debug {
+  position: fixed; left: 12px; bottom: 12px; z-index: 10;
+  width: 420px; max-height: 40vh; overflow: auto;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px; padding: 8px 10px; margin: 0;
+  font: 12px/1.35 ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  color: #e6eef8; white-space: pre-wrap;
+}
+
+
+/* --- Touch Controls --- */
+#touch-controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5; /* Below UI panel */
+  pointer-events: none; /* Allows clicks to pass through to canvas */
+  display: none; /* Hidden by default, enabled by JS */
+}
+
+.touch-joystick-base {
+  position: absolute;
+  bottom: 12vw;
+  left: 12vw;
+  width: 28vw;
+  height: 28vw;
+  max-width: 150px;
+  max-height: 150px;
+  background: rgba(255,255,255,0.1);
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  transform: translate(-50%, 50%);
+  pointer-events: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.touch-joystick-stick {
+  width: 14vw;
+  height: 14vw;
+  max-width: 75px;
+  max-height: 75px;
+  background: rgba(255,255,255,0.25);
+  border: 2px solid rgba(255,255,255,0.4);
+  border-radius: 50%;
+  pointer-events: none; /* Stick doesn't need to capture events */
+}
+
+.touch-buttons {
+  position: absolute;
+  bottom: 12vw;
+  right: 12vw;
+  transform: translate(50%, 50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.touch-button {
+  width: 16vw;
+  height: 16vw;
+  max-width: 80px;
+  max-height: 80px;
+  background: rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.25);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 4vw;
+  font-weight: bold;
+  color: rgba(255,255,255,0.8);
+  user-select: none;
+  -webkit-user-select: none; /* For Safari */
+}
+
+.touch-button.active {
+  background: rgba(255,255,255,0.3);
+  transform: scale(0.95);
+}
+
+
+/* --- Add this to the end of your style.css --- */
+
+#btnCloseMenu {
+  width:34px; 
+  padding:4px 0; 
+  font-size:22px; 
+  line-height: 1;
+  display: none; /* Hidden by default, shown via JS on touch devices */
+}
+
+#touch-menu-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 50px;
+  height: 50px;
+  background: rgba(255,255,255,0.15);
+  border: 2px solid rgba(255,255,255,0.25);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+}
+#touch-menu-button.active {
+  background: rgba(255,255,255,0.3);
+  transform: scale(0.95);
+}
+#touch-menu-button span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: rgba(255,255,255,0.8);
+  border-radius: 2px;
+}
+
+/* --- ADDED/MODIFIED FOR CONTROL SWITCHER --- */
+#btnSwitchControls {
+  background: rgba(100, 150, 255, 0.75);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: #fff;
+  font-weight: 500;
+  white-space: nowrap; /* Prevent text from wrapping */
+  padding: 6px 12px; /* A bit more horizontal padding for clarity */
+}
+
+#btnSwitchControls:hover {
+  background: rgba(120, 170, 255, 0.9);
+}
+
+/* --- Loading Screen --- */
+#loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #0b0f14;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: opacity 0.5s ease-out;
+}
+
+#loading-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loader-content {
+  text-align: center;
+  width: 300px;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-left-color: #0088ff;
+  border-radius: 50%;
+  margin: 0 auto 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 18px;
+  margin-bottom: 10px;
+  font-weight: 500;
+  color: #e6eef8;
+  letter-spacing: 0.5px;
+}
+
+.progress-container {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #0088ff, #00bbff);
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 10px rgba(0, 136, 255, 0.5);
+}
+
+#loading-percentage {
+  font-size: 14px;
+  color: rgba(230, 238, 248, 0.6);
+}

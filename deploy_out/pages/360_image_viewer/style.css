@@ -1,0 +1,404 @@
+:root {
+    --primary: #3b82f6;
+    --glass-bg: rgba(15, 15, 15, 0.85); 
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --text-main: #ffffff;
+    --text-muted: #a3a3a3;
+    --card-radius: 16px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    background-color: #000;
+    color: var(--text-main);
+    overflow: hidden; 
+    height: 100vh;
+    width: 100vw;
+}
+
+/* --- Global Transitions --- */
+.fade-transition {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.fade-transition.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-10px);
+}
+
+/* --- Site Header --- */
+#site-header-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 100;
+    pointer-events: none;
+}
+#site-header-container * {
+    pointer-events: auto;
+}
+
+/* --- A-Frame Scene (Replaces #panorama) --- */
+a-scene {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0; /* Behind everything */
+}
+
+/* --- Toggle Button --- */
+.floating-toggle {
+    position: absolute;
+    bottom: 30px;
+    left: 20px;
+    z-index: 50;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: white;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.floating-toggle:hover {
+    transform: scale(1.1);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* --- Main Controls UI --- */
+.ui-container {
+    position: absolute;
+    top: 100px; 
+    left: 20px;
+    width: 320px;
+    max-width: 90vw; 
+    z-index: 50;
+    max-height: calc(100vh - 120px); 
+    display: flex;
+    flex-direction: column;
+}
+
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--card-radius);
+    padding: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 12px;
+}
+
+.header-actions { display: flex; gap: 10px; }
+h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: 0.5px; }
+
+.icon-btn, .close-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    color: white;
+    transition: transform 0.2s;
+    padding: 4px;
+}
+.icon-btn:hover, .close-btn:hover { transform: scale(1.2); }
+.icon-btn:disabled { opacity: 0.3; cursor: default; transform: none; }
+
+.control-group { margin-bottom: 16px; }
+
+/* File Input Button */
+.file-btn {
+    display: block;
+    background: var(--primary);
+    color: white;
+    padding: 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: background 0.2s, transform 0.1s;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+.file-btn:hover { background: #2563eb; transform: translateY(-1px); }
+.file-btn:active { transform: translateY(1px); }
+input[type="file"] { display: none; }
+
+#fileCount {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* Slider */
+.slider-box label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+    color: var(--text-muted);
+}
+input[type="range"] { width: 100%; accent-color: var(--primary); cursor: pointer; height: 4px; }
+
+/* VR Button */
+.sensor-controls { display: flex; gap: 8px; }
+.sensor-btn {
+    flex: 1;
+    background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+    border: 1px solid var(--glass-border);
+    color: white;
+    padding: 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.sensor-btn:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.3);
+}
+
+.sensor-btn.active {
+    background: rgba(74, 222, 128, 0.2);
+    border-color: #4ade80;
+    color: #4ade80;
+}
+
+.nav-controls { display: flex; gap: 10px; }
+.nav-controls button {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
+    color: white;
+    padding: 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+.nav-controls button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.2); }
+.nav-controls button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.file-info-box {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.debug-log {
+    margin-top: 5px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    font-family: 'Menlo', 'Monaco', monospace;
+    font-size: 0.7rem;
+    height: 80px;
+    overflow-y: auto;
+    color: #4ade80; 
+    border: 1px solid rgba(255,255,255,0.05);
+    line-height: 1.4;
+}
+
+/* --- Gallery Sidebar --- */
+.gallery-modal {
+    position: fixed; 
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 320px; 
+    background: rgba(10, 10, 10, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-left: 1px solid var(--glass-border);
+    z-index: 200; 
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    box-shadow: -5px 0 30px rgba(0,0,0,0.8);
+}
+
+.gallery-modal.hidden {
+    transform: translateX(100%); 
+    opacity: 0;
+    pointer-events: none;
+}
+
+.gallery-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255,255,255,0.03);
+    flex-shrink: 0; 
+}
+.gallery-header h3 { font-size: 1rem; color: #fff; }
+.gallery-header .close-btn { font-size: 1.8rem; padding: 0 10px; }
+
+.gallery-grid {
+    flex: 1;
+    overflow-y: auto; 
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px; 
+}
+
+/* Custom Scrollbar */
+.gallery-grid::-webkit-scrollbar { width: 6px; }
+.gallery-grid::-webkit-scrollbar-track { background: transparent; }
+.gallery-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+
+/* Thumbnails */
+.thumb-card {
+    position: relative;
+    width: 100%;
+    height: 160px; 
+    min-height: 160px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    background: #000;
+    transition: transform 0.2s, border-color 0.2s;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+.thumb-card:hover { border-color: rgba(255,255,255,0.4); transform: scale(1.02); }
+
+.thumb-card.active {
+    border-color: var(--primary);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+}
+
+.thumb-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.thumb-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.95), transparent);
+    color: white;
+    font-size: 0.8rem;
+    padding: 12px;
+    padding-top: 30px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --- Responsive Adjustments --- */
+@media (max-width: 600px) {
+    .ui-container {
+        top: auto;
+        bottom: 90px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 95%;
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+    
+    .debug-log { display: none; }
+    
+    .gallery-modal {
+        width: 100%; 
+        border-left: none;
+    }
+    
+    #site-header-container { pointer-events: none; }
+    
+    .nav-controls button, .file-btn, .sensor-btn {
+        padding: 14px; 
+    }
+}
+
+/* --- Add this to your style.css --- */
+
+/* 2D Loader Overlay */
+.loader-overlay {
+    position: absolute;
+    top: 0; 
+    left: 0;
+    width: 100%; 
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    z-index: 80; /* Below Header (100) but above UI (50) */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    transition: opacity 0.3s;
+}
+
+.loader-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Spinner Animation */
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- Ensure existing styles remain --- */
+/* (Your existing styles for glass-panel, buttons, etc. go here...) */

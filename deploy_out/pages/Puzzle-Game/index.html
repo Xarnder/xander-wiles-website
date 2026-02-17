@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>A Little Puzzle</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Header CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- App Specific CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Main Game UI -->
+    <div id="game-container">
+
+        <!-- Controls Overlay -->
+        <div class="ui-panel" id="ui-panel">
+            <h1 id="title-text">Puzzle Game</h1>
+
+            <!-- Romance Mode Toggle (Visible Always) -->
+            <div class="toggle-container"
+                style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;">
+
+                <!-- Row for Main Toggles -->
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+                    <!-- Romance Toggle -->
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="romance-toggle">
+                        <span class="slider round"></span>
+                        <span class="toggle-label" id="romance-label" style="margin-left: 15px;">Romance Mode:
+                            Off</span>
+                    </label>
+
+                    <!-- Hide Image Toggle (New Placement) -->
+                    <label id="hide-image-container" class="toggle-switch">
+                        <input type="checkbox" id="hide-image-toggle">
+                        <span class="slider round"></span>
+                        <span class="toggle-label" style="margin-left: 15px;">Hide Image</span>
+                    </label>
+                </div>
+
+                <!-- Audio Toggles Row -->
+                <div style="display: flex; gap: 20px; justify-content: center;">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="mute-music-toggle">
+                        <span class="slider round"></span>
+                        <span class="toggle-label" style="margin-left: 10px;">Mute Music</span>
+                    </label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="mute-sfx-toggle">
+                        <span class="slider round"></span>
+                        <span class="toggle-label" style="margin-left: 10px;">Mute SFX</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="controls-col">
+                <div class="slider-group">
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px; justify-content: center;">
+                        <label for="image-upload" class="glass-btn small" style="justify-content: center; flex: 1;">
+                            <span>📁</span> Upload Image
+                        </label>
+                        <button id="btn-reset-image" class="glass-btn small" style="justify-content: center; flex: 1;">
+                            <span>🖼️</span> Default
+                        </button>
+                    </div>
+                    <input type="file" id="image-upload" accept="image/png, image/jpeg, image/webp" class="hidden">
+                    <div id="upload-error" class="hidden"
+                        style="color: #ff4081; font-size: 0.8rem; margin-bottom: 10px; text-align: center;"></div>
+
+                    <label for="difficulty">Puzzple Piece Size: <span id="difficulty-val">4</span></label>
+                    <input type="range" id="difficulty" min="3" max="15" value="4">
+                    <!-- Preview Canvas -->
+                    <div style="margin-top: 15px; display: flex; justify-content: center; width: 100%;">
+                        <canvas id="preview-canvas" width="800" height="600"
+                            style="border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 800px; height: auto;"></canvas>
+                    </div>
+                </div>
+                <button id="btn-start" class="glass-btn">Initialize</button>
+            </div>
+
+            <div id="game-controls">
+                <div id="timer-display" class="timer-display">00:00</div>
+                <button id="btn-pause" class="glass-btn small">
+                    <span>⏸️</span> Pause
+                </button>
+                <button id="btn-help" class="glass-btn small">
+                    <span>?</span> Help
+                </button>
+                <button id="btn-reset" class="glass-btn small">
+                    <span>↺</span> Reset
+                </button>
+            </div>
+        </div>
+        <!-- The Puzzle Canvas -->
+        <canvas id="puzzle-canvas" class="hidden"></canvas>
+
+        <!-- Floating Hearts Container -->
+        <div id="hearts-container"></div>
+
+        <!-- Background Overlay for darkening/tinting -->
+        <div id="ambient-overlay"></div>
+    </div>
+
+    <!-- Slide to Confirm Modal -->
+    <div id="modal-overlay" class="hidden">
+        <div class="glass-card modal">
+            <p>Confirm System Reset?</p>
+            <div class="slider-confirm-track">
+                <div class="slider-text">Slide to Reset</div>
+                <div id="slider-handle">
+                    <!-- Reset Arrow Icon (SVG) -->
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                        <path d="M3 3v5h5"></path>
+                    </svg>
+                </div>
+            </div>
+            <button id="btn-cancel" class="text-btn">Cancel</button>
+        </div>
+
+        <!-- Toast Notification -->
+        <div id="toast" class="toast hidden">Game Paused! Press Play to continue.</div>
+
+        <!-- Music Attribution -->
+        <div class="music-attribution" id="attribution-romance" style="display: none;">
+            Music from <a href="https://uppbeat.io/t/northwestern/all-i-need" target="_blank">#Uppbeat</a> (free for
+            Creators!)<br>
+            License code: ADGAFF68CSERJFFM
+        </div>
+        <div class="music-attribution" id="attribution-normal" style="display: none;">
+            Music from <a href="https://uppbeat.io/t/nicolas-kluzek/paros" target="_blank">#Uppbeat</a> (free for
+            Creators!)<br>
+            License code: BJQ38PTBJ0TQULPJ
+        </div>
+
+        <!-- Audio Element -->
+        <audio id="bg-music" loop>
+            <source src="romantic_music.mp3" type="audio/mpeg">
+        </audio>
+        <audio id="normal-music" loop>
+            <source src="normal_music.mp3" type="audio/mpeg">
+        </audio>
+        <!-- SFX -->
+        <audio id="sfx-pickup" src="pickup.mp3"></audio>
+        <audio id="sfx-drop" src="drop.mp3"></audio>
+        <audio id="sfx-snap" src="snap.mp3"></audio>
+        <audio id="sfx-win" src="win.mp3"></audio>
+
+        <script src="script.js"></script>
+</body>
+
+</html>

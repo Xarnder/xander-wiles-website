@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam Cheatsheet Compactor</title>
+
+    <!-- Theme-aware SVG icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Global Header -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="main-wrapper">
+
+        <!-- 1. Input Panel -->
+        <section class="panel editor">
+            <div class="panel-header">
+                <h2>Input (Markdown + LaTeX)</h2>
+                <!-- File Navigation & Info -->
+                <div id="file-nav" style="display: none; flex-direction: column; align-items: center; gap: 5px;">
+                    <span id="file-info" style="font-size: 0.9em; text-align: center; word-break: break-all;">File 1 of
+                        1</span>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="btn-prev-file" class="btn-micro" title="Previous File (Left Arrow)">◀</button>
+                        <button id="btn-next-file" class="btn-micro" title="Next File (Right Arrow)">▶</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Batch Upload Controls -->
+            <div class="file-load-controls" style="margin-bottom: 20px;">
+                <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                    <label class="btn btn-secondary"
+                        style="cursor: pointer; display: inline-block; flex: 1; text-align: center;">
+                        📂 Upload Folder
+                        <input type="file" id="folder-input" webkitdirectory multiple style="display: none;">
+                    </label>
+                    <button id="btn-reload-folder" class="btn btn-secondary" style="flex: 1;"
+                        title="Reload files updating content but keeping settings">
+                        ↻ Reload Folder
+                    </button>
+                </div>
+                <div style="font-size: 0.85em; color: #888; margin-bottom: 12px; text-align: center;">Select a folder
+                    containing .md files</div>
+
+                <button id="btn-clear-md" class="btn btn-danger" style="width: 100%;">
+                    🗑 Clear Markdown
+                </button>
+                <div class="checkbox-group" style="margin-top: 10px; justify-content: center;">
+                    <input type="checkbox" id="quick-clear">
+                    <label for="quick-clear">Quick Clear (No Confirm)</label>
+                </div>
+            </div>
+
+            <textarea id="input-text" placeholder="### Section Title
+Paste your notes here.
+---
+Lines with '---' will be removed.
+Double dollar $$x^2$$ equations supported."></textarea>
+        </section>
+
+        <!-- 2. Controls Panel -->
+        <section class="panel controls">
+            <div class="panel-header">
+                <h2>Format Settings</h2>
+                <div id="status-indicator" class="status-ready">Ready</div>
+            </div>
+
+            <div class="control-grid">
+                <!-- Layout Controls -->
+                <div class="input-group">
+                    <label>Orientation</label>
+                    <select id="orientation">
+                        <option value="portrait">Portrait (A4)</option>
+                        <option value="landscape">Landscape (A4)</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Section Style (###)</label>
+                    <select id="section-style">
+                        <option value="box">Boxed Borders (Structured)</option>
+                        <option value="highlight">Pastel Backgrounds (Compact)</option>
+                        <option value="none">None (Flat Text)</option>
+                    </select>
+                </div>
+
+                <!-- Font Size -->
+                <div class="input-group">
+                    <label>Font Size (px)</label>
+                    <div class="slider-input-row">
+                        <input type="range" id="fontSize" min="4" max="32" step="0.2" value="10">
+                        <input type="number" id="fs-val" min="4" max="32" step="0.2" value="10">
+                    </div>
+                </div>
+
+                <!-- Tightness -->
+                <div class="input-group">
+                    <label>Tightness</label>
+                    <div class="slider-input-row">
+                        <input type="range" id="lineHeight" min="0.8" max="1.5" step="0.05" value="0.8">
+                        <input type="number" id="lh-val" min="0.8" max="1.5" step="0.05" value="0.8">
+                    </div>
+                </div>
+
+                <!-- Page Margin -->
+                <div class="input-group">
+                    <label>Page Margin (mm)</label>
+                    <div class="slider-input-row">
+                        <input type="range" id="padPage" min="0" max="20" step="1" value="1">
+                        <input type="number" id="pad-page-val" min="0" max="20" step="1" value="1">
+                    </div>
+                </div>
+
+                <!-- Box Padding -->
+                <div class="input-group">
+                    <label>Box Padding (px)</label>
+                    <div class="slider-input-row">
+                        <input type="range" id="padBox" min="0" max="10" step="1" value="0">
+                        <input type="number" id="pad-box-val" min="0" max="10" step="1" value="0">
+                    </div>
+                </div>
+
+                <!-- Toggles -->
+                <div class="input-group checkbox-group">
+                    <input type="checkbox" id="remove-bullets" checked>
+                    <label for="remove-bullets">Auto-remove bullets (*)</label>
+                </div>
+                <div class="input-group checkbox-group">
+                    <input type="checkbox" id="show-brackets">
+                    <label for="show-brackets">Show Header Brackets [ ]</label>
+                </div>
+                <div class="input-group checkbox-group">
+                    <input type="checkbox" id="bolder-formulas" checked>
+                    <label for="bolder-formulas">Bolder Formulas</label>
+                </div>
+                <div class="input-group checkbox-group">
+                    <input type="checkbox" id="render-tables" checked>
+                    <label for="render-tables">Render Tables</label>
+                </div>
+                <div class="input-group checkbox-group">
+                    <input type="checkbox" id="compact-tables">
+                    <label for="compact-tables">Compact Tables (Wrap Text)</label>
+                </div>
+                <div class="input-group checkbox-group">
+                    <input type="checkbox" id="compact-text" checked>
+                    <label for="compact-text">Compact Text</label>
+                </div>
+                <div class="input-group checkbox-group">
+                    <input type="checkbox" id="preserve-newlines">
+                    <label for="preserve-newlines">Preserve Newlines</label>
+                </div>
+
+
+                <!-- Preview Scale -->
+                <div class="input-group" style="margin-top: 20px;">
+                    <label>Preview Scale</label>
+                    <div class="slider-input-row">
+                        <input type="range" id="zoomLevel" min="0.1" max="2.0" step="0.1" value="0.8">
+                        <input type="number" id="zoom-val" min="0.1" max="2.0" step="0.1" value="0.8">
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button id="btn-render" class="btn btn-primary">Refresh Preview</button>
+                <button id="btn-batch-export" class="btn btn-primary"
+                    style="background-color: #663399; display: none;">Batch Export (ZIP)</button>
+                <div class="split-btn">
+                    <select id="export-format" class="format-select">
+                        <option value="jpg">JPG</option>
+                        <option value="png">PNG</option>
+                        <option value="pdf">PDF</option>
+                    </select>
+                    <button id="btn-download" class="btn btn-success">Download Image</button>
+                </div>
+            </div>
+
+            <div class="debug-console" id="debug-area">
+                <div class="debug-title">System Logs</div>
+                <div id="debug-content"></div>
+            </div>
+        </section>
+
+        <!-- 3. Preview Panel -->
+        <section class="panel preview">
+            <h2>Live Preview</h2>
+            <div class="canvas-container">
+                <div id="sheet" class="a4-sheet portrait">
+                    <div id="sheet-content"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Custom Generic Modal -->
+    <div id="custom-modal" class="modal-backdrop">
+        <div class="modal-content">
+            <h3 id="modal-title">Title</h3>
+            <p id="modal-message">Message body...</p>
+            <div class="modal-buttons">
+                <button id="modal-btn-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="modal-btn-confirm" class="btn btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

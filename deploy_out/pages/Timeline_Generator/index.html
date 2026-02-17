@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timeline Generator</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Theme-aware SVG icons (modern browsers) -->
+  <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+  <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+  <!-- Fallback PNG icons -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+  <!-- Other essential links -->
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+</head>
+<div id="main-nav-placeholder"></div> 
+
+<body>
+
+  <div class="background-overlay"></div>
+  <div class="app-container">
+    <header class="glass-card hero-card">
+      <h1>Smart Timeline Generator</h1>
+      <p>Paste your itinerary or schedule below, and we'll format it into a clean timeline.</p>
+    </header>
+    <main class="glass-card main-content-card">
+        <div class="input-section">
+            <h2>Your Text</h2>
+            <textarea id="text-input" rows="12" placeholder="e.g., London - Friday 7th November 2025&#10;&#10;09:00 - 10:30 Team Meeting&#10;11:00 Project Sync&#10;12:30 - 13:30 Lunch Break"></textarea>
+            <div class="settings-row">
+              <label class="toggle-switch">
+                <input type="checkbox" id="color-toggle">
+                <span class="slider"></span>
+                <span>Colorful Timeline</span>
+              </label>
+            </div>
+            <button id="generate-button">Generate Timeline</button>
+        </div>
+        <div class="output-section">
+            <h2 id="timeline-title">Your Timeline</h2>
+            <div id="timeline-output-container">
+                <div id="timeline-output">
+                    <p class="placeholder-text">Your generated timeline will appear here.</p>
+                </div>
+            </div>
+            <div id="export-controls" class="hidden">
+              <h3>Aspect Ratio</h3>
+              <div class="export-buttons aspect-ratio-buttons">
+                  <button data-ratio="auto" class="active">Auto</button>
+                  <button data-ratio="9:16">9:16</button>
+                  <button data-ratio="4:5">4:5</button>
+                  <button data-ratio="1:1">1:1</button>
+                  <div class="custom-ratio-wrapper">
+                    <input type="text" id="custom-ratio-input" placeholder="e.g., 2:3">
+                  </div>
+              </div>
+              <h3 class="export-title">Resolution</h3>
+               <div class="export-buttons resolution-buttons">
+                  <button data-multiplier="1" class="active">1x</button>
+                  <button data-multiplier="2">2x</button>
+                  <button data-multiplier="3">3x</button>
+              </div>
+              <h3 class="export-title">Export as</h3>
+              <div class="export-buttons">
+                <button id="export-png">PNG</button>
+                <button id="export-jpg">JPG</button>
+                <button id="export-svg">SVG</button>
+              </div>
+            </div>
+        </div>
+    </main>
+    <footer class="glass-card debug-card">
+        <h2>Parsing Status</h2>
+        <div id="debug-output">
+            <p>Enter some text and click "Generate" to see the parsing status.</p>
+        </div>
+    </footer>
+  </div>
+
+  <!-- Load the library you saved -->
+  <script src="libs/dom-to-image.js"></script>
+  <!-- Then load your script -->
+  <script src="script.js"></script>
+  <script src="/assets/js/nav-loader.js"></script> 
+
+</body>
+</html>

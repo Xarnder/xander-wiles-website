@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FOV & Display Visualizer</title>
+
+    <!-- Theme-aware SVG icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Site Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Page Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- IMPORT MAP: This fixes the "Failed to resolve module" error -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="container">
+        <div class="glass-card">
+            <h1>FOV Visualizer</h1>
+            <p class="subtitle">Live 3D View & Calculation</p>
+
+            <!-- Mode Selector -->
+            <div class="input-group">
+                <label for="calcMode">I want to calculate:</label>
+                <select id="calcMode">
+                    <option value="fov">Field of View (Degrees)</option>
+                    <option value="distance">Viewing Distance Needed</option>
+                    <option value="size">Screen Width Needed</option>
+                </select>
+            </div>
+
+            <hr class="divider">
+
+            <!-- INPUTS -->
+            <div id="inputs-container">
+
+                <!-- Common Sizes Templates -->
+                <div class="input-group" id="common-sizes">
+                    <label>Common Sizes (Diagonal)</label>
+                    <div class="size-presets">
+                        <button class="size-btn" data-diag="32">32"</button>
+                        <button class="size-btn" data-diag="43">43"</button>
+                        <button class="size-btn" data-diag="50">50"</button>
+                        <button class="size-btn" data-diag="55">55"</button>
+                        <button class="size-btn" data-diag="65">65"</button>
+                        <button class="size-btn" data-diag="75">75"</button>
+                        <button class="size-btn" data-diag="85">85"</button>
+                    </div>
+                </div>
+
+                <!-- Screen Dimensions Input -->
+                <div class="input-row" id="row-width">
+                    <div class="field">
+                        <label for="screenWidth">Screen Width</label>
+                        <input type="number" id="screenWidth" value="95" step="0.1">
+                    </div>
+                    <div class="field small">
+                        <label for="widthUnit">Unit</label>
+                        <select id="widthUnit">
+                            <option value="mm">mm</option>
+                            <option value="cm" selected>cm</option>
+                            <option value="in">in</option>
+                            <option value="ft">ft</option>
+                            <option value="m">m</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-row" id="row-height">
+                    <div class="field">
+                        <label for="screenHeight">Screen Height</label>
+                        <input type="number" id="screenHeight" value="53" step="0.1">
+                    </div>
+                    <div class="field small">
+                        <label for="heightUnit">Unit</label>
+                        <select id="heightUnit">
+                            <option value="mm">mm</option>
+                            <option value="cm" selected>cm</option>
+                            <option value="in">in</option>
+                            <option value="ft">ft</option>
+                            <option value="m">m</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Aspect Ratio Input -->
+                <div class="input-row hidden" id="row-aspect">
+                    <div class="field">
+                        <label>Aspect Ratio (W:H)</label>
+                        <div style="display: flex; gap: 5px; align-items: center;">
+                            <input type="number" id="ratioW" value="16" step="0.1" style="flex:1;">
+                            <span style="color: var(--text-muted);">:</span>
+                            <input type="number" id="ratioH" value="9" step="0.1" style="flex:1;">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Distance Input -->
+                <div class="input-row" id="row-distance">
+                    <div class="field">
+                        <label for="viewDistance">Viewing Distance</label>
+                        <input type="number" id="viewDistance" value="100" step="0.1">
+                    </div>
+                    <div class="field small">
+                        <label for="distUnit">Unit</label>
+                        <select id="distUnit">
+                            <option value="mm">mm</option>
+                            <option value="cm" selected>cm</option>
+                            <option value="in">in</option>
+                            <option value="ft">ft</option>
+                            <option value="m">m</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Target FOV Input -->
+                <div class="input-row hidden" id="row-fov">
+                    <div class="field">
+                        <label for="targetFov">Target Field of View</label>
+                        <input type="number" id="targetFov" value="45" step="0.1">
+                    </div>
+                    <div class="field small">
+                        <label>Unit</label>
+                        <input type="text" value="Degrees" disabled readonly>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- RESULTS -->
+            <div id="result-area" class="result-box">
+                <div id="result-content"></div>
+            </div>
+
+            <div id="debug-msg" class="debug-text">Adjust values to see live updates.</div>
+        </div>
+
+        <!-- 3D VISUALIZER CARD -->
+        <div class="glass-card scene-card">
+            <h3>3D Representation</h3>
+            <div id="canvas-container"></div>
+            <p class="hint">Left Click to Rotate • Right Click to Pan • Scroll to Zoom</p>
+        </div>
+    </main>
+
+    <!-- Main Script -->
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>

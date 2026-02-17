@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Essential Items Checklist</title>
+
+    <!-- Load external assets FIRST -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Load local app styles LAST to ensure they override defaults -->
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+</head>
+
+<body>
+    <div class="background-overlay"></div>
+
+    <!-- TOP LOADING BAR (non-blocking) -->
+    <div id="app-loading-bar" class="top-loading-bar">
+        <div id="loading-progress-bar"></div>
+        <span id="loading-status-text" class="loading-status-text">Loading...</span>
+    </div>
+
+    <div id="main-nav-placeholder"></div>
+
+    <div class="app-container">
+        <header class="glass-card hero-card header-layout">
+            <div class="header-content">
+                <h1>Essential Items Checklist</h1>
+                <p>A list to check when moving to a new home</p>
+            </div>
+            <div class="header-controls">
+                <div class="control-group slider-group header-slider">
+                    <label for="scale-slider" class="sr-only">Scale</label>
+                    <input type="range" id="scale-slider" min="1" max="8" value="4" step="0.1"
+                        title="Adjust View Scale">
+                </div>
+
+                <div class="header-toggle-group">
+                    <label class="toggle-label header-toggle" title="Show Labels">
+                        <input type="checkbox" id="toggle-show-labels" checked>
+                        <span class="sr-only">Show Labels</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+                        </svg>
+                    </label>
+                </div>
+
+                <div class="view-toggle">
+                    <button id="view-split" class="view-btn active" aria-label="Split View">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="18" rx="1"></rect>
+                        </svg>
+                    </button>
+                    <button id="view-grid" class="view-btn" aria-label="Grid View">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="14" width="7" height="7"></rect>
+                            <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                    </button>
+                </div>
+                <button id="theme-toggle" class="theme-btn" aria-label="Toggle Light/Dark Mode">
+                    <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                    <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <div id="split-view-container" class="main-content-grid">
+            <!-- Left Panel (List View) -->
+            <aside class="glass-card list-panel">
+                <div class="list-controls">
+                    <div class="control-group">
+                        <label for="filter-category">Category</label>
+                        <select id="filter-category">
+                            <option value="all">All Categories</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="filter-status">Status</label>
+                        <select id="filter-status">
+                            <option value="all">Show All</option>
+                            <option value="unchecked">To Do (Unchecked)</option>
+                            <option value="checked">Completed (Checked)</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="sort-order">Sort by</label>
+                        <select id="sort-order">
+                            <option value="category">Category</option>
+                            <option value="alphabetical">Alphabetical</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group toggle-group">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggle-has-image" checked>
+                            <span>Show images only</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="checklist-container"></div>
+            </aside>
+
+            <!-- Right Panel (Carousel View) -->
+            <main class="glass-card carousel-panel">
+                <div id="carousel-view">
+                    <div class="carousel-placeholder">
+                        <p>Select an item to view details</p>
+                    </div>
+                </div>
+
+                <div class="carousel-navigation">
+                    <button id="prev-item" class="nav-arrow" aria-label="Previous Item">&lt;</button>
+                    <div id="progress-container">
+                        <div id="progress-bar-fill"></div>
+                        <span id="progress-text">0% Complete</span>
+                    </div>
+                    <button id="next-item" class="nav-arrow" aria-label="Next Item">&gt;</button>
+                </div>
+            </main>
+        </div>
+
+        <div id="grid-view-container" class="glass-card grid-view-panel hidden">
+            <!-- Grid Items will be injected here -->
+        </div>
+
+        <footer class="glass-card footer-card">
+            <button id="clear-all-button">Clear All Selections</button>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+    <script src="/assets/js/nav-loader.js"></script>
+</body>
+
+</html>

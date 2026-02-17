@@ -1,0 +1,595 @@
+:root {
+    /* Initial State: Cold, Dark, Technical */
+    --bg-color: #111115;
+    --card-bg: rgba(30, 30, 35, 0.7);
+    --text-main: #e0e0e0;
+    --accent: #64b5f6;
+    /* Cold Blue */
+    --border: rgba(255, 255, 255, 0.1);
+    --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+    /* Softer shadow */
+    --font-family: 'Nunito', 'Segoe UI', sans-serif;
+    /* Soft fun font */
+
+    /* Variables that will animate */
+    --ambient-opacity: 0;
+    --ambient-color: transparent;
+}
+
+/* Romantic State Class (Added via JS) */
+body.in-love {
+    --accent: #ff4081;
+    /* Hot Pink */
+    --text-main: #fff0f5;
+    --card-bg: rgba(255, 192, 203, 0.15);
+    --border: rgba(255, 100, 150, 0.3);
+    /* Gradient Background */
+    background-color: #111115;
+    /* Fallback/Base to match normal mode dark */
+    background: linear-gradient(135deg, #111115 0%, #2a0a12 50%, #4a1020 100%);
+    background-size: 200% 200%;
+    animation: gradientShift 10s ease infinite;
+}
+
+@keyframes gradientShift {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    background: var(--bg-color);
+    color: var(--text-main);
+    font-family: var(--font-family);
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    /* Prevent scrolling while dragging */
+    transition: background 2s ease;
+    padding: 0 !important;
+}
+
+/* Header Spacer to prevent overlap */
+#main-nav-placeholder {
+    min-height: 80px;
+    /* Increased to ensure clearance */
+    width: 100%;
+    background: transparent;
+}
+
+#game-container {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 80px);
+    /* Match placeholder */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    /* Start at top */
+    padding-top: 20px;
+    /* Slight top padding */
+}
+
+#game-controls {
+    display: flex;
+    width: 100%;
+    margin-top: 30px;
+    /* Spacing from Initialize button */
+    justify-content: center;
+    /* Centered buttons */
+    padding: 0 40px;
+    margin-bottom: 20px;
+    /* Space between controls and puzzle */
+    gap: 20px;
+}
+
+/* Canvas */
+#puzzle-canvas {
+    touch-action: none;
+    /* Critical for dragging on mobile */
+    box-shadow: var(--shadow);
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.05);
+    max-width: 95vw;
+    max-height: 65vh;
+    /* Reduced from 75vh */
+    margin-top: 10px;
+    /* Reduced top margin slightly */
+}
+
+/* UI Panel (Glassmorphism) */
+.ui-panel {
+    position: relative;
+    /* Changed from absolute to relative for flow */
+    /* top: 50px; Removed */
+    z-index: 100;
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    padding: 1.5rem 2.5rem;
+    border-radius: 35px;
+    /* Extra rounded */
+    box-shadow: var(--shadow);
+    text-align: center;
+    transition: all 0.5s ease;
+    width: 90%;
+    max-width: 800px;
+    margin-bottom: 20px;
+    /* Push canvas down */
+}
+
+h1 {
+    font-size: 1.4rem;
+    margin-bottom: 1.2rem;
+    letter-spacing: 1px;
+    text-transform: none;
+    /* Less serious */
+    font-weight: 700;
+}
+
+.controls-col {
+    display: flex;
+    flex-direction: column;
+    /* Stack vertically */
+    gap: 20px;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Sliders */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    /* Standard property */
+    width: 100%;
+    height: 10px;
+    /* Thicker for cute look */
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px;
+    /* Larger thumb */
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    transition: transform 0.2s;
+    border: 2px solid white;
+    /* Cute border */
+}
+
+/* Buttons */
+.glass-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 16px 32px;
+    /* Increased Padding */
+    border-radius: 50px;
+    /* Fully rounded */
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 700;
+    transition: 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.glass-btn:hover {
+    background: var(--accent);
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+.glass-btn.small {
+    padding: 12px 24px;
+    /* Increased Padding */
+    font-size: 0.9rem;
+}
+
+/* Ambient Overlay (for color shifts) */
+#ambient-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+    /* Lovely Pink Gradient at the end */
+    background: radial-gradient(circle, rgba(255, 105, 180, 0.6) 0%, rgba(255, 182, 193, 0.3) 60%, transparent 100%);
+    opacity: 0;
+    transition: opacity 1s ease;
+}
+
+/* Hearts */
+#hearts-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 50;
+    overflow: hidden;
+}
+
+.heart {
+    position: absolute;
+    width: 20px;
+    /* Much smaller (was ~48px font size or default img width) */
+    height: 20px;
+    opacity: 0.8;
+    animation: floatUp 4s linear forwards;
+}
+
+@keyframes floatUp {
+    0% {
+        transform: translateY(0) scale(0.5);
+        opacity: 0;
+    }
+
+    20% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(-100vh) scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* Slide to Confirm Modal */
+#modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal {
+    background: var(--card-bg);
+    backdrop-filter: blur(15px);
+    padding: 2rem;
+    border-radius: 40px;
+    border: 1px solid var(--border);
+    width: 320px;
+    text-align: center;
+}
+
+.slider-confirm-track {
+    width: 100%;
+    height: 50px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 25px;
+    position: relative;
+    margin: 20px 0;
+    overflow: hidden;
+}
+
+#slider-handle {
+    width: 50px;
+    height: 50px;
+    background: var(--accent);
+    border-radius: 50%;
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    cursor: pointer;
+    font-size: 10px;
+    user-select: none;
+}
+
+.slider-text {
+    line-height: 50px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.9rem;
+    pointer-events: none;
+}
+
+.text-btn {
+    background: none;
+    border: none;
+    color: #aaa;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* Specific fix for Puzzle Game Header to match page aesthetics */
+#main-nav-placeholder .site-header {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding-top: 10px;
+}
+
+#main-nav-placeholder .site-header .logo {
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+#main-nav-placeholder .nav-links a {
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+/* Music Attribution */
+.music-attribution {
+    position: fixed;
+    bottom: 10px;
+    right: 15px;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: right;
+    z-index: 40;
+    pointer-events: none;
+    line-height: 1.4;
+    font-family: var(--font-family);
+}
+
+.music-attribution a {
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: none;
+    pointer-events: auto;
+    transition: color 0.2s;
+}
+
+.music-attribution a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+/* --- Toggle Switch Styles --- */
+.toggle-switch {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50px;
+    padding: 5px 15px 5px 5px;
+    border: 1px solid var(--border);
+    transition: 0.3s;
+    height: 40px;
+}
+
+.toggle-switch:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.game-controls .toggle-label {
+    margin-left: 10px;
+    font-size: 0.9rem;
+    color: var(--text-main);
+    font-weight: 700;
+}
+
+/* The Slider */
+.slider {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    /* Wider for more space */
+    height: 28px;
+    /* Taller */
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 34px;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.4);
+    /* Inner shadow for depth */
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 4px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    /* Drop shadow on knob */
+    z-index: 2;
+}
+
+/* Icons inside slider? Pseudo elements */
+.slider:after {
+    content: "❄️";
+    /* Cold/Blue/Normal icon */
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    opacity: 0.8;
+    transition: 0.4s;
+}
+
+input:checked+.slider {
+    background-color: #ff4081;
+    /* Pink for Romance */
+}
+
+input:checked+.slider:after {
+    content: "❤️";
+    /* Heart icon */
+    left: 8px;
+    /* Move icon to left */
+    right: auto;
+    color: white;
+    opacity: 1;
+}
+
+input:not(:checked)+.slider {
+    background-color: #64b5f6;
+    /* Blue for Normal */
+}
+
+input:focus+.slider {
+    box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked+.slider:before {
+    transform: translateX(20px);
+    /* Adjusted for wider slider */
+}
+
+/* --- Specific Toggle Icons --- */
+
+/* Music Toggle */
+#mute-music-toggle+.slider:after {
+    content: "🎵";
+    font-size: 12px;
+}
+
+#mute-music-toggle:checked+.slider:after {
+    content: "🔇";
+    left: 8px;
+    right: auto;
+}
+
+#mute-music-toggle:checked+.slider {
+    background-color: #ff5252;
+    /* Red for muted */
+}
+
+/* SFX Toggle */
+#mute-sfx-toggle+.slider:after {
+    content: "🔊";
+    font-size: 12px;
+}
+
+#mute-sfx-toggle:checked+.slider:after {
+    content: "🔇";
+    left: 8px;
+    right: auto;
+}
+
+#mute-sfx-toggle:checked+.slider {
+    background-color: #ff5252;
+    /* Red for muted */
+}
+
+.toggle-label {
+    transition: color 0.3s;
+}
+
+input:checked~.toggle-label {
+    color: white;
+    /* Changed from pink to white */
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}
+
+input:not(:checked)~.toggle-label {
+    color: #64b5f6;
+}
+
+/* Hide Image Toggle specific */
+#hide-image-toggle+.slider:after {
+    content: "👁️";
+    /* Eye icon for visible */
+    font-size: 12px;
+}
+
+#hide-image-toggle:checked+.slider:after {
+    content: "🚫";
+    /* Prohibition or hidden icon */
+    left: 8px;
+    right: auto;
+}
+
+#hide-image-toggle:checked+.slider {
+    background-color: #555;
+    /* Grey/Black for hidden state */
+}
+
+/* --- Normal Mode Blue Overlay --- */
+#ambient-overlay.blue-mode {
+    background: radial-gradient(circle, rgba(100, 181, 246, 0.4) 0%, rgba(33, 150, 243, 0.2) 60%, transparent 100%);
+}
+
+/* Timer Display */
+.timer-display {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 5px 15px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    min-width: 80px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Toast Notification */
+.toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 64, 129, 0.9);
+    /* Pinkish alert */
+    color: white;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-10px);
+    /* Float up */
+}

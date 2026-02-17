@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced PDF Table Extractor</title>
+    
+    <!-- Global Site Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <!-- Local App Styles -->
+    <link rel="stylesheet" href="style.css">
+
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+    
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+</head>
+<body>
+
+<div id="main-nav-placeholder"></div> 
+<script src="/assets/js/nav-loader.js"></script>
+
+<div class="extractor-app-container">
+    
+    <aside class="extractor-sidebar">
+        <div class="extractor-brand">
+            <h2>Extraction Tool</h2>
+            <button id="btnShowGuide" class="btn small-btn">? Help</button>
+        </div>
+
+        <!-- 1. Template -->
+        <div class="extractor-card">
+            <h3>1. Template & Layout</h3>
+            <p class="instruction">Upload PDF. Switch pages to configure layouts.</p>
+            <input type="file" id="templateInput" accept="application/pdf">
+            
+            <div class="flex-row" style="margin-bottom:10px;">
+                <button id="btnPrevPage" class="btn small-btn" disabled>◀ Prev</button>
+                <span id="pageIndicator" style="font-size:0.8rem; color:#fff;">Page 1</span>
+                <button id="btnNextPage" class="btn small-btn" disabled>Next ▶</button>
+            </div>
+
+            <div class="setting-row" style="margin-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+                <label class="date-toggle" style="color:#fff; font-weight:bold;">
+                    <input type="checkbox" id="chkMultiPage"> 
+                    Enable Different Layout for Page 2+
+                </label>
+            </div>
+
+            <div id="layoutSwitcher" class="toggle-container hidden">
+                <button id="btnEditPage1" class="btn-toggle active">Editing: Page 1</button>
+                <button id="btnEditPage2" class="btn-toggle">Editing: Page 2+</button>
+            </div>
+
+            <div class="tool-group">
+                <button id="btnHeadTop" class="btn">1. Header Top</button>
+                <button id="btnHeadBot" class="btn">2. Header Bottom (Data Start)</button>
+                <button id="btnTableBot" class="btn warning">3. Table Bottom (Data End)</button>
+            </div>
+
+            <div class="tool-group">
+                <label>Vertical Edges</label>
+                <button id="btnTableLeft" class="btn">4. Far Left Edge</button>
+                <button id="btnTableRight" class="btn">5. Far Right Edge</button>
+                <button id="btnColDiv" class="btn accent">6. Add Column Divider</button>
+                <button id="btnDelDiv" class="btn danger-outline">7. Delete Divider (Click Line)</button>
+                <div id="dividerList" class="divider-list-container"></div>
+            </div>
+        </div>
+
+        <!-- 2. Row Strategy -->
+        <div class="extractor-card">
+            <h3>2. Row Strategy</h3>
+            <div class="toggle-container">
+                <button id="btnModeAuto" class="btn-toggle active">Auto (OCR)</button>
+                <button id="btnModeFixed" class="btn-toggle">Fixed Grid</button>
+            </div>
+
+            <div id="panelAuto" class="mode-panel">
+                <p class="instruction">Detects uneven row heights automatically.</p>
+            </div>
+
+            <div id="panelFixed" class="mode-panel hidden">
+                <p class="instruction">Define grid for current active layout.</p>
+                <div class="radio-group">
+                    <label><input type="radio" name="fixedMode" value="height" checked> By Height</label>
+                    <label><input type="radio" name="fixedMode" value="count"> By Count</label>
+                </div>
+                <div id="subPanelHeight">
+                    <button id="btnRow1" class="btn success">Set Row 1 Bottom</button>
+                </div>
+                <div id="subPanelCount" class="hidden">
+                    <label>Row Count:</label>
+                    <input type="number" id="rowCountInput" value="10" min="1" class="input-dark">
+                </div>
+            </div>
+
+            <button id="btnClear" class="btn danger-outline">Reset Current Layout</button>
+        </div>
+
+        <!-- 3. Columns -->
+        <div class="extractor-card extractor-scrollable-card">
+            <h3>3. Columns</h3>
+            <div class="flex-row">
+                <p class="instruction">Define dividers first.</p>
+                <button id="btnReadHeaders" class="btn primary-outline xs-btn">✨ Auto-Read</button>
+            </div>
+            <div id="colContainer" class="column-list"></div>
+        </div>
+
+        <!-- 4. Batch Extraction -->
+        <div class="extractor-card">
+            <h3>4. Batch Extraction</h3>
+            
+            <div class="setting-row">
+                <label class="date-toggle" style="color:#fff; margin-bottom:5px; display:block;">
+                    <input type="checkbox" id="chkCleanPipes" checked> 
+                    Remove "|" Noise
+                </label>
+                <label class="date-toggle" style="color:#fff; margin-bottom:5px; display:block;">
+                    <input type="checkbox" id="chkInferDates" checked> 
+                    Infer Missing Dates
+                </label>
+                <label class="date-toggle" style="color:#fff; display:block;">
+                    <input type="checkbox" id="chkIgnoreLastPage"> 
+                    Ignore Last Page (Info/Summary)
+                </label>
+            </div>
+
+            <input type="file" id="batchInput" accept="application/pdf" multiple disabled>
+            <button id="btnProcess" class="btn primary" disabled>Run Extraction</button>
+            <div class="flex-row" style="gap:5px; margin-top:8px;">
+                <button id="btnExport" class="btn success hidden">CSV</button>
+                <button id="btnExportZip" class="btn primary-outline hidden">Debug ZIP</button>
+            </div>
+        </div>
+
+        <!-- Utility: Remove Last Page -->
+        <div class="extractor-card" style="border: 1px solid #f59e0b;">
+            <h3 style="color:#f59e0b;">Utility: Remove Last Page</h3>
+            <p class="instruction">Creates NEW files with the last page removed.</p>
+            <input type="file" id="preProcessInput" accept="application/pdf" multiple>
+            <button id="btnRemoveLastPage" class="btn" style="background:#f59e0b; color:#000; font-weight:bold;" disabled>Process & Download ZIP</button>
+        </div>
+
+        <!-- Utility: Manual Culling -->
+        <div class="extractor-card" style="border: 1px solid #ef4444;">
+            <h3 style="color:#ef4444;">Util: Manual Page Culling</h3>
+            <p class="instruction">Upload 1 PDF. Mark pages to remove.</p>
+            <input type="file" id="cullInput" accept="application/pdf">
+            
+            <div id="cullControls" class="hidden">
+                <div class="flex-row">
+                    <button id="btnCullPrev" class="btn small-btn">◀</button>
+                    <span id="cullPageIndicator" style="font-size:0.8rem;">Pg 1</span>
+                    <button id="btnCullNext" class="btn small-btn">▶</button>
+                </div>
+                <button id="btnToggleCull" class="btn danger-outline">Mark for Removal</button>
+                <button id="btnDownloadCull" class="btn primary">Download Clean PDF</button>
+            </div>
+        </div>
+
+        <div class="extractor-card console-card">
+            <h3>Debug Log</h3>
+            <div id="debugConsole" class="console-output">Waiting for input...</div>
+        </div>
+    </aside>
+
+    <main class="extractor-workspace">
+        <div id="guideModal" class="guide-modal hidden">
+            <div class="guide-content">
+                <h3>Layout Guide</h3>
+                <p>1. Set Page 1 Layout.</p>
+                <p>2. Enable "Page 2+" if needed.</p>
+                <p>3. Switch to Page 2 using Prev/Next buttons.</p>
+                <p>4. Use "Delete Divider" to remove mistakes.</p>
+                <button id="btnCloseGuide" class="btn primary">Got it</button>
+            </div>
+        </div>
+
+        <div class="canvas-wrapper">
+            <canvas id="pdfCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+            <div id="loadingIndicator" class="hidden">Loading PDF...</div>
+        </div>
+        
+        <div class="results-section hidden" id="resultsSection">
+            <div class="table-header-row">
+                <h3>Extracted Data</h3>
+                <span id="rowCount" class="badge">0 rows</span>
+            </div>
+            <div class="table-responsive">
+                <table id="resultTable">
+                    <!-- Header is dynamically filled by JS -->
+                    <thead><tr id="tableHeader"></tr></thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

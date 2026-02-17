@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>360° VR Viewer</title>
+    
+    <!-- Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- A-Frame Library -->
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+    
+    <link rel="icon" href="favicon.ico" sizes="any">
+    
+    <meta name="theme-color" content="#111115">
+</head>
+<body>
+
+    <!-- Site Header Wrapper -->
+    <div id="site-header-container" class="fade-transition">
+        <div id="main-nav-placeholder"></div> 
+    </div>
+    <script src="/assets/js/nav-loader.js"></script> 
+
+    <!-- 2D LOADING SCREEN (Visible on Phone/Desktop) -->
+    <div id="loader-2d" class="loader-overlay hidden">
+        <div class="spinner"></div>
+        <p>Loading 360° Image...</p>
+    </div>
+
+    <!-- A-FRAME SCENE -->
+    <a-scene embedded vr-mode-ui="enabled: false" renderer="colorManagement: true; antialias: true;">
+        
+        <!-- Asset Management System (For preloading) -->
+        <a-assets>
+            <img id="placeholder" src=""> 
+        </a-assets>
+
+        <!-- The Sky Sphere -->
+        <a-sky id="image-360" src="" rotation="0 -90 0"></a-sky>
+
+        <!-- CAMERA RIG -->
+        <!-- We rotate the RIG, not the camera, for the "Drag" effect -->
+        <a-entity id="rig" position="0 0 0" rotation="0 0 0">
+            
+            <!-- The Camera (Head) -->
+            <a-entity id="camera" camera look-controls="reverseMouseDrag: true; magicWindowTrackingEnabled: false"></a-entity>
+            
+            <!-- VR Loading Indicator (Attached to head so it follows you) -->
+            <a-entity id="loader-vr" position="0 0 -1.5" visible="false" text="value: LOADING...; align: center; width: 4; color: white; shader: msdf; font: roboto"></a-entity>
+
+            <!-- CONTROLLERS (For Quest 3) -->
+            <!-- Left Hand: Teleport/UI (Standard) -->
+            <a-entity laser-controls="hand: left" raycaster="objects: .clickable; far: 5"></a-entity>
+            
+            <!-- Right Hand: Custom "Drag to Rotate" logic attached here -->
+            <a-entity id="right-hand" laser-controls="hand: right" raycaster="objects: .clickable" drag-rotate-world></a-entity>
+
+        </a-entity>
+    </a-scene>
+
+    <!-- UI Buttons -->
+    <button id="toggleUiBtn" class="floating-toggle" title="Toggle UI (Press H)">👁️</button>
+
+    <!-- Gallery Sidebar -->
+    <div id="galleryModal" class="gallery-modal hidden">
+        <div class="gallery-header">
+            <h3>Gallery <span id="galleryProgress"></span></h3>
+            <button id="closeGalleryBtn" class="close-btn">&times;</button>
+        </div>
+        <div class="gallery-grid" id="galleryGrid"></div>
+    </div>
+
+    <!-- Main Controls UI -->
+    <div class="ui-container fade-transition" id="mainUi">
+        <div class="card glass-panel">
+            <div class="card-header">
+                <h2>360° VR Viewer</h2>
+                <div class="header-actions">
+                    <button id="clearBtn" class="icon-btn" title="Reset" disabled>🗑️</button>
+                    <button class="close-btn" id="closeUiBtn">&times;</button>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label for="dirInput" class="file-btn">
+                    Select Local Folder
+                    <input type="file" id="dirInput" webkitdirectory directory multiple>
+                </label>
+                <span id="fileCount">No files loaded</span>
+            </div>
+
+            <div class="control-group">
+                <div class="slider-box">
+                    <label>Zoom: <span id="fovVal">80</span></label>
+                    <input type="range" id="fovSlider" min="20" max="100" value="80">
+                </div>
+            </div>
+
+            <!-- Sensor Controls -->
+            <div class="control-group sensor-controls">
+                <!-- Motion Button (Restored) -->
+                <button id="gyroBtn" class="sensor-btn" title="Enable Phone Motion">
+                    <span>📱 Motion</span>
+                </button>
+                <!-- VR Button -->
+                <button id="vrBtn" class="sensor-btn" title="Enter VR Mode">
+                    <span>🥽 VR Mode</span>
+                </button>
+            </div>
+
+            <div class="control-group nav-controls">
+                <button id="prevBtn" disabled>&#8592;</button>
+                <button id="galleryBtn" disabled>Gallery</button>
+                <button id="nextBtn" disabled>&#8594;</button>
+            </div>
+            
+            <div class="file-info-box">
+                <span id="currentFileName">Waiting for input...</span>
+            </div>
+
+            <div class="debug-log" id="debugLog">
+                <div>> Ready. Use HTTPS for VR.</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

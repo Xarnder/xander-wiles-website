@@ -1,0 +1,508 @@
+/* Modern Dark Theme Variables */
+:root {
+    --bg-color: #111115;
+    --text-color: #e0e0e0;
+    --accent-color: #4a9eff;
+    --glass-bg: rgba(30, 30, 35, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --card-radius: 16px;
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+    min-height: 100vh;
+    padding-bottom: 50px;
+}
+
+/* Container */
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.tool-header {
+    text-align: center;
+    margin-bottom: 30px;
+    margin-top: 20px;
+}
+
+.tool-header h1 {
+    font-weight: 300;
+    font-size: 2.5rem;
+    background: linear-gradient(90deg, #fff, #888);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Glassmorphism Cards */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--card-radius);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* Controls */
+.controls-card {
+    padding: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 40px;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+label {
+    font-size: 0.9rem;
+    color: #aaa;
+}
+
+input[type="number"],
+select {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid #444;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.checkbox-group {
+    flex-direction: row;
+    align-items: center;
+    padding-top: 24px;
+}
+
+.btn-action {
+    background-color: var(--accent-color);
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.2s;
+}
+
+.btn-action:hover {
+    transform: scale(1.05);
+}
+
+/* Visualization Layout */
+.vis-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.stage {
+    flex: 1;
+    min-width: 300px;
+    text-align: center;
+}
+
+.stage h3 {
+    margin-bottom: 10px;
+    color: var(--accent-color);
+}
+
+.info-tag {
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 5px;
+}
+
+/* Grids */
+.grid-display {
+    padding: 10px;
+    display: grid;
+    gap: 2px;
+    margin: 0 auto;
+    /* Max size allows it to shrink on mobile */
+    aspect-ratio: 1 / 1;
+    max-width: 400px;
+    transition: all 0.3s ease;
+}
+
+.cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-family: monospace;
+    border-radius: 2px;
+    transition: background-color 0.2s;
+    user-select: none;
+    color: #fff;
+    /* Text shadow helps visibility on light bg */
+    text-shadow: 0 0 2px #000;
+}
+
+/* Hide numbers on very small cells (large grids) */
+.cell.tiny-text {
+    font-size: 0px;
+}
+
+.cell.tiny-text:hover {
+    font-size: 10px;
+    /* Reveal on hover */
+    z-index: 10;
+    transform: scale(2);
+    box-shadow: 0 0 10px black;
+}
+
+/* Operator Section */
+.operator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    font-size: 2rem;
+    padding-top: 50px;
+}
+
+.kernel-display {
+    padding: 15px;
+}
+
+.kernel-display h4 {
+    font-size: 1rem;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.grid-kernel {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    width: 120px;
+    height: 120px;
+}
+
+.k-cell {
+    background: #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+/* Debug Panel */
+.debug-panel {
+    margin-top: 40px;
+    padding: 15px;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+
+.debug-entry {
+    margin-bottom: 5px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 2px;
+}
+
+.debug-time {
+    color: var(--accent-color);
+    margin-right: 10px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .vis-container {
+        flex-direction: column;
+        align-items: center;
+    }
+
+
+    .operator {
+        flex-direction: row;
+        padding-top: 0;
+        margin: 20px 0;
+    }
+}
+
+/* File Upload */
+input[type="file"] {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 8px;
+    border-radius: 8px;
+    color: #ccc;
+    font-size: 0.9rem;
+}
+
+input[type="file"]::file-selector-button {
+    background: var(--accent-color);
+    border: none;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+    font-weight: 600;
+}
+
+/* Canvas Display */
+canvas {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    /* Keep it crisp */
+}
+
+/* Editable Inputs in Grid */
+.grid-input {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    text-align: center;
+    padding: 0;
+    margin: 0;
+    outline: none;
+    cursor: text;
+    appearance: textfield;
+}
+
+.grid-input::-webkit-outer-spin-button,
+.grid-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Padding Cells */
+.cell.padding {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+    color: #666 !important;
+    text-shadow: none !important;
+}
+
+/* Kernel Inputs */
+.k-input {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    border: none;
+    color: white;
+    text-align: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.k-cell:focus-within {
+    border: 1px solid var(--accent-color);
+    box-shadow: 0 0 5px var(--accent-color);
+}
+
+/* Calculation Panel */
+.calc-panel {
+    margin-top: 20px;
+    padding: 20px;
+    width: 100%;
+}
+
+.calc-content {
+    font-family: monospace;
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-top: 15px;
+    white-space: pre-wrap;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 15px;
+    border-radius: 8px;
+    color: #ffd700;
+    /* Gold color for math */
+}
+
+/* Selected Output Cell */
+.cell.selected {
+    border: 2px solid #ffd700;
+    transform: scale(1.1);
+    z-index: 10;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+}
+
+/* Input Window Highlight */
+.input-highlight {
+    border: 2px dashed #4a9eff;
+    box-shadow: 0 0 10px rgba(74, 158, 255, 0.5) inset;
+    background-color: rgba(74, 158, 255, 0.2) !important;
+}
+
+/* Visual Equation Layout */
+.visual-equation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.matrix-block {
+    text-align: center;
+}
+
+.matrix-block h5 {
+    margin-bottom: 8px;
+    color: #ccc;
+    font-weight: normal;
+}
+
+.symbol {
+    font-size: 2rem;
+    color: #888;
+    font-weight: bold;
+}
+
+.mini-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.mini-cell {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-family: monospace;
+    background: #444;
+    color: white;
+    border-radius: 2px;
+}
+
+.result-value {
+    font-size: 1.5rem;
+    color: #ffd700;
+    font-weight: bold;
+}
+
+/* New Buttons */
+.btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+}
+
+.btn-small {
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #4facfe, #00f2fe);
+    border: none;
+    border-radius: 6px;
+    color: #000;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.btn-small:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 242, 254, 0.4);
+    background: linear-gradient(135deg, #00f2fe, #4facfe);
+}
+
+/* Custom Checkbox Styling */
+input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+    margin-right: 10px;
+    transition: all 0.2s;
+}
+
+input[type="checkbox"]:checked {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    color: white;
+    font-size: 14px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-weight: bold;
+}
+
+input[type="checkbox"]:hover {
+    border-color: var(--accent-color);
+}
+
+/* Radio Buttons */
+input[type="radio"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #555;
+    border-radius: 50%;
+    cursor: pointer;
+    margin-right: 5px;
+    position: relative;
+}
+
+input[type="radio"]:checked {
+    border-color: var(--accent-color);
+}
+
+input[type="radio"]:checked::after {
+    content: '';
+    width: 10px;
+    height: 10px;
+    background: var(--accent-color);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}

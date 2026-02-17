@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Quest 3 AR Studio</title>
+    
+    <!-- YOUR SITE HEADER CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <!-- LOCAL AR STYLES -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <!-- YOUR SITE NAVIGATION -->
+    <div id="main-nav-placeholder"></div> 
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- 2D INSTRUCTIONS CARD -->
+    <div id="instructions-card">
+        <h2>AR Controls</h2>
+        <ul>
+            <li><strong>Trigger</strong>: Spawn Model</li>
+            <li><strong>Hold 'A'</strong>: Drag Model</li>
+            <li><strong>Left Stick ↕</strong>: Adjust Height</li>
+            <li><strong>Right Stick ↕</strong>: Scale Size</li>
+            <li><strong>Right Stick ↔</strong>: Rotate</li>
+            <li><strong>Button 'B'</strong>: Toggle Menu</li>
+        </ul>
+    </div>
+
+    <!-- AR UI CONTAINER -->
+    <div id="ar-button-container"></div>
+    
+    <!-- MAIN APP SCRIPT -->
+    <script type="module" src="script.js"></script>
+</body>
+</html>

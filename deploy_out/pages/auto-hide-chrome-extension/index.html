@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Hide Page | Privacy Extension</title>
+
+    <!-- Theme-aware SVG icons -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Site Header CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Landing Page Specific CSS -->
+    <link rel="stylesheet" href="landing.css">
+
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="landing-container">
+
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="hero-content fade-in">
+                <span class="badge">Version 1.5 Released</span>
+                <h1>Hide your screen <br><span class="gradient-text">in a blink.</span></h1>
+                <p class="hero-sub">
+                    Instantly replace sensitive tabs with a realistic system error screen.
+                    The ultimate panic button for your browser privacy.
+                </p>
+                <div class="cta-group">
+                    <a href="https://chromewebstore.google.com/detail/oialljegjhkkgfcpdopnjnjjpahpfahc?utm_source=item-share-cb" class="btn-primary" id="downloadBtn">
+                        <i class="fa-brands fa-chrome"></i> Add to Chrome
+                    </a>
+                    <a href="#how-it-works" class="btn-secondary">How it works</a>
+                </div>
+            </div>
+            <div class="hero-visual fade-in delay-1">
+                <div class="browser-mockup">
+                    <div class="browser-header">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <div class="browser-body">
+                        <!-- New Timer Mockup Overlay -->
+                        <div class="timer-bubble">
+                            <!-- <i class="fa-solid fa-stopwatch"></i> -->
+                            <!-- <span id="mock-timer">05:00</span> -->
+                        </div>
+                        <div class="error-preview">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <h3>Connection Lost</h3>
+                            <p>Could not establish a secure connection.</p>
+                            <button class="mock-btn">Reload</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Grid -->
+        <section class="features-section" id="features">
+            <div class="section-header">
+                <h2>Pro-Privacy Features</h2>
+                <p>Everything you need to keep your browsing your business.</p>
+            </div>
+
+            <div class="grid-container">
+                <div class="feature-card glass-panel fade-in">
+                    <div class="icon-box"><i class="fa-solid fa-mask"></i></div>
+                    <h3>Realistic Decoys</h3>
+                    <p>Replaces your page with varied error screens (503, DNS Error, 404) that look completely
+                        authentic.</p>
+                </div>
+
+                <div class="feature-card glass-panel fade-in delay-1">
+                    <div class="icon-box"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                    <h3>Temporary Access</h3>
+                    <p>Need to unhide everything for a quick task? Set a timer for 5, 10, or 60 minutes to pause all
+                        blocking automatically.</p>
+                </div>
+
+                <div class="feature-card glass-panel fade-in delay-2">
+                    <div class="icon-box"><i class="fa-solid fa-bolt"></i></div>
+                    <h3>Always On Mode</h3>
+                    <p>Create a list of specific domains. They will automatically hide every time you visit them.</p>
+                </div>
+
+                <div class="feature-card glass-panel fade-in delay-3">
+                    <div class="icon-box"><i class="fa-solid fa-key"></i></div>
+                    <h3>Password Locked</h3>
+                    <p>Set a master recovery code. Once a page is hidden, it stays hidden until your code is entered.
+                    </p>
+                </div>
+
+                <!-- Feature Card 4 (New: Temporary Access) -->
+                <div class="feature-card glass-panel fade-in delay-3">
+                    <div class="icon-box"><i class="fa-solid fa-hourglass-half"></i></div>
+                    <h3>Temporary Access</h3>
+                    <p>Need a break? Set a countdown timer to temporarily reveal all hidden pages. Once time is up, they
+                        lock automatically.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- How To Use -->
+        <section class="steps-section" id="how-it-works">
+            <div class="section-header">
+                <h2>Detailed Instructions</h2>
+            </div>
+            <div class="steps-container">
+                <div class="step-item fade-in">
+                    <div class="step-number">01</div>
+                    <div class="step-content">
+                        <h3>Initial Configuration</h3>
+                        <p>Open the extension popup and set your **Master Password**. This is the key to revealing any
+                            hidden page. Without it, the extension controls remain disabled for security.</p>
+                    </div>
+                </div>
+                <div class="step-item fade-in">
+                    <div class="step-number">02</div>
+                    <div class="step-content">
+                        <h3>Manage your Blacklist</h3>
+                        <p>Use the "Automatic List" box to type in domains like <code>youtube.com</code> or
+                            <code>reddit.com</code>. Click Save. These sites will now trigger the decoy screen the
+                            moment they load.
+                        </p>
+                    </div>
+                </div>
+                <div class="step-item fade-in">
+                    <div class="step-number">03</div>
+                    <div class="step-content">
+                        <h3>Using Temporary Access</h3>
+                        <p>When you need to browse freely without constant password prompts, enter a duration in the
+                            **Temporary Access** section and click Start. A green countdown will appear, and all hiding
+                            logic is paused until the time runs out.</p>
+                    </div>
+                </div>
+                <div class="step-item fade-in">
+                    <div class="step-number">04</div>
+                    <div class="step-content">
+                        <h3>The Recovery Process</h3>
+                        <p>To reveal a page, click the **Reload** button on the decoy. A browser prompt will appear.
+                            Enter your password. If correct, the decoy vanishes and your content returns.</p>
+                    </div>
+                </div>
+                <!-- Step 04 (New: Timer) -->
+                <div class="step-item fade-in">
+                    <div class="step-number">04</div>
+                    <div class="step-content">
+                        <h3>Use the Timer</h3>
+                        <p>For quick browsing sessions, enter a duration (e.g., 5 minutes) in the popup. This unhides
+                            everything instantly without needing to enter your password for every tab.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Disclaimer -->
+        <section class="disclaimer-section glass-panel">
+            <h3><i class="fa-solid fa-shield-halved"></i> Security & Privacy Disclaimer</h3>
+            <p>
+                <strong>Auto Hide Page</strong> is a visual privacy tool. It is designed to hide your activity from
+                people physically near your computer.
+                <strong>Important:</strong> This extension does not hide your history from your Internet Service
+                Provider (ISP) or hide your IP address. It is not a VPN or an encryption tool. Your Master Password is
+                stored locally on your device.
+            </p>
+        </section>
+
+        <!-- Privacy Policy -->
+        <section class="privacy-section" id="privacy-policy">
+            <div class="section-header">
+                <h2><i class="fa-solid fa-lock"></i> Privacy Policy</h2>
+                <p>Your privacy is our priority. Here's our commitment to you.</p>
+            </div>
+
+            <div class="privacy-grid">
+                <div class="privacy-card glass-panel fade-in">
+                    <div class="privacy-icon"><i class="fa-solid fa-database"></i></div>
+                    <h3>Zero Data Collection</h3>
+                    <p>Auto Hide Page <strong>does not collect, store, or transmit</strong> any personal data, browsing
+                        history, or usage information. We have no servers, no analytics, and no tracking of any kind.
+                    </p>
+                </div>
+
+                <div class="privacy-card glass-panel fade-in delay-1">
+                    <div class="privacy-icon"><i class="fa-solid fa-hard-drive"></i></div>
+                    <h3>100% Local Storage</h3>
+                    <p>All settings, including your master password and domain blacklist, are stored <strong>exclusively
+                            on your device</strong> using Chrome's local storage API. Your data never leaves your
+                        computer.</p>
+                </div>
+
+                <div class="privacy-card glass-panel fade-in delay-2">
+                    <div class="privacy-icon"><i class="fa-solid fa-plug-circle-xmark"></i></div>
+                    <h3>No Network Requests</h3>
+                    <p>This extension operates <strong>entirely offline</strong>. It makes zero external network
+                        requests, API calls, or connections to third-party services. Your browsing activity remains
+                        completely private.</p>
+                </div>
+
+                <div class="privacy-card glass-panel fade-in delay-3">
+                    <div class="privacy-icon"><i class="fa-solid fa-user-secret"></i></div>
+                    <h3>No Third-Party Sharing</h3>
+                    <p>We do not share, sell, or transfer any user information to third parties because <strong>we
+                            simply don't have any</strong>. There is nothing to share.</p>
+                </div>
+            </div>
+
+            <div class="privacy-summary glass-panel fade-in">
+                <h3><i class="fa-solid fa-file-contract"></i> Summary</h3>
+                <ul class="privacy-list">
+                    <li><i class="fa-solid fa-check"></i> No personal information is collected</li>
+                    <li><i class="fa-solid fa-check"></i> No browsing data is tracked or stored</li>
+                    <li><i class="fa-solid fa-check"></i> No cookies or tracking technologies are used</li>
+                    <li><i class="fa-solid fa-check"></i> No data is transmitted to external servers</li>
+                    <li><i class="fa-solid fa-check"></i> No analytics or telemetry of any kind</li>
+                    <li><i class="fa-solid fa-check"></i> All functionality operates entirely on your device</li>
+                </ul>
+                <p class="privacy-footer">
+                    <strong>Effective Date:</strong> February 2026 | <strong>Contact:</strong> <a
+                        href="mailto:xanderwileswork@gmail.com">xanderwileswork@gmail.com</a>
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>&copy; 2026 Auto Hide Extension. Built for Privacy.</p>
+    </footer>
+
+    <script src="landing.js"></script>
+</body>
+
+</html>

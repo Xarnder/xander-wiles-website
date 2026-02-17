@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Model Viewer</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Website Header CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Local Viewer CSS -->
+    <link rel="stylesheet" href="viewer.css">
+
+    <!-- Import Map for Three.js (No installation needed) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+
+<body>
+
+    <!-- Global Header Injection -->
+    <div id="main-nav-placeholder"></div>
+
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay -->
+    <div class="ui-container">
+        <!-- Upload Card -->
+        <div class="glass-card">
+            <h3>Model Selection</h3>
+            <div class="control-group" style="margin-bottom: 15px;">
+                <label for="model-selector">Choose Default Model</label>
+                <select id="model-selector"
+                    style="width: 100%; padding: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px;">
+                    <option value="" disabled selected>Select a model...</option>
+                </select>
+            </div>
+
+            <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 15px 0;"></div>
+
+            <h3>Upload Custom</h3>
+            <label class="custom-file-upload">
+                <input type="file" id="file-input" accept=".glb, .gltf">
+                Select GLB / GLTF
+            </label>
+            <div id="loading-bar-container" style="display:none;">
+                <div id="loading-bar"></div>
+            </div>
+        </div>
+
+        <!-- Controls Card -->
+        <div class="glass-card controls-panel">
+            <h3>Controls</h3>
+
+            <div class="control-group">
+                <label for="fov-slider">Camera FOV <span id="fov-val">45</span></label>
+                <input type="range" id="fov-slider" min="10" max="100" value="45">
+            </div>
+
+            <div class="control-group">
+                <label for="env-slider">Environment Intensity <span id="env-val">0</span></label>
+                <input type="range" id="env-slider" min="0" max="5" step="0.1" value="0">
+            </div>
+
+            <div class="control-group">
+                <label for="dir-slider">Sun Light Intensity <span id="dir-val">0</span></label>
+                <input type="range" id="dir-slider" min="0" max="10" step="0.1" value="0">
+            </div>
+
+            <div class="control-group">
+                <label for="amb-slider">Ambient Light Intensity <span id="amb-val">0</span></label>
+                <input type="range" id="amb-slider" min="0" max="5" step="0.1" value="0">
+            </div>
+
+            <div class="control-group">
+                <label
+                    style="margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">Rendering
+                    Effects</label>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label for="ao-toggle" style="margin:0;">Ambient Occlusion</label>
+                    <input type="checkbox" id="ao-toggle">
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label for="cavity-toggle" style="margin:0;">Cavity Shadows (GTAO)</label>
+                    <input type="checkbox" id="cavity-toggle" checked>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label for="ssr-toggle" style="margin:0;">Ray Tracing (SSR)</label>
+                    <input type="checkbox" id="ssr-toggle">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button id="add-light-btn" class="action-btn">Add Point Light</button>
+                <button id="toggle-helpers-btn" class="action-btn secondary">Hide Light Wireframes</button>
+                <button id="reset-cam-btn" class="action-btn secondary">Reset Camera</button>
+            </div>
+
+            <!-- Selected Light Properties (Hidden by default) -->
+            <div id="selected-light-panel"
+                style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; margin-top: 15px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 0.9rem; color: #efefef;">Selected Light</h4>
+
+                <div class="control-group">
+                    <label for="sel-light-color">Color</label>
+                    <input type="color" id="sel-light-color" value="#ffffff"
+                        style="width: 100%; border: none; height: 30px; cursor: pointer;">
+                </div>
+
+                <div class="control-group">
+                    <label for="sel-light-intensity">Intensity <span id="sel-light-int-val">50</span></label>
+                    <input type="range" id="sel-light-intensity" min="0" max="200" step="1" value="50">
+                </div>
+
+                <!-- NEW: Movement Controls -->
+                <div class="control-group">
+                    <label>Position Control</label>
+                    <div class="movement-grid">
+                        <!-- Top Row: Up (Y) -->
+                        <button class="move-btn" id="move-y-up" title="Move Up">Y+</button>
+
+                        <!-- Middle Row: Cross for X/Z -->
+                        <div class="d-pad">
+                            <button class="move-btn" id="move-z-back" title="Move Back">▲</button>
+                            <div class="d-pad-row">
+                                <button class="move-btn" id="move-x-left" title="Move Left">◀</button>
+                                <button class="move-btn center-btn" disabled>MOVE</button>
+                                <button class="move-btn" id="move-x-right" title="Move Right">▶</button>
+                            </div>
+                            <button class="move-btn" id="move-z-fwd" title="Move Forward">▼</button>
+                        </div>
+
+                        <!-- Bottom Row: Down (Y) -->
+                        <button class="move-btn" id="move-y-down" title="Move Down">Y-</button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <button id="delete-light-btn" class="action-btn" style="background: #ff4d4d; color: white;">Delete
+                        Light</button>
+                </div>
+
+                <div style="font-size: 0.75rem; color: #888; margin-top: 8px;">
+                    Move: Arrow Keys<br>
+                    Up/Down: Shift + Arrows
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug Console on Screen (Optional, good for mobile) -->
+        <div id="debug-overlay" class="glass-card debug-card">
+            <h4>System Log</h4>
+            <div id="console-output">Ready...</div>
+        </div>
+    </div>
+
+    <!-- Mobile Toggle Button -->
+    <button id="mobile-menu-toggle" class="glass-btn icon-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+
+    <!-- Light Retention Modal -->
+    <div id="light-retention-modal" class="modal-overlay" style="display: none;">
+        <div class="glass-card modal-card">
+            <h3>Existing Lights Found</h3>
+            <p style="margin-bottom: 20px; color: #ccc;">Would you like to keep the point lights you added, or clear
+                them for the new model?</p>
+            <div style="display: flex; gap: 10px;">
+                <button id="modal-keep-btn" class="action-btn" style="background: #007AFF;">Keep Lights</button>
+                <button id="modal-clear-btn" class="action-btn secondary">Clear All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Logic -->
+    <script type="module" src="app.js"></script>
+    <script src="/assets/js/nav-loader.js"></script>
+</body>
+
+</html>

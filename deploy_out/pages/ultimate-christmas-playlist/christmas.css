@@ -1,0 +1,344 @@
+:root {
+    --bg-color: #0f172a; 
+    --card-bg: rgba(255, 255, 255, 0.03); 
+    --card-border: rgba(255, 255, 255, 0.1);
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --christmas-red: #ff2a2a;
+    --christmas-green: #00e658; 
+    --glow-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+}
+
+/* --- Ambient Background --- */
+.ambient-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    z-index: -1;
+    pointer-events: none;
+    background: #050911;
+}
+
+.blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px); 
+    opacity: 0.25; 
+    animation: drift 20s infinite alternate ease-in-out;
+}
+
+.blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: var(--christmas-green); animation-delay: 0s; }
+.blob-2 { bottom: -10%; right: -10%; width: 50vw; height: 50vw; background: var(--christmas-red); animation-delay: -5s; }
+.blob-3 { top: 10%; right: 0%; width: 30vw; height: 30vw; background: var(--christmas-red); opacity: 0.15; animation-delay: -10s; }
+.blob-4 { bottom: 0%; left: 10%; width: 40vw; height: 40vw; background: var(--christmas-green); opacity: 0.15; animation-delay: -15s; }
+
+@keyframes drift {
+    0% { transform: translate(0, 0) scale(1); }
+    100% { transform: translate(30px, 50px) scale(1.1); }
+}
+
+/* --- Santa Sleigh Animation --- */
+.santa-container {
+    position: fixed;
+    top: 15%;
+    left: -300px; 
+    width: 100%;
+    height: 0; 
+    z-index: 5;
+    pointer-events: none;
+    animation: flySanta 25s linear infinite;
+}
+
+.santa-sleigh {
+    width: 250px; /* Adjusted size for SVG image */
+    height: auto;
+    filter: drop-shadow(0 0 15px rgba(255,255,255,0.3));
+}
+
+@keyframes flySanta {
+    0% { left: -300px; transform: translateY(0) rotate(5deg); }
+    20% { transform: translateY(-20px) rotate(0deg); }
+    40% { transform: translateY(10px) rotate(-5deg); }
+    60% { transform: translateY(-10px) rotate(0deg); }
+    100% { left: 110vw; transform: translateY(0) rotate(5deg); } 
+}
+
+/* --- Layout --- */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+}
+
+.playlist-header {
+    text-align: center;
+    margin-bottom: 4rem;
+    margin-top: 3rem;
+}
+
+.festive-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 5rem;
+    margin-bottom: 0.5rem;
+    letter-spacing: -2px;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.text-gradient {
+    background: linear-gradient(135deg, var(--christmas-green) 30%, var(--christmas-red) 70%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    margin-bottom: 2.5rem;
+    font-weight: 300;
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 35px;
+    border-radius: 50px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1.1rem;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--christmas-red), #b91c1c);
+    color: white;
+    box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 8px 25px rgba(239, 68, 68, 0.7);
+}
+
+/* --- Controls (Search + Filter) --- */
+.controls-container {
+    max-width: 800px;
+    margin: 0 auto 3rem auto;
+    display: flex;
+    gap: 15px;
+}
+
+.search-wrapper {
+    flex: 2;
+}
+
+.filter-wrapper {
+    flex: 1;
+    position: relative;
+}
+
+#searchInput, #sortSelect {
+    width: 100%;
+    padding: 18px 30px;
+    border-radius: 30px;
+    border: 1px solid var(--card-border);
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(15px);
+    color: white;
+    font-size: 1.1rem;
+    outline: none;
+    transition: all 0.3s ease;
+    box-sizing: border-box; /* Ensures padding doesn't affect width */
+}
+
+/* Specific styling for the Select dropdown */
+#sortSelect {
+    appearance: none; /* Removes default OS styling */
+    -webkit-appearance: none;
+    cursor: pointer;
+    padding-right: 50px; /* Space for arrow */
+}
+
+/* Custom dropdown arrow */
+.select-arrow {
+    position: absolute;
+    right: 25px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+#searchInput:focus, #sortSelect:focus {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--christmas-green);
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+}
+
+/* Dropdown options (usually hard to style, but dark bg helps) */
+#sortSelect option {
+    background-color: #0f172a;
+    color: white;
+}
+
+/* Grid Layout */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 25px;
+}
+
+/* Card Styles */
+.song-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--card-border);
+    border-radius: 24px;
+    padding: 1.8rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.song-card:hover {
+    transform: translateY(-8px);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);
+}
+
+.card-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    opacity: 0.8;
+}
+
+.song-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.song-artist {
+    font-size: 1rem;
+    color: var(--christmas-green);
+    margin: 0 0 1.5rem 0;
+    font-weight: 500;
+}
+
+.play-link {
+    margin-top: auto;
+    text-decoration: none;
+    color: white;
+    background-color: rgba(255,255,255,0.05);
+    padding: 10px 16px;
+    border-radius: 12px;
+    text-align: center;
+    font-size: 0.95rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid transparent;
+}
+
+.play-link:hover {
+    background-color: var(--christmas-red);
+    border-color: rgba(255,255,255,0.2);
+}
+
+.playlist-footer {
+    text-align: center;
+    padding: 6rem 0 4rem 0;
+    color: var(--text-muted);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 1.2rem;
+    opacity: 0.7;
+}
+
+/* Snow Animation */
+.snowflake {
+    position: fixed;
+    top: -10px;
+    color: white;
+    font-size: 1em;
+    opacity: 0.8;
+    z-index: 0;
+    user-select: none;
+    pointer-events: none;
+    animation: fall linear forwards;
+}
+
+@keyframes fall {
+    to { transform: translateY(105vh); }
+}
+
+@media (max-width: 768px) {
+    .controls-container {
+        flex-direction: column;
+    }
+    .festive-title {
+        font-size: 3rem;
+    }
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ... (Your existing CSS above) ... */
+
+/* Footer Actions */
+.footer-actions {
+    margin-top: 2rem;
+}
+
+/* Secondary Button (Download) */
+.btn-secondary {
+    background: transparent;
+    border: 2px solid var(--text-muted);
+    color: var(--text-muted);
+    padding: 10px 25px;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.btn-secondary:hover {
+    border-color: var(--christmas-green);
+    color: var(--christmas-green);
+    background: rgba(34, 197, 94, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(34, 197, 94, 0.2);
+}
+
+.btn-secondary svg {
+    margin-right: 8px;
+}
