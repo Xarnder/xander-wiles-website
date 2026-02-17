@@ -1188,8 +1188,8 @@ input:checked+.slider-small:before {
 }
 
 #google-login-btn {
-    background: white;
-    color: #333;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
     padding: 12px 24px;
     border-radius: 24px;
     font-size: 1.1rem;
@@ -1197,14 +1197,41 @@ input:checked+.slider-small:before {
     display: flex;
     align-items: center;
     gap: 10px;
-    border: none;
+    border: 1px solid var(--glass-border);
     cursor: pointer;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    transition: transform 0.2s;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+    animation: glowPulseBtn 2s infinite alternate;
 }
 
 #google-login-btn:hover {
     transform: scale(1.05);
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
+}
+
+@keyframes glowPulseBtn {
+    from {
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+    }
+
+    to {
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.7);
+    }
+}
+
+[data-theme="light"] #google-login-btn {
+    background: white;
+    color: #333;
+    border: none;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    animation: none;
+}
+
+[data-theme="light"] #google-login-btn:hover {
+    transform: scale(1.05);
+    background: white;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
 }
 
 #logout-btn {

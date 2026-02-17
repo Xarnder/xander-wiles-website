@@ -182,6 +182,11 @@ export function updateSetting(settingKey, value) {
     // Nested field update support simply
     const updateObj = {};
     updateObj[`settings.${settingKey}`] = value;
+
+    if (settingKey === 'theme') {
+        localStorage.setItem('theme', value);
+    }
+
     return updateDoc(doc(db, "users", state.currentUser.uid), updateObj)
         .catch(e => handleSyncError(e));
 }

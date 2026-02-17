@@ -118,6 +118,9 @@ onAuthStateChanged(auth, (user) => {
         stopSyncTimer();
         cleanupListeners();
         dateReset();
+        // Hide splash if generic login screen is shown
+        const splash = document.getElementById('splash-screen');
+        if (splash) splash.classList.add('hidden-splash');
     }
 });
 
@@ -159,6 +162,9 @@ function setupFirestoreListeners(uid) {
             state.appData.listOrder = data.listOrder || [];
 
             // Apply Settings
+            if (state.appData.settings.theme) {
+                localStorage.setItem('theme', state.appData.settings.theme);
+            }
             document.documentElement.setAttribute('data-theme', state.appData.settings.theme);
             if (projectTitleInput) projectTitleInput.value = state.appData.projectTitle;
             if (document.getElementById('auto-archive-toggle')) document.getElementById('auto-archive-toggle').checked = state.appData.settings.autoArchive;
@@ -186,6 +192,14 @@ function setupFirestoreListeners(uid) {
             });
         }
         UI.renderBoard();
+
+        // Hide Splash on first load
+        const splash = document.getElementById('splash-screen');
+        if (splash) {
+            // Small delay to ensure render is painted
+            setTimeout(() => splash.classList.add('hidden-splash'), 100);
+        }
+
     }, (error) => API.handleSyncError(error)));
 
     // 2. Lists
