@@ -45,7 +45,8 @@ export default function CalendarView() {
                     querySnapshot.forEach((doc) => {
                         const data = doc.data();
                         entryData.set(doc.id, {
-                            wordCount: countWords(data.content || '')
+                            wordCount: countWords(data.content || ''),
+                            hasImage: !!data.imageUrl || !!data.imageMetadata
                         });
                     });
                     setEntries(entryData);
@@ -253,6 +254,9 @@ export default function CalendarView() {
                                                         title={entry ? `${entry.wordCount} words` : ''}
                                                     >
                                                         {day}
+                                                        {entry && entry.hasImage && (
+                                                            <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border border-[#0a0a0b] transform translate-x-1/4 -translate-y-1/4"></div>
+                                                        )}
                                                     </button>
                                                 );
                                             })}
