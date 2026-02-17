@@ -1,6 +1,6 @@
 {
     "version": 2,
-    "buildCommand": "npm run build",
+    "buildCommand": "node build.js",
     "outputDirectory": "deploy_out",
     "rewrites": [
         {

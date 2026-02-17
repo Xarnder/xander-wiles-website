@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xander Wiles</title>
+
+    <!-- Favicon and App Icon Links -->
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/images/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon-16x16.png">
+    <link rel="manifest" href="assets/site.webmanifest">
+    <link rel="shortcut icon" href="assets/images/favicon.ico">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="msapplication-config" content="assets/browserconfig.xml">
+    <meta name="theme-color" content="#ffffff">
+
+    <!-- Link to Shared CSS -->
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <!-- Background elements from your original design -->
+    <div class="background-overlay"></div>
+    <div class="floating-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+    </div>
+
+    <!-- The header now correctly contains the navigation again -->
+    <div id="main-nav-placeholder"></div>
+
+    <main class="app-container">
+        <div class="top-section-grid">
+            <div class="hero-card glass-card">
+                <picture>
+                    <!-- The browser tries to load this AVIF file first -->
+                    <source srcset="assets/images/xander_Correted_Edited.avif" type="image/avif">
+
+                    <!-- If it can't, it tries this WebP file next -->
+                    <source srcset="assets/images/Xander_Corrected_Edited.webp" type="image/webp">
+
+                    <!-- This is the final fallback for older browsers. It also provides the alt text. -->
+                    <img src="assets/images/Xander Corrected Edited.png" alt="A profile picture of Xander Wiles"
+                        class="profile-picture" width="300" height="300" loading="lazy">
+                </picture>
+                <h1>Welcome</h1>
+                <p>Select a game or page from the navigation menu below to get started. All projects are built with
+                    passion
+                    and a lot of JavaScript.</p>
+            </div>
+
+            <!-- Stacked Side Cards -->
+            <div class="hero-side-stack">
+                <a href="/pages/To-Do-List/" class="page-card glass-card top-feature-card">
+                    <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon"
+                        loading="lazy">
+                    <h3>To Do List</h3>
+                    <p>Manage tasks with drag-and-drop & linked lists.</p>
+                </a>
+
+                <div class="about-card glass-card">
+                    <h3>About Me</h3>
+                    <p class="tagline">"Curious. Ambitious. Technology Lover."</p>
+                    <p class="bio-text">
+                        Hi, I'm <strong>Xander</strong>. I'm a 23-year-old software engineer and artist from the UK.
+                        I hold a degree in Computer Animation and Masters in
+                        <strong>Artificial
+                            Intelligence</strong>.
+                    </p>
+                    <p class="bio-text">
+                        I love bringing ideas to life, whether that’s coding up a new web app, designing a game, or
+                        training an AI Model. When I’m not at the keyboard, you’ll find me with my Lumix S5 in hand or
+                        adding
+                        to my journal, which recently hit over 1,000 entries!
+                    </p>
+                    <div class="interests-tags">
+                        <span class="tag">🚀 AI & Tech</span>
+                        <span class="tag">🎨 Art</span>
+                        <span class="tag">🎻 Cello</span>
+                        <a href="/pages/journal/" class="tag">☕ Daily Journal</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- === Best Pages === -->
+        <h2 class="section-title">Best Pages</h2>
+        <div class="page-grid best-pages-grid">
+            <a href="/games/rocket-lander/" class="page-card glass-card">
+                <img src="/games/rocket-lander/favicon.png" class="page-icon" alt="Rocket Lander Icon" loading="lazy">
+                <h3>Rocket Lander 2</h3>
+                <p>A challenging physics-based game. Can you land the rocket safely?</p>
+            </a>
+            <a href="/pages/Puzzle-Game/" class="page-card glass-card special-puzzle-game-card">
+                <img src="/pages/Puzzle-Game/favicon-dark.svg" class="page-icon" alt="Puzzle Game Icon" loading="lazy">
+                <h3>Puzzle Game</h3>
+                <p>A puzzle game</p>
+            </a>
+            <a href="/pages/To-Do-List/" class="page-card glass-card">
+                <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon" loading="lazy">
+                <h3>To Do List</h3>
+                <p>A tool for managing tasks and to-dos with features like drag-and-drop and linked tasks.</p>
+            </a>
+            <a href="/pages/Local-AI/" class="page-card glass-card">
+                <img src="/pages/Local-AI/favicon-dark.svg" class="page-icon" alt="Local AI Icon" loading="lazy">
+                <h3>Local AI</h3>
+                <p>A tool for running AI models locally.</p>
+            </a>
+            <a href="/pages/Poster_Gen/" class="page-card glass-card">
+                <img src="/pages/Poster_Gen/favicon-dark.svg" class="page-icon" alt="Poster Maker Icon" loading="lazy">
+                <h3>Poster Maker</h3>
+                <p>A tool for creating custom posters with editable text and colors.</p>
+            </a>
+            <a href="/pages/Machine-Learning-Explanation/" class="page-card glass-card">
+                <img src="/pages/Machine-Learning-Explanation/favicon-dark.svg" class="page-icon"
+                    alt="Machine Learning Toy Icon" loading="lazy">
+                <h3>Machine Learning Toy</h3>
+                <p>Interactive visualization of machine learning concepts.</p>
+            </a>
+            <a href="/pages/life-counter-extension/" class="page-card glass-card">
+                <img src="/pages/life-counter-extension/favicon-dark.svg" class="page-icon"
+                    alt="Your life in weeks Icon" loading="lazy">
+                <h3>Your life in weeks</h3>
+                <p>Visualize your life in weeks with this simple tool.</p>
+            </a>
+            <a href="pages/Essential_Items/" class="page-card glass-card">
+                <img src="/pages/Essential_Items/favicon-dark.svg" class="page-icon"
+                    alt="Essential Items Checklist Icon" loading="lazy">
+                <h3>Essential Items Checklist</h3>
+                <p>A checklist of basic needs to ensure you're prepared.</p>
+            </a>
+            <a href="/pages/Batch_Image_Manger/" class="page-card glass-card">
+                <img src="/pages/Batch_Image_Manger/favicon-dark.svg" class="page-icon" alt="Batch Image Manger Icon"
+                    loading="lazy">
+                <h3>Batch Image Manger</h3>
+                <p>Simple Batch Image Manger</p>
+            </a>
+            <a href="/pages/tax_bracket_visualizer/" class="page-card glass-card">
+                <img src="/pages/tax_bracket_visualizer/favicon-dark.svg" class="page-icon"
+                    alt="Tax Bracket Visualiser Icon" loading="lazy">
+                <h3>Tax Bracket Visualiser</h3>
+                <p>A tool to visualize UK tax brackets and calculate take-home pay.</p>
+            </a>
+            <a href="/pages/FOV-Screen-Calculator/" class="page-card glass-card">
+                <img src="/pages/FOV-Screen-Calculator/favicon-dark.svg" class="page-icon"
+                    alt="FOV Screen Calculator Icon" loading="lazy">
+                <h3>FOV Screen Calculator</h3>
+                <p>A tool for calculating the field of view of a screen.</p>
+            </a>
+            <a href="/pages/3d-Model-Viewer/" class="page-card glass-card">
+                <img src="/pages/3d-Model-Viewer/favicon-dark.svg" class="page-icon" alt="3D Model Viewer Icon"
+                    loading="lazy">
+                <h3>3D Model Viewer</h3>
+                <p>A tool for viewing 3D models.</p>
+            </a>
+            <a href="/pages/Akensile/" class="page-card glass-card special-akensile-card">
+                <img src="/pages/Akensile/favicon-dark.svg" class="page-icon" alt="Akensile Icon" loading="lazy">
+                <h3>Akensile</h3>
+                <p>Discover more about the book Akensile</p>
+            </a>
+
+        </div>
+
+
+        <!-- === UTILITIES & PRODUCTIVITY === -->
+        <h2 class="section-title">Utilities & Productivity</h2>
+        <div class="page-grid">
+            <a href="/pages/To-Do-List/" class="page-card glass-card">
+                <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon" loading="lazy">
+                <h3>To Do List</h3>
+                <p>A tool for managing tasks and to-dos with features like drag-and-drop and linked tasks.</p>
+            </a>
+            <a href="/pages/Local-AI/" class="page-card glass-card">
+                <img src="/pages/Local-AI/favicon-dark.svg" class="page-icon" alt="Local AI Icon" loading="lazy">
+                <h3>Local AI</h3>
+                <p>A tool for running AI models locally.</p>
+            </a>
+            <a href="/pages/tax_bracket_visualizer/" class="page-card glass-card">
+                <img src="/pages/tax_bracket_visualizer/favicon-dark.svg" class="page-icon"
+                    alt="Tax Bracket Visualiser Icon" loading="lazy">
+                <h3>Tax Bracket Visualiser</h3>
+                <p>A tool to visualize UK tax brackets and calculate take-home pay.</p>
+            </a>
+            <a href="/pages/Table_Extractor/" class="page-card glass-card">
+                <img src="/pages/Table_Extractor/favicon-dark.svg" class="page-icon" alt="Table Extractor Icon"
+                    loading="lazy">
+                <h3>Table Extractor</h3>
+                <p>A tool to extract tables from PDF and export as a CSV file.</p>
+            </a>
+            <a href="/pages/WhatsAppViewer/" class="page-card glass-card">
+                <img src="/pages/WhatsAppViewer/favicon.png" class="page-icon" alt="WhatsApp Chat Viewer Icon"
+                    loading="lazy">
+                <h3>WhatsApp Chat Viewer</h3>
+                <p>A Simple WhatsApp Chat Viewer</p>
+            </a>
+            <a href="pages/Timeline_Generator/" class="page-card glass-card">
+                <img src="/pages/Timeline_Generator/favicon-dark.svg" class="page-icon" alt="Timeline Generator Icon"
+                    loading="lazy">
+                <h3>Timeline Generator</h3>
+                <p>With this tool, you can easily create a timeline from your text input.</p>
+            </a>
+            <a href="/pages/Flashcard_App/" class="page-card glass-card">
+                <img src="/pages/Flashcard_App/favicon.png" class="page-icon" alt="Flashcard App Icon" loading="lazy">
+                <h3>Flashcard App</h3>
+                <p>Simple Flashcard App</p>
+            </a>
+            <a href="/pages/life-counter-extension/" class="page-card glass-card">
+                <img src="/pages/life-counter-extension/favicon-dark.svg" class="page-icon"
+                    alt="Your life in weeks Icon" loading="lazy">
+                <h3>Your life in weeks</h3>
+                <p>Visualize your life in weeks with this simple tool.</p>
+            </a>
+            <a href="/pages/Ratio_Calculator/" class="page-card glass-card">
+                <img src="/pages/Ratio_Calculator/favicon-dark.svg" class="page-icon" alt="Ratio Calculator Icon"
+                    loading="lazy">
+                <h3>Ratio Calculator</h3>
+                <p>A tool for calculating ratios based on user-defined lines.</p>
+            </a>
+            <a href="/pages/Text-Compactor/" class="page-card glass-card">
+                <img src="/pages/Text-Compactor/favicon-dark.svg" class="page-icon" alt="Text Compactor Icon"
+                    loading="lazy">
+                <h3>Text Compactor</h3>
+                <p>A tool for compacting text into a printable format.</p>
+            </a>
+            <a href="/pages/ultimate-christmas-playlist/" class="page-card glass-card">
+                <img src="/pages/ultimate-christmas-playlist/favicon-dark.svg" class="page-icon"
+                    alt="Ultimate Christmas Playlist Icon" loading="lazy">
+                <h3>Ultimate Christmas Playlist</h3>
+                <p>A curated list of festive songs for the holiday season.</p>
+            </a>
+            <a href="pages/Essential_Items/" class="page-card glass-card">
+                <img src="/pages/Essential_Items/favicon-dark.svg" class="page-icon"
+                    alt="Essential Items Checklist Icon" loading="lazy">
+                <h3>Essential Items Checklist</h3>
+                <p>A checklist of basic needs to ensure you're prepared.</p>
+            </a>
+            <a href="/pages/midi-editor/" class="page-card glass-card">
+                <img src="/pages/midi-editor/favicon-dark.svg" class="page-icon" alt="MIDI Editor Icon" loading="lazy">
+                <h3>MIDI Editor</h3>
+                <p>A tool for editing MIDI files.</p>
+            </a>
+            <a href="/pages/Youtube-Link-Extractor/" class="page-card glass-card">
+                <img src="/pages/Youtube-Link-Extractor/favicon-dark.svg" class="page-icon" alt="XR Viewer Icon"
+                    loading="lazy">
+                <h3>Youtube Link Extractor</h3>
+                <p>A tool for extracting links from a Youtube Playlists.</p>
+            </a>
+            <a href="/pages/FOV-Screen-Calculator/" class="page-card glass-card">
+                <img src="/pages/FOV-Screen-Calculator/favicon-dark.svg" class="page-icon"
+                    alt="FOV Screen Calculator Icon" loading="lazy">
+                <h3>FOV Screen Calculator</h3>
+                <p>A tool for calculating the field of view of a screen.</p>
+            </a>
+            <a href="/pages/PDF-Manger/" class="page-card glass-card">
+                <img src="/pages/PDF-Manger/favicon-dark.svg" class="page-icon" alt="FOV Screen Calculator Icon"
+                    loading="lazy">
+                <h3>PDF Manger</h3>
+                <p>A tool for managing PDFs</p>
+            </a>
+            <a href="/pages/Image_To_PDF_Converter/" class="page-card glass-card">
+                <img src="/pages/Image_To_PDF_Converter/favicon-dark.svg" class="page-icon"
+                    alt="Image To PDF Converter Icon" loading="lazy">
+                <h3>Lossless Image To PDF Converter</h3>
+                <p>A tool for converting images to PDFs without loss of quality.</p>
+            </a>
+
+        </div>
+
+
+        <!-- === IMAGE & GRAPHICS TOOLS === -->
+        <h2 class="section-title">Image & Graphics Tools</h2>
+        <div class="page-grid">
+            <a href="/pages/Poster_Gen/" class="page-card glass-card">
+                <img src="/pages/Poster_Gen/favicon-dark.svg" class="page-icon" alt="Poster Maker Icon" loading="lazy">
+                <h3>Poster Maker</h3>
+                <p>A tool for creating custom posters with editable text and colors.</p>
+            </a>
+            <a href="/pages/Favicon_Maker/" class="page-card glass-card">
+                <img src="/pages/Favicon_Maker/favicon-dark.svg" class="page-icon" alt="Favicon Maker Icon"
+                    loading="lazy">
+                <h3>Favicon Maker</h3>
+                <p>A tool for generating favicons from images.</p>
+            </a>
+            <a href="/pages/Batch_Image_Manger/" class="page-card glass-card">
+                <img src="/pages/Batch_Image_Manger/favicon-dark.svg" class="page-icon" alt="Batch Image Manger Icon"
+                    loading="lazy">
+                <h3>Batch Image Manger</h3>
+                <p>Simple Batch Image Manger</p>
+            </a>
+            <a href="/pages/Compare_Images/" class="page-card glass-card">
+                <img src="/pages/Compare_Images/assets/images/icon32.png" class="page-icon" alt="Compare Images Icon"
+                    loading="lazy">
+                <h3>Compare Images</h3>
+                <p>Compare two images side by side.</p>
+            </a>
+            <a href="pages/replace_region/" class="page-card glass-card">
+                <img src="/pages/replace_region/favicon-dark.svg" class="page-icon" alt="Replace Image Region Icon"
+                    loading="lazy">
+                <h3>Replace Image Region</h3>
+                <p>A tool to replace a region in an image.</p>
+            </a>
+            <a href="/pages/image_align_tool/" class="page-card glass-card">
+                <img src="/pages/image_align_tool/favicon-dark.svg" class="page-icon" alt="Image Align Tool Icon"
+                    loading="lazy">
+                <h3>Image Align Tool</h3>
+                <p>A tool for aligning images based on user-defined points.</p>
+            </a>
+            <a href="/pages/360_image_viewer/" class="page-card glass-card">
+                <img src="/pages/360_image_viewer/favicon-dark.svg" class="page-icon" alt="360 Image Viewer Icon"
+                    loading="lazy">
+                <h3>360 Image Viewer</h3>
+                <p>A tool for viewing 360-degree images.</p>
+            </a>
+            <a href="/pages/XR_Viewer/" class="page-card glass-card">
+                <img src="/pages/XR_Viewer/favicon-dark.svg" class="page-icon" alt="XR Viewer Icon" loading="lazy">
+                <h3>AR Viewer</h3>
+                <p>A tool for viewing 3D models in AR in a headset.</p>
+            </a>
+            <a href="/pages/Face_Crop_Tool/" class="page-card glass-card">
+                <img src="/pages/Face_Crop_Tool/favicon-dark.svg" class="page-icon" alt="Face Crop Tool Icon"
+                    loading="lazy">
+                <h3>Face Crop Tool</h3>
+                <p>A tool for cropping faces from images.</p>
+            </a>
+        </div>
+
+
+        <!-- === GAMES === -->
+        <h2 class="section-title">Games</h2>
+        <div class="page-grid">
+            <a href="/games/rocket-lander/" class="page-card glass-card">
+                <img src="/games/rocket-lander/favicon.png" class="page-icon" alt="Rocket Lander Icon" loading="lazy">
+                <h3>Rocket Lander 2</h3>
+                <p>A challenging physics-based game. Can you land the rocket safely?</p>
+            </a>
+            <a href="/pages/3D-Game/" class="page-card glass-card">
+                <img src="/pages/3D-Game/favicon-dark.svg" class="page-icon" alt="3D Game Icon" loading="lazy">
+                <h3>3D Game</h3>
+                <p>A 3D game built with Three.js</p>
+            </a>
+            <a href="/pages/Machine-Learning-Explanation/" class="page-card glass-card">
+                <img src="/pages/Machine-Learning-Explanation/favicon-dark.svg" class="page-icon"
+                    alt="Machine Learning Toy Icon" loading="lazy">
+                <h3>Machine Learning Toy</h3>
+                <p>Interactive visualization of machine learning concepts.</p>
+            </a>
+            <a href="/pages/word-game/" class="page-card glass-card">
+                <img src="/pages/word-game/favicon-dark.svg" class="page-icon" alt="Word Game Icon" loading="lazy">
+                <h3>Word Game</h3>
+                <p>A classic word game with big buttons and flower rewards.</p>
+            </a>
+            <a href="/games/original-rocket-lander/" class="page-card glass-card">
+                <img src="/games/original-rocket-lander/favicon-dark.svg" class="page-icon"
+                    alt="Original Rocket Lander Icon" loading="lazy">
+                <h3>Original Rocket Lander (2012)</h3>
+                <p>The Original Rocket Lander game made at age 10</p>
+            </a>
+            <a href="/pages/Sensory-Experience/" class="page-card glass-card">
+                <img src="/pages/Sensory-Experience/favicon-dark.svg" class="page-icon" alt="Sensory Experience Icon"
+                    loading="lazy">
+                <h3>Sensory Experience</h3>
+                <p>Explore a unique sensory experience</p>
+            </a>
+            <a href="/pages/Puzzle-Game/" class="page-card glass-card special-puzzle-game-card">
+                <img src="/pages/Puzzle-Game/favicon-dark.svg" class="page-icon" alt="Puzzle Game Icon" loading="lazy">
+                <h3>Puzzle Game</h3>
+                <p>A puzzle game</p>
+            </a>
+
+        </div>
+
+        <!-- === GUIDES, DEMOS & MEMORIALS === -->
+        <h2 class="section-title">Guides, Demos & More</h2>
+        <div class="page-grid">
+            <a href="/pages/Akensile/" class="page-card glass-card special-akensile-card">
+                <img src="/pages/Akensile/favicon-dark.svg" class="page-icon" alt="Akensile Icon" loading="lazy">
+                <h3>Akensile</h3>
+                <p>Discover more about the book Akensile</p>
+            </a>
+            <a href="/pages/Balanced-Life/" class="page-card glass-card special-balanced-life-card">
+                <img src="/pages/Balanced-Life/favicon-dark.svg" class="page-icon" alt="Balanced Life Icon"
+                    loading="lazy">
+                <h3>Balanced Life</h3>
+                <p>Discover more about the a Balanced Life</p>
+            </a>
+            <a href="/pages/3d-Model-Viewer/" class="page-card glass-card">
+                <img src="/pages/3d-Model-Viewer/favicon-dark.svg" class="page-icon" alt="3D Model Viewer Icon"
+                    loading="lazy">
+                <h3>3D Model Viewer</h3>
+                <p>A tool for viewing 3D models.</p>
+            </a>
+            <a href="pages/Docker_Guide/" class="page-card glass-card">
+                <img src="/pages/Docker_Guide/favicon-dark.svg" class="page-icon" alt="Docker Guide Icon"
+                    loading="lazy">
+                <h3>Docker Guide</h3>
+                <p>A guide for setting up Docker containers</p>
+            </a>
+            <a href="/pages/web_dev_sever/" class="page-card glass-card">
+                <img src="/pages/web_dev_sever/favicon-dark.svg" class="page-icon" alt="Web Dev Server Setup Icon"
+                    loading="lazy">
+                <h3>Web Dev Server Setup</h3>
+                <p>A guide for setting up a local development server with VS Code and Ngrok.</p>
+            </a>
+            <a href="/pages/Siewli/" class="page-card glass-card">
+                <img src="/pages/Siewli/favicon-dark.svg" class="page-icon" alt="Siewli Kok Memorial Icon"
+                    loading="lazy">
+                <h3>Siewli Kok Memorial</h3>
+                <p>A tribute page for Siewli Kok</p>
+            </a>
+            <a href="/pages/Gaussian_Splatting/" class="page-card glass-card">
+                <img src="/pages/Gaussian_Splatting/favicon-dark.svg" class="page-icon"
+                    alt="Gaussian Splatting Explainer Icon" loading="lazy">
+                <h3>Gaussian Splatting Explainer</h3>
+                <p>A project exploring Gaussian splatting techniques.</p>
+            </a>
+            <a href="/pages/Alignment_Game/" class="page-card glass-card">
+                <img src="/pages/Alignment_Game/favicon-dark.svg" class="page-icon" alt="Alignment Game Icon"
+                    loading="lazy">
+                <h3>Alignment Game</h3>
+                <p>A project focused on alignment techniques for machine learning.</p>
+            </a>
+            <a href="/pages/Convolution-Calculator/" class="page-card glass-card">
+                <img src="/pages/Convolution-Calculator/favicon-dark.svg" class="page-icon"
+                    alt="Convolution Calculator Icon" loading="lazy">
+                <h3>Convolution Calculator</h3>
+                <p>A tool for visualizing convolution operations.</p>
+            </a>
+            <a href="/pages/PDF-Question-Answer-Tool/" class="page-card glass-card">
+                <img src="/pages/PDF-Question-Answer-Tool/favicon-dark.svg" class="page-icon"
+                    alt="PDF Question Answer Tool Icon" loading="lazy">
+                <h3>PDF Question Answer Tool</h3>
+                <p>A tool for answering questions about PDFs</p>
+            </a>
+            <a href="http://www.akensile.com/" class="page-card glass-card">
+                <img src="/assets/icons/akensile/favicon-dark.svg" class="page-icon" alt="Akensile Icon" loading="lazy">
+                <h3>Legacy Akensile Site</h3>
+                <p>The old webpage about the book Akensile</p>
+            </a>
+            <a href="/pages/auto-hide-chrome-extension/" class="page-card glass-card">
+                <img src="/pages/auto-hide-chrome-extension/favicon-dark.svg" class="page-icon"
+                    alt="Auto Hide Chrome Extension Icon" loading="lazy">
+                <h3>Auto Hide Chrome Extension</h3>
+                <p>A chrome extension that hides the chrome toolbar when scrolling down and shows it when scrolling
+                    up.</p>
+            </a>
+        </div>
+
+
+
+
+        <!-- Contact Card -->
+        <div class="contact-card glass-card">
+            <div class="contact-icon">✉️</div>
+            <div class="contact-content">
+                <h3>Get in Touch</h3>
+                <p>Please contact me at <a href="mailto:xanderwileswork@gmail.com">xanderwileswork@gmail.com</a></p>
+            </div>
+        </div>
+
+        <div class="support-links-grid">
+            <a href="https://github.com/Xarnder" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
+                <span>GitHub</span>
+            </a>
+            <a href="https://www.instagram.com/xander.and.the.lens/" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
+                <span>Instagram</span>
+            </a>
+            <a href="https://www.youtube.com/@XanderWiles" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
+                <span>YouTube</span>
+            </a>
+            <a href="https://buymeacoffee.com/xarnder" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
+                <span>Buy Me a Coffee</span>
+            </a>
+            <a href="https://www.linkedin.com/in/xander-wiles-245999169/" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
+                <span>LinkedIn</span>
+            </a>
+            <a href="https://www.youtube.com/watch?v=xvFZjo5PgG0" target="_blank" rel="noopener noreferrer"
+                class="support-card glass-card">
+                <span>Only Fans</span>
+            </a>
+        </div>
+        <!-- Hidden Test Pages Section -->
+        <div id="hidden-test-pages" class="hidden-pages-container" style="display: none;">
+            <h2 class="section-title">Test Pages</h2>
+            <div class="page-grid">
+                <a href="/beta-pages/beta-to-do-list/" class="page-card glass-card special-beta-to-do-list-card">
+                    <img src="/beta-pages/beta-to-do-list/favicon-dark.svg" class="page-icon" alt="Balanced Life Icon"
+                        loading="lazy">
+                    <h3>Beta To Do List</h3>
+                    <p>A beta version of a to do list</p>
+                </a>
+                <a href="/pages/journal/" class="page-card glass-card special-journal-card">
+                    <img src="/pages/journal/favicon-dark.svg" class="page-icon" alt="Journal Icon"
+                        loading="lazy">
+                    <h3>Journal App</h3>
+                    <p>A journal Application</p>
+                </a>
+                <a href="/pages/Pixel_Texture_Maker/" class="page-card glass-card special-pixel-texture-maker-card">
+                    <img src="/pages/Pixel_Texture_Maker/favicon-dark.svg" class="page-icon" alt="Pixel Texture Maker Icon"
+                        loading="lazy">
+                    <h3>Pixel Texture Maker</h3>
+                    <p>A tool for creating custom pixel textures</p>
+                </a>
+                <a href="/pages/Social-Network/" class="page-card glass-card special-social-network-card">
+                    <img src="/pages/Social-Network/favicon-dark.svg" class="page-icon" alt="Social Network Icon"
+                        loading="lazy">
+                    <h3>Social Network</h3>
+                    <p>A social network</p>
+                </a>
+
+
+            </div>
+        </div>
+
+        <div class="hidden-pages-toggle-container">
+            <button id="toggle-hidden-pages" class="glass-card toggle-button">Show Hidden Test Pages</button>
+        </div>
+    </main>
+
+    <script src="assets/js/main.js"></script>
+    <script src="/assets/js/nav-loader.js"></script> <!-- ADD THIS LINE -->
+</body>
+
+</html>

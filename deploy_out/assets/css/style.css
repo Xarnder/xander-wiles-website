@@ -1,0 +1,748 @@
+/* --- Foundational Styles --- */
+:root {
+    --bg-primary: #0a0a0b;
+    --bg-secondary: #111115;
+    --glass-bg: rgba(26, 26, 32, 0.7);
+    --glass-bg-nav: rgba(26, 26, 32, 0.99);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent-orange: #f59e0b;
+    --accent-purple: #8b5cf6;
+    --accent-cyan: #06b6d4;
+    --gradient-primary: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+    --radius-xl: 20px;
+}
+
+/* --- Global & Body Styles --- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 1rem;
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* Class added by JS to prevent scrolling when the mobile menu is open */
+body.nav-open {
+    overflow: hidden;
+}
+
+/* --- Background Decorations --- */
+.background-overlay,
+.floating-shapes {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.background-overlay {
+    background: radial-gradient(circle at 25% 25%, rgba(139, 92, 246, 0.1) 0%, transparent 50%), radial-gradient(circle at 75% 75%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
+}
+
+.shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.3;
+}
+
+.shape-1 {
+    width: 300px;
+    height: 300px;
+    background: var(--accent-purple);
+    top: 10%;
+    left: 10%;
+}
+
+.shape-2 {
+    width: 400px;
+    height: 400px;
+    background: var(--accent-cyan);
+    top: 50%;
+    right: 5%;
+}
+
+/* --- Main Layout & Card Styles --- */
+.app-container {
+    width: 100%;
+    max-width: 1200px;
+    /* <<< CHANGED: Increased from 800px to allow wider grid */
+    margin: 1.5rem auto 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    padding: 2rem;
+}
+
+a {
+    color: var(--accent-cyan);
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+a:hover {
+    color: var(--text-primary);
+}
+
+/* --- Header & Desktop Navigation --- */
+.site-header {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem 2rem;
+}
+
+.site-header .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.site-header .logo {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    gap: 2rem;
+}
+
+.nav-links a {
+    font-weight: 600;
+    color: var(--text-secondary);
+    position: relative;
+    padding: 0.5rem 0;
+}
+
+.nav-links a::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--gradient-primary);
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.3s ease-in-out;
+}
+
+.nav-links a:hover::after,
+.nav-links a:focus::after {
+    transform: scaleX(1);
+    transform-origin: left;
+}
+
+.nav-toggle {
+    display: none;
+    /* Hamburger is hidden by default on desktop */
+}
+
+/* --- Page Content Specific Styles --- */
+.hero-card {
+    text-align: center;
+}
+
+.hero-card h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hero-card p {
+    color: var(--text-secondary);
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+}
+
+/* --- PROFILE PICTURE LAZY LOAD STYLES --- */
+.profile-picture {
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin: 0 auto 1.5rem;
+    display: block;
+    border: 3px solid var(--glass-border);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    /* START: Styles for the blur-up effect */
+    filter: blur(20px);
+    transition: filter 0.3s ease-in-out;
+    /* END: Styles for the blur-up effect */
+}
+
+.profile-picture.loaded {
+    filter: blur(0);
+}
+
+/* --- END PROFILE PICTURE STYLES --- */
+
+.page-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+/* --- Top Section Grid (Profile + Featured App) --- */
+.top-section-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+    align-items: stretch;
+    /* Make them same height */
+}
+
+/* Make sure the featured card takes up full height */
+/* Make sure the featured card takes up full height */
+/* UPDATED: This selector was too broad and affected the nested cards. 
+   We only want this behavior if a page-card is a direct child of the grid (legacy support) 
+   or we can just remove it and style specific instances. 
+   For now, I'll restrict it to direct children or potential future uses. */
+.top-section-grid>.page-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    /* Override any potential margins */
+}
+
+/* New Right Column Stack */
+.hero-side-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    height: 100%;
+}
+
+.hero-side-stack .page-card {
+    /* To Do List card takes up natural space based on content */
+    flex: 0 0 auto;
+    /* Inherit grid display from .page-card */
+}
+
+/* Removed .hero-side-stack .page-card .page-icon override to use global 64px */
+
+.hero-side-stack .page-card h3 {
+    margin-bottom: 0;
+    /* Align with global style */
+}
+
+.hero-side-stack .page-card p {
+    font-size: 0.9rem;
+}
+
+/* About Card Styles */
+.about-card {
+    flex: 1;
+    /* Takes up remaining vertical space */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 2rem;
+    text-align: left;
+}
+
+.about-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    width: fit-content;
+}
+
+.about-card .tagline {
+    font-style: italic;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.about-card .bio-text {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+.about-card .bio-text strong {
+    color: var(--text-primary);
+}
+
+.interests-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: auto;
+    /* Push to bottom if space allows */
+}
+
+.tag {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+}
+
+.tag:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border-color: var(--accent-cyan);
+    transform: translateY(-2px);
+}
+
+
+.page-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    text-align: left;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    gap: 0.5rem 1.5rem;
+    align-items: center;
+    padding: 1.5rem;
+}
+
+.page-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    border-color: var(--accent-purple);
+}
+
+.page-card h3 {
+    margin-bottom: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+}
+
+.page-card p {
+    color: var(--text-muted);
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0;
+    align-self: start;
+}
+
+.page-icon {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 0;
+    display: inline-block;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    grid-column: 1;
+    grid-row: 1 / -1;
+}
+
+.support-links-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1.5rem;
+}
+
+.support-card {
+    padding: 1.25rem 1rem;
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+}
+
+.support-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    border-color: var(--accent-cyan);
+    color: var(--text-primary);
+}
+
+/* --- Contact Card --- */
+.contact-card {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.5rem 2rem;
+    margin-top: 2rem;
+}
+
+.contact-icon {
+    font-size: 2.5rem;
+    line-height: 1;
+}
+
+.contact-content h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    width: fit-content;
+}
+
+.contact-content p {
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.contact-content a {
+    color: var(--accent-cyan);
+    font-weight: 600;
+    transition: color 0.3s ease;
+}
+
+.contact-content a:hover {
+    color: var(--text-primary);
+}
+
+/* --- Section Headers --- */
+.section-title {
+    font-size: 1.8rem;
+    margin-top: 2rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+    padding-left: 0.5rem;
+    border-left: 4px solid var(--accent-purple);
+    line-height: 1.2;
+}
+
+/* --- Special Cards --- */
+@keyframes purple-pulse {
+    0% {
+        box-shadow: 0 0 0 rgba(139, 92, 246, 0);
+        border-color: var(--glass-border);
+    }
+
+    50% {
+        box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+        border-color: var(--accent-purple);
+    }
+
+    100% {
+        box-shadow: 0 0 0 rgba(139, 92, 246, 0);
+        border-color: var(--glass-border);
+    }
+}
+
+.special-akensile-card {
+    animation: purple-pulse 3s infinite ease-in-out;
+}
+
+/* Ensure hover state overrides or combines nicely */
+.special-akensile-card:hover {
+    animation: none;
+    /* Stop pulsing on hover to stick to the active hover state */
+    box-shadow: 0 0 25px rgba(139, 92, 246, 0.8);
+    border-color: var(--accent-purple);
+    transform: translateY(-5px);
+}
+
+/* --- Best Pages Special Styling --- */
+.best-pages-grid .page-card {
+    position: relative;
+    border-color: transparent;
+    /* Hide default border */
+    background-clip: padding-box;
+    /* Ensure z-index is handled correctly for pseudo-elements */
+    z-index: 1;
+}
+
+/* Background of the card (Masking the center of the gradient) */
+.best-pages-grid .page-card::after {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    /* Controls border thickness */
+    background: var(--bg-primary);
+    /* Dark background to improve contrast */
+    border-radius: inherit;
+    z-index: -1;
+    opacity: 0.9;
+}
+
+/* Animated Gradient Border/Glow */
+.best-pages-grid .page-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: -2;
+    background: linear-gradient(45deg,
+            var(--accent-purple),
+            var(--accent-cyan),
+            var(--accent-orange),
+            var(--accent-purple));
+    background-size: 300% 300%;
+    border-radius: inherit;
+    animation: best-pages-gradient 4s ease infinite;
+    opacity: 0.7;
+    transition: all 0.3s ease;
+}
+
+.best-pages-grid .page-card:hover::before {
+    opacity: 1;
+    filter: blur(10px);
+    /* Outer glow effect */
+    inset: -3px;
+    /* Expand slightly */
+}
+
+/* Add a spotlight/sheen effect on hover */
+.best-pages-grid .page-card:hover {
+    transform: translateY(-5px) scale(1.02);
+}
+
+@keyframes best-pages-gradient {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+
+/* Optional: Gradient text for headers if preferred
+.section-title {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+}
+*/
+
+
+/*
+* === FINAL, WORKING MOBILE NAVIGATION SYSTEM ===
+*/
+@media (max-width: 768px) {
+
+    /* --- Basic Mobile Layout Adjustments --- */
+    body {
+        padding: 0;
+    }
+
+    .app-container {
+        padding: 0 1rem;
+        margin-top: 1rem;
+        gap: 1rem;
+    }
+
+    .top-section-grid {
+        grid-template-columns: 1fr;
+        /* Stack on mobile */
+    }
+
+    .site-header {
+        border-radius: 0;
+        position: relative;
+        /* Lifts the header stacking context */
+        z-index: 9999;
+        /* Ensures header is above the main content */
+    }
+
+    /* 1. Show the hamburger button and fix its position */
+    .nav-toggle {
+        display: block;
+        position: fixed;
+        top: 1.5rem;
+        right: 2rem;
+        z-index: 1001;
+        /* Highest z-index to stay on top */
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+        width: 2rem;
+        height: 1.5rem;
+    }
+
+    /* 2. Create the full-screen, blurred overlay using a pseudo-element */
+    /* This only appears when the menu is active */
+    .main-nav.active::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: 999;
+        /* Below the menu card but above page content */
+        background: rgba(10, 10, 11, 0.5);
+        backdrop-filter: blur(40px);
+        -webkit-backdrop-filter: blur(40px);
+    }
+
+    /* 3. On mobile, the menu list is hidden by default */
+    .nav-links {
+        display: none;
+    }
+
+    /* 4. When the nav is active, display the list and style it as the glass card */
+    .main-nav.active .nav-links {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+        align-items: center;
+
+        position: fixed;
+        z-index: 9999;
+
+        /* === FIX STARTS HERE === */
+        top: 4.5rem;
+        /* Position from the top, leaving space for the close button */
+        left: 50%;
+        transform: translateX(-50%);
+        /* Center horizontally only */
+        /* === FIX ENDS HERE === */
+
+        /* The glass card styling */
+        width: 90%;
+        max-width: 400px;
+        background: var(--glass-bg-nav);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-xl);
+        padding: 3rem 2rem;
+    }
+
+    /* 5. The hamburger to 'X' animation */
+    .hamburger {
+        display: block;
+        background: var(--text-primary);
+        height: 3px;
+        width: 100%;
+        border-radius: 2px;
+        position: absolute;
+        z-index: 9999;
+        left: 0;
+        transition: transform 300ms, opacity: 300ms;
+    }
+
+    .hamburger:nth-child(1) {
+        top: 0;
+    }
+
+    .hamburger:nth-child(2) {
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    .hamburger:nth-child(3) {
+        bottom: 0;
+    }
+
+    .main-nav.active .hamburger:nth-child(1) {
+        transform: translateY(10.5px) rotate(45deg);
+    }
+
+    .main-nav.active .hamburger:nth-child(2) {
+        opacity: 0;
+    }
+
+    .main-nav.active .hamburger:nth-child(3) {
+        transform: translateY(-10.5px) rotate(-45deg);
+    }
+}
+
+.main-nav .nav-links a.active {
+    color: #ffffff;
+    font-weight: bold;
+    /* Add this line for the glow effect */
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
+}
+
+/* --- Hidden Pages Toggle --- */
+.hidden-pages-toggle-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+}
+
+.toggle-button {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-radius: var(--radius-xl);
+}
+
+.toggle-button:hover {
+    background: var(--glass-bg);
+    color: var(--text-primary);
+    border-color: var(--accent-purple);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* --- Hidden Beta Section Styling --- */
+.hidden-pages-container {
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-xl);
+    border: 1px dashed var(--glass-border);
+    margin: 2rem 0;
+}
+
+.hidden-pages-container .section-title {
+    margin-top: 0;
+    border-left-color: var(--accent-orange);
+    /* Orange accent for beta */
+    color: var(--accent-orange);
+}
+
+.hidden-pages-container .page-card {
+    background: rgba(40, 40, 45, 0.6);
+    padding: 1.5rem;
+    /* Slightly different dark background */
+    border-color: rgba(245, 158, 11, 0.3);
+    /* Subtle orange border */
+}
+
+.hidden-pages-container .page-card:hover {
+    background: rgba(40, 40, 45, 0.8);
+    border-color: var(--accent-orange);
+    box-shadow: 0 10px 25px rgba(245, 158, 11, 0.15);
+    /* Orange glow */
+}
+
+.hidden-pages-container .page-card h3 {
+    color: var(--accent-orange) !important;
+}
