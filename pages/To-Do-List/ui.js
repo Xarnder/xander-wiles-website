@@ -336,11 +336,18 @@ export function createTaskElement(task, sourceListId, number) {
 
 export function updateTotalTaskCount() {
     let total = 0;
+    const isArchivedView = state.showArchived;
+
     Object.values(state.appData.tasks).forEach(task => {
-        if (!task.archived) total++;
+        if (isArchivedView) {
+            if (task.archived) total++;
+        } else {
+            if (!task.archived) total++;
+        }
     });
+
     if (total > 0) {
-        totalTaskCountEl.textContent = `Total: ${total}`;
+        totalTaskCountEl.textContent = isArchivedView ? `Total Archived: ${total}` : `Total: ${total}`;
         totalTaskCountEl.classList.remove('hidden');
     } else {
         totalTaskCountEl.classList.add('hidden');
