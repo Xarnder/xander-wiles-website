@@ -29,9 +29,8 @@ export default function EntryEditor() {
     const [showRawHeader, setShowRawHeader] = useState(false);
 
     // Image State
-    const [imageFile, setImageFile] = useState(null);
-    const [imageUrl, setImageUrl] = useState('');
-    const [imageMetadata, setImageMetadata] = useState(null);
+    const [images, setImages] = useState([]); // Array of { url, path, size }
+    const [imageToDelete, setImageToDelete] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -72,22 +71,23 @@ export default function EntryEditor() {
                     setTitle(data.title || '');
 
                     // Handle new schema vs legacy schema
-                    if (data.imageUrl) {
-                        setImageUrl(data.imageUrl);
-                        setImageMetadata({
-                            size: data.imageSize || 0,
-                            path: data.imagePath // Optional: keep path for deletion if needed, though user didn't explicitly ask for it, it's good practice
-                        });
+                    if (data.images && Array.isArray(data.images)) {
+                        setImages(data.images);
+                    } else if (data.imageUrl) {
+                        setImages([{
+                            url: data.imageUrl,
+                            path: data.imagePath || null,
+                            size: data.imageSize || 0
+                        }]);
                     } else if (data.imageMetadata) {
                         // Legacy fallback
-                        setImageUrl(data.imageMetadata.url);
-                        setImageMetadata({
-                            size: data.imageMetadata.sizeInBytes,
-                            path: data.imageMetadata.path
-                        });
+                        setImages([{
+                            url: data.imageMetadata.url,
+                            path: data.imageMetadata.path,
+                            size: data.imageMetadata.sizeInBytes
+                        }]);
                     } else {
-                        setImageUrl('');
-                        setImageMetadata(null);
+                        setImages([]);
                     }
                     setIsEditing(false); // Ensure we start in view mode for existing entries
                 } else {
@@ -95,8 +95,7 @@ export default function EntryEditor() {
                     setIsEditing(true);
                     setContent('');
                     setTitle('');
-                    setImageUrl('');
-                    setImageMetadata(null);
+                    setImages([]);
                 }
             } catch (error) {
                 console.error("Error fetching entry:", error);
@@ -124,37 +123,52 @@ export default function EntryEditor() {
     }, [content]);
 
     // Image Upload Handler
-    // Image Upload Handler
     const handleImageUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
 
-        setUploading(true);
-        // Set initial status based on file type
-        if (file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic') {
-            setStatusMessage('Converting Apple Photo format...');
-        } else {
-            setStatusMessage('Compressing & Uploading...');
+        if (images.length + files.length > 4) {
+            toastError("You can only have up to 4 images per entry.");
+            return;
         }
 
+        setUploading(true);
+        setStatusMessage('Compressing & Uploading...');
+
         try {
-            const compressedFile = await compressImage(file);
-
-            setStatusMessage('Uploading...');
+            const newImages = [];
             const storage = getStorage();
-            const storagePath = `users/${currentUser.uid}/images/${date}.webp`;
-            const storageRef = ref(storage, storagePath);
 
-            await uploadBytes(storageRef, compressedFile);
-            const downloadUrl = await getDownloadURL(storageRef);
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                // Update status for HEIC if needed
+                if (file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic') {
+                    setStatusMessage(`Converting image ${i + 1}...`);
+                } else {
+                    setStatusMessage(`Compressing image ${i + 1}...`);
+                }
 
-            setImageUrl(downloadUrl);
-            setImageMetadata({
-                size: compressedFile.size,
-                path: storagePath
-            });
+                // Compress
+                const compressedFile = await compressImage(file);
 
-            success('Image uploaded successfully');
+                // Upload
+                setStatusMessage(`Uploading image ${i + 1}...`);
+                const timestamp = Date.now();
+                const storagePath = `users/${currentUser.uid}/images/${date}_${timestamp}_${i}.webp`;
+                const storageRef = ref(storage, storagePath);
+
+                await uploadBytes(storageRef, compressedFile);
+                const downloadUrl = await getDownloadURL(storageRef);
+
+                newImages.push({
+                    url: downloadUrl,
+                    path: storagePath,
+                    size: compressedFile.size
+                });
+            }
+
+            setImages(prev => [...prev, ...newImages]);
+            success('Images uploaded successfully');
         } catch (error) {
             console.error("Error uploading image:", error);
             if (error.message === "Could not read this iPhone photo format.") {
@@ -165,25 +179,31 @@ export default function EntryEditor() {
         } finally {
             setUploading(false);
             setStatusMessage('');
+            // Reset input
+            e.target.value = null;
         }
     };
 
-    const handleRemoveImage = () => {
+    const handleRemoveImage = (index) => {
+        setImageToDelete(index);
         setShowDeleteConfirm(true);
     };
 
     const confirmRemoveImage = async () => {
+        if (imageToDelete === null) return;
+
         setUploading(true);
         try {
-            if (imageMetadata && imageMetadata.path) {
+            const image = images[imageToDelete];
+            if (image && image.path) {
                 const storage = getStorage();
-                const storageRef = ref(storage, imageMetadata.path);
+                const storageRef = ref(storage, image.path);
                 await deleteObject(storageRef);
-            } else if (imageUrl) {
+            } else if (image && image.url) {
                 // Try to construct path from URL if metadata missing (fallback)
                 try {
                     const storage = getStorage();
-                    const path = decodeURIComponent(imageUrl.split('/o/')[1].split('?')[0]);
+                    const path = decodeURIComponent(image.url.split('/o/')[1].split('?')[0]);
                     const storageRef = ref(storage, path);
                     await deleteObject(storageRef);
                 } catch (e) {
@@ -191,14 +211,18 @@ export default function EntryEditor() {
                 }
             }
 
-            setImageUrl('');
-            setImageMetadata(null);
+            const newImages = [...images];
+            newImages.splice(imageToDelete, 1);
+            setImages(newImages);
+
+            setImageToDelete(null);
             success("Image removed");
         } catch (error) {
             console.error("Error removing image:", error);
             toastError("Failed to remove image");
         } finally {
             setUploading(false);
+            setShowDeleteConfirm(false); // Close modal
         }
     };
 
@@ -211,19 +235,26 @@ export default function EntryEditor() {
             const trimmedTitle = title.trim();
             const inferredTitle = content.split('\n')[0].replace('#', '').trim();
 
-            if (!trimmedContent && !trimmedTitle && !imageUrl) {
+            if (!trimmedContent && !trimmedTitle && images.length === 0) {
                 await deleteDoc(docRef);
             } else {
                 const textSize = new Blob([content]).size;
+                const totalImageSize = images.reduce((acc, img) => acc + (img.size || 0), 0);
+
+                // For backward compatibility until migration is complete or ignored
+                const mainImage = images.length > 0 ? images[0] : null;
 
                 await setDoc(docRef, {
                     date: parseISO(date),
                     title: trimmedTitle || inferredTitle,
                     content: content,
                     updatedAt: serverTimestamp(),
-                    imageUrl: imageUrl || null,
-                    imageSize: imageMetadata?.size || 0,
-                    imagePath: imageMetadata?.path || null, // Keep path for management
+                    images: images, // Array of {url, path, size}
+                    // Backward compatibility fields
+                    imageUrl: mainImage ? mainImage.url : null,
+                    imageSize: mainImage ? mainImage.size : 0,
+                    imagePath: mainImage ? mainImage.path : null,
+
                     textSize: textSize
                 }, { merge: true });
             }
@@ -314,11 +345,11 @@ export default function EntryEditor() {
                 />
 
                 {/* Background Image Overlay */}
-                {imageUrl && (
+                {images.length > 0 && (
                     <>
                         <div
                             className="absolute inset-0 z-[-5] rounded-xl opacity-20 bg-cover bg-center pointer-events-none transition-opacity duration-500"
-                            style={{ backgroundImage: `url(${imageUrl})` }}
+                            style={{ backgroundImage: `url(${images[0].url})` }}
                         />
                         <div className="absolute inset-0 z-[-4] bg-gradient-to-b from-[#0a0a0b]/80 via-[#0a0a0b]/90 to-[#0a0a0b] rounded-xl" />
                     </>
@@ -447,9 +478,17 @@ export default function EntryEditor() {
 
             {/* Content Container */}
             <div className={`glass-card flex-1 p-6 md:p-8 overflow-hidden flex flex-col relative ${isEditing ? 'ring-2 ring-primary/30' : ''}`}>
-                {imageUrl && !isEditing && (
-                    <div className="mb-6 rounded-lg overflow-hidden border border-white/10 shadow-lg relative group">
-                        <img src={imageUrl} alt="Entry attachment" className="w-full object-cover max-h-[400px]" />
+                {images.length > 0 && !isEditing && (
+                    <div className={`mb-6 ${images.length === 1 ? 'flex justify-center' : 'columns-1 sm:columns-2 gap-4'}`}>
+                        {images.map((img, idx) => (
+                            <div key={idx} className={`break-inside-avoid rounded-lg overflow-hidden border border-white/10 shadow-lg relative group ${images.length > 1 ? 'mb-4' : ''}`}>
+                                <img
+                                    src={img.url}
+                                    alt={`Attachment ${idx + 1}`}
+                                    className={`block h-auto ${images.length === 1 ? 'max-h-[80vh] w-auto max-w-full' : 'w-full'}`}
+                                />
+                            </div>
+                        ))}
                     </div>
                 )}
 
@@ -472,22 +511,29 @@ export default function EntryEditor() {
 
                         {/* Image Upload Area */}
                         <div className="mb-4">
-                            {imageUrl ? (
-                                <div className="relative rounded-lg overflow-hidden border border-white/10 group h-48 bg-black/40 flex items-center justify-center">
-                                    <img src={imageUrl} alt="Uploaded" className="h-full object-contain" />
-                                    <button
-                                        onClick={handleRemoveImage}
-                                        className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
-                                        title="Remove Image"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
+                            {images.length > 0 && (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                                    {images.map((img, idx) => (
+                                        <div key={idx} className="relative rounded-lg overflow-hidden border border-white/10 group aspect-square bg-black/40 flex items-center justify-center">
+                                            <img src={img.url} alt={`Uploaded ${idx}`} className="w-full h-full object-cover" />
+                                            <button
+                                                onClick={() => handleRemoveImage(idx)}
+                                                className="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                title="Remove Image"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
                                 </div>
-                            ) : (
+                            )}
+
+                            {images.length < 4 && (
                                 <div className="relative group">
                                     <input
                                         type="file"
                                         accept="image/*,.heic,.heif"
+                                        multiple
                                         onChange={handleImageUpload}
                                         className="hidden"
                                         id="image-upload"
@@ -495,7 +541,7 @@ export default function EntryEditor() {
                                     />
                                     <label
                                         htmlFor="image-upload"
-                                        className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/10 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-white/5 transition-all ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        className={`flex flex-col items-center justify-center w-full ${images.length > 0 ? 'h-24' : 'h-32'} border-2 border-dashed border-white/10 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-white/5 transition-all ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
                                         {uploading ? (
                                             <div className="flex flex-col items-center text-primary">
@@ -505,8 +551,8 @@ export default function EntryEditor() {
                                         ) : (
                                             <div className="flex flex-col items-center text-text-muted group-hover:text-white">
                                                 <ImageIcon className="w-8 h-8 mb-2" />
-                                                <span className="text-sm font-medium">Click to upload image</span>
-                                                <span className="text-xs mt-1 text-text-muted/60">Max 200KB (Auto-compressed)</span>
+                                                <span className="text-sm font-medium">Click to upload images ({images.length}/4)</span>
+                                                <span className="text-xs mt-1 text-text-muted/60">Max 200KB each (Auto-compressed)</span>
                                             </div>
                                         )}
                                     </label>
@@ -540,7 +586,7 @@ export default function EntryEditor() {
                         </div>
                         <StorageStats
                             entryTextSize={new Blob([content]).size}
-                            entryImageSize={imageMetadata?.size || 0}
+                            entryImageSize={images.reduce((acc, img) => acc + (img.size || 0), 0)}
                         />
                     </>
                 )}

@@ -46,7 +46,7 @@ export default function CalendarView() {
                         const data = doc.data();
                         entryData.set(doc.id, {
                             wordCount: countWords(data.content || ''),
-                            hasImage: !!data.imageUrl || !!data.imageMetadata
+                            hasImage: !!data.imageUrl || !!data.imageMetadata || (data.images && data.images.length > 0)
                         });
                     });
                     setEntries(entryData);

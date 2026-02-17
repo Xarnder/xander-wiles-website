@@ -29,15 +29,21 @@ export default function ImageView() {
 
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
-                    // Check for modern imageUrl or legacy imageMetadata
-                    const imgUrl = data.imageUrl || (data.imageMetadata ? data.imageMetadata.url : null);
+                    const entryImages = [];
+                    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+                        entryImages.push(...data.images);
+                    } else if (data.imageUrl) {
+                        entryImages.push({ url: data.imageUrl });
+                    } else if (data.imageMetadata) {
+                        entryImages.push({ url: data.imageMetadata.url });
+                    }
 
-                    if (imgUrl) {
+                    if (entryImages.length > 0) {
                         imageEntries.push({
                             id: doc.id,
                             date: data.date.toDate ? data.date.toDate() : parseISO(data.date), // Handle generic timestamp or string
                             title: data.title || 'Untitled',
-                            imageUrl: imgUrl
+                            images: entryImages // Array of { url }
                         });
                     }
                 });
@@ -84,15 +90,36 @@ export default function ImageView() {
                             onClick={() => navigate(`/entry/${format(entry.date, 'yyyy-MM-dd')}`)}
                             className="group relative aspect-square rounded-xl overflow-hidden cursor-pointer bg-white/5 border border-white/10 hover:border-primary/50 transition-all duration-300"
                         >
-                            <img
-                                src={entry.imageUrl}
-                                alt={entry.title}
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                loading="lazy"
-                            />
+                            <div className={`w-full h-full relative ${entry.images.length > 1 ? 'grid grid-cols-2 grid-rows-2 gap-[1px]' : ''}`}>
+                                {entry.images.length === 1 ? (
+                                    <img
+                                        src={entry.images[0].url}
+                                        alt={entry.title}
+                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                        loading="lazy"
+                                    />
+                                ) : (
+                                    entry.images.slice(0, 4).map((img, i) => (
+                                        <img
+                                            key={i}
+                                            src={img.url}
+                                            alt={`${entry.title} ${i}`}
+                                            className={`w-full h-full object-cover ${entry.images.length === 2 ? 'col-span-2 last:col-span-2 row-span-1' : ''} ${entry.images.length === 3 && i === 0 ? 'col-span-2' : ''}`}
+                                            loading="lazy"
+                                        />
+                                    ))
+                                )}
+
+                                {entry.images.length > 1 && (
+                                    <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm z-10 flex items-center">
+                                        <ImageIcon className="w-3 h-3 mr-1" />
+                                        {entry.images.length}
+                                    </div>
+                                )}
+                            </div>
 
                             {/* Overlay on hover */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 z-20">
                                 <div className="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
                                     <p className="text-xs text-primary font-bold mb-1 flex items-center">
                                         <Calendar className="w-3 h-3 mr-1" />
