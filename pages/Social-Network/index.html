@@ -61,6 +61,8 @@
                         style="display:none; font-size:1.5rem; padding:5px 10px;">☰</button>
                     <div id="header-actions" class="header-actions">
                         <button id="export-btn" class="btn secondary-btn" style="padding: 8px 15px;">Export</button>
+                        <!-- <button id="select-mode-btn" class="btn secondary-btn"
+                            style="padding: 8px 15px;">Select</button> -->
                         <button id="add-btn" class="btn primary-btn">+ Add Person</button>
                         <button id="logout-btn" class="btn secondary-btn"
                             style="border-color:var(--danger); color:var(--danger)">Logout</button>
@@ -96,6 +98,27 @@
             </div>
         </section>
     </main>
+
+    <!-- Selection Action Toolbar -->
+    <div id="selection-toolbar" class="selection-toolbar hidden">
+        <div class="selection-info">
+            <span id="selection-count">0 Selected</span>
+            <button id="cancel-selection" class="btn secondary-btn">Cancel</button>
+        </div>
+        <div class="selection-actions">
+            <button id="export-grid-img" class="btn primary-btn">Export Image</button>
+            <button id="export-grid-pdf" class="btn primary-btn">Export PDF</button>
+        </div>
+    </div>
+
+    <!-- Hidden Container for Export Rendering -->
+    <div id="export-staging-area"
+        style="position:fixed; top:-9999px; left:-9999px; width:1200px; background:#111; padding:40px;">
+        <h1 style="color:white; text-align:center; margin-bottom:30px; font-family:sans-serif;">Network Export</h1>
+        <div id="export-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:20px;">
+            <!-- Cards will be cloned here -->
+        </div>
+    </div>
 
     <!-- Modal Form -->
     <div id="modal" class="modal hidden">
@@ -272,6 +295,8 @@
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <!-- Firebase SDKs & Logic -->
     <script type="module" src="script.js"></script>

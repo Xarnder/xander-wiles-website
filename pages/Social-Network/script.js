@@ -35,6 +35,8 @@ let allFriends = [];
 let currentCalendarDate = new Date();
 let undoTimeout = null;
 let tempUndoData = null; // Store old date for undo
+let isSelectionMode = false;
+let selectedFriendIds = new Set();
 
 // DOM Elements
 const views = {
@@ -376,9 +378,18 @@ function renderCard(data) {
 
     const card = document.createElement('div');
     card.className = 'glass-card friend-card';
+    if (isSelectionMode) card.classList.add('selecting');
+    if (selectedFriendIds.has(data.id)) card.classList.add('selected');
+
+    card.dataset.id = data.id;
     card.dataset.category = data.category || ""; // Store for filtering
+
+    // Selection Overlay Checkbox
+    const selectionHTML = isSelectionMode ? `<div class="selection-checkbox"></div>` : '';
+
     card.innerHTML = `
-        <img src="${data.photoURL}" class="card-img" alt="${data.name}" loading="lazy" style="cursor:zoom-in" onclick="openImageViewer('${data.photoURL}', '${data.name.replace(/'/g, "\\'")}')">
+        ${selectionHTML}
+        <img src="${data.photoURL}" class="card-img" alt="${data.name}" loading="lazy" style="${isSelectionMode ? '' : 'cursor:zoom-in'}" ${!isSelectionMode ? `onclick="openImageViewer('${data.photoURL}', '${data.name.replace(/'/g, "\\'")}')"` : ''}>
         <div class="card-info">
             <div style="display:flex;justify-content:space-between; align-items:flex-start; gap:15px">
                 <div>
@@ -389,13 +400,13 @@ function renderCard(data) {
             </div>
             <div class="card-details">
                 <div>📍 ${data.origin || '-'} | 💼 ${data.work || '-'}</div>
-                <div>📞 <a href="tel:${data.phone}" style="color:inherit">${data.phone || '-'}</a></div>
+                <div>📞 <a href="tel:${data.phone}" style="color:inherit" onclick="event.stopPropagation()">${data.phone || '-'}</a></div>
                 <div>🗓 Met: ${data.met || '-'}</div>
                 ${lastSeenText}
             </div>
             <p style="font-size:0.85rem; margin-top:10px">${data.notes || ''}</p>
         </div>
-        <div class="card-actions">
+        <div class="card-actions" style="${isSelectionMode ? 'visibility:hidden' : ''}">
             <!-- New Today Button -->
             <button class="btn secondary-btn today-btn" style="color:var(--success); border-color:rgba(16,185,129,0.3)">Met Today</button>
             <button class="btn secondary-btn edit-btn">Edit</button>
@@ -404,9 +415,16 @@ function renderCard(data) {
     `;
 
     // Event Listeners for buttons
-    card.querySelector('.today-btn').addEventListener('click', () => markToday(data.id, data.lastContact));
-    card.querySelector('.delete-btn').addEventListener('click', () => deletePerson(data.id));
-    card.querySelector('.edit-btn').addEventListener('click', () => openEdit(data));
+    if (!isSelectionMode) {
+        card.querySelector('.today-btn').addEventListener('click', (e) => { e.stopPropagation(); markToday(data.id, data.lastContact); });
+        card.querySelector('.delete-btn').addEventListener('click', (e) => { e.stopPropagation(); deletePerson(data.id); });
+        card.querySelector('.edit-btn').addEventListener('click', (e) => { e.stopPropagation(); openEdit(data); });
+    }
+
+    // Card Selection Click
+    if (isSelectionMode) {
+        card.addEventListener('click', () => toggleCardSelection(data.id));
+    }
 
     friendsGrid.appendChild(card);
 }
@@ -1019,3 +1037,249 @@ document.getElementById('export-zip-html').addEventListener('click', async () =>
         statusEl.innerText = "Error exporting Offline Website.";
     }
 });
+
+// --- Selection Logic ---
+const selectModeBtn = document.getElementById('select-mode-btn');
+const selectionToolbar = document.getElementById('selection-toolbar');
+const cancelSelectionBtn = document.getElementById('cancel-selection');
+const selectionCount = document.getElementById('selection-count');
+const addBtn = document.getElementById('add-btn');
+
+selectModeBtn.addEventListener('click', () => toggleSelectionMode(true));
+cancelSelectionBtn.addEventListener('click', () => toggleSelectionMode(false));
+
+function toggleSelectionMode(active) {
+    isSelectionMode = active;
+    selectedFriendIds.clear(); // Always clear on toggle
+
+    // Toggle UI elements
+    if (active) {
+        selectionToolbar.classList.remove('hidden');
+        selectModeBtn.classList.add('hidden');
+        addBtn.classList.add('hidden');
+        document.getElementById('mobile-menu-btn').classList.add('hidden'); // Hide mobile menu too
+        updateSelectionCount();
+    } else {
+        selectionToolbar.classList.add('hidden');
+        selectModeBtn.classList.remove('hidden');
+        addBtn.classList.remove('hidden');
+        document.getElementById('mobile-menu-btn').classList.remove('hidden');
+    }
+
+    // Re-render cards to show/hide checkboxes & update click behavior
+    loadFriends();
+}
+
+function toggleCardSelection(id) {
+    if (selectedFriendIds.has(id)) {
+        selectedFriendIds.delete(id);
+    } else {
+        selectedFriendIds.add(id);
+    }
+    updateSelectionCount();
+
+    // Optimistic Update UI
+    const card = document.querySelector(`.friend-card[data-id="${id}"]`);
+    if (card) {
+        if (selectedFriendIds.has(id)) {
+            card.classList.add('selected');
+        } else {
+            card.classList.remove('selected');
+        }
+    }
+}
+
+function updateSelectionCount() {
+    selectionCount.innerText = `${selectedFriendIds.size} Selected`;
+}
+
+// --- Grid Export Logic ---
+document.getElementById('export-grid-img').addEventListener('click', () => generateGridExport('image'));
+document.getElementById('export-grid-pdf').addEventListener('click', () => generateGridExport('pdf'));
+
+// Add System Print Button dynamically if not present (or we can just use a new button in UI, 
+// for now let's make the PDF button ask or try both?)
+// Better: Add a new button to the toolbar in JS for "Print View"
+const selectionActions = document.querySelector('.selection-actions');
+if (selectionActions && !document.getElementById('export-print')) {
+    const printBtn = document.createElement('button');
+    printBtn.id = 'export-print';
+    printBtn.className = 'btn secondary-btn';
+    printBtn.innerText = 'Print / System PDF';
+    printBtn.onclick = () => {
+        generateGridExport('print');
+    };
+    selectionActions.appendChild(printBtn);
+}
+
+async function generateGridExport(type) {
+    if (selectedFriendIds.size === 0) {
+        alert("Please select at least one person.");
+        return;
+    }
+
+    // Filter Selected Friends
+    const selectedFriends = allFriends.filter(f => selectedFriendIds.has(f.id));
+
+    // Render to Hidden Staging Area
+    const stagingGrid = document.getElementById('export-grid');
+    stagingGrid.innerHTML = ''; // Clear previous
+
+    const imageLoadPromises = [];
+
+    for (const friend of selectedFriends) {
+        const card = document.createElement('div');
+        // Simple clean styling for export
+        card.style.background = "#2a2a2a";
+        card.style.borderRadius = "10px";
+        card.style.overflow = "hidden";
+        card.style.padding = "15px";
+        card.style.border = "1px solid #333";
+        card.style.fontFamily = "sans-serif";
+        card.style.color = "white";
+
+        const img = document.createElement('img');
+        img.style.width = "100%";
+        img.style.height = "200px";
+        img.style.objectFit = "cover";
+        img.style.borderRadius = "8px";
+        img.style.marginBottom = "10px";
+        img.style.background = "#222";
+        img.crossOrigin = "anonymous"; // Try anonymous CORS
+
+        // Convert image to data URL to avoid tainting canvas if possible
+        let imgUrl = friend.photoURL;
+        if (imgUrl && imgUrl.startsWith('http')) {
+            // Create a promise for this image's loading state
+            const loadPromise = new Promise(async (resolve) => {
+                let finalSrc = imgUrl;
+                try {
+                    // Try fetching blob to create Data URL (bypasses CORS during html2canvas taint check)
+                    const response = await fetch(imgUrl);
+                    const blob = await response.blob();
+                    finalSrc = await new Promise(r => {
+                        const reader = new FileReader();
+                        reader.onload = () => r(reader.result);
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (e) {
+                    console.warn("Fetch failed, falling back to direct URL", e);
+                }
+
+                img.onload = resolve;
+                img.onerror = resolve; // Resolve anyway to not block
+                img.src = finalSrc;
+            });
+            imageLoadPromises.push(loadPromise);
+        } else {
+            img.src = imgUrl || '';
+        }
+
+        card.appendChild(img);
+
+        const info = document.createElement('div');
+        info.innerHTML = `
+            <h3 style="margin:0 0 5px 0; font-size:1.2rem;">${friend.name}</h3>
+            <p style="margin:0 0 5px 0; color:#ccc; font-size:0.9rem;">${friend.work || ''}</p>
+            <p style="margin:0; color:#888; font-size:0.8rem;">${friend.phone || ''}</p>
+        `;
+        card.appendChild(info);
+
+        stagingGrid.appendChild(card);
+    }
+
+    // Determine grid columns based on count (rough heuristic)
+    const total = selectedFriends.length;
+    let columns = 4;
+    if (total <= 4) columns = total;
+    else if (total <= 6) columns = 3;
+
+    // Update container width for PDF sizing logic
+    stagingGrid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+
+    // Wait for all images to actually load in the DOM
+    if (imageLoadPromises.length > 0) {
+        await Promise.all(imageLoadPromises);
+    }
+
+    // Slight delay to ensure rendering catches up
+    await new Promise(r => setTimeout(r, 500));
+
+    const element = document.getElementById('export-staging-area');
+
+    // Capture
+    if (type === 'print') {
+        // For Print: We need to style the staging area for print and trigger window.print()
+        // But window.print() prints the whole window. We need to hide everything else or open a new window.
+        // Opening a new window is cleaner for reports.
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Network Export</title>
+                <style>
+                    body { font-family: sans-serif; padding: 20px; }
+                    .grid { display: grid; grid-template-columns: repeat(${columns}, 1fr); gap: 20px; }
+                    .card { break-inside: avoid; border: 1px solid #ccc; padding: 10px; border-radius: 8px; }
+                    img { width: 100%; height: 200px; object-fit: cover; border-radius: 5px; }
+                    h3 { margin: 10px 0 5px; }
+                    p { margin: 0; color: #666; font-size: 0.9rem; }
+                    @media print {
+                        .no-print { display: none; }
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>Network Export</h1>
+                <div class="grid">
+                    ${stagingGrid.innerHTML}
+                </div>
+                <!-- Fix image sources back to original URL if they are blobs (blobs might not transfer to new window easily if revoked, but here we haven't revoked them yet) -->
+                <!-- Actually, data URLs work fine in new windows -->
+                <script>
+                    window.onload = () => { window.print(); };
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+        return;
+    }
+
+    try {
+        const canvas = await html2canvas(element, {
+            backgroundColor: "#111",
+            scale: 2, // High res
+            useCORS: true,
+            allowTaint: true,
+            imageTimeout: 15000
+        });
+
+        if (type === 'image') {
+            const link = document.createElement('a');
+            link.download = `network-grid-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        } else if (type === 'pdf') {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({
+                orientation: canvas.width > canvas.height ? 'l' : 'p',
+                unit: 'px',
+                format: [canvas.width, canvas.height]
+            });
+
+            // Add image to full page size
+            pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, canvas.width, canvas.height);
+            pdf.save(`network-grid-${Date.now()}.pdf`);
+        }
+
+    } catch (err) {
+        console.error("Export Failed", err);
+        alert("Export failed. See console.");
+    } finally {
+        // Optional: clear staging
+        stagingGrid.innerHTML = '';
+        // Note: we don't automatically exit selection mode, user might want to simple export different formats
+    }
+}

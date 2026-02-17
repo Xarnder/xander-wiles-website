@@ -493,3 +493,75 @@ body {
     cursor: pointer;
     font-weight: bold;
 }
+
+/* Selection Toolbar */
+.selection-toolbar {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(17, 17, 21, 0.95);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 15px 25px;
+    display: flex;
+    gap: 30px;
+    align-items: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+}
+
+.selection-info {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    border-right: 1px solid var(--glass-border);
+    padding-right: 25px;
+}
+
+.selection-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Selection State on Cards */
+.friend-card.selecting {
+    cursor: pointer;
+    position: relative;
+    border: 2px solid transparent;
+}
+
+.friend-card.selected {
+    border-color: var(--primary);
+    background: rgba(79, 70, 229, 0.1);
+}
+
+.selection-checkbox {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid white;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+.friend-card.selected .selection-checkbox {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.friend-card.selected .selection-checkbox::after {
+    content: '✓';
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+}
