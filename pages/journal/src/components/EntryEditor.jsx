@@ -33,6 +33,7 @@ export default function EntryEditor() {
     const [imageUrl, setImageUrl] = useState('');
     const [imageMetadata, setImageMetadata] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [statusMessage, setStatusMessage] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     // Parse date for display
@@ -123,13 +124,23 @@ export default function EntryEditor() {
     }, [content]);
 
     // Image Upload Handler
+    // Image Upload Handler
     const handleImageUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
         setUploading(true);
+        // Set initial status based on file type
+        if (file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic') {
+            setStatusMessage('Converting Apple Photo format...');
+        } else {
+            setStatusMessage('Compressing & Uploading...');
+        }
+
         try {
             const compressedFile = await compressImage(file);
+
+            setStatusMessage('Uploading...');
             const storage = getStorage();
             const storagePath = `users/${currentUser.uid}/images/${date}.webp`;
             const storageRef = ref(storage, storagePath);
@@ -146,9 +157,14 @@ export default function EntryEditor() {
             success('Image uploaded successfully');
         } catch (error) {
             console.error("Error uploading image:", error);
-            toastError("Failed to upload image");
+            if (error.message === "Could not read this iPhone photo format.") {
+                toastError("Could not convert HEIC image. Please try a different photo.");
+            } else {
+                toastError("Failed to upload image");
+            }
         } finally {
             setUploading(false);
+            setStatusMessage('');
         }
     };
 
@@ -471,7 +487,7 @@ export default function EntryEditor() {
                                 <div className="relative group">
                                     <input
                                         type="file"
-                                        accept="image/*"
+                                        accept="image/*,.heic,.heif"
                                         onChange={handleImageUpload}
                                         className="hidden"
                                         id="image-upload"
@@ -484,7 +500,7 @@ export default function EntryEditor() {
                                         {uploading ? (
                                             <div className="flex flex-col items-center text-primary">
                                                 <Loader className="w-8 h-8 animate-spin mb-2" />
-                                                <span className="text-sm">Compressing & Uploading...</span>
+                                                <span className="text-sm">{statusMessage || 'Processing...'}</span>
                                             </div>
                                         ) : (
                                             <div className="flex flex-col items-center text-text-muted group-hover:text-white">
