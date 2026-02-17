@@ -4,34 +4,6 @@
     "outputDirectory": ".",
     "rewrites": [
         {
-            "source": "/pages/journal/assets/(.*)",
-            "destination": "/pages/journal/dist/assets/$1"
-        },
-        {
-            "source": "/pages/journal/favicon.ico",
-            "destination": "/pages/journal/dist/favicon.ico"
-        },
-        {
-            "source": "/pages/journal/site.webmanifest",
-            "destination": "/pages/journal/dist/site.webmanifest"
-        },
-        {
-            "source": "/pages/journal/favicon-(.*)",
-            "destination": "/pages/journal/dist/favicon-$1"
-        },
-        {
-            "source": "/pages/journal/apple-touch-icon.png",
-            "destination": "/pages/journal/dist/apple-touch-icon.png"
-        },
-        {
-            "source": "/pages/journal",
-            "destination": "/pages/journal/dist/index.html"
-        },
-        {
-            "source": "/pages/journal/",
-            "destination": "/pages/journal/dist/index.html"
-        },
-        {
             "source": "/pages/journal/(.*)",
             "destination": "/pages/journal/dist/index.html"
         }
