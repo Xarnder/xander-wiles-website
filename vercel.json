@@ -1,4 +1,16 @@
 {
-    "buildCommand": "exit 0",
-    "outputDirectory": "."
+    "version": 2,
+    "buildCommand": "cd pages/journal && npm install && npm run build",
+    "outputDirectory": ".",
+    "rewrites": [
+        {
+            "source": "/pages/journal",
+            "destination": "/pages/journal/dist/index.html"
+        },
+        {
+            "source": "/pages/journal/(.*)",
+            "destination": "/pages/journal/dist/$1"
+        }
+    ],
+    "cleanUrls": true
 }
