@@ -1,5 +1,5 @@
 {
-    "buildCommand": "cd pages/journal && npm install && npm run build",
+    "buildCommand": "cd pages/journal && npm install && npm run build && mv dist/index.dev.html dist/index.html",
     "outputDirectory": ".",
     "rewrites": [
         {
