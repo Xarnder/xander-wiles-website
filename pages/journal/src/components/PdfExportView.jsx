@@ -108,7 +108,7 @@ export default function PdfExportView() {
                             // Ensure date is a string YYYY-MM-DD for consistency
                             date: format(data.date.toDate(), 'yyyy-MM-dd'),
                             content: content,
-                            imageUrl: data.imageUrl || null
+                            images: data.images || (data.imageUrl ? [{ url: data.imageUrl }] : (data.imageMetadata ? [{ url: data.imageMetadata.url }] : []))
                         };
                     });
                     setEntries(fetchedEntries);
@@ -411,13 +411,17 @@ export default function PdfExportView() {
                                                     className="prose max-w-none text-gray-800"
                                                     style={{ fontSize: `${fontSettings.bodySize}px` }}
                                                 >
-                                                    {entry.imageUrl && (
-                                                        <div className="mb-4">
-                                                            <img
-                                                                src={entry.imageUrl}
-                                                                alt="Entry attachment"
-                                                                className="max-w-full max-h-[400px] object-contain rounded-lg border border-gray-200"
-                                                            />
+                                                    {entry.images && entry.images.length > 0 && (
+                                                        <div className={`mb-4 grid gap-4 ${entry.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                            {entry.images.map((img, i) => (
+                                                                <div key={i} className="break-inside-avoid">
+                                                                    <img
+                                                                        src={img.url}
+                                                                        alt={`Attachment ${i + 1}`}
+                                                                        className="w-full h-auto object-contain rounded-lg border border-gray-200 max-h-[500px]"
+                                                                    />
+                                                                </div>
+                                                            ))}
                                                         </div>
                                                     )}
                                                     <ReactMarkdown>{entry.content}</ReactMarkdown>
