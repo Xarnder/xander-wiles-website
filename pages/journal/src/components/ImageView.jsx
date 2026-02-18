@@ -166,11 +166,11 @@ export default function ImageView() {
                                         {/* Overlay on hover or when showInfo is true */}
                                         <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 flex flex-col justify-end p-4 z-20 ${showInfo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                                             <div className={`transform transition-transform duration-300 ${showInfo ? 'translate-y-0' : 'translate-y-4 group-hover:translate-y-0'}`}>
-                                                <p className="text-xs text-primary font-bold mb-1 flex items-center">
-                                                    <Calendar className="w-3 h-3 mr-1" />
+                                                <p className="text-sm text-white font-extrabold mb-1 flex items-center drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
+                                                    <Calendar className="w-4 h-4 mr-1 drop-shadow-md" />
                                                     {format(entry.date, 'MMM d, yyyy')}
                                                 </p>
-                                                <p className="text-white font-serif font-medium line-clamp-2 text-sm">
+                                                <p className="text-white font-serif font-bold line-clamp-2 text-sm drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
                                                     {entry.title}
                                                 </p>
                                             </div>
