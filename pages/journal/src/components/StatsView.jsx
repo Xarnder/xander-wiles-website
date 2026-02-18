@@ -16,6 +16,7 @@ import {
     ResponsiveContainer
 } from 'recharts';
 import StorageStats from './StorageStats';
+import FirestoreUsage from './FirestoreUsage';
 
 // List of common stop words to exclude from analysis
 const STOP_WORDS = new Set([
@@ -377,6 +378,8 @@ export default function StatsView() {
                         timeFrameLabel={ranges[timeRange]?.label}
                         className="flex-1 flex flex-col justify-center items-center text-center"
                     />
+
+                    <FirestoreUsage className="flex-1 flex flex-col justify-center text-center" />
                 </div>
             </div>
         </div>
