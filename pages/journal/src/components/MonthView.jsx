@@ -53,7 +53,21 @@ export default function MonthView() {
                             }
                         }
 
-                        newEntries[doc.id] = title || 'Untitled Entry';
+                        // ... Inside fetchMonthEntries ...
+                        // Extract image (support current and legacy schemas)
+                        let imageUrl = null;
+                        if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+                            imageUrl = data.images[0].url;
+                        } else if (data.imageUrl) {
+                            imageUrl = data.imageUrl;
+                        } else if (data.imageMetadata && data.imageMetadata.url) {
+                            imageUrl = data.imageMetadata.url;
+                        }
+
+                        newEntries[doc.id] = {
+                            title: title || 'Untitled Entry',
+                            imageUrl: imageUrl
+                        };
                     });
                     setEntries(newEntries);
                     setLoading(false);
@@ -142,7 +156,7 @@ export default function MonthView() {
                     <div className="divide-y divide-white/10">
                         {monthDates.map((dateObj) => {
                             const dateKey = format(dateObj, 'yyyy-MM-dd');
-                            const entryTitle = entries[dateKey];
+                            const entryData = entries[dateKey];
                             const isToday = format(new Date(), 'yyyy-MM-dd') === dateKey;
 
                             return (
@@ -168,12 +182,24 @@ export default function MonthView() {
 
                                     {/* Content Column */}
                                     <div className="flex-1 min-w-0">
-                                        {entryTitle ? (
-                                            <h3 className="text-lg font-medium text-white truncate">{entryTitle}</h3>
+                                        {entryData ? (
+                                            <h3 className="text-lg font-medium text-white truncate">{entryData.title}</h3>
                                         ) : (
                                             <h3 className="text-sm italic text-text-muted/50">No entry</h3>
                                         )}
                                     </div>
+
+                                    {/* Connection Line / Image Thumbnail */}
+                                    {entryData && entryData.imageUrl && (
+                                        <div className="w-12 h-12 shrink-0 rounded-md overflow-hidden bg-white/5 border border-white/10 relative group">
+                                            <img
+                                                src={entryData.imageUrl}
+                                                alt="Thumb"
+                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                                loading="lazy"
+                                            />
+                                        </div>
+                                    )}
 
                                     {/* Arrow hint */}
                                     <ChevronRight className="w-4 h-4 text-text-muted/30" />
