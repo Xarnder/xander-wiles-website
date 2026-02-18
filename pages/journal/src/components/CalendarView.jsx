@@ -46,7 +46,7 @@ export default function CalendarView() {
                         const data = doc.data();
                         entryData.set(doc.id, {
                             wordCount: countWords(data.content || ''),
-                            hasImage: !!data.imageUrl || !!data.imageMetadata || (data.images && data.images.length > 0),
+                            imageCount: (data.images ? data.images.length : (data.imageUrl || data.imageMetadata ? 1 : 0)),
                             hasTitle: !!data.title && data.title.trim().length > 0
                         });
                     });
@@ -257,9 +257,11 @@ export default function CalendarView() {
                                                         title={entry ? `${entry.wordCount} words${entry.hasTitle ? ' + Title' : ''}` : ''}
                                                     >
                                                         {day}
-                                                        {/* Image Indicator - Blue Dot */}
-                                                        {entry && entry.hasImage && (
-                                                            <div className="absolute top-0 right-0 w-2 h-2 bg-blue-500 rounded-full border border-[#0a0a0b] transform translate-x-1/4 -translate-y-1/4"></div>
+                                                        {/* Image Indicator - Blue Badge with Count */}
+                                                        {entry && entry.imageCount > 0 && (
+                                                            <div className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-0.5 bg-blue-500 rounded-full border-2 border-[#0a0a0b] text-[10px] font-bold text-white z-20 shadow-sm">
+                                                                {entry.imageCount}
+                                                            </div>
                                                         )}
 
                                                         {/* Title Only Indicator - Red Dot on Left */}

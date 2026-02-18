@@ -138,8 +138,8 @@ export default function EntryEditor() {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
-        if (images.length + files.length > 4) {
-            toastError("You can only have up to 4 images per entry.");
+        if (images.length + files.length > 8) {
+            toastError("You can only have up to 8 images per entry.");
             return;
         }
 
@@ -606,7 +606,7 @@ export default function EntryEditor() {
                                 </div>
                             )}
 
-                            {images.length < 4 && (
+                            {images.length < 8 && (
                                 <div className="relative group">
                                     <input
                                         type="file"
@@ -628,7 +628,7 @@ export default function EntryEditor() {
                                         ) : (
                                             <div className="flex flex-col items-center text-text-muted group-hover:text-white">
                                                 <ImageIcon className="w-8 h-8 mb-2" />
-                                                <span className="text-sm font-medium">Click to upload images ({images.length}/4)</span>
+                                                <span className="text-sm font-medium">Click to upload images ({images.length}/8)</span>
                                                 <span className="text-xs mt-1 text-text-muted/60">Max 200KB each (Auto-compressed)</span>
                                             </div>
                                         )}
