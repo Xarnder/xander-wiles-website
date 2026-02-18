@@ -6,6 +6,8 @@ import { format, parseISO, startOfMonth, endOfMonth, startOfYear, endOfYear, eac
 import { FileDown, Calendar, Type, ChevronLeft, ChevronRight, Printer, Image as ImageIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
+import html2pdf from 'html2pdf.js';
+
 export default function PdfExportView() {
     const { currentUser } = useAuth();
     const [filterMode, setFilterMode] = useState('month'); // range, month, year
@@ -31,11 +33,13 @@ export default function PdfExportView() {
 
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [tocItems, setTocItems] = useState([]);
 
     // Preview Pagination Logic
     const previewContainerRef = useRef(null);
     const pageWrapperRef = useRef(null);
+    const contentRef = useRef(null); // Ref for actual content to export
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [previewScale, setPreviewScale] = useState(1);
@@ -272,8 +276,119 @@ export default function PdfExportView() {
         return () => observer.disconnect();
     }, []);
 
-    const handlePrint = () => {
-        window.print();
+    const handlePrint = async () => {
+        if (!contentRef.current) return;
+        setIsExporting(true);
+
+        // Helper to convert modern colors (oklch) to standard rgba using canvas image data
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        const getStandardColor = (colorStr) => {
+            if (!colorStr || colorStr === 'rgba(0, 0, 0, 0)' || colorStr === 'transparent') return 'transparent';
+
+            // Optimization for simple colors
+            if (colorStr.startsWith('#') || (colorStr.startsWith('rgb') && !colorStr.includes('oklch'))) {
+                return colorStr;
+            }
+
+            // Force conversion to RGBA via canvas rendering
+            ctx.clearRect(0, 0, 1, 1);
+            ctx.fillStyle = colorStr;
+            ctx.fillRect(0, 0, 1, 1);
+            const data = ctx.getImageData(0, 0, 1, 1).data;
+            // data is [r, g, b, a] (0-255)
+            // Round alpha to 2 decimal places for cleanliness
+            const alpha = Math.round((data[3] / 255) * 100) / 100;
+            return `rgba(${data[0]}, ${data[1]}, ${data[2]}, ${alpha})`;
+        };
+
+        // Recursive function to bake computed styles into the clone
+        const bakeStyles = (source, target) => {
+            if (!source || !target) return;
+
+            // 1. Compute styles from source
+            const computed = window.getComputedStyle(source);
+
+            // 2. Apply standardized colors to target
+            target.style.color = getStandardColor(computed.color);
+            target.style.backgroundColor = getStandardColor(computed.backgroundColor);
+            target.style.borderColor = getStandardColor(computed.borderColor);
+
+            // 3. Remove complex effects that might contain oklch or cause rendering issues
+            target.style.boxShadow = 'none';
+            target.style.textShadow = 'none';
+            target.style.filter = 'none';
+            target.style.backdropFilter = 'none';
+
+            // 4. Recurse
+            const sourceChildren = source.children;
+            const targetChildren = target.children;
+
+            for (let i = 0; i < sourceChildren.length; i++) {
+                if (targetChildren[i]) {
+                    bakeStyles(sourceChildren[i], targetChildren[i]);
+                }
+            }
+        };
+
+        const element = contentRef.current;
+        const clone = element.cloneNode(true);
+
+        // Reset base styles for the clone wrapper
+        clone.style.transform = 'none';
+        clone.style.width = '210mm';
+        clone.style.height = 'auto';
+        clone.style.margin = '0';
+        clone.style.position = 'absolute';
+        clone.style.left = '-9999px';
+        clone.style.top = '0';
+
+        // Apply fallback standard font explicitly to be safe
+        clone.style.fontFamily = 'serif';
+
+        // BAKE THE STYLES
+        try {
+            bakeStyles(element, clone);
+        } catch (e) {
+            console.error("Error baking styles:", e);
+        }
+
+        document.body.appendChild(clone);
+
+        // Generate Filename
+        const dateStr = format(new Date(), 'yyyy-MM-dd');
+        const filename = `Journal_Export_${dateStr}.pdf`;
+
+        const opt = {
+            margin: 10,
+            filename: filename,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        try {
+            await html2pdf().set(opt).from(clone).toPdf().get('pdf').then((pdf) => {
+                if (showPageNumbers) {
+                    const totalPages = pdf.internal.getNumberOfPages();
+                    for (let i = 1; i <= totalPages; i++) {
+                        pdf.setPage(i);
+                        pdf.setFontSize(10);
+                        pdf.setTextColor(150);
+                        pdf.text(`Page ${i} of ${totalPages}`, pdf.internal.pageSize.getWidth() / 2, pdf.internal.pageSize.getHeight() - 10, { align: 'center' });
+                    }
+                }
+            }).save();
+        } catch (err) {
+            console.error('PDF Generation Failed:', err);
+            alert(`PDF Generation Failed: ${err.message}`);
+        } finally {
+            document.body.removeChild(clone);
+            setIsExporting(false);
+        }
     };
 
     const scrollPreview = (direction) => {
@@ -564,15 +679,39 @@ export default function PdfExportView() {
                 </div>
 
                 {/* Action Buttons */}
-                <button
-                    onClick={handlePrint}
-                    disabled={entries.length === 0}
-                    className={`w-full py-3 bg-gradient-to-r from-primary to-secondary text-white font-bold rounded-lg shadow-lg shadow-primary/30 transition-all flex items-center justify-center ${entries.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-primary/50 hover:scale-[1.02]'
-                        }`}
-                >
-                    <Printer className="w-5 h-5 mr-2" />
-                    Export PDF
-                </button>
+                <div className="flex flex-col gap-3">
+                    <button
+                        onClick={handlePrint}
+                        disabled={entries.length === 0 || isExporting}
+                        className={`w-full py-3 bg-gradient-to-r from-primary to-secondary text-white font-bold rounded-lg shadow-lg shadow-primary/30 transition-all flex items-center justify-center ${entries.length === 0 || isExporting ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-primary/50 hover:scale-[1.02]'
+                            }`}
+                    >
+                        {isExporting ? (
+                            <>
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                                Generating PDF...
+                            </>
+                        ) : (
+                            <>
+                                <FileDown className="w-5 h-5 mr-2" />
+                                Download PDF
+                            </>
+                        )}
+                    </button>
+
+                    <button
+                        onClick={() => window.print()}
+                        disabled={entries.length === 0 || isExporting}
+                        className={`w-full py-3 bg-white/5 border border-white/10 text-white font-bold rounded-lg hover:bg-white/10 transition-all flex items-center justify-center ${entries.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                    >
+                        <Printer className="w-5 h-5 mr-2" />
+                        Print / Save as PDF
+                    </button>
+                    <p className="text-xs text-center text-text-muted mt-1 px-2">
+                        "Download PDF" is best for mobile. "Print" is best for desktop.
+                    </p>
+                </div>
 
             </div>
 
@@ -627,6 +766,7 @@ export default function PdfExportView() {
                             }}
                         >
                             <div
+                                ref={contentRef}
                                 className="bg-white text-black shadow-2xl p-[20mm] print:shadow-none print:min-h-0 print:p-0 pb-20 relative"
                                 style={{
                                     backgroundColor: 'white',
@@ -734,9 +874,10 @@ export default function PdfExportView() {
                                 )}
 
                                 {/* Page Number Footer for Print */}
+                                {/* Page Number Footer for Print - Removed in favor of JS injection for PDF and browser default for Print */}
                                 {showPageNumbers && (
-                                    <div className="hidden print:flex fixed bottom-0 left-0 w-full justify-center pb-4 text-gray-500 text-sm font-serif bg-white">
-                                        <span>Page <span className="after:content-[counter(page)]"></span></span>
+                                    <div className="hidden">
+                                        {/* CSS Counters don't work well with html2pdf or across all browsers in this context */}
                                     </div>
                                 )}
                             </div>
