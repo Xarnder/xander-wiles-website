@@ -274,13 +274,12 @@ export default function EntryEditor() {
             setIsEditing(false);
             success('Entry saved successfully');
 
-            // Check if it's Sunday (0)
+            // Trigger backup popup on every save with dynamic day name
             const dateObj = parseISO(date);
-            if (getDay(dateObj) === 0) {
-                setTimeout(() => {
-                    openBackup("It's Sunday! Great time to reflect and download a backup of your entries.");
-                }, 1500);
-            }
+            const dayName = format(dateObj, 'EEEE');
+            setTimeout(() => {
+                openBackup(`It's ${dayName}! Great time to reflect and download a backup of your entries.`);
+            }, 1500);
         } catch (err) {
             console.error("Error saving entry:", err);
 
