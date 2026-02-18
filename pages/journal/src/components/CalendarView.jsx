@@ -46,7 +46,8 @@ export default function CalendarView() {
                         const data = doc.data();
                         entryData.set(doc.id, {
                             wordCount: countWords(data.content || ''),
-                            hasImage: !!data.imageUrl || !!data.imageMetadata || (data.images && data.images.length > 0)
+                            hasImage: !!data.imageUrl || !!data.imageMetadata || (data.images && data.images.length > 0),
+                            hasTitle: !!data.title && data.title.trim().length > 0
                         });
                     });
                     setEntries(entryData);
@@ -196,14 +197,16 @@ export default function CalendarView() {
                                                 const dateKey = format(dateObj, 'yyyy-MM-dd');
                                                 const entry = entries.get(dateKey);
                                                 const isSelected = location.pathname.includes(dateKey);
+                                                const isTitleOnly = entry && entry.hasTitle && entry.wordCount === 0;
 
                                                 // Calculate Intensity and Color
                                                 let style = {};
                                                 let className = `aspect-square flex items-center justify-center rounded-full transition-all duration-300 text-sm relative z-0 `;
 
                                                 if (isSelected) {
-                                                    className += 'ring-2 ring-secondary ring-offset-2 ring-offset-[#0a0a0b] z-10 scale-110 bg-primary text-white ';
-                                                } else if (entry) {
+                                                    // Blue selection instead of secondary/primary
+                                                    className += 'ring-2 ring-blue-400 ring-offset-2 ring-offset-[#0a0a0b] z-10 scale-110 bg-blue-600 text-white ';
+                                                } else if (entry && !isTitleOnly) {
                                                     // Normalize word count 0..1 relative to month
                                                     let intensity = 0;
                                                     if (maxWords > minWords) {
@@ -251,11 +254,17 @@ export default function CalendarView() {
                                                         onClick={() => navigate(`entry/${dateKey}`)}
                                                         style={style}
                                                         className={className}
-                                                        title={entry ? `${entry.wordCount} words` : ''}
+                                                        title={entry ? `${entry.wordCount} words${entry.hasTitle ? ' + Title' : ''}` : ''}
                                                     >
                                                         {day}
+                                                        {/* Image Indicator - Blue Dot */}
                                                         {entry && entry.hasImage && (
-                                                            <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border border-[#0a0a0b] transform translate-x-1/4 -translate-y-1/4"></div>
+                                                            <div className="absolute top-0 right-0 w-2 h-2 bg-blue-500 rounded-full border border-[#0a0a0b] transform translate-x-1/4 -translate-y-1/4"></div>
+                                                        )}
+
+                                                        {/* Title Only Indicator - Red Dot on Left */}
+                                                        {isTitleOnly && (
+                                                            <div className="absolute top-1/2 left-0 w-1.5 h-1.5 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 ml-1"></div>
                                                         )}
                                                     </button>
                                                 );
