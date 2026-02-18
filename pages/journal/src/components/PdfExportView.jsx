@@ -363,11 +363,12 @@ export default function PdfExportView() {
         const filename = `Journal_Export_${dateStr}.pdf`;
 
         const opt = {
-            margin: 10,
+            margin: [10, 10, 15, 10], // top, left, bottom, right (more bottom for page number)
             filename: filename,
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, logging: false },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['css', 'legacy'] }
         };
 
         try {
@@ -378,7 +379,9 @@ export default function PdfExportView() {
                         pdf.setPage(i);
                         pdf.setFontSize(10);
                         pdf.setTextColor(150);
-                        pdf.text(`Page ${i} of ${totalPages}`, pdf.internal.pageSize.getWidth() / 2, pdf.internal.pageSize.getHeight() - 10, { align: 'center' });
+                        const width = pdf.internal.pageSize.getWidth();
+                        const height = pdf.internal.pageSize.getHeight();
+                        pdf.text(`Page ${i} of ${totalPages}`, width / 2, height - 10, { align: 'center' });
                     }
                 }
             }).save();
