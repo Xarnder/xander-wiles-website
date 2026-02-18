@@ -35,6 +35,10 @@ export default function EntryEditor() {
     const [statusMessage, setStatusMessage] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+    // Caption State
+    const [editingCaptionIndex, setEditingCaptionIndex] = useState(null);
+    const [tempCaption, setTempCaption] = useState('');
+
     // Parse date for display
     const displayDate = useMemo(() => {
         try {
@@ -163,7 +167,8 @@ export default function EntryEditor() {
                 newImages.push({
                     url: downloadUrl,
                     path: storagePath,
-                    size: compressedFile.size
+                    size: compressedFile.size,
+                    caption: ''
                 });
             }
 
@@ -487,6 +492,13 @@ export default function EntryEditor() {
                                     alt={`Attachment ${idx + 1}`}
                                     className={`block h-auto ${images.length === 1 ? 'max-h-[80vh] w-auto max-w-full' : 'w-full'}`}
                                 />
+                                {img.caption && (
+                                    <div className="p-3 bg-white/5 backdrop-blur-sm border-t border-white/10">
+                                        <p className="text-center text-sm text-gray-300 italic font-medium leading-relaxed">
+                                            {img.caption}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -517,12 +529,27 @@ export default function EntryEditor() {
                                         <div key={idx} className="relative rounded-lg overflow-hidden border border-white/10 group aspect-square bg-black/40 flex items-center justify-center">
                                             <img src={img.url} alt={`Uploaded ${idx}`} className="w-full h-full object-cover" />
                                             <button
+                                                onClick={() => {
+                                                    setEditingCaptionIndex(idx);
+                                                    setTempCaption(img.caption || '');
+                                                }}
+                                                className="absolute top-2 left-2 p-1.5 bg-blue-500/80 text-white rounded-full hover:bg-blue-600 transition-colors"
+                                                title="Edit Caption"
+                                            >
+                                                <PenTool className="w-4 h-4" />
+                                            </button>
+                                            <button
                                                 onClick={() => handleRemoveImage(idx)}
                                                 className="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-full hover:bg-red-600 transition-colors"
                                                 title="Remove Image"
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
+                                            {img.caption && (
+                                                <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-black/70 backdrop-blur-sm text-xs text-center text-white truncate border-t border-white/10">
+                                                    {img.caption}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -601,6 +628,41 @@ export default function EntryEditor() {
                 confirmText="Remove"
                 isDangerous={true}
             />
+
+            {/* Caption Edit Modal */}
+            {editingCaptionIndex !== null && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                    <div className="glass-card w-full max-w-md p-6 relative animate-in fade-in zoom-in duration-200">
+                        <h3 className="text-xl font-bold text-white mb-4">Image Caption</h3>
+                        <textarea
+                            value={tempCaption}
+                            onChange={(e) => setTempCaption(e.target.value)}
+                            placeholder="Enter a caption for this image..."
+                            className="w-full h-32 glass-input mb-6 resize-none"
+                            autoFocus
+                        />
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setEditingCaptionIndex(null)}
+                                className="glass-button px-4 py-2 text-text hover:bg-white/10"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const newImages = [...images];
+                                    newImages[editingCaptionIndex].caption = tempCaption.trim();
+                                    setImages(newImages);
+                                    setEditingCaptionIndex(null);
+                                }}
+                                className="px-6 py-2 rounded-lg bg-primary text-white font-bold hover:bg-primary-dark transition-colors"
+                            >
+                                Save Caption
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

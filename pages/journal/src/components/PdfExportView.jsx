@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { format, parseISO, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval } from 'date-fns';
-import { FileDown, Calendar, Type, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
+import { FileDown, Calendar, Type, ChevronLeft, ChevronRight, Printer, Image as ImageIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 export default function PdfExportView() {
@@ -20,6 +20,10 @@ export default function PdfExportView() {
         dateSize: 14,
         bodySize: 16
     });
+
+    // Layout Options
+    const [imageLayout, setImageLayout] = useState('block'); // 'block' | 'wrap'
+    const [compactMode, setCompactMode] = useState(false); // If true, allow splitting across pages
 
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -316,6 +320,56 @@ export default function PdfExportView() {
                     </div>
                 </div>
 
+                {/* Layout Settings */}
+                <div className="glass-card p-5">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center">
+                        <ImageIcon className="w-5 h-5 mr-2 text-primary" />
+                        Layout
+                    </h3>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm text-text-muted mb-2">Image Position</label>
+                            <div className="flex bg-white/5 p-1 rounded-lg">
+                                <button
+                                    onClick={() => setImageLayout('block')}
+                                    className={`flex-1 py-1.5 px-2 rounded-md text-sm font-medium transition-all ${imageLayout === 'block' ? 'bg-primary text-white shadow-lg' : 'text-text-muted hover:text-white'}`}
+                                >
+                                    Under (Block)
+                                </button>
+                                <button
+                                    onClick={() => setImageLayout('wrap')}
+                                    className={`flex-1 py-1.5 px-2 rounded-md text-sm font-medium transition-all ${imageLayout === 'wrap' ? 'bg-primary text-white shadow-lg' : 'text-text-muted hover:text-white'}`}
+                                >
+                                    Tight (Wrap)
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-text-muted">Compact Mode</span>
+                            <div className="relative inline-block w-10 h-6 select-none transition duration-200 ease-in-out">
+                                <input
+                                    type="checkbox"
+                                    name="toggle"
+                                    id="compactMode"
+                                    checked={compactMode}
+                                    onChange={(e) => setCompactMode(e.target.checked)}
+                                    className="peer absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+                                />
+                                <label
+                                    htmlFor="compactMode"
+                                    className={`block overflow-hidden h-6 rounded-full bg-white/10 cursor-pointer peer-checked:bg-primary transition-colors`}
+                                ></label>
+                                <div className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${compactMode ? 'translate-x-4' : ''} pointer-events-none`}></div>
+                            </div>
+                        </div>
+                        <p className="text-xs text-text-muted/60">
+                            {compactMode ? "Entries flow continuously to save space." : "Entries try to stay on one page."}
+                        </p>
+                    </div>
+                </div>
+
                 {/* Action Buttons */}
                 <button
                     onClick={handlePrint}
@@ -394,7 +448,7 @@ export default function PdfExportView() {
                                 {entries.length > 0 ? (
                                     <div className="space-y-8">
                                         {entries.map((entry, index) => (
-                                            <div key={entry.id} className="mb-8 break-inside-avoid">
+                                            <div key={entry.id} className={`mb-8 ${compactMode ? '' : 'break-inside-avoid'}`}>
                                                 <div
                                                     className="font-serif font-bold text-gray-900 mb-1"
                                                     style={{ fontSize: `${fontSettings.titleSize}px` }}
@@ -408,11 +462,11 @@ export default function PdfExportView() {
                                                     {format(parseISO(entry.date), 'EEEE, d MMMM yyyy')}
                                                 </div>
                                                 <div
-                                                    className="prose max-w-none text-gray-800"
+                                                    className={`prose max-w-none text-gray-800 ${imageLayout === 'wrap' ? 'clearfix' : ''}`}
                                                     style={{ fontSize: `${fontSettings.bodySize}px` }}
                                                 >
                                                     {entry.images && entry.images.length > 0 && (
-                                                        <div className={`mb-4 grid gap-4 ${entry.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                        <div className={`mb-4 ${imageLayout === 'wrap' ? 'float-left w-[45%] mr-6' : 'grid gap-4'} ${entry.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                                             {entry.images.map((img, i) => (
                                                                 <div key={i} className="break-inside-avoid">
                                                                     <img
@@ -420,6 +474,11 @@ export default function PdfExportView() {
                                                                         alt={`Attachment ${i + 1}`}
                                                                         className="w-full h-auto object-contain rounded-lg border border-gray-200 max-h-[500px]"
                                                                     />
+                                                                    {img.caption && (
+                                                                        <div className="text-center text-gray-500 text-sm mt-1 italic font-serif">
+                                                                            {img.caption}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -427,7 +486,7 @@ export default function PdfExportView() {
                                                     <ReactMarkdown>{entry.content}</ReactMarkdown>
                                                 </div>
                                                 {index < entries.length - 1 && (
-                                                    <hr className="my-8 border-gray-200" />
+                                                    <hr className={`border-gray-200 ${compactMode ? 'my-4' : 'my-8'}`} />
                                                 )}
                                             </div>
                                         ))}
