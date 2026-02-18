@@ -15,6 +15,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'fire
 import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
 import ConfirmModal from './ConfirmModal';
+import ImageWithSkeleton from './ImageWithSkeleton';
 
 export default function EntryEditor() {
     const { currentUser } = useAuth();
@@ -526,10 +527,11 @@ export default function EntryEditor() {
                                 onClick={() => handleImageClick(img)}
                                 className={`break-inside-avoid rounded-lg overflow-hidden border border-white/10 shadow-lg relative group cursor-zoom-in ${images.length > 1 ? 'mb-4' : ''}`}
                             >
-                                <img
+                                <ImageWithSkeleton
                                     src={img.url}
                                     alt={`Attachment ${idx + 1}`}
-                                    className={`block h-auto ${images.length === 1 ? 'max-h-[80vh] w-auto max-w-full' : 'w-full'}`}
+                                    className="w-full"
+                                    imgClassName={`block h-auto ${images.length === 1 ? 'max-h-[80vh] w-auto max-w-full' : 'w-full'}`}
                                 />
                                 {img.caption && (
                                     <div className="p-3 bg-white/5 backdrop-blur-sm border-t border-white/10">
@@ -566,7 +568,12 @@ export default function EntryEditor() {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
                                     {images.map((img, idx) => (
                                         <div key={idx} className="relative rounded-lg overflow-hidden border border-white/10 group aspect-square bg-black/40 flex items-center justify-center">
-                                            <img src={img.url} alt={`Uploaded ${idx}`} className="w-full h-full object-cover" />
+                                            <ImageWithSkeleton
+                                                src={img.url}
+                                                alt={`Uploaded ${idx}`}
+                                                className="w-full h-full"
+                                                imgClassName="w-full h-full object-cover"
+                                            />
                                             <button
                                                 onClick={() => {
                                                     setEditingCaptionIndex(idx);
@@ -722,30 +729,27 @@ export default function EntryEditor() {
                         )}
 
                         {/* Image Wrapper */}
-                        <div className="relative inline-block">
+                        <div className="relative inline-block" style={{
+                            maxWidth: zoomLevel > 1 ? 'none' : '100%',
+                            width: zoomLevel > 1 ? 'auto' : '100%',
+                            display: 'flex',
+                            justifyContent: 'center'
+                        }}>
                             <img
                                 src={lightboxImage.url}
                                 alt="Full screen view"
-                                className="block max-w-[90vw] md:max-w-[80vw] object-contain shadow-2xl rounded-lg transition-all duration-200 ease-out"
+                                className={`block object-contain shadow-2xl rounded-lg transition-all duration-200 ease-out ${zoomLevel === 1 ? 'max-w-[90vw] md:max-w-[80vw]' : ''}`}
                                 style={{
                                     height: `${80 * zoomLevel}vh`,
                                     maxHeight: zoomLevel === 1 ? '85vh' : 'none',
-                                    width: 'auto'
+                                    width: 'auto',
+                                    maxWidth: zoomLevel > 1 ? 'none' : undefined
                                 }}
                             />
-
-                            {/* Close Button - Right of bottom-right corner */}
-                            <button
-                                onClick={closeLightbox}
-                                className="absolute -right-12 bottom-0 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
-                                title="Close"
-                            >
-                                <X className="w-6 h-6" />
-                            </button>
                         </div>
                     </div>
 
-                    {/* Zoom Controls - Fixed at bottom center (floating) */}
+                    {/* Zoom Controls & Close - Fixed at bottom center (floating) */}
                     <div
                         className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-white/10 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 z-[110]"
                         onClick={(e) => e.stopPropagation()}
@@ -756,18 +760,30 @@ export default function EntryEditor() {
                             className="p-2 hover:bg-white/10 rounded-full text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Zoom Out"
                         >
-                            <ChevronLeft className="w-6 h-6 rotate-[-90deg]" />
+                            <ChevronLeft className="w-5 h-5 rotate-[-90deg]" />
                         </button>
-                        <span className="text-white font-mono text-sm w-12 text-center">
+
+                        <span className="text-white font-mono text-sm w-12 text-center select-none">
                             {Math.round(zoomLevel * 100)}%
                         </span>
+
                         <button
                             onClick={handleZoomIn}
                             disabled={zoomLevel >= 3}
                             className="p-2 hover:bg-white/10 rounded-full text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Zoom In"
                         >
-                            <ChevronRight className="w-6 h-6 rotate-[-90deg]" />
+                            <ChevronRight className="w-5 h-5 rotate-[-90deg]" />
+                        </button>
+
+                        <div className="w-px h-6 bg-white/20 mx-1"></div>
+
+                        <button
+                            onClick={closeLightbox}
+                            className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
+                            title="Close"
+                        >
+                            <X className="w-5 h-5" />
                         </button>
                     </div>
                 </div>,
