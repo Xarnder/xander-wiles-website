@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schem to Vox Converter</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Site Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Tool Specific Styles -->
+    <link rel="stylesheet" href="converter.css">
+</head>
+
+<body>
+
+    <!-- Global Navigation -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Main Tool Container -->
+    <main class="container">
+        <div class="card glass-panel">
+            <header>
+                <h1>Schem to Vox</h1>
+                <p>Convert Minecraft 1.21+ Schematics (.schem) to .vox</p>
+            </header>
+
+            <div class="upload-area" id="drop-zone">
+                <input type="file" id="file-input" accept=".schem" hidden>
+                <div class="icon">📂</div>
+                <p>Drag & Drop your <strong>.schem</strong> file here<br>or click to browse</p>
+                <p class="error-msg" id="error-display"></p>
+            </div>
+
+            <div class="controls hidden" id="controls">
+                <div class="info-stats">
+                    <span id="dim-info">Size: -</span>
+                    <span id="block-count">Blocks: -</span>
+                </div>
+
+                <div class="control-group">
+                    <h3>View</h3>
+                    <label><input type="checkbox" id="auto-rotate-toggle" checked> Auto Rotate</label>
+                    <label style="margin-top: 5px;"><input type="checkbox" id="grid-toggle" checked> Show Grid</label>
+                    <label style="margin-top: 5px;"><input type="checkbox" id="axis-toggle"> Show Axis</label>
+                </div>
+
+                <div class="control-group">
+                    <h3>Geometry</h3>
+                    <label>Voxel Size: <span id="voxel-size-val">0.97</span> <input type="range" id="voxel-size" min="0"
+                            max="1" step="0.01" value="0.97"></label>
+                </div>
+
+                <div class="control-group">
+                    <h3>Lighting</h3>
+                    <label>Ambient: <span id="ambient-val">1.2</span> <input type="range" id="ambient-intensity" min="0"
+                            max="5" step="0.1" value="1.2"></label>
+                    <label>Directional: <span id="dir-val">2.0</span> <input type="range" id="dir-intensity" min="0"
+                            max="5" step="0.1" value="2.0"></label>
+                </div>
+
+                <div class="control-group">
+                    <h3>Material</h3>
+                    <label>Base Color: <input type="color" id="material-color" value="#ffffff"></label>
+                    <label style="margin-top: 5px;"><input type="checkbox" id="block-colors-toggle"> Use Block
+                        Colors</label>
+
+                    <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                        <label style="margin-bottom: 5px;"><input type="checkbox" id="gtao-toggle" checked> Amb.
+                            Occlusion (GTAO)</label>
+                        <div id="gtao-controls" style="padding-left: 10px;">
+                            <label style="font-size: 0.8rem;">Strength: <span id="gtao-str-val">1.0</span> <input
+                                    type="range" id="gtao-intensity" min="0" max="100" step="0.1" value="1.0"></label>
+                            <label style="font-size: 0.8rem;">Radius: <span id="gtao-rad-val">0.05</span> <input
+                                    type="range" id="gtao-radius" min="0.01" max="1.0" step="0.01" value="0.05"></label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>Texture</h3>
+                    <div class="texture-upload">
+                        <input type="file" id="texture-input" accept="image/*" class="hidden">
+                        <button id="texture-btn" class="btn secondary small">Upload Texture</button>
+                        <span id="texture-name" style="font-size: 0.8rem; color: #aaa; margin-left: 10px;">None</span>
+                    </div>
+                    <label style="margin-top: 5px; display: block;"><input type="checkbox" id="texture-toggle" disabled>
+                        Enable Texture</label>
+                </div>
+
+                <button id="download-btn" class="btn primary">Download .vox</button>
+                <button id="reset-btn" class="btn secondary">Convert Another</button>
+            </div>
+
+            <div style="margin-top: 15px; font-size: 0.8rem; color: #666;">
+                <p>Check Browser Console (F12) for detailed debug logs if conversion fails.</p>
+            </div>
+        </div>
+
+        <div class="card glass-panel preview-container">
+            <div id="canvas-container"></div>
+            <div class="loading-overlay hidden" id="loader">
+                <div class="spinner"></div>
+                <p id="loading-text">Processing...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Libraries (ES Modules) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "pako": "https://cdn.jsdelivr.net/npm/pako@2.1.0/+esm"
+            }
+        }
+    </script>
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>
