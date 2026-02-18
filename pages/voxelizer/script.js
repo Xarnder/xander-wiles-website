@@ -24,6 +24,7 @@ const controlsDiv = document.getElementById('controls');
 const uploadDiv = document.querySelector('.upload-area');
 const dimInfo = document.getElementById('dim-info');
 const blockCountInfo = document.getElementById('block-count');
+const progressFill = document.getElementById('progress-fill');
 
 // --- Initialization ---
 initThreeJS();
@@ -36,9 +37,12 @@ function log(msg, type = 'info') {
     else console.log(`[${timestamp}] DEBUG:`, msg);
 }
 
-function updateStatus(msg) {
+function updateStatus(msg, percent = -1) {
     if (loadingText) loadingText.textContent = msg;
-    log(msg);
+    if (percent >= 0 && progressFill) {
+        progressFill.style.width = `${percent}%`;
+    }
+    // log(msg); // Reduce log spam
 }
 
 // --- Three.js Setup ---
@@ -316,13 +320,16 @@ async function handleFile(file) {
 
     showError("");
     loader.classList.remove('hidden');
-    updateStatus(`Reading ${file.name}...`);
+    updateStatus(`Reading ${file.name}...`, 0);
 
     try {
         const arrayBuffer = await file.arrayBuffer();
 
         // 1. Decompress
-        updateStatus("Decompressing GZip...");
+        updateStatus("Decompressing GZip...", 5);
+        // Allow UI to update
+        await new Promise(r => setTimeout(r, 10));
+
         let decompressed;
         try {
             decompressed = pako.inflate(new Uint8Array(arrayBuffer));
@@ -331,7 +338,8 @@ async function handleFile(file) {
         }
 
         // 2. Parse NBT (Robust Recursive)
-        updateStatus("Parsing NBT tags...");
+        updateStatus("Parsing NBT tags...", 10);
+        await new Promise(r => setTimeout(r, 10));
         const nbtData = new NBTParser(decompressed).read();
 
         console.group("Parsed NBT Data");
@@ -339,7 +347,7 @@ async function handleFile(file) {
         console.groupEnd();
 
         // 3. Process Data
-        updateStatus("Processing Voxel Data...");
+        updateStatus("Processing Voxel Data...", 15);
 
         // Handle Sponge V2/V3 variations
         let width = nbtData.value.Width || nbtData.value.width;
@@ -357,25 +365,22 @@ async function handleFile(file) {
         height = Number(height);
         length = Number(length);
 
-        currentVoxData = processSchematic({
+        currentVoxData = await processSchematic({
             Width: width, Height: height, Length: length,
             Palette: palette, BlockData: blockData
         });
 
         // 4. Render
-        updateStatus("Rendering Preview...");
-        // Use a slight timeout to allow UI to update before heavy rendering
-        setTimeout(() => {
-            renderPreview(currentVoxData);
+        updateStatus("Preparing Render...", 80);
+        await renderPreview(currentVoxData);
 
-            uploadDiv.classList.add('hidden');
-            controlsDiv.classList.remove('hidden');
-            dimInfo.innerText = `Size: ${currentVoxData.size.x}x${currentVoxData.size.y}x${currentVoxData.size.z}`;
-            blockCountInfo.innerText = `Blocks: ${currentVoxData.voxels.length}`;
+        uploadDiv.classList.add('hidden');
+        controlsDiv.classList.remove('hidden');
+        dimInfo.innerText = `Size: ${currentVoxData.size.x}x${currentVoxData.size.y}x${currentVoxData.size.z}`;
+        blockCountInfo.innerText = `Blocks: ${currentVoxData.voxels.length}`;
 
-            loader.classList.add('hidden');
-            log("Conversion complete.");
-        }, 50);
+        loader.classList.add('hidden');
+        log("Conversion complete.");
 
     } catch (err) {
         log(err.message, 'error');
@@ -484,7 +489,7 @@ class NBTParser {
 }
 
 // --- Logic ---
-function processSchematic(nbt) {
+async function processSchematic(nbt) {
     const width = nbt.Width;
     const height = nbt.Height;
     const length = nbt.Length;
@@ -509,6 +514,16 @@ function processSchematic(nbt) {
     // Safety check on data
     if (!(data instanceof Uint8Array)) throw new Error("BlockData is not a ByteArray");
 
+    // Chunk Size for processing
+    const CHUNK_SIZE = 100000;
+    let nextYield = CHUNK_SIZE;
+
+    // We can't easily chunk the VarInt decoding freely because it's stateful per byte,
+    // but we can yield every N bytes processed or N blocks found.
+    // Given the tight loop, let's yield based on output size or input index.
+
+    const totalBytes = data.length;
+
     while (idx < data.length) {
         let value = 0;
         let varintLength = 0;
@@ -522,6 +537,13 @@ function processSchematic(nbt) {
             if ((currentByte & 128) !== 128) break;
         }
         blockIds.push(value);
+
+        if (idx > nextYield) {
+            const progress = 15 + (idx / totalBytes) * 15; // 15% to 30%
+            updateStatus(`Decoding Block Data... ${Math.floor(progress)}%`, progress);
+            await new Promise(r => setTimeout(r, 0));
+            nextYield = idx + CHUNK_SIZE;
+        }
     }
 
     log(`Decoded ${blockIds.length} blocks.`);
@@ -555,12 +577,25 @@ function processSchematic(nbt) {
     // Sponge Order: Y Z X usually? Or Y X Z?
     // Spec says: index = (y * length + z) * width + x
     let i = 0;
+
+    const totalBlocks = height * length * width;
+    let processedBlocks = 0;
+    nextYield = 10000; // Reset yield counter
+
     for (let y = 0; y < height; y++) {
         for (let z = 0; z < length; z++) {
             for (let x = 0; x < width; x++) {
                 if (i >= blockIds.length) break;
 
                 const id = blockIds[i++];
+                processedBlocks++;
+
+                if (processedBlocks % 20000 === 0) {
+                    const progress = 30 + (processedBlocks / totalBlocks) * 50; // 30% to 80%
+                    updateStatus(`Extracting Voxels... ${Math.floor(progress)}%`, progress);
+                    await new Promise(r => setTimeout(r, 0));
+                }
+
                 if (id === 0) continue;
 
                 const name = idToName[id] || "minecraft:unknown";
@@ -596,7 +631,7 @@ function processSchematic(nbt) {
 }
 
 // --- Render ---
-function renderPreview(data) {
+async function renderPreview(data) {
     // Clean scene
     scene.children.filter(o => o.type === "Mesh" || o.type === "Group").forEach(o => scene.remove(o));
 
@@ -608,16 +643,16 @@ function renderPreview(data) {
         metalness: 0.1
     });
 
-    // Create a 1x1 white data texture as default to ensure map is never null if that helps, 
-    // but actually standard material works fine with null map (uses color).
-    // However, if we want a 'default material' feel, maybe we stick to white.
-
     if (currentTexture && document.getElementById('texture-toggle').checked) {
         material.map = currentTexture;
     }
 
     // Limit Max Instances for performance on phones
-    const MAX_INSTANCES = 50000;
+    // Updated to support larger models (512^3 is huge, so we might still hit GPU limits)
+    // 512^3 is 134 million blocks. InstancedMesh limit is technically high, but VRAM is the issue.
+    // However, most 512^3 region files are not 100% full.
+    // Let's set a safe high limit. 2 million? 
+    const MAX_INSTANCES = 5000000;
     const voxelCount = Math.min(data.voxels.length, MAX_INSTANCES);
 
     if (data.voxels.length > MAX_INSTANCES) {
@@ -633,6 +668,9 @@ function renderPreview(data) {
     // Initial Scale
     const initialScale = parseFloat(document.getElementById('voxel-size').value) || 1.0;
 
+    // Batch processing
+    const BATCH_SIZE = 5000;
+
     for (let i = 0; i < voxelCount; i++) {
         const v = data.voxels[i];
         dummy.position.set(v.x, v.z, v.y); // Flip to Y-up
@@ -645,6 +683,12 @@ function renderPreview(data) {
         color.setRGB(p.r / 255, p.g / 255, p.b / 255);
         color.convertSRGBToLinear();
         mesh.setColorAt(i, color);
+
+        if (i % BATCH_SIZE === 0) {
+            const progress = 80 + (i / voxelCount) * 20;
+            updateStatus(`Building Mesh... ${Math.floor(progress)}%`, progress);
+            await new Promise(r => setTimeout(r, 0));
+        }
     }
 
     mesh.instanceMatrix.needsUpdate = true;
