@@ -371,7 +371,12 @@ export default function StatsView() {
                         <div className="text-sm text-text-muted">Average Words / Entry</div>
                     </div>
 
-                    <StorageStats variant="global" className="flex-1 flex flex-col justify-center items-center text-center" />
+                    <StorageStats
+                        variant="global"
+                        entries={entries}
+                        timeFrameLabel={ranges[timeRange]?.label}
+                        className="flex-1 flex flex-col justify-center items-center text-center"
+                    />
                 </div>
             </div>
         </div>

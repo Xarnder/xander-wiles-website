@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { HardDrive, Image as ImageIcon, FileText, Loader } from 'lucide-react';
 
-export default function StorageStats({ variant = 'entry', entryTextSize = 0, entryImageSize = 0, className = '' }) {
+export default function StorageStats({ variant = 'entry', entryTextSize = 0, entryImageSize = 0, entries = [], timeFrameLabel = '', className = '' }) {
     const { currentUser } = useAuth();
     const [totalSize, setTotalSize] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -19,6 +19,46 @@ export default function StorageStats({ variant = 'entry', entryTextSize = 0, ent
         return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
     };
 
+    // Helper to calculate size for a single entry
+    const calculateEntrySize = (data) => {
+        let size = 0;
+        // Text size
+        if (data.textSize) {
+            size += data.textSize;
+        } else if (data.contentSizeInBytes) {
+            size += data.contentSizeInBytes;
+        } else if (data.content) {
+            size += new Blob([data.content]).size;
+        }
+
+        // Image size
+        if (data.imageSize) {
+            size += data.imageSize;
+        } else if (data.imageMetadata && data.imageMetadata.sizeInBytes) {
+            size += data.imageMetadata.sizeInBytes;
+        }
+        return size;
+    };
+
+    // Calculate stats for filtered entries (props)
+    const filteredStats = useMemo(() => {
+        if (!entries || entries.length === 0) return { size: 0, images: 0 };
+
+        let size = 0;
+        let images = 0;
+
+        entries.forEach(entry => {
+            size += calculateEntrySize(entry);
+            if (entry.images && entry.images.length > 0) {
+                images += entry.images.length;
+            } else if (entry.imageUrl || entry.image) {
+                images += 1;
+            }
+        });
+
+        return { size, images };
+    }, [entries]);
+
     useEffect(() => {
         if (variant !== 'global' || !currentUser) return;
 
@@ -30,23 +70,7 @@ export default function StorageStats({ variant = 'entry', entryTextSize = 0, ent
                 let totalBytes = 0;
 
                 querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-
-                    // Add text size (New Schema -> Fallback Schema -> Estimate)
-                    if (data.textSize) {
-                        totalBytes += data.textSize;
-                    } else if (data.contentSizeInBytes) {
-                        totalBytes += data.contentSizeInBytes;
-                    } else if (data.content) {
-                        totalBytes += new Blob([data.content]).size;
-                    }
-
-                    // Add image size (New Schema -> Fallback Schema)
-                    if (data.imageSize) {
-                        totalBytes += data.imageSize;
-                    } else if (data.imageMetadata && data.imageMetadata.sizeInBytes) {
-                        totalBytes += data.imageMetadata.sizeInBytes;
-                    }
+                    totalBytes += calculateEntrySize(doc.data());
                 });
 
                 setTotalSize(totalBytes);
@@ -103,10 +127,10 @@ export default function StorageStats({ variant = 'entry', entryTextSize = 0, ent
     // Global Variant
     return (
         <div className={`glass-card p-6 ${className}`}>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-serif font-bold text-white flex items-center gap-2">
                     <HardDrive className="w-5 h-5 text-secondary" />
-                    Account Storage
+                    Storage Stats
                 </h3>
             </div>
 
@@ -116,11 +140,40 @@ export default function StorageStats({ variant = 'entry', entryTextSize = 0, ent
                     <span className="text-sm">Calculating usage...</span>
                 </div>
             ) : (
-                <div>
-                    <div className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                        {formatBytes(totalSize)}
+                <div className="space-y-6">
+                    {/* Filtered Stats (if available) */}
+                    {entries && entries.length > 0 && (
+                        <div className="pb-4 border-b border-white/10">
+                            <div className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">
+                                {timeFrameLabel || 'Selected Range'}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="text-2xl font-bold text-white">
+                                        {formatBytes(filteredStats.size)}
+                                    </div>
+                                    <div className="text-xs text-text-muted mt-1">Used</div>
+                                </div>
+                                <div>
+                                    <div className="text-2xl font-bold text-white flex items-center justify-center gap-1">
+                                        {filteredStats.images} <ImageIcon className="w-4 h-4 text-text-muted" />
+                                    </div>
+                                    <div className="text-xs text-text-muted mt-1">Images</div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Global Total */}
+                    <div>
+                        <div className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+                            Total Account Usage
+                        </div>
+                        <div className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                            {formatBytes(totalSize)}
+                        </div>
+                        <p className="text-xs text-text-muted mt-1">Total space used across all entries</p>
                     </div>
-                    <p className="text-sm text-text-muted mt-1">Total space used across all entries</p>
                 </div>
             )}
         </div>
