@@ -11,6 +11,7 @@ export default function ImageView() {
     const navigate = useNavigate();
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showInfo, setShowInfo] = useState(true);
 
     useEffect(() => {
         async function fetchImages() {
@@ -95,11 +96,22 @@ export default function ImageView() {
                     </h2>
                     <p className="text-text-muted text-sm">A visual journey through your memories</p>
                 </div>
-                <div className="text-right">
-                    <p className="text-3xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
-                        {entries.length}
-                    </p>
-                    <p className="text-xs text-text-muted uppercase tracking-wider">Photos</p>
+                <div className="text-right flex flex-col items-end">
+                    <div className="flex items-center space-x-4 mb-2">
+                        <button
+                            onClick={() => setShowInfo(!showInfo)}
+                            className={`p-2 rounded-lg transition-colors ${showInfo ? 'bg-primary text-white' : 'bg-white/5 text-text-muted hover:bg-white/10 hover:text-white'}`}
+                            title={showInfo ? "Hide Details" : "Show Details"}
+                        >
+                            <ImageIcon className="w-5 h-5" />
+                        </button>
+                        <div>
+                            <p className="text-3xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary leading-none">
+                                {entries.length}
+                            </p>
+                            <p className="text-xs text-text-muted uppercase tracking-wider text-right">Photos</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -151,9 +163,9 @@ export default function ImageView() {
                                             )}
                                         </div>
 
-                                        {/* Overlay on hover */}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 z-20">
-                                            <div className="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+                                        {/* Overlay on hover or when showInfo is true */}
+                                        <div className={`absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent transition-opacity duration-300 flex flex-col justify-end p-4 z-20 ${showInfo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                            <div className={`transform transition-transform duration-300 ${showInfo ? 'translate-y-0' : 'translate-y-4 group-hover:translate-y-0'}`}>
                                                 <p className="text-xs text-primary font-bold mb-1 flex items-center">
                                                     <Calendar className="w-3 h-3 mr-1" />
                                                     {format(entry.date, 'MMM d, yyyy')}
