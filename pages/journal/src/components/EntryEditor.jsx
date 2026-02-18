@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -328,10 +329,44 @@ export default function EntryEditor() {
         navigate(`/entry/${nextDateString}`);
     };
 
-    // Check if title is inferred from content
-    const isInferredTitle = useMemo(() => {
-        return /(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/.test(content || '');
-    }, [content]);
+    // Lightbox State
+    const [lightboxImage, setLightboxImage] = useState(null);
+    const [zoomLevel, setZoomLevel] = useState(1);
+
+    // Lightbox Handlers
+    const handleImageClick = (img) => {
+        if (!isEditing) {
+            setLightboxImage(img);
+            setZoomLevel(1);
+        }
+    };
+
+    const closeLightbox = () => {
+        setLightboxImage(null);
+        setZoomLevel(1);
+    };
+
+    const handleZoomIn = (e) => {
+        e.stopPropagation();
+        setZoomLevel(prev => Math.min(prev + 0.5, 3));
+    };
+
+    const handleZoomOut = (e) => {
+        e.stopPropagation();
+        setZoomLevel(prev => Math.max(prev - 0.5, 1));
+    };
+
+    // Lock body scroll when lightbox is open
+    useEffect(() => {
+        if (lightboxImage) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, [lightboxImage]);
 
     if (loading) return (
         <div className="glass-card p-8 flex flex-col items-center justify-center min-h-[400px] text-text-muted animate-pulse">
@@ -341,7 +376,7 @@ export default function EntryEditor() {
     );
 
     return (
-        <div className="h-full flex flex-col">
+        <div className="h-full flex flex-col relative">
             {/* Header / Actions */}
             <div className="mb-6 sticky top-24 z-40 relative transition-all duration-300 isolate">
                 {/* Background Layer */}
@@ -486,7 +521,11 @@ export default function EntryEditor() {
                 {images.length > 0 && !isEditing && (
                     <div className={`mb-6 ${images.length === 1 ? 'flex justify-center' : 'columns-1 sm:columns-2 gap-4'}`}>
                         {images.map((img, idx) => (
-                            <div key={idx} className={`break-inside-avoid rounded-lg overflow-hidden border border-white/10 shadow-lg relative group ${images.length > 1 ? 'mb-4' : ''}`}>
+                            <div
+                                key={idx}
+                                onClick={() => handleImageClick(img)}
+                                className={`break-inside-avoid rounded-lg overflow-hidden border border-white/10 shadow-lg relative group cursor-zoom-in ${images.length > 1 ? 'mb-4' : ''}`}
+                            >
                                 <img
                                     src={img.url}
                                     alt={`Attachment ${idx + 1}`}
@@ -564,7 +603,6 @@ export default function EntryEditor() {
                                         onChange={handleImageUpload}
                                         className="hidden"
                                         id="image-upload"
-                                        disabled={uploading}
                                     />
                                     <label
                                         htmlFor="image-upload"
@@ -662,6 +700,78 @@ export default function EntryEditor() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Lightbox Modal - Portaled to body to avoid z-index stacking context issues */}
+            {lightboxImage && createPortal(
+                <div
+                    className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center animate-in fade-in duration-300 overflow-auto p-4 sm:p-8"
+                    onClick={closeLightbox}
+                >
+                    <div
+                        className="relative flex flex-col items-center shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Caption */}
+                        {lightboxImage.caption && (
+                            <div className="mb-4 bg-black/60 backdrop-blur-md px-6 py-3 rounded-xl border border-white/10 max-w-prose">
+                                <p className="text-white text-sm sm:text-base font-medium text-center">
+                                    {lightboxImage.caption}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Image Wrapper */}
+                        <div className="relative inline-block">
+                            <img
+                                src={lightboxImage.url}
+                                alt="Full screen view"
+                                className="block max-w-[90vw] md:max-w-[80vw] object-contain shadow-2xl rounded-lg transition-all duration-200 ease-out"
+                                style={{
+                                    height: `${80 * zoomLevel}vh`,
+                                    maxHeight: zoomLevel === 1 ? '85vh' : 'none',
+                                    width: 'auto'
+                                }}
+                            />
+
+                            {/* Close Button - Right of bottom-right corner */}
+                            <button
+                                onClick={closeLightbox}
+                                className="absolute -right-12 bottom-0 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+                                title="Close"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Zoom Controls - Fixed at bottom center (floating) */}
+                    <div
+                        className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-white/10 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 z-[110]"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            onClick={handleZoomOut}
+                            disabled={zoomLevel <= 1}
+                            className="p-2 hover:bg-white/10 rounded-full text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Zoom Out"
+                        >
+                            <ChevronLeft className="w-6 h-6 rotate-[-90deg]" />
+                        </button>
+                        <span className="text-white font-mono text-sm w-12 text-center">
+                            {Math.round(zoomLevel * 100)}%
+                        </span>
+                        <button
+                            onClick={handleZoomIn}
+                            disabled={zoomLevel >= 3}
+                            className="p-2 hover:bg-white/10 rounded-full text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Zoom In"
+                        >
+                            <ChevronRight className="w-6 h-6 rotate-[-90deg]" />
+                        </button>
+                    </div>
+                </div>,
+                document.body
             )}
         </div >
     );
