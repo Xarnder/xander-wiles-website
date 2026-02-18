@@ -1,17 +1,17 @@
 
 import { app, auth, db } from './firebase-config.js';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { onAuthStateChanged, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { doc, onSnapshot, setDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { state, setCurrentUser, cleanupListeners } from './store.js';
 import * as API from './api.js';
 import * as UI from './ui.js';
 import * as Utils from './utils.js';
 
-console.log("[DEBUG] Main Module Initialized - v1.2 CHECK");
+console.log("[DEBUG] Main Module Initialized - v1.3 PWA Fixes");
 
 // GLOBAL ERROR HANDLER FOR DEBUGGING
 window.onerror = function (msg, url, line, col, error) {
-    alert(`Script Error: ${msg}\nLine: ${line}`);
+    // alert(`Script Error: ${msg}\nLine: ${line}`); // Create noise
     console.error("Global Error:", error);
 };
 
@@ -38,6 +38,16 @@ if ('serviceWorker' in navigator) {
 }
 
 // ... existing code ...
+
+// --- SPLASH SCREEN TIMEOUT ---
+// If auth takes too long (e.g. offline with no cache), force hide splash
+setTimeout(() => {
+    const splash = document.getElementById('splash-screen');
+    if (splash && !splash.classList.contains('hidden-splash')) {
+        console.warn("Splash screen timed out - forcing hide");
+        splash.classList.add('hidden-splash');
+    }
+}, 8000); // 8 seconds max
 
 // --- EXPOSE TO WINDOW FOR INLINE HTML ---
 // This is critical for onclick="..." to work
@@ -90,18 +100,26 @@ const boardContainer = document.getElementById('board-container');
 const projectTitleInput = document.getElementById('project-title-input');
 
 // --- AUTHENTICATION ---
+// USE REDIRECT FOR PWA COMPATIBILITY
 googleLoginBtn.onclick = () => {
-    console.log("Login Button Clicked");
+    console.log("Login Button Clicked - Redirect Mode");
     const provider = new GoogleAuthProvider();
-    signInWithPopup(auth, provider)
-        .then(result => {
-            console.log("Login Success:", result.user.uid);
-        })
-        .catch(err => {
-            console.error("Login Error Details:", err);
-            alert(`Login Failed!\nCode: ${err.code}\nMessage: ${err.message}`);
-        });
+    signInWithRedirect(auth, provider); // No promise here, page redirects
 };
+
+// Check for redirect result on page load
+getRedirectResult(auth)
+    .then((result) => {
+        if (result) {
+            console.log("Redirect Login Success:", result.user.uid);
+            // Auth state listener will handle the rest
+        }
+    })
+    .catch((error) => {
+        console.error("Redirect Login Error:", error);
+        // alert(`Login Failed: ${error.message}`);
+    });
+
 
 logoutBtn.onclick = () => {
     if (confirm("Are you sure you want to logout?")) {
