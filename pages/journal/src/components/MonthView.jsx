@@ -183,7 +183,9 @@ export default function MonthView() {
                                     {/* Content Column */}
                                     <div className="flex-1 min-w-0">
                                         {entryData ? (
-                                            <h3 className="text-lg font-medium text-white truncate">{entryData.title}</h3>
+                                            <h3 className="text-sm sm:text-lg font-medium text-white whitespace-normal sm:truncate leading-tight sm:leading-normal">
+                                                {entryData.title}
+                                            </h3>
                                         ) : (
                                             <h3 className="text-sm italic text-text-muted/50">No entry</h3>
                                         )}
