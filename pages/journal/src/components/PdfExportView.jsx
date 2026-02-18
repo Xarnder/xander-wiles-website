@@ -24,9 +24,14 @@ export default function PdfExportView() {
     // Layout Options
     const [imageLayout, setImageLayout] = useState('block'); // 'block' | 'wrap'
     const [compactMode, setCompactMode] = useState(false); // If true, allow splitting across pages
+    const [showContentsPage, setShowContentsPage] = useState(false);
+    const [showDateRangeHeader, setShowDateRangeHeader] = useState(true);
+    const [showMonthHeaders, setShowMonthHeaders] = useState(true);
+    const [showPageNumbers, setShowPageNumbers] = useState(true);
 
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [tocItems, setTocItems] = useState([]);
 
     // Preview Pagination Logic
     const previewContainerRef = useRef(null);
@@ -40,6 +45,28 @@ export default function PdfExportView() {
         if (filterMode === 'range' && !startDate && !endDate) return;
         // Trigger fetch (logic below)
     }, []);
+
+    // Check if range is long enough to default to showing contents page
+    useEffect(() => {
+        if (filterMode === 'range' && startDate && endDate) {
+            const start = parseISO(startDate);
+            const end = parseISO(endDate);
+            const diffTime = Math.abs(end - start);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            // If range > 32 days, default show contents to true
+            if (diffDays > 32) {
+                setShowContentsPage(true);
+            } else {
+                setShowContentsPage(false);
+            }
+        } else if (filterMode === 'year') {
+            setShowContentsPage(true);
+        } else {
+            setShowContentsPage(false);
+        }
+    }, [filterMode, startDate, endDate, selectedYear]);
+
 
     useEffect(() => {
         async function fetchEntries() {
@@ -71,6 +98,9 @@ export default function PdfExportView() {
                 }
 
                 if (start && end) {
+                    // Create Date Range Header String
+                    const dateRangeStr = `${format(start, 'MMMM d, yyyy')} - ${format(end, 'MMMM d, yyyy')}`;
+
                     q = query(
                         entriesRef,
                         where('date', '>=', start),
@@ -131,23 +161,94 @@ export default function PdfExportView() {
     }, [currentUser, filterMode, selectedMonth, selectedYear, startDate, endDate]);
 
     // Calculate total pages (approximate) when entries change
+    // Also calculate TOC items
     useEffect(() => {
-        if (previewContainerRef.current) {
+        if (previewContainerRef.current && entries.length > 0) {
             // Delay slightly to allow rendering
             setTimeout(() => {
-                if (previewContainerRef.current) {
-                    const scrollHeight = previewContainerRef.current.scrollHeight;
-                    const clientHeight = previewContainerRef.current.clientHeight;
-                    // Assuming A4 ratio is maintained in view, but here we just use scroll height
-                    // Page height in preview pixels (A4 is 297mm, assuming standard browser DPI roughly 1123px)
-                    // But we are scaling. Let's strictly use the container's clientHeight as "one page view"
-                    const pageHeight = clientHeight > 0 ? clientHeight : 1;
+                const container = previewContainerRef.current;
+                // Need to look at the A4 page wrapper actually, not just container scroll
+                const pageWrapper = pageWrapperRef.current;
+
+                if (container && pageWrapper) {
+                    const scrollHeight = container.scrollHeight;
+                    const clientHeight = container.clientHeight;
+                    // A4 height in pixels (approx 1123px at 96dpi, but heavily depends on scaling)
+                    // We can try to deduce "one page height" from the container's visible area if it fits one page
+                    // Ideally 297mm convert to px. @ 96dpi = 1122.5px. 
+                    // Let's use the container clientHeight as the "viewer page height".
+
+                    const pageHeight = clientHeight > 0 ? clientHeight : 1123;
                     setTotalPages(Math.max(1, Math.ceil(scrollHeight / pageHeight)));
                     setCurrentPage(1); // Reset to first page on new content
+
+                    // Calculate TOC
+                    // Find all month headers or first entry of each month
+                    const newTocItems = [];
+                    let currentMonth = '';
+
+                    entries.forEach((entry, index) => {
+                        const entryDate = parseISO(entry.date);
+                        const monthStr = format(entryDate, 'MMMM yyyy');
+
+                        if (monthStr !== currentMonth) {
+                            currentMonth = monthStr;
+                            // Find the DOM element for this entry
+                            // We need to query selector strictly within our preview container to avoid other elements
+                            // But identifiers might be tricky. Let's use ID on the entry div.
+                            // Wait, we are in a timeout, render should be done.
+                            // BUT, React renders might take a tick.
+
+                            // Let's defer this calculation slightly more or rely on a separate effect if needed.
+                            // For now assuming the DOM is ready in this timeout.
+                        }
+                    });
+
+                    // More robust TOC calculation reading actual DOM offsets
+                    const items = [];
+                    let lastMonth = '';
+
+                    // We need to select elements rendered in the preview
+                    // Using a specific class or ID standard
+                    const renderedEntries = pageWrapper.querySelectorAll('.journal-entry-item');
+
+                    renderedEntries.forEach((el) => {
+                        const dateStr = el.getAttribute('data-date');
+                        if (!dateStr) return;
+
+                        const date = parseISO(dateStr);
+                        const monthStr = format(date, 'MMMM yyyy');
+
+                        if (monthStr !== lastMonth) {
+                            lastMonth = monthStr;
+                            // Calculate page
+                            // Offset relative to the wrapper top?
+                            // The wrapper scrollHeight vs the pageHeight
+                            const offsetTop = el.offsetTop;
+                            // Add 1 for 1-based index. 
+                            // If Contents Page is active, it might push things down, 
+                            // but the offsetTop will reflect that if we re-run this effect! 
+                            // So we need to be careful about dependency loops if we change state based on this.
+                            // `showContentsPage` is a dependency of this effect (via re-render > entries potentially or just deps).
+
+                            let pageNum = Math.ceil(offsetTop / pageHeight) + 1; // +1 to start at page 1
+
+                            // If the offset is 0 (start of doc), it's page 1. 
+                            // Actually Math.ceil(0/h) is 0. So +1 is correct. 
+                            // Math.ceil(1/h) is 1 -> Page 2? No. 
+                            // Page 1 is 0..pageHeight. 
+                            // Page 2 is pageHeight..2*pageHeight.
+                            // Floor is better. 0..1122 -> Page 1. 
+                            pageNum = Math.floor(offsetTop / pageHeight) + 1;
+
+                            items.push({ month: monthStr, page: pageNum });
+                        }
+                    });
+                    setTocItems(items);
                 }
-            }, 500);
+            }, 800);
         }
-    }, [entries, fontSettings]);
+    }, [entries, fontSettings, showContentsPage, showDateRangeHeader, imageLayout, compactMode]); // Re-run when layout changes
 
     // Calculate scale for mobile preview
     useEffect(() => {
@@ -192,6 +293,22 @@ export default function PdfExportView() {
             const newPage = Math.round(container.scrollTop / pageHeight) + 1;
             setCurrentPage(newPage);
         }, 300);
+    };
+
+    // Helper to check if month changed
+    const isNewMonth = (currentDate, prevDate) => {
+        if (!prevDate) return true;
+        return format(parseISO(currentDate), 'yyyy-MM') !== format(parseISO(prevDate), 'yyyy-MM');
+    };
+
+    // Helper to get date range string
+    const getDateRangeString = () => {
+        if (filterMode === 'month') return format(parseISO(selectedMonth + '-01'), 'MMMM yyyy');
+        if (filterMode === 'year') return selectedYear.toString();
+        if (filterMode === 'range' && startDate && endDate) {
+            return `${format(parseISO(startDate), 'MMMM d, yyyy')} - ${format(parseISO(endDate), 'MMMM d, yyyy')}`;
+        }
+        return 'Journal Export';
     };
 
     return (
@@ -347,6 +464,82 @@ export default function PdfExportView() {
                         </div>
 
                         <div className="flex items-center justify-between">
+                            <span className="text-sm text-text-muted">Contents Page</span>
+                            <div className="relative inline-block w-10 h-6 select-none transition duration-200 ease-in-out">
+                                <input
+                                    type="checkbox"
+                                    name="toggleContents"
+                                    id="toggleContents"
+                                    checked={showContentsPage}
+                                    onChange={(e) => setShowContentsPage(e.target.checked)}
+                                    className="peer absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+                                />
+                                <label
+                                    htmlFor="toggleContents"
+                                    className={`block overflow-hidden h-6 rounded-full bg-white/10 cursor-pointer peer-checked:bg-primary transition-colors`}
+                                ></label>
+                                <div className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${showContentsPage ? 'translate-x-4' : ''} pointer-events-none`}></div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-text-muted">Date Header</span>
+                            <div className="relative inline-block w-10 h-6 select-none transition duration-200 ease-in-out">
+                                <input
+                                    type="checkbox"
+                                    name="toggleHeader"
+                                    id="toggleHeader"
+                                    checked={showDateRangeHeader}
+                                    onChange={(e) => setShowDateRangeHeader(e.target.checked)}
+                                    className="peer absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+                                />
+                                <label
+                                    htmlFor="toggleHeader"
+                                    className={`block overflow-hidden h-6 rounded-full bg-white/10 cursor-pointer peer-checked:bg-primary transition-colors`}
+                                ></label>
+                                <div className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${showDateRangeHeader ? 'translate-x-4' : ''} pointer-events-none`}></div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-text-muted">Month Headers</span>
+                            <div className="relative inline-block w-10 h-6 select-none transition duration-200 ease-in-out">
+                                <input
+                                    type="checkbox"
+                                    name="toggleMonthHeaders"
+                                    id="toggleMonthHeaders"
+                                    checked={showMonthHeaders}
+                                    onChange={(e) => setShowMonthHeaders(e.target.checked)}
+                                    className="peer absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+                                />
+                                <label
+                                    htmlFor="toggleMonthHeaders"
+                                    className={`block overflow-hidden h-6 rounded-full bg-white/10 cursor-pointer peer-checked:bg-primary transition-colors`}
+                                ></label>
+                                <div className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${showMonthHeaders ? 'translate-x-4' : ''} pointer-events-none`}></div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-text-muted">Page Numbers</span>
+                            <div className="relative inline-block w-10 h-6 select-none transition duration-200 ease-in-out">
+                                <input
+                                    type="checkbox"
+                                    name="togglePageNumbers"
+                                    id="togglePageNumbers"
+                                    checked={showPageNumbers}
+                                    onChange={(e) => setShowPageNumbers(e.target.checked)}
+                                    className="peer absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+                                />
+                                <label
+                                    htmlFor="togglePageNumbers"
+                                    className={`block overflow-hidden h-6 rounded-full bg-white/10 cursor-pointer peer-checked:bg-primary transition-colors`}
+                                ></label>
+                                <div className={`absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 ${showPageNumbers ? 'translate-x-4' : ''} pointer-events-none`}></div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
                             <span className="text-sm text-text-muted">Compact Mode</span>
                             <div className="relative inline-block w-10 h-6 select-none transition duration-200 ease-in-out">
                                 <input
@@ -434,7 +627,7 @@ export default function PdfExportView() {
                             }}
                         >
                             <div
-                                className="bg-white text-black shadow-2xl p-[20mm] print:shadow-none print:w-full print:min-h-0 print:p-0 pb-20"
+                                className="bg-white text-black shadow-2xl p-[20mm] print:shadow-none print:min-h-0 print:p-0 pb-20 relative"
                                 style={{
                                     backgroundColor: 'white',
                                     width: '210mm',
@@ -444,56 +637,106 @@ export default function PdfExportView() {
                                     transformOrigin: 'top left',
                                 }}
                             >
+                                {/* Date Range Header */}
+                                {showDateRangeHeader && (
+                                    <div className="mb-8 border-b-2 border-gray-800 pb-4">
+                                        <h1 className="text-3xl font-serif font-bold text-gray-900 text-center">
+                                            {getDateRangeString()}
+                                        </h1>
+                                    </div>
+                                )}
+
+                                {/* Contents Page */}
+                                {showContentsPage && tocItems.length > 0 && (
+                                    <div className="mb-12 break-after-page page-break" style={{ pageBreakAfter: 'always' }}>
+                                        <h2 className="text-2xl font-serif font-bold text-gray-900 mb-6 border-b border-gray-300 pb-2">Contents</h2>
+                                        <div className="space-y-2">
+                                            {tocItems.map((item, index) => (
+                                                <div key={index} className="flex items-baseline justify-between border-b border-gray-100 py-1">
+                                                    <span className="text-lg font-medium text-gray-800">{item.month}</span>
+                                                    <div className="flex-1 mx-4 border-b border-dotted border-gray-400 relative top-[-4px]"></div>
+                                                    <span className="text-lg font-bold text-gray-900">{item.page}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Content Rendering for Preview */}
                                 {entries.length > 0 ? (
                                     <div className="space-y-8">
-                                        {entries.map((entry, index) => (
-                                            <div key={entry.id} className={`mb-8 ${compactMode ? '' : 'break-inside-avoid'}`}>
-                                                <div
-                                                    className="font-serif font-bold text-gray-900 mb-1"
-                                                    style={{ fontSize: `${fontSettings.titleSize}px` }}
-                                                >
-                                                    {entry.title}
-                                                </div>
-                                                <div
-                                                    className="text-gray-500 font-medium mb-4"
-                                                    style={{ fontSize: `${fontSettings.dateSize}px` }}
-                                                >
-                                                    {format(parseISO(entry.date), 'EEEE, d MMMM yyyy')}
-                                                </div>
-                                                <div
-                                                    className={`prose max-w-none text-gray-800 ${imageLayout === 'wrap' ? 'clearfix' : ''}`}
-                                                    style={{ fontSize: `${fontSettings.bodySize}px` }}
-                                                >
-                                                    {entry.images && entry.images.length > 0 && (
-                                                        <div className={`mb-4 ${imageLayout === 'wrap' ? 'float-left w-[45%] mr-6' : 'grid gap-4'} ${entry.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                                            {entry.images.map((img, i) => (
-                                                                <div key={i} className="break-inside-avoid">
-                                                                    <img
-                                                                        src={img.url}
-                                                                        alt={`Attachment ${i + 1}`}
-                                                                        className="w-full h-auto object-contain rounded-lg border border-gray-200 max-h-[500px]"
-                                                                    />
-                                                                    {img.caption && (
-                                                                        <div className="text-center text-gray-500 text-sm mt-1 italic font-serif">
-                                                                            {img.caption}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            ))}
+                                        {entries.map((entry, index) => {
+                                            const prevEntry = index > 0 ? entries[index - 1] : null;
+                                            const showMonthHeader = showMonthHeaders && isNewMonth(entry.date, prevEntry?.date);
+
+                                            return (
+                                                <div key={entry.id}>
+                                                    {showMonthHeader && (
+                                                        <div className="mt-12 mb-8 break-before-page">
+                                                            <h2 className="text-4xl font-serif font-bold text-gray-900 border-b-2 border-gray-900 pb-2">
+                                                                {format(parseISO(entry.date), 'MMMM yyyy')}
+                                                            </h2>
                                                         </div>
                                                     )}
-                                                    <ReactMarkdown>{entry.content}</ReactMarkdown>
+
+                                                    <div
+                                                        className={`journal-entry-item mb-8 ${compactMode ? '' : 'break-inside-avoid'}`}
+                                                        data-date={entry.date}
+                                                    >
+                                                        <div
+                                                            className="font-serif font-bold text-gray-900 mb-1"
+                                                            style={{ fontSize: `${fontSettings.titleSize}px` }}
+                                                        >
+                                                            {entry.title}
+                                                        </div>
+                                                        <div
+                                                            className="text-gray-500 font-medium mb-4"
+                                                            style={{ fontSize: `${fontSettings.dateSize}px` }}
+                                                        >
+                                                            {format(parseISO(entry.date), 'EEEE, d MMMM yyyy')}
+                                                        </div>
+                                                        <div
+                                                            className={`prose max-w-none text-gray-800 ${imageLayout === 'wrap' ? 'clearfix' : ''}`}
+                                                            style={{ fontSize: `${fontSettings.bodySize}px` }}
+                                                        >
+                                                            {entry.images && entry.images.length > 0 && (
+                                                                <div className={`mb-4 ${imageLayout === 'wrap' ? 'float-left w-[45%] mr-6' : 'grid gap-4'} ${entry.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                                    {entry.images.map((img, i) => (
+                                                                        <div key={i} className="break-inside-avoid">
+                                                                            <img
+                                                                                src={img.url}
+                                                                                alt={`Attachment ${i + 1}`}
+                                                                                className="w-full h-auto object-contain rounded-lg border border-gray-200 max-h-[500px]"
+                                                                            />
+                                                                            {img.caption && (
+                                                                                <div className="text-center text-gray-500 text-sm mt-1 italic font-serif">
+                                                                                    {img.caption}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                            <ReactMarkdown>{entry.content}</ReactMarkdown>
+                                                        </div>
+                                                        {index < entries.length - 1 && !isNewMonth(entries[index + 1]?.date, entry.date) && (
+                                                            <hr className={`border-gray-200 ${compactMode ? 'my-4' : 'my-8'}`} />
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                {index < entries.length - 1 && (
-                                                    <hr className={`border-gray-200 ${compactMode ? 'my-4' : 'my-8'}`} />
-                                                )}
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <div className="flex items-center justify-center h-[500px] text-gray-400">
                                         No entries found for this period.
+                                    </div>
+                                )}
+
+                                {/* Page Number Footer for Print */}
+                                {showPageNumbers && (
+                                    <div className="hidden print:flex fixed bottom-0 left-0 w-full justify-center pb-4 text-gray-500 text-sm font-serif bg-white">
+                                        <span>Page <span className="after:content-[counter(page)]"></span></span>
                                     </div>
                                 )}
                             </div>
@@ -511,11 +754,21 @@ export default function PdfExportView() {
                         body {
                             background: white;
                         }
+                        /* Ensure fixed footer works by giving body height */
+                        html, body {
+                            height: 100%;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                        }
+                        
                         .print\\:hidden {
                             display: none !important;
                         }
                         .print\\:block {
                             display: block !important;
+                        }
+                        .print\\:flex {
+                            display: flex !important;
                         }
                         .print\\:text-black {
                             color: black !important;
@@ -530,9 +783,17 @@ export default function PdfExportView() {
                             max-width: 100% !important;
                             page-break-inside: avoid;
                         }
+                        /* Force page break */
+                        .break-after-page {
+                            break-after: page;
+                            page-break-after: always;
+                        }
+                        .break-before-page {
+                            break-before: page;
+                            page-break-before: always;
+                        }
                     }
                 `}</style>
-
             </div >
         </div >
     );

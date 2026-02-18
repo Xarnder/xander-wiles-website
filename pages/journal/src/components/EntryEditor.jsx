@@ -62,6 +62,11 @@ export default function EntryEditor() {
         return displayContent.trim().split(/\s+/).filter(word => word.length > 0).length;
     }, [displayContent]);
 
+    const isInferredTitle = useMemo(() => {
+        if (!content) return false;
+        return !!content.match(/(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/);
+    }, [content]);
+
     useEffect(() => {
         async function fetchEntry() {
             setLoading(true);
