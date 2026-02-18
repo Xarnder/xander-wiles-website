@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -40,6 +40,16 @@ export default function EntryEditor() {
     // Caption State
     const [editingCaptionIndex, setEditingCaptionIndex] = useState(null);
     const [tempCaption, setTempCaption] = useState('');
+
+    const titleTextareaRef = useRef(null);
+
+    // Auto-resize title textarea
+    useEffect(() => {
+        if (titleTextareaRef.current) {
+            titleTextareaRef.current.style.height = 'auto';
+            titleTextareaRef.current.style.height = titleTextareaRef.current.scrollHeight + 'px';
+        }
+    }, [title, isEditing]);
 
     // Parse date for display
     const displayDate = useMemo(() => {
@@ -556,13 +566,14 @@ export default function EntryEditor() {
                                 toastError("Title is inferred from content. Please edit it in the journal entry.");
                             }
                         }}>
-                            <input
-                                type="text"
+                            <textarea
+                                ref={titleTextareaRef}
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="Give this day a title..."
                                 readOnly={isInferredTitle}
-                                className={`w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-6 p-0 ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
+                                rows={1}
+                                className={`w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-6 p-0 resize-none overflow-hidden ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
                             />
                         </div>
 
