@@ -309,21 +309,13 @@ function loadFriends() {
         const metList = document.getElementById('met-list');
         metList.innerHTML = metPlaces.map(m => `<option value="${m}">`).join('');
 
-        // Client-side sorting (easiest without complex Firestore indexes)
-        // Sort by "Next Due Date" ascending
-        friends.sort((a, b) => {
-            const dateA = getNextDueDate(a.lastContact, a.freq);
-            const dateB = getNextDueDate(b.lastContact, b.freq);
-            return dateA - dateB;
-        });
+        // Client-side sorting (initial default, but filterGrid will override based on UI)
+        // We can just accept the arbitrary order here because filterGrid will sort it.
 
         renderCalendar(); // Update calendar widget
 
-        if (friends.length === 0) {
-            friendsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#666">No friends added yet.</p>';
-        }
-
-        friends.forEach(friend => renderCard(friend));
+        // Delegate rendering to filterGrid to respect current filters and sort
+        filterGrid();
     }, (err) => {
         console.error("Load Error:", err);
         friendsGrid.innerHTML = `<p style="color:red">Error loading data. Check console.</p>`;
@@ -772,24 +764,69 @@ imageViewerModal.onclick = (e) => {
 };
 
 // Filter Logic
+// Filter & Sort Logic
+const sortSelect = document.getElementById('sort-select');
+
 function filterGrid() {
     const textVal = searchInput.value.toLowerCase();
     const catVal = filterCategory.value;
-    const cards = document.querySelectorAll('.friend-card');
+    const sortVal = sortSelect ? sortSelect.value : 'status';
 
-    cards.forEach(card => {
-        const text = card.innerText.toLowerCase();
-        const cardCategory = card.dataset.category || ""; // We need to add this to renderCard
+    // items usually rendered in 'friendsGrid' are DOM nodes. 
+    // It's better to re-render the sorted list from 'allFriends' data rather than sorting DOM nodes if possible.
+
+    let filtered = allFriends.filter(friend => {
+        const text = (friend.name || '').toLowerCase() + ' ' + (friend.notes || '').toLowerCase() + ' ' + (friend.met || '').toLowerCase();
+        const cardCategory = friend.category || "";
 
         const matchesText = text.includes(textVal);
         const matchesCategory = catVal === "" || cardCategory === catVal;
 
-        card.style.display = (matchesText && matchesCategory) ? 'flex' : 'none';
+        return matchesText && matchesCategory;
     });
+
+    // Sort
+    filtered.sort((a, b) => {
+        switch (sortVal) {
+            case 'first':
+                return (a.firstName || a.name || '').localeCompare(b.firstName || b.name || '');
+            case 'last':
+                // fallback to name if lastname missing
+                const lnA = a.lastName || a.name || '';
+                const lnB = b.lastName || b.name || '';
+                return lnA.localeCompare(lnB);
+            case 'recent':
+                // Newest (largest timestamp) first
+                return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+            case 'met':
+                // Last Contacted (Recent date first)
+                const dateA = a.lastContact ? new Date(a.lastContact) : new Date(0);
+                const dateB = b.lastContact ? new Date(b.lastContact) : new Date(0);
+                return dateB - dateA;
+            case 'freq':
+                // Shortest cycle first
+                return a.freq - b.freq;
+            case 'status':
+            default:
+                // Status (Overdue/Due Soon first) -> basically Next Due Date ascending
+                const nA = getNextDueDate(a.lastContact, a.freq);
+                const nB = getNextDueDate(b.lastContact, b.freq);
+                return nA - nB;
+        }
+    });
+
+    // Re-render
+    friendsGrid.innerHTML = '';
+    if (filtered.length === 0) {
+        friendsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#666">No matches found.</p>';
+    }
+
+    filtered.forEach(friend => renderCard(friend));
 }
 
 searchInput.addEventListener('input', filterGrid);
 filterCategory.addEventListener('change', filterGrid);
+if (sortSelect) sortSelect.addEventListener('change', filterGrid);
 
 // Calendar Widget Logic
 function renderCalendar() {
@@ -1526,7 +1563,7 @@ if (confirmImportBtn) {
         const btn = confirmImportBtn;
         btn.disabled = true;
         btn.innerText = "Importing...";
-        
+
         let importCount = 0;
         try {
             const batchPromises = currentImportData.map(async (data) => {
@@ -1535,10 +1572,10 @@ if (confirmImportBtn) {
             });
 
             await Promise.all(batchPromises);
-            
+
             // Success feedback
             const statusEl = document.getElementById('preview-status');
-            if(statusEl) {
+            if (statusEl) {
                 statusEl.innerText = `Successfully imported ${importCount} contacts!`;
                 statusEl.style.color = "var(--success)";
             }
@@ -1548,7 +1585,7 @@ if (confirmImportBtn) {
                 csvPreviewModal.classList.add('hidden');
                 btn.disabled = false;
                 btn.innerText = "Confirm Import";
-                if(statusEl) statusEl.innerText = "";
+                if (statusEl) statusEl.innerText = "";
                 updateStorageStats();
             }, 1000);
 
@@ -1580,7 +1617,7 @@ function parseCSV(file) {
             // Validate headers slightly less strict
             const firstRow = data[0];
             const hasKey = (key) => Object.keys(firstRow).some(k => k.trim() === key);
-            
+
             if (!hasKey("Forename") || !hasKey("Surname")) {
                 alert("Error: CSV must have 'Forename' and 'Surname' columns.");
                 return;
@@ -1617,9 +1654,9 @@ function parseCSV(file) {
                     isExempt: false,
                     createdAt: new Date(),
                     updatedAt: new Date(),
-                    photoURL: `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(fullName)}` 
+                    photoURL: `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(fullName)}`
                 };
-                
+
                 currentImportData.push(friendData);
             });
 
@@ -1640,7 +1677,7 @@ function parseCSV(file) {
 
 function renderPreview() {
     csvPreviewTableBody.innerHTML = '';
-    
+
     if (currentImportData.length === 0) {
         csvPreviewTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">No data to import</td></tr>';
         return;
@@ -1649,7 +1686,7 @@ function renderPreview() {
     currentImportData.forEach((item, index) => {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-        
+
         tr.innerHTML = `
             <td style="padding: 10px;">${item.name}</td>
             <td style="padding: 10px;">${item.work || '-'}</td>
@@ -1682,7 +1719,7 @@ const slideDeleteMsg = document.getElementById('slide-delete-msg');
 if (deleteSelectedBtn) {
     deleteSelectedBtn.addEventListener('click', () => {
         if (selectedFriendIds.size === 0) return;
-        
+
         slideDeleteMsg.innerText = `Deleting ${selectedFriendIds.size} contacts. This cannot be undone.`;
         deleteSlider.value = 0;
         updateSliderVisuals(0);
@@ -1703,7 +1740,7 @@ if (deleteSlider && sliderThumb) {
     deleteSlider.addEventListener('input', (e) => {
         const val = e.target.value;
         updateSliderVisuals(val);
-        
+
         if (parseInt(val) === 100) {
             performBulkDelete();
         }
@@ -1717,7 +1754,7 @@ if (deleteSlider && sliderThumb) {
             updateSliderVisuals(0);
         }
     });
-    
+
     // Also handle touch end if change doesn't fire reliably on all browsers
     deleteSlider.addEventListener('touchend', (e) => {
         if (parseInt(deleteSlider.value) < 100) {
@@ -1735,34 +1772,34 @@ function updateSliderVisuals(val) {
     // The input range track width is 100% of container (minus some padding).
     // Let's assume the container has padding.
     // Simple approach: left = val% - but we need to account for thumb width.
-    
+
     const containerWidth = deleteSlider.parentElement.clientWidth; // approx 400px max
     const thumbWidth = 40;
     const padding = 5;
-    
+
     // visual thumb position logic
     // 0% -> left: 5px
     // 100% -> left: containerWidth - thumbWidth - 5px
-    
+
     const maxLeft = containerWidth - thumbWidth - padding;
     const minLeft = padding;
     const range = maxLeft - minLeft;
-    
+
     const leftPos = minLeft + (range * (val / 100));
     sliderThumb.style.left = `${leftPos}px`;
-    
+
     // Optional transparency change
-    sliderThumb.style.opacity = 0.5 + (val/200); 
+    sliderThumb.style.opacity = 0.5 + (val / 200);
 }
 
 async function performBulkDelete() {
     deleteSlider.disabled = true; // Prevent multiple triggers
     sliderThumb.innerHTML = '<div class="spinner"></div>';
     slideDeleteMsg.innerText = "Deleting...";
-    
+
     const idsToDelete = Array.from(selectedFriendIds);
     let deletedCount = 0;
-    
+
     try {
         const promiseBatch = idsToDelete.map(async (id) => {
             await deleteDoc(doc(db, "friends", id));
@@ -1770,18 +1807,18 @@ async function performBulkDelete() {
         });
 
         await Promise.all(promiseBatch);
-        
+
         // Success
         slideDeleteModal.classList.add('hidden');
         toggleSelectionMode(false); // Exit selection mode
-        
+
         // Show success toast (reuse undo toast styled differently or create new)
         const toast = document.createElement('div');
         toast.style.cssText = "position:fixed; bottom:20px; right:20px; background:var(--success); color:white; padding:15px; border-radius:10px; z-index:2000;";
         toast.innerText = `Deleted ${deletedCount} contacts.`;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
-        
+
         updateStorageStats();
 
     } catch (error) {
@@ -1793,6 +1830,6 @@ async function performBulkDelete() {
         deleteSlider.disabled = false;
         deleteSlider.value = 0;
         updateSliderVisuals(0);
-        sliderThumb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>'; 
+        sliderThumb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
     }
 }
