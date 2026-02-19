@@ -60,6 +60,8 @@
                     <button id="mobile-menu-btn" class="btn icon-btn"
                         style="display:none; font-size:1.5rem; padding:5px 10px;">☰</button>
                     <div id="header-actions" class="header-actions">
+                        <button id="import-btn" class="btn secondary-btn" style="padding: 8px 15px;">Import</button>
+                        <input type="file" id="import-csv-input" accept=".csv" style="display: none;">
                         <button id="export-btn" class="btn secondary-btn" style="padding: 8px 15px;">Export</button>
                         <button id="select-mode-btn" class="btn secondary-btn"
                             style="padding: 8px 15px;">Select</button>
@@ -233,6 +235,40 @@
         </div>
     </div>
 
+    <!-- CSV Preview Modal -->
+    <div id="csv-preview-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 800px; width: 95%;">
+            <h3>Preview Import</h3>
+            <p style="margin-bottom: 15px; color: var(--text-muted);">Review the data below. Click the trash icon to
+                remove unwanted rows.</p>
+
+            <div class="table-container"
+                style="max-height: 50vh; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--glass-border); border-radius: 8px;">
+                <table id="csv-preview-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.05); text-align: left;">
+                            <th style="padding: 10px;">Name</th>
+                            <th style="padding: 10px;">Work</th>
+                            <th style="padding: 10px;">Met At</th>
+                            <th style="padding: 10px; width: 50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="preview-status" style="margin-bottom: 15px; text-align: center;"></div>
+
+            <div class="modal-actions" style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="cancel-import" class="btn secondary-btn"
+                    style="color: var(--danger); border-color: var(--danger);">Cancel</button>
+                <button id="confirm-import" class="btn primary-btn">Confirm Import</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Export Modal -->
     <div id="export-modal" class="modal hidden">
         <div class="modal-content glass-card">
@@ -306,6 +342,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
     <!-- Firebase SDKs & Logic -->
     <script type="module" src="script.js"></script>

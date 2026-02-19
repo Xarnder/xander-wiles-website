@@ -1481,3 +1481,192 @@ function calculateAndRenderStats() {
         </div>
     `;
 }
+
+
+// --- CSV IMPORT LOGIC ---
+const importBtn = document.getElementById('import-btn');
+const importInput = document.getElementById('import-csv-input');
+const csvPreviewModal = document.getElementById('csv-preview-modal');
+const csvPreviewTableBody = document.querySelector('#csv-preview-table tbody');
+const confirmImportBtn = document.getElementById('confirm-import');
+const cancelImportBtn = document.getElementById('cancel-import');
+let currentImportData = [];
+
+if (importBtn && importInput) {
+    importBtn.addEventListener('click', () => {
+        importInput.click();
+    });
+
+    importInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Reset input for next time
+        e.target.value = '';
+        parseCSV(file);
+    });
+} else {
+    console.error("CSV Import elements not found!");
+}
+
+if (cancelImportBtn) {
+    cancelImportBtn.addEventListener('click', () => {
+        csvPreviewModal.classList.add('hidden');
+        currentImportData = [];
+    });
+}
+
+if (confirmImportBtn) {
+    confirmImportBtn.addEventListener('click', async () => {
+        if (currentImportData.length === 0) {
+            alert("No data to import.");
+            return;
+        }
+
+        const btn = confirmImportBtn;
+        btn.disabled = true;
+        btn.innerText = "Importing...";
+        
+        let importCount = 0;
+        try {
+            const batchPromises = currentImportData.map(async (data) => {
+                await addDoc(collection(db, "friends"), data);
+                importCount++;
+            });
+
+            await Promise.all(batchPromises);
+            
+            // Success feedback
+            const statusEl = document.getElementById('preview-status');
+            if(statusEl) {
+                statusEl.innerText = `Successfully imported ${importCount} contacts!`;
+                statusEl.style.color = "var(--success)";
+            }
+
+            // Close after short delay
+            setTimeout(() => {
+                csvPreviewModal.classList.add('hidden');
+                btn.disabled = false;
+                btn.innerText = "Confirm Import";
+                if(statusEl) statusEl.innerText = "";
+                updateStorageStats();
+            }, 1000);
+
+        } catch (error) {
+            console.error("Import Error:", error);
+            alert("Error importing contacts: " + error.message);
+            btn.disabled = false;
+            btn.innerText = "Confirm Import";
+        }
+    });
+}
+
+function parseCSV(file) {
+    if (typeof Papa === 'undefined') {
+        alert("CSV Parser not loaded. Please refresh.");
+        return;
+    }
+
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+            const data = results.data;
+            if (data.length === 0) {
+                alert("CSV is empty.");
+                return;
+            }
+
+            // Validate headers slightly less strict
+            const firstRow = data[0];
+            const hasKey = (key) => Object.keys(firstRow).some(k => k.trim() === key);
+            
+            if (!hasKey("Forename") || !hasKey("Surname")) {
+                alert("Error: CSV must have 'Forename' and 'Surname' columns.");
+                return;
+            }
+
+            // Process data for preview
+            currentImportData = [];
+            const getVal = (row, key) => row[key]?.trim() || "";
+
+            data.forEach(row => {
+                const firstName = getVal(row, "Forename");
+                const lastName = getVal(row, "Surname");
+                const work = getVal(row, "Line Of Work");
+                const met = getVal(row, "Met At");
+
+                if (!firstName && !lastName) return;
+
+                const fullName = `${firstName} ${lastName}`.trim();
+
+                const friendData = {
+                    userId: currentUser.uid,
+                    firstName: firstName,
+                    lastName: lastName,
+                    name: fullName,
+                    work: work,
+                    met: met,
+                    origin: "",
+                    phone: "",
+                    freq: 30,
+                    lastContact: "",
+                    notes: "Imported from CSV",
+                    category: "Imported",
+                    categoryColor: "#888888",
+                    isExempt: false,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    photoURL: `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(fullName)}` 
+                };
+                
+                currentImportData.push(friendData);
+            });
+
+            if (currentImportData.length === 0) {
+                alert("No valid rows found to import.");
+                return;
+            }
+
+            renderPreview();
+            csvPreviewModal.classList.remove('hidden');
+        },
+        error: (err) => {
+            console.error("CSV Parse Error:", err);
+            alert("Failed to parse CSV file.");
+        }
+    });
+}
+
+function renderPreview() {
+    csvPreviewTableBody.innerHTML = '';
+    
+    if (currentImportData.length === 0) {
+        csvPreviewTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">No data to import</td></tr>';
+        return;
+    }
+
+    currentImportData.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+        
+        tr.innerHTML = `
+            <td style="padding: 10px;">${item.name}</td>
+            <td style="padding: 10px;">${item.work || '-'}</td>
+            <td style="padding: 10px;">${item.met || '-'}</td>
+            <td style="padding: 10px; text-align: center;">
+                <button class="btn icon-btn delete-row-btn" data-index="${index}" style="color: var(--danger); padding: 5px;">&times;</button>
+            </td>
+        `;
+        csvPreviewTableBody.appendChild(tr);
+    });
+
+    // Add listeners to delete buttons
+    document.querySelectorAll('.delete-row-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            currentImportData.splice(index, 1);
+            renderPreview();
+        });
+    });
+}
