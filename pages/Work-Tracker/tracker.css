@@ -1,0 +1,224 @@
+:root {
+    --bg-color: #111115;
+    --card-bg: rgba(255, 255, 255, 0.05);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --text-primary: #ffffff;
+    --text-secondary: #aaaaaa;
+    --accent-green: #2ecc71;
+    --accent-red: #e74c3c;
+    --accent-blue: #3498db;
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+}
+
+/* Container */
+.app-container {
+    max-width: 600px;
+    margin: 80px auto 40px auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Glassmorphism Card Style */
+.card {
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Auth Section */
+#auth-section {
+    text-align: center;
+    margin-top: 50px;
+}
+
+/* Header */
+.user-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 0 10px;
+}
+
+.user-header span {
+    font-weight: 600;
+}
+
+/* Controls */
+.controls {
+    text-align: center;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.input-group label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+}
+
+.input-group input {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--card-border);
+    color: white;
+    padding: 8px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 1.1rem;
+    width: 100px;
+}
+
+.timer-display {
+    margin: 30px 0;
+}
+
+#timer {
+    font-size: 3.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    display: block;
+    line-height: 1;
+}
+
+.highlight-text {
+    color: var(--accent-green);
+    font-size: 1.2rem;
+    margin-top: 10px;
+    font-weight: 500;
+}
+
+/* Buttons */
+button {
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 12px 24px;
+    border-radius: 50px;
+    border: none;
+    transition: transform 0.1s, opacity 0.2s;
+}
+
+button:active {
+    transform: scale(0.96);
+}
+
+.btn-primary {
+    background: var(--accent-blue);
+    color: white;
+}
+
+.btn-success {
+    background: var(--accent-green);
+    color: white;
+    width: 100%;
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.btn-danger {
+    background: var(--accent-red);
+    color: white;
+    width: 100%;
+    font-weight: bold;
+    font-size: 1.1rem;
+}
+
+.btn-text {
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 5px 10px;
+    font-size: 0.9rem;
+}
+
+.btn-text:hover {
+    color: white;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    text-align: center;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-item .label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stat-item .value {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+/* History List */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+}
+
+.history-date {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    display: block;
+}
+
+.history-details {
+    text-align: right;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 480px) {
+    .app-container {
+        margin-top: 60px;
+        padding: 15px;
+    }
+
+    #timer {
+        font-size: 2.8rem;
+    }
+}

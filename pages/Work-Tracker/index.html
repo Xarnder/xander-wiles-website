@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Work Hour Tracker</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Website Header CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- App Specific CSS -->
+    <link rel="stylesheet" href="tracker.css">
+</head>
+
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Main Application Container -->
+    <main class="app-container">
+
+        <!-- Auth Section -->
+        <section id="auth-section" class="card">
+            <h1>Work Tracker</h1>
+            <p>Please sign in to sync your hours.</p>
+            <button id="login-btn" class="btn-primary">Sign in with Google</button>
+        </section>
+
+        <!-- Dashboard (Hidden until logged in) -->
+        <div id="dashboard" class="hidden">
+
+            <!-- User Info -->
+            <div class="user-header">
+                <span id="user-name">Loading...</span>
+                <button id="logout-btn" class="btn-text">Logout</button>
+            </div>
+
+            <!-- Controls Card -->
+            <section class="card controls">
+                <div class="input-group">
+                    <label for="hourly-rate">Hourly Rate ($)</label>
+                    <input type="number" id="hourly-rate" value="50" min="0">
+                </div>
+
+                <div class="timer-display">
+                    <span id="timer">00:00:00</span>
+                    <div id="live-earnings" class="highlight-text">$0.00</div>
+                </div>
+
+                <div class="btn-group">
+                    <button id="start-btn" class="btn-success">Start Work</button>
+                    <button id="stop-btn" class="btn-danger hidden">Stop Work</button>
+                </div>
+            </section>
+
+            <!-- Stats Card -->
+            <section class="card stats">
+                <h2>This Week (Mon-Sun)</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="label">Total Hours</span>
+                        <span class="value" id="weekly-hours">0h</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="label">Total Earnings</span>
+                        <span class="value" id="weekly-earnings">$0.00</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Calendar / History -->
+            <section class="card history">
+                <h2>History</h2>
+                <div id="history-list" class="history-list">
+                    <p class="loading-text">Loading history...</p>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Firebase Logic -->
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>
