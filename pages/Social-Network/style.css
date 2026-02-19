@@ -77,10 +77,24 @@ body {
 
 /* Login */
 .login-card {
-    max-width: 350px;
+    max-width: 400px;
     margin: 100px auto;
-    padding: 40px;
+    padding: 60px 40px;
     text-align: center;
+}
+
+.login-card h1 {
+    margin-bottom: 20px;
+}
+
+.login-card p {
+    margin-bottom: 30px;
+    color: var(--text-muted);
+}
+
+.login-card button {
+    padding: 12px 24px;
+    font-size: 1.1rem;
 }
 
 /* Dashboard */

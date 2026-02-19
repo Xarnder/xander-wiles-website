@@ -1108,6 +1108,7 @@ document.getElementById('export-zip-html').addEventListener('click', async () =>
 
 // --- Selection Logic ---
 const selectModeBtn = document.getElementById('select-mode-btn');
+const cancelSelectHeaderBtn = document.getElementById('cancel-select-header-btn'); // New button
 const selectionToolbar = document.getElementById('selection-toolbar');
 const cancelSelectionBtn = document.getElementById('cancel-selection');
 const selectionCount = document.getElementById('selection-count');
@@ -1115,6 +1116,9 @@ const addBtn = document.getElementById('add-btn');
 
 selectModeBtn.addEventListener('click', () => toggleSelectionMode(true));
 cancelSelectionBtn.addEventListener('click', () => toggleSelectionMode(false));
+if (cancelSelectHeaderBtn) {
+    cancelSelectHeaderBtn.addEventListener('click', () => toggleSelectionMode(false));
+}
 
 function toggleSelectionMode(active) {
     isSelectionMode = active;
@@ -1124,12 +1128,14 @@ function toggleSelectionMode(active) {
     if (active) {
         selectionToolbar.classList.remove('hidden');
         selectModeBtn.classList.add('hidden');
+        if (cancelSelectHeaderBtn) cancelSelectHeaderBtn.classList.remove('hidden'); // Show header cancel
         addBtn.classList.add('hidden');
         document.getElementById('mobile-menu-btn').classList.add('hidden'); // Hide mobile menu too
         updateSelectionCount();
     } else {
         selectionToolbar.classList.add('hidden');
         selectModeBtn.classList.remove('hidden');
+        if (cancelSelectHeaderBtn) cancelSelectHeaderBtn.classList.add('hidden'); // Hide header cancel
         addBtn.classList.remove('hidden');
         document.getElementById('mobile-menu-btn').classList.remove('hidden');
     }
@@ -1137,6 +1143,7 @@ function toggleSelectionMode(active) {
     // Re-render cards to show/hide checkboxes & update click behavior
     loadFriends();
 }
+
 
 function toggleCardSelection(id) {
     if (selectedFriendIds.has(id)) {
