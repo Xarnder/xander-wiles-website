@@ -1670,3 +1670,129 @@ function renderPreview() {
         });
     });
 }
+
+// --- Bulk Delete Logic ---
+const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+const slideDeleteModal = document.getElementById('slide-delete-modal');
+const deleteSlider = document.getElementById('delete-slider');
+const sliderThumb = document.getElementById('slider-thumb');
+const cancelSlideDeleteBtn = document.getElementById('cancel-slide-delete');
+const slideDeleteMsg = document.getElementById('slide-delete-msg');
+
+if (deleteSelectedBtn) {
+    deleteSelectedBtn.addEventListener('click', () => {
+        if (selectedFriendIds.size === 0) return;
+        
+        slideDeleteMsg.innerText = `Deleting ${selectedFriendIds.size} contacts. This cannot be undone.`;
+        deleteSlider.value = 0;
+        updateSliderVisuals(0);
+        slideDeleteModal.classList.remove('hidden');
+    });
+}
+
+if (cancelSlideDeleteBtn) {
+    cancelSlideDeleteBtn.addEventListener('click', () => {
+        slideDeleteModal.classList.add('hidden');
+        deleteSlider.value = 0;
+        updateSliderVisuals(0);
+    });
+}
+
+// Slider Logic
+if (deleteSlider && sliderThumb) {
+    deleteSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        updateSliderVisuals(val);
+        
+        if (parseInt(val) === 100) {
+            performBulkDelete();
+        }
+    });
+
+    // Reset if dropped before 100
+    deleteSlider.addEventListener('change', (e) => {
+        if (parseInt(e.target.value) < 100) {
+            // Animate back
+            deleteSlider.value = 0;
+            updateSliderVisuals(0);
+        }
+    });
+    
+    // Also handle touch end if change doesn't fire reliably on all browsers
+    deleteSlider.addEventListener('touchend', (e) => {
+        if (parseInt(deleteSlider.value) < 100) {
+            deleteSlider.value = 0;
+            updateSliderVisuals(0);
+        }
+    });
+}
+
+function updateSliderVisuals(val) {
+    // thumb is 40px wide, container is roughly 100% width.
+    // We need to move the visual thumb to match the input thumb position.
+    // Input range usually maps 0-100% of available width.
+    // Let's just use calc for the left position.
+    // The input range track width is 100% of container (minus some padding).
+    // Let's assume the container has padding.
+    // Simple approach: left = val% - but we need to account for thumb width.
+    
+    const containerWidth = deleteSlider.parentElement.clientWidth; // approx 400px max
+    const thumbWidth = 40;
+    const padding = 5;
+    
+    // visual thumb position logic
+    // 0% -> left: 5px
+    // 100% -> left: containerWidth - thumbWidth - 5px
+    
+    const maxLeft = containerWidth - thumbWidth - padding;
+    const minLeft = padding;
+    const range = maxLeft - minLeft;
+    
+    const leftPos = minLeft + (range * (val / 100));
+    sliderThumb.style.left = `${leftPos}px`;
+    
+    // Optional transparency change
+    sliderThumb.style.opacity = 0.5 + (val/200); 
+}
+
+async function performBulkDelete() {
+    deleteSlider.disabled = true; // Prevent multiple triggers
+    sliderThumb.innerHTML = '<div class="spinner"></div>';
+    slideDeleteMsg.innerText = "Deleting...";
+    
+    const idsToDelete = Array.from(selectedFriendIds);
+    let deletedCount = 0;
+    
+    try {
+        const promiseBatch = idsToDelete.map(async (id) => {
+            await deleteDoc(doc(db, "friends", id));
+            deletedCount++;
+        });
+
+        await Promise.all(promiseBatch);
+        
+        // Success
+        slideDeleteModal.classList.add('hidden');
+        toggleSelectionMode(false); // Exit selection mode
+        
+        // Show success toast (reuse undo toast styled differently or create new)
+        const toast = document.createElement('div');
+        toast.style.cssText = "position:fixed; bottom:20px; right:20px; background:var(--success); color:white; padding:15px; border-radius:10px; z-index:2000;";
+        toast.innerText = `Deleted ${deletedCount} contacts.`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+        
+        updateStorageStats();
+
+    } catch (error) {
+        console.error("Bulk Delete Error:", error);
+        alert("Failed to delete some contacts: " + error.message);
+        slideDeleteModal.classList.add('hidden');
+    } finally {
+        // Reset slider
+        deleteSlider.disabled = false;
+        deleteSlider.value = 0;
+        updateSliderVisuals(0);
+        sliderThumb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>'; 
+    }
+}
