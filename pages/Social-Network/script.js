@@ -619,9 +619,13 @@ document.getElementById('add-btn').addEventListener('click', () => {
     document.getElementById('inp-category').value = '';
     document.getElementById('inp-color').value = '#4f46e5';
 
-    document.getElementById('photo-preview').style.backgroundImage = 'none';
     document.getElementById('photo-preview').innerHTML = '<span>Tap to Add Photo</span>';
     currentPhotoBlob = null;
+
+    // Clear stats for new entry
+    const statsContainer = document.getElementById('modal-storage-stats');
+    if (statsContainer) statsContainer.innerHTML = '';
+
     modal.classList.remove('hidden');
 });
 
@@ -665,6 +669,65 @@ function openEdit(data) {
     currentPhotoBlob = null; // Reset blob unless they pick a new one
 
     modal.classList.remove('hidden');
+
+    // --- Calculate Storage Stats ---
+    const statsContainer = document.getElementById('modal-storage-stats');
+    if (statsContainer) {
+        statsContainer.innerHTML = 'Calculating storage...';
+
+        // 1. Calculate approximate Firestore Doc Size
+        // Crude approximation: JSON stringify size
+        const docSize = new Blob([JSON.stringify(data)]).size;
+
+        // 2. Get Image Size
+        let imgSizeStr = "0 KB";
+        let imageSize = 0;
+
+        if (data.photoURL && data.photoURL.includes('firebasestorage')) {
+            // Create a reference from URL to get metadata
+            try {
+                const httpsReference = ref(storage, data.photoURL);
+                getMetadata(httpsReference)
+                    .then((metadata) => {
+                        imageSize = metadata.size;
+                        updateStatsDisplay(docSize, imageSize);
+                    })
+                    .catch((error) => {
+                        console.log("Error getting image metadata:", error);
+                        // Fallback: If we can't get metadata, we can't easily know size without downloading
+                        updateStatsDisplay(docSize, 0, true);
+                    });
+            } catch (e) {
+                console.log("Invalid storage ref", e);
+                updateStatsDisplay(docSize, 0, true);
+            }
+        } else {
+            // External image or no image
+            updateStatsDisplay(docSize, 0, false, !!data.photoURL);
+        }
+
+        function updateStatsDisplay(docBytes, imgBytes, imgError = false, isExternal = false) {
+            const formatSize = (bytes) => {
+                if (bytes === 0) return "0 B";
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            };
+
+            let imgText = formatSize(imgBytes);
+            if (imgError) imgText = "Unknown (External/Error)";
+            if (isExternal) imgText = "External (0 B)";
+
+            const totalBytes = docBytes + imgBytes;
+
+            statsContainer.innerHTML = `
+                <div>Card Data: ${formatSize(docBytes)}</div>
+                <div>Image: ${imgText}</div>
+                <div style="border-top:1px solid #333; margin-top:4px; padding-top:4px; font-weight:bold">Total: ${formatSize(totalBytes)}</div>
+            `;
+        }
+    }
 }
 
 function closeModal() {
