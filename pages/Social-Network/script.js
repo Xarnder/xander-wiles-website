@@ -875,11 +875,16 @@ document.getElementById('export-csv').addEventListener('click', () => {
 // ZIP Export Logic
 async function fetchImageBlob(url) {
     try {
-        const response = await fetch(url);
+        // Add cache buster here too
+        const cacheUrl = url.includes('?')
+            ? `${url}&t=${new Date().getTime()}`
+            : `${url}?t=${new Date().getTime()}`;
+
+        const response = await fetch(cacheUrl, { mode: 'cors' }); // Explicitly request CORS
         return await response.blob();
     } catch (e) {
         console.error("Failed to fetch image", url, e);
-        return null; // Return null if fetch fails (e.g., CORS or loose URL)
+        return null;
     }
 }
 
@@ -1149,31 +1154,48 @@ async function generateGridExport(type) {
 
         // Convert image to data URL to avoid tainting canvas if possible
         let imgUrl = friend.photoURL;
+
         if (imgUrl && imgUrl.startsWith('http')) {
-            // Create a promise for this image's loading state
             const loadPromise = new Promise(async (resolve) => {
                 let finalSrc = imgUrl;
                 try {
-                    // Try fetching blob to create Data URL (bypasses CORS during html2canvas taint check)
-                    const response = await fetch(imgUrl);
+                    // 1. ADD TIMESTAMP HERE (Only for the fetch)
+                    // This forces a fresh network request to get the new CORS headers
+                    const cacheBusterUrl = imgUrl.includes('?')
+                        ? `${imgUrl}&t=${new Date().getTime()}`
+                        : `${imgUrl}?t=${new Date().getTime()}`;
+
+                    const response = await fetch(cacheBusterUrl);
                     const blob = await response.blob();
+
+                    // Convert to Base64
                     finalSrc = await new Promise(r => {
                         const reader = new FileReader();
                         reader.onload = () => r(reader.result);
                         reader.readAsDataURL(blob);
                     });
+
+                    // finalSrc is now "data:image/png;base64,..."
+                    // WE DO NOT ADD TIMESTAMP TO THIS
+
                 } catch (e) {
                     console.warn("Fetch failed, falling back to direct URL", e);
+                    // If fetch fails, we fall back to the http URL. 
+                    // We can try adding the timestamp here as a last resort.
+                    finalSrc = imgUrl.includes('?')
+                        ? `${imgUrl}&t=${new Date().getTime()}`
+                        : `${imgUrl}?t=${new Date().getTime()}`;
                 }
 
                 img.onload = resolve;
-                img.onerror = resolve; // Resolve anyway to not block
-                img.src = finalSrc;
+                img.onerror = resolve;
+                img.src = finalSrc; // Set the source
             });
             imageLoadPromises.push(loadPromise);
         } else {
             img.src = imgUrl || '';
         }
+
 
         card.appendChild(img);
 
