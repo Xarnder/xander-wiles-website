@@ -233,9 +233,15 @@ friendForm.addEventListener('submit', async (e) => {
         const unit = parseInt(document.getElementById('inp-freq-unit').value) || 1;
         const freqDays = val * unit;
 
+        const firstName = document.getElementById('inp-first-name').value.trim();
+        const lastName = document.getElementById('inp-last-name').value.trim();
+        const fullName = `${firstName} ${lastName}`.trim();
+
         const friendData = {
             userId: currentUser.uid,
-            name: document.getElementById('inp-name').value,
+            firstName: firstName,
+            lastName: lastName,
+            name: fullName,
             met: document.getElementById('inp-met').value,
             origin: document.getElementById('inp-origin').value,
             work: document.getElementById('inp-work').value,
@@ -605,6 +611,8 @@ async function updateStorageStats() {
 // Modal Logic
 document.getElementById('add-btn').addEventListener('click', () => {
     friendForm.reset();
+    document.getElementById('inp-first-name').value = '';
+    document.getElementById('inp-last-name').value = '';
     statusMsg.innerText = ""; // Fix: Clear previous status
     document.getElementById('edit-id').value = "";
     document.getElementById('modal-title').innerText = "Add Person";
@@ -635,7 +643,15 @@ function openEdit(data) {
     document.getElementById('edit-id').value = data.id;
     document.getElementById('modal-title').innerText = "Edit Person";
 
-    document.getElementById('inp-name').value = data.name;
+    if (data.firstName !== undefined || data.lastName !== undefined) {
+        document.getElementById('inp-first-name').value = data.firstName || '';
+        document.getElementById('inp-last-name').value = data.lastName || '';
+    } else if (data.name) {
+        // Fallback for legacy data
+        const parts = data.name.split(' ');
+        document.getElementById('inp-first-name').value = parts[0] || '';
+        document.getElementById('inp-last-name').value = parts.slice(1).join(' ') || '';
+    }
     document.getElementById('inp-met').value = data.met;
     document.getElementById('inp-origin').value = data.origin;
     document.getElementById('inp-work').value = data.work;
