@@ -1376,3 +1376,85 @@ async function generateGridExport(type) {
         // Note: we don't automatically exit selection mode, user might want to simple export different formats
     }
 }
+
+// --- Stats View Logic ---
+const statsModal = document.getElementById('stats-modal');
+const statsBtn = document.getElementById('stats-btn');
+const closeStatsBtn = document.getElementById('close-stats');
+const statsContent = document.getElementById('stats-content');
+
+if (statsBtn) {
+    statsBtn.addEventListener('click', () => {
+        calculateAndRenderStats();
+        statsModal.classList.remove('hidden');
+        // Close mobile menu if open
+        const headerActions = document.getElementById('header-actions');
+        if (headerActions) headerActions.classList.remove('show');
+    });
+}
+
+if (closeStatsBtn) {
+    closeStatsBtn.addEventListener('click', () => {
+        statsModal.classList.add('hidden');
+    });
+}
+
+// Close on outside click
+window.addEventListener('click', (e) => {
+    if (e.target == statsModal) {
+        statsModal.classList.add('hidden');
+    }
+});
+
+function calculateAndRenderStats() {
+    const totalFriends = allFriends.length;
+    const categoryCounts = {};
+
+    allFriends.forEach(friend => {
+        const cat = friend.category || 'Uncategorized';
+        // Normalize empty string or null to Uncategorized
+        const cleanCat = cat.trim() === '' ? 'Uncategorized' : cat;
+        categoryCounts[cleanCat] = (categoryCounts[cleanCat] || 0) + 1;
+    });
+
+    // Sort categories by count (descending)
+    const sortedCategories = Object.entries(categoryCounts)
+        .sort((a, b) => b[1] - a[1]);
+
+    let categoriesHTML = '';
+    sortedCategories.forEach(([cat, count]) => {
+        // Find color if available
+        let color = '#4f46e5'; // Default
+        const sampleFriend = allFriends.find(f => {
+            const fCat = f.category || 'Uncategorized';
+            const cleanFCat = fCat.trim() === '' ? 'Uncategorized' : fCat;
+            return cleanFCat === cat;
+        });
+
+        if (sampleFriend && sampleFriend.categoryColor) {
+            color = sampleFriend.categoryColor;
+        }
+
+        // Handle Uncategorized specific styling if needed
+        if (cat === 'Uncategorized') color = '#666';
+
+        categoriesHTML += `
+            <div class="stats-category-card">
+                <div style="font-size:0.85rem; color:${color}; font-weight:bold; margin-bottom:5px;">${cat}</div>
+                <div class="stats-cat-count">${count}</div>
+            </div>
+        `;
+    });
+
+    statsContent.innerHTML = `
+        <div class="stats-row">
+            <h3 style="margin:0; color:var(--text-muted); font-size:1rem;">Total People</h3>
+            <div class="stats-big-number">${totalFriends}</div>
+        </div>
+        
+        <h3 style="margin:20px 0 10px; font-size:1.1rem; border-top:1px solid var(--glass-border); padding-top:15px;">By Category</h3>
+        <div class="stats-grid">
+            ${categoriesHTML}
+        </div>
+    `;
+}

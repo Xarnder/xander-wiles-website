@@ -63,6 +63,7 @@
                         <button id="export-btn" class="btn secondary-btn" style="padding: 8px 15px;">Export</button>
                         <button id="select-mode-btn" class="btn secondary-btn"
                             style="padding: 8px 15px;">Select</button>
+                        <button id="stats-btn" class="btn secondary-btn" style="padding: 8px 15px;">Stats</button>
                         <button id="add-btn" class="btn primary-btn">+ Add Person</button>
                         <button id="logout-btn" class="btn secondary-btn"
                             style="border-color:var(--danger); color:var(--danger)">Logout</button>
@@ -96,6 +97,7 @@
                 <!-- Javascript fills this -->
                 <div class="loader">Loading...</div>
             </div>
+
         </section>
     </main>
 
@@ -302,6 +304,18 @@
 
     <!-- Firebase SDKs & Logic -->
     <script type="module" src="script.js"></script>
+
+    <!-- Stats Modal -->
+    <div id="stats-modal" class="modal hidden">
+        <div class="modal-content glass-card">
+            <span id="close-stats" class="close"
+                style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h2>Network Statistics</h2>
+            <div id="stats-content" style="margin-top:20px;">
+                <!-- Stats injected here -->
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>
