@@ -12,13 +12,15 @@ import {
     signOut
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 import {
-    getFirestore,
+    initializeFirestore,
     collection,
     addDoc,
     query,
     orderBy,
     onSnapshot,
-    serverTimestamp
+    serverTimestamp,
+    doc,
+    deleteDoc
 } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 
 console.log("Debug: JS Script Loaded - Firebase v12.9.0");
@@ -36,7 +38,9 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = initializeFirestore(app, {
+    experimentalForceLongPolling: true
+});
 const provider = new GoogleAuthProvider();
 
 // =======================================================
@@ -57,12 +61,43 @@ const liveEarningsDisplay = document.getElementById('live-earnings');
 const historyList = document.getElementById('history-list');
 const weeklyHoursDisplay = document.getElementById('weekly-hours');
 const weeklyEarningsDisplay = document.getElementById('weekly-earnings');
+const prevMonthBtn = document.getElementById('prev-month');
+const nextMonthBtn = document.getElementById('next-month');
+const calendarMonthYear = document.getElementById('calendar-month-year');
+const calendarGrid = document.querySelector('.calendar-grid');
+const weeklyChart = document.getElementById('weekly-chart');
+
+// Settings Elements
+const settingsBtn = document.getElementById('settings-btn');
+const closeSettingsBtn = document.getElementById('close-settings');
+const settingsModal = document.getElementById('settings-modal');
+const currencySelect = document.getElementById('currency-select');
+const saveSettingsBtn = document.getElementById('save-settings');
+
+// Custom Popup Modals
+const alertModal = document.getElementById('alert-modal');
+const alertTitle = document.getElementById('alert-title');
+const alertMessage = document.getElementById('alert-message');
+const alertOkBtn = document.getElementById('alert-ok-btn');
+
+const confirmModal = document.getElementById('confirm-modal');
+const confirmTitle = document.getElementById('confirm-title');
+const confirmMessage = document.getElementById('confirm-message');
+const confirmOkBtn = document.getElementById('confirm-ok-btn');
+const confirmCancelBtn = document.getElementById('confirm-cancel-btn');
 
 // State Variables
 let currentUser = null;
 let timerInterval = null;
 let startTime = null;
 let currentSessionRate = 0;
+let currentCalendarDate = new Date();
+let allSessions = [];
+let currentCurrency = localStorage.getItem('work_tracker_currency') || '£';
+
+// Initialize UI
+updateCurrencyDisplays();
+currencySelect.value = currentCurrency;
 
 // ==========================================
 // Authentication Logic
@@ -75,7 +110,7 @@ loginBtn.addEventListener('click', () => {
             console.log("Debug: Logged in as", result.user.email);
         }).catch((error) => {
             console.error("Debug: Login Error", error);
-            alert("Login failed: " + error.message);
+            showAlert("Login Failed", error.message);
         });
 });
 
@@ -105,6 +140,48 @@ onAuthStateChanged(auth, (user) => {
 });
 
 // ==========================================
+// Settings Logic
+// ==========================================
+
+settingsBtn.addEventListener('click', () => {
+    currencySelect.value = currentCurrency;
+    settingsModal.classList.remove('hidden');
+});
+
+closeSettingsBtn.addEventListener('click', () => {
+    settingsModal.classList.add('hidden');
+});
+
+saveSettingsBtn.addEventListener('click', () => {
+    currentCurrency = currencySelect.value;
+    localStorage.setItem('work_tracker_currency', currentCurrency);
+    updateCurrencyDisplays();
+    if (currentUser) {
+        // Re-render history text since it incorporates the currency symbols
+        loadHistory();
+    }
+    settingsModal.classList.add('hidden');
+});
+
+function updateCurrencyDisplays() {
+    const symbolSpans = document.querySelectorAll('.currency-symbol');
+    symbolSpans.forEach(span => {
+        span.textContent = currentCurrency;
+    });
+
+    // Specifically update the live earnings display
+    if (startTime) {
+        const now = Date.now();
+        const elapsedMs = now - startTime;
+        const hoursFloat = elapsedMs / (1000 * 60 * 60);
+        const earned = hoursFloat * currentSessionRate;
+        liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${currentCurrency}</span>${earned.toFixed(2)}`;
+    } else {
+        liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${currentCurrency}</span>0.00`;
+    }
+}
+
+// ==========================================
 // Timer Logic
 // ==========================================
 
@@ -121,7 +198,7 @@ function updateTimerDisplay(elapsedMs) {
 
     const hoursFloat = elapsedMs / (1000 * 60 * 60);
     const earned = hoursFloat * currentSessionRate;
-    liveEarningsDisplay.textContent = `$${earned.toFixed(2)}`;
+    liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${currentCurrency}</span>${earned.toFixed(2)}`;
 
     document.title = `${formattedTime} - Work Tracker`;
 }
@@ -131,7 +208,7 @@ startBtn.addEventListener('click', () => {
 
     const rate = parseFloat(hourlyRateInput.value);
     if (isNaN(rate)) {
-        alert("Please enter a valid hourly rate");
+        showAlert("Invalid Input", "Please enter a valid hourly rate.");
         return;
     }
 
@@ -174,7 +251,7 @@ stopBtn.addEventListener('click', async () => {
         console.log("Debug: Session saved to Firebase");
     } catch (e) {
         console.error("Debug: Error adding document: ", e);
-        alert("Error saving data! Check console.");
+        showAlert("Save Error", "Error saving tracking data! Please check your internet connection.");
     }
 
     localStorage.removeItem('work_tracker_start');
@@ -182,7 +259,7 @@ stopBtn.addEventListener('click', async () => {
 
     toggleTimerUI(false);
     timerDisplay.textContent = "00:00:00";
-    liveEarningsDisplay.textContent = "$0.00";
+    liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${currentCurrency}</span>0.00`;
     document.title = "Work Tracker";
 });
 
@@ -230,15 +307,17 @@ function loadHistory() {
 
     onSnapshot(q, (querySnapshot) => {
         historyList.innerHTML = "";
+        allSessions = [];
         let totalWeeklyMs = 0;
         let totalWeeklyEarnings = 0;
 
         const now = new Date();
         const startOfWeek = getMonday(now);
 
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
+        querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data();
             const dateObj = new Date(data.startTime);
+            allSessions.push({ id: docSnap.id, ...data });
 
             if (dateObj >= startOfWeek) {
                 totalWeeklyMs += data.durationMs;
@@ -252,15 +331,40 @@ function loadHistory() {
             const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
             item.innerHTML = `
-                <div>
-                    <span class="history-date">${dateStr}</span>
-                    <strong>${hours} hrs</strong>
+                <div class="history-item-content">
+                    <div>
+                        <span class="history-date">${dateStr}</span>
+                        <strong>${hours} hrs</strong>
+                    </div>
+                    <div class="history-details">
+                        <div>${currentCurrency}${data.earnings.toFixed(2)}</div>
+                        <small>@ ${currentCurrency}${data.rate}/hr</small>
+                    </div>
                 </div>
-                <div class="history-details">
-                    <div>$${data.earnings.toFixed(2)}</div>
-                    <small>@ $${data.rate}/hr</small>
-                </div>
+                <button class="btn-delete" data-id="${docSnap.id}" title="Delete Session">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                </button>
             `;
+
+            const deleteBtn = item.querySelector('.btn-delete');
+            deleteBtn.addEventListener('click', async () => {
+                const isConfirmed = await showConfirm("Delete Session", "Are you sure you want to permanently delete this work session?");
+                if (isConfirmed) {
+                    try {
+                        await deleteDoc(doc(db, "users", currentUser.uid, "sessions", docSnap.id));
+                        console.log("Debug: Session deleted", docSnap.id);
+                    } catch (e) {
+                        console.error("Debug: Error deleting document: ", e);
+                        showAlert("Error", "There was an error deleting this session.");
+                    }
+                }
+            });
+
             historyList.appendChild(item);
         });
 
@@ -268,6 +372,8 @@ function loadHistory() {
         weeklyHoursDisplay.textContent = `${totalWeeklyHours}h`;
         weeklyEarningsDisplay.textContent = `$${totalWeeklyEarnings.toFixed(2)}`;
 
+        renderCalendar();
+        renderChart();
         console.log("Debug: History updated from Firebase");
     }, (error) => {
         console.error("Debug: Snapshot error", error);
@@ -281,4 +387,204 @@ function getMonday(d) {
     d.setDate(diff);
     d.setHours(0, 0, 0, 0);
     return d;
+}
+
+// ==========================================
+// Calendar Logic
+// ==========================================
+
+function renderCalendar() {
+    if (!calendarGrid || !calendarMonthYear) return;
+
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+
+    const monthNames = ["January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"];
+    calendarMonthYear.textContent = `${monthNames[month]} ${year}`;
+
+    // Clear existing days but keep headers
+    const existingDays = calendarGrid.querySelectorAll('.calendar-day');
+    existingDays.forEach(day => day.remove());
+
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const todayDate = new Date();
+
+    // Aggregate hours per day for the current month view
+    const dailyHours = {};
+    allSessions.forEach(session => {
+        const sessionDate = new Date(session.startTime);
+        if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
+            const dayNum = sessionDate.getDate();
+            const hours = session.durationMs / (1000 * 60 * 60);
+            if (!dailyHours[dayNum]) {
+                dailyHours[dayNum] = 0;
+            }
+            dailyHours[dayNum] += hours;
+        }
+    });
+
+    // Padding for first day
+    for (let x = 0; x < firstDayIndex; x++) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'calendar-day empty';
+        calendarGrid.appendChild(emptyDiv);
+    }
+
+    // Days setup
+    for (let i = 1; i <= daysInMonth; i++) {
+        const dayDiv = document.createElement('div');
+        dayDiv.className = 'calendar-day';
+        dayDiv.textContent = i;
+
+        if (todayDate.getDate() === i &&
+            todayDate.getMonth() === month &&
+            todayDate.getFullYear() === year) {
+            dayDiv.classList.add('today');
+        }
+
+        if (dailyHours[i] && dailyHours[i] > 0) {
+            dayDiv.classList.add('has-work');
+            const hourLabel = document.createElement('div');
+            hourLabel.className = 'work-hours-indicator';
+            hourLabel.textContent = `${dailyHours[i].toFixed(1)}h`;
+            dayDiv.appendChild(hourLabel);
+        }
+
+        calendarGrid.appendChild(dayDiv);
+    }
+}
+
+if (prevMonthBtn && nextMonthBtn) {
+    prevMonthBtn.addEventListener('click', () => {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+        renderCalendar();
+    });
+
+    nextMonthBtn.addEventListener('click', () => {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+        renderCalendar();
+    });
+}
+
+// ==========================================
+// Custom Popup Modals
+// ==========================================
+
+function showAlert(title, message) {
+    return new Promise((resolve) => {
+        alertTitle.textContent = title || "Notice";
+        alertMessage.textContent = message;
+        alertModal.classList.remove('hidden');
+
+        const handleOk = () => {
+            alertModal.classList.add('hidden');
+            alertOkBtn.removeEventListener('click', handleOk);
+            resolve();
+        };
+
+        alertOkBtn.addEventListener('click', handleOk);
+    });
+}
+
+function showConfirm(title, message) {
+    return new Promise((resolve) => {
+        confirmTitle.textContent = title || "Confirm Action";
+        confirmMessage.textContent = message;
+        confirmModal.classList.remove('hidden');
+
+        const handleConfirm = () => {
+            cleanup();
+            resolve(true);
+        };
+
+        const handleCancel = () => {
+            cleanup();
+            resolve(false);
+        };
+
+        const cleanup = () => {
+            confirmModal.classList.add('hidden');
+            confirmOkBtn.removeEventListener('click', handleConfirm);
+            confirmCancelBtn.removeEventListener('click', handleCancel);
+        };
+
+        confirmOkBtn.addEventListener('click', handleConfirm);
+        confirmCancelBtn.addEventListener('click', handleCancel);
+    });
+}
+
+// ==========================================
+// Weekly Chart Logic
+// ==========================================
+
+function renderChart() {
+    if (!weeklyChart) return;
+
+    weeklyChart.innerHTML = '';
+
+    // Days of week: Mon, Tue, Wed, Thu, Fri, Sat, Sun
+    const daysArr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    const now = new Date();
+    const startOfWeek = getMonday(now);
+
+    // Initialize day map (sub-session durations)
+    const weekData = Array(7).fill().map(() => []);
+
+    let maxDailyHours = 0;
+
+    // Filter current week sessions
+    const currentWeekSessions = allSessions.filter(session => {
+        const sessionDate = new Date(session.startTime);
+        return sessionDate >= startOfWeek;
+    });
+
+    currentWeekSessions.forEach(session => {
+        const sessionDate = new Date(session.startTime);
+        let dayIndex = sessionDate.getDay() - 1; // 0=Mon, 6=Sun
+        if (dayIndex === -1) dayIndex = 6; // Sunday is 0 locally, map to 6
+
+        const hours = session.durationMs / (1000 * 60 * 60);
+        weekData[dayIndex].push(hours);
+    });
+
+    weekData.forEach(daySessions => {
+        const dailyTotal = daySessions.reduce((sum, hrs) => sum + hrs, 0);
+        if (dailyTotal > maxDailyHours) {
+            maxDailyHours = dailyTotal;
+        }
+    });
+
+    // Normalize scale strictly to this week's highest logged duration
+    const scaleMax = maxDailyHours > 0 ? maxDailyHours : 1;
+
+    // Build DOM
+    daysArr.forEach((label, index) => {
+        const colDiv = document.createElement('div');
+        colDiv.className = 'chart-day-column';
+
+        const areaDiv = document.createElement('div');
+        areaDiv.className = 'chart-bar-area';
+
+        weekData[index].forEach((hrs, sIndex) => {
+            const pct = (hrs / scaleMax) * 100;
+            const bar = document.createElement('div');
+            bar.className = 'chart-sub-session';
+            bar.style.height = `${pct}%`;
+            bar.title = `Session ${sIndex + 1}: ${hrs.toFixed(2)}h`;
+            areaDiv.appendChild(bar);
+        });
+
+        const lblDiv = document.createElement('div');
+        lblDiv.className = 'chart-day-label';
+        lblDiv.textContent = label;
+
+        colDiv.appendChild(areaDiv);
+        colDiv.appendChild(lblDiv);
+
+        weeklyChart.appendChild(colDiv);
+    });
 }

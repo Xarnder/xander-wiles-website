@@ -50,50 +50,139 @@
             <!-- User Info -->
             <div class="user-header">
                 <span id="user-name">Loading...</span>
-                <button id="logout-btn" class="btn-text">Logout</button>
+                <div>
+                    <button id="settings-btn" class="btn-text">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                    </button>
+                    <button id="logout-btn" class="btn-text">Logout</button>
+                </div>
             </div>
 
-            <!-- Controls Card -->
-            <section class="card controls">
+            <div class="dashboard-grid">
+                <!-- Controls Card -->
+                <section class="card controls">
+                    <div class="input-group">
+                        <label for="hourly-rate">Hourly Rate (<span class="currency-symbol">£</span>)</label>
+                        <input type="number" id="hourly-rate" value="50" min="0">
+                    </div>
+
+                    <div class="timer-display">
+                        <span id="timer">00:00:00</span>
+                        <div id="live-earnings" class="highlight-text"><span class="currency-symbol">£</span>0.00</div>
+                    </div>
+
+                    <div class="btn-group">
+                        <button id="start-btn" class="btn-success">Start Work</button>
+                        <button id="stop-btn" class="btn-danger hidden">Stop Work</button>
+                    </div>
+                </section>
+
+                <!-- Stats Card -->
+                <section class="card stats">
+                    <h2>This Week</h2>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="label">Total Hours</span>
+                            <span class="value" id="weekly-hours">0h</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="label">Total Earnings</span>
+                            <span class="value" id="weekly-earnings"><span class="currency-symbol">£</span>0.00</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Calendar -->
+                <section class="card calendar">
+                    <div class="calendar-header">
+                        <button id="prev-month" class="btn-outline">&larr;</button>
+                        <h2 id="calendar-month-year">Loading...</h2>
+                        <button id="next-month" class="btn-outline">&rarr;</button>
+                    </div>
+                    <div class="calendar-grid">
+                        <div class="day-label">Sun</div>
+                        <div class="day-label">Mon</div>
+                        <div class="day-label">Tue</div>
+                        <div class="day-label">Wed</div>
+                        <div class="day-label">Thu</div>
+                        <div class="day-label">Fri</div>
+                        <div class="day-label">Sat</div>
+                        <!-- Calendar days will be injected via JS -->
+                    </div>
+                </section>
+
+                <!-- Weekly Bar Chart -->
+                <section class="card chart-widget">
+                    <h2>Weekly Breakdown</h2>
+                    <div id="weekly-chart" class="chart-container">
+                        <!-- Chart bars will be injected via JS -->
+                    </div>
+                </section>
+
+                <!-- Calendar / History -->
+                <section class="card history">
+                    <h2>History</h2>
+                    <div id="history-list" class="history-list">
+                        <p class="loading-text">Loading history...</p>
+                    </div>
+                </section>
+            </div>
+
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal-overlay hidden">
+            <div class="modal-content card">
+                <div class="modal-header">
+                    <h2>Settings</h2>
+                    <button id="close-settings" class="btn-text">&times;</button>
+                </div>
+
                 <div class="input-group">
-                    <label for="hourly-rate">Hourly Rate ($)</label>
-                    <input type="number" id="hourly-rate" value="50" min="0">
+                    <label for="currency-select">Currency Symbol</label>
+                    <select id="currency-select" class="currency-dropdown">
+                        <option value="£">£ (GBP)</option>
+                        <option value="$">$ (USD)</option>
+                        <option value="€">€ (EUR)</option>
+                        <option value="¥">¥ (JPY)</option>
+                        <option value="₹">₹ (INR)</option>
+                    </select>
                 </div>
 
-                <div class="timer-display">
-                    <span id="timer">00:00:00</span>
-                    <div id="live-earnings" class="highlight-text">$0.00</div>
+                <div class="settings-footer">
+                    <button id="save-settings" class="btn-primary">Save Changes</button>
                 </div>
+            </div>
+        </div>
 
-                <div class="btn-group">
-                    <button id="start-btn" class="btn-success">Start Work</button>
-                    <button id="stop-btn" class="btn-danger hidden">Stop Work</button>
+        <!-- Alert Modal -->
+        <div id="alert-modal" class="modal-overlay hidden">
+            <div class="modal-content card" style="text-align: center;">
+                <h2 id="alert-title">Notice</h2>
+                <p id="alert-message" style="margin: 20px 0; color: var(--text-secondary);"></p>
+                <div class="settings-footer" style="justify-content: center;">
+                    <button id="alert-ok-btn" class="btn-primary">OK</button>
                 </div>
-            </section>
+            </div>
+        </div>
 
-            <!-- Stats Card -->
-            <section class="card stats">
-                <h2>This Week (Mon-Sun)</h2>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <span class="label">Total Hours</span>
-                        <span class="value" id="weekly-hours">0h</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="label">Total Earnings</span>
-                        <span class="value" id="weekly-earnings">$0.00</span>
-                    </div>
+        <!-- Confirm Modal -->
+        <div id="confirm-modal" class="modal-overlay hidden">
+            <div class="modal-content card" style="text-align: center;">
+                <h2 id="confirm-title">Confirm Action</h2>
+                <p id="confirm-message" style="margin: 20px 0; color: var(--text-secondary);"></p>
+                <div class="settings-footer" style="justify-content: center; gap: 15px;">
+                    <button id="confirm-cancel-btn" class="btn-text"
+                        style="background: rgba(255,255,255,0.1);">Cancel</button>
+                    <button id="confirm-ok-btn" class="btn-danger">Confirm</button>
                 </div>
-            </section>
-
-            <!-- Calendar / History -->
-            <section class="card history">
-                <h2>History</h2>
-                <div id="history-list" class="history-list">
-                    <p class="loading-text">Loading history...</p>
-                </div>
-            </section>
-
+            </div>
         </div>
     </main>
 
