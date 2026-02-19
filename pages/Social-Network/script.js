@@ -1143,14 +1143,14 @@ async function generateGridExport(type) {
         card.style.fontFamily = "sans-serif";
         card.style.color = "white";
 
-        const img = document.createElement('img');
-        img.style.width = "100%";
-        img.style.height = "200px";
-        img.style.objectFit = "cover";
-        img.style.borderRadius = "8px";
-        img.style.marginBottom = "10px";
-        img.style.background = "#222";
-        img.crossOrigin = "anonymous"; // Try anonymous CORS
+        const imgBox = document.createElement('div');
+        imgBox.style.width = "100%";
+        imgBox.style.paddingTop = "100%"; // 1:1 Aspect Ratio
+        imgBox.style.backgroundSize = "cover";
+        imgBox.style.backgroundPosition = "center";
+        imgBox.style.borderRadius = "8px";
+        imgBox.style.marginBottom = "10px";
+        imgBox.style.backgroundColor = "#222";
 
         // Convert image to data URL to avoid tainting canvas if possible
         let imgUrl = friend.photoURL;
@@ -1159,8 +1159,7 @@ async function generateGridExport(type) {
             const loadPromise = new Promise(async (resolve) => {
                 let finalSrc = imgUrl;
                 try {
-                    // 1. ADD TIMESTAMP HERE (Only for the fetch)
-                    // This forces a fresh network request to get the new CORS headers
+                    // Force fresh network request
                     const cacheBusterUrl = imgUrl.includes('?')
                         ? `${imgUrl}&t=${new Date().getTime()}`
                         : `${imgUrl}?t=${new Date().getTime()}`;
@@ -1175,29 +1174,38 @@ async function generateGridExport(type) {
                         reader.readAsDataURL(blob);
                     });
 
-                    // finalSrc is now "data:image/png;base64,..."
-                    // WE DO NOT ADD TIMESTAMP TO THIS
-
                 } catch (e) {
                     console.warn("Fetch failed, falling back to direct URL", e);
-                    // If fetch fails, we fall back to the http URL. 
-                    // We can try adding the timestamp here as a last resort.
                     finalSrc = imgUrl.includes('?')
                         ? `${imgUrl}&t=${new Date().getTime()}`
                         : `${imgUrl}?t=${new Date().getTime()}`;
                 }
 
-                img.onload = resolve;
-                img.onerror = resolve;
-                img.src = finalSrc; // Set the source
+                // If fallback to URL, pre-load via Image object to ensure readiness
+                if (finalSrc.startsWith('http')) {
+                    const temp = new Image();
+                    temp.crossOrigin = 'anonymous';
+                    temp.onload = () => {
+                        imgBox.style.backgroundImage = `url('${finalSrc}')`;
+                        resolve();
+                    };
+                    temp.onerror = () => {
+                        imgBox.style.backgroundImage = `url('${finalSrc}')`;
+                        resolve();
+                    };
+                    temp.src = finalSrc;
+                } else {
+                    // Base64 ready
+                    imgBox.style.backgroundImage = `url('${finalSrc}')`;
+                    resolve();
+                }
             });
             imageLoadPromises.push(loadPromise);
         } else {
-            img.src = imgUrl || '';
+            if (imgUrl) imgBox.style.backgroundImage = `url('${imgUrl}')`;
         }
 
-
-        card.appendChild(img);
+        card.appendChild(imgBox);
 
         const info = document.createElement('div');
         info.innerHTML = `
