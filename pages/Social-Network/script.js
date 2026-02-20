@@ -97,6 +97,59 @@ if (mobileMenuBtn) {
     });
 }
 
+// --- VIEW CONTROLS (Compact Grid & Size) ---
+const compactViewToggle = document.getElementById('compact-view-toggle');
+const gridSizeSlider = document.getElementById('grid-size-slider');
+
+// Load saved preferences
+const savedCompactMode = localStorage.getItem('socialNetworkCompactMode') === 'true';
+const savedGridSize = localStorage.getItem('socialNetworkGridSize') || '280';
+
+// Apply initial state
+if (compactViewToggle) {
+    compactViewToggle.checked = savedCompactMode;
+    if (savedCompactMode) {
+        friendsGrid.classList.add('compact-mode');
+        if (gridSizeSlider) gridSizeSlider.disabled = false;
+    } else {
+        if (gridSizeSlider) gridSizeSlider.disabled = true;
+    }
+
+    compactViewToggle.addEventListener('change', (e) => {
+        const isCompact = e.target.checked;
+        if (isCompact) {
+            friendsGrid.classList.add('compact-mode');
+            if (gridSizeSlider) {
+                gridSizeSlider.disabled = false;
+                friendsGrid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${gridSizeSlider.value}px, 1fr))`;
+            }
+        } else {
+            friendsGrid.classList.remove('compact-mode');
+            if (gridSizeSlider) {
+                gridSizeSlider.disabled = true;
+                friendsGrid.style.gridTemplateColumns = ''; // Reset to CSS default
+            }
+        }
+        localStorage.setItem('socialNetworkCompactMode', isCompact);
+    });
+}
+
+if (gridSizeSlider) {
+    gridSizeSlider.value = savedGridSize;
+    if (savedCompactMode) {
+        friendsGrid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${savedGridSize}px, 1fr))`;
+    } else {
+        friendsGrid.style.gridTemplateColumns = ''; // Reset to CSS default if not compact
+    }
+
+    gridSizeSlider.addEventListener('input', (e) => {
+        if (!compactViewToggle.checked) return; // Safeguard
+        const size = e.target.value;
+        friendsGrid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${size}px, 1fr))`;
+        localStorage.setItem('socialNetworkGridSize', size);
+    });
+}
+
 // --- IMAGE PROCESSING (4MP WebP) ---
 // --- IMAGE PROCESSING (4MP WebP) ---
 // --- IMAGE PROCESSING (4MP WebP) ---

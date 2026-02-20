@@ -177,6 +177,70 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 20px;
+    transition: all 0.3s ease;
+}
+
+/* Compact Mode Constraints */
+.friends-grid.compact-mode {
+    gap: 4px;
+    /* Greatly reduced gap so cards are dense */
+}
+
+.friends-grid.compact-mode .friend-card {
+    text-align: center;
+    border-radius: 8px;
+    /* Tighter radius */
+    padding: 0;
+}
+
+.friends-grid.compact-mode .card-img {
+    border-radius: 8px;
+    /* Round all corners in compact view */
+    margin-bottom: 2px;
+}
+
+.friends-grid.compact-mode .card-info {
+    padding: 2px 4px 6px 4px;
+    /* Minimal padding, slightly more on bottom for breathing room */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+
+.friends-grid.compact-mode .card-info h3 {
+    font-size: 0.8rem;
+    /* Smaller font to fit tight spaces */
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    max-width: 100%;
+    display: block;
+}
+
+/* Hide extra details in compact mode */
+.friends-grid.compact-mode .card-details,
+.friends-grid.compact-mode .card-info p,
+.friends-grid.compact-mode .card-info .status-badge,
+.friends-grid.compact-mode .card-info .category-badge,
+.friends-grid.compact-mode .card-actions,
+.friends-grid.compact-mode .status-ok,
+.friends-grid.compact-mode .status-due,
+.friends-grid.compact-mode .status-overdue {
+    display: none !important;
+}
+
+.friends-grid.compact-mode .card-info>div {
+    justify-content: center !important;
+    gap: 0 !important;
+    width: 100%;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 /* Friend Card */
