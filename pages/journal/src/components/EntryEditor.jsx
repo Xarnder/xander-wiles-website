@@ -350,8 +350,8 @@ export default function EntryEditor() {
             success('Entry saved successfully');
 
             // Trigger backup popup on every save with dynamic day name
-            const dateObj = parseISO(date);
-            const dayName = format(dateObj, 'EEEE');
+            const today = new Date();
+            const dayName = format(today, 'EEEE');
             setTimeout(() => {
                 openBackup(`It's ${dayName}! Great time to reflect and download a backup of your entries.`);
             }, 1500);
