@@ -143,9 +143,7 @@ export default function EntryEditor() {
         }
     }, [content]);
 
-    // Image Upload Handler
-    const handleImageUpload = async (e) => {
-        const files = Array.from(e.target.files);
+    const uploadImageFiles = async (files) => {
         if (files.length === 0) return;
 
         if (images.length + files.length > 8) {
@@ -201,8 +199,35 @@ export default function EntryEditor() {
         } finally {
             setUploading(false);
             setStatusMessage('');
-            // Reset input
-            e.target.value = null;
+        }
+    };
+
+    // Image Upload Handler
+    const handleImageUpload = async (e) => {
+        const files = Array.from(e.target.files);
+        await uploadImageFiles(files);
+        // Reset input
+        e.target.value = null;
+    };
+
+    // Image Paste Handler
+    const handlePaste = async (e) => {
+        if (!e.clipboardData) return;
+        const items = e.clipboardData.items;
+        const imageFiles = [];
+
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const file = items[i].getAsFile();
+                if (file) {
+                    imageFiles.push(file);
+                }
+            }
+        }
+
+        if (imageFiles.length > 0) {
+            e.preventDefault(); // Prevent default pasting behavior if images are detected
+            await uploadImageFiles(imageFiles);
         }
     };
 
@@ -560,7 +585,7 @@ export default function EntryEditor() {
                 )}
 
                 {isEditing ? (
-                    <div className="h-full flex flex-col">
+                    <div className="h-full flex flex-col" onPaste={handlePaste}>
                         <div onClick={() => {
                             if (isInferredTitle) {
                                 toastError("Title is inferred from content. Please edit it in the journal entry.");
