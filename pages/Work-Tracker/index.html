@@ -58,7 +58,13 @@
             <div class="user-header">
                 <span id="user-name">Loading...</span>
                 <div>
-                    <button id="export-btn" class="btn-text">
+                    <button id="filter-btn" class="btn-text" title="Filter Dashboard">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                        </svg>
+                    </button>
+                    <button id="export-btn" class="btn-text" title="Export as PDF">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -202,34 +208,35 @@
 
         </div>
 
-        <!-- Export Modal -->
-        <div id="export-modal" class="modal-overlay hidden">
+        <!-- Filter Modal -->
+        <div id="filter-modal" class="modal-overlay hidden">
             <div class="modal-content card">
                 <div class="modal-header">
-                    <h2>Export PDF</h2>
-                    <button id="close-export" class="btn-text">&times;</button>
+                    <h2>Filter Dashboard</h2>
+                    <button id="close-filter" class="btn-text">&times;</button>
                 </div>
 
                 <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.95rem;">
-                    Filter your dashboard before exporting to PDF. Leave blank to include all sessions.
+                    Filter your dashboard by Company or Project.
                 </p>
 
                 <div class="input-group">
-                    <label for="export-company">Filter by Company</label>
-                    <select id="export-company" class="currency-dropdown touch-picker" style="width: 100%;">
+                    <label for="filter-company">Filter by Company</label>
+                    <select id="filter-company" class="currency-dropdown touch-picker" style="width: 100%;">
                         <option value="">All Companies</option>
                     </select>
                 </div>
 
                 <div class="input-group">
-                    <label for="export-project">Filter by Project</label>
-                    <select id="export-project" class="currency-dropdown touch-picker" style="width: 100%;">
+                    <label for="filter-project">Filter by Project</label>
+                    <select id="filter-project" class="currency-dropdown touch-picker" style="width: 100%;">
                         <option value="">All Projects</option>
                     </select>
                 </div>
 
-                <div class="settings-footer">
-                    <button id="generate-pdf-btn" class="btn-primary" style="width: 100%;">Generate PDF</button>
+                <div class="settings-footer" style="justify-content: space-between;">
+                    <button id="clear-filter-btn" class="btn-outline" style="width: 48%;">Clear</button>
+                    <button id="apply-filter-btn" class="btn-primary" style="width: 48%;">Apply Filter</button>
                 </div>
             </div>
         </div>

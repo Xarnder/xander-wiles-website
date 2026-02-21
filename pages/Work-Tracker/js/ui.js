@@ -46,11 +46,13 @@ export const DOM = {
     showTitlesToggle: document.getElementById('show-titles-toggle'),
     ganttChart: document.getElementById('gantt-chart'),
     exportBtn: document.getElementById('export-btn'),
-    exportModal: document.getElementById('export-modal'),
-    closeExportBtn: document.getElementById('close-export'),
-    exportCompanySelect: document.getElementById('export-company'),
-    exportProjectSelect: document.getElementById('export-project'),
-    generatePdfBtn: document.getElementById('generate-pdf-btn')
+    filterBtn: document.getElementById('filter-btn'),
+    filterModal: document.getElementById('filter-modal'),
+    closeFilterBtn: document.getElementById('close-filter'),
+    filterCompanySelect: document.getElementById('filter-company'),
+    filterProjectSelect: document.getElementById('filter-project'),
+    applyFilterBtn: document.getElementById('apply-filter-btn'),
+    clearFilterBtn: document.getElementById('clear-filter-btn')
 };
 
 export function showAlert(title, message) {

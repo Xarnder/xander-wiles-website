@@ -6,7 +6,10 @@ export const state = {
     currentCompany: '',
     currentProject: '',
     currentCalendarDate: new Date(),
+    rawSessions: [],
     allSessions: [],
+    globalFilterCompany: '',
+    globalFilterProject: '',
     currentCurrency: localStorage.getItem('work_tracker_currency') || '£',
     widgetOrder: JSON.parse(localStorage.getItem('work_tracker_widget_order')) || ['widget-timer', 'widget-stats', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'],
     showWidgetTitles: localStorage.getItem('work_tracker_show_titles') !== 'false'

@@ -132,17 +132,38 @@ export function loadHistory() {
     );
 
     onSnapshot(q, (querySnapshot) => {
-        state.allSessions = [];
+        state.rawSessions = [];
 
         querySnapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            state.allSessions.push({ id: docSnap.id, ...data });
+            state.rawSessions.push({ id: docSnap.id, ...data });
         });
 
-        renderDashboardData();
-
+        applyGlobalFilters();
         console.log("Debug: History updated from Firebase");
     }, (error) => {
         console.error("Debug: Snapshot error", error);
     });
+}
+
+export function applyGlobalFilters() {
+    if (!state.globalFilterCompany && !state.globalFilterProject) {
+        state.allSessions = [...state.rawSessions];
+    } else {
+        state.allSessions = state.rawSessions.filter(session => {
+            let matchCompany = true;
+            let matchProject = true;
+
+            if (state.globalFilterCompany) {
+                matchCompany = session.company === state.globalFilterCompany;
+            }
+            if (state.globalFilterProject) {
+                matchProject = session.project === state.globalFilterProject;
+            }
+
+            return matchCompany && matchProject;
+        });
+    }
+
+    renderDashboardData();
 }
