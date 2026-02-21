@@ -1005,7 +1005,8 @@ button:active {
     #auth-section,
     .timer-widget .btn-group,
     .timer-widget .input-group,
-    .modal-overlay {
+    .modal-overlay,
+    #active-filters-container {
         display: none !important;
     }
 

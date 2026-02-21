@@ -166,4 +166,5 @@ export function applyGlobalFilters() {
     }
 
     renderDashboardData();
+    import('./ui.js').then(module => module.updateActiveFilterDisplay());
 }

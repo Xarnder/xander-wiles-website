@@ -52,7 +52,8 @@ export const DOM = {
     filterCompanySelect: document.getElementById('filter-company'),
     filterProjectSelect: document.getElementById('filter-project'),
     applyFilterBtn: document.getElementById('apply-filter-btn'),
-    clearFilterBtn: document.getElementById('clear-filter-btn')
+    clearFilterBtn: document.getElementById('clear-filter-btn'),
+    activeFiltersContainer: document.getElementById('active-filters-container')
 };
 
 export function showAlert(title, message) {
@@ -406,6 +407,27 @@ export function applyWidgetTitles() {
         document.body.classList.add('hide-widget-titles');
     } else {
         document.body.classList.remove('hide-widget-titles');
+    }
+}
+
+export function updateActiveFilterDisplay() {
+    if (!DOM.activeFiltersContainer) return;
+    DOM.activeFiltersContainer.innerHTML = '';
+
+    if (state.globalFilterCompany) {
+        const badge = document.createElement('span');
+        badge.className = 'history-badge history-badge-company';
+        badge.textContent = state.globalFilterCompany;
+        badge.title = 'Filtered by Company: ' + state.globalFilterCompany;
+        DOM.activeFiltersContainer.appendChild(badge);
+    }
+
+    if (state.globalFilterProject) {
+        const badge = document.createElement('span');
+        badge.className = 'history-badge history-badge-project';
+        badge.textContent = state.globalFilterProject;
+        badge.title = 'Filtered by Project: ' + state.globalFilterProject;
+        DOM.activeFiltersContainer.appendChild(badge);
     }
 }
 
