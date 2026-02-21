@@ -1,4 +1,4 @@
-import { DOM, updateCurrencyDisplays, renderCalendar } from './ui.js';
+import { DOM, updateCurrencyDisplays, renderCalendar, applyWidgetOrder } from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
 import { state, updateCurrency } from './state.js';
@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize UI
     updateCurrencyDisplays();
     DOM.currencySelect.value = state.currentCurrency;
+    applyWidgetOrder();
 
     // Setup Auth
     setupAuth();
@@ -38,6 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Settings Events
     DOM.settingsBtn.addEventListener('click', () => {
         DOM.currencySelect.value = state.currentCurrency;
+        // Import dynamically here to avoid circular dep if needed, but it's imported at top anyway
+        import('./ui.js').then(module => module.renderWidgetOrderList());
         DOM.settingsModal.classList.remove('hidden');
     });
 
@@ -47,11 +50,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     DOM.saveSettingsBtn.addEventListener('click', () => {
         updateCurrency(DOM.currencySelect.value);
+
+        // Harvest new widget order
+        const newOrder = [];
+        const items = DOM.widgetOrderList.querySelectorAll('.sortable-item');
+        items.forEach(item => newOrder.push(item.dataset.id));
+
+        import('./state.js').then(module => module.updateWidgetOrder(newOrder));
+        applyWidgetOrder();
         updateCurrencyDisplays();
+
         if (state.currentUser) {
             loadHistory();
         }
         DOM.settingsModal.classList.add('hidden');
+
+        // Alert to reload for widget order
+        import('./ui.js').then(module => {
+            module.showAlert("Settings Saved", "Your settings have been saved! Please reload the page to cleanly view any changes to your widget order.");
+        });
     });
 
     // Calendar Events

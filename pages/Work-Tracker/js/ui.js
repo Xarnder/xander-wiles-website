@@ -41,7 +41,8 @@ export const DOM = {
     confirmTitle: document.getElementById('confirm-title'),
     confirmMessage: document.getElementById('confirm-message'),
     confirmOkBtn: document.getElementById('confirm-ok-btn'),
-    confirmCancelBtn: document.getElementById('confirm-cancel-btn')
+    confirmCancelBtn: document.getElementById('confirm-cancel-btn'),
+    widgetOrderList: document.getElementById('widget-order-list')
 };
 
 export function showAlert(title, message) {
@@ -190,7 +191,25 @@ export function renderChart() {
         if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
     });
 
-    const scaleMax = maxDailyHours > 0 ? maxDailyHours : 1;
+    const scaleMax = Math.ceil(maxDailyHours > 0 ? maxDailyHours : 1);
+
+    // Y Axis Labels
+    const yAxisDiv = document.createElement('div');
+    yAxisDiv.className = 'chart-y-axis';
+
+    const maxLabel = document.createElement('div');
+    maxLabel.textContent = scaleMax + 'h';
+
+    const midLabel = document.createElement('div');
+    midLabel.textContent = (scaleMax / 2).toFixed(1) + 'h';
+
+    const zeroLabel = document.createElement('div');
+    zeroLabel.textContent = '0h';
+
+    yAxisDiv.appendChild(maxLabel);
+    yAxisDiv.appendChild(midLabel);
+    yAxisDiv.appendChild(zeroLabel);
+    DOM.weeklyChart.appendChild(yAxisDiv);
 
     daysArr.forEach((label, index) => {
         const colDiv = document.createElement('div');
@@ -281,5 +300,115 @@ export function updateDatalists() {
         option.value = project;
         option.textContent = project;
         DOM.projectSelect.appendChild(option);
+    });
+}
+
+export function applyWidgetOrder() {
+    state.widgetOrder.forEach((id, index) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.style.order = index;
+        }
+    });
+}
+
+export function renderWidgetOrderList() {
+    if (!DOM.widgetOrderList) return;
+    DOM.widgetOrderList.innerHTML = '';
+
+    const labels = {
+        'widget-timer': 'Timer & Controls',
+        'widget-stats': 'Statistics',
+        'widget-calendar': 'Calendar',
+        'widget-chart': 'Weekly Breakdown',
+        'widget-history': 'History List'
+    };
+
+    state.widgetOrder.forEach(id => {
+        if (!labels[id]) return;
+
+        const li = document.createElement('li');
+        li.className = 'sortable-item';
+        li.draggable = true;
+        li.dataset.id = id;
+
+        li.innerHTML = `
+            <div class="drag-handle">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                </svg>
+            </div>
+            <span>${labels[id]}</span>
+        `;
+
+        li.addEventListener('dragstart', handleDragStart);
+        li.addEventListener('dragenter', handleDragEnter);
+        li.addEventListener('dragover', handleDragOver);
+        li.addEventListener('dragleave', handleDragLeave);
+        li.addEventListener('drop', handleDrop);
+        li.addEventListener('dragend', handleDragEnd);
+
+        DOM.widgetOrderList.appendChild(li);
+    });
+}
+
+let draggedItem = null;
+
+function handleDragStart(e) {
+    draggedItem = this;
+    setTimeout(() => this.classList.add('dragging'), 0);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleDragEnter(e) {
+    if (this !== draggedItem) {
+        this.style.borderStyle = 'dashed';
+        this.style.borderColor = 'var(--accent-blue)';
+    }
+}
+
+function handleDragLeave(e) {
+    this.style.borderStyle = 'solid';
+    this.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) e.stopPropagation();
+
+    this.style.borderStyle = 'solid';
+    this.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+
+    if (draggedItem !== this) {
+        // Swap IDs and HTML
+        const draggedHtml = draggedItem.innerHTML;
+        const draggedId = draggedItem.dataset.id;
+
+        draggedItem.innerHTML = this.innerHTML;
+        draggedItem.dataset.id = this.dataset.id;
+
+        this.innerHTML = draggedHtml;
+        this.dataset.id = draggedId;
+    }
+    return false;
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('dragging');
+    const items = DOM.widgetOrderList.querySelectorAll('.sortable-item');
+    items.forEach(item => {
+        item.style.borderStyle = 'solid';
+        item.style.borderColor = 'rgba(255, 255, 255, 0.15)';
     });
 }
