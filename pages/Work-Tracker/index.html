@@ -25,10 +25,17 @@
     <link rel="stylesheet" href="/assets/css/style.css">
 
     <!-- App Specific CSS -->
-    <link rel="stylesheet" href="tracker.css">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
+    <!-- Background Orbs for Glassmorphism -->
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
 
     <!-- Global Header Placeholder -->
     <div id="main-nav-placeholder"></div>
@@ -66,7 +73,7 @@
 
             <div class="dashboard-grid">
                 <!-- Controls Card -->
-                <section class="card controls">
+                <section class="card controls card-anim-1">
                     <div class="input-group">
                         <label for="hourly-rate">Hourly Rate (<span class="currency-symbol">£</span>)</label>
                         <input type="number" id="hourly-rate" value="50" min="0">
@@ -84,7 +91,7 @@
                 </section>
 
                 <!-- Stats Card -->
-                <section class="card stats">
+                <section class="card stats card-anim-2">
                     <h2>This Week</h2>
                     <div class="stats-grid">
                         <div class="stat-item">
@@ -99,7 +106,7 @@
                 </section>
 
                 <!-- Calendar -->
-                <section class="card calendar">
+                <section class="card calendar card-anim-3">
                     <div class="calendar-header">
                         <button id="prev-month" class="btn-outline">&larr;</button>
                         <h2 id="calendar-month-year">Loading...</h2>
@@ -118,7 +125,7 @@
                 </section>
 
                 <!-- Weekly Bar Chart -->
-                <section class="card chart-widget">
+                <section class="card chart-widget card-anim-4">
                     <h2>Weekly Breakdown</h2>
                     <div id="weekly-chart" class="chart-container">
                         <!-- Chart bars will be injected via JS -->
@@ -126,7 +133,7 @@
                 </section>
 
                 <!-- Calendar / History -->
-                <section class="card history">
+                <section class="card history card-anim-5">
                     <h2>History</h2>
                     <div id="history-list" class="history-list">
                         <p class="loading-text">Loading history...</p>
@@ -187,7 +194,7 @@
     </main>
 
     <!-- Firebase Logic -->
-    <script type="module" src="app.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 
 </html>
