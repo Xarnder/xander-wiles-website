@@ -992,3 +992,143 @@ button:active {
     align-items: center;
     cursor: grab;
 }
+
+/* Print / Export Styles */
+@media print {
+    body {
+        background: white !important;
+        color: black !important;
+    }
+
+    .bg-orbs,
+    .user-header,
+    #auth-section,
+    .timer-widget .btn-group,
+    .timer-widget .input-group,
+    .modal-overlay {
+        display: none !important;
+    }
+
+    .app-container {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .dashboard-grid {
+        gap: 20px !important;
+    }
+
+    .card {
+        background: transparent !important;
+        border: 1px solid #000 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        padding: 20px !important;
+        page-break-inside: avoid;
+    }
+
+    .card:hover {
+        transform: none !important;
+        box-shadow: none !important;
+        border-color: #000 !important;
+    }
+
+    .widget-title {
+        color: black !important;
+    }
+
+    .text-secondary,
+    .input-group label,
+    .day-label,
+    .stat-item .label,
+    .history-date,
+    .history-details small {
+        color: #000 !important;
+    }
+
+    .stat-item {
+        background: transparent !important;
+        border: 1px solid #000 !important;
+        color: black !important;
+    }
+
+    .calendar-day {
+        border-color: #000 !important;
+        color: #000 !important;
+    }
+
+    .calendar-day.today {
+        background: rgba(0, 0, 0, 0.05) !important;
+        border-color: #000 !important;
+        box-shadow: none !important;
+        color: black !important;
+    }
+
+    .calendar-day.has-work {
+        background: rgba(0, 0, 0, 0.1) !important;
+        border-color: #000 !important;
+        color: black !important;
+    }
+
+    .btn-delete {
+        display: none !important;
+    }
+
+    .history-item {
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 1px solid #000 !important;
+        border-radius: 0 !important;
+        padding: 10px 0 !important;
+    }
+
+    .chart-y-axis div,
+    .chart-day-label {
+        color: #000 !important;
+    }
+
+    #timer {
+        color: black !important;
+        text-shadow: none !important;
+    }
+
+    .highlight-text,
+    .stat-item .value {
+        color: #000 !important;
+        text-shadow: none !important;
+    }
+
+    /* Ensure colors print correctly */
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .gantt-hour-marker {
+        border-left: 1px dashed #000 !important;
+    }
+
+    .gantt-hour-marker span {
+        color: #000 !important;
+        background: white !important;
+    }
+
+    /* Make inline-styled and text elements darker for readability on white background */
+    .gantt-block,
+    .chart-sub-session {
+        filter: brightness(0.6) contrast(1.5) !important;
+        border: 1px solid #000 !important;
+    }
+
+    .work-hours-indicator {
+        color: #000 !important;
+        font-weight: 800 !important;
+    }
+
+    .history-badge {
+        background: transparent !important;
+        color: #000 !important;
+        border: 1px solid #666 !important;
+    }
+}

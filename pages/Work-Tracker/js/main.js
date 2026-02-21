@@ -2,7 +2,7 @@ import { DOM, updateCurrencyDisplays, renderCalendar, applyWidgetOrder, applyWid
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
 import { state, updateCurrency } from './state.js';
-import { loadHistory } from './api.js';
+import { loadHistory, renderDashboardData } from './api.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize UI
@@ -88,6 +88,97 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.nextMonthBtn.addEventListener('click', () => {
             state.currentCalendarDate.setMonth(state.currentCalendarDate.getMonth() + 1);
             renderCalendar();
+        });
+    }
+
+    // Export PDF Events
+    if (DOM.exportBtn) {
+        DOM.exportBtn.addEventListener('click', () => {
+            // Populate filter dropdowns based on current data
+            const companies = new Set();
+            const projects = new Set();
+
+            state.allSessions.forEach(session => {
+                if (session.company) companies.add(session.company.trim());
+                if (session.project) projects.add(session.project.trim());
+            });
+
+            DOM.exportCompanySelect.innerHTML = '<option value="">All Companies</option>';
+            Array.from(companies).sort().forEach(company => {
+                const opt = document.createElement('option');
+                opt.value = company;
+                opt.textContent = company;
+                DOM.exportCompanySelect.appendChild(opt);
+            });
+
+            DOM.exportProjectSelect.innerHTML = '<option value="">All Projects</option>';
+            Array.from(projects).sort().forEach(project => {
+                const opt = document.createElement('option');
+                opt.value = project;
+                opt.textContent = project;
+                DOM.exportProjectSelect.appendChild(opt);
+            });
+
+            DOM.exportModal.classList.remove('hidden');
+        });
+    }
+
+    if (DOM.closeExportBtn) {
+        DOM.closeExportBtn.addEventListener('click', () => {
+            DOM.exportModal.classList.add('hidden');
+        });
+    }
+
+    if (DOM.generatePdfBtn) {
+        DOM.generatePdfBtn.addEventListener('click', () => {
+            const selectedCompany = DOM.exportCompanySelect.value;
+            const selectedProject = DOM.exportProjectSelect.value;
+
+            // Validate if we have any data
+            if (!state.allSessions || state.allSessions.length === 0) {
+                import('./ui.js').then(module => module.showAlert("No Data", "There are no sessions to export."));
+                return;
+            }
+
+            // Temporarily store the original full dataset
+            const originalSessions = [...state.allSessions];
+
+            // Filter the data payload based on selections
+            state.allSessions = originalSessions.filter(session => {
+                let matchCompany = true;
+                let matchProject = true;
+
+                if (selectedCompany) {
+                    matchCompany = session.company === selectedCompany;
+                }
+                if (selectedProject) {
+                    matchProject = session.project === selectedProject;
+                }
+
+                return matchCompany && matchProject;
+            });
+
+            // If the filter resulted in 0 sessions, warn and abort
+            if (state.allSessions.length === 0) {
+                state.allSessions = originalSessions; // Restore
+                import('./ui.js').then(module => module.showAlert("No Matches", "No sessions match these filters."));
+                return;
+            }
+
+            // Close the modal
+            DOM.exportModal.classList.add('hidden');
+
+            // Force the UI to re-render with the filtered subset
+            renderDashboardData();
+
+            // Give the browser a split second to paint the new DOM elements, then print
+            setTimeout(() => {
+                window.print();
+
+                // Upon returning from print dialog, restore the original dataset
+                state.allSessions = originalSessions;
+                renderDashboardData();
+            }, 500);
         });
     }
 });

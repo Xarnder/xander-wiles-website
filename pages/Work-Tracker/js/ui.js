@@ -44,7 +44,13 @@ export const DOM = {
     confirmCancelBtn: document.getElementById('confirm-cancel-btn'),
     widgetOrderList: document.getElementById('widget-order-list'),
     showTitlesToggle: document.getElementById('show-titles-toggle'),
-    ganttChart: document.getElementById('gantt-chart')
+    ganttChart: document.getElementById('gantt-chart'),
+    exportBtn: document.getElementById('export-btn'),
+    exportModal: document.getElementById('export-modal'),
+    closeExportBtn: document.getElementById('close-export'),
+    exportCompanySelect: document.getElementById('export-company'),
+    exportProjectSelect: document.getElementById('export-project'),
+    generatePdfBtn: document.getElementById('generate-pdf-btn')
 };
 
 export function showAlert(title, message) {
