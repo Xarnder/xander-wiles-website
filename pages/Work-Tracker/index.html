@@ -74,6 +74,7 @@
             <div class="dashboard-grid">
                 <!-- Timer Card -->
                 <section class="card timer-widget" id="widget-timer">
+                    <h2 class="widget-title">Timer</h2>
                     <div class="input-group">
                         <label for="hourly-rate">Hourly Rate (<span class="currency-symbol">£</span>)</label>
                         <input type="number" id="hourly-rate" value="20" min="0">
@@ -111,7 +112,7 @@
                 <section class="card stats" id="widget-stats">
                     <div
                         style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px;">
-                        <h2 style="margin: 0;">Statistics</h2>
+                        <h2 class="widget-title" style="margin: 0;">Statistics</h2>
                     </div>
 
                     <div class="stats-grid">
@@ -147,9 +148,11 @@
 
                 <!-- Calendar -->
                 <section class="card calendar-widget" id="widget-calendar">
+                    <h2 class="widget-title">Calendar</h2>
                     <div class="calendar-header">
                         <button id="prev-month" class="btn-outline">&larr;</button>
-                        <h2 id="calendar-month-year">Loading...</h2>
+                        <h3 id="calendar-month-year" style="margin: 0; font-weight: 400; font-size: 1.2rem;">Loading...
+                        </h3>
                         <button id="next-month" class="btn-outline">&rarr;</button>
                     </div>
                     <div class="calendar-grid">
@@ -166,7 +169,7 @@
 
                 <!-- Weekly Bar Chart -->
                 <section class="card chart-widget" id="widget-chart">
-                    <h2>Weekly Breakdown</h2>
+                    <h2 class="widget-title">Weekly Breakdown</h2>
                     <div id="weekly-chart" class="chart-container">
                         <!-- Chart bars will be injected via JS -->
                     </div>
@@ -174,7 +177,7 @@
 
                 <!-- Calendar / History -->
                 <section class="card history" id="widget-history">
-                    <h2>History</h2>
+                    <h2 class="widget-title">History</h2>
                     <div id="history-list" class="history-list">
                         <p class="loading-text">Loading history...</p>
                     </div>
@@ -207,6 +210,12 @@
                     <ul id="widget-order-list" class="sortable-list">
                         <!-- List items will be injected by JS -->
                     </ul>
+                </div>
+
+                <div class="input-group"
+                    style="flex-direction: row; justify-content: space-between; align-items: center;">
+                    <label for="show-titles-toggle" style="margin-bottom: 0;">Show Widget Titles</label>
+                    <input type="checkbox" id="show-titles-toggle" style="width: 20px; height: 20px; cursor: pointer;">
                 </div>
 
                 <div class="settings-footer">

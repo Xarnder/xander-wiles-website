@@ -1,4 +1,4 @@
-import { DOM, updateCurrencyDisplays, renderCalendar, applyWidgetOrder } from './ui.js';
+import { DOM, updateCurrencyDisplays, renderCalendar, applyWidgetOrder, applyWidgetTitles } from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
 import { state, updateCurrency } from './state.js';
@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateCurrencyDisplays();
     DOM.currencySelect.value = state.currentCurrency;
     applyWidgetOrder();
+    applyWidgetTitles();
 
     // Setup Auth
     setupAuth();
@@ -39,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Settings Events
     DOM.settingsBtn.addEventListener('click', () => {
         DOM.currencySelect.value = state.currentCurrency;
+        DOM.showTitlesToggle.checked = state.showWidgetTitles;
         // Import dynamically here to avoid circular dep if needed, but it's imported at top anyway
         import('./ui.js').then(module => module.renderWidgetOrderList());
         DOM.settingsModal.classList.remove('hidden');
@@ -56,8 +58,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const items = DOM.widgetOrderList.querySelectorAll('.sortable-item');
         items.forEach(item => newOrder.push(item.dataset.id));
 
-        import('./state.js').then(module => module.updateWidgetOrder(newOrder));
+        import('./state.js').then(module => {
+            module.updateWidgetOrder(newOrder);
+            module.updateWidgetTitles(DOM.showTitlesToggle.checked);
+        });
+
         applyWidgetOrder();
+        applyWidgetTitles();
         updateCurrencyDisplays();
 
         if (state.currentUser) {

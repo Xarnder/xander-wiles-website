@@ -114,6 +114,10 @@ body {
     }
 }
 
+.hide-widget-titles .widget-title {
+    display: none !important;
+}
+
 /* Removed antigravity floating animation for cards */
 @keyframes antigravity {
     0% {
@@ -760,6 +764,10 @@ button:active {
 }
 
 /* Chart Widget */
+.chart-widget {
+    display: flex;
+    flex-direction: column;
+}
 
 .chart-widget h2 {
     margin-top: 0;
@@ -771,7 +779,8 @@ button:active {
     display: flex;
     justify-content: space-around;
     align-items: flex-end;
-    height: 220px;
+    flex-grow: 1;
+    min-height: 220px;
     margin-top: 20px;
     padding-left: 35px;
     padding-bottom: 30px;

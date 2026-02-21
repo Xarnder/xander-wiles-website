@@ -42,7 +42,8 @@ export const DOM = {
     confirmMessage: document.getElementById('confirm-message'),
     confirmOkBtn: document.getElementById('confirm-ok-btn'),
     confirmCancelBtn: document.getElementById('confirm-cancel-btn'),
-    widgetOrderList: document.getElementById('widget-order-list')
+    widgetOrderList: document.getElementById('widget-order-list'),
+    showTitlesToggle: document.getElementById('show-titles-toggle')
 };
 
 export function showAlert(title, message) {
@@ -310,6 +311,14 @@ export function applyWidgetOrder() {
             el.style.order = index;
         }
     });
+}
+
+export function applyWidgetTitles() {
+    if (!state.showWidgetTitles) {
+        document.body.classList.add('hide-widget-titles');
+    } else {
+        document.body.classList.remove('hide-widget-titles');
+    }
 }
 
 export function renderWidgetOrderList() {
