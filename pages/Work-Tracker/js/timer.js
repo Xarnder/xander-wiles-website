@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert } from './ui.js';
+import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert, renderGanttChart } from './ui.js';
 import { saveSession } from './api.js';
 
 export function updateTimerDisplay(elapsedMs) {
@@ -41,6 +41,7 @@ export function startTimer() {
 
     state.timerInterval = setInterval(() => {
         updateTimerDisplay(Date.now() - state.startTime);
+        renderGanttChart();
     }, 1000);
 }
 
@@ -87,6 +88,7 @@ export function checkRestorableSession() {
 
         state.timerInterval = setInterval(() => {
             updateTimerDisplay(Date.now() - state.startTime);
+            renderGanttChart();
         }, 1000);
     }
 }

@@ -43,7 +43,8 @@ export const DOM = {
     confirmOkBtn: document.getElementById('confirm-ok-btn'),
     confirmCancelBtn: document.getElementById('confirm-cancel-btn'),
     widgetOrderList: document.getElementById('widget-order-list'),
-    showTitlesToggle: document.getElementById('show-titles-toggle')
+    showTitlesToggle: document.getElementById('show-titles-toggle'),
+    ganttChart: document.getElementById('gantt-chart')
 };
 
 export function showAlert(title, message) {
@@ -274,6 +275,85 @@ function adjustColorOpacity(hslaString, opacity) {
         return hslaString.replace(/[\d\.]+\)$/g, `${opacity})`);
     }
     return hslaString.replace(')', `, ${opacity})`).replace('rgb', 'rgba').replace('hsl', 'hsla');
+}
+
+export function renderGanttChart() {
+    if (!DOM.ganttChart) return;
+    DOM.ganttChart.innerHTML = '';
+
+    // We cover a 24-hour period (0 to 24)
+    // Create the background grid (hour lines)
+    for (let i = 0; i <= 24; i += 4) {
+        const marker = document.createElement('div');
+        marker.className = 'gantt-hour-marker';
+        marker.style.left = `${(i / 24) * 100}%`;
+
+        const label = document.createElement('span');
+        label.textContent = `${i}:00`;
+        marker.appendChild(label);
+
+        DOM.ganttChart.appendChild(marker);
+    }
+
+    // Calculate today's boundaries
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
+
+    // Render completed sessions for today
+    const todaysSessions = state.allSessions.filter(session => {
+        const sessionTime = new Date(session.startTime);
+        return sessionTime >= startOfToday && sessionTime < endOfToday;
+    });
+
+    todaysSessions.forEach(session => {
+        const sTime = new Date(session.startTime);
+        createGanttBlock(sTime, session.durationMs, session.project, session.company, false);
+    });
+
+    // Render live active session if one is currently ticking
+    if (state.timerInterval && state.startTime) {
+        const activeDuration = Date.now() - state.startTime;
+        createGanttBlock(new Date(state.startTime), activeDuration, state.currentProject, state.currentCompany, true);
+    }
+}
+
+function createGanttBlock(startTimeObj, durationMs, project, company, isLive) {
+    const startOfToday = new Date(startTimeObj.getFullYear(), startTimeObj.getMonth(), startTimeObj.getDate(), 0, 0, 0, 0);
+    const msSinceMidnight = startTimeObj.getTime() - startOfToday.getTime();
+
+    const msInDay = 24 * 60 * 60 * 1000;
+
+    let leftPercent = (msSinceMidnight / msInDay) * 100;
+    let widthPercent = (durationMs / msInDay) * 100;
+
+    // Clamp if it goes over midnight
+    if (leftPercent + widthPercent > 100) {
+        widthPercent = 100 - leftPercent;
+    }
+
+    const block = document.createElement('div');
+    block.className = `gantt-block ${isLive ? 'gantt-live' : ''}`;
+    block.style.left = `${leftPercent}%`;
+    block.style.width = widthPercent > 0.5 ? `${widthPercent}%` : '0.5%'; // Minimum width for visibility
+
+    const identifier = project || company || 'default';
+    const color = isLive ? 'rgba(255, 60, 60, 0.8)' : getColorForIdentifier(identifier);
+
+    block.style.backgroundColor = color;
+    block.style.boxShadow = `0 0 8px ${color}`;
+
+    let titlePrefix = project ? `[${project}] ` : (company ? `[${company}] ` : '');
+    block.title = `${titlePrefix}${formatDuration(durationMs)}${isLive ? ' (Live)' : ''}`;
+
+    if (identifier !== 'default' && widthPercent > 4) { // Only show label if block is wide enough
+        const label = document.createElement('span');
+        label.className = 'gantt-block-label';
+        label.textContent = project || company;
+        block.appendChild(label);
+    }
+
+    DOM.ganttChart.appendChild(block);
 }
 
 export function updateDatalists() {
