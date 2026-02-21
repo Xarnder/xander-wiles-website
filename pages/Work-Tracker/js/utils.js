@@ -4,6 +4,7 @@ export function getMonday(d) {
         diff = date.getDate() - day + (day === 0 ? -6 : 1);
     date.setDate(diff);
     date.setHours(0, 0, 0, 0);
+    return date;
 }
 
 export function formatDuration(ms) {
