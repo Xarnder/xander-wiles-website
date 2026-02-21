@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-v6';
+const CACHE_NAME = 'taskmaster-v11';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -29,7 +29,12 @@ self.addEventListener('install', (event) => {
         caches.open(CACHE_NAME)
             .then((cache) => {
                 console.log('[Service Worker] Caching all: app shell and content');
-                return cache.addAll(ASSETS_TO_CACHE);
+                return Promise.all(
+                    ASSETS_TO_CACHE.map((url) => {
+                        return cache.add(new Request(url, { cache: 'reload' }))
+                            .catch(err => console.error('Failed to cache', url, err));
+                    })
+                );
             })
     );
 });

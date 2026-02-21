@@ -267,6 +267,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add List
     document.getElementById('add-list-btn').onclick = API.addNewList;
 
+    // Mobile Reorder
+    document.getElementById('mobile-reorder-lists-btn').onclick = UI.openMobileReorderModal;
+    document.getElementById('close-mobile-reorder-btn').onclick = () => document.getElementById('mobile-reorder-modal-overlay').classList.add('hidden');
+    document.getElementById('save-mobile-reorder-btn').onclick = UI.saveMobileReorder;
+
     // Network Status Listeners
     window.addEventListener('online', UI.updateSyncUI);
     window.addEventListener('offline', UI.updateSyncUI);

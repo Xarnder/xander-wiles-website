@@ -41,6 +41,46 @@ export default function EntryEditor() {
     const [editingCaptionIndex, setEditingCaptionIndex] = useState(null);
     const [tempCaption, setTempCaption] = useState('');
 
+    // Drag and Drop State
+    const [draggedImageIndex, setDraggedImageIndex] = useState(null);
+    const [dragOverImageIndex, setDragOverImageIndex] = useState(null);
+
+    const handleDragStart = (e, index) => {
+        setDraggedImageIndex(index);
+        // Required for Firefox
+        e.dataTransfer.setData('text/plain', index);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragEnter = (e, index) => {
+        setDragOverImageIndex(index);
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault(); // Necessary to allow dropping
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = (e, index) => {
+        e.preventDefault();
+        if (draggedImageIndex === null) return;
+
+        const newImages = [...images];
+        const draggedImage = newImages[draggedImageIndex];
+
+        newImages.splice(draggedImageIndex, 1);
+        newImages.splice(index, 0, draggedImage);
+
+        setImages(newImages);
+        setDraggedImageIndex(null);
+        setDragOverImageIndex(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedImageIndex(null);
+        setDragOverImageIndex(null);
+    };
+
     const titleTextareaRef = useRef(null);
 
     // Auto-resize title textarea
@@ -607,7 +647,16 @@ export default function EntryEditor() {
                             {images.length > 0 && (
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
                                     {images.map((img, idx) => (
-                                        <div key={idx} className="relative rounded-lg overflow-hidden border border-white/10 group aspect-square bg-black/40 flex items-center justify-center">
+                                        <div
+                                            key={idx}
+                                            className={`relative rounded-lg overflow-hidden border border-white/10 group aspect-square bg-black/40 flex items-center justify-center cursor-move transition-transform duration-200 ${dragOverImageIndex === idx ? 'scale-105 ring-2 ring-primary/80 z-10' : ''} ${draggedImageIndex === idx ? 'opacity-50' : ''}`}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, idx)}
+                                            onDragEnter={(e) => handleDragEnter(e, idx)}
+                                            onDragOver={handleDragOver}
+                                            onDrop={(e) => handleDrop(e, idx)}
+                                            onDragEnd={handleDragEnd}
+                                        >
                                             <ImageWithSkeleton
                                                 src={img.url}
                                                 alt={`Uploaded ${idx}`}

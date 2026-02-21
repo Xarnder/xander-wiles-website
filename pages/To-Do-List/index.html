@@ -188,6 +188,10 @@
 
                     <button id="add-list-btn" class="btn primary control-item">+ List</button>
 
+                    <button id="mobile-reorder-lists-btn" class="btn secondary control-item" title="Reorder Lists">
+                        <i class="ph ph-arrows-down-up"></i>
+                    </button>
+
                     <button id="options-btn" class="btn secondary control-item">Options</button>
                     <button id="logout-btn" class="btn secondary control-item"
                         style="display:none; color: var(--accent-red); border-color: var(--accent-red);">Logout</button>
@@ -537,6 +541,27 @@
             </div>
         </div>
 
+        <!-- MOBILE REORDER LISTS MODAL -->
+        <div id="mobile-reorder-modal-overlay" class="modal-overlay hidden">
+            <div class="modal glass-panel">
+                <div class="modal-header-row">
+                    <h2>Reorder Lists</h2>
+                    <button id="close-mobile-reorder-btn" class="icon-btn-large">&times;</button>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">
+                    Drag to reorder your lists.
+                </p>
+                <div id="mobile-reorder-list-container" class="task-list"
+                    style="max-height: 60vh; overflow-y: auto; padding: 0; margin-bottom: 15px;">
+                    <!-- List items injected here -->
+                </div>
+                <div class="modal-actions-bar">
+                    <button id="save-mobile-reorder-btn" class="btn primary full-width" style="width: 100%;">Save
+                        Order</button>
+                </div>
+            </div>
+        </div>
+
         <!-- ARCHIVED TASK ACTION MODAL -->
         <div id="archived-task-modal-overlay" class="modal-overlay hidden">
             <div class="modal glass-panel confirm-box">
@@ -566,7 +591,7 @@
 
         <!-- VERSION INDICATOR -->
         <div id="app-version" class="app-version">
-            v1.5 <!-- UPDATE THIS ON EVERY CHANGE -->
+            v1.10 <!-- UPDATE THIS ON EVERY CHANGE -->
         </div>
 
         <script type="module" src="main.js"></script>
