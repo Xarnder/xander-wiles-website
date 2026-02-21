@@ -1,8 +1,8 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
 import { state } from './state.js';
-import { renderCalendar, renderChart, DOM, showConfirm, showAlert } from './ui.js';
-import { getMonday } from './utils.js';
+import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists } from './ui.js';
+import { getMonday, formatDuration } from './utils.js';
 
 export async function saveSession(durationMs, totalEarned) {
     try {
@@ -12,6 +12,8 @@ export async function saveSession(durationMs, totalEarned) {
             durationMs: durationMs,
             rate: state.currentSessionRate,
             earnings: totalEarned,
+            company: state.currentCompany,
+            project: state.currentProject,
             createdAt: serverTimestamp()
         });
         console.log("Debug: Session saved to Firebase");
@@ -40,31 +42,56 @@ export function loadHistory() {
     onSnapshot(q, (querySnapshot) => {
         DOM.historyList.innerHTML = "";
         state.allSessions = [];
+
+        let totalDailyMs = 0;
+        let totalDailyEarnings = 0;
         let totalWeeklyMs = 0;
         let totalWeeklyEarnings = 0;
+        let totalMonthlyMs = 0;
+        let totalMonthlyEarnings = 0;
 
-        const startOfWeek = getMonday(new Date());
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfWeek = getMonday(now);
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
         querySnapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const dateObj = new Date(data.startTime);
             state.allSessions.push({ id: docSnap.id, ...data });
 
+            if (dateObj >= startOfDay) {
+                totalDailyMs += data.durationMs;
+                totalDailyEarnings += data.earnings;
+            }
+
             if (dateObj >= startOfWeek) {
                 totalWeeklyMs += data.durationMs;
                 totalWeeklyEarnings += data.earnings;
             }
 
+            if (dateObj >= startOfMonth) {
+                totalMonthlyMs += data.durationMs;
+                totalMonthlyEarnings += data.earnings;
+            }
+
             const item = document.createElement('div');
             item.className = 'history-item';
-            const hours = (data.durationMs / (1000 * 60 * 60)).toFixed(2);
+            const formattedTime = formatDuration(data.durationMs);
             const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            const companyHtml = data.company ? `<span class="history-badge history-badge-company">${data.company}</span>` : '';
+            const projectHtml = data.project ? `<span class="history-badge history-badge-project">${data.project}</span>` : '';
 
             item.innerHTML = `
                 <div class="history-item-content">
                     <div>
                         <span class="history-date">${dateStr}</span>
-                        <strong>${hours} hrs</strong>
+                        <strong>${formattedTime}</strong>
+                        <div class="history-badges">
+                            ${companyHtml}
+                            ${projectHtml}
+                        </div>
                     </div>
                     <div class="history-details">
                         <div>${state.currentCurrency}${data.earnings.toFixed(2)}</div>
@@ -92,12 +119,18 @@ export function loadHistory() {
             DOM.historyList.appendChild(item);
         });
 
-        const totalWeeklyHours = (totalWeeklyMs / (1000 * 60 * 60)).toFixed(2);
-        DOM.weeklyHoursDisplay.textContent = `${totalWeeklyHours}h`;
-        DOM.weeklyEarningsDisplay.textContent = `$${totalWeeklyEarnings.toFixed(2)}`;
+        DOM.dailyHoursDisplay.textContent = formatDuration(totalDailyMs);
+        DOM.dailyEarningsDisplay.textContent = `${state.currentCurrency}${totalDailyEarnings.toFixed(2)}`;
+
+        DOM.weeklyHoursDisplay.textContent = formatDuration(totalWeeklyMs);
+        DOM.weeklyEarningsDisplay.textContent = `${state.currentCurrency}${totalWeeklyEarnings.toFixed(2)}`;
+
+        DOM.monthlyHoursDisplay.textContent = formatDuration(totalMonthlyMs);
+        DOM.monthlyEarningsDisplay.textContent = `${state.currentCurrency}${totalMonthlyEarnings.toFixed(2)}`;
 
         renderCalendar();
         renderChart();
+        updateDatalists();
         console.log("Debug: History updated from Firebase");
     }, (error) => {
         console.error("Debug: Snapshot error", error);

@@ -93,8 +93,8 @@ body {
 /* Container */
 .app-container {
     max-width: 1100px;
-    margin: 80px auto 40px auto;
-    padding: 40px;
+    margin: 20px auto 40px auto;
+    padding: 20px 40px;
     display: flex;
     flex-direction: column;
     gap: 40px;
@@ -114,7 +114,7 @@ body {
     }
 }
 
-/* Antigravity floating animation for cards */
+/* Removed antigravity floating animation for cards */
 @keyframes antigravity {
     0% {
         transform: translateY(0px);
@@ -127,26 +127,6 @@ body {
     100% {
         transform: translateY(0px);
     }
-}
-
-.card-anim-1 {
-    animation: antigravity 6s infinite ease-in-out;
-}
-
-.card-anim-2 {
-    animation: antigravity 7.5s infinite ease-in-out 1s;
-}
-
-.card-anim-3 {
-    animation: antigravity 8s infinite ease-in-out 0.5s;
-}
-
-.card-anim-4 {
-    animation: antigravity 6.5s infinite ease-in-out 2s;
-}
-
-.card-anim-5 {
-    animation: antigravity 7s infinite ease-in-out 1.5s;
 }
 
 /* Glassmorphism Card Style */
@@ -247,8 +227,8 @@ body {
     padding: 10px 15px;
     border-radius: 12px;
     text-align: center;
-    font-size: 1.2rem;
-    width: 120px;
+    font-size: 1rem;
+    width: 180px;
     font-family: var(--font-family);
     transition: border-color 0.3s, box-shadow 0.3s, background 0.3s;
 }
@@ -259,6 +239,19 @@ body {
     border-color: var(--accent-blue);
     background: rgba(255, 255, 255, 0.1);
     box-shadow: 0 0 15px rgba(0, 212, 255, 0.3);
+}
+
+.touch-picker {
+    font-size: 0.85rem !important;
+    padding: 6px 10px !important;
+    background: rgba(0, 212, 255, 0.1) !important;
+    border: 1px solid rgba(0, 212, 255, 0.3) !important;
+    cursor: pointer;
+    color: var(--accent-blue) !important;
+}
+
+.touch-picker:hover {
+    background: rgba(0, 212, 255, 0.15) !important;
 }
 
 .timer-display {
@@ -411,7 +404,7 @@ button:active {
 
 .stats-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: 20px;
     text-align: center;
 }
@@ -511,11 +504,53 @@ button:active {
     font-weight: normal;
 }
 
+.history-badges {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+
+.history-badge {
+    font-size: 0.70rem;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    max-width: 100px;
+}
+
+.history-badge-project {
+    background: rgba(0, 212, 255, 0.15);
+    border-color: rgba(0, 212, 255, 0.3);
+}
+
+.history-badge-company {
+    background: rgba(0, 230, 118, 0.15);
+    border-color: rgba(0, 230, 118, 0.3);
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 480px) {
     .app-container {
         margin-top: 60px;
         padding: 15px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .card {
+        padding: 20px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
     }
 
     #timer {
@@ -769,6 +804,22 @@ button:active {
     margin-top: 3px;
     box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
     transition: height 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.3s, transform 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+}
+
+.chart-bar-label {
+    font-size: 0.6rem;
+    color: rgba(255, 255, 255, 0.9);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    max-width: 90%;
+    pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .chart-sub-session:hover {

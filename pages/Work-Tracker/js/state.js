@@ -3,6 +3,8 @@ export const state = {
     timerInterval: null,
     startTime: null,
     currentSessionRate: 0,
+    currentCompany: '',
+    currentProject: '',
     currentCalendarDate: new Date(),
     allSessions: [],
     currentCurrency: localStorage.getItem('work_tracker_currency') || '£'

@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { getMonday } from './utils.js';
+import { getMonday, formatDuration } from './utils.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
@@ -11,10 +11,18 @@ export const DOM = {
     stopBtn: document.getElementById('stop-btn'),
     timerDisplay: document.getElementById('timer'),
     hourlyRateInput: document.getElementById('hourly-rate'),
+    companyInput: document.getElementById('company-input'),
+    projectInput: document.getElementById('project-input'),
+    companySelect: document.getElementById('company-select'),
+    projectSelect: document.getElementById('project-select'),
     liveEarningsDisplay: document.getElementById('live-earnings'),
     historyList: document.getElementById('history-list'),
+    dailyHoursDisplay: document.getElementById('daily-hours'),
+    dailyEarningsDisplay: document.getElementById('daily-earnings'),
     weeklyHoursDisplay: document.getElementById('weekly-hours'),
     weeklyEarningsDisplay: document.getElementById('weekly-earnings'),
+    monthlyHoursDisplay: document.getElementById('monthly-hours'),
+    monthlyEarningsDisplay: document.getElementById('monthly-earnings'),
     prevMonthBtn: document.getElementById('prev-month'),
     nextMonthBtn: document.getElementById('next-month'),
     calendarMonthYear: document.getElementById('calendar-month-year'),
@@ -44,11 +52,11 @@ export function showAlert(title, message) {
 
         const handleOk = () => {
             DOM.alertModal.classList.add('hidden');
-            DOM.alertOkBtn.removeEventListener('click', handleOk);
+            DOM.alertOkBtn.onclick = null;
             resolve();
         };
 
-        DOM.alertOkBtn.addEventListener('click', handleOk);
+        DOM.alertOkBtn.onclick = handleOk;
     });
 }
 
@@ -58,17 +66,18 @@ export function showConfirm(title, message) {
         DOM.confirmMessage.textContent = message;
         DOM.confirmModal.classList.remove('hidden');
 
-        const handleConfirm = () => { cleanup(); resolve(true); };
-        const handleCancel = () => { cleanup(); resolve(false); };
-
-        const cleanup = () => {
+        DOM.confirmOkBtn.onclick = () => {
             DOM.confirmModal.classList.add('hidden');
-            DOM.confirmOkBtn.removeEventListener('click', handleConfirm);
-            DOM.confirmCancelBtn.removeEventListener('click', handleCancel);
+            DOM.confirmOkBtn.onclick = null;
+            DOM.confirmCancelBtn.onclick = null;
+            resolve(true);
         };
-
-        DOM.confirmOkBtn.addEventListener('click', handleConfirm);
-        DOM.confirmCancelBtn.addEventListener('click', handleCancel);
+        DOM.confirmCancelBtn.onclick = () => {
+            DOM.confirmModal.classList.add('hidden');
+            DOM.confirmOkBtn.onclick = null;
+            DOM.confirmCancelBtn.onclick = null;
+            resolve(false);
+        };
     });
 }
 
@@ -168,11 +177,16 @@ export function renderChart() {
     currentWeekSessions.forEach(session => {
         let dayIndex = new Date(session.startTime).getDay() - 1;
         if (dayIndex === -1) dayIndex = 6;
-        weekData[dayIndex].push(session.durationMs / (1000 * 60 * 60));
+        weekData[dayIndex].push({
+            hours: session.durationMs / (1000 * 60 * 60),
+            durationMs: session.durationMs,
+            company: session.company,
+            project: session.project
+        });
     });
 
     weekData.forEach(daySessions => {
-        const dailyTotal = daySessions.reduce((sum, hrs) => sum + hrs, 0);
+        const dailyTotal = daySessions.reduce((sum, sessionObj) => sum + sessionObj.hours, 0);
         if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
     });
 
@@ -184,11 +198,28 @@ export function renderChart() {
         const areaDiv = document.createElement('div');
         areaDiv.className = 'chart-bar-area';
 
-        weekData[index].forEach((hrs, sIndex) => {
+        weekData[index].forEach((sessionObj, sIndex) => {
+            const hrs = sessionObj.hours;
             const bar = document.createElement('div');
             bar.className = 'chart-sub-session';
             bar.style.height = `${(hrs / scaleMax) * 100}%`;
-            bar.title = `Session ${sIndex + 1}: ${hrs.toFixed(2)}h`;
+
+            // Determine color based on project or company
+            const identifier = sessionObj.project || sessionObj.company || 'default';
+            const color = getColorForIdentifier(identifier);
+            bar.style.background = `linear-gradient(180deg, ${color} 0%, ${adjustColorOpacity(color, 0.8)} 100%)`;
+
+            let titlePrefix = sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : '');
+            bar.title = `${titlePrefix}Session ${sIndex + 1}: ${formatDuration(sessionObj.durationMs)}`;
+
+            // Add persistent label if an identifier exists
+            if (identifier !== 'default') {
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'chart-bar-label';
+                labelSpan.textContent = sessionObj.project || sessionObj.company;
+                bar.appendChild(labelSpan);
+            }
+
             areaDiv.appendChild(bar);
         });
 
@@ -199,5 +230,56 @@ export function renderChart() {
         colDiv.appendChild(areaDiv);
         colDiv.appendChild(lblDiv);
         DOM.weeklyChart.appendChild(colDiv);
+    });
+}
+
+function getColorForIdentifier(identifier) {
+    if (identifier === 'default') return 'rgba(0, 212, 255, 0.8)';
+
+    // Simple string hashing to consistently generate a hue
+    let hash = 0;
+    for (let i = 0; i < identifier.length; i++) {
+        hash = identifier.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    const h = Math.abs(hash) % 360;
+    const s = 70 + (Math.abs(hash) % 30); // 70-100% saturation
+    const l = 45 + (Math.abs(hash) % 15); // 45-60% lightness
+
+    return `hsl(${h}, ${s}%, ${l}%)`;
+}
+
+function adjustColorOpacity(hslaString, opacity) {
+    if (hslaString.startsWith('rgba')) {
+        return hslaString.replace(/[\d\.]+\)$/g, `${opacity})`);
+    }
+    return hslaString.replace(')', `, ${opacity})`).replace('rgb', 'rgba').replace('hsl', 'hsla');
+}
+
+export function updateDatalists() {
+    if (!DOM.companySelect || !DOM.projectSelect) return;
+
+    const companies = new Set();
+    const projects = new Set();
+
+    state.allSessions.forEach(session => {
+        if (session.company) companies.add(session.company.trim());
+        if (session.project) projects.add(session.project.trim());
+    });
+
+    DOM.companySelect.innerHTML = '<option value="">Or pick saved...</option>';
+    Array.from(companies).sort().forEach(company => {
+        const option = document.createElement('option');
+        option.value = company;
+        option.textContent = company;
+        DOM.companySelect.appendChild(option);
+    });
+
+    DOM.projectSelect.innerHTML = '<option value="">Or pick saved...</option>';
+    Array.from(projects).sort().forEach(project => {
+        const option = document.createElement('option');
+        option.value = project;
+        option.textContent = project;
+        DOM.projectSelect.appendChild(option);
     });
 }

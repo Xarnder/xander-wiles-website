@@ -16,6 +16,25 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.startBtn.addEventListener('click', startTimer);
     DOM.stopBtn.addEventListener('click', stopTimer);
 
+    // Dropdown Sync Events
+    if (DOM.companySelect) {
+        DOM.companySelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                DOM.companyInput.value = e.target.value;
+                e.target.value = ""; // Reset selector
+            }
+        });
+    }
+
+    if (DOM.projectSelect) {
+        DOM.projectSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                DOM.projectInput.value = e.target.value;
+                e.target.value = ""; // Reset selector
+            }
+        });
+    }
+
     // Settings Events
     DOM.settingsBtn.addEventListener('click', () => {
         DOM.currencySelect.value = state.currentCurrency;

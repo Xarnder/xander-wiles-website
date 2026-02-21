@@ -72,11 +72,28 @@
             </div>
 
             <div class="dashboard-grid">
-                <!-- Controls Card -->
-                <section class="card controls card-anim-1">
+                <!-- Timer Card -->
+                <section class="card timer-widget">
                     <div class="input-group">
                         <label for="hourly-rate">Hourly Rate (<span class="currency-symbol">£</span>)</label>
-                        <input type="number" id="hourly-rate" value="50" min="0">
+                        <input type="number" id="hourly-rate" value="20" min="0">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="company-input">Company</label>
+                        <input type="text" id="company-input" placeholder="e.g. Acme Corp" style="margin-bottom: 8px;">
+                        <select id="company-select" class="touch-picker">
+                            <option value="">Or pick saved...</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="project-input">Project</label>
+                        <input type="text" id="project-input" placeholder="e.g. Website Redesign"
+                            style="margin-bottom: 8px;">
+                        <select id="project-select" class="touch-picker">
+                            <option value="">Or pick saved...</option>
+                        </select>
                     </div>
 
                     <div class="timer-display">
@@ -91,22 +108,45 @@
                 </section>
 
                 <!-- Stats Card -->
-                <section class="card stats card-anim-2">
-                    <h2>This Week</h2>
+                <section class="card stats" style="grid-column: 1 / -1;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 20px;">
+                        <h2 style="margin: 0;">Statistics</h2>
+                    </div>
+
                     <div class="stats-grid">
+                        <!-- Daily Stats -->
                         <div class="stat-item">
-                            <span class="label">Total Hours</span>
-                            <span class="value" id="weekly-hours">0h</span>
+                            <span class="label">Today's Hours</span>
+                            <span class="value" id="daily-hours">0h</span>
+                            <span class="label" style="margin-top: 10px;">Today's Earnings</span>
+                            <span class="value" id="daily-earnings" style="font-size: 1.4rem;"><span
+                                    class="currency-symbol">£</span>0.00</span>
                         </div>
+
+                        <!-- Weekly Stats -->
+                        <div class="stat-item"
+                            style="background: rgba(0, 212, 255, 0.1); border-color: rgba(0, 212, 255, 0.2);">
+                            <span class="label">This Week's Hours</span>
+                            <span class="value" id="weekly-hours">0h</span>
+                            <span class="label" style="margin-top: 10px;">This Week's Earnings</span>
+                            <span class="value" id="weekly-earnings" style="font-size: 1.4rem;"><span
+                                    class="currency-symbol">£</span>0.00</span>
+                        </div>
+
+                        <!-- Monthly Stats -->
                         <div class="stat-item">
-                            <span class="label">Total Earnings</span>
-                            <span class="value" id="weekly-earnings"><span class="currency-symbol">£</span>0.00</span>
+                            <span class="label">This Month's Hours</span>
+                            <span class="value" id="monthly-hours">0h</span>
+                            <span class="label" style="margin-top: 10px;">This Month's Earnings</span>
+                            <span class="value" id="monthly-earnings" style="font-size: 1.4rem;"><span
+                                    class="currency-symbol">£</span>0.00</span>
                         </div>
                     </div>
                 </section>
 
                 <!-- Calendar -->
-                <section class="card calendar card-anim-3">
+                <section class="card calendar-widget">
                     <div class="calendar-header">
                         <button id="prev-month" class="btn-outline">&larr;</button>
                         <h2 id="calendar-month-year">Loading...</h2>
@@ -125,7 +165,7 @@
                 </section>
 
                 <!-- Weekly Bar Chart -->
-                <section class="card chart-widget card-anim-4">
+                <section class="card chart-widget">
                     <h2>Weekly Breakdown</h2>
                     <div id="weekly-chart" class="chart-container">
                         <!-- Chart bars will be injected via JS -->
@@ -133,7 +173,7 @@
                 </section>
 
                 <!-- Calendar / History -->
-                <section class="card history card-anim-5">
+                <section class="card history">
                     <h2>History</h2>
                     <div id="history-list" class="history-list">
                         <p class="loading-text">Loading history...</p>
@@ -185,9 +225,8 @@
                 <h2 id="confirm-title">Confirm Action</h2>
                 <p id="confirm-message" style="margin: 20px 0; color: var(--text-secondary);"></p>
                 <div class="settings-footer" style="justify-content: center; gap: 15px;">
-                    <button id="confirm-cancel-btn" class="btn-text"
-                        style="background: rgba(255,255,255,0.1);">Cancel</button>
-                    <button id="confirm-ok-btn" class="btn-danger">Confirm</button>
+                    <button id="confirm-cancel-btn" class="btn-outline" style="min-width: 120px;">Cancel</button>
+                    <button id="confirm-ok-btn" class="btn-danger" style="min-width: 120px;">Confirm</button>
                 </div>
             </div>
         </div>

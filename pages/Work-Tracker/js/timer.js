@@ -29,8 +29,13 @@ export function startTimer() {
 
     state.startTime = Date.now();
     state.currentSessionRate = rate;
+    state.currentCompany = DOM.companyInput.value.trim();
+    state.currentProject = DOM.projectInput.value.trim();
+
     localStorage.setItem('work_tracker_start', state.startTime);
     localStorage.setItem('work_tracker_rate', state.currentSessionRate);
+    localStorage.setItem('work_tracker_company', state.currentCompany);
+    localStorage.setItem('work_tracker_project', state.currentProject);
 
     toggleTimerUI(true);
 
@@ -50,7 +55,12 @@ export async function stopTimer() {
 
     localStorage.removeItem('work_tracker_start');
     localStorage.removeItem('work_tracker_rate');
+    localStorage.removeItem('work_tracker_company');
+    localStorage.removeItem('work_tracker_project');
+
     state.startTime = null;
+    state.currentCompany = '';
+    state.currentProject = '';
 
     toggleTimerUI(false);
     DOM.timerDisplay.textContent = "00:00:00";
@@ -65,7 +75,12 @@ export function checkRestorableSession() {
     if (savedStart && savedRate) {
         state.startTime = parseInt(savedStart);
         state.currentSessionRate = parseFloat(savedRate);
+        state.currentCompany = localStorage.getItem('work_tracker_company') || '';
+        state.currentProject = localStorage.getItem('work_tracker_project') || '';
+
         DOM.hourlyRateInput.value = state.currentSessionRate;
+        DOM.companyInput.value = state.currentCompany;
+        DOM.projectInput.value = state.currentProject;
 
         toggleTimerUI(true);
         updateTimerDisplay(Date.now() - state.startTime);
