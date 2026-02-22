@@ -1,8 +1,10 @@
-const CACHE_NAME = 'taskmaster-v5';
+const CACHE_NAME = 'taskmaster-v17';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
     './style.css',
+    '/assets/css/style.css',
+    '/assets/js/nav-loader.js',
     './main.js',
     './api.js',
     './store.js',
@@ -27,9 +29,33 @@ self.addEventListener('install', (event) => {
 
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then((cache) => {
+            .then(async (cache) => {
                 console.log('[Service Worker] Caching all: app shell and content');
-                return cache.addAll(ASSETS_TO_CACHE);
+                for (const url of ASSETS_TO_CACHE) {
+                    try {
+                        const response = await fetch(new Request(url, { cache: 'reload' }));
+                        if (!response || response.status !== 200) {
+                            console.error('Failed to cache', url, response?.status);
+                            continue;
+                        }
+
+                        let finalResponse = response;
+                        if (response.redirected) {
+                            const cloned = response.clone();
+                            const newHeaders = new Headers();
+                            cloned.headers.forEach((v, k) => newHeaders.append(k, v));
+                            finalResponse = new Response(cloned.body, {
+                                headers: newHeaders,
+                                status: cloned.status,
+                                statusText: cloned.statusText
+                            });
+                        }
+
+                        await cache.put(url, finalResponse.clone());
+                    } catch (err) {
+                        console.error('Failed to cache', url, err);
+                    }
+                }
             })
     );
 });
@@ -53,9 +79,43 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Fetch Event - Cache First, then Network
+// Fetch Event - Network First for Navigation, Cache First for Assets
 self.addEventListener('fetch', (event) => {
-    // Check if the request is for an item in our asset list
+    // Ignore Firebase Auth endpoints to prevent redirect loops and SW interference
+    if (event.request.url.includes('/__/auth/')) {
+        return;
+    }
+
+    // Network-First for HTML/Navigation to avoid Safari PWA redirect caching errors
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            fetch(event.request)
+                .then((response) => {
+                    let finalResponse = response;
+                    if (response.redirected) {
+                        const cloned = response.clone();
+                        finalResponse = new Response(cloned.body, {
+                            headers: cloned.headers,
+                            status: cloned.status,
+                            statusText: cloned.statusText
+                        });
+                    }
+                    // Cache the latest version
+                    const responseToCache = finalResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+                    return finalResponse;
+                })
+                .catch(() => {
+                    // Fallback to cache if offline
+                    return caches.match('./index.html').then(cached => {
+                        return cached || caches.match('./');
+                    });
+                })
+        );
+        return;
+    }
+
+    // Cache-First for everything else
     const isStaticAsset = ASSETS_TO_CACHE.some(asset => event.request.url.includes(asset.replace('./', '')));
     const isSelf = event.request.url.startsWith(self.location.origin);
     const isFirebase = event.request.url.includes('gstatic.com/firebasejs');
@@ -71,21 +131,37 @@ self.addEventListener('fetch', (event) => {
                     return fetch(event.request).then(
                         (response) => {
                             // Check if we received a valid response
-                            if (!response || response.status !== 200 || response.type !== 'basic' && response.type !== 'cors') {
+                            if (!response || response.status !== 200 || (response.type !== 'basic' && response.type !== 'cors')) {
                                 return response;
                             }
 
+                            let finalResponse = response;
+                            if (response.redirected) {
+                                const cloned = response.clone();
+                                const newHeaders = new Headers();
+                                cloned.headers.forEach((v, k) => newHeaders.append(k, v));
+                                finalResponse = new Response(cloned.body, {
+                                    headers: newHeaders,
+                                    status: cloned.status,
+                                    statusText: cloned.statusText
+                                });
+                            }
+
                             // Clone the response
-                            const responseToCache = response.clone();
+                            const responseToCache = finalResponse.clone();
 
                             caches.open(CACHE_NAME)
                                 .then((cache) => {
                                     cache.put(event.request, responseToCache);
                                 });
 
-                            return response;
+                            return finalResponse;
                         }
-                    );
+                    ).catch(err => {
+                        console.error('Fetch failed for', event.request.url, err);
+                        // If it fails (offline) and not in cache, we just return empty or let it fail naturally
+                        // But CSS failing shouldn't crash the JS loop.
+                    });
                 })
         );
     }

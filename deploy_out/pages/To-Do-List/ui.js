@@ -737,3 +737,54 @@ export function openArchivedTaskModal(taskId) {
 
     modal.classList.remove('hidden');
 }
+
+// --- MOBILE REORDER ---
+let mobileSortableInstance = null;
+
+export function openMobileReorderModal() {
+    const modal = document.getElementById('mobile-reorder-modal-overlay');
+    const container = document.getElementById('mobile-reorder-list-container');
+
+    // Clear old
+    container.innerHTML = '';
+
+    // Get lists excluding orphan-archive
+    const activeLists = state.appData.lists.filter(l => l.id !== 'orphan-archive');
+
+    activeLists.forEach(list => {
+        const item = document.createElement('div');
+        item.className = 'mobile-reorder-list-item';
+        item.dataset.listId = list.id;
+        item.innerHTML = `
+            <i class="ph ph-dots-six-vertical list-drag-handle" style="opacity: 0.5;"></i>
+            <span style="flex-grow: 1; pointer-events: none;">${escapeHtml(list.title)}</span>
+            <i class="ph ph-list" style="opacity: 0.5;"></i>
+        `;
+        container.appendChild(item);
+    });
+
+    // Init sortable if not already or destroy old
+    if (mobileSortableInstance) mobileSortableInstance.destroy();
+
+    mobileSortableInstance = new Sortable(container, {
+        animation: 150,
+        handle: '.mobile-reorder-list-item', // They drag the whole card
+        forceFallback: true,
+        fallbackOnBody: true
+    });
+
+    modal.classList.remove('hidden');
+}
+
+export function saveMobileReorder() {
+    const container = document.getElementById('mobile-reorder-list-container');
+    const newOrder = Array.from(container.children).map(el => el.dataset.listId);
+
+    // Update DB
+    updateDoc(doc(db, "users", state.currentUser.uid), { listOrder: newOrder })
+        .then(() => {
+            document.getElementById('mobile-reorder-modal-overlay').classList.add('hidden');
+            showToast("Lists reordered");
+        })
+        .catch(e => handleSyncError(e));
+}

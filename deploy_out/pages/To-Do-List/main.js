@@ -1,17 +1,17 @@
 
 import { app, auth, db } from './firebase-config.js';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { doc, onSnapshot, setDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { state, setCurrentUser, cleanupListeners } from './store.js';
 import * as API from './api.js';
 import * as UI from './ui.js';
 import * as Utils from './utils.js';
 
-console.log("[DEBUG] Main Module Initialized - v1.2 CHECK");
+console.log("[DEBUG] Main Module Initialized - v1.3 PWA Fixes");
 
 // GLOBAL ERROR HANDLER FOR DEBUGGING
 window.onerror = function (msg, url, line, col, error) {
-    alert(`Script Error: ${msg}\nLine: ${line}`);
+    // alert(`Script Error: ${msg}\nLine: ${line}`); // Create noise
     console.error("Global Error:", error);
 };
 
@@ -26,18 +26,16 @@ if ('serviceWorker' in navigator) {
                 console.log('ServiceWorker registration failed: ', err);
             });
 
-        // REFRESH PAGE ON CONTROLLER CHANGE
-        // This ensures the new service worker takes over immediately
-        let refreshing;
+        // Removed automatic refresh on controllerchange to prevent iOS infinite reload loops.
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (refreshing) return;
-            window.location.reload();
-            refreshing = true;
+            console.log("Service Worker updated its controller.");
         });
     });
 }
 
 // ... existing code ...
+
+// --- SPLASH SCREEN TIMEOUT REMOVED ---
 
 // --- EXPOSE TO WINDOW FOR INLINE HTML ---
 // This is critical for onclick="..." to work
@@ -90,18 +88,55 @@ const boardContainer = document.getElementById('board-container');
 const projectTitleInput = document.getElementById('project-title-input');
 
 // --- AUTHENTICATION ---
-googleLoginBtn.onclick = () => {
+// Set persistence to Local to ensure PWA and Safari keep the user logged in across sessions
+setPersistence(auth, browserLocalPersistence)
+    .then(() => {
+        // Persistence set successfully
+    })
+    .catch((error) => {
+        console.error("Auth Persistence Error:", error);
+    });
+
+// Handle Login Button
+googleLoginBtn.addEventListener('click', () => {
     console.log("Login Button Clicked");
     const provider = new GoogleAuthProvider();
+
+    // In iOS/Safari Safari, popups are often blocked, especially in PWA mode.
+    // Try popup first. If it fails with a popup-blocked error, cleanly fallback to redirect.
     signInWithPopup(auth, provider)
-        .then(result => {
-            console.log("Login Success:", result.user.uid);
+        .then((result) => {
+            console.log("Popup Login Success:", result.user.uid);
         })
-        .catch(err => {
-            console.error("Login Error Details:", err);
-            alert(`Login Failed!\nCode: ${err.code}\nMessage: ${err.message}`);
+        .catch((error) => {
+            console.warn("Popup Login Error or Blocked:", error);
+            // Fallback to redirect if popup is blocked or fails
+            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                console.log("Falling back to redirect login...");
+                signInWithRedirect(auth, provider).catch(redirectErr => {
+                    console.error("Redirect Fallback Error:", redirectErr);
+                    alert(`Login Failed: ${redirectErr.message}`);
+                });
+            } else {
+                alert(`Login Error: ${error.message}`);
+            }
         });
-};
+});
+
+// Check for redirect result on page load (in case fallback was used)
+// We must always call this on startup if signInWithRedirect is ever used.
+getRedirectResult(auth)
+    .then((result) => {
+        if (result) {
+            console.log("Redirect Login Success:", result.user.uid);
+            // Auth state listener will handle the rest
+        }
+    })
+    .catch((error) => {
+        console.error("Redirect Login Error:", error);
+        // Do not alert on redirect error unless requested, as it might just be an expired nonce or back-button navigation issue
+    });
+
 
 logoutBtn.onclick = () => {
     if (confirm("Are you sure you want to logout?")) {
@@ -127,9 +162,7 @@ onAuthStateChanged(auth, (user) => {
         stopSyncTimer();
         cleanupListeners();
         dateReset();
-        // Hide splash if generic login screen is shown
-        const splash = document.getElementById('splash-screen');
-        if (splash) splash.classList.add('hidden-splash');
+        // Splash logic removed
     }
 });
 
@@ -202,12 +235,7 @@ function setupFirestoreListeners(uid) {
         }
         UI.renderBoard();
 
-        // Hide Splash on first load
-        const splash = document.getElementById('splash-screen');
-        if (splash) {
-            // Small delay to ensure render is painted
-            setTimeout(() => splash.classList.add('hidden-splash'), 100);
-        }
+        // Splash logic removed
 
     }, (error) => API.handleSyncError(error)));
 
@@ -248,6 +276,11 @@ function setupFirestoreListeners(uid) {
 document.addEventListener('DOMContentLoaded', () => {
     // Add List
     document.getElementById('add-list-btn').onclick = API.addNewList;
+
+    // Mobile Reorder
+    document.getElementById('mobile-reorder-lists-btn').onclick = UI.openMobileReorderModal;
+    document.getElementById('close-mobile-reorder-btn').onclick = () => document.getElementById('mobile-reorder-modal-overlay').classList.add('hidden');
+    document.getElementById('save-mobile-reorder-btn').onclick = UI.saveMobileReorder;
 
     // Network Status Listeners
     window.addEventListener('online', UI.updateSyncUI);

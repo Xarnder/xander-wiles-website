@@ -34,6 +34,13 @@
     <div id="main-nav-placeholder"></div>
     <script src="/assets/js/nav-loader.js"></script>
 
+    <!-- Background Orbs -->
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
     <main class="app-container">
 
         <!-- Login View -->
@@ -60,9 +67,14 @@
                     <button id="mobile-menu-btn" class="btn icon-btn"
                         style="display:none; font-size:1.5rem; padding:5px 10px;">☰</button>
                     <div id="header-actions" class="header-actions">
+                        <button id="import-btn" class="btn secondary-btn" style="padding: 8px 15px;">Import</button>
+                        <input type="file" id="import-csv-input" accept=".csv" style="display: none;">
                         <button id="export-btn" class="btn secondary-btn" style="padding: 8px 15px;">Export</button>
-                        <!-- <button id="select-mode-btn" class="btn secondary-btn"
-                            style="padding: 8px 15px;">Select</button> -->
+                        <button id="select-mode-btn" class="btn secondary-btn"
+                            style="padding: 8px 15px;">Select</button>
+                        <button id="cancel-select-header-btn" class="btn secondary-btn hidden"
+                            style="padding: 8px 15px; border-color:var(--danger); color:var(--danger);">Cancel</button>
+                        <button id="stats-btn" class="btn secondary-btn" style="padding: 8px 15px;">Stats</button>
                         <button id="add-btn" class="btn primary-btn">+ Add Person</button>
                         <button id="logout-btn" class="btn secondary-btn"
                             style="border-color:var(--danger); color:var(--danger)">Logout</button>
@@ -83,12 +95,36 @@
             </div>
 
             <!-- Search / Filter -->
-            <div class="search-bar" style="display:flex; gap:10px;">
+            <div class="search-bar" style="display:flex; gap:10px; margin-bottom: 20px;">
                 <input type="text" id="search-input" placeholder="Search friends..." style="flex:1; margin-bottom:0;">
                 <select id="filter-category"
                     style="padding:12px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:10px; color:white; min-width:150px;">
                     <option value="">All Categories</option>
                 </select>
+                <select id="sort-select"
+                    style="padding:12px; border-radius:10px; border:1px solid var(--glass-border); background:var(--glass-bg); color:white; min-width:140px;">
+                    <option value="status">Status (Default)</option>
+                    <option value="first">First Name (A-Z)</option>
+                    <option value="last">Last Name (A-Z)</option>
+                    <option value="recent">Recently Added</option>
+                    <option value="met">Last Contacted</option>
+                    <option value="freq">Cycle Length</option>
+                </select>
+            </div>
+
+            <!-- View Controls -->
+            <div class="view-controls"
+                style="display:flex; gap:20px; align-items:center; margin-bottom: 20px; background:var(--glass-bg); padding:10px 15px; border-radius:10px; border:1px solid var(--glass-border); flex-wrap: wrap;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="compact-view-toggle" class="custom-checkbox">
+                    <label for="compact-view-toggle" class="custom-checkbox-label">Compact Grid</label>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px; flex:1; min-width: 200px;">
+                    <label for="grid-size-slider"
+                        style="color:var(--text-muted); font-size: 0.9rem; white-space: nowrap;">Grid Size:</label>
+                    <input type="range" id="grid-size-slider" min="100" max="400" value="280" step="10"
+                        style="flex:1; accent-color: var(--primary);">
+                </div>
             </div>
 
             <!-- Grid -->
@@ -96,6 +132,7 @@
                 <!-- Javascript fills this -->
                 <div class="loader">Loading...</div>
             </div>
+
         </section>
     </main>
 
@@ -106,6 +143,8 @@
             <button id="cancel-selection" class="btn secondary-btn">Cancel</button>
         </div>
         <div class="selection-actions">
+            <button id="delete-selected-btn" class="btn secondary-btn"
+                style="color:var(--danger); border-color:var(--danger); margin-right:10px;">Delete Selected</button>
             <button id="export-grid-img" class="btn primary-btn">Export Image</button>
             <button id="export-grid-pdf" class="btn primary-btn">Export PDF</button>
         </div>
@@ -141,7 +180,10 @@
                 <div class="form-row">
                     <div class="input-group">
                         <label>Name</label>
-                        <input type="text" id="inp-name" required placeholder="Full Name">
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="inp-first-name" required placeholder="First Name" style="flex: 1;">
+                            <input type="text" id="inp-last-name" placeholder="Last Name" style="flex: 1;">
+                        </div>
                     </div>
                     <div class="input-group">
                         <label>Where Met</label>
@@ -218,9 +260,45 @@
                     <textarea id="inp-notes" rows="3" placeholder="Interests, family info..."></textarea>
                 </div>
 
+                <div id="modal-storage-stats"
+                    style="margin: 10px 0; font-size: 0.8rem; color: var(--text-muted); text-align: right;"></div>
                 <div id="status-msg"></div>
                 <button type="submit" class="btn primary-btn full-width">Save</button>
             </form>
+        </div>
+    </div>
+
+    <!-- CSV Preview Modal -->
+    <div id="csv-preview-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 800px; width: 95%;">
+            <h3>Preview Import</h3>
+            <p style="margin-bottom: 15px; color: var(--text-muted);">Review the data below. Click the trash icon to
+                remove unwanted rows.</p>
+
+            <div class="table-container"
+                style="max-height: 50vh; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--glass-border); border-radius: 8px;">
+                <table id="csv-preview-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: rgba(255,255,255,0.05); text-align: left;">
+                            <th style="padding: 10px;">Name</th>
+                            <th style="padding: 10px;">Work</th>
+                            <th style="padding: 10px;">Met At</th>
+                            <th style="padding: 10px; width: 50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Rows injected here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="preview-status" style="margin-bottom: 15px; text-align: center;"></div>
+
+            <div class="modal-actions" style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="cancel-import" class="btn secondary-btn"
+                    style="color: var(--danger); border-color: var(--danger);">Cancel</button>
+                <button id="confirm-import" class="btn primary-btn">Confirm Import</button>
+            </div>
         </div>
     </div>
 
@@ -277,6 +355,32 @@
         </div>
     </div>
 
+    <!-- Slide to Delete Modal -->
+    <div id="slide-delete-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 400px; text-align: center;">
+            <h3 style="color:var(--danger)">Bulk Delete</h3>
+            <p id="slide-delete-msg" style="color:var(--text-muted); margin: 20px 0;">This cannot be undone.</p>
+
+            <div class="slider-container"
+                style="position:relative; margin:30px 0; height:50px; background:rgba(255,255,255,0.1); border-radius:25px; display:flex; align-items:center; padding:0 5px;">
+                <span
+                    style="position:absolute; width:100%; text-align:center; color:rgba(255,255,255,0.3); pointer-events:none; font-weight:bold; letter-spacing:1px; z-index:0;">SLIDE
+                    TO DELETE</span>
+                <input type="range" id="delete-slider" min="0" max="100" value="0"
+                    style="width:100%; z-index:1; opacity:0; cursor:pointer; height:100%; position:absolute; left:0; top:0; margin:0;">
+                <div id="slider-thumb"
+                    style="width:40px; height:40px; background:var(--danger); border-radius:50%; position:absolute; left:5px; pointer-events:none; transition: left 0.1s; display:flex; align-items:center; justify-content:center; box-shadow:0 0 10px rgba(0,0,0,0.5);">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </div>
+            </div>
+
+            <button id="cancel-slide-delete" class="btn secondary-btn" style="margin-top:10px;">Cancel</button>
+        </div>
+    </div>
+
     <!-- Image Viewer Modal -->
     <div id="image-viewer-modal" class="modal hidden" style="background:rgba(0,0,0,0.9);">
         <span id="close-image-viewer"
@@ -297,9 +401,22 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 
     <!-- Firebase SDKs & Logic -->
     <script type="module" src="script.js"></script>
+
+    <!-- Stats Modal -->
+    <div id="stats-modal" class="modal hidden">
+        <div class="modal-content glass-card">
+            <span id="close-stats" class="close"
+                style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h2>Network Statistics</h2>
+            <div id="stats-content" style="margin-top:20px;">
+                <!-- Stats injected here -->
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

@@ -97,6 +97,59 @@ if (mobileMenuBtn) {
     });
 }
 
+// --- VIEW CONTROLS (Compact Grid & Size) ---
+const compactViewToggle = document.getElementById('compact-view-toggle');
+const gridSizeSlider = document.getElementById('grid-size-slider');
+
+// Load saved preferences
+const savedCompactMode = localStorage.getItem('socialNetworkCompactMode') === 'true';
+const savedGridSize = localStorage.getItem('socialNetworkGridSize') || '280';
+
+// Apply initial state
+if (compactViewToggle) {
+    compactViewToggle.checked = savedCompactMode;
+    if (savedCompactMode) {
+        friendsGrid.classList.add('compact-mode');
+        if (gridSizeSlider) gridSizeSlider.disabled = false;
+    } else {
+        if (gridSizeSlider) gridSizeSlider.disabled = true;
+    }
+
+    compactViewToggle.addEventListener('change', (e) => {
+        const isCompact = e.target.checked;
+        if (isCompact) {
+            friendsGrid.classList.add('compact-mode');
+            if (gridSizeSlider) {
+                gridSizeSlider.disabled = false;
+                friendsGrid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${gridSizeSlider.value}px, 1fr))`;
+            }
+        } else {
+            friendsGrid.classList.remove('compact-mode');
+            if (gridSizeSlider) {
+                gridSizeSlider.disabled = true;
+                friendsGrid.style.gridTemplateColumns = ''; // Reset to CSS default
+            }
+        }
+        localStorage.setItem('socialNetworkCompactMode', isCompact);
+    });
+}
+
+if (gridSizeSlider) {
+    gridSizeSlider.value = savedGridSize;
+    if (savedCompactMode) {
+        friendsGrid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${savedGridSize}px, 1fr))`;
+    } else {
+        friendsGrid.style.gridTemplateColumns = ''; // Reset to CSS default if not compact
+    }
+
+    gridSizeSlider.addEventListener('input', (e) => {
+        if (!compactViewToggle.checked) return; // Safeguard
+        const size = e.target.value;
+        friendsGrid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${size}px, 1fr))`;
+        localStorage.setItem('socialNetworkGridSize', size);
+    });
+}
+
 // --- IMAGE PROCESSING (4MP WebP) ---
 // --- IMAGE PROCESSING (4MP WebP) ---
 // --- IMAGE PROCESSING (4MP WebP) ---
@@ -233,9 +286,15 @@ friendForm.addEventListener('submit', async (e) => {
         const unit = parseInt(document.getElementById('inp-freq-unit').value) || 1;
         const freqDays = val * unit;
 
+        const firstName = document.getElementById('inp-first-name').value.trim();
+        const lastName = document.getElementById('inp-last-name').value.trim();
+        const fullName = `${firstName} ${lastName}`.trim();
+
         const friendData = {
             userId: currentUser.uid,
-            name: document.getElementById('inp-name').value,
+            firstName: firstName,
+            lastName: lastName,
+            name: fullName,
             met: document.getElementById('inp-met').value,
             origin: document.getElementById('inp-origin').value,
             work: document.getElementById('inp-work').value,
@@ -303,21 +362,13 @@ function loadFriends() {
         const metList = document.getElementById('met-list');
         metList.innerHTML = metPlaces.map(m => `<option value="${m}">`).join('');
 
-        // Client-side sorting (easiest without complex Firestore indexes)
-        // Sort by "Next Due Date" ascending
-        friends.sort((a, b) => {
-            const dateA = getNextDueDate(a.lastContact, a.freq);
-            const dateB = getNextDueDate(b.lastContact, b.freq);
-            return dateA - dateB;
-        });
+        // Client-side sorting (initial default, but filterGrid will override based on UI)
+        // We can just accept the arbitrary order here because filterGrid will sort it.
 
         renderCalendar(); // Update calendar widget
 
-        if (friends.length === 0) {
-            friendsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#666">No friends added yet.</p>';
-        }
-
-        friends.forEach(friend => renderCard(friend));
+        // Delegate rendering to filterGrid to respect current filters and sort
+        filterGrid();
     }, (err) => {
         console.error("Load Error:", err);
         friendsGrid.innerHTML = `<p style="color:red">Error loading data. Check console.</p>`;
@@ -605,6 +656,8 @@ async function updateStorageStats() {
 // Modal Logic
 document.getElementById('add-btn').addEventListener('click', () => {
     friendForm.reset();
+    document.getElementById('inp-first-name').value = '';
+    document.getElementById('inp-last-name').value = '';
     statusMsg.innerText = ""; // Fix: Clear previous status
     document.getElementById('edit-id').value = "";
     document.getElementById('modal-title').innerText = "Add Person";
@@ -619,9 +672,13 @@ document.getElementById('add-btn').addEventListener('click', () => {
     document.getElementById('inp-category').value = '';
     document.getElementById('inp-color').value = '#4f46e5';
 
-    document.getElementById('photo-preview').style.backgroundImage = 'none';
     document.getElementById('photo-preview').innerHTML = '<span>Tap to Add Photo</span>';
     currentPhotoBlob = null;
+
+    // Clear stats for new entry
+    const statsContainer = document.getElementById('modal-storage-stats');
+    if (statsContainer) statsContainer.innerHTML = '';
+
     modal.classList.remove('hidden');
 });
 
@@ -631,7 +688,15 @@ function openEdit(data) {
     document.getElementById('edit-id').value = data.id;
     document.getElementById('modal-title').innerText = "Edit Person";
 
-    document.getElementById('inp-name').value = data.name;
+    if (data.firstName !== undefined || data.lastName !== undefined) {
+        document.getElementById('inp-first-name').value = data.firstName || '';
+        document.getElementById('inp-last-name').value = data.lastName || '';
+    } else if (data.name) {
+        // Fallback for legacy data
+        const parts = data.name.split(' ');
+        document.getElementById('inp-first-name').value = parts[0] || '';
+        document.getElementById('inp-last-name').value = parts.slice(1).join(' ') || '';
+    }
     document.getElementById('inp-met').value = data.met;
     document.getElementById('inp-origin').value = data.origin;
     document.getElementById('inp-work').value = data.work;
@@ -665,6 +730,65 @@ function openEdit(data) {
     currentPhotoBlob = null; // Reset blob unless they pick a new one
 
     modal.classList.remove('hidden');
+
+    // --- Calculate Storage Stats ---
+    const statsContainer = document.getElementById('modal-storage-stats');
+    if (statsContainer) {
+        statsContainer.innerHTML = 'Calculating storage...';
+
+        // 1. Calculate approximate Firestore Doc Size
+        // Crude approximation: JSON stringify size
+        const docSize = new Blob([JSON.stringify(data)]).size;
+
+        // 2. Get Image Size
+        let imgSizeStr = "0 KB";
+        let imageSize = 0;
+
+        if (data.photoURL && data.photoURL.includes('firebasestorage')) {
+            // Create a reference from URL to get metadata
+            try {
+                const httpsReference = ref(storage, data.photoURL);
+                getMetadata(httpsReference)
+                    .then((metadata) => {
+                        imageSize = metadata.size;
+                        updateStatsDisplay(docSize, imageSize);
+                    })
+                    .catch((error) => {
+                        console.log("Error getting image metadata:", error);
+                        // Fallback: If we can't get metadata, we can't easily know size without downloading
+                        updateStatsDisplay(docSize, 0, true);
+                    });
+            } catch (e) {
+                console.log("Invalid storage ref", e);
+                updateStatsDisplay(docSize, 0, true);
+            }
+        } else {
+            // External image or no image
+            updateStatsDisplay(docSize, 0, false, !!data.photoURL);
+        }
+
+        function updateStatsDisplay(docBytes, imgBytes, imgError = false, isExternal = false) {
+            const formatSize = (bytes) => {
+                if (bytes === 0) return "0 B";
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            };
+
+            let imgText = formatSize(imgBytes);
+            if (imgError) imgText = "Unknown (External/Error)";
+            if (isExternal) imgText = "External (0 B)";
+
+            const totalBytes = docBytes + imgBytes;
+
+            statsContainer.innerHTML = `
+                <div>Card Data: ${formatSize(docBytes)}</div>
+                <div>Image: ${imgText}</div>
+                <div style="border-top:1px solid #333; margin-top:4px; padding-top:4px; font-weight:bold">Total: ${formatSize(totalBytes)}</div>
+            `;
+        }
+    }
 }
 
 function closeModal() {
@@ -693,24 +817,69 @@ imageViewerModal.onclick = (e) => {
 };
 
 // Filter Logic
+// Filter & Sort Logic
+const sortSelect = document.getElementById('sort-select');
+
 function filterGrid() {
     const textVal = searchInput.value.toLowerCase();
     const catVal = filterCategory.value;
-    const cards = document.querySelectorAll('.friend-card');
+    const sortVal = sortSelect ? sortSelect.value : 'status';
 
-    cards.forEach(card => {
-        const text = card.innerText.toLowerCase();
-        const cardCategory = card.dataset.category || ""; // We need to add this to renderCard
+    // items usually rendered in 'friendsGrid' are DOM nodes. 
+    // It's better to re-render the sorted list from 'allFriends' data rather than sorting DOM nodes if possible.
+
+    let filtered = allFriends.filter(friend => {
+        const text = (friend.name || '').toLowerCase() + ' ' + (friend.notes || '').toLowerCase() + ' ' + (friend.met || '').toLowerCase();
+        const cardCategory = friend.category || "";
 
         const matchesText = text.includes(textVal);
         const matchesCategory = catVal === "" || cardCategory === catVal;
 
-        card.style.display = (matchesText && matchesCategory) ? 'flex' : 'none';
+        return matchesText && matchesCategory;
     });
+
+    // Sort
+    filtered.sort((a, b) => {
+        switch (sortVal) {
+            case 'first':
+                return (a.firstName || a.name || '').localeCompare(b.firstName || b.name || '');
+            case 'last':
+                // fallback to name if lastname missing
+                const lnA = a.lastName || a.name || '';
+                const lnB = b.lastName || b.name || '';
+                return lnA.localeCompare(lnB);
+            case 'recent':
+                // Newest (largest timestamp) first
+                return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+            case 'met':
+                // Last Contacted (Recent date first)
+                const dateA = a.lastContact ? new Date(a.lastContact) : new Date(0);
+                const dateB = b.lastContact ? new Date(b.lastContact) : new Date(0);
+                return dateB - dateA;
+            case 'freq':
+                // Shortest cycle first
+                return a.freq - b.freq;
+            case 'status':
+            default:
+                // Status (Overdue/Due Soon first) -> basically Next Due Date ascending
+                const nA = getNextDueDate(a.lastContact, a.freq);
+                const nB = getNextDueDate(b.lastContact, b.freq);
+                return nA - nB;
+        }
+    });
+
+    // Re-render
+    friendsGrid.innerHTML = '';
+    if (filtered.length === 0) {
+        friendsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#666">No matches found.</p>';
+    }
+
+    filtered.forEach(friend => renderCard(friend));
 }
 
 searchInput.addEventListener('input', filterGrid);
 filterCategory.addEventListener('change', filterGrid);
+if (sortSelect) sortSelect.addEventListener('change', filterGrid);
 
 // Calendar Widget Logic
 function renderCalendar() {
@@ -875,11 +1044,16 @@ document.getElementById('export-csv').addEventListener('click', () => {
 // ZIP Export Logic
 async function fetchImageBlob(url) {
     try {
-        const response = await fetch(url);
+        // Add cache buster here too
+        const cacheUrl = url.includes('?')
+            ? `${url}&t=${new Date().getTime()}`
+            : `${url}?t=${new Date().getTime()}`;
+
+        const response = await fetch(cacheUrl, { mode: 'cors' }); // Explicitly request CORS
         return await response.blob();
     } catch (e) {
         console.error("Failed to fetch image", url, e);
-        return null; // Return null if fetch fails (e.g., CORS or loose URL)
+        return null;
     }
 }
 
@@ -1040,6 +1214,7 @@ document.getElementById('export-zip-html').addEventListener('click', async () =>
 
 // --- Selection Logic ---
 const selectModeBtn = document.getElementById('select-mode-btn');
+const cancelSelectHeaderBtn = document.getElementById('cancel-select-header-btn'); // New button
 const selectionToolbar = document.getElementById('selection-toolbar');
 const cancelSelectionBtn = document.getElementById('cancel-selection');
 const selectionCount = document.getElementById('selection-count');
@@ -1047,6 +1222,9 @@ const addBtn = document.getElementById('add-btn');
 
 selectModeBtn.addEventListener('click', () => toggleSelectionMode(true));
 cancelSelectionBtn.addEventListener('click', () => toggleSelectionMode(false));
+if (cancelSelectHeaderBtn) {
+    cancelSelectHeaderBtn.addEventListener('click', () => toggleSelectionMode(false));
+}
 
 function toggleSelectionMode(active) {
     isSelectionMode = active;
@@ -1056,12 +1234,14 @@ function toggleSelectionMode(active) {
     if (active) {
         selectionToolbar.classList.remove('hidden');
         selectModeBtn.classList.add('hidden');
+        if (cancelSelectHeaderBtn) cancelSelectHeaderBtn.classList.remove('hidden'); // Show header cancel
         addBtn.classList.add('hidden');
         document.getElementById('mobile-menu-btn').classList.add('hidden'); // Hide mobile menu too
         updateSelectionCount();
     } else {
         selectionToolbar.classList.add('hidden');
         selectModeBtn.classList.remove('hidden');
+        if (cancelSelectHeaderBtn) cancelSelectHeaderBtn.classList.add('hidden'); // Hide header cancel
         addBtn.classList.remove('hidden');
         document.getElementById('mobile-menu-btn').classList.remove('hidden');
     }
@@ -1069,6 +1249,7 @@ function toggleSelectionMode(active) {
     // Re-render cards to show/hide checkboxes & update click behavior
     loadFriends();
 }
+
 
 function toggleCardSelection(id) {
     if (selectedFriendIds.has(id)) {
@@ -1138,44 +1319,69 @@ async function generateGridExport(type) {
         card.style.fontFamily = "sans-serif";
         card.style.color = "white";
 
-        const img = document.createElement('img');
-        img.style.width = "100%";
-        img.style.height = "200px";
-        img.style.objectFit = "cover";
-        img.style.borderRadius = "8px";
-        img.style.marginBottom = "10px";
-        img.style.background = "#222";
-        img.crossOrigin = "anonymous"; // Try anonymous CORS
+        const imgBox = document.createElement('div');
+        imgBox.style.width = "100%";
+        imgBox.style.paddingTop = "100%"; // 1:1 Aspect Ratio
+        imgBox.style.backgroundSize = "cover";
+        imgBox.style.backgroundPosition = "center";
+        imgBox.style.borderRadius = "8px";
+        imgBox.style.marginBottom = "10px";
+        imgBox.style.backgroundColor = "#222";
 
         // Convert image to data URL to avoid tainting canvas if possible
         let imgUrl = friend.photoURL;
+
         if (imgUrl && imgUrl.startsWith('http')) {
-            // Create a promise for this image's loading state
             const loadPromise = new Promise(async (resolve) => {
                 let finalSrc = imgUrl;
                 try {
-                    // Try fetching blob to create Data URL (bypasses CORS during html2canvas taint check)
-                    const response = await fetch(imgUrl);
+                    // Force fresh network request
+                    const cacheBusterUrl = imgUrl.includes('?')
+                        ? `${imgUrl}&t=${new Date().getTime()}`
+                        : `${imgUrl}?t=${new Date().getTime()}`;
+
+                    const response = await fetch(cacheBusterUrl);
                     const blob = await response.blob();
+
+                    // Convert to Base64
                     finalSrc = await new Promise(r => {
                         const reader = new FileReader();
                         reader.onload = () => r(reader.result);
                         reader.readAsDataURL(blob);
                     });
+
                 } catch (e) {
                     console.warn("Fetch failed, falling back to direct URL", e);
+                    finalSrc = imgUrl.includes('?')
+                        ? `${imgUrl}&t=${new Date().getTime()}`
+                        : `${imgUrl}?t=${new Date().getTime()}`;
                 }
 
-                img.onload = resolve;
-                img.onerror = resolve; // Resolve anyway to not block
-                img.src = finalSrc;
+                // If fallback to URL, pre-load via Image object to ensure readiness
+                if (finalSrc.startsWith('http')) {
+                    const temp = new Image();
+                    temp.crossOrigin = 'anonymous';
+                    temp.onload = () => {
+                        imgBox.style.backgroundImage = `url('${finalSrc}')`;
+                        resolve();
+                    };
+                    temp.onerror = () => {
+                        imgBox.style.backgroundImage = `url('${finalSrc}')`;
+                        resolve();
+                    };
+                    temp.src = finalSrc;
+                } else {
+                    // Base64 ready
+                    imgBox.style.backgroundImage = `url('${finalSrc}')`;
+                    resolve();
+                }
             });
             imageLoadPromises.push(loadPromise);
         } else {
-            img.src = imgUrl || '';
+            if (imgUrl) imgBox.style.backgroundImage = `url('${imgUrl}')`;
         }
 
-        card.appendChild(img);
+        card.appendChild(imgBox);
 
         const info = document.createElement('div');
         info.innerHTML = `
@@ -1281,5 +1487,402 @@ async function generateGridExport(type) {
         // Optional: clear staging
         stagingGrid.innerHTML = '';
         // Note: we don't automatically exit selection mode, user might want to simple export different formats
+    }
+}
+
+// --- Stats View Logic ---
+const statsModal = document.getElementById('stats-modal');
+const statsBtn = document.getElementById('stats-btn');
+const closeStatsBtn = document.getElementById('close-stats');
+const statsContent = document.getElementById('stats-content');
+
+if (statsBtn) {
+    statsBtn.addEventListener('click', () => {
+        calculateAndRenderStats();
+        statsModal.classList.remove('hidden');
+        // Close mobile menu if open
+        const headerActions = document.getElementById('header-actions');
+        if (headerActions) headerActions.classList.remove('show');
+    });
+}
+
+if (closeStatsBtn) {
+    closeStatsBtn.addEventListener('click', () => {
+        statsModal.classList.add('hidden');
+    });
+}
+
+// Close on outside click
+window.addEventListener('click', (e) => {
+    if (e.target == statsModal) {
+        statsModal.classList.add('hidden');
+    }
+});
+
+function calculateAndRenderStats() {
+    const totalFriends = allFriends.length;
+    const categoryCounts = {};
+
+    allFriends.forEach(friend => {
+        const cat = friend.category || 'Uncategorized';
+        // Normalize empty string or null to Uncategorized
+        const cleanCat = cat.trim() === '' ? 'Uncategorized' : cat;
+        categoryCounts[cleanCat] = (categoryCounts[cleanCat] || 0) + 1;
+    });
+
+    // Sort categories by count (descending)
+    const sortedCategories = Object.entries(categoryCounts)
+        .sort((a, b) => b[1] - a[1]);
+
+    let categoriesHTML = '';
+    sortedCategories.forEach(([cat, count]) => {
+        // Find color if available
+        let color = '#4f46e5'; // Default
+        const sampleFriend = allFriends.find(f => {
+            const fCat = f.category || 'Uncategorized';
+            const cleanFCat = fCat.trim() === '' ? 'Uncategorized' : fCat;
+            return cleanFCat === cat;
+        });
+
+        if (sampleFriend && sampleFriend.categoryColor) {
+            color = sampleFriend.categoryColor;
+        }
+
+        // Handle Uncategorized specific styling if needed
+        if (cat === 'Uncategorized') color = '#666';
+
+        categoriesHTML += `
+            <div class="stats-category-card">
+                <div style="font-size:0.85rem; color:${color}; font-weight:bold; margin-bottom:5px;">${cat}</div>
+                <div class="stats-cat-count">${count}</div>
+            </div>
+        `;
+    });
+
+    statsContent.innerHTML = `
+        <div class="stats-row">
+            <h3 style="margin:0; color:var(--text-muted); font-size:1rem;">Total People</h3>
+            <div class="stats-big-number">${totalFriends}</div>
+        </div>
+        
+        <h3 style="margin:20px 0 10px; font-size:1.1rem; border-top:1px solid var(--glass-border); padding-top:15px;">By Category</h3>
+        <div class="stats-grid">
+            ${categoriesHTML}
+        </div>
+    `;
+}
+
+
+// --- CSV IMPORT LOGIC ---
+const importBtn = document.getElementById('import-btn');
+const importInput = document.getElementById('import-csv-input');
+const csvPreviewModal = document.getElementById('csv-preview-modal');
+const csvPreviewTableBody = document.querySelector('#csv-preview-table tbody');
+const confirmImportBtn = document.getElementById('confirm-import');
+const cancelImportBtn = document.getElementById('cancel-import');
+let currentImportData = [];
+
+if (importBtn && importInput) {
+    importBtn.addEventListener('click', () => {
+        importInput.click();
+    });
+
+    importInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // Reset input for next time
+        e.target.value = '';
+        parseCSV(file);
+    });
+} else {
+    console.error("CSV Import elements not found!");
+}
+
+if (cancelImportBtn) {
+    cancelImportBtn.addEventListener('click', () => {
+        csvPreviewModal.classList.add('hidden');
+        currentImportData = [];
+    });
+}
+
+if (confirmImportBtn) {
+    confirmImportBtn.addEventListener('click', async () => {
+        if (currentImportData.length === 0) {
+            alert("No data to import.");
+            return;
+        }
+
+        const btn = confirmImportBtn;
+        btn.disabled = true;
+        btn.innerText = "Importing...";
+
+        let importCount = 0;
+        try {
+            const batchPromises = currentImportData.map(async (data) => {
+                await addDoc(collection(db, "friends"), data);
+                importCount++;
+            });
+
+            await Promise.all(batchPromises);
+
+            // Success feedback
+            const statusEl = document.getElementById('preview-status');
+            if (statusEl) {
+                statusEl.innerText = `Successfully imported ${importCount} contacts!`;
+                statusEl.style.color = "var(--success)";
+            }
+
+            // Close after short delay
+            setTimeout(() => {
+                csvPreviewModal.classList.add('hidden');
+                btn.disabled = false;
+                btn.innerText = "Confirm Import";
+                if (statusEl) statusEl.innerText = "";
+                updateStorageStats();
+            }, 1000);
+
+        } catch (error) {
+            console.error("Import Error:", error);
+            alert("Error importing contacts: " + error.message);
+            btn.disabled = false;
+            btn.innerText = "Confirm Import";
+        }
+    });
+}
+
+function parseCSV(file) {
+    if (typeof Papa === 'undefined') {
+        alert("CSV Parser not loaded. Please refresh.");
+        return;
+    }
+
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+            const data = results.data;
+            if (data.length === 0) {
+                alert("CSV is empty.");
+                return;
+            }
+
+            // Validate headers slightly less strict
+            const firstRow = data[0];
+            const hasKey = (key) => Object.keys(firstRow).some(k => k.trim() === key);
+
+            if (!hasKey("Forename") || !hasKey("Surname")) {
+                alert("Error: CSV must have 'Forename' and 'Surname' columns.");
+                return;
+            }
+
+            // Process data for preview
+            currentImportData = [];
+            const getVal = (row, key) => row[key]?.trim() || "";
+
+            data.forEach(row => {
+                const firstName = getVal(row, "Forename");
+                const lastName = getVal(row, "Surname");
+                const work = getVal(row, "Line Of Work");
+                const met = getVal(row, "Met At");
+
+                if (!firstName && !lastName) return;
+
+                const fullName = `${firstName} ${lastName}`.trim();
+
+                const friendData = {
+                    userId: currentUser.uid,
+                    firstName: firstName,
+                    lastName: lastName,
+                    name: fullName,
+                    work: work,
+                    met: met,
+                    origin: "",
+                    phone: "",
+                    freq: 30,
+                    lastContact: "",
+                    notes: "Imported from CSV",
+                    category: "Imported",
+                    categoryColor: "#888888",
+                    isExempt: false,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    photoURL: `https://ui-avatars.com/api/?background=random&name=${encodeURIComponent(fullName)}`
+                };
+
+                currentImportData.push(friendData);
+            });
+
+            if (currentImportData.length === 0) {
+                alert("No valid rows found to import.");
+                return;
+            }
+
+            renderPreview();
+            csvPreviewModal.classList.remove('hidden');
+        },
+        error: (err) => {
+            console.error("CSV Parse Error:", err);
+            alert("Failed to parse CSV file.");
+        }
+    });
+}
+
+function renderPreview() {
+    csvPreviewTableBody.innerHTML = '';
+
+    if (currentImportData.length === 0) {
+        csvPreviewTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">No data to import</td></tr>';
+        return;
+    }
+
+    currentImportData.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+
+        tr.innerHTML = `
+            <td style="padding: 10px;">${item.name}</td>
+            <td style="padding: 10px;">${item.work || '-'}</td>
+            <td style="padding: 10px;">${item.met || '-'}</td>
+            <td style="padding: 10px; text-align: center;">
+                <button class="btn icon-btn delete-row-btn" data-index="${index}" style="color: var(--danger); padding: 5px;">&times;</button>
+            </td>
+        `;
+        csvPreviewTableBody.appendChild(tr);
+    });
+
+    // Add listeners to delete buttons
+    document.querySelectorAll('.delete-row-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            currentImportData.splice(index, 1);
+            renderPreview();
+        });
+    });
+}
+
+// --- Bulk Delete Logic ---
+const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+const slideDeleteModal = document.getElementById('slide-delete-modal');
+const deleteSlider = document.getElementById('delete-slider');
+const sliderThumb = document.getElementById('slider-thumb');
+const cancelSlideDeleteBtn = document.getElementById('cancel-slide-delete');
+const slideDeleteMsg = document.getElementById('slide-delete-msg');
+
+if (deleteSelectedBtn) {
+    deleteSelectedBtn.addEventListener('click', () => {
+        if (selectedFriendIds.size === 0) return;
+
+        slideDeleteMsg.innerText = `Deleting ${selectedFriendIds.size} contacts. This cannot be undone.`;
+        deleteSlider.value = 0;
+        updateSliderVisuals(0);
+        slideDeleteModal.classList.remove('hidden');
+    });
+}
+
+if (cancelSlideDeleteBtn) {
+    cancelSlideDeleteBtn.addEventListener('click', () => {
+        slideDeleteModal.classList.add('hidden');
+        deleteSlider.value = 0;
+        updateSliderVisuals(0);
+    });
+}
+
+// Slider Logic
+if (deleteSlider && sliderThumb) {
+    deleteSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        updateSliderVisuals(val);
+
+        if (parseInt(val) === 100) {
+            performBulkDelete();
+        }
+    });
+
+    // Reset if dropped before 100
+    deleteSlider.addEventListener('change', (e) => {
+        if (parseInt(e.target.value) < 100) {
+            // Animate back
+            deleteSlider.value = 0;
+            updateSliderVisuals(0);
+        }
+    });
+
+    // Also handle touch end if change doesn't fire reliably on all browsers
+    deleteSlider.addEventListener('touchend', (e) => {
+        if (parseInt(deleteSlider.value) < 100) {
+            deleteSlider.value = 0;
+            updateSliderVisuals(0);
+        }
+    });
+}
+
+function updateSliderVisuals(val) {
+    // thumb is 40px wide, container is roughly 100% width.
+    // We need to move the visual thumb to match the input thumb position.
+    // Input range usually maps 0-100% of available width.
+    // Let's just use calc for the left position.
+    // The input range track width is 100% of container (minus some padding).
+    // Let's assume the container has padding.
+    // Simple approach: left = val% - but we need to account for thumb width.
+
+    const containerWidth = deleteSlider.parentElement.clientWidth; // approx 400px max
+    const thumbWidth = 40;
+    const padding = 5;
+
+    // visual thumb position logic
+    // 0% -> left: 5px
+    // 100% -> left: containerWidth - thumbWidth - 5px
+
+    const maxLeft = containerWidth - thumbWidth - padding;
+    const minLeft = padding;
+    const range = maxLeft - minLeft;
+
+    const leftPos = minLeft + (range * (val / 100));
+    sliderThumb.style.left = `${leftPos}px`;
+
+    // Optional transparency change
+    sliderThumb.style.opacity = 0.5 + (val / 200);
+}
+
+async function performBulkDelete() {
+    deleteSlider.disabled = true; // Prevent multiple triggers
+    sliderThumb.innerHTML = '<div class="spinner"></div>';
+    slideDeleteMsg.innerText = "Deleting...";
+
+    const idsToDelete = Array.from(selectedFriendIds);
+    let deletedCount = 0;
+
+    try {
+        const promiseBatch = idsToDelete.map(async (id) => {
+            await deleteDoc(doc(db, "friends", id));
+            deletedCount++;
+        });
+
+        await Promise.all(promiseBatch);
+
+        // Success
+        slideDeleteModal.classList.add('hidden');
+        toggleSelectionMode(false); // Exit selection mode
+
+        // Show success toast (reuse undo toast styled differently or create new)
+        const toast = document.createElement('div');
+        toast.style.cssText = "position:fixed; bottom:20px; right:20px; background:var(--success); color:white; padding:15px; border-radius:10px; z-index:2000;";
+        toast.innerText = `Deleted ${deletedCount} contacts.`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+
+        updateStorageStats();
+
+    } catch (error) {
+        console.error("Bulk Delete Error:", error);
+        alert("Failed to delete some contacts: " + error.message);
+        slideDeleteModal.classList.add('hidden');
+    } finally {
+        // Reset slider
+        deleteSlider.disabled = false;
+        deleteSlider.value = 0;
+        updateSliderVisuals(0);
+        sliderThumb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
     }
 }

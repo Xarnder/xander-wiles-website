@@ -1667,3 +1667,31 @@ input:checked+.slider-small:before {
         transform: translate(-50%, 0);
     }
 }
+
+/* MOBILE REORDER FIXES */
+
+.mobile-reorder-list-item {
+    background: var(--card-bg);
+    padding: 12px 15px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--text-primary);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+[data-theme="light"] .mobile-reorder-list-item {
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+.mobile-reorder-list-item:active {
+    cursor: grabbing;
+}
