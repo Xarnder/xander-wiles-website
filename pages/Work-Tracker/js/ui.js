@@ -139,6 +139,8 @@ export function toggleTimerUI(isRunning) {
 export function renderCalendar() {
     if (!DOM.calendarGrid || !DOM.calendarMonthYear) return;
 
+    DOM.calendarGrid.innerHTML = '';
+
     // Inject Days of Week Header
     const daysArrBase = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const daysArrLabel = [...daysArrBase.slice(state.startOfWeek), ...daysArrBase.slice(0, state.startOfWeek)];
@@ -155,9 +157,6 @@ export function renderCalendar() {
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
     DOM.calendarMonthYear.textContent = `${monthNames[month]} ${year}`;
-
-    const existingDays = DOM.calendarGrid.querySelectorAll('.calendar-day');
-    existingDays.forEach(day => day.remove());
 
     const rawFirstDayIndex = new Date(year, month, 1).getDay();
     const firstDayIndex = (rawFirstDayIndex - state.startOfWeek + 7) % 7;
