@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { db } from '../firebase';
@@ -23,6 +23,7 @@ export default function EntryEditor() {
     const { openBackup } = useBackup();
     const { date } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const [content, setContent] = useState('');
     const [title, setTitle] = useState('');
     const [loading, setLoading] = useState(true);
@@ -477,13 +478,28 @@ export default function EntryEditor() {
 
                 <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="flex items-center w-full sm:w-auto overflow-hidden">
-                        <button
-                            onClick={() => navigate('/')}
-                            className="glass-button p-2 text-text-muted hover:text-white md:hidden mr-2 shrink-0"
-                            title="Back to Calendar"
-                        >
-                            <ArrowLeft className="w-5 h-5" />
-                        </button>
+                        {/* Base Navigation (Calendar) - Only show if NOT from gallery */}
+                        {!location.state?.fromGallery && (
+                            <button
+                                onClick={() => navigate('/')}
+                                className="glass-button p-2 text-text-muted hover:text-white md:hidden mr-2 shrink-0"
+                                title="Back to Calendar"
+                            >
+                                <ArrowLeft className="w-5 h-5" />
+                            </button>
+                        )}
+
+                        {/* Back to Gallery Navigation - Visible on ALL breakpoints if coming from gallery */}
+                        {location.state?.fromGallery && (
+                            <button
+                                onClick={() => navigate('/images', { state: { scrollToId: location.state.scrollToId } })}
+                                className="glass-button px-3 py-2 text-primary hover:text-white hover:bg-primary/20 flex items-center justify-center mr-3 shrink-0"
+                                title="Back to Gallery"
+                            >
+                                <ArrowLeft className="w-4 h-4 sm:mr-2" />
+                                <span className="hidden sm:inline font-medium">To Gallery</span>
+                            </button>
+                        )}
 
                         {/* Navigation Arrows (View Mode Only) */}
                         {!isEditing && (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
@@ -9,6 +9,7 @@ import { Image as ImageIcon, Calendar } from 'lucide-react';
 export default function ImageView() {
     const { currentUser } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showInfo, setShowInfo] = useState(true);
@@ -66,6 +67,34 @@ export default function ImageView() {
 
     // Calculate pagination
     const totalPages = Math.ceil(entries.length / ITEMS_PER_PAGE);
+
+    useEffect(() => {
+        if (!loading && entries.length > 0 && location.state?.scrollToId) {
+            const targetId = location.state.scrollToId;
+            const entryIndex = entries.findIndex(e => e.id === targetId);
+
+            if (entryIndex !== -1) {
+                const targetPage = Math.floor(entryIndex / ITEMS_PER_PAGE) + 1;
+
+                if (currentPage !== targetPage) {
+                    setCurrentPage(targetPage);
+                } else {
+                    // Try immediately first
+                    const element = document.getElementById(`gallery-item-${targetId}`);
+                    if (element) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+
+                    // Fallback using timeout to wait for render if page just changed or images loading
+                    setTimeout(() => {
+                        const el = document.getElementById(`gallery-item-${targetId}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 500);
+                }
+            }
+        }
+    }, [loading, entries, location.state, currentPage]);
+
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const paginatedEntries = entries.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
@@ -132,7 +161,8 @@ export default function ImageView() {
                                 {monthEntries.map((entry) => (
                                     <div
                                         key={entry.id}
-                                        onClick={() => navigate(`/entry/${format(entry.date, 'yyyy-MM-dd')}`)}
+                                        id={`gallery-item-${entry.id}`}
+                                        onClick={() => navigate(`/entry/${format(entry.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: entry.id } })}
                                         className="group relative aspect-square rounded-xl overflow-hidden cursor-pointer bg-white/5 border border-white/10 hover:border-primary/50 transition-all duration-300"
                                     >
                                         <div className={`w-full h-full relative ${entry.images.length > 1 ? 'grid grid-cols-2 grid-rows-2 gap-[1px]' : ''}`}>
