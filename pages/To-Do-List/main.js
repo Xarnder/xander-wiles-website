@@ -1,6 +1,6 @@
 
 import { app, auth, db } from './firebase-config.js';
-import { onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { doc, onSnapshot, setDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { state, setCurrentUser, cleanupListeners } from './store.js';
 import * as API from './api.js';
@@ -100,26 +100,43 @@ const boardContainer = document.getElementById('board-container');
 const projectTitleInput = document.getElementById('project-title-input');
 
 // --- AUTHENTICATION ---
-// USE POPUP FOR SAFARI/IOS COMPATIBILITY
+// Set persistence to Local to ensure PWA and Safari keep the user logged in across sessions
+setPersistence(auth, browserLocalPersistence)
+    .then(() => {
+        // Persistence set successfully
+    })
+    .catch((error) => {
+        console.error("Auth Persistence Error:", error);
+    });
+
+// Handle Login Button
 googleLoginBtn.addEventListener('click', () => {
-    console.log("Login Button Clicked - Popup Mode");
+    console.log("Login Button Clicked");
     const provider = new GoogleAuthProvider();
+
+    // In iOS/Safari Safari, popups are often blocked, especially in PWA mode.
+    // Try popup first. If it fails with a popup-blocked error, cleanly fallback to redirect.
     signInWithPopup(auth, provider)
         .then((result) => {
             console.log("Popup Login Success:", result.user.uid);
         })
         .catch((error) => {
-            console.error("Popup Login Error:", error);
-            // Fallback to redirect if popup is blocked
-            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-                signInWithRedirect(auth, provider);
+            console.warn("Popup Login Error or Blocked:", error);
+            // Fallback to redirect if popup is blocked or fails
+            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                console.log("Falling back to redirect login...");
+                signInWithRedirect(auth, provider).catch(redirectErr => {
+                    console.error("Redirect Fallback Error:", redirectErr);
+                    alert(`Login Failed: ${redirectErr.message}`);
+                });
             } else {
-                alert(`Login Failed: ${error.message}`);
+                alert(`Login Error: ${error.message}`);
             }
         });
 });
 
 // Check for redirect result on page load (in case fallback was used)
+// We must always call this on startup if signInWithRedirect is ever used.
 getRedirectResult(auth)
     .then((result) => {
         if (result) {
@@ -129,7 +146,7 @@ getRedirectResult(auth)
     })
     .catch((error) => {
         console.error("Redirect Login Error:", error);
-        // alert(`Login Failed: ${error.message}`);
+        // Do not alert on redirect error unless requested, as it might just be an expired nonce or back-button navigation issue
     });
 
 
