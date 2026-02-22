@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { getMonday, formatDuration } from './utils.js';
+import { formatDuration } from './utils.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
