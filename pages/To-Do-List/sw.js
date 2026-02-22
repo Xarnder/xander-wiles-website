@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-v11';
+const CACHE_NAME = 'taskmaster-v12';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -60,6 +60,11 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Event - Cache First, then Network
 self.addEventListener('fetch', (event) => {
+    // Ignore Firebase Auth endpoints to prevent redirect loops and SW interference
+    if (event.request.url.includes('/__/auth/')) {
+        return;
+    }
+
     // Check if the request is for an item in our asset list
     const isStaticAsset = ASSETS_TO_CACHE.some(asset => event.request.url.includes(asset.replace('./', '')));
     const isSelf = event.request.url.startsWith(self.location.origin);
@@ -76,19 +81,31 @@ self.addEventListener('fetch', (event) => {
                     return fetch(event.request).then(
                         (response) => {
                             // Check if we received a valid response
-                            if (!response || response.status !== 200 || response.type !== 'basic' && response.type !== 'cors') {
+                            if (!response || response.status !== 200 || (response.type !== 'basic' && response.type !== 'cors')) {
                                 return response;
                             }
 
+                            // Safari PWA Fix: "Response served by service worker has redirections"
+                            // Safari drops responses with redirected: true for navigation and other critical requests.
+                            let finalResponse = response;
+                            if (response.redirected) {
+                                const cloned = response.clone();
+                                finalResponse = new Response(cloned.body, {
+                                    headers: cloned.headers,
+                                    status: cloned.status,
+                                    statusText: cloned.statusText
+                                });
+                            }
+
                             // Clone the response
-                            const responseToCache = response.clone();
+                            const responseToCache = finalResponse.clone();
 
                             caches.open(CACHE_NAME)
                                 .then((cache) => {
                                     cache.put(event.request, responseToCache);
                                 });
 
-                            return response;
+                            return finalResponse;
                         }
                     );
                 })
