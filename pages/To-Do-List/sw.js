@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-v12';
+const CACHE_NAME = 'taskmaster-v13';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -27,14 +27,32 @@ self.addEventListener('install', (event) => {
 
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then((cache) => {
+            .then(async (cache) => {
                 console.log('[Service Worker] Caching all: app shell and content');
-                return Promise.all(
-                    ASSETS_TO_CACHE.map((url) => {
-                        return cache.add(new Request(url, { cache: 'reload' }))
-                            .catch(err => console.error('Failed to cache', url, err));
-                    })
-                );
+                for (const url of ASSETS_TO_CACHE) {
+                    try {
+                        const response = await fetch(new Request(url, { cache: 'reload' }));
+                        if (!response || response.status !== 200) {
+                            console.error('Failed to cache', url, response?.status);
+                            continue;
+                        }
+
+                        // Apply the same Safari PWA redirect fix on install cache!
+                        let finalResponse = response;
+                        if (response.redirected) {
+                            const cloned = response.clone();
+                            finalResponse = new Response(cloned.body, {
+                                headers: cloned.headers,
+                                status: cloned.status,
+                                statusText: cloned.statusText
+                            });
+                        }
+
+                        await cache.put(url, finalResponse.clone());
+                    } catch (err) {
+                        console.error('Failed to cache', url, err);
+                    }
+                }
             })
     );
 });
