@@ -540,6 +540,18 @@ button:active {
     border-color: rgba(0, 230, 118, 0.3);
 }
 
+.history-badge-focus {
+    background: rgba(156, 39, 176, 0.15);
+    border-color: rgba(156, 39, 176, 0.3);
+    color: #e1bee7;
+}
+
+.history-badge-multitasking {
+    background: rgba(255, 152, 0, 0.15);
+    border-color: rgba(255, 152, 0, 0.3);
+    color: #ffe0b2;
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 480px) {
     .app-container {

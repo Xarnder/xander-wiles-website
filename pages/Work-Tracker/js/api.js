@@ -96,6 +96,12 @@ export function renderDashboardData() {
 
         const companyHtml = data.company ? `<span class="history-badge history-badge-company">${data.company}</span>` : '';
         const projectHtml = data.project ? `<span class="history-badge history-badge-project">${data.project}</span>` : '';
+        let focusHtml = '';
+        if (data.focused === true) {
+            focusHtml = `<span class="history-badge history-badge-focus">Focused</span>`;
+        } else if (data.focused === false) {
+            focusHtml = `<span class="history-badge history-badge-multitasking">Multitasking</span>`;
+        }
 
         item.innerHTML = `
             <div class="history-item-content">
@@ -105,6 +111,7 @@ export function renderDashboardData() {
                     <div class="history-badges">
                         ${companyHtml}
                         ${projectHtml}
+                        ${focusHtml}
                     </div>
                 </div>
                 <div class="history-details">
@@ -148,6 +155,7 @@ export function renderDashboardData() {
                 DOM.sessionRate.value = data.rate || 0;
                 DOM.sessionCompany.value = data.company || "";
                 DOM.sessionProject.value = data.project || "";
+                DOM.sessionFocused.checked = data.focused !== false;
                 DOM.sessionModal.classList.remove('hidden');
             });
         });

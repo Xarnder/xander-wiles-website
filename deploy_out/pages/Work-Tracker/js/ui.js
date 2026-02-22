@@ -66,6 +66,7 @@ export const DOM = {
     sessionCompanySelect: document.getElementById('session-company-select'),
     sessionProject: document.getElementById('session-project'),
     sessionProjectSelect: document.getElementById('session-project-select'),
+    sessionFocused: document.getElementById('session-focused'),
     saveSessionBtn: document.getElementById('save-session-btn')
 };
 

@@ -172,6 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
             DOM.sessionRate.value = DOM.hourlyRateInput.value || 20;
             DOM.sessionCompany.value = "";
             DOM.sessionProject.value = "";
+            DOM.sessionFocused.checked = true;
             DOM.sessionModal.classList.remove('hidden');
         });
     }
@@ -230,7 +231,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 rate: rate,
                 earnings: earnings,
                 company: DOM.sessionCompany.value.trim(),
-                project: DOM.sessionProject.value.trim()
+                project: DOM.sessionProject.value.trim(),
+                focused: DOM.sessionFocused.checked
             };
 
             const sessionId = DOM.editSessionId.value;
