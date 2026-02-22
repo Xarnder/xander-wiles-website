@@ -1,8 +1,10 @@
-const CACHE_NAME = 'taskmaster-v14';
+const CACHE_NAME = 'taskmaster-v15';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
     './style.css',
+    '/assets/css/style.css',
+    '/assets/js/nav-loader.js',
     './main.js',
     './api.js',
     './store.js',
