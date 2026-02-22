@@ -35,15 +35,7 @@ if ('serviceWorker' in navigator) {
 
 // ... existing code ...
 
-// --- SPLASH SCREEN TIMEOUT ---
-// If auth takes too long (e.g. offline with no cache), force hide splash
-setTimeout(() => {
-    const splash = document.getElementById('splash-screen');
-    if (splash && !splash.classList.contains('hidden-splash')) {
-        console.warn("Splash screen timed out - forcing hide");
-        splash.classList.add('hidden-splash');
-    }
-}, 8000); // 8 seconds max
+// --- SPLASH SCREEN TIMEOUT REMOVED ---
 
 // --- EXPOSE TO WINDOW FOR INLINE HTML ---
 // This is critical for onclick="..." to work
@@ -170,9 +162,7 @@ onAuthStateChanged(auth, (user) => {
         stopSyncTimer();
         cleanupListeners();
         dateReset();
-        // Hide splash if generic login screen is shown
-        const splash = document.getElementById('splash-screen');
-        if (splash) splash.classList.add('hidden-splash');
+        // Splash logic removed
     }
 });
 
@@ -245,12 +235,7 @@ function setupFirestoreListeners(uid) {
         }
         UI.renderBoard();
 
-        // Hide Splash on first load
-        const splash = document.getElementById('splash-screen');
-        if (splash) {
-            // Small delay to ensure render is painted
-            setTimeout(() => splash.classList.add('hidden-splash'), 100);
-        }
+        // Splash logic removed
 
     }, (error) => API.handleSyncError(error)));
 
