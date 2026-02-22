@@ -1,6 +1,6 @@
 
 import { app, auth, db } from './firebase-config.js';
-import { onAuthStateChanged, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { doc, onSnapshot, setDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { state, setCurrentUser, cleanupListeners } from './store.js';
 import * as API from './api.js';
@@ -100,14 +100,26 @@ const boardContainer = document.getElementById('board-container');
 const projectTitleInput = document.getElementById('project-title-input');
 
 // --- AUTHENTICATION ---
-// USE REDIRECT FOR PWA COMPATIBILITY
-googleLoginBtn.onclick = () => {
-    console.log("Login Button Clicked - Redirect Mode");
+// USE POPUP FOR SAFARI/IOS COMPATIBILITY
+googleLoginBtn.addEventListener('click', () => {
+    console.log("Login Button Clicked - Popup Mode");
     const provider = new GoogleAuthProvider();
-    signInWithRedirect(auth, provider); // No promise here, page redirects
-};
+    signInWithPopup(auth, provider)
+        .then((result) => {
+            console.log("Popup Login Success:", result.user.uid);
+        })
+        .catch((error) => {
+            console.error("Popup Login Error:", error);
+            // Fallback to redirect if popup is blocked
+            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+                signInWithRedirect(auth, provider);
+            } else {
+                alert(`Login Failed: ${error.message}`);
+            }
+        });
+});
 
-// Check for redirect result on page load
+// Check for redirect result on page load (in case fallback was used)
 getRedirectResult(auth)
     .then((result) => {
         if (result) {
