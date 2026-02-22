@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-v15';
+const CACHE_NAME = 'taskmaster-v16';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -39,12 +39,13 @@ self.addEventListener('install', (event) => {
                             continue;
                         }
 
-                        // Apply the same Safari PWA redirect fix on install cache!
                         let finalResponse = response;
                         if (response.redirected) {
                             const cloned = response.clone();
+                            const newHeaders = new Headers();
+                            cloned.headers.forEach((v, k) => newHeaders.append(k, v));
                             finalResponse = new Response(cloned.body, {
-                                headers: cloned.headers,
+                                headers: newHeaders,
                                 status: cloned.status,
                                 statusText: cloned.statusText
                             });
@@ -134,12 +135,13 @@ self.addEventListener('fetch', (event) => {
                                 return response;
                             }
 
-                            // Safari PWA Fix
                             let finalResponse = response;
                             if (response.redirected) {
                                 const cloned = response.clone();
+                                const newHeaders = new Headers();
+                                cloned.headers.forEach((v, k) => newHeaders.append(k, v));
                                 finalResponse = new Response(cloned.body, {
-                                    headers: cloned.headers,
+                                    headers: newHeaders,
                                     status: cloned.status,
                                     statusText: cloned.statusText
                                 });
@@ -155,7 +157,11 @@ self.addEventListener('fetch', (event) => {
 
                             return finalResponse;
                         }
-                    );
+                    ).catch(err => {
+                        console.error('Fetch failed for', event.request.url, err);
+                        // If it fails (offline) and not in cache, we just return empty or let it fail naturally
+                        // But CSS failing shouldn't crash the JS loop.
+                    });
                 })
         );
     }
