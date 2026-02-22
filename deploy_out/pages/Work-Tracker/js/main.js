@@ -258,4 +258,84 @@ document.addEventListener('DOMContentLoaded', () => {
             window.print();
         });
     }
+
+    // Export CSV Event - Downloads currently filtered sessions as a .csv file
+    if (DOM.exportCsvBtn) {
+        DOM.exportCsvBtn.addEventListener('click', () => {
+            if (!state.allSessions || state.allSessions.length === 0) {
+                import('./ui.js').then(module => module.showAlert("No Data", "There are no sessions to export."));
+                return;
+            }
+
+            // Define CSV headers
+            const headers = [
+                "Date",
+                "Start Time",
+                "End Time",
+                "Duration (Hours)",
+                "Rate",
+                "Earnings",
+                "Company",
+                "Project",
+                "Focused"
+            ];
+
+            // Safely escape values containing commas or double-quotes
+            function escapeCSV(val) {
+                if (val === null || val === undefined) return "";
+                const str = String(val);
+                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                    return `"${str.replace(/"/g, '""')}"`;
+                }
+                return str;
+            }
+
+            // Build rows
+            const rows = [headers.join(",")];
+
+            state.allSessions.forEach(session => {
+                const startDate = new Date(session.startTime);
+                const endDate = new Date(session.endTime);
+
+                const dateStr = startDate.toLocaleDateString();
+                const startTimeStr = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const endTimeStr = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const durationHrs = (session.durationMs / (1000 * 60 * 60)).toFixed(2);
+
+                const isFocusedStr = session.focused === false ? "False" : "True";
+
+                const rowData = [
+                    dateStr,
+                    startTimeStr,
+                    endTimeStr,
+                    durationHrs,
+                    session.rate,
+                    session.earnings.toFixed(2),
+                    session.company || "",
+                    session.project || "",
+                    isFocusedStr
+                ];
+
+                rows.push(rowData.map(escapeCSV).join(","));
+            });
+
+            // Trigger download
+            const csvData = rows.join("\n");
+            const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+
+            // Format fallback timestamp for the filename
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+
+            a.href = url;
+            a.download = `Work_Tracker_Export_${dateStr}.csv`;
+            a.style.display = "none";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    }
 });

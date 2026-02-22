@@ -46,6 +46,7 @@ export const DOM = {
     showTitlesToggle: document.getElementById('show-titles-toggle'),
     ganttChart: document.getElementById('gantt-chart'),
     exportBtn: document.getElementById('export-btn'),
+    exportCsvBtn: document.getElementById('export-csv-btn'),
     filterBtn: document.getElementById('filter-btn'),
     filterModal: document.getElementById('filter-modal'),
     closeFilterBtn: document.getElementById('close-filter'),
