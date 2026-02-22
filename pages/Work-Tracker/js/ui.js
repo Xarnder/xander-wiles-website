@@ -32,6 +32,7 @@ export const DOM = {
     closeSettingsBtn: document.getElementById('close-settings'),
     settingsModal: document.getElementById('settings-modal'),
     currencySelect: document.getElementById('currency-select'),
+    startOfWeekSelect: document.getElementById('start-of-week-select'),
     saveSettingsBtn: document.getElementById('save-settings'),
     alertModal: document.getElementById('alert-modal'),
     alertTitle: document.getElementById('alert-title'),
@@ -138,6 +139,17 @@ export function toggleTimerUI(isRunning) {
 export function renderCalendar() {
     if (!DOM.calendarGrid || !DOM.calendarMonthYear) return;
 
+    // Inject Days of Week Header
+    const daysArrBase = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const daysArrLabel = [...daysArrBase.slice(state.startOfWeek), ...daysArrBase.slice(0, state.startOfWeek)];
+
+    daysArrLabel.forEach(dayName => {
+        const headerLabel = document.createElement('div');
+        headerLabel.className = 'day-label';
+        headerLabel.textContent = dayName;
+        DOM.calendarGrid.appendChild(headerLabel);
+    });
+
     const year = state.currentCalendarDate.getFullYear();
     const month = state.currentCalendarDate.getMonth();
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -147,7 +159,8 @@ export function renderCalendar() {
     const existingDays = DOM.calendarGrid.querySelectorAll('.calendar-day');
     existingDays.forEach(day => day.remove());
 
-    const firstDayIndex = new Date(year, month, 1).getDay();
+    const rawFirstDayIndex = new Date(year, month, 1).getDay();
+    const firstDayIndex = (rawFirstDayIndex - state.startOfWeek + 7) % 7;
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const todayDate = new Date();
 
@@ -193,88 +206,92 @@ export function renderChart() {
     if (!DOM.weeklyChart) return;
     DOM.weeklyChart.innerHTML = '';
 
-    const daysArr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const now = new Date();
-    const startOfWeek = getMonday(now);
-    const weekData = Array(7).fill().map(() => []);
-    let maxDailyHours = 0;
+    import('./utils.js').then(({ getStartOfWeekDate }) => {
+        const daysArrBase = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const daysArr = [...daysArrBase.slice(state.startOfWeek), ...daysArrBase.slice(0, state.startOfWeek)];
 
-    const currentWeekSessions = state.allSessions.filter(session => new Date(session.startTime) >= startOfWeek);
+        const now = new Date();
+        const startOfWeek = getStartOfWeekDate(now, state.startOfWeek);
+        const weekData = Array(7).fill().map(() => []);
+        let maxDailyHours = 0;
 
-    currentWeekSessions.forEach(session => {
-        let dayIndex = new Date(session.startTime).getDay() - 1;
-        if (dayIndex === -1) dayIndex = 6;
-        weekData[dayIndex].push({
-            hours: session.durationMs / (1000 * 60 * 60),
-            durationMs: session.durationMs,
-            company: session.company,
-            project: session.project
-        });
-    });
+        const currentWeekSessions = state.allSessions.filter(session => new Date(session.startTime) >= startOfWeek);
 
-    weekData.forEach(daySessions => {
-        const dailyTotal = daySessions.reduce((sum, sessionObj) => sum + sessionObj.hours, 0);
-        if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
-    });
-
-    const scaleMax = Math.ceil(maxDailyHours > 0 ? maxDailyHours : 1);
-
-    // Y Axis Labels
-    const yAxisDiv = document.createElement('div');
-    yAxisDiv.className = 'chart-y-axis';
-
-    const maxLabel = document.createElement('div');
-    maxLabel.textContent = scaleMax + 'h';
-
-    const midLabel = document.createElement('div');
-    midLabel.textContent = (scaleMax / 2).toFixed(1) + 'h';
-
-    const zeroLabel = document.createElement('div');
-    zeroLabel.textContent = '0h';
-
-    yAxisDiv.appendChild(maxLabel);
-    yAxisDiv.appendChild(midLabel);
-    yAxisDiv.appendChild(zeroLabel);
-    DOM.weeklyChart.appendChild(yAxisDiv);
-
-    daysArr.forEach((label, index) => {
-        const colDiv = document.createElement('div');
-        colDiv.className = 'chart-day-column';
-        const areaDiv = document.createElement('div');
-        areaDiv.className = 'chart-bar-area';
-
-        weekData[index].forEach((sessionObj, sIndex) => {
-            const hrs = sessionObj.hours;
-            const bar = document.createElement('div');
-            bar.className = 'chart-sub-session';
-            bar.style.height = `${(hrs / scaleMax) * 100}%`;
-
-            // Determine color based on project or company
-            const identifier = sessionObj.project || sessionObj.company || 'default';
-            const color = getColorForIdentifier(identifier);
-            bar.style.background = `linear-gradient(180deg, ${color} 0%, ${adjustColorOpacity(color, 0.8)} 100%)`;
-
-            let titlePrefix = sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : '');
-            bar.title = `${titlePrefix}Session ${sIndex + 1}: ${formatDuration(sessionObj.durationMs)}`;
-
-            // Add persistent label if an identifier exists
-            if (identifier !== 'default') {
-                const labelSpan = document.createElement('span');
-                labelSpan.className = 'chart-bar-label';
-                labelSpan.textContent = sessionObj.project || sessionObj.company;
-                bar.appendChild(labelSpan);
-            }
-
-            areaDiv.appendChild(bar);
+        currentWeekSessions.forEach(session => {
+            let actualDay = new Date(session.startTime).getDay();
+            let dayIndex = (actualDay - state.startOfWeek + 7) % 7;
+            weekData[dayIndex].push({
+                hours: session.durationMs / (1000 * 60 * 60),
+                durationMs: session.durationMs,
+                company: session.company,
+                project: session.project
+            });
         });
 
-        const lblDiv = document.createElement('div');
-        lblDiv.className = 'chart-day-label';
-        lblDiv.textContent = label;
+        weekData.forEach(daySessions => {
+            const dailyTotal = daySessions.reduce((sum, sessionObj) => sum + sessionObj.hours, 0);
+            if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
+        });
 
-        colDiv.appendChild(areaDiv);
-        colDiv.appendChild(lblDiv);
-        DOM.weeklyChart.appendChild(colDiv);
+        const scaleMax = Math.ceil(maxDailyHours > 0 ? maxDailyHours : 1);
+
+        // Y Axis Labels
+        const yAxisDiv = document.createElement('div');
+        yAxisDiv.className = 'chart-y-axis';
+
+        const maxLabel = document.createElement('div');
+        maxLabel.textContent = scaleMax + 'h';
+
+        const midLabel = document.createElement('div');
+        midLabel.textContent = (scaleMax / 2).toFixed(1) + 'h';
+
+        const zeroLabel = document.createElement('div');
+        zeroLabel.textContent = '0h';
+
+        yAxisDiv.appendChild(maxLabel);
+        yAxisDiv.appendChild(midLabel);
+        yAxisDiv.appendChild(zeroLabel);
+        DOM.weeklyChart.appendChild(yAxisDiv);
+
+        daysArr.forEach((label, index) => {
+            const colDiv = document.createElement('div');
+            colDiv.className = 'chart-day-column';
+            const areaDiv = document.createElement('div');
+            areaDiv.className = 'chart-bar-area';
+
+            weekData[index].forEach((sessionObj, sIndex) => {
+                const hrs = sessionObj.hours;
+                const bar = document.createElement('div');
+                bar.className = 'chart-sub-session';
+                bar.style.height = `${(hrs / scaleMax) * 100}%`;
+
+                // Determine color based on project or company
+                const identifier = sessionObj.project || sessionObj.company || 'default';
+                const color = getColorForIdentifier(identifier);
+                bar.style.background = `linear-gradient(180deg, ${color} 0%, ${adjustColorOpacity(color, 0.8)} 100%)`;
+
+                let titlePrefix = sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : '');
+                bar.title = `${titlePrefix}Session ${sIndex + 1}: ${formatDuration(sessionObj.durationMs)}`;
+
+                // Add persistent label if an identifier exists
+                if (identifier !== 'default') {
+                    const labelSpan = document.createElement('span');
+                    labelSpan.className = 'chart-bar-label';
+                    labelSpan.textContent = sessionObj.project || sessionObj.company;
+                    bar.appendChild(labelSpan);
+                }
+
+                areaDiv.appendChild(bar);
+            });
+
+            const lblDiv = document.createElement('div');
+            lblDiv.className = 'chart-day-label';
+            lblDiv.textContent = label;
+
+            colDiv.appendChild(areaDiv);
+            colDiv.appendChild(lblDiv);
+            DOM.weeklyChart.appendChild(colDiv);
+        });
     });
 }
 

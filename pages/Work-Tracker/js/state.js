@@ -12,7 +12,8 @@ export const state = {
     globalFilterProject: '',
     currentCurrency: localStorage.getItem('work_tracker_currency') || '£',
     widgetOrder: JSON.parse(localStorage.getItem('work_tracker_widget_order')) || ['widget-timer', 'widget-stats', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'],
-    showWidgetTitles: localStorage.getItem('work_tracker_show_titles') !== 'false'
+    showWidgetTitles: localStorage.getItem('work_tracker_show_titles') !== 'false',
+    startOfWeek: parseInt(localStorage.getItem('work_tracker_start_of_week')) || 0 // 0 = Sunday, 1 = Monday
 };
 
 export function updateCurrency(newCurrency) {
@@ -28,4 +29,9 @@ export function updateWidgetOrder(newOrder) {
 export function updateWidgetTitles(showTitles) {
     state.showWidgetTitles = showTitles;
     localStorage.setItem('work_tracker_show_titles', showTitles);
+}
+
+export function updateStartOfWeek(newDay) {
+    state.startOfWeek = newDay;
+    localStorage.setItem('work_tracker_start_of_week', newDay);
 }

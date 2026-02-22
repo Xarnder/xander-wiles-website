@@ -1,7 +1,10 @@
-export function getMonday(d) {
+export function getStartOfWeekDate(d, offsetDays = 0) {
+    // offsetDays: 0 = Sunday, 1 = Monday
     const date = new Date(d);
-    const day = date.getDay(),
-        diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    let day = date.getDay();
+    // Calculate difference to get back to the start of the defined week
+    const diff = date.getDate() - day + (day < offsetDays ? -7 : 0) + offsetDays;
+
     date.setDate(diff);
     date.setHours(0, 0, 0, 0);
     return date;

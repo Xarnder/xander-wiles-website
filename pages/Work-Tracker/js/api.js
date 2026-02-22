@@ -2,7 +2,7 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, d
 import { db } from './config.js';
 import { state } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists } from './ui.js';
-import { getMonday, formatDuration } from './utils.js';
+import { getStartOfWeekDate, formatDuration } from './utils.js';
 
 export async function saveSession(durationMs, totalEarned) {
     try {
@@ -68,7 +68,7 @@ export function renderDashboardData() {
 
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfWeek = getMonday(now);
+    const startOfWeek = getStartOfWeekDate(now, state.startOfWeek);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     state.allSessions.forEach((data) => {

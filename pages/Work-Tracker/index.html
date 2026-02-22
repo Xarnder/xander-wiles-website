@@ -182,47 +182,40 @@
                         </h3>
                         <button id="next-month" class="btn-outline">&rarr;</button>
                     </div>
-                    <div class="calendar-grid">
-                        <div class="day-label">Sun</div>
-                        <div class="day-label">Mon</div>
-                        <div class="day-label">Tue</div>
-                        <div class="day-label">Wed</div>
-                        <div class="day-label">Thu</div>
-                        <div class="day-label">Fri</div>
-                        <div class="day-label">Sat</div>
-                        <!-- Calendar days will be injected via JS -->
-                    </div>
-                </section>
-
-                <!-- Weekly Bar Chart -->
-                <section class="card chart-widget" id="widget-chart">
-                    <h2 class="widget-title">Weekly Breakdown</h2>
-                    <div id="weekly-chart" class="chart-container">
-                        <!-- Chart bars will be injected via JS -->
-                    </div>
-                </section>
-
-                <!-- Daily Gantt Chart -->
-                <section class="card gantt-widget" id="widget-gantt">
-                    <h2 class="widget-title">Today's Timeline</h2>
-                    <div class="gantt-container" id="gantt-chart">
-                        <!-- Timeline markers and session blocks injected via JS -->
-                    </div>
-                </section>
-
-                <!-- Calendar / History -->
-                <section class="card history" id="widget-history">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h2 class="widget-title" style="margin: 0;">History</h2>
-                        <button id="add-session-btn" class="btn-outline" style="padding: 6px 14px; font-size: 0.9rem;">+
-                            Add Session</button>
-                    </div>
-                    <div id="history-list" class="history-list">
-                        <p class="loading-text">Loading history...</p>
-                    </div>
-                </section>
             </div>
+            <div class="calendar-grid">
+                <!-- Calendar days will be injected via JS -->
+            </div>
+            </section>
+
+            <!-- Weekly Bar Chart -->
+            <section class="card chart-widget" id="widget-chart">
+                <h2 class="widget-title">Weekly Breakdown</h2>
+                <div id="weekly-chart" class="chart-container">
+                    <!-- Chart bars will be injected via JS -->
+                </div>
+            </section>
+
+            <!-- Daily Gantt Chart -->
+            <section class="card gantt-widget" id="widget-gantt">
+                <h2 class="widget-title">Today's Timeline</h2>
+                <div class="gantt-container" id="gantt-chart">
+                    <!-- Timeline markers and session blocks injected via JS -->
+                </div>
+            </section>
+
+            <!-- Calendar / History -->
+            <section class="card history" id="widget-history">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 class="widget-title" style="margin: 0;">History</h2>
+                    <button id="add-session-btn" class="btn-outline" style="padding: 6px 14px; font-size: 0.9rem;">+
+                        Add Session</button>
+                </div>
+                <div id="history-list" class="history-list">
+                    <p class="loading-text">Loading history...</p>
+                </div>
+            </section>
+        </div>
 
         </div>
 
@@ -275,6 +268,14 @@
                         <option value="€">€ (EUR)</option>
                         <option value="¥">¥ (JPY)</option>
                         <option value="₹">₹ (INR)</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="start-of-week-select">Start of Week</label>
+                    <select id="start-of-week-select" class="currency-dropdown">
+                        <option value="0">Sunday</option>
+                        <option value="1">Monday</option>
                     </select>
                 </div>
 

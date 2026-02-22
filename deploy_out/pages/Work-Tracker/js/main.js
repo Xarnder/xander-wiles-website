@@ -41,6 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.settingsBtn.addEventListener('click', () => {
         DOM.currencySelect.value = state.currentCurrency;
         DOM.showTitlesToggle.checked = state.showWidgetTitles;
+        if (DOM.startOfWeekSelect) {
+            DOM.startOfWeekSelect.value = state.startOfWeek.toString();
+        }
         // Import dynamically here to avoid circular dep if needed, but it's imported at top anyway
         import('./ui.js').then(module => module.renderWidgetOrderList());
         DOM.settingsModal.classList.remove('hidden');
@@ -52,6 +55,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     DOM.saveSettingsBtn.addEventListener('click', () => {
         updateCurrency(DOM.currencySelect.value);
+
+        if (DOM.startOfWeekSelect) {
+            import('./state.js').then(module => {
+                module.updateStartOfWeek(parseInt(DOM.startOfWeekSelect.value));
+                // We don't reload the entire UI tree, we just force Dashboard metadata to repaint over
+                import('./api.js').then(apiModule => {
+                    apiModule.renderDashboardData();
+                    import('./ui.js').then(uiModule => {
+                        uiModule.renderCalendar();
+                        uiModule.renderChart();
+                    });
+                });
+            });
+        }
 
         // Harvest new widget order
         const newOrder = [];
