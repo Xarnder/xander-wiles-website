@@ -26,13 +26,9 @@ if ('serviceWorker' in navigator) {
                 console.log('ServiceWorker registration failed: ', err);
             });
 
-        // REFRESH PAGE ON CONTROLLER CHANGE
-        // This ensures the new service worker takes over immediately
-        let refreshing;
+        // Removed automatic refresh on controllerchange to prevent iOS infinite reload loops.
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (refreshing) return;
-            window.location.reload();
-            refreshing = true;
+            console.log("Service Worker updated its controller.");
         });
     });
 }
