@@ -45,6 +45,7 @@ export const DOM = {
     confirmCancelBtn: document.getElementById('confirm-cancel-btn'),
     widgetOrderList: document.getElementById('widget-order-list'),
     showTitlesToggle: document.getElementById('show-titles-toggle'),
+    continueSessionToggle: document.getElementById('continue-session-toggle'),
     ganttChart: document.getElementById('gantt-chart'),
     exportBtn: document.getElementById('export-btn'),
     exportCsvBtn: document.getElementById('export-csv-btn'),

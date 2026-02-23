@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.settingsBtn.addEventListener('click', () => {
         DOM.currencySelect.value = state.currentCurrency;
         DOM.showTitlesToggle.checked = state.showWidgetTitles;
+        DOM.continueSessionToggle.checked = state.continueSessionOnClose;
         if (DOM.startOfWeekSelect) {
             DOM.startOfWeekSelect.value = state.startOfWeek.toString();
         }
@@ -78,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
         import('./state.js').then(module => {
             module.updateWidgetOrder(newOrder);
             module.updateWidgetTitles(DOM.showTitlesToggle.checked);
+            module.updateContinueSession(DOM.continueSessionToggle.checked);
         });
 
         applyWidgetOrder();
@@ -355,4 +357,35 @@ document.addEventListener('DOMContentLoaded', () => {
             URL.revokeObjectURL(url);
         });
     }
+
+    // Handle Tab Close Session Logic
+    window.addEventListener('beforeunload', (e) => {
+        if (!state.continueSessionOnClose && state.startTime) {
+            // Calculate session data so far and save to local storage
+            const durationMs = Date.now() - state.startTime;
+            const rate = state.currentSessionRate || 0;
+            const hours = durationMs / (1000 * 60 * 60);
+            const earnings = hours * rate;
+
+            const pendingSession = {
+                startTime: state.startTime,
+                endTime: Date.now(),
+                durationMs: durationMs,
+                rate: rate,
+                earnings: earnings,
+                company: state.currentCompany,
+                project: state.currentProject,
+                focused: true // assume true if tracked via main timer
+            };
+
+            // Save pending session
+            localStorage.setItem('work_tracker_pending_session', JSON.stringify(pendingSession));
+
+            // Clean up standard timer storage so it doesn't resume automatically
+            localStorage.removeItem('work_tracker_start');
+            localStorage.removeItem('work_tracker_rate');
+            localStorage.removeItem('work_tracker_company');
+            localStorage.removeItem('work_tracker_project');
+        }
+    });
 });
