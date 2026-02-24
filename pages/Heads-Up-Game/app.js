@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const timeSelect = document.getElementById('time-select');
     const sensitivitySelect = document.getElementById('sensitivity-select');
     const tiltToggle = document.getElementById('tilt-toggle');
+    const randomizeToggle = document.getElementById('randomize-toggle');
     const soundToggle = document.getElementById('sound-toggle');
     const alertModal = document.getElementById('alert-modal');
     const alertCloseBtn = document.getElementById('alert-close-btn');
@@ -41,11 +42,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let tiltCooldown = false;
     let hasTiltedUp = false;
     let hasTiltedDown = false;
+    let currentWordStartTime = 0;
+    let answerTimes = [];
 
     // --- Settings State ---
     let settingGameTime = 60;
     let settingSensitivity = 45; // angle threshold
     let settingTiltEnabled = true;
+    let settingRandomizeEnabled = true;
     let settingSoundEnabled = true;
 
     // --- Audio System ---
@@ -118,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
             settingGameTime = parseInt(timeSelect.value);
             settingSensitivity = parseInt(sensitivitySelect.value);
             settingTiltEnabled = tiltToggle.checked;
+            settingRandomizeEnabled = randomizeToggle.checked;
             settingSoundEnabled = soundToggle.checked;
 
             settingsScreen.classList.add('hidden');
@@ -140,9 +145,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Split by new line, clean up empty strings
         words = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
 
-        // Shuffle words randomly
-        words.sort(() => Math.random() - 0.5);
-        console.log("🔵 [DEBUG] Words loaded and shuffled:", words);
+        // Shuffle words dynamically based on setting
+        if (settingRandomizeEnabled) {
+            words.sort(() => Math.random() - 0.5);
+            console.log("🔵 [DEBUG] Words loaded and shuffled.");
+        } else {
+            console.log("🔵 [DEBUG] Words loaded in original order.");
+        }
 
         // Request Device Orientation Permissions (Required for iOS 13+)
         if (typeof window.DeviceOrientationEvent !== 'undefined' && typeof window.DeviceOrientationEvent.requestPermission === 'function') {
@@ -176,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
         score = 0;
         timer = settingGameTime;
         isPlaying = true;
+        answerTimes = [];
 
         // Initialize Timer Display
         updateTimerDisplay();
@@ -216,13 +226,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         currentWordEl.innerText = words[currentWordIndex];
+        currentWordStartTime = performance.now();
         console.log(`🔵 [DEBUG] Displaying word: ${words[currentWordIndex]}`);
     }
 
     // --- Actions ---
+    function recordAnswerTime() {
+        const timeTakenMs = performance.now() - currentWordStartTime;
+        answerTimes.push(timeTakenMs / 1000); // Convert to seconds
+    }
+
     function markCorrect() {
         if (!isPlaying || tiltCooldown) return;
         console.log("🟢 [DEBUG] Action: CORRECT. Word was:", words[currentWordIndex]);
+        recordAnswerTime();
         playSound('correct');
         score++;
         triggerVisualFeedback('correct');
@@ -232,6 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function markSkip() {
         if (!isPlaying || tiltCooldown) return;
         console.log("🟠 [DEBUG] Action: SKIP. Word was:", words[currentWordIndex]);
+        recordAnswerTime();
         playSound('skip');
         triggerVisualFeedback('skip');
         advanceGame();
@@ -344,7 +362,18 @@ document.addEventListener('DOMContentLoaded', () => {
             percentage = Math.round((score / totalPlayed) * 100);
         }
 
-        finalStatsEl.innerText = `${score} correct out of ${totalPlayed} (${percentage}%)`;
+        let statsHtml = `<div>${score} correct out of ${totalPlayed} (${percentage}%)</div>`;
+
+        if (answerTimes.length > 0) {
+            const fastestTime = Math.min(...answerTimes).toFixed(1);
+            const sumTimes = answerTimes.reduce((a, b) => a + b, 0);
+            const averageTime = (sumTimes / answerTimes.length).toFixed(1);
+
+            statsHtml += `<span>Fastest Guess: ${fastestTime}s</span>`;
+            statsHtml += `<span>Avg. Time per Word: ${averageTime}s</span>`;
+        }
+
+        finalStatsEl.innerHTML = statsHtml;
     }
 
     // --- Restart ---
