@@ -1,0 +1,247 @@
+/* Base Resets */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Outfit', sans-serif;
+}
+
+body {
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    color: #ffffff;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Background Glowing Orbs */
+.orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: -1;
+    opacity: 0.6;
+    animation: drift 20s infinite alternate ease-in-out;
+}
+
+.orb-1 {
+    width: 300px;
+    height: 300px;
+    background: #8a2be2;
+    top: 10%;
+    left: 20%;
+}
+
+.orb-2 {
+    width: 400px;
+    height: 400px;
+    background: #00d2ff;
+    bottom: 10%;
+    right: 15%;
+    animation-delay: -5s;
+}
+
+.orb-3 {
+    width: 250px;
+    height: 250px;
+    background: #ff007f;
+    top: 50%;
+    left: 60%;
+    animation-delay: -10s;
+}
+
+/* Anti-gravity Animations */
+@keyframes drift {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    50% {
+        transform: translate(30px, -50px) scale(1.1);
+    }
+
+    100% {
+        transform: translate(-30px, 20px) scale(0.9);
+    }
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-15px);
+    }
+}
+
+.float-animation {
+    animation: float 6s ease-in-out infinite;
+}
+
+/* App Container */
+.app-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    width: 100%;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+/* Glassmorphism Card */
+.glass-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    border-radius: 24px;
+    padding: 40px;
+    width: 100%;
+    max-width: 600px;
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.glass-card:hover {
+    box-shadow: 0 12px 40px 0 rgba(255, 255, 255, 0.1);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Typography & Inputs */
+h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    font-weight: 800;
+}
+
+p {
+    font-size: 1.1rem;
+    margin-bottom: 20px;
+    opacity: 0.8;
+}
+
+textarea {
+    width: 100%;
+    height: 150px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    resize: none;
+    font-size: 1rem;
+    outline: none;
+}
+
+textarea:focus {
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Neon Buttons */
+.neon-btn {
+    background: linear-gradient(90deg, #bb00ff, #00d2ff);
+    border: none;
+    padding: 15px 40px;
+    color: white;
+    font-size: 1.2rem;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 210, 255, 0.4);
+    transition: all 0.3s ease;
+}
+
+.neon-btn:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(0, 210, 255, 0.6);
+}
+
+/* Gameplay Screen (Landscape Optimized) */
+#play-screen {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 900px;
+    height: 80vh;
+    padding: 20px;
+}
+
+.word-display-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#current-word {
+    font-size: 4rem;
+    font-weight: 800;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+    margin: 20px 0;
+}
+
+/* Side Fallback Buttons */
+.side-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+    font-weight: 800;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.8rem;
+}
+
+.skip-btn {
+    border-color: #ff4b4b;
+}
+
+.skip-btn:active,
+.flash-red {
+    background: rgba(255, 75, 75, 0.4) !important;
+    box-shadow: 0 0 30px #ff4b4b;
+}
+
+.correct-btn {
+    border-color: #00e676;
+}
+
+.correct-btn:active,
+.flash-green {
+    background: rgba(0, 230, 118, 0.4) !important;
+    box-shadow: 0 0 30px #00e676;
+}
+
+/* Responsive adjustments for phones */
+@media (max-width: 768px) {
+    #current-word {
+        font-size: 2.5rem;
+    }
+
+    .side-btn {
+        width: 60px;
+        height: 60px;
+        font-size: 0.6rem;
+    }
+}

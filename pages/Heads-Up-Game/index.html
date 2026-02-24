@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Heads Up! Glassmorphism Edition</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Google Fonts for Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <!-- Global Website Header Stylesheet -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    
+    <!-- Game Specific Stylesheet -->
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+    <!-- Global Navigation Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Background Orbs -->
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <!-- Main App Container -->
+    <main class="app-container">
+        
+        <!-- Screen 1: Setup -->
+        <div id="setup-screen" class="glass-card float-animation">
+            <h1>Heads Up!</h1>
+            <p>Paste your list of words below (one per line):</p>
+            <textarea id="word-list" placeholder="Apple&#10;Banana&#10;Eiffel Tower&#10;Spider-Man"></textarea>
+            <button id="start-btn" class="neon-btn">Start Game</button>
+        </div>
+
+        <!-- Screen 2: Game Play -->
+        <div id="play-screen" class="glass-card hidden">
+            <!-- Fallback Buttons -->
+            <button id="skip-btn" class="side-btn skip-btn">SKIP<br>▼</button>
+            
+            <div class="word-display-container">
+                <p id="timer">Time: 60s</p>
+                <h2 id="current-word">Word</h2>
+                <p id="instruction-text">Tilt UP = Correct | Tilt DOWN = Skip</p>
+            </div>
+
+            <button id="correct-btn" class="side-btn correct-btn">CORRECT<br>▲</button>
+        </div>
+
+        <!-- Screen 3: Game Over -->
+        <div id="end-screen" class="glass-card hidden float-animation">
+            <h1>Game Over!</h1>
+            <h2 id="final-score">Score: 0</h2>
+            <ul id="results-list"></ul>
+            <button id="restart-btn" class="neon-btn">Play Again</button>
+        </div>
+
+    </main>
+
+    <!-- Game Specific Script -->
+    <script src="app.js"></script>
+</body>
+</html>
