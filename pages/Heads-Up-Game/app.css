@@ -7,6 +7,7 @@
 }
 
 body {
+    background-color: #0f0c29;
     background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
     color: #ffffff;
     min-height: 100vh;
@@ -168,15 +169,141 @@ textarea:focus {
     box-shadow: 0 8px 25px rgba(0, 210, 255, 0.6);
 }
 
+.start-top-btn {
+    margin-bottom: 30px;
+    width: 100%;
+}
+
+.setup-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.neon-btn.secondary {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.neon-btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+}
+
+/* Settings Screen */
+#settings-screen h2 {
+    font-size: 2rem;
+    margin-bottom: 30px;
+    font-weight: 800;
+}
+
+.setting-group {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    margin-bottom: 20px;
+}
+
+.setting-group label {
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.glass-input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 12px 15px;
+    border-radius: 12px;
+    font-size: 1rem;
+    outline: none;
+    appearance: none;
+    cursor: pointer;
+}
+
+.glass-input option {
+    background: #24243e;
+    color: #fff;
+}
+
+.glass-input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.checkbox-group {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 30px;
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.checkbox-group input[type="checkbox"]:checked::after {
+    content: "✔";
+    color: #00d2ff;
+    font-size: 14px;
+}
+
+/* Custom Alert & Instructions Modal */
+#alert-modal,
+#instructions-modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 400px;
+    z-index: 1000;
+}
+
+.instructions-list {
+    list-style: none;
+    text-align: left;
+    margin-bottom: 30px;
+}
+
+.instructions-list li {
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+    line-height: 1.5;
+    opacity: 0.9;
+}
+
+.stats-text {
+    font-size: 1.2rem;
+    color: #00d2ff;
+    margin-top: 15px;
+    margin-bottom: 30px;
+    font-weight: 600;
+}
+
 /* Gameplay Screen (Landscape Optimized) */
 #play-screen {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
-    max-width: 900px;
+    max-width: 1000px;
+    width: 100%;
     height: 80vh;
-    padding: 20px;
+    padding: 10px;
+    gap: 15px;
 }
 
 .word-display-container {
@@ -187,19 +314,35 @@ textarea:focus {
     align-items: center;
 }
 
+#timer {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #00d2ff;
+    text-shadow: 0 0 10px rgba(0, 210, 255, 0.4);
+    margin-bottom: 10px;
+}
+
 #current-word {
     font-size: 4rem;
     font-weight: 800;
     text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
     margin: 20px 0;
+    text-align: center;
+}
+
+#instruction-text {
+    font-size: 1.2rem;
+    opacity: 0.8;
+    transition: opacity 0.5s ease;
 }
 
 /* Side Fallback Buttons */
 .side-btn {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    width: 25vw;
+    max-width: 200px;
+    height: 100%;
+    border-radius: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.05);
     color: white;
     font-weight: 800;
@@ -210,7 +353,7 @@ textarea:focus {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    font-size: 0.8rem;
+    font-size: 1.5rem;
 }
 
 .skip-btn {
@@ -234,14 +377,28 @@ textarea:focus {
 }
 
 /* Responsive adjustments for phones */
-@media (max-width: 768px) {
+@media (max-width: 768px),
+(orientation: portrait) {
     #current-word {
         font-size: 2.5rem;
     }
+}
+
+@media (orientation: portrait) {
+    #play-screen {
+        flex-direction: column;
+        height: 85vh;
+    }
 
     .side-btn {
-        width: 60px;
-        height: 60px;
-        font-size: 0.6rem;
+        width: 100%;
+        max-width: none;
+        height: 15vh;
+        flex-direction: row;
+        gap: 10px;
+    }
+
+    .side-btn br {
+        display: none;
     }
 }
