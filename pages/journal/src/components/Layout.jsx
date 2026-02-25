@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon } from 'lucide-react';
+import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History } from 'lucide-react';
 import DirectoryImporter from './DirectoryImporter';
 import DataRepair from './DataRepair';
 import BackupOptions from './BackupOptions';
@@ -111,6 +111,14 @@ export default function Layout() {
                         </button>
 
                         <button
+                            onClick={() => navigate('/memories')}
+                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/memories' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
+                            title="Memories"
+                        >
+                            <History className="h-5 w-5" />
+                        </button>
+
+                        <button
                             onClick={() => navigate('/pdf-export')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/pdf-export' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Export PDF"
@@ -152,6 +160,7 @@ export default function Layout() {
                                 <NavItem path="/month" icon={List} label="Month View" onClick={() => setIsMobileMenuOpen(false)} />
                                 <NavItem path="/images" icon={ImageIcon} label="Photos" onClick={() => setIsMobileMenuOpen(false)} />
                                 <NavItem path="/stats" icon={BarChart} label="Stats" onClick={() => setIsMobileMenuOpen(false)} />
+                                <NavItem path="/memories" icon={History} label="Memories" onClick={() => setIsMobileMenuOpen(false)} />
                                 <NavItem path="/pdf-export" icon={FileDown} label="PDF Export" onClick={() => setIsMobileMenuOpen(false)} />
                             </div>
 

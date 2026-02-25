@@ -12,6 +12,7 @@ import EntryEditor from './components/EntryEditor';
 import StatsView from './components/StatsView';
 import PdfExportView from './components/PdfExportView';
 import ImageView from './components/ImageView';
+import MemoriesView from './components/MemoriesView';
 
 function PrivateRoute({ children }) {
   const { currentUser } = useAuth();
@@ -38,6 +39,7 @@ function App() {
               <Route path="/month" element={<MonthView />} />
               <Route path="/images" element={<ImageView />} />
               <Route path="/stats" element={<StatsView />} />
+              <Route path="/memories" element={<MemoriesView />} />
               <Route path="/pdf-export" element={<PdfExportView />} />
             </Route>
           </Routes>
