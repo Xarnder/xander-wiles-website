@@ -400,7 +400,7 @@ input[type="range"]::-webkit-slider-thumb {
     height: 0;
 }
 
-.game-controls .toggle-label {
+.toggle-label {
     margin-left: 10px;
     font-size: 0.9rem;
     color: var(--text-main);
@@ -592,4 +592,192 @@ input:not(:checked)~.toggle-label {
     opacity: 1;
     transform: translateX(-50%) translateY(-10px);
     /* Float up */
+}
+
+/* --- Extracted Inline Styles --- */
+.toggle-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.toggle-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.upload-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    justify-content: center;
+}
+
+#upload-error {
+    color: #ff4081;
+    font-size: 0.8rem;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.preview-container {
+    margin-top: 15px;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+/* --- Responsive Desktop UI Panel --- */
+@media (min-width: 1024px) {
+    .ui-panel {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+        padding: 10px 20px;
+        max-width: 95%;
+        border-radius: 20px;
+        margin-bottom: 10px;
+    }
+
+    #title-text {
+        margin-bottom: 0;
+        margin-right: 15px;
+        white-space: nowrap;
+    }
+
+    .toggle-container {
+        flex-direction: row;
+        margin-bottom: 0;
+        gap: 15px;
+    }
+
+    .toggle-row {
+        flex-wrap: nowrap;
+        gap: 15px;
+    }
+
+    .controls-col {
+        flex-direction: row;
+        width: auto;
+        gap: 15px;
+    }
+
+    .slider-group {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        position: relative;
+    }
+
+    .upload-row {
+        margin-bottom: 0;
+    }
+
+    .preview-container {
+        margin-top: 0;
+        width: auto;
+    }
+
+    /* Shrink the canvas on desktop so it sits inline */
+    #preview-canvas {
+        max-height: 48px;
+        width: auto;
+        margin: 0;
+    }
+
+    #upload-error {
+        position: absolute;
+        bottom: -20px;
+        left: 0;
+        width: 100%;
+        margin: 0;
+        font-size: 0.7rem;
+    }
+
+    #game-controls {
+        margin-top: 0;
+        margin-bottom: 0;
+        padding: 0;
+        width: auto;
+    }
+}
+
+/* --- Slim Mobile Scaling --- */
+@media (max-width: 480px) {
+    .ui-panel {
+        padding: 1rem 1rem;
+        gap: 10px;
+        width: 100%;
+        border-radius: 20px;
+    }
+
+    h1#title-text {
+        font-size: 1.2rem;
+        margin-bottom: 0.8rem;
+    }
+
+    .glass-btn {
+        padding: 10px 20px;
+        font-size: 0.85rem;
+    }
+
+    .glass-btn.small {
+        padding: 8px 16px;
+        font-size: 0.8rem;
+    }
+
+    .toggle-switch {
+        height: 32px;
+        padding: 3px 10px 3px 3px;
+    }
+
+    .slider {
+        width: 40px;
+        height: 24px;
+    }
+
+    .slider:before {
+        height: 18px;
+        width: 18px;
+        bottom: 3px;
+        left: 3px;
+    }
+
+    input:checked+.slider:before {
+        transform: translateX(16px);
+    }
+
+    .slider:after,
+    #mute-music-toggle+.slider:after,
+    #mute-sfx-toggle+.slider:after,
+    #hide-image-toggle+.slider:after {
+        font-size: 10px;
+    }
+
+    .toggle-label {
+        font-size: 0.8rem;
+        margin-left: 8px;
+    }
+
+    #game-controls {
+        gap: 10px;
+        padding: 0 10px;
+    }
+
+    .timer-display {
+        font-size: 1.2rem;
+        padding: 4px 10px;
+        min-width: 60px;
+    }
+
+    .toggle-row,
+    .upload-row {
+        gap: 10px;
+    }
 }

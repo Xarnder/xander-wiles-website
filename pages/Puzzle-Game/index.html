@@ -47,16 +47,15 @@
             <h1 id="title-text">Puzzle Game</h1>
 
             <!-- Romance Mode Toggle (Visible Always) -->
-            <div class="toggle-container"
-                style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;">
+            <div class="toggle-container">
 
                 <!-- Row for Main Toggles -->
-                <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+                <div class="toggle-row">
                     <!-- Romance Toggle -->
                     <label class="toggle-switch">
                         <input type="checkbox" id="romance-toggle">
                         <span class="slider round"></span>
-                        <span class="toggle-label" id="romance-label" style="margin-left: 15px;">Romance Mode:
+                        <span class="toggle-label" id="romance-label">Romance Mode:
                             Off</span>
                     </label>
 
@@ -64,28 +63,28 @@
                     <label id="hide-image-container" class="toggle-switch">
                         <input type="checkbox" id="hide-image-toggle">
                         <span class="slider round"></span>
-                        <span class="toggle-label" style="margin-left: 15px;">Hide Image</span>
+                        <span class="toggle-label">Hide Image</span>
                     </label>
                 </div>
 
                 <!-- Audio Toggles Row -->
-                <div style="display: flex; gap: 20px; justify-content: center;">
+                <div class="toggle-row">
                     <label class="toggle-switch">
                         <input type="checkbox" id="mute-music-toggle">
                         <span class="slider round"></span>
-                        <span class="toggle-label" style="margin-left: 10px;">Mute Music</span>
+                        <span class="toggle-label">Mute Music</span>
                     </label>
                     <label class="toggle-switch">
                         <input type="checkbox" id="mute-sfx-toggle">
                         <span class="slider round"></span>
-                        <span class="toggle-label" style="margin-left: 10px;">Mute SFX</span>
+                        <span class="toggle-label">Mute SFX</span>
                     </label>
                 </div>
             </div>
 
             <div class="controls-col">
                 <div class="slider-group">
-                    <div style="display: flex; gap: 10px; margin-bottom: 15px; justify-content: center;">
+                    <div class="upload-row">
                         <label for="image-upload" class="glass-btn small" style="justify-content: center; flex: 1;">
                             <span>📁</span> Upload Image
                         </label>
@@ -94,13 +93,12 @@
                         </button>
                     </div>
                     <input type="file" id="image-upload" accept="image/png, image/jpeg, image/webp" class="hidden">
-                    <div id="upload-error" class="hidden"
-                        style="color: #ff4081; font-size: 0.8rem; margin-bottom: 10px; text-align: center;"></div>
+                    <div id="upload-error" class="hidden"></div>
 
                     <label for="difficulty">Puzzple Piece Size: <span id="difficulty-val">4</span></label>
                     <input type="range" id="difficulty" min="3" max="15" value="4">
                     <!-- Preview Canvas -->
-                    <div style="margin-top: 15px; display: flex; justify-content: center; width: 100%;">
+                    <div class="preview-container">
                         <canvas id="preview-canvas" width="800" height="600"
                             style="border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 800px; height: auto;"></canvas>
                     </div>
