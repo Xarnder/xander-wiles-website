@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const soundToggle = document.getElementById('sound-toggle');
     const showButtonsToggle = document.getElementById('show-buttons-toggle');
     const showGoBackToggle = document.getElementById('show-goback-toggle');
+    const showPastWordToggle = document.getElementById('show-pastword-toggle');
     const alertModal = document.getElementById('alert-modal');
     const alertCloseBtn = document.getElementById('alert-close-btn');
     const alertMessage = document.getElementById('alert-message');
@@ -73,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingSoundEnabled = true;
     let settingShowButtons = true;
     let settingShowGoBack = true;
+    let settingShowPastWord = true;
 
     // --- Audio System ---
     const correctAudio = new Audio('Correct.mp3');
@@ -133,6 +135,27 @@ document.addEventListener('DOMContentLoaded', () => {
         ],
         "📢 Activists & Other Public Figures": [
             "Greta Thunberg", "Jeffrey Epstein", "Andrew Tate"
+        ],
+        "📦 Common Objects": [
+            "Apple", "Backpack", "Banana", "Bed", "Bookshelf", "Bus", "Car", "Chair", "Coffee Mug", "Couch", "Hat", "Keys", "Lamp", "Laptop", "Microwave", "Necklace", "Pen", "Pencil", "Phone", "Refrigerator", "Ring", "Shoes", "Sock", "Sunglasses", "Table", "Television", "Toaster", "Umbrella", "Wallet", "Watch"
+        ],
+        "🏅 Actual Sports": [
+            "Athletics", "Badminton", "Baseball", "Basketball", "Boxing", "Cricket", "Cycling", "Football", "Golf", "Gymnastics", "Hockey", "Rowing", "Rugby", "Soccer", "Swimming", "Table Tennis", "Tennis", "Volleyball", "Wrestling"
+        ],
+        "🧗 Extreme Sports": [
+            "BMX", "Base Jumping", "Bungee Jumping", "Cave Diving", "Kite Surfing", "Motocross", "Paragliding", "Parkour", "Rock Climbing", "Scuba Diving", "Skateboarding", "Skydiving", "Snowboarding", "Surfing", "Wakeboarding"
+        ],
+        "🎉 Events & Celebrations": [
+            "Anniversary", "Baby Shower", "Bachelor Party", "Bachelorette Party", "Bar Mitzvah", "Birthday Party", "Engagement", "Funeral", "Graduation", "Housewarming", "Prom", "Quinceañera", "Retirement Party", "Reunion", "Wedding"
+        ],
+        "🚀 Space & Astronomy": [
+            "Asteroid", "Black Hole", "Comet", "Constellation", "Dwarf Planet", "Eclipse", "Galaxy", "Jupiter", "Mars", "Mercury", "Meteor", "Milky Way", "Moon", "Neptune", "Orbit", "Pluto", "Saturn", "Solar System", "Star", "Sun", "Supernova", "Telescope", "Uranus", "Venus"
+        ],
+        "🦄 Mythical Creatures": [
+            "Banshee", "Basilisk", "Centaur", "Cerberus", "Chimera", "Cyclops", "Dragon", "Fairy", "Gargoyle", "Goblin", "Gorgon", "Griffin", "Hydra", "Kraken", "Leprechaun", "Manticore", "Mermaid", "Minotaur", "Pegasus", "Phoenix", "Sasquatch", "Siren", "Sphinx", "Troll", "Unicorn", "Vampire", "Werewolf", "Yeti", "Zombie"
+        ],
+        "💼 Professions & Jobs": [
+            "Accountant", "Actor", "Architect", "Artist", "Astronaut", "Baker", "Carpenter", "Chef", "Dentist", "Doctor", "Electrician", "Engineer", "Farmer", "Firefighter", "Judge", "Lawyer", "Mechanic", "Musician", "Nurse", "Pilot", "Plumber", "Police Officer", "Programmer", "Scientist", "Teacher", "Veterinarian", "Writer"
         ]
     };
 
@@ -250,6 +273,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (settingsBtn) {
         settingsBtn.addEventListener('click', () => {
+            if (tiltToggle) tiltToggle.checked = settingTiltEnabled;
+            if (randomizeToggle) randomizeToggle.checked = settingRandomizeEnabled;
+            if (soundToggle) soundToggle.checked = settingSoundEnabled;
+            if (showButtonsToggle) showButtonsToggle.checked = settingShowButtons;
+            if (showGoBackToggle) showGoBackToggle.checked = settingShowGoBack;
+            if (showPastWordToggle) showPastWordToggle.checked = settingShowPastWord;
+
             setupScreen.classList.add('hidden');
             settingsScreen.classList.remove('hidden');
         });
@@ -319,6 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
             settingSoundEnabled = soundToggle.checked;
             if (showButtonsToggle) settingShowButtons = showButtonsToggle.checked;
             if (showGoBackToggle) settingShowGoBack = showGoBackToggle.checked;
+            if (showPastWordToggle) settingShowPastWord = showPastWordToggle.checked;
 
             settingsScreen.classList.add('hidden');
             setupScreen.classList.remove('hidden');
@@ -441,8 +472,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Setup the past word text (if we have one)
-        if (currentWordIndex > 0 && pastWordEl) {
+        // Setup the past word text (if we have one and setting is enabled)
+        if (settingShowPastWord && currentWordIndex > 0 && pastWordEl) {
             pastWordEl.innerText = words[currentWordIndex - 1];
             pastWordEl.classList.remove('hidden');
         } else if (pastWordEl) {
@@ -536,7 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentWordIndex++;
 
         // Trigger transition out animation
-        if (currentWordEl && pastWordEl) {
+        if (settingShowPastWord && currentWordEl && pastWordEl) {
             currentWordEl.classList.add('transition-up');
         }
 
