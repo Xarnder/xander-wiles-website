@@ -48,8 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const reviewWordsBtn = document.getElementById('review-words-btn');
     const reviewModal = document.getElementById('review-modal');
     const closeReviewBtn = document.getElementById('close-review-btn');
+    const mainMenuReviewBtn = document.getElementById('main-menu-review-btn');
     const correctWordsList = document.getElementById('correct-words-list');
     const skippedWordsList = document.getElementById('skipped-words-list');
+    const lastGameStatsContainer = document.getElementById('last-game-stats-container');
+    const lastGameScoreEl = document.getElementById('last-game-score');
+    const lastGameDetailedStatsEl = document.getElementById('last-game-detailed-stats');
 
     // --- Game State Variables ---
     let words = [];
@@ -82,6 +86,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const skipAudio = new Audio('Skip.mp3');
     const endAudio = new Audio('End.mp3');
     const countdownAudio = new Audio('Countdown.mp3');
+    const uiAudio = new Audio('ui-sound.mp3');
+    const thirtySecAudio = new Audio('30-Seconds-Remaining.mp3');
+    const oneMinAudio = new Audio('1-minute-remaing.mp3');
+    const twoMinAudio = new Audio('2-minutes-remaing.mp3');
 
     function playSound(type) {
         if (!settingSoundEnabled) return;
@@ -98,6 +106,18 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (type === 'countdown') {
             // Don't reset time for countdown so it plays smoothly from where it is
             countdownAudio.play().catch(e => console.log('Audio error:', e));
+        } else if (type === '30sec') {
+            thirtySecAudio.currentTime = 0;
+            thirtySecAudio.play().catch(e => console.log('Audio error:', e));
+        } else if (type === '1min') {
+            oneMinAudio.currentTime = 0;
+            oneMinAudio.play().catch(e => console.log('Audio error:', e));
+        } else if (type === '2min') {
+            twoMinAudio.currentTime = 0;
+            twoMinAudio.play().catch(e => console.log('Audio error:', e));
+        } else if (type === 'ui') {
+            uiAudio.currentTime = 0;
+            uiAudio.play().catch(e => console.log('Audio error:', e));
         }
     }
 
@@ -105,8 +125,48 @@ document.addEventListener('DOMContentLoaded', () => {
         if (type === 'countdown') {
             countdownAudio.pause();
             countdownAudio.currentTime = 0;
+        } else if (type === 'all') {
+            countdownAudio.pause();
+            thirtySecAudio.pause();
+            oneMinAudio.pause();
+            twoMinAudio.pause();
+            uiAudio.pause();
+            countdownAudio.currentTime = 0;
+            thirtySecAudio.currentTime = 0;
+            oneMinAudio.currentTime = 0;
+            twoMinAudio.currentTime = 0;
+            uiAudio.currentTime = 0;
         }
     }
+
+    // iOS Safari requires sound to be triggered by a direct user interaction first
+    let audioInitialized = false;
+    function initializeAudio() {
+        if (audioInitialized) return;
+
+        // Play and immediately pause all sounds silently
+        const sounds = [correctAudio, skipAudio, endAudio, countdownAudio, uiAudio, thirtySecAudio, oneMinAudio, twoMinAudio];
+        sounds.forEach(audio => {
+            audio.volume = 0; // mute temporarily
+            audio.play().then(() => {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.volume = 1; // restore volume
+            }).catch(e => console.log('Audio init error:', e));
+        });
+        audioInitialized = true;
+    }
+
+    // Global UI Click Sound logic
+    document.addEventListener('click', (e) => {
+        const btn = e.target.tagName === 'BUTTON' ? e.target : e.target.closest('button');
+        if (btn) {
+            if (btn.id === 'skip-btn' || btn.id === 'correct-btn' || btn.classList.contains('category-btn')) {
+                return; // Exclude gameplay/category ones that don't need UI sound
+            }
+            playSound('ui');
+        }
+    });
 
     // --- Event Listeners: Settings & Interaction ---
     const categoriesData = {
@@ -324,6 +384,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (mainMenuReviewBtn) {
+        mainMenuReviewBtn.addEventListener('click', () => {
+            reviewModal.classList.remove('hidden');
+        });
+    }
+
     if (closeSettingsBtn) {
         // Toggle Custom Time Input
         timeSelect.addEventListener('change', () => {
@@ -359,6 +425,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     startBtn.addEventListener('click', async () => {
         console.log("🔵 [DEBUG] Start button clicked.");
+
+        // Initialize audio payload for Safari iOS
+        if (settingSoundEnabled) {
+            initializeAudio();
+        }
 
         // Parse user input
         const rawText = wordListInput.value.trim();
@@ -451,7 +522,13 @@ document.addEventListener('DOMContentLoaded', () => {
             timer--;
             updateTimerDisplay();
 
-            if (timer === 10) {
+            if (timer === 120) {
+                playSound('2min');
+            } else if (timer === 60) {
+                playSound('1min');
+            } else if (timer === 30) {
+                playSound('30sec');
+            } else if (timer === 10) {
                 playSound('countdown');
             }
 
@@ -659,18 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- End Game Flow ---
-    function endGame() {
-        console.log(`🔴 [DEBUG] Game Over. Final Score: ${score}`);
-        isPlaying = false;
-        clearInterval(gameInterval);
-
-        stopSound('countdown');
-        playSound('end');
-
-        playScreen.classList.add('hidden');
-        endScreen.classList.remove('hidden');
-        finalScoreEl.innerText = `Score: ${score}`;
-
+    function generateStatsHtml() {
         const totalPlayed = currentWordIndex;
         let percentage = 0;
         if (totalPlayed > 0) {
@@ -687,8 +753,22 @@ document.addEventListener('DOMContentLoaded', () => {
             statsHtml += `<span>Fastest Guess: ${fastestTime}s</span>`;
             statsHtml += `<span>Avg. Time per Word: ${averageTime}s</span>`;
         }
+        return statsHtml;
+    }
 
-        finalStatsEl.innerHTML = statsHtml;
+    function endGame() {
+        console.log(`🔴 [DEBUG] Game Over. Final Score: ${score}`);
+        isPlaying = false;
+        clearInterval(gameInterval);
+
+        stopSound('all');
+        playSound('end');
+
+        playScreen.classList.add('hidden');
+        endScreen.classList.remove('hidden');
+        finalScoreEl.innerText = `Score: ${score}`;
+
+        finalStatsEl.innerHTML = generateStatsHtml();
 
         // Populate Review Lists
         correctWordsList.innerHTML = '';
@@ -708,17 +788,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Restart ---
+    function updateMainMenuStats() {
+        lastGameScoreEl.innerText = `Score: ${score}`;
+        lastGameDetailedStatsEl.innerHTML = generateStatsHtml();
+        lastGameStatsContainer.classList.remove('hidden');
+    }
+
     restartBtn.addEventListener('click', () => {
-        stopSound('countdown');
+        stopSound('all');
         endScreen.classList.add('hidden');
+        updateMainMenuStats();
         setupScreen.classList.remove('hidden');
         // Purposely NOT clearing wordListInput.value so words persist for the next round
     });
 
     if (restartRemoveBtn) {
         restartRemoveBtn.addEventListener('click', () => {
-            stopSound('countdown');
+            stopSound('all');
             endScreen.classList.add('hidden');
+            updateMainMenuStats();
             setupScreen.classList.remove('hidden');
 
             // Remove played words from the textarea
@@ -730,6 +818,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const remainingWords = originalWords.filter(w => !playedWordsText.includes(w.toLowerCase()));
 
             wordListInput.value = remainingWords.join('\n');
+            updateWordCount();
         });
     }
 });

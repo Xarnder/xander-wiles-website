@@ -47,7 +47,7 @@
     <main class="app-container">
 
         <!-- Screen 1: Setup -->
-        <div id="setup-screen" class="glass-card float-animation">
+        <div id="setup-screen" class="glass-card">
             <h1>Shout it Out!</h1>
             <button id="start-btn" class="neon-btn start-top-btn">Start Game</button>
             <p>Paste your list of words below (one per line):</p>
@@ -60,10 +60,24 @@
                 <button id="categories-btn" class="neon-btn secondary">Categories</button>
                 <button id="settings-btn" class="neon-btn secondary">Settings</button>
             </div>
+
+            <!-- Last Game Stats Container -->
+            <div id="last-game-stats-container" class="hidden"
+                style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <h3 style="margin-bottom: 10px; opacity: 0.8; font-size: 1.1rem;">Last Game Stats</h3>
+                <div id="last-game-full-stats" style="margin-bottom: 20px;">
+                    <p id="last-game-score"
+                        style="font-size: 1.5rem; font-weight: bold; color: #00d2ff; margin-bottom: 5px;">Score: 0</p>
+                    <div id="last-game-detailed-stats"
+                        style="font-size: 0.9rem; opacity: 0.8; display: flex; flex-direction: column; gap: 5px;"></div>
+                </div>
+                <button id="main-menu-review-btn" class="neon-btn secondary" style="width: 100%;">Review Last Game
+                    Words</button>
+            </div>
         </div>
 
         <!-- Categories Modal -->
-        <div id="categories-modal" class="glass-card hidden float-animation" style="max-width: 800px;">
+        <div id="categories-modal" class="glass-card hidden" style="max-width: 800px;">
             <h2 style="margin-bottom: 30px;">Select Categories</h2>
             <div id="categories-grid" class="categories-grid"></div>
             <div class="category-actions" style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
@@ -79,7 +93,7 @@
         </div>
 
         <!-- Settings Modal -->
-        <div id="settings-screen" class="glass-card hidden float-animation">
+        <div id="settings-screen" class="glass-card hidden">
             <h2>Settings</h2>
 
             <div class="setting-group">
@@ -166,11 +180,13 @@
             <h2>Word Review</h2>
             <div class="review-lists">
                 <div class="review-column">
-                    <h3 class="correct-text">Correct</h3>
+                    <h3 class="correct-text" style="color: #00e676; text-shadow: 0 0 10px rgba(0,230,118,0.5);">Correct
+                    </h3>
                     <ul id="correct-words-list" class="word-list"></ul>
                 </div>
                 <div class="review-column">
-                    <h3 class="skip-text">Skipped</h3>
+                    <h3 class="skip-text" style="color: #ff4b4b; text-shadow: 0 0 10px rgba(255,75,75,0.5);">Skipped
+                    </h3>
                     <ul id="skipped-words-list" class="word-list"></ul>
                 </div>
             </div>
@@ -196,7 +212,7 @@
         </div>
 
         <!-- Screen 3: Game Over -->
-        <div id="end-screen" class="glass-card hidden float-animation">
+        <div id="end-screen" class="glass-card hidden">
             <h1>Game Over!</h1>
             <h2 id="final-score">Score: 0</h2>
             <p id="final-stats" class="stats-text">0 correct out of 0 (0%)</p>
