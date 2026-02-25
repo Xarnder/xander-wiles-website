@@ -346,12 +346,41 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (tiltToggle && sensitivitySelect) {
+    if (tiltToggle && sensitivitySelect && showButtonsToggle) {
         tiltToggle.addEventListener('change', (e) => {
             sensitivitySelect.disabled = !e.target.checked;
+
+            // Prevent both from being disabled
+            if (!e.target.checked) {
+                showButtonsToggle.disabled = true;
+                showButtonsToggle.parentElement.style.opacity = '0.5';
+            } else {
+                showButtonsToggle.disabled = false;
+                showButtonsToggle.parentElement.style.opacity = '1';
+            }
         });
+
+        showButtonsToggle.addEventListener('change', (e) => {
+            // Prevent both from being disabled
+            if (!e.target.checked) {
+                tiltToggle.disabled = true;
+                tiltToggle.parentElement.style.opacity = '0.5';
+            } else {
+                tiltToggle.disabled = false;
+                tiltToggle.parentElement.style.opacity = '1';
+            }
+        });
+
         // Initial state load
         sensitivitySelect.disabled = !tiltToggle.checked;
+        if (!tiltToggle.checked) {
+            showButtonsToggle.disabled = true;
+            showButtonsToggle.parentElement.style.opacity = '0.5';
+        }
+        if (!showButtonsToggle.checked) {
+            tiltToggle.disabled = true;
+            tiltToggle.parentElement.style.opacity = '0.5';
+        }
     }
 
     if (alertCloseBtn) {
