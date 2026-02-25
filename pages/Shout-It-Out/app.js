@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let tiltCooldown = false;
     let hasTiltedUp = false;
     let hasTiltedDown = false;
+    let waitingForNeutral = false;
     let currentWordStartTime = 0;
     let answerTimes = [];
     let correctWordsArr = [];
@@ -605,44 +606,42 @@ document.addEventListener('DOMContentLoaded', () => {
         const beta = event.beta;   // Front-to-back tilt [-180, 180]
         const gamma = event.gamma; // Left-to-right tilt [-90, 90]
 
-        // Debug logging (throttled visually in console depending on browser)
-        // console.log(`[DEBUG SENSORS] Beta: ${Math.round(beta)} | Gamma: ${Math.round(gamma)}`);
+        let isTiltedUp = false;
+        let isTiltedDown = false;
 
         // Heuristic for "Shout it Out" across devices (avoiding Gimbal lock on iOS)
-        // Check if device is in landscape
         if (window.innerHeight < window.innerWidth) {
-            // In landscape, holding it upright against the forehead makes |gamma| ~90.
-            // As user nods UP or DOWN, |gamma| decreases towards 0.
-            // Because of gimbal lock, beta leaps between 0 and +/-180 when passing vertical.
-            // We check if it is tilted away from vertical (|gamma| < 50).
+            // Landscape
             if (Math.abs(gamma) < 50) {
-                // If |beta| is near 0, the screen is facing the sky (Tilted UP)
-                // If |beta| is near 180, the screen is facing the floor (Tilted DOWN)
-                if (Math.abs(beta) < settingSensitivity) {
-                    console.log("📡 [DEBUG] Sensor Threshold Met: TILTED UP - Correct");
-                    hasTiltedUp = true;
-                    updateInstructions();
-                    markCorrect();
-                } else if (Math.abs(beta) > 180 - settingSensitivity) {
-                    console.log("📡 [DEBUG] Sensor Threshold Met: TILTED DOWN - Skip");
-                    hasTiltedDown = true;
-                    updateInstructions();
-                    markSkip();
-                }
+                if (Math.abs(beta) < settingSensitivity) isTiltedUp = true;
+                else if (Math.abs(beta) > 180 - settingSensitivity) isTiltedDown = true;
             }
         } else {
             // Fallback for Portrait mode
-            if (beta < settingSensitivity && beta > -settingSensitivity) {
-                console.log("📡 [DEBUG] Sensor: TILTED UP (Portrait)");
-                hasTiltedUp = true;
-                updateInstructions();
-                markCorrect();
-            } else if (beta > 180 - settingSensitivity || beta < -180 + settingSensitivity) {
-                console.log("📡 [DEBUG] Sensor: TILTED DOWN (Portrait)");
-                hasTiltedDown = true;
-                updateInstructions();
-                markSkip();
+            if (beta < settingSensitivity && beta > -settingSensitivity) isTiltedUp = true;
+            else if (beta > 180 - settingSensitivity || beta < -180 + settingSensitivity) isTiltedDown = true;
+        }
+
+        if (waitingForNeutral) {
+            // Require the phone to return outside the trigger zones to reset
+            if (!isTiltedUp && !isTiltedDown) {
+                waitingForNeutral = false;
             }
+            return;
+        }
+
+        if (isTiltedUp) {
+            console.log("📡 [DEBUG] Sensor Threshold Met: TILTED UP - Correct");
+            hasTiltedUp = true;
+            waitingForNeutral = true;
+            updateInstructions();
+            markCorrect();
+        } else if (isTiltedDown) {
+            console.log("📡 [DEBUG] Sensor Threshold Met: TILTED DOWN - Skip");
+            hasTiltedDown = true;
+            waitingForNeutral = true;
+            updateInstructions();
+            markSkip();
         }
     }
 
