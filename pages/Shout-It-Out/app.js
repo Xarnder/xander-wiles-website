@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const playScreen = document.getElementById('play-screen');
     const endScreen = document.getElementById('end-screen');
     const wordListInput = document.getElementById('word-list');
+    const wordCounterEl = document.getElementById('word-counter');
     const startBtn = document.getElementById('start-btn');
     const settingsBtn = document.getElementById('settings-btn');
     const closeSettingsBtn = document.getElementById('close-settings-btn');
@@ -24,12 +25,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const tiltToggle = document.getElementById('tilt-toggle');
     const randomizeToggle = document.getElementById('randomize-toggle');
     const soundToggle = document.getElementById('sound-toggle');
+    const showButtonsToggle = document.getElementById('show-buttons-toggle');
+    const showGoBackToggle = document.getElementById('show-goback-toggle');
     const alertModal = document.getElementById('alert-modal');
     const alertCloseBtn = document.getElementById('alert-close-btn');
     const alertMessage = document.getElementById('alert-message');
+    const goBackBtn = document.getElementById('go-back-btn');
     const instructionsBtn = document.getElementById('instructions-btn');
     const instructionsModal = document.getElementById('instructions-modal');
     const closeInstructionsBtn = document.getElementById('close-instructions-btn');
+    const pastWordEl = document.getElementById('past-word');
     const currentWordEl = document.getElementById('current-word');
     const timerEl = document.getElementById('timer');
     const instructionTextEl = document.getElementById('instruction-text');
@@ -66,11 +71,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingTiltEnabled = true;
     let settingRandomizeEnabled = true;
     let settingSoundEnabled = true;
+    let settingShowButtons = true;
+    let settingShowGoBack = true;
 
     // --- Audio System ---
     const correctAudio = new Audio('Correct.mp3');
     const skipAudio = new Audio('Skip.mp3');
     const endAudio = new Audio('End.mp3');
+    const countdownAudio = new Audio('Countdown.mp3');
 
     function playSound(type) {
         if (!settingSoundEnabled) return;
@@ -84,13 +92,23 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (type === 'end') {
             endAudio.currentTime = 0;
             endAudio.play().catch(e => console.log('Audio error:', e));
+        } else if (type === 'countdown') {
+            // Don't reset time for countdown so it plays smoothly from where it is
+            countdownAudio.play().catch(e => console.log('Audio error:', e));
+        }
+    }
+
+    function stopSound(type) {
+        if (type === 'countdown') {
+            countdownAudio.pause();
+            countdownAudio.currentTime = 0;
         }
     }
 
     // --- Event Listeners: Settings & Interaction ---
     const categoriesData = {
         "🎬 Actors & Actresses": [
-            "Adam Driver", "Adam Sandler", "Amber Heard", "Ana de Armas", "Andrew Garfield", "Anne Hathaway", "Anthony Mackie", "Anya Taylor-Joy", "Austin Butler", "Ben Affleck", "Benedict Cumberbatch", "Brad Pitt", "Bradley Cooper", "Brendan Fraser", "Caleb McLaughlin", "Charlize Theron", "Chris Evans", "Chris Hemsworth", "Chris Pine", "Christian Bale", "Cillian Murphy", "Colin Farrell", "Daisy Ridley", "Daniel Craig", "Daniel Radcliffe", "David Harbour", "Denzel Washington", "Dwayne Johnson", "Elizabeth Olsen", "Emma Stone", "Emma Watson", "Ezra Miller", "Finn Wolfhard", "Florence Pugh", "Gal Gadot", "Gaten Matarazzo", "Glen Powell", "Hailee Steinfeld", "Harrison Ford", "Henry Cavill", "Hugh Jackman", "Jacob Elordi", "Jamie Lee", "Jason Momoa", "Jenna Ortega", "Jennifer Coolidge", "Jennifer Lawrence", "Jeremy Renner", "Jessica Chastain", "Joaquin Phoenix", "Joe Keery", "Johnny Depp", "Jonah Hill", "Ke Huy Quan", "Keanu Reeves", "Leonardo DiCaprio", "Margot Robbie", "Mark Ruffalo", "Matt Damon", "Matthew McConaughey", "Maya Hawke", "Michelle Yeoh", "Millie Bobby Brown", "Noah Schnapp", "Oscar Isaac", "Paul Rudd", "Pedro Pascal", "Ralph Fiennes", "Robert Downey Jr.", "Robert Pattinson", "Rupert Grint", "Ryan Gosling", "Ryan Reynolds", "Sadie Sink", "Samuel L. Jackson", "Scarlett Johansson", "Sebastian Stan", "Seth Rogen", "Steve Carell", "Sydney Sweeney", "Timothée Chalamet", "Tobey Maguire", "Tom Cruse", "Tom Cruise", "Tom Hanks", "Tom Hardy", "Tom Hiddleston", "Tom Holland", "Willem Dafoe", "Will Smith", "Winona Ryder", "Zendaya", "Zoe Kravitz"
+            "Adam Driver", "Adam Sandler", "Amber Heard", "Ana de Armas", "Andrew Garfield", "Anne Hathaway", "Anthony Mackie", "Anya Taylor-Joy", "Austin Butler", "Ben Affleck", "Benedict Cumberbatch", "Brad Pitt", "Bradley Cooper", "Brendan Fraser", "Caleb McLaughlin", "Charlize Theron", "Chris Evans", "Chris Hemsworth", "Chris Pine", "Christian Bale", "Cillian Murphy", "Colin Farrell", "Daisy Ridley", "Daniel Craig", "Daniel Radcliffe", "David Harbour", "Denzel Washington", "Dwayne Johnson", "Elizabeth Olsen", "Emma Stone", "Emma Watson", "Ezra Miller", "Finn Wolfhard", "Florence Pugh", "Gal Gadot", "Gaten Matarazzo", "Glen Powell", "Hailee Steinfeld", "Harrison Ford", "Henry Cavill", "Hugh Jackman", "Jacob Elordi", "Jamie Lee", "Jason Momoa", "Jenna Ortega", "Jennifer Coolidge", "Jennifer Lawrence", "Jeremy Renner", "Jessica Chastain", "Joaquin Phoenix", "Joe Keery", "Johnny Depp", "Jonah Hill", "Ke Huy Quan", "Keanu Reeves", "Leonardo DiCaprio", "Margot Robbie", "Mark Ruffalo", "Matt Damon", "Matthew McConaughey", "Maya Hawke", "Michelle Yeoh", "Millie Bobby Brown", "Noah Schnapp", "Oscar Isaac", "Paul Rudd", "Pedro Pascal", "Ralph Fiennes", "Robert Downey Jr.", "Robert Pattinson", "Rupert Grint", "Ryan Gosling", "Ryan Reynolds", "Sadie Sink", "Samuel L. Jackson", "Scarlett Johansson", "Sebastian Stan", "Seth Rogen", "Steve Carell", "Sydney Sweeney", "Timothée Chalamet", "Tobey Maguire", "Tom Cruise", "Tom Hanks", "Tom Hardy", "Tom Hiddleston", "Tom Holland", "Will Smith", "Willem Dafoe", "Winona Ryder", "Zendaya", "Zoe Kravitz"
         ],
         "🎤 Musicians & Bands": [
             "Adele", "Arctic Monkeys", "Ariana Grande", "Benson Boone", "Beyoncé", "Billie Eilish", "Blackpink", "Bruno Mars", "BTS", "Cardi B", "Charli XCX", "Coldplay", "Doja Cat", "Drake", "Dua Lipa", "Ed Sheeran", "Elton John", "Eminem", "Harry Styles", "Hozier", "Imagine Dragons", "Justin Bieber", "Katy Perry", "Kendrick Lamar", "Lady Gaga", "Lana Del Rey", "Lil Nas X", "Lorde", "Miley Cyrus", "Nicki Minaj", "Olivia Rodrigo", "Post Malone", "Rihanna", "Sabrina Carpenter", "Sam Smith", "Shakira", "Snoop Dogg", "Tate McRae", "Taylor Swift", "The Weeknd"
@@ -105,26 +123,42 @@ document.addEventListener('DOMContentLoaded', () => {
             "Cristiano Ronaldo", "Lewis Hamilton", "Lionel Messi", "Max Verstappen", "Mbappé", "Novak Djokovic", "Simone Biles", "Stephen Curry", "Tom Brady"
         ],
         "💼 Business & Technology Leaders": [
-            "Bill Gates", "Elon Musk", "Jeff Bezos", "Mark Zuckberg", "Sam Altman", "Tim Cook"
+            "Bill Gates", "Elon Musk", "Jeff Bezos", "Mark Zuckerberg", "Sam Altman", "Tim Cook"
         ],
         "🐉 Fictional Characters": [
-            "Barbie", "Grogu", "John Wick", "Ken", "Wednesday Addams"
+            "Agent Smith", "Ahsoka Tano", "Albus Dumbledore", "Alice", "Alien", "Aragorn", "Arya Stark", "Barbie", "Bart Simpson", "Batman", "Beatrix Kiddo", "Bilbo Baggins", "Black Panther", "Black Widow", "Bowser", "Bugs Bunny", "Buzz Lightyear", "Captain America", "Chewbacca", "Daenerys Targaryen", "Darth Vader", "Deadpool", "Doctor Strange", "Dominic Toretto", "Donkey", "Dorothy Gale", "Dracula", "Dwight Schrute", "Eleven", "Ellen Ripley", "Elsa", "Ethan Hunt", "Forrest Gump", "Frankenstein", "Freddy Krueger", "Frodo Baggins", "Furiosa", "Gandalf", "Geralt of Rivia", "Godzilla", "Goku", "Grogu", "Groot", "Gru", "Han Solo", "Hannibal Lecter", "Harley Quinn", "Harry Potter", "Hermione Granger", "Homer Simpson", "Hulk", "Indiana Jones", "Iron Man", "Jack Sparrow", "James Bond", "James T. Kirk", "Jason Bourne", "Jason Voorhees", "Jaws", "Jesse Pinkman", "Jim Hopper", "John Wick", "Jon Snow", "Katniss Everdeen", "Ken", "King Arthur", "King Kong", "Kratos", "Lara Croft", "Legolas", "Link", "Loki", "Lord Voldemort", "Luigi", "Luke Skywalker", "Mario", "Mary Poppins", "Master Chief", "Michael Myers", "Michael Scott", "Mickey Mouse", "Moana", "Monkey D. Luffy", "Mulan", "Mummy", "Naruto Uzumaki", "Neo", "Obi-Wan Kenobi", "Olaf", "Pennywise", "Peter Pan", "Pikachu", "Po", "Predator", "Princess Leia", "Princess Peach", "Rambo", "Robin Hood", "RoboCop", "Rocket Raccoon", "Rocky Balboa", "Ron Weasley", "Sarah Connor", "Saul Goodman", "Scarlet Witch", "Scooby-Doo", "Severus Snape", "Sherlock Holmes", "Shrek", "Simba", "Sonic the Hedgehog", "Spider-Man", "Spock", "SpongeBob SquarePants", "Star-Lord", "Steve Harrington", "Stitch", "Superman", "Terminator", "Thanos", "The Doctor", "The Grinch", "The Joker", "The Mandalorian", "Thor", "Tony Soprano", "Trinity", "Tyrion Lannister", "Walter White", "Wednesday Addams", "Werewolf", "Willy Wonka", "Wolverine", "Wonder Woman", "Woody", "Yoda", "Zelda", "Zorro"
         ],
         "📜 Historical Figures": [
-            "Isaac Newton"
+            "Abraham Lincoln", "Albert Einstein", "Alexander the Great", "Aristotle", "Buddha", "Charles Darwin", "Cleopatra", "Confucius", "Galileo Galilei", "Genghis Khan", "George Washington", "Isaac Newton", "Jesus Christ", "Joan of Arc", "Julius Caesar", "Leonardo da Vinci", "Mahatma Gandhi", "Marie Curie", "Mark Twain", "Martin Luther King Jr.", "Michelangelo", "Moses", "Mother Teresa", "Muhammad", "Napoleon Bonaparte", "Nikola Tesla", "Pablo Picasso", "Plato", "Queen Elizabeth I", "Queen Victoria", "Sigmund Freud", "Socrates", "Steve Jobs", "Thomas Edison", "Vincent van Gogh", "William Shakespeare", "Winston Churchill"
         ],
         "📢 Activists & Other Public Figures": [
-            "Greta Thunberg", "Jeffrey Epstein"
+            "Greta Thunberg", "Jeffrey Epstein", "Andrew Tate"
         ]
     };
 
     let selectedCategories = new Set();
 
+    function updateWordCount() {
+        if (!wordCounterEl) return;
+        const text = wordListInput.value.trim();
+        if (!text) {
+            wordCounterEl.innerText = "0 words";
+            return;
+        }
+        const count = text.split('\n').map(w => w.trim()).filter(w => w.length > 0).length;
+        wordCounterEl.innerText = `${count} word${count === 1 ? '' : 's'}`;
+    }
+
+    if (wordListInput) {
+        wordListInput.addEventListener('input', updateWordCount);
+    }
+
     if (categoriesGrid) {
         Object.keys(categoriesData).forEach(category => {
             const btn = document.createElement('button');
             btn.className = 'neon-btn secondary category-btn';
-            btn.innerText = category;
+            const categoryCount = categoriesData[category].length;
+            btn.innerText = `${category} (${categoryCount})`;
             btn.addEventListener('click', () => {
                 if (selectedCategories.has(category)) {
                     selectedCategories.delete(category);
@@ -159,6 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             wordListInput.value = currentWords.join('\n');
+            updateWordCount();
             categoriesModal.classList.add('hidden');
         });
     }
@@ -184,6 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentWords = currentWords.filter(w => !wordsToRemove.has(w.toLowerCase()));
             wordListInput.value = currentWords.join('\n');
+            updateWordCount();
             categoriesModal.classList.add('hidden');
         });
     }
@@ -191,6 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (clearListBtn) {
         clearListBtn.addEventListener('click', () => {
             wordListInput.value = '';
+            updateWordCount();
             selectedCategories.clear();
             document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
             categoriesModal.classList.add('hidden');
@@ -280,6 +317,8 @@ document.addEventListener('DOMContentLoaded', () => {
             settingTiltEnabled = tiltToggle.checked;
             settingRandomizeEnabled = randomizeToggle.checked;
             settingSoundEnabled = soundToggle.checked;
+            if (showButtonsToggle) settingShowButtons = showButtonsToggle.checked;
+            if (showGoBackToggle) settingShowGoBack = showGoBackToggle.checked;
 
             settingsScreen.classList.add('hidden');
             setupScreen.classList.remove('hidden');
@@ -353,11 +392,24 @@ document.addEventListener('DOMContentLoaded', () => {
         endScreen.classList.add('hidden');
         playScreen.classList.remove('hidden');
 
+        if (!settingShowButtons) {
+            skipBtn.classList.add('hidden');
+            correctBtn.classList.add('hidden');
+        } else {
+            skipBtn.classList.remove('hidden');
+            correctBtn.classList.remove('hidden');
+        }
+
         // Manage Instruction Visibility
         if (settingTiltEnabled && (!hasTiltedUp || !hasTiltedDown)) {
             instructionTextEl.classList.remove('hidden');
         } else {
             instructionTextEl.classList.add('hidden');
+        }
+
+        if (pastWordEl) {
+            pastWordEl.innerText = '';
+            pastWordEl.classList.add('hidden');
         }
 
         showNextWord();
@@ -366,6 +418,11 @@ document.addEventListener('DOMContentLoaded', () => {
         gameInterval = setInterval(() => {
             timer--;
             updateTimerDisplay();
+
+            if (timer === 10) {
+                playSound('countdown');
+            }
+
             if (timer <= 0) {
                 endGame();
             }
@@ -383,9 +440,68 @@ document.addEventListener('DOMContentLoaded', () => {
             endGame();
             return;
         }
+
+        // Setup the past word text (if we have one)
+        if (currentWordIndex > 0 && pastWordEl) {
+            pastWordEl.innerText = words[currentWordIndex - 1];
+            pastWordEl.classList.remove('hidden');
+        } else if (pastWordEl) {
+            pastWordEl.classList.add('hidden');
+            pastWordEl.innerText = '';
+        }
+
+        // Apply roll-in animation to the new current word
+        currentWordEl.classList.remove('roll-in');
+        void currentWordEl.offsetWidth; // Trigger reflow
         currentWordEl.innerText = words[currentWordIndex];
+        currentWordEl.classList.add('roll-in');
+
         currentWordStartTime = performance.now();
         console.log(`🔵 [DEBUG] Displaying word: ${words[currentWordIndex]}`);
+
+        if (settingShowGoBack && currentWordIndex > 0) {
+            if (goBackBtn) goBackBtn.classList.remove('hidden');
+        } else {
+            if (goBackBtn) goBackBtn.classList.add('hidden');
+        }
+    }
+
+    // --- Go Back ---
+    if (goBackBtn) {
+        goBackBtn.addEventListener('click', () => {
+            if (!isPlaying || tiltCooldown || currentWordIndex === 0) return;
+            tiltCooldown = true;
+
+            const prevWord = words[currentWordIndex - 1];
+
+            if (correctWordsArr.length > 0 && correctWordsArr[correctWordsArr.length - 1] === prevWord) {
+                correctWordsArr.pop();
+                score--;
+            } else if (skippedWordsArr.length > 0 && skippedWordsArr[skippedWordsArr.length - 1] === prevWord) {
+                skippedWordsArr.pop();
+            }
+
+            if (answerTimes.length > 0) {
+                answerTimes.pop();
+            }
+
+            currentWordIndex--;
+
+            triggerVisualFeedback('back');
+
+            // Apply special "roll-back" animation
+            if (pastWordEl) {
+                pastWordEl.classList.add('roll-out-reverse');
+            }
+            currentWordEl.classList.add('roll-out-reverse');
+
+            setTimeout(() => {
+                if (pastWordEl) pastWordEl.classList.remove('roll-out-reverse');
+                currentWordEl.classList.remove('roll-out-reverse');
+                showNextWord();
+                tiltCooldown = false;
+            }, 300);
+        });
     }
 
     // --- Actions ---
@@ -419,11 +535,16 @@ document.addEventListener('DOMContentLoaded', () => {
         tiltCooldown = true;
         currentWordIndex++;
 
-        // Brief pause so it doesn't instantly flip to the next word while phone is tilted
+        // Trigger transition out animation
+        if (currentWordEl && pastWordEl) {
+            currentWordEl.classList.add('transition-up');
+        }
+
         setTimeout(() => {
+            if (currentWordEl) currentWordEl.classList.remove('transition-up');
             showNextWord();
             tiltCooldown = false;
-        }, 800);
+        }, 400); // Wait for transition animation
     }
 
     function triggerVisualFeedback(type) {
@@ -431,9 +552,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (type === 'correct') {
             playScreen.classList.add('flash-green');
             setTimeout(() => playScreen.classList.remove('flash-green'), 500);
-        } else {
+        } else if (type === 'skip') {
             playScreen.classList.add('flash-red');
             setTimeout(() => playScreen.classList.remove('flash-red'), 500);
+        } else if (type === 'back') {
+            playScreen.classList.add('flash-yellow');
+            setTimeout(() => playScreen.classList.remove('flash-yellow'), 500);
         }
     }
 
@@ -510,6 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isPlaying = false;
         clearInterval(gameInterval);
 
+        stopSound('countdown');
         playSound('end');
 
         playScreen.classList.add('hidden');
@@ -554,6 +679,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Restart ---
     restartBtn.addEventListener('click', () => {
+        stopSound('countdown');
         endScreen.classList.add('hidden');
         setupScreen.classList.remove('hidden');
         // Purposely NOT clearing wordListInput.value so words persist for the next round
@@ -561,6 +687,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (restartRemoveBtn) {
         restartRemoveBtn.addEventListener('click', () => {
+            stopSound('countdown');
             endScreen.classList.add('hidden');
             setupScreen.classList.remove('hidden');
 

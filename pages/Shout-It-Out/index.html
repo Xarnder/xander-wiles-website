@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Shout it Out! Glassmorphism Edition</title>
+    <title>Shout it Out!</title>
 
     <!-- Theme-aware SVG icons (modern browsers) -->
     <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
@@ -52,6 +52,9 @@
             <button id="start-btn" class="neon-btn start-top-btn">Start Game</button>
             <p>Paste your list of words below (one per line):</p>
             <textarea id="word-list" placeholder="Apple&#10;Banana&#10;Eiffel Tower&#10;Spider-Man"></textarea>
+            <div id="word-counter"
+                style="text-align: right; margin-top: -15px; margin-bottom: 20px; opacity: 0.8; font-size: 0.95rem;">0
+                words</div>
             <div class="setup-actions">
                 <button id="instructions-btn" class="neon-btn secondary">How to Play</button>
                 <button id="categories-btn" class="neon-btn secondary">Categories</button>
@@ -119,6 +122,16 @@
                 <label for="sound-toggle">Enable Sound Effects</label>
             </div>
 
+            <div class="setting-group checkbox-group">
+                <input type="checkbox" id="show-buttons-toggle" checked>
+                <label for="show-buttons-toggle">Show On-Screen Buttons (Skip/Correct)</label>
+            </div>
+
+            <div class="setting-group checkbox-group">
+                <input type="checkbox" id="show-goback-toggle" checked>
+                <label for="show-goback-toggle">Show 'Go Back' Button</label>
+            </div>
+
             <button id="close-settings-btn" class="neon-btn">Save & Close</button>
         </div>
 
@@ -165,8 +178,12 @@
             <button id="skip-btn" class="side-btn skip-btn">SKIP<br>▼</button>
 
             <div class="word-display-container">
+                <button id="go-back-btn" class="go-back-btn hidden">↩ Go Back</button>
                 <p id="timer">Time: 60s</p>
-                <h2 id="current-word">Word</h2>
+                <div class="word-animator">
+                    <h3 id="past-word" class="past-word hidden"></h3>
+                    <h2 id="current-word">Word</h2>
+                </div>
                 <p id="instruction-text">Tilt UP = Correct | Tilt DOWN = Skip</p>
             </div>
 
