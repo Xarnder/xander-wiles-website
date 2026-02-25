@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeSettingsBtn = document.getElementById('close-settings-btn');
     const defaultListBtn = document.getElementById('default-list-btn');
     const timeSelect = document.getElementById('time-select');
+    const customTimeInput = document.getElementById('custom-time-input');
     const sensitivitySelect = document.getElementById('sensitivity-select');
     const tiltToggle = document.getElementById('tilt-toggle');
     const randomizeToggle = document.getElementById('randomize-toggle');
@@ -31,6 +32,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const finalScoreEl = document.getElementById('final-score');
     const finalStatsEl = document.getElementById('final-stats');
     const restartBtn = document.getElementById('restart-btn');
+    const restartRemoveBtn = document.getElementById('restart-remove-btn');
+    const reviewWordsBtn = document.getElementById('review-words-btn');
+    const reviewModal = document.getElementById('review-modal');
+    const closeReviewBtn = document.getElementById('close-review-btn');
+    const correctWordsList = document.getElementById('correct-words-list');
+    const skippedWordsList = document.getElementById('skipped-words-list');
 
     // --- Game State Variables ---
     let words = [];
@@ -44,6 +51,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let hasTiltedDown = false;
     let currentWordStartTime = 0;
     let answerTimes = [];
+    let correctWordsArr = [];
+    let skippedWordsArr = [];
 
     // --- Settings State ---
     let settingGameTime = 60;
@@ -117,9 +126,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (reviewWordsBtn) {
+        reviewWordsBtn.addEventListener('click', () => {
+            reviewModal.classList.remove('hidden');
+        });
+    }
+
+    if (closeReviewBtn) {
+        closeReviewBtn.addEventListener('click', () => {
+            reviewModal.classList.add('hidden');
+        });
+    }
+
     if (closeSettingsBtn) {
+        // Toggle Custom Time Input
+        timeSelect.addEventListener('change', () => {
+            if (timeSelect.value === 'custom') {
+                customTimeInput.classList.remove('hidden');
+            } else {
+                customTimeInput.classList.add('hidden');
+            }
+        });
+
         closeSettingsBtn.addEventListener('click', () => {
-            settingGameTime = parseInt(timeSelect.value);
+            if (timeSelect.value === 'custom') {
+                let customMinutes = parseInt(customTimeInput.value);
+                if (isNaN(customMinutes) || customMinutes < 1) customMinutes = 1;
+                if (customMinutes > 60) customMinutes = 60;
+                settingGameTime = customMinutes * 60;
+            } else {
+                settingGameTime = parseInt(timeSelect.value);
+            }
+
             settingSensitivity = parseInt(sensitivitySelect.value);
             settingTiltEnabled = tiltToggle.checked;
             settingRandomizeEnabled = randomizeToggle.checked;
@@ -186,6 +224,8 @@ document.addEventListener('DOMContentLoaded', () => {
         timer = settingGameTime;
         isPlaying = true;
         answerTimes = [];
+        correctWordsArr = [];
+        skippedWordsArr = [];
 
         // Initialize Timer Display
         updateTimerDisplay();
@@ -239,6 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function markCorrect() {
         if (!isPlaying || tiltCooldown) return;
         console.log("🟢 [DEBUG] Action: CORRECT. Word was:", words[currentWordIndex]);
+        correctWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
         playSound('correct');
         score++;
@@ -249,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function markSkip() {
         if (!isPlaying || tiltCooldown) return;
         console.log("🟠 [DEBUG] Action: SKIP. Word was:", words[currentWordIndex]);
+        skippedWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
         playSound('skip');
         triggerVisualFeedback('skip');
@@ -374,6 +416,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         finalStatsEl.innerHTML = statsHtml;
+
+        // Populate Review Lists
+        correctWordsList.innerHTML = '';
+        skippedWordsList.innerHTML = '';
+
+        correctWordsArr.forEach(word => {
+            const li = document.createElement('li');
+            li.textContent = word;
+            correctWordsList.appendChild(li);
+        });
+
+        skippedWordsArr.forEach(word => {
+            const li = document.createElement('li');
+            li.textContent = word;
+            skippedWordsList.appendChild(li);
+        });
     }
 
     // --- Restart ---
@@ -382,4 +440,21 @@ document.addEventListener('DOMContentLoaded', () => {
         setupScreen.classList.remove('hidden');
         // Purposely NOT clearing wordListInput.value so words persist for the next round
     });
+
+    if (restartRemoveBtn) {
+        restartRemoveBtn.addEventListener('click', () => {
+            endScreen.classList.add('hidden');
+            setupScreen.classList.remove('hidden');
+
+            // Remove played words from the textarea
+            const playedWordsText = words.slice(0, currentWordIndex).map(w => w.toLowerCase());
+
+            const rawText = wordListInput.value;
+            const originalWords = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+
+            const remainingWords = originalWords.filter(w => !playedWordsText.includes(w.toLowerCase()));
+
+            wordListInput.value = remainingWords.join('\n');
+        });
+    }
 });
