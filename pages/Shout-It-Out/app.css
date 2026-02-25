@@ -261,6 +261,35 @@ textarea:focus {
     font-size: 14px;
 }
 
+/* Categories Grid */
+.categories-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: center;
+    margin-bottom: 20px;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+/* Base Neon Button adjustment for Category */
+.category-btn {
+    flex: 1 1 calc(50% - 15px);
+    font-size: 1rem;
+    padding: 10px 15px;
+    min-width: 150px;
+    white-space: normal;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.category-selected {
+    background: linear-gradient(90deg, #bb00ff, #00d2ff) !important;
+    border-color: transparent !important;
+    box-shadow: 0 4px 15px rgba(0, 210, 255, 0.4) !important;
+}
+
 /* Custom Alert, Instructions, & Review Modal */
 #alert-modal,
 #instructions-modal,

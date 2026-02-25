@@ -11,7 +11,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const startBtn = document.getElementById('start-btn');
     const settingsBtn = document.getElementById('settings-btn');
     const closeSettingsBtn = document.getElementById('close-settings-btn');
-    const defaultListBtn = document.getElementById('default-list-btn');
+    const categoriesBtn = document.getElementById('categories-btn');
+    const categoriesModal = document.getElementById('categories-modal');
+    const closeCategoriesBtn = document.getElementById('close-categories-btn');
+    const addCategoriesBtn = document.getElementById('add-categories-btn');
+    const removeCategoriesBtn = document.getElementById('remove-categories-btn');
+    const clearListBtn = document.getElementById('clear-list-btn');
+    const categoriesGrid = document.getElementById('categories-grid');
     const timeSelect = document.getElementById('time-select');
     const customTimeInput = document.getElementById('custom-time-input');
     const sensitivitySelect = document.getElementById('sensitivity-select');
@@ -82,14 +88,126 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Event Listeners: Settings & Interaction ---
-    if (defaultListBtn) {
-        defaultListBtn.addEventListener('click', () => {
-            const defaultWords = [
-                "Apple", "Banana", "Eiffel Tower", "Spider-Man", "Coffee",
-                "Laptop", "Guitar", "Ocean", "Mountain", "Television",
-                "Books", "Pizza", "Airplane", "Tiger", "Soccer"
-            ];
-            wordListInput.value = defaultWords.join('\n');
+    const categoriesData = {
+        "🎬 Actors & Actresses": [
+            "Adam Driver", "Adam Sandler", "Amber Heard", "Ana de Armas", "Andrew Garfield", "Anne Hathaway", "Anthony Mackie", "Anya Taylor-Joy", "Austin Butler", "Ben Affleck", "Benedict Cumberbatch", "Brad Pitt", "Bradley Cooper", "Brendan Fraser", "Caleb McLaughlin", "Charlize Theron", "Chris Evans", "Chris Hemsworth", "Chris Pine", "Christian Bale", "Cillian Murphy", "Colin Farrell", "Daisy Ridley", "Daniel Craig", "Daniel Radcliffe", "David Harbour", "Denzel Washington", "Dwayne Johnson", "Elizabeth Olsen", "Emma Stone", "Emma Watson", "Ezra Miller", "Finn Wolfhard", "Florence Pugh", "Gal Gadot", "Gaten Matarazzo", "Glen Powell", "Hailee Steinfeld", "Harrison Ford", "Henry Cavill", "Hugh Jackman", "Jacob Elordi", "Jamie Lee", "Jason Momoa", "Jenna Ortega", "Jennifer Coolidge", "Jennifer Lawrence", "Jeremy Renner", "Jessica Chastain", "Joaquin Phoenix", "Joe Keery", "Johnny Depp", "Jonah Hill", "Ke Huy Quan", "Keanu Reeves", "Leonardo DiCaprio", "Margot Robbie", "Mark Ruffalo", "Matt Damon", "Matthew McConaughey", "Maya Hawke", "Michelle Yeoh", "Millie Bobby Brown", "Noah Schnapp", "Oscar Isaac", "Paul Rudd", "Pedro Pascal", "Ralph Fiennes", "Robert Downey Jr.", "Robert Pattinson", "Rupert Grint", "Ryan Gosling", "Ryan Reynolds", "Sadie Sink", "Samuel L. Jackson", "Scarlett Johansson", "Sebastian Stan", "Seth Rogen", "Steve Carell", "Sydney Sweeney", "Timothée Chalamet", "Tobey Maguire", "Tom Cruse", "Tom Cruise", "Tom Hanks", "Tom Hardy", "Tom Hiddleston", "Tom Holland", "Willem Dafoe", "Will Smith", "Winona Ryder", "Zendaya", "Zoe Kravitz"
+        ],
+        "🎤 Musicians & Bands": [
+            "Adele", "Arctic Monkeys", "Ariana Grande", "Benson Boone", "Beyoncé", "Billie Eilish", "Blackpink", "Bruno Mars", "BTS", "Cardi B", "Charli XCX", "Coldplay", "Doja Cat", "Drake", "Dua Lipa", "Ed Sheeran", "Elton John", "Eminem", "Harry Styles", "Hozier", "Imagine Dragons", "Justin Bieber", "Katy Perry", "Kendrick Lamar", "Lady Gaga", "Lana Del Rey", "Lil Nas X", "Lorde", "Miley Cyrus", "Nicki Minaj", "Olivia Rodrigo", "Post Malone", "Rihanna", "Sabrina Carpenter", "Sam Smith", "Shakira", "Snoop Dogg", "Tate McRae", "Taylor Swift", "The Weeknd"
+        ],
+        "🌍 Politicians, World Leaders & Royalty": [
+            "Donald Trump", "Joe Biden", "Kamala Harris", "Keir Starmer", "King Charles III", "Meghan Markle", "Narendra Modi", "Pope Francis", "Prince Harry", "Rishi Sunak", "Vladimir Putin", "Volodymyr Zelenskyy", "Xi Jinping"
+        ],
+        "📱 Internet Personalities, Media & Reality TV": [
+            "Charli D'Amelio", "IShowSpeed", "Joe Rogan", "Kai Cenat", "Kim Kardashian", "Kylie Jenner", "Mia Khalifa", "Mr Beast", "Riley Reid", "Tucker Carlson"
+        ],
+        "⚽️ Athletes": [
+            "Cristiano Ronaldo", "Lewis Hamilton", "Lionel Messi", "Max Verstappen", "Mbappé", "Novak Djokovic", "Simone Biles", "Stephen Curry", "Tom Brady"
+        ],
+        "💼 Business & Technology Leaders": [
+            "Bill Gates", "Elon Musk", "Jeff Bezos", "Mark Zuckberg", "Sam Altman", "Tim Cook"
+        ],
+        "🐉 Fictional Characters": [
+            "Barbie", "Grogu", "John Wick", "Ken", "Wednesday Addams"
+        ],
+        "📜 Historical Figures": [
+            "Isaac Newton"
+        ],
+        "📢 Activists & Other Public Figures": [
+            "Greta Thunberg", "Jeffrey Epstein"
+        ]
+    };
+
+    let selectedCategories = new Set();
+
+    if (categoriesGrid) {
+        Object.keys(categoriesData).forEach(category => {
+            const btn = document.createElement('button');
+            btn.className = 'neon-btn secondary category-btn';
+            btn.innerText = category;
+            btn.addEventListener('click', () => {
+                if (selectedCategories.has(category)) {
+                    selectedCategories.delete(category);
+                    btn.classList.remove('category-selected');
+                } else {
+                    selectedCategories.add(category);
+                    btn.classList.add('category-selected');
+                }
+            });
+            categoriesGrid.appendChild(btn);
+        });
+    }
+
+    if (addCategoriesBtn) {
+        addCategoriesBtn.addEventListener('click', () => {
+            if (selectedCategories.size === 0) {
+                categoriesModal.classList.add('hidden');
+                return;
+            }
+
+            const currentText = wordListInput.value.trim();
+            let currentWords = currentText ? currentText.split('\n').map(w => w.trim()).filter(w => w.length > 0) : [];
+            let currentWordsLower = new Set(currentWords.map(w => w.toLowerCase()));
+
+            selectedCategories.forEach(cat => {
+                categoriesData[cat].forEach(w => {
+                    if (!currentWordsLower.has(w.toLowerCase())) {
+                        currentWords.push(w);
+                        currentWordsLower.add(w.toLowerCase());
+                    }
+                });
+            });
+
+            wordListInput.value = currentWords.join('\n');
+            categoriesModal.classList.add('hidden');
+        });
+    }
+
+    if (removeCategoriesBtn) {
+        removeCategoriesBtn.addEventListener('click', () => {
+            if (selectedCategories.size === 0) {
+                categoriesModal.classList.add('hidden');
+                return;
+            }
+
+            const currentText = wordListInput.value.trim();
+            if (!currentText) {
+                categoriesModal.classList.add('hidden');
+                return;
+            }
+            let currentWords = currentText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+
+            let wordsToRemove = new Set();
+            selectedCategories.forEach(cat => {
+                categoriesData[cat].forEach(w => wordsToRemove.add(w.toLowerCase()));
+            });
+
+            currentWords = currentWords.filter(w => !wordsToRemove.has(w.toLowerCase()));
+            wordListInput.value = currentWords.join('\n');
+            categoriesModal.classList.add('hidden');
+        });
+    }
+
+    if (clearListBtn) {
+        clearListBtn.addEventListener('click', () => {
+            wordListInput.value = '';
+            selectedCategories.clear();
+            document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
+            categoriesModal.classList.add('hidden');
+        });
+    }
+
+    if (categoriesBtn) {
+        categoriesBtn.addEventListener('click', () => {
+            selectedCategories.clear();
+            document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
+            categoriesModal.classList.remove('hidden');
+        });
+    }
+
+    if (closeCategoriesBtn) {
+        closeCategoriesBtn.addEventListener('click', () => {
+            categoriesModal.classList.add('hidden');
         });
     }
 
@@ -335,7 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Debug logging (throttled visually in console depending on browser)
         // console.log(`[DEBUG SENSORS] Beta: ${Math.round(beta)} | Gamma: ${Math.round(gamma)}`);
 
-        // Heuristic for "Heads Up" across devices (avoiding Gimbal lock on iOS)
+        // Heuristic for "Shout it Out" across devices (avoiding Gimbal lock on iOS)
         // Check if device is in landscape
         if (window.innerHeight < window.innerWidth) {
             // In landscape, holding it upright against the forehead makes |gamma| ~90.

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Heads Up! Glassmorphism Edition</title>
+    <title>Shout it Out! Glassmorphism Edition</title>
 
     <!-- Theme-aware SVG icons (modern browsers) -->
     <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
@@ -48,14 +48,30 @@
 
         <!-- Screen 1: Setup -->
         <div id="setup-screen" class="glass-card float-animation">
-            <h1>Heads Up!</h1>
+            <h1>Shout it Out!</h1>
             <button id="start-btn" class="neon-btn start-top-btn">Start Game</button>
             <p>Paste your list of words below (one per line):</p>
             <textarea id="word-list" placeholder="Apple&#10;Banana&#10;Eiffel Tower&#10;Spider-Man"></textarea>
             <div class="setup-actions">
                 <button id="instructions-btn" class="neon-btn secondary">How to Play</button>
-                <button id="default-list-btn" class="neon-btn secondary">Default List</button>
+                <button id="categories-btn" class="neon-btn secondary">Categories</button>
                 <button id="settings-btn" class="neon-btn secondary">Settings</button>
+            </div>
+        </div>
+
+        <!-- Categories Modal -->
+        <div id="categories-modal" class="glass-card hidden float-animation" style="max-width: 800px;">
+            <h2 style="margin-bottom: 30px;">Select Categories</h2>
+            <div id="categories-grid" class="categories-grid"></div>
+            <div class="category-actions" style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
+                <button id="add-categories-btn" class="neon-btn">Add to List</button>
+                <div style="display: flex; gap: 15px;">
+                    <button id="remove-categories-btn" class="neon-btn secondary" style="flex: 1;">Remove from
+                        List</button>
+                    <button id="clear-list-btn" class="neon-btn secondary" style="flex: 1;">Clear Entire List</button>
+                </div>
+                <button id="close-categories-btn" class="neon-btn secondary"
+                    style="border: none; box-shadow: none; opacity: 0.8;">Cancel</button>
             </div>
         </div>
 
@@ -117,7 +133,7 @@
         <div id="instructions-modal" class="glass-card hidden">
             <h2>How to Play</h2>
             <ul class="instructions-list">
-                <li><strong>1.</strong> Enter a list of words or tap "Default List".</li>
+                <li><strong>1.</strong> Enter a list of words or tap "Categories".</li>
                 <li><strong>2.</strong> Hold your phone horizontally against your forehead.</li>
                 <li><strong>3.</strong> Have your friends describe the word on screen.</li>
                 <li><strong>4.</strong> Tilt your phone <strong>UP</strong> to mark it <strong>Correct</strong>.</li>
