@@ -8,7 +8,7 @@ import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firest
 import ReactMarkdown from 'react-markdown';
 import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
-import { format, parseISO, getDay, addDays } from 'date-fns';
+import { format, parseISO, getDay, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
 import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2 } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -112,6 +112,38 @@ export default function EntryEditor() {
         if (!displayContent) return 0;
         return displayContent.trim().split(/\s+/).filter(word => word.length > 0).length;
     }, [displayContent]);
+
+    const timeSinceEntry = useMemo(() => {
+        if (!date) return "";
+        try {
+            const entryDate = parseISO(date);
+            const today = new Date();
+
+            entryDate.setHours(0, 0, 0, 0);
+            today.setHours(0, 0, 0, 0);
+
+            if (today < entryDate) return "";
+            if (today.getTime() === entryDate.getTime()) return "Time Since Entry: Today";
+
+            const months = differenceInMonths(today, entryDate);
+            const dateAfterMonths = addMonths(entryDate, months);
+
+            const weeks = differenceInWeeks(today, dateAfterMonths);
+            const dateAfterWeeks = addWeeks(dateAfterMonths, weeks);
+
+            const days = differenceInDays(today, dateAfterWeeks);
+
+            const parts = [];
+            if (months > 0) parts.push(`${months} month${months !== 1 ? 's' : ''}`);
+            if (weeks > 0) parts.push(`${weeks} week${weeks !== 1 ? 's' : ''}`);
+            if (days > 0) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+
+            if (parts.length === 0) return "Time Since Entry: Today";
+            return `Time Since Entry: ${parts.join(', ')}`;
+        } catch {
+            return "";
+        }
+    }, [date]);
 
     const isInferredTitle = useMemo(() => {
         if (!content) return false;
@@ -519,7 +551,17 @@ export default function EntryEditor() {
                             </div>
                             <h2 className="text-xl sm:text-2xl font-serif font-bold text-white break-words">{displayDate}</h2>
                             {title && !isEditing && <p className="text-secondary font-medium opacity-90 break-words">{title}</p>}
-                            {!isEditing && <p className="text-xs text-text-muted mt-1">{wordCount} words</p>}
+                            {!isEditing && (
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-1">
+                                    <p className="text-xs text-text-muted">{wordCount} words</p>
+                                    {timeSinceEntry && (
+                                        <>
+                                            <span className="hidden sm:inline text-text-muted/30">•</span>
+                                            <p className="text-xs text-primary/80 font-medium">{timeSinceEntry}</p>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* Navigation Arrows (Right / Next) */}
