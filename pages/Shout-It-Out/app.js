@@ -235,12 +235,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (wordListInput) {
         wordListInput.addEventListener('input', updateWordCount);
+
+        // Pre-load Historical Figures if empty to allow instant play
+        if (wordListInput.value.trim() === '') {
+            const defaultCategory = "📜 Historical Figures";
+            if (categoriesData[defaultCategory]) {
+                wordListInput.value = categoriesData[defaultCategory].join('\n');
+                updateWordCount();
+
+                // Add to selected UI state so user knows it's active
+                selectedCategories.add(defaultCategory);
+            }
+        }
     }
 
     if (categoriesGrid) {
         Object.keys(categoriesData).forEach(category => {
             const btn = document.createElement('button');
             btn.className = 'neon-btn secondary category-btn';
+
+            // Apply selected styling on load if it's the default category we preloaded
+            if (selectedCategories.has(category)) {
+                btn.classList.add('category-selected');
+            }
+
             const categoryCount = categoriesData[category].length;
             btn.innerText = `${category} (${categoryCount})`;
             btn.addEventListener('click', () => {
