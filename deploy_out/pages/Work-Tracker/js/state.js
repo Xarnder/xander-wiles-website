@@ -13,7 +13,8 @@ export const state = {
     currentCurrency: localStorage.getItem('work_tracker_currency') || '£',
     widgetOrder: JSON.parse(localStorage.getItem('work_tracker_widget_order')) || ['widget-timer', 'widget-stats', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'],
     showWidgetTitles: localStorage.getItem('work_tracker_show_titles') !== 'false',
-    startOfWeek: parseInt(localStorage.getItem('work_tracker_start_of_week')) || 0 // 0 = Sunday, 1 = Monday
+    startOfWeek: parseInt(localStorage.getItem('work_tracker_start_of_week')) || 0, // 0 = Sunday, 1 = Monday
+    continueSessionOnClose: localStorage.getItem('work_tracker_continue_session') !== 'false' // default true
 };
 
 export function updateCurrency(newCurrency) {
@@ -34,4 +35,9 @@ export function updateWidgetTitles(showTitles) {
 export function updateStartOfWeek(newDay) {
     state.startOfWeek = newDay;
     localStorage.setItem('work_tracker_start_of_week', newDay);
+}
+
+export function updateContinueSession(continueSession) {
+    state.continueSessionOnClose = continueSession;
+    localStorage.setItem('work_tracker_continue_session', continueSession);
 }

@@ -37,8 +37,17 @@
     <div id="main-nav-placeholder"></div>
     <script src="/assets/js/nav-loader.js"></script>
 
-    <main class="container">
-        <div class="glass-card">
+    <!-- LOADING BAR -->
+    <div id="loading-container" class="loading-bar-top-container">
+        <div id="loading-bar" class="loading-bar-top"></div>
+    </div>
+
+    <!-- 3D VISUALIZER FULLSCREEN -->
+    <div id="canvas-container" class="fullscreen-canvas"></div>
+    <div class="hint-floating">Left Click to Rotate • Right Click to Pan • Scroll to Zoom</div>
+
+    <main class="floating-menu glass-card">
+        <div class="menu-content">
             <h1>FOV Visualizer</h1>
             <p class="subtitle">Live 3D View & Calculation</p>
 
@@ -156,13 +165,6 @@
             </div>
 
             <div id="debug-msg" class="debug-text">Adjust values to see live updates.</div>
-        </div>
-
-        <!-- 3D VISUALIZER CARD -->
-        <div class="glass-card scene-card">
-            <h3>3D Representation</h3>
-            <div id="canvas-container"></div>
-            <p class="hint">Left Click to Rotate • Right Click to Pan • Scroll to Zoom</p>
         </div>
     </main>
 

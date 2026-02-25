@@ -252,7 +252,7 @@ function init3D() {
     container.appendChild(renderer.domElement);
 
     // Controls
-    controls = new OrbitControls(camera, renderer.domElement);
+    controls = new OrbitControls(camera, document.body); // Listen to body instead of domElement so it works when canvas is behind UI
     controls.enableDamping = true;
     controls.autoRotate = false;
 
@@ -298,8 +298,27 @@ function init3D() {
         // Trigger a render update to position it correctly immediately
         calculateAndRender();
 
-    }, undefined, (error) => {
+        const loadingContainer = document.getElementById('loading-container');
+        if (loadingContainer) {
+            loadingContainer.classList.add('hidden');
+        }
+
+    }, (xhr) => {
+        const loadingBar = document.getElementById('loading-bar');
+        if (loadingBar) {
+            if (xhr.lengthComputable) {
+                const percent = (xhr.loaded / xhr.total) * 100;
+                loadingBar.style.width = percent + '%';
+            } else {
+                loadingBar.classList.add('indeterminate');
+            }
+        }
+    }, (error) => {
         console.error('An error occurred loading the model:', error);
+        const loadingContainer = document.getElementById('loading-container');
+        if (loadingContainer) {
+            loadingContainer.classList.add('hidden');
+        }
     });
 
     // 4. FOV Lines (Frustum lines)
@@ -417,7 +436,7 @@ modeSelect.addEventListener("change", updateInputVisibility);
 // Size Template Buttons
 document.querySelectorAll('.size-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
-        const diag = parseFloat(e.target.dataset.diag);
+        const diag = parseFloat(e.currentTarget.dataset.diag);
         if (diag > 0) applyDiagonalSize(diag);
     });
 });
