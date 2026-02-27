@@ -298,3 +298,265 @@ select:focus {
 #common-sizes.hidden {
     display: none !important;
 }
+
+/* Chart Button */
+.chart-toggle-btn {
+    margin-top: 15px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 10px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.chart-toggle-btn:hover {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+}
+
+/* Side Modal */
+.side-modal {
+    position: fixed;
+    top: 90px;
+    right: 20px;
+    width: 450px;
+    max-height: calc(100vh - 120px);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    padding: 25px;
+    box-sizing: border-box;
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+}
+
+.side-modal.hidden {
+    display: flex !important;
+    transform: translateX(120%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.4rem;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.8rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.close-btn:hover {
+    color: white;
+}
+
+.modal-body {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.modal-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 15px;
+}
+
+/* Chart Controls */
+.chart-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.chart-controls label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    margin-bottom: 0;
+}
+
+.chart-controls select {
+    flex: 1;
+    max-width: 180px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+}
+
+/* Selection Feedback */
+.chart-selection {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 15px;
+    font-size: 0.85rem;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: selectionPulse 0.3s ease-out;
+}
+
+.chart-selection.hidden {
+    display: none !important;
+}
+
+.chart-selection .sel-icon {
+    font-size: 1.2rem;
+}
+
+.chart-selection .sel-text strong {
+    color: var(--accent);
+}
+
+@keyframes selectionPulse {
+    0% {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Active data point */
+.data-point-active {
+    stroke: white;
+    stroke-width: 2;
+    r: 7;
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
+}
+
+/* Chart SVG Styling */
+.chart-canvas-container {
+    width: 100%;
+    aspect-ratio: 1.4;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 12px;
+    position: relative;
+    overflow: visible;
+    margin-bottom: 15px;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.chart-svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.axis-line {
+    stroke: var(--border);
+    stroke-width: 1;
+}
+
+.axis-label {
+    fill: var(--text-muted);
+    font-size: 10px;
+}
+
+.grid-line {
+    stroke: rgba(255, 255, 255, 0.05);
+    stroke-width: 1;
+}
+
+.data-line {
+    fill: none;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
+    transition: stroke-dashoffset 2s ease-out;
+}
+
+.data-point {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.data-point:hover {
+    r: 6;
+    fill: white;
+}
+
+/* Legend */
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 5px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.legend-color {
+    width: 12px;
+    height: 4px;
+    border-radius: 2px;
+}
+
+@media (max-width: 1000px) {
+    .side-modal {
+        width: 380px;
+    }
+}
+
+@media (max-width: 768px) {
+    .side-modal {
+        top: 0;
+        right: 0;
+        width: 100%;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        transform: translateY(100%);
+        z-index: 200;
+    }
+
+    .side-modal.hidden {
+        transform: translateY(100%);
+    }
+}
