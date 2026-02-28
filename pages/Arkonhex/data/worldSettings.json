@@ -1,0 +1,7 @@
+{
+    "seed": "arkonhex_alpha_01",
+    "chunkSize": 16,
+    "chunkHeight": 64,
+    "renderDistance": 8,
+    "seaLevel": 16
+}
