@@ -55,5 +55,13 @@
         "topColor": "black",
         "baseColor": "black",
         "hardness": -1.0
+    },
+    {
+        "id": 9,
+        "name": "glass",
+        "topColor": "white",
+        "baseColor": "white",
+        "hardness": 0.5,
+        "transparent": true
     }
 ]

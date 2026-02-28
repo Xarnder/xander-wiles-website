@@ -73,6 +73,16 @@ export class ChunkMeshBuilder {
             resolution: new THREE.Vector2(window.innerWidth, window.innerHeight)
         });
 
+        // Shared line material for glass outlines (reused across all chunks)
+        this.glassOutlineMaterial = new LineMaterial({
+            color: 0xffffff,
+            linewidth: 2,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+            transparent: true,
+            opacity: 0.8,
+            depthWrite: false
+        });
+
         // Dynamically build Canvas Textures using the shadow map
         const loader = new THREE.TextureLoader();
         loader.load(
@@ -159,6 +169,12 @@ export class ChunkMeshBuilder {
         const transIndices = Array.from({ length: numMaterials }, () => []);
         const transVertexOffsets = new Array(numMaterials).fill(0);
 
+        const glassPositions = Array.from({ length: numMaterials }, () => []);
+        const glassNormals = Array.from({ length: numMaterials }, () => []);
+        const glassUvs = Array.from({ length: numMaterials }, () => []);
+        const glassIndices = Array.from({ length: numMaterials }, () => []);
+        const glassVertexOffsets = new Array(numMaterials).fill(0);
+
         const CHUNK_SIZE = 16;
         const neighborOffsets = [
             { q: 1, r: 0 },
@@ -190,14 +206,34 @@ export class ChunkMeshBuilder {
             const yOffset = block.y * BLOCK_HEIGHT;
 
             const isTrans = def.transparent || def.translucent;
+            const isGlass = block.id === 9; // Specifically target glass for always-on outlines
 
             // Helper to add a quad specifically to a material group
             const addQuad = (p1, p2, p3, p4, uv1, uv2, uv3, uv4, normal, matIndex) => {
-                const tPos = isTrans ? transPositions[matIndex] : positions[matIndex];
-                const tNorm = isTrans ? transNormals[matIndex] : normals[matIndex];
-                const tUv = isTrans ? transUvs[matIndex] : uvs[matIndex];
-                const tInd = isTrans ? transIndices[matIndex] : indices[matIndex];
-                let currentOffset = isTrans ? transVertexOffsets[matIndex] : vertexOffsets[matIndex];
+                let tPos, tNorm, tUv, tInd, currentOffset;
+
+                if (isGlass) {
+                    tPos = glassPositions[matIndex];
+                    tNorm = glassNormals[matIndex];
+                    tUv = glassUvs[matIndex];
+                    tInd = glassIndices[matIndex];
+                    currentOffset = glassVertexOffsets[matIndex];
+                    glassVertexOffsets[matIndex] += 4;
+                } else if (isTrans) {
+                    tPos = transPositions[matIndex];
+                    tNorm = transNormals[matIndex];
+                    tUv = transUvs[matIndex];
+                    tInd = transIndices[matIndex];
+                    currentOffset = transVertexOffsets[matIndex];
+                    transVertexOffsets[matIndex] += 4;
+                } else {
+                    tPos = positions[matIndex];
+                    tNorm = normals[matIndex];
+                    tUv = uvs[matIndex];
+                    tInd = indices[matIndex];
+                    currentOffset = vertexOffsets[matIndex];
+                    vertexOffsets[matIndex] += 4;
+                }
 
                 tPos.push(...p1, ...p2, ...p3, ...p4);
                 tUv.push(...uv1, ...uv2, ...uv3, ...uv4);
@@ -207,9 +243,6 @@ export class ChunkMeshBuilder {
                     currentOffset, currentOffset + 1, currentOffset + 2,
                     currentOffset + 2, currentOffset + 3, currentOffset
                 );
-
-                if (isTrans) transVertexOffsets[matIndex] += 4;
-                else vertexOffsets[matIndex] += 4;
             };
 
             // block.q and block.r are already global owing to chunk.getBlocks()
@@ -218,20 +251,36 @@ export class ChunkMeshBuilder {
 
             // Helper to add a triangle specifically to a material group (used for hex caps)
             const addTriangle = (p1, p2, p3, uv1, uv2, uv3, normal, matIndex) => {
-                const tPos = isTrans ? transPositions[matIndex] : positions[matIndex];
-                const tNorm = isTrans ? transNormals[matIndex] : normals[matIndex];
-                const tUv = isTrans ? transUvs[matIndex] : uvs[matIndex];
-                const tInd = isTrans ? transIndices[matIndex] : indices[matIndex];
-                let currentOffset = isTrans ? transVertexOffsets[matIndex] : vertexOffsets[matIndex];
+                let tPos, tNorm, tUv, tInd, currentOffset;
+
+                if (isGlass) {
+                    tPos = glassPositions[matIndex];
+                    tNorm = glassNormals[matIndex];
+                    tUv = glassUvs[matIndex];
+                    tInd = glassIndices[matIndex];
+                    currentOffset = glassVertexOffsets[matIndex];
+                    glassVertexOffsets[matIndex] += 3;
+                } else if (isTrans) {
+                    tPos = transPositions[matIndex];
+                    tNorm = transNormals[matIndex];
+                    tUv = transUvs[matIndex];
+                    tInd = transIndices[matIndex];
+                    currentOffset = transVertexOffsets[matIndex];
+                    transVertexOffsets[matIndex] += 3;
+                } else {
+                    tPos = positions[matIndex];
+                    tNorm = normals[matIndex];
+                    tUv = uvs[matIndex];
+                    tInd = indices[matIndex];
+                    currentOffset = vertexOffsets[matIndex];
+                    vertexOffsets[matIndex] += 3;
+                }
 
                 tPos.push(...p1, ...p2, ...p3);
                 tUv.push(...uv1, ...uv2, ...uv3);
                 tNorm.push(...normal, ...normal, ...normal);
 
                 tInd.push(currentOffset, currentOffset + 1, currentOffset + 2);
-
-                if (isTrans) transVertexOffsets[matIndex] += 3;
-                else vertexOffsets[matIndex] += 3;
             };
 
             const shouldRenderFace = (gq, gr, gy, myDef) => {
@@ -404,6 +453,7 @@ export class ChunkMeshBuilder {
 
         const solidMesh = buildMesh(positions, normals, uvs, indices, this.materialArray);
         const transMesh = buildMesh(transPositions, transNormals, transUvs, transIndices, this.transparentMaterialArray);
+        const glassMesh = buildMesh(glassPositions, glassNormals, glassUvs, glassIndices, this.transparentMaterialArray);
 
         const group = new THREE.Group();
         if (solidMesh) {
@@ -420,13 +470,22 @@ export class ChunkMeshBuilder {
         if (transMesh) {
             group.add(transMesh);
 
-            // Add outlines for transparent blocks too if enabled
+            // Add outlines for transparent blocks only if enabled
             if (blockSystem.showOutlines) {
                 const edges = new THREE.EdgesGeometry(transMesh.geometry, 1);
                 const lineGeom = new LineSegmentsGeometry().fromEdgesGeometry(edges);
                 const outline = new Line2(lineGeom, this.outlineMaterial);
                 group.add(outline);
             }
+        }
+        if (glassMesh) {
+            group.add(glassMesh);
+
+            // Always add white outlines for glass blocks — reuse shared material
+            const glassEdges = new THREE.EdgesGeometry(glassMesh.geometry, 1);
+            const glassLineGeom = new LineSegmentsGeometry().fromEdgesGeometry(glassEdges);
+            const glassOutline = new Line2(glassLineGeom, this.glassOutlineMaterial);
+            group.add(glassOutline);
         }
 
         return group;

@@ -59,8 +59,57 @@
                     <div id="loading-bar-fill"></div>
                 </div>
             </div>
-            <p id="start-hint" style="display: none; cursor: pointer;">Click to Start</p>
-            <p>Controls: WASD to move, Space to Jump, Shift to Sprint. Click to Break, Right Click to Place.</p>
+        </div>
+
+        <div id="world-select-screen" class="overlay-screen hidden">
+            <h1>ARKONHEX</h1>
+            <h2 style="margin-bottom: 20px; opacity: 0.7; font-weight: 300;">Select World</h2>
+
+            <div id="world-list"
+                style="max-height: 320px; overflow-y: auto; margin-bottom: 20px; width: 100%; max-width: 500px;">
+                <!-- World entries injected by WorldSelectMenu.js -->
+            </div>
+
+            <button id="show-create-form-btn" style="
+                padding: 12px 30px; font-size: 1rem;
+                background: linear-gradient(135deg, #4a9eff, #6c5ce7);
+                border: none; color: white; border-radius: 8px;
+                cursor: pointer; font-weight: 600; margin-bottom: 15px;
+            ">+ Create New World</button>
+
+            <div id="create-world-form" class="hidden" style="
+                background: rgba(255,255,255,0.05); border-radius: 10px;
+                padding: 20px; max-width: 400px; width: 100%;
+                border: 1px solid rgba(255,255,255,0.1);
+            ">
+                <div style="margin-bottom: 12px;">
+                    <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">World
+                        Name</label>
+                    <input id="world-name-input" type="text" placeholder="My World" style="
+                        width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
+                        border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+                        color: white; font-size: 1rem; box-sizing: border-box;
+                    ">
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">Seed
+                        (optional)</label>
+                    <input id="world-seed-input" type="text" placeholder="Random" style="
+                        width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
+                        border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+                        color: white; font-size: 1rem; box-sizing: border-box;
+                    ">
+                </div>
+                <button id="create-world-btn" style="
+                    padding: 10px 25px; font-size: 1rem;
+                    background: linear-gradient(135deg, #00b894, #00cec9);
+                    border: none; color: white; border-radius: 6px;
+                    cursor: pointer; font-weight: 600;
+                ">Create &amp; Play</button>
+            </div>
+
+            <p style="margin-top: 20px; opacity: 0.4; font-size: 0.85rem;">Controls: WASD to move, Space to Jump, Shift
+                to Sprint. Click to Break, Right Click to Place.</p>
         </div>
 
         <div id="pause-screen" class="overlay-screen hidden"
@@ -72,58 +121,99 @@
                 <button class="pause-tab active" data-tab="settings-tab"
                     onclick="event.stopPropagation()">Settings</button>
                 <button class="pause-tab" data-tab="inventory-tab" onclick="event.stopPropagation()">Inventory</button>
+                <button class="pause-tab" data-tab="waypoints-tab" onclick="event.stopPropagation()">Waypoints</button>
+                <button class="pause-tab" data-tab="help-tab" onclick="event.stopPropagation()">Help</button>
             </div>
 
             <div id="settings-tab" class="settings-panel tab-content active" style="pointer-events: auto;"
                 onclick="event.stopPropagation()">
-                <div class="setting-row">
-                    <label>Render Distance: <span id="rd-val">8</span> Chunks</label>
-                    <input type="range" id="rd-slider" min="2" max="16" step="1" value="8">
-                    <p style="font-size:0.8em; color: #ff5555; margin-top:5px;">Warning: Higher values severely impact
-                        FPS.</p>
+                <!-- Sub-tabs for Settings -->
+                <div class="settings-sub-nav"
+                    style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                    <button class="sub-tab active" data-sub-tab="settings-world">World</button>
+                    <button class="sub-tab" data-sub-tab="settings-graphics">Graphics</button>
+                    <button class="sub-tab" data-sub-tab="settings-controls">Controls</button>
+                    <button class="sub-tab" data-sub-tab="settings-audio">Audio</button>
                 </div>
 
-                <div class="setting-row" style="margin-top: 20px;">
-                    <label>Field of View: <span id="fov-val">75</span></label>
-                    <input type="range" id="fov-slider" min="60" max="120" step="1" value="75">
+                <!-- World Settings -->
+                <div id="settings-world" class="sub-tab-content active">
+                    <div class="setting-row">
+                        <label>Render Distance: <span id="rd-val">8</span> Chunks</label>
+                        <input type="range" id="rd-slider" min="2" max="16" step="1" value="8">
+                        <p style="font-size:0.8em; color: #ff5555; margin-top:5px;">Warning: Higher values severely
+                            impact FPS.</p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>Block Outlines: <input type="checkbox" id="block-outline-toggle"></label>
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Draws sharp outlines around all
+                            blocks.</p>
+                    </div>
                 </div>
 
-                <div class="setting-row" style="margin-top: 20px;">
-                    <label>Cloud Shadows: <input type="checkbox" id="cloud-shadows-toggle"></label>
+                <!-- Graphics Settings -->
+                <div id="settings-graphics" class="sub-tab-content">
+                    <div class="setting-row">
+                        <label>Field of View: <span id="fov-val">75</span></label>
+                        <input type="range" id="fov-slider" min="60" max="120" step="1" value="75">
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>Cloud Shadows: <input type="checkbox" id="cloud-shadows-toggle"></label>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>AOC Strength: <span id="aoc-val">0.8</span></label>
+                        <input type="range" id="aoc-slider" min="0.0" max="1.0" step="0.1" value="0.8">
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Ambient Occlusion blending. Requires
+                            High Graphics (G).</p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>GTAO Post-Processing: <span id="gtao-val">1.0</span></label>
+                        <input type="range" id="gtao-slider" min="0.0" max="2.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>Terrain Shadow Resolution:
+                            <select id="shadow-res-select"
+                                style="margin-left: 10px; padding: 5px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;">
+                                <option value="1024">Low (1024)</option>
+                                <option value="2048">Medium (2048)</option>
+                                <option value="4096" selected>High (4096)</option>
+                                <option value="8192">Ultra (8192)</option>
+                            </select>
+                        </label>
+                    </div>
                 </div>
 
-                <div class="setting-row" style="margin-top: 20px;">
-                    <label>AOC Strength: <span id="aoc-val">0.8</span></label>
-                    <input type="range" id="aoc-slider" min="0.0" max="1.0" step="0.1" value="0.8">
-                    <p style="font-size:0.8em; color: #888888; margin-top:5px;">Ambient Occlusion blending. Requires
-                        High Graphics (G) to be enabled.</p>
+                <!-- Controls Settings -->
+                <div id="settings-controls" class="sub-tab-content">
+                    <div class="setting-row">
+                        <label>Initial Hold Delay: <span id="init-delay-val">400</span>ms</label>
+                        <input type="range" id="init-delay-slider" min="100" max="1000" step="50" value="400">
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Pause before the 2nd block action
+                            fires.</p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>Repeat Rate: <span id="repeat-delay-val">150</span>ms</label>
+                        <input type="range" id="repeat-delay-slider" min="50" max="500" step="25" value="150">
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">How fast blocks repeatedly
+                            break/place.</p>
+                    </div>
                 </div>
 
-                <div class="setting-row" style="margin-top: 20px;">
-                    <label>GTAO Post-Processing: <span id="gtao-val">1.0</span></label>
-                    <input type="range" id="gtao-slider" min="0.0" max="2.0" step="0.1" value="1.0">
-                    <p style="font-size:0.8em; color: #ff5555; margin-top:5px;">Ground Truth Screen-Space Shadows.
-                        Massive performance hit.</p>
-                </div>
-
-                <div class="setting-row" style="margin-top: 20px;">
-                    <label>Terrain Shadow Resolution:
-                        <select id="shadow-res-select"
-                            style="margin-left: 10px; padding: 5px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;">
-                            <option value="1024">Low (1024)</option>
-                            <option value="2048">Medium (2048)</option>
-                            <option value="4096" selected>High (4096)</option>
-                            <option value="8192">Ultra (8192)</option>
-                        </select>
-                    </label>
-                    <p style="font-size:0.8em; color: #888888; margin-top:5px;">Requires High Graphics (G) to be active.
-                        Lower to vastly improve framerate.</p>
-                </div>
-
-                <div class="setting-row" style="margin-top: 20px;">
-                    <label>Block Outlines: <input type="checkbox" id="block-outline-toggle"></label>
-                    <p style="font-size:0.8em; color: #888888; margin-top:5px;">Draws sharp outlines around all blocks.
-                        Adds a slight performance cost.</p>
+                <!-- Audio Settings -->
+                <div id="settings-audio" class="sub-tab-content">
+                    <div class="setting-row">
+                        <label>Mute All: <input type="checkbox" id="mute-all-toggle"></label>
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Silence all game audio.</p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>Mute Sound Effects: <input type="checkbox" id="mute-sfx-toggle"></label>
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Break, Place, Walk, Swim, Splash.
+                        </p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>Mute Ambience: <input type="checkbox" id="mute-ambience-toggle"></label>
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Environment background sounds.</p>
+                    </div>
                 </div>
             </div>
 
@@ -133,7 +223,85 @@
                 <p style="opacity: 0.7;">Inventory system coming soon...</p>
             </div>
 
-            <p style="margin-top:20px; pointer-events: none;">Click anywhere outside to resume.</p>
+            <div id="waypoints-tab" class="settings-panel tab-content" style="pointer-events: auto;"
+                onclick="event.stopPropagation()">
+                <h2 style="margin-top: 0;">Waypoints</h2>
+                <p style="opacity: 0.5; font-size: 0.85rem; margin-bottom: 12px;">Press <strong>P</strong> in-game to
+                    place a waypoint. Manage them here.</p>
+                <div id="waypoint-list" style="max-height: 300px; overflow-y: auto;"></div>
+            </div>
+
+            <div id="help-tab" class="settings-panel tab-content" style="pointer-events: auto;"
+                onclick="event.stopPropagation()">
+                <h2 style="margin-top: 0;">Controls</h2>
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.15);">
+                            <th style="text-align: left; padding: 6px 8px; opacity: 0.6;">Key</th>
+                            <th style="text-align: left; padding: 6px 8px; opacity: 0.6;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>W A S D</kbd></td>
+                            <td style="padding:5px 8px;">Move</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>Space</kbd></td>
+                            <td style="padding:5px 8px;">Jump / Fly Up</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>Shift</kbd></td>
+                            <td style="padding:5px 8px;">Sprint / Fly Down</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>Double Space</kbd></td>
+                            <td style="padding:5px 8px;">Toggle Fly Mode</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>Left Click</kbd></td>
+                            <td style="padding:5px 8px;">Break Block (hold to repeat)</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>Right Click</kbd></td>
+                            <td style="padding:5px 8px;">Place Block (hold to repeat)</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>1 – 9</kbd></td>
+                            <td style="padding:5px 8px;">Select Hotbar Slot</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>E</kbd></td>
+                            <td style="padding:5px 8px;">Open Inventory</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>Escape</kbd></td>
+                            <td style="padding:5px 8px;">Pause / Settings</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>G</kbd></td>
+                            <td style="padding:5px 8px;">Toggle Graphics Quality</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>P</kbd></td>
+                            <td style="padding:5px 8px;">Place Waypoint</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top: 20px; pointer-events: auto;" onclick="event.stopPropagation()">
+                <button id="exit-to-menu-btn" style="
+                    padding: 10px 28px; font-size: 0.95rem;
+                    background: rgba(255, 100, 100, 0.15);
+                    border: 1px solid rgba(255, 100, 100, 0.4);
+                    color: #ff6b6b; border-radius: 8px;
+                    cursor: pointer; font-weight: 600;
+                    transition: background 0.2s;
+                ">&#x2190; Exit to World Menu</button>
+            </div>
+
+            <p style="margin-top:12px; pointer-events: none;">Click anywhere outside to resume.</p>
         </div>
     </div>
 

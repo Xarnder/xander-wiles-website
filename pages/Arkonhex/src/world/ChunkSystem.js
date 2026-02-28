@@ -1,5 +1,7 @@
 import { ChunkMeshBuilder } from '../rendering/ChunkMeshBuilder.js';
 import { worldToAxial } from '../utils/HexUtils.js';
+import { Chunk } from './Chunk.js';
+import { saveChunk, loadChunk } from '../storage/ChunkStorage.js';
 
 export class ChunkSystem {
     constructor(engine, worldGen, blockSystem) {
@@ -13,6 +15,11 @@ export class ChunkSystem {
         this.pendingChunks = new Set();
 
         this.renderDistance = 8; // Expanded for further view distance
+
+        // Debounced save queue — collects modified chunks, flushes every 5 seconds
+        this.saveQueue = new Set(); // Set of chunk keys that need saving
+        this.saveInterval = null;
+        this._startSaveLoop();
 
         this.engine.registerSystem(this);
     }
@@ -71,11 +78,38 @@ export class ChunkSystem {
         }
     }
 
-    loadChunk(cq, cr) {
+    async loadChunk(cq, cr) {
+        const worldId = this.engine.activeWorldId;
+
+        // Check IndexedDB first for saved chunk data
+        if (worldId) {
+            try {
+                const savedBlocks = await loadChunk(worldId, cq, cr);
+                if (savedBlocks) {
+                    const chunk = new Chunk(cq, cr);
+                    chunk.blocks = savedBlocks;
+                    chunk.isDirty = true;
+                    chunk.isModified = false; // It's already saved, not newly modified
+                    this.chunks.set(this.getChunkKey(cq, cr), chunk);
+
+                    // Dirty neighbors
+                    this._dirtyNeighbors(cq, cr);
+                    return;
+                }
+            } catch (e) {
+                console.warn('[ChunkSystem] Failed to load chunk from DB, generating fresh:', e);
+            }
+        }
+
+        // Generate procedurally if not in DB
         const chunk = this.worldGen.generateChunk(cq, cr, this.blockSystem);
         this.chunks.set(this.getChunkKey(cq, cr), chunk);
 
         // Dirty neighbors to ensure they cull boundary faces correctly
+        this._dirtyNeighbors(cq, cr);
+    }
+
+    _dirtyNeighbors(cq, cr) {
         for (let dcq = -1; dcq <= 1; dcq++) {
             for (let dcr = -1; dcr <= 1; dcr++) {
                 if (dcq === 0 && dcr === 0) continue;
@@ -87,7 +121,15 @@ export class ChunkSystem {
 
     unloadChunk(key) {
         const chunk = this.chunks.get(key);
-        if (chunk && chunk.mesh) {
+        if (!chunk) return;
+
+        // Save modified chunks before unloading
+        if (chunk.isModified && this.engine.activeWorldId) {
+            this.saveQueue.add(key);
+            this._flushSaveQueue(); // Flush immediately on unload
+        }
+
+        if (chunk.mesh) {
             this.engine.scene.remove(chunk.mesh);
             // Must traverse and dispose geometries/materials to prevent memory leak
             chunk.mesh.traverse((child) => {
@@ -100,6 +142,18 @@ export class ChunkSystem {
         this.pendingChunks.delete(key);
         // Remove from queue if it was pending
         this.chunkGenQueue = this.chunkGenQueue.filter(item => item.key !== key);
+    }
+
+    /**
+     * Mark a chunk as modified by player action (needs saving).
+     */
+    markChunkModified(cq, cr) {
+        const key = this.getChunkKey(cq, cr);
+        const chunk = this.chunks.get(key);
+        if (chunk) {
+            chunk.isModified = true;
+            this.saveQueue.add(key);
+        }
     }
 
     update(delta, time) {
@@ -159,5 +213,59 @@ export class ChunkSystem {
         const lr = globalR - (cr * CHUNK_SIZE);
 
         return chunk.getBlock(lq, lr, y);
+    }
+
+    // ─── Debounced Save System ───
+
+    _startSaveLoop() {
+        // Flush the save queue every 5 seconds
+        this.saveInterval = setInterval(() => {
+            this._flushSaveQueue();
+        }, 5000);
+    }
+
+    async _flushSaveQueue() {
+        if (this.saveQueue.size === 0) return;
+        if (!this.engine.activeWorldId) return;
+
+        const worldId = this.engine.activeWorldId;
+        const keysToSave = [...this.saveQueue];
+        this.saveQueue.clear();
+
+        for (const key of keysToSave) {
+            const chunk = this.chunks.get(key);
+            if (chunk && chunk.isModified) {
+                try {
+                    await saveChunk(worldId, chunk.cq, chunk.cr, chunk.blocks);
+                    chunk.isModified = false;
+                } catch (e) {
+                    console.error(`[ChunkSystem] Failed to save chunk ${key}:`, e);
+                    // Re-add to queue for retry
+                    this.saveQueue.add(key);
+                }
+            }
+        }
+    }
+
+    /**
+     * Force-save all modified chunks (called on world exit / page unload).
+     */
+    async saveAllModifiedChunks() {
+        if (!this.engine.activeWorldId) return;
+
+        for (const [key, chunk] of this.chunks.entries()) {
+            if (chunk.isModified) {
+                this.saveQueue.add(key);
+            }
+        }
+
+        await this._flushSaveQueue();
+    }
+
+    dispose() {
+        if (this.saveInterval) {
+            clearInterval(this.saveInterval);
+            this.saveInterval = null;
+        }
     }
 }

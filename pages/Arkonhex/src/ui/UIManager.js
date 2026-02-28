@@ -137,6 +137,28 @@ export class UIManager {
             }
         }
 
+        // Audio Toggle Listeners
+        const muteAllToggle = document.getElementById('mute-all-toggle');
+        if (muteAllToggle) {
+            muteAllToggle.addEventListener('change', (e) => {
+                this.engine.audioManager.toggleMuteAll(e.target.checked);
+            });
+        }
+
+        const muteSFXToggle = document.getElementById('mute-sfx-toggle');
+        if (muteSFXToggle) {
+            muteSFXToggle.addEventListener('change', (e) => {
+                this.engine.audioManager.toggleMuteSFX(e.target.checked);
+            });
+        }
+
+        const muteAmbienceToggle = document.getElementById('mute-ambience-toggle');
+        if (muteAmbienceToggle) {
+            muteAmbienceToggle.addEventListener('change', (e) => {
+                this.engine.audioManager.toggleMuteAmbience(e.target.checked);
+            });
+        }
+
         const shadowResSelect = document.getElementById('shadow-res-select');
         if (shadowResSelect) {
             shadowResSelect.addEventListener('change', (e) => {
@@ -152,6 +174,30 @@ export class UIManager {
                         shadow.map = null;
                     }
                 }
+            });
+        }
+
+        // Initial hold delay slider (how long before 2nd action fires)
+        const initDelaySlider = document.getElementById('init-delay-slider');
+        const initDelayVal = document.getElementById('init-delay-val');
+        if (initDelaySlider && initDelayVal) {
+            initDelaySlider.value = Math.round(this.playerSystem.blockInitialDelay * 1000);
+            initDelayVal.innerText = initDelaySlider.value;
+            initDelaySlider.addEventListener('input', (e) => {
+                initDelayVal.innerText = e.target.value;
+                this.playerSystem.blockInitialDelay = parseInt(e.target.value) / 1000;
+            });
+        }
+
+        // Repeat delay slider (cadence after 2nd action)
+        const repeatDelaySlider = document.getElementById('repeat-delay-slider');
+        const repeatDelayVal = document.getElementById('repeat-delay-val');
+        if (repeatDelaySlider && repeatDelayVal) {
+            repeatDelaySlider.value = Math.round(this.playerSystem.blockRepeatDelay * 1000);
+            repeatDelayVal.innerText = repeatDelaySlider.value;
+            repeatDelaySlider.addEventListener('input', (e) => {
+                repeatDelayVal.innerText = e.target.value;
+                this.playerSystem.blockRepeatDelay = parseInt(e.target.value) / 1000;
             });
         }
 
@@ -175,7 +221,7 @@ export class UIManager {
             });
         }
 
-        // Tab logic
+        // Main Tab logic
         const tabs = document.querySelectorAll('.pause-tab');
         const contents = document.querySelectorAll('.tab-content');
         tabs.forEach(tab => {
@@ -190,6 +236,27 @@ export class UIManager {
                 const targetId = tab.getAttribute('data-tab');
                 const targetContent = document.getElementById(targetId);
                 if (targetContent) targetContent.classList.add('active');
+
+                // Refresh waypoint list when switching to that tab
+                if (targetId === 'waypoints-tab') {
+                    this.refreshWaypointList();
+                }
+            });
+        });
+
+        // Sub-tab logic (for settings)
+        const subTabs = document.querySelectorAll('.sub-tab');
+        const subContents = document.querySelectorAll('.sub-tab-content');
+        subTabs.forEach(subTab => {
+            subTab.addEventListener('click', (e) => {
+                e.stopPropagation();
+                subTabs.forEach(st => st.classList.remove('active'));
+                subContents.forEach(sc => sc.classList.remove('active'));
+
+                subTab.classList.add('active');
+                const targetSubId = subTab.getAttribute('data-sub-tab');
+                const targetSubContent = document.getElementById(targetSubId);
+                if (targetSubContent) targetSubContent.classList.add('active');
             });
         });
 
@@ -200,6 +267,41 @@ export class UIManager {
                 e.stopPropagation();
             });
         });
+
+        // Exit to World Menu button
+        const exitToMenuBtn = document.getElementById('exit-to-menu-btn');
+        if (exitToMenuBtn) {
+            exitToMenuBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+
+                // Exit pointer lock so cursor is accessible
+                if (document.pointerLockElement) {
+                    document.exitPointerLock();
+                }
+
+                // Save world state before exiting
+                await this.engine._saveAndExit();
+
+                // Stop the game loop
+                this.engine.stop();
+
+                // Hide pause screen and game UI layer
+                const pauseScreen = document.getElementById('pause-screen');
+                if (pauseScreen) pauseScreen.classList.add('hidden');
+                const uiLayer = document.getElementById('ui-layer');
+                if (uiLayer) uiLayer.classList.add('ui-hidden');
+
+                // Clear active world
+                this.engine.activeWorldId = null;
+                this.engine.activeWorldMeta = null;
+
+                // Show the world select screen
+                if (this.engine.worldSelectMenu) {
+                    await this.engine.worldSelectMenu.refresh();
+                    this.engine.worldSelectMenu.show();
+                }
+            });
+        }
     }
 
     initHotbar() {
@@ -223,6 +325,95 @@ export class UIManager {
 
             slot.appendChild(inner);
             this.hotbarElement.appendChild(slot);
+        }
+    }
+
+    /**
+     * Update highlighted hotbar slot when player presses a number key.
+     * @param {number} slotIndex — 0-indexed
+     */
+    updateHotbarSelection(slotIndex) {
+        const slots = this.hotbarElement.querySelectorAll('.hotbar-slot');
+        slots.forEach((slot, i) => {
+            slot.classList.toggle('active', i === slotIndex);
+        });
+    }
+
+    /**
+     * Refresh the Waypoints tab with current waypoint data.
+     */
+    refreshWaypointList() {
+        const listEl = document.getElementById('waypoint-list');
+        if (!listEl) return;
+
+        const wm = this.engine.waypointManager;
+        if (!wm) {
+            listEl.innerHTML = '<p style="opacity:0.5">No world loaded.</p>';
+            return;
+        }
+
+        if (wm.waypoints.length === 0) {
+            listEl.innerHTML = '<p style="opacity:0.5">No waypoints yet. Press <strong>P</strong> in-game to place one.</p>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+
+        for (const wp of wm.waypoints) {
+            const entry = document.createElement('div');
+            entry.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 10px; margin-bottom:6px; background:rgba(255,255,255,0.05); border-radius:6px; border:1px solid rgba(255,255,255,0.08);';
+
+            // Color dot
+            const dot = document.createElement('span');
+            dot.style.cssText = `width:10px; height:10px; border-radius:50%; flex-shrink:0; background:#${wp.color.toString(16).padStart(6, '0')};`;
+            entry.appendChild(dot);
+
+            // Name + coords
+            const info = document.createElement('div');
+            info.style.cssText = 'flex:1; min-width:0;';
+            info.innerHTML = `<div style="font-weight:600; font-size:0.9rem;">${wp.name}</div><div style="font-size:0.75rem; opacity:0.5;">X:${Math.round(wp.x)} Y:${Math.round(wp.y)} Z:${Math.round(wp.z)}</div>`;
+            entry.appendChild(info);
+
+            // Rename button
+            const renameBtn = document.createElement('button');
+            renameBtn.textContent = '✏';
+            renameBtn.title = 'Rename';
+            renameBtn.style.cssText = 'background:none; border:1px solid rgba(255,255,255,0.2); color:white; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:0.85rem;';
+            renameBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const newName = prompt('Rename waypoint:', wp.name);
+                if (newName !== null && newName.trim()) {
+                    await wm.renameWaypoint(wp.id, newName);
+                    this.refreshWaypointList();
+                }
+            });
+            entry.appendChild(renameBtn);
+
+            // Toggle visibility button
+            const toggleBtn = document.createElement('button');
+            toggleBtn.textContent = wp.visible ? '👁' : '👁‍🗨';
+            toggleBtn.title = wp.visible ? 'Hide' : 'Show';
+            toggleBtn.style.cssText = 'background:none; border:1px solid rgba(255,255,255,0.2); color:white; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:0.85rem;';
+            toggleBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await wm.toggleWaypoint(wp.id);
+                this.refreshWaypointList();
+            });
+            entry.appendChild(toggleBtn);
+
+            // Delete button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '🗑';
+            deleteBtn.title = 'Delete';
+            deleteBtn.style.cssText = 'background:none; border:1px solid rgba(255,100,100,0.3); color:#ff6b6b; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:0.85rem;';
+            deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await wm.deleteWaypoint(wp.id);
+                this.refreshWaypointList();
+            });
+            entry.appendChild(deleteBtn);
+
+            listEl.appendChild(entry);
         }
     }
 

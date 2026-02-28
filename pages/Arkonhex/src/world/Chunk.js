@@ -12,6 +12,7 @@ export class Chunk {
         this.blocks = new Uint8Array(CHUNK_AREA * CHUNK_HEIGHT);
 
         this.isDirty = true; // Needs remesh
+        this.isModified = false; // Tracks if player has edited blocks (needs save)
         this.mesh = null;    // The THREE.Group or Mesh holding the rendering
     }
 

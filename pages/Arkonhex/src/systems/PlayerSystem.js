@@ -23,41 +23,30 @@ export class PlayerSystem {
         this.isFlying = false;
         this.lastSpacePress = 0;
 
+        // Block selection — hotbar slot (0-indexed) and block ID to place
+        this.selectedHotbarSlot = 0;
+        this.selectedBlockId = 1;
+
+        // Hold-to-place/break timing
+        this.blockInitialDelay = 0.4;  // s (default 400ms)
+        this.blockRepeatDelay = 0.15;  // s (default 150ms)
+        this.breakHoldTimer = 0;
+        this.breakHoldCount = 0; // 0 = not yet fired this hold
+        this.placeHoldTimer = 0;
+        this.placeHoldCount = 0;
+
         this.baseFov = 75;
 
-        // Setup Audio sounds
-        this.placeSound = new Audio('assets/sounds/place.mp3');
-        this.placeSound.volume = 0.5;
-        this.walkSound = new Audio('assets/sounds/walking.mp3');
-        this.walkSound.volume = 0.3;
-        this.walkSound.loop = true;
+        // Audio state
         this.isWalking = false;
-
-        this.breakSound = new Audio('assets/sounds/break.mp3');
-        this.breakSound.volume = 0.8;
-
-        this.swimSound = new Audio('assets/sounds/swimming.mp3');
-        this.swimSound.volume = 0.4;
-        this.swimSound.loop = true;
         this.isSwimming = false;
-
-        this.splashSound = new Audio('assets/sounds/splash.mp3');
-        this.splashSound.volume = 0.7;
-
-        // Ambient audio tracks — crossfade between environment states
-        this.underwaterAmbient = new Audio('assets/sounds/underwater-ambients.mp3');
-        this.underwaterAmbient.loop = true;
-        this.underwaterAmbient.volume = 0;
-
-        this.normalAmbient = new Audio('assets/sounds/normal-ambients.mp3');
-        this.normalAmbient.loop = true;
-        this.normalAmbient.volume = 0;
-
         this.wasSubmerged = false;
         this.wasFeetInWater = false;
         this.ambientStarted = false;
         this.ambientTime = 0; // Tracks elapsed time for ambient volume modulation
         this.lastSineWasLow = false; // Used to detect sine trough crossing for random seek
+
+        this.audioManager = engine.audioManager;
 
         // Setup Camera with expanded draw distance (default was 1000)
         this.camera = new THREE.PerspectiveCamera(this.baseFov, window.innerWidth / window.innerHeight, 0.1, 8000);
@@ -74,9 +63,10 @@ export class PlayerSystem {
         this.selectedBlock = null;
 
         // Highlight Mesh
-        const geometry = new THREE.CylinderGeometry(HEX_SIZE * 1.05, HEX_SIZE * 1.05, 1.05, 6);
-        const material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.5 });
-        this.highlightMesh = new THREE.Mesh(geometry, material);
+        const highlightGeom = new THREE.CylinderGeometry(HEX_SIZE * 1.05, HEX_SIZE * 1.05, 1.05, 6);
+        const edges = new THREE.EdgesGeometry(highlightGeom);
+        const material = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+        this.highlightMesh = new THREE.LineSegments(edges, material);
         this.highlightMesh.visible = false;
         this.engine.scene.add(this.highlightMesh);
 
@@ -94,7 +84,13 @@ export class PlayerSystem {
 
         this.updateMouseLook();
         this.updateMovement(delta);
-        this.updateInteraction();
+        this.updateHotbarKeys();
+        this.updateInteraction(delta);
+
+        // P key — place waypoint
+        if (this.input.consumeKey('KeyP') && this.engine.waypointManager) {
+            this.engine.waypointManager.createWaypoint(null, this.position);
+        }
 
         // Sync visual objects
         this.yawObject.position.copy(this.position);
@@ -169,11 +165,9 @@ export class PlayerSystem {
 
         // Splash fires when feet cross the water boundary (entry or exit)
         if (isFeetInWater && !this.wasFeetInWater) {
-            this.splashSound.currentTime = 0;
-            this.splashSound.play().catch(e => console.warn(e));
+            this.audioManager.playSFX('splash');
         } else if (!isFeetInWater && this.wasFeetInWater) {
-            this.splashSound.currentTime = 0;
-            this.splashSound.play().catch(e => console.warn(e));
+            this.audioManager.playSFX('splash');
         }
         this.wasFeetInWater = isFeetInWater;
 
@@ -204,24 +198,11 @@ export class PlayerSystem {
             const maxNormalVol = 0.4;
             const targetNormalVol = isSubmerged ? 0 : sineEnvelope * maxNormalVol;
 
-            // When the sine hits its quiet trough (envelope < 0.05), randomly seek to a new 
-            // position in the file — inaudible because we're near silence.
-            const isTrough = sineEnvelope < 0.05;
-            if (isTrough && !this.lastSineWasLow) {
-                // Seek to a random timestamp within the loaded audio (if duration is known)
-                const dur = this.normalAmbient.duration;
-                if (dur && isFinite(dur) && dur > 0) {
-                    this.normalAmbient.currentTime = Math.random() * dur;
-                }
-            }
-            this.lastSineWasLow = isTrough;
-
             const targetUnderVol = isSubmerged ? 0.45 : 0;
-            // Lerp towards target volume each frame (smooth crossfade over ~1 second)
-            this.underwaterAmbient.volume = Math.max(0, Math.min(1,
-                this.underwaterAmbient.volume + (targetUnderVol - this.underwaterAmbient.volume) * 0.05));
-            this.normalAmbient.volume = Math.max(0, Math.min(1,
-                this.normalAmbient.volume + (targetNormalVol - this.normalAmbient.volume) * 0.05));
+
+            // AudioManager handles the actual volume setting and mute logic
+            this.audioManager.setAmbienceVolume('normal', targetNormalVol);
+            this.audioManager.setAmbienceVolume('underwater', targetUnderVol);
         }
         if (isSubmerged) {
             currentWalk *= 0.33;
@@ -234,10 +215,10 @@ export class PlayerSystem {
 
             // Handle swimming sound
             if (moveDir.lengthSq() > 0 && !this.isSwimming) {
-                this.swimSound.play().catch(e => console.warn(e));
+                this.audioManager.playSFX('swim');
                 this.isSwimming = true;
             } else if (moveDir.lengthSq() === 0 && this.isSwimming) {
-                this.swimSound.pause();
+                this.audioManager.stopSFX('swim');
                 this.isSwimming = false;
             }
         } else {
@@ -245,7 +226,7 @@ export class PlayerSystem {
             if (overlay) overlay.style.display = 'none';
 
             if (this.isSwimming) {
-                this.swimSound.pause();
+                this.audioManager.stopSFX('swim');
                 this.isSwimming = false;
             }
         }
@@ -295,15 +276,15 @@ export class PlayerSystem {
         const horizontalSpeedSq = this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z;
         if (this.onGround && !this.isFlying && horizontalSpeedSq > 2.0) {
             if (!this.isWalking) {
-                this.walkSound.play().catch(e => console.warn(e));
+                this.audioManager.playSFX('walk');
                 this.isWalking = true;
             }
             // Adjust pitch based on sprint
-            this.walkSound.playbackRate = this.input.isKeyDown('ShiftLeft') ? 1.5 : 1.0;
+            const walkSound = this.audioManager.sfx.walk;
+            if (walkSound) walkSound.playbackRate = this.input.isKeyDown('ShiftLeft') ? 1.5 : 1.0;
         } else {
             if (this.isWalking) {
-                this.walkSound.pause();
-                this.walkSound.currentTime = 0;
+                this.audioManager.stopSFX('walk');
                 this.isWalking = false;
             }
         }
@@ -315,7 +296,29 @@ export class PlayerSystem {
         }
     }
 
-    updateInteraction() {
+    /**
+     * Handle number keys 1-9 for hotbar slot selection.
+     */
+    updateHotbarKeys() {
+        const digitCodes = [
+            'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
+            'Digit6', 'Digit7', 'Digit8', 'Digit9'
+        ];
+        for (let i = 0; i < digitCodes.length; i++) {
+            if (this.input.consumeKey(digitCodes[i])) {
+                this.selectedHotbarSlot = i;
+                // Map slot to block ID (slot i => block id i+1)
+                this.selectedBlockId = i + 1;
+                // Notify UIManager to update hotbar highlight
+                if (this.engine.uiManager) {
+                    this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
+                }
+                break;
+            }
+        }
+    }
+
+    updateInteraction(delta) {
         // Set raycaster to center of screen
         this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
 
@@ -348,29 +351,73 @@ export class PlayerSystem {
             this.highlightMesh.position.set(hexPos.x, y + 0.5, hexPos.z);
             this.highlightMesh.visible = true;
 
-            // Handle Clicks
-            if (this.input.consumeButton(0)) { // Left Click - Break
-                this.breakBlock(q, r, y);
-            } else if (this.input.consumeButton(2)) { // Right Click - Place
-                const norm = closestIntersection.face.normal;
+            // --- 3-phase hold-to-act -----------------------------------------
+            // Phase 0: fire immediately on first press of this hold
+            // Phase 1: wait 2 × blockInitialDelay before 2nd action
+            // Phase 2+: wait blockRepeatDelay for every subsequent action
+            // -----------------------------------------------------------------
 
-                // Determine block position to place
+            const breakHeld = this.input.isButtonDown(0);
+            const placeHeld = this.input.isButtonDown(2);
+
+            // BREAK
+            if (breakHeld) {
+                if (this.breakHoldCount === 0) {
+                    // Phase 0: instant first break
+                    this.breakBlock(q, r, y);
+                    this.breakHoldCount = 1;
+                    this.breakHoldTimer = 0;
+                } else {
+                    this.breakHoldTimer += delta;
+                    const threshold = this.breakHoldCount === 1
+                        ? this.blockInitialDelay * 2  // phase 1: 2× initial delay
+                        : this.blockRepeatDelay;       // phase 2+: normal repeat
+                    if (this.breakHoldTimer >= threshold) {
+                        this.breakHoldTimer = 0;
+                        this.breakHoldCount++;
+                        this.breakBlock(q, r, y);
+                    }
+                }
+            } else {
+                this.breakHoldTimer = 0;
+                this.breakHoldCount = 0;
+            }
+
+            // PLACE
+            if (placeHeld) {
+                // Compute target placement position once
+                const norm = closestIntersection.face.normal;
                 let placeY = y;
                 let placeQ = q;
                 let placeR = r;
-
                 if (Math.abs(norm.y) > 0.5) {
                     placeY += Math.sign(norm.y);
                 } else {
-                    // Place horizontally
                     const outward = hitPoint.clone().add(norm.clone().multiplyScalar(0.5));
                     const nextAxial = worldToAxial(outward.x, outward.z);
                     placeQ = nextAxial.q;
                     placeR = nextAxial.r;
                 }
 
-                // For now, place dirt (id 2) or whatever is selected in UI
-                this.placeBlock(placeQ, placeR, placeY, 2);
+                if (this.placeHoldCount === 0) {
+                    // Phase 0: instant first place
+                    this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                    this.placeHoldCount = 1;
+                    this.placeHoldTimer = 0;
+                } else {
+                    this.placeHoldTimer += delta;
+                    const threshold = this.placeHoldCount === 1
+                        ? this.blockInitialDelay * 2
+                        : this.blockRepeatDelay;
+                    if (this.placeHoldTimer >= threshold) {
+                        this.placeHoldTimer = 0;
+                        this.placeHoldCount++;
+                        this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                    }
+                }
+            } else {
+                this.placeHoldTimer = 0;
+                this.placeHoldCount = 0;
             }
         } else {
             this.selectedBlock = null;
@@ -380,26 +427,31 @@ export class PlayerSystem {
 
     breakBlock(q, r, y) {
         if (this.setBlockGlobal(q, r, y, 0)) { // Air
-            this.breakSound.currentTime = 0;
-            this.breakSound.play().catch(e => console.warn(e));
+            this.audioManager.playSFX('break');
         }
     }
 
     placeBlock(q, r, y, id) {
-        // Don't place inside player
-        if (Math.abs(this.position.x - q) < 1 &&
-            Math.abs(this.position.z - r) < 1 &&
-            y >= Math.floor(this.position.y) &&
-            y <= Math.floor(this.position.y + this.playerHeight)) {
-            return;
+        // --- Prevent placing inside player body (feet or camera) ---
+        // Convert target hex to world position to compare with player
+        const playerAxial = worldToAxial(this.position.x, this.position.z);
+
+        // Feet check: same hex column AND within player's Y occupancy
+        if (playerAxial.q === q && playerAxial.r === r) {
+            const feetY = Math.floor(this.position.y);
+            const headY = Math.floor(this.position.y + this.playerHeight);
+            if (y >= feetY && y <= headY) return;
         }
 
-        const success = this.setBlockGlobal(q, r, y, id);
+        // Camera check: block that the camera eye is inside
+        const camWorld = new THREE.Vector3();
+        this.camera.getWorldPosition(camWorld);
+        const camAxial = worldToAxial(camWorld.x, camWorld.z);
+        if (camAxial.q === q && camAxial.r === r && Math.floor(camWorld.y) === y) return;
 
-        // Play placement audio on success
+        const success = this.setBlockGlobal(q, r, y, id);
         if (success) {
-            this.placeSound.currentTime = 0;
-            this.placeSound.play().catch(e => console.warn(e));
+            this.audioManager.playSFX('place');
         }
     }
 
@@ -413,6 +465,9 @@ export class PlayerSystem {
             const lq = GlobalQ - (cq * CHUNK_SIZE);
             const lr = GlobalR - (cr * CHUNK_SIZE);
             if (chunk.setBlock(lq, lr, y, id)) {
+                // Mark chunk as modified for saving
+                this.chunkSystem.markChunkModified(cq, cr);
+
                 // Determine if we need to update neighboring chunks due to edge changes
                 if (lq === 0) this.dirtyChunk(cq - 1, cr);
                 if (lq === CHUNK_SIZE - 1) this.dirtyChunk(cq + 1, cr);

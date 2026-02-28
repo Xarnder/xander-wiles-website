@@ -7,19 +7,22 @@ const CHUNK_SIZE = 16;
 const CHUNK_HEIGHT = 64;
 
 export class WorldGen {
-    constructor(engine) {
+    constructor(engine, seed = null) {
         this.engine = engine;
-        this.seed = "arkonhex"; // default
+        this.seed = seed || "arkonhex"; // Accept per-world seed
         this.noise = null;
         this.seaLevel = 16;
     }
 
     async init() {
-        // Load settings
+        // Load settings (seaLevel, etc.) — seed comes from constructor now
         const settingsRes = await fetch('data/worldSettings.json');
         const settings = await settingsRes.json();
 
-        this.seed = settings.seed || this.seed;
+        // Only use JSON seed as fallback if none was provided
+        if (this.seed === "arkonhex" && settings.seed) {
+            this.seed = settings.seed;
+        }
         this.seaLevel = settings.seaLevel || 16;
 
         // Initialize noise with seeded random
