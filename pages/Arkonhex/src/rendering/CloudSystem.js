@@ -13,6 +13,7 @@ export class CloudSystem {
         this.cloudScale = 0.003; // Noise scale for clouds
         this.cloudThreshold = 0.6; // High threshold for sparser clouds
         this.cloudRadius = 1200; // How far to render clouds
+        this.castShadows = false; // Toggled by Settings Menu
 
         this.cloudMeshes = new Map(); // key -> mesh
 
@@ -20,10 +21,17 @@ export class CloudSystem {
         const prng = createPRNG("arkonhex_clouds");
         this.noise = new SimplexNoise(prng);
 
-        this.material = new THREE.MeshBasicMaterial({
+        // Cloud Material
+        // USER CONFIG: Tweak 'opacity' for translucency, and 'emissiveIntensity' to make them brighter white!
+        this.material = new THREE.MeshStandardMaterial({
             color: 0xffffff,
+            emissive: 0xffffff, // Full white glow base
+            emissiveIntensity: 0.8, // USER CONFIG: Increase this to make clouds glow brighter white
+            roughness: 0.8,
+            metalness: 0.1,
             transparent: true,
-            opacity: 0.8,
+            opacity: 0.8, // USER CONFIG: Tweak this for whiter/more transparent clouds
+            depthWrite: false, // Completely eliminates Z-fighting for overlapping transparent meshes
             side: THREE.FrontSide
         });
 
@@ -43,6 +51,26 @@ export class CloudSystem {
     }
 
     update(delta, time) {
+        // Dynamic Emissive Intensity based on Sun Angle
+        if (this.engine.lightingManager) {
+            const timeOfDay = this.engine.lightingManager.timeOfDay;
+            // 0.0 = Midnight, 0.25 = Sunrise, 0.5 = Noon, 0.75 = Sunset
+            const angle = (timeOfDay * Math.PI * 2) - (Math.PI / 2);
+            const sunY = Math.sin(angle); // -1.0 at midnight, 1.0 at noon
+
+            // Map sunY [-1.0, 1.0] to intensity [0.05, 0.8]
+            const minIntensity = 0.00;
+            const maxIntensity = 0.8;
+
+            // Normalize sunY to [0.0, 1.0]
+            let normalizedSunY = (sunY + 1.0) / 2.0;
+
+            // Raise to a power (e.g., cubic) so it drops off much faster at sunset/sunrise
+            normalizedSunY = Math.pow(normalizedSunY, 3.0);
+
+            this.material.emissiveIntensity = minIntensity + (normalizedSunY * (maxIntensity - minIntensity));
+        }
+
         // Slowly drift the entire group so chunks don't change internal shapes
         this.cloudGroup.position.x += delta * this.cloudSpeed;
 
@@ -110,16 +138,30 @@ export class CloudSystem {
         let density = this.noise.noise2D(nx, nz);
         density = (density + 1) / 2; // [0, 1]
 
+        // MACRO NOISE MASK: Evaluate the noise at a massive zoomed-out scale to carve huge blue-sky gaps
+        let macroNoise = this.noise.noise2D(nx * 0.05, nz * 0.05);
+        macroNoise = (macroNoise + 1) / 2; // [0, 1]
+
+        // If the region rolls low on the macro scale, explicitly kill the clouds in this chunk
+        if (macroNoise < 0.45) { // 45% of the world will be vast open blue skies
+            density = 0;
+        }
+
         // Create an instanced mesh or just a scaled group
         // If density exceeds threshold, we spawn
         if (density > this.cloudThreshold) {
             const mesh = new THREE.Mesh(this.geometry, this.material);
-            mesh.position.set(localX, this.cloudHeight, localZ);
+            // Stagger spawn height using a deterministic pseudo-random number based on the grid coordinate (q, r).
+            // This guarantees that adjacent/overlapping hexes are forcefully pushed onto completely different height planes!
+            const pseudoRandom = Math.abs(Math.sin(q * 12.9898 + r * 78.233)) * 60.0;
+            mesh.position.set(localX, this.cloudHeight + pseudoRandom, localZ);
 
             // Scale hex radius based on density to make fluffy overlapping varied hexagons
             const scaleFac = size * ((density - this.cloudThreshold) * 3 + 1);
             // Thick clouds
             mesh.scale.set(scaleFac, 10 + (density * 15), scaleFac);
+            mesh.castShadow = this.castShadows;
+            mesh.receiveShadow = false; // Never let clouds cast shadows onto themselves or each other
 
             this.cloudGroup.add(mesh);
             this.cloudMeshes.set(`${q},${r}`, mesh);

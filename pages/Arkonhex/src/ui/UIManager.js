@@ -10,7 +10,13 @@ export class UIManager {
         this.selectedBlockElement = document.getElementById('selected-block-info');
         this.hotbarElement = document.getElementById('hotbar');
 
-        this.frameCount = 0;
+        this.dateElement = document.getElementById('system-date');
+        this.timeElement = document.getElementById('in-game-time');
+
+        if (this.dateElement) {
+            this.dateElement.innerText = new Date().toISOString().split('T')[0];
+        }
+
         this.frameCount = 0;
         this.lastFpsTime = 0;
 
@@ -78,6 +84,97 @@ export class UIManager {
             });
         }
 
+        const cloudShadowToggle = document.getElementById('cloud-shadows-toggle');
+        if (cloudShadowToggle) {
+            cloudShadowToggle.addEventListener('change', (e) => {
+                const cloudSystem = this.engine.systems.find(s => s.cloudMeshes);
+                if (cloudSystem) {
+                    cloudSystem.castShadows = e.target.checked;
+                    cloudSystem.cloudGroup.children.forEach(mesh => {
+                        mesh.castShadow = e.target.checked;
+                        mesh.receiveShadow = e.target.checked;
+                    });
+                }
+            });
+        }
+
+        const aocSlider = document.getElementById('aoc-slider');
+        const aocValDisplay = document.getElementById('aoc-val');
+        if (aocSlider && aocValDisplay) {
+            aocSlider.addEventListener('input', (e) => {
+                aocValDisplay.innerText = e.target.value;
+            });
+
+            aocSlider.addEventListener('change', (e) => {
+                const strength = parseFloat(e.target.value);
+                // The blockSystem configures materials. We tell its builder to rebuild textures!
+                if (this.blockSystem.chunkMeshBuilder && this.blockSystem.chunkMeshBuilder.rebuildTextures) {
+                    this.blockSystem.chunkMeshBuilder.rebuildTextures(this.blockSystem, strength);
+                }
+            });
+        }
+
+        const gtaoSlider = document.getElementById('gtao-slider');
+        const gtaoValDisplay = document.getElementById('gtao-val');
+        if (gtaoSlider && gtaoValDisplay) {
+            gtaoSlider.addEventListener('input', (e) => {
+                gtaoValDisplay.innerText = e.target.value;
+            });
+
+            gtaoSlider.addEventListener('change', (e) => {
+                const intensity = parseFloat(e.target.value);
+                if (this.engine.renderer && this.engine.renderer.gtaoPass) {
+                    this.engine.renderer.gtaoPass.blendIntensity = intensity;
+                    this.engine.renderer.gtaoPass.enabled = intensity > 0; // Dynamically eliminate VRAM footprint when turned off
+                }
+            });
+
+            // Initialize the GTAO pass state from the slider's initial HTML value
+            const initialGtaoIntensity = parseFloat(gtaoSlider.value);
+            if (this.engine.renderer && this.engine.renderer.gtaoPass) {
+                this.engine.renderer.gtaoPass.blendIntensity = initialGtaoIntensity;
+                this.engine.renderer.gtaoPass.enabled = initialGtaoIntensity > 0;
+            }
+        }
+
+        const shadowResSelect = document.getElementById('shadow-res-select');
+        if (shadowResSelect) {
+            shadowResSelect.addEventListener('change', (e) => {
+                const res = parseInt(e.target.value);
+                if (this.engine.lightingManager && this.engine.lightingManager.sunLight) {
+                    const shadow = this.engine.lightingManager.sunLight.shadow;
+                    shadow.mapSize.width = res;
+                    shadow.mapSize.height = res;
+
+                    // Force the Three.js Graphics Engine to dynamically destroy the old VRAM buffer and rebuild the new one!
+                    if (shadow.map) {
+                        shadow.map.dispose();
+                        shadow.map = null;
+                    }
+                }
+            });
+        }
+
+        const blockOutlineToggle = document.getElementById('block-outline-toggle');
+        if (blockOutlineToggle) {
+            // Initial sync
+            if (this.blockSystem) {
+                this.blockSystem.showOutlines = blockOutlineToggle.checked;
+            }
+
+            blockOutlineToggle.addEventListener('change', (e) => {
+                const showOutlines = e.target.checked;
+                if (this.blockSystem) {
+                    this.blockSystem.showOutlines = showOutlines;
+
+                    // Force a total rebuild of all currently loaded chunks to apply/remove outlines
+                    if (this.playerSystem.chunkSystem) {
+                        this.playerSystem.chunkSystem.dirtyAllChunks();
+                    }
+                }
+            });
+        }
+
         // Tab logic
         const tabs = document.querySelectorAll('.pause-tab');
         const contents = document.querySelectorAll('.tab-content');
@@ -117,10 +214,8 @@ export class UIManager {
             // Map 1-9 to first 9 blocks in our palette
             const blockDef = this.blockSystem.getBlockDef(i);
             if (blockDef) {
-                const colors = this.blockSystem.getColor(blockDef.topColor);
-                // Convert linear back to sRGB hex for DOM
-                const toHex = c => Math.round(Math.pow(c, 1 / 2.2) * 255).toString(16).padStart(2, '0');
-                const hexColor = `#${toHex(colors[0])}${toHex(colors[1])}${toHex(colors[2])}`;
+                // The palette now stores the raw hex strings from the JSON
+                const hexColor = this.blockSystem.palette.get(blockDef.topColor) || '#ffffff';
                 inner.style.backgroundColor = hexColor;
             } else {
                 inner.style.backgroundColor = 'transparent';
@@ -138,6 +233,24 @@ export class UIManager {
             this.fpsElement.innerText = `FPS: ${this.frameCount}`;
             this.frameCount = 0;
             this.lastFpsTime = time;
+        }
+
+        // Debug info - In-Game Time
+        if (this.timeElement && this.engine.lightingManager) {
+            // timeOfDay is 0.0 to 1.0. Multiply by 24 to get total hours float.
+            const totalHours = this.engine.lightingManager.timeOfDay * 24.0;
+            const hours24 = Math.floor(totalHours);
+            const minutes = Math.floor((totalHours - hours24) * 60);
+
+            // Map 24H -> 12H (AM/PM)
+            const ampm = hours24 >= 12 ? 'PM' : 'AM';
+            let hours12 = hours24 % 12;
+            hours12 = hours12 ? hours12 : 12; // Modulo returns 0 for 12, so set to 12
+
+            // Format minutes to be two digits (e.g., '05' instead of '5')
+            const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+
+            this.timeElement.innerText = `${hours12}:${minutesStr} ${ampm}`;
         }
 
         // Debug info - Selected Block
@@ -185,6 +298,7 @@ export class UIManager {
             // Toggle Light Shadows
             if (this.engine.lightingManager) {
                 this.engine.lightingManager.sunLight.castShadow = this.highGraphics;
+                this.engine.lightingManager.sunLight.shadow.camera.updateProjectionMatrix();
             }
 
             this.graphicsElement.innerText = `Graphics: ${this.highGraphics ? 'High' : 'Low'} (Press G to toggle)`;

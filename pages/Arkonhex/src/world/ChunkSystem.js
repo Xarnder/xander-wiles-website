@@ -6,7 +6,7 @@ export class ChunkSystem {
         this.engine = engine;
         this.worldGen = worldGen;
         this.blockSystem = blockSystem;
-        this.meshBuilder = new ChunkMeshBuilder();
+        this.meshBuilder = new ChunkMeshBuilder(this.blockSystem);
 
         this.chunks = new Map(); // string key "${cq},${cr}" -> Chunk
         this.chunkGenQueue = [];
@@ -137,6 +137,12 @@ export class ChunkSystem {
         }
 
         chunk.isDirty = false;
+    }
+
+    dirtyAllChunks() {
+        for (const chunk of this.chunks.values()) {
+            chunk.isDirty = true;
+        }
     }
 
     getBlockGlobal(globalQ, globalR, y) {

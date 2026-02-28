@@ -4,7 +4,8 @@ export class BlockSystem {
     constructor() {
         this.blocks = new Map();
         this.blocksByName = new Map();
-        this.palette = new Map(); // name -> normalized RGB array [r, g, b]
+        this.palette = new Map(); // name -> hex string (used by UI and materials)
+        this.paletteOpacity = new Map(); // name -> float opacity blending scalar for shadow map
     }
 
     async init() {
@@ -14,14 +15,15 @@ export class BlockSystem {
         const paletteRes = await fetch('data/palette.json');
         const paletteData = await paletteRes.json();
 
-        for (const [name, hex] of Object.entries(paletteData)) {
-            const color = new THREE.Color(hex);
-
-            // We store colors as normalized arrays for vertex colors
-            // Since we set outputColorSpace to sRGB, Three.js standard material 
-            // expects linear vertex colors. We must convert sRGB hex to linear.
-            color.convertSRGBToLinear();
-            this.palette.set(name, [color.r, color.g, color.b]);
+        for (const [name, data] of Object.entries(paletteData)) {
+            // Support both flat string "#fff" and dense config objects {color: "#fff", opacity: 0.5}
+            if (typeof data === 'object') {
+                this.palette.set(name, data.color);
+                this.paletteOpacity.set(name, data.opacity !== undefined ? data.opacity : 0.8);
+            } else {
+                this.palette.set(name, data);
+                this.paletteOpacity.set(name, 0.8); // Default fallback opacity
+            }
         }
 
         // Load block definitions
@@ -44,7 +46,8 @@ export class BlockSystem {
         return this.blocksByName.get(name) || 0;
     }
 
-    getColor(name) {
-        return this.palette.get(name) || [1, 1, 1];
+    getColorName(name) {
+        // Return the string name if it exists in the palette, otherwise default to "white"
+        return this.palette.has(name) ? name : "white";
     }
 }

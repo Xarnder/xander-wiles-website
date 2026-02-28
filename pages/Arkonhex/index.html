@@ -40,7 +40,7 @@
     <div id="ui-layer" class="ui-hidden">
         <div id="crosshair"></div>
         <div id="dev-info">
-            Arkonhex Development: 2026-02-27 - v0.1.0 Alpha
+            Arkonhex <span id="system-date"></span> - <span id="in-game-time">12:00 AM</span> - v0.1.0 Alpha
         </div>
         <div id="debug-overlay">
             <div id="fps-counter">FPS: 0</div>
@@ -86,6 +86,44 @@
                 <div class="setting-row" style="margin-top: 20px;">
                     <label>Field of View: <span id="fov-val">75</span></label>
                     <input type="range" id="fov-slider" min="60" max="120" step="1" value="75">
+                </div>
+
+                <div class="setting-row" style="margin-top: 20px;">
+                    <label>Cloud Shadows: <input type="checkbox" id="cloud-shadows-toggle"></label>
+                </div>
+
+                <div class="setting-row" style="margin-top: 20px;">
+                    <label>AOC Strength: <span id="aoc-val">0.8</span></label>
+                    <input type="range" id="aoc-slider" min="0.0" max="1.0" step="0.1" value="0.8">
+                    <p style="font-size:0.8em; color: #888888; margin-top:5px;">Ambient Occlusion blending. Requires
+                        High Graphics (G) to be enabled.</p>
+                </div>
+
+                <div class="setting-row" style="margin-top: 20px;">
+                    <label>GTAO Post-Processing: <span id="gtao-val">1.0</span></label>
+                    <input type="range" id="gtao-slider" min="0.0" max="2.0" step="0.1" value="1.0">
+                    <p style="font-size:0.8em; color: #ff5555; margin-top:5px;">Ground Truth Screen-Space Shadows.
+                        Massive performance hit.</p>
+                </div>
+
+                <div class="setting-row" style="margin-top: 20px;">
+                    <label>Terrain Shadow Resolution:
+                        <select id="shadow-res-select"
+                            style="margin-left: 10px; padding: 5px; background: #333; color: white; border: 1px solid #555; border-radius: 4px;">
+                            <option value="1024">Low (1024)</option>
+                            <option value="2048">Medium (2048)</option>
+                            <option value="4096" selected>High (4096)</option>
+                            <option value="8192">Ultra (8192)</option>
+                        </select>
+                    </label>
+                    <p style="font-size:0.8em; color: #888888; margin-top:5px;">Requires High Graphics (G) to be active.
+                        Lower to vastly improve framerate.</p>
+                </div>
+
+                <div class="setting-row" style="margin-top: 20px;">
+                    <label>Block Outlines: <input type="checkbox" id="block-outline-toggle"></label>
+                    <p style="font-size:0.8em; color: #888888; margin-top:5px;">Draws sharp outlines around all blocks.
+                        Adds a slight performance cost.</p>
                 </div>
             </div>
 

@@ -19,7 +19,7 @@ export class Engine {
 
         // Base Three.js setup
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87CEEB); // Sky blue
+        // SkyDome will be constructed in LightingManager to replace static background
     }
 
     async init() {
@@ -47,7 +47,7 @@ export class Engine {
         // 2. Rendering Base
         await setProgress('Initializing Renderer...', 30);
         this.rendererSystem = new Renderer(this);
-        this.lightingManager = new LightingManager(this.scene);
+        this.lightingManager = new LightingManager(this);
 
         // 3. World Generation
         await setProgress('Loading World Settings...', 50);
@@ -118,7 +118,7 @@ export class Engine {
 
         // Specific system updates that aren't purely ECS
         if (this.lightingManager && this.playerSystem) {
-            this.lightingManager.update(this.playerSystem.position);
+            this.lightingManager.update(this.playerSystem.position, delta, this.inputManager);
         }
 
         // Update all registered systems
