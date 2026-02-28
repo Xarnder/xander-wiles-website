@@ -69,6 +69,49 @@ export class UIManager {
             });
         }
 
+        const lodSlider = document.getElementById('lod-slider');
+        const lodValDisplay = document.getElementById('lod-val');
+
+        if (lodSlider && lodValDisplay) {
+            lodSlider.value = this.playerSystem.chunkSystem.lodDistance;
+            lodValDisplay.innerText = lodSlider.value;
+
+            lodSlider.addEventListener('input', (e) => {
+                lodValDisplay.innerText = e.target.value;
+            });
+
+            lodSlider.addEventListener('change', (e) => {
+                const newLodDist = parseInt(e.target.value);
+                this.playerSystem.chunkSystem.lodDistance = newLodDist;
+
+                // Force a rebuild of all currently rendered chunks to apply LOD states
+                const pos = this.playerSystem.position;
+                const axial = this.playerSystem.chunkSystem.worldToAxial ?
+                    this.playerSystem.chunkSystem.worldToAxial(pos.x, pos.z) :
+                    { q: Math.round(pos.x / 16), r: Math.round(pos.z / 16) };
+
+                this.playerSystem.chunkSystem.updateLoadedChunks(axial.q, axial.r);
+            });
+        }
+
+        const lodEnableToggle = document.getElementById('lod-enable-toggle');
+        if (lodEnableToggle) {
+            lodEnableToggle.checked = this.playerSystem.chunkSystem.enableLOD;
+            lodEnableToggle.addEventListener('change', (e) => {
+                this.playerSystem.chunkSystem.enableLOD = e.target.checked;
+
+                // Force a rebuild of chunks to apply/remove LOD states
+                if (this.playerSystem.chunkSystem) {
+                    const pos = this.playerSystem.position;
+                    const axial = this.playerSystem.chunkSystem.worldToAxial ?
+                        this.playerSystem.chunkSystem.worldToAxial(pos.x, pos.z) :
+                        { q: Math.round(pos.x / 16), r: Math.round(pos.z / 16) };
+
+                    this.playerSystem.chunkSystem.updateLoadedChunks(axial.q, axial.r);
+                }
+            });
+        }
+
         const fovSlider = document.getElementById('fov-slider');
         const fovValDisplay = document.getElementById('fov-val');
 

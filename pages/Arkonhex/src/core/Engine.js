@@ -282,6 +282,15 @@ export class Engine {
         // Specific system updates that aren't purely ECS
         if (this.lightingManager && this.playerSystem) {
             this.lightingManager.update(this.playerSystem.position, delta, this.inputManager);
+
+            // Update LOD outline color dynamically based on sun angle relative to camera view
+            if (this.blockSystem && this.blockSystem.chunkMeshBuilder && this.rendererSystem && this.rendererSystem.camera) {
+                this.blockSystem.chunkMeshBuilder.updateLODOutlineColor(
+                    this.rendererSystem.camera,
+                    this.lightingManager.sunLight,
+                    this.lightingManager.timeOfDay
+                );
+            }
         }
 
         // Update all registered systems

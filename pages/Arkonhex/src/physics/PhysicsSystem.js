@@ -1,4 +1,4 @@
-import { worldToAxial, HEX_SIZE, HEX_WIDTH } from '../utils/HexUtils.js';
+import { worldToAxial, HEX_SIZE, HEX_WIDTH, getSeededBlockHeight } from '../utils/HexUtils.js';
 
 export class PhysicsSystem {
     constructor(engine, chunkSystem) {
@@ -8,8 +8,24 @@ export class PhysicsSystem {
     }
 
     /**
-     * Get the block ID at a specific world coordinate.
+     * Get the exact height of a block at a given world position
      */
+    getBlockHeightAt(x, y, z) {
+        const blockId = this.getBlockAt(x, y, z);
+        if (blockId === 0) return 0;
+
+        const { q, r } = worldToAxial(x, z);
+
+        // We need the world seed from the engine/worldgen
+        // The seed exists on engine.worldSystem.worldGen.seed or similar, but let's grab it safely
+        const seed = this.engine.worldSystem?.currentWorld?.seed || "arkonhex";
+
+        const blockAboveId = this.getBlockAt(x, y + 1, z);
+
+        const isSolidFn = (id) => this.isSolid(id);
+
+        return getSeededBlockHeight(q, r, Math.floor(y), seed, blockAboveId, isSolidFn);
+    }
     getBlockAt(x, y, z) {
         if (y < 0 || y >= 64) return 0;
 
@@ -68,10 +84,16 @@ export class PhysicsSystem {
 
         // Refined Vertical Check
         for (let pt of checkPoints) {
-            const blockFloor = this.getBlockAt(pt.x, nextY, pt.z);
+            const blockFloorY = Math.floor(nextY);
+            const blockFloor = this.getBlockAt(pt.x, blockFloorY, pt.z);
+
             if (blockFloor !== 0 && this.isSolid(blockFloor)) {
-                if (velocity.y < 0) {
-                    nextY = Math.floor(nextY) + 1;
+                // Determine exact physical height of this specific floor block
+                const floorHeight = this.getBlockHeightAt(pt.x, blockFloorY, pt.z);
+                const exactFloorY = blockFloorY + floorHeight;
+
+                if (velocity.y < 0 && nextY <= exactFloorY && position.y >= exactFloorY - 0.5) {
+                    nextY = exactFloorY;
                     velocity.y = 0;
                     onGround = true;
                     break;
@@ -79,26 +101,48 @@ export class PhysicsSystem {
             }
 
             // Check Head
-            const blockCeil = this.getBlockAt(pt.x, nextY + height, pt.z);
+            const blockCeilY = Math.floor(nextY + height);
+            const blockCeil = this.getBlockAt(pt.x, blockCeilY, pt.z);
             if (blockCeil !== 0 && this.isSolid(blockCeil)) {
+                // If there's a ceiling block, we collide with its bottom (which is an integer)
                 if (velocity.y > 0) {
-                    nextY = Math.floor(nextY + height) - height; // Stop going up
+                    nextY = blockCeilY - height; // Stop going up
                     velocity.y = 0;
                     break;
                 }
             }
         }
 
-        // 2. Horizontal Collision (X axis)
+        // 2. Horizontal Collision (X axis) with auto-stepper for organic height variations
         for (let pt of checkPoints) {
             // Check from bottom to top of player
-            const playerBaseY = nextY;
+            // But skip the very bottom 0.6 units to automatically step over variable heights
+            const stepHeight = 0.61; // Auto-step over any bump up to 0.61 blocks high
+            const playerBaseY = nextY + stepHeight;
             const playerTopY = nextY + height - 0.1;
 
-            for (let y = playerBaseY; y <= playerTopY; y += 1) {
+            if (playerBaseY > playerTopY) continue; // Safety check
+
+            // We test the grid cells encompassing the player's height
+            const startGridY = Math.floor(playerBaseY);
+            const endGridY = Math.floor(playerTopY);
+
+            for (let y = startGridY; y <= endGridY; y++) {
                 // X collision
                 const blockX = this.getBlockAt(pt.x + velocity.x * delta, y, pt.z);
                 if (blockX !== 0 && this.isSolid(blockX)) {
+                    // We only collide horizontally if the physical geometry exists at this height
+                    let physicalThreshold = y; // Bottom of block
+
+                    // If we are checking the top-most block the player hits, we need to respect its exact height
+                    if (y === endGridY || y === startGridY) {
+                        const exactHeight = this.getBlockHeightAt(pt.x + velocity.x * delta, y, pt.z);
+                        // If the player is above the precise top geometry of this block, let them slide over
+                        if (playerBaseY > y + exactHeight) {
+                            continue;
+                        }
+                    }
+
                     velocity.x = 0;
                     nextX = position.x;
                     break;
@@ -108,13 +152,27 @@ export class PhysicsSystem {
 
         // 3. Horizontal Collision (Z axis)
         for (let pt of checkPoints) {
-            const playerBaseY = nextY;
+            const stepHeight = 0.61;
+            const playerBaseY = nextY + stepHeight;
             const playerTopY = nextY + height - 0.1;
 
-            for (let y = playerBaseY; y <= playerTopY; y += 1) {
+            if (playerBaseY > playerTopY) continue;
+
+            const startGridY = Math.floor(playerBaseY);
+            const endGridY = Math.floor(playerTopY);
+
+            for (let y = startGridY; y <= endGridY; y++) {
                 // Z collision
                 const blockZ = this.getBlockAt(nextX, y, pt.z + velocity.z * delta);
                 if (blockZ !== 0 && this.isSolid(blockZ)) {
+                    // Exact height precision for Z axis collisions too
+                    if (y === endGridY || y === startGridY) {
+                        const exactHeight = this.getBlockHeightAt(nextX, y, pt.z + velocity.z * delta);
+                        if (playerBaseY > y + exactHeight) {
+                            continue;
+                        }
+                    }
+
                     velocity.z = 0;
                     nextZ = position.z;
                     break;

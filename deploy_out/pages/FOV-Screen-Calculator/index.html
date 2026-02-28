@@ -162,11 +162,38 @@
             <!-- RESULTS -->
             <div id="result-area" class="result-box">
                 <div id="result-content"></div>
+                <button id="show-chart-btn" class="chart-toggle-btn">View Distance Chart</button>
             </div>
 
             <div id="debug-msg" class="debug-text">Adjust values to see live updates.</div>
         </div>
     </main>
+
+    <!-- CHART MODAL -->
+    <div id="chart-modal" class="side-modal glass-card hidden">
+        <div class="modal-header">
+            <h2>Optimal Viewing Distance</h2>
+            <button id="close-chart" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-desc">Based on visual acuity limits for different screen resolutions. Click a point to apply
+                values.</p>
+            <div class="chart-controls">
+                <label for="chartUnit">Distance Unit</label>
+                <select id="chartUnit">
+                    <option value="ft" selected>Feet (ft)</option>
+                    <option value="m">Meters (m)</option>
+                    <option value="cm">Centimeters (cm)</option>
+                    <option value="in">Inches (in)</option>
+                </select>
+            </div>
+            <div id="chart-selection" class="chart-selection hidden"></div>
+            <div id="chart-container" class="chart-canvas-container">
+                <!-- SVG Graph will be injected here -->
+            </div>
+            <div class="chart-legend" id="chart-legend"></div>
+        </div>
+    </div>
 
     <!-- Main Script -->
     <script type="module" src="script.js"></script>

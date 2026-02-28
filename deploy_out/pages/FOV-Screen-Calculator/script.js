@@ -252,7 +252,7 @@ function init3D() {
     container.appendChild(renderer.domElement);
 
     // Controls
-    controls = new OrbitControls(camera, document.body); // Listen to body instead of domElement so it works when canvas is behind UI
+    controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.autoRotate = false;
 
@@ -473,3 +473,282 @@ function applyDiagonalSize(diagInches) {
 updateInputVisibility();
 init3D();
 calculateAndRender();
+
+// ==========================================
+// 5. CHART & CSV LOGIC
+// ==========================================
+
+const chartModal = document.getElementById("chart-modal");
+const showChartBtn = document.getElementById("show-chart-btn");
+const closeChartBtn = document.getElementById("close-chart");
+const chartContainer = document.getElementById("chart-container");
+const chartLegend = document.getElementById("chart-legend");
+const chartUnitSelect = document.getElementById("chartUnit");
+const chartSelection = document.getElementById("chart-selection");
+
+let chartData = null;
+let chartAnimated = false; // only animate on first open
+
+// Unit conversion factors (from feet)
+const ftConversions = {
+    ft: 1,
+    m: 0.3048,
+    cm: 30.48,
+    in: 12
+};
+
+const unitLabels = {
+    ft: 'ft',
+    m: 'm',
+    cm: 'cm',
+    in: 'in'
+};
+
+function convertFromFeet(valueFt, targetUnit) {
+    return valueFt * (ftConversions[targetUnit] || 1);
+}
+
+showChartBtn.addEventListener("click", () => {
+    chartModal.classList.remove("hidden");
+    if (!chartData) {
+        loadChartData();
+    } else {
+        renderChart();
+    }
+});
+
+closeChartBtn.addEventListener("click", () => {
+    chartModal.classList.add("hidden");
+});
+
+chartUnitSelect.addEventListener("change", () => {
+    chartAnimated = false; // re-animate on unit change
+    renderChart();
+});
+
+async function loadChartData() {
+    try {
+        const response = await fetch('TV-Distance.csv');
+        const csvText = await response.text();
+        parseCSV(csvText);
+        renderChart();
+    } catch (error) {
+        console.error("Error loading CSV:", error);
+    }
+}
+
+function parseCSV(text) {
+    const lines = text.trim().split('\n');
+    const headers = lines[0].split(',');
+
+    // Store raw data in feet (original CSV unit)
+    const data = {
+        labels: [],
+        datasets: headers.slice(1).map(h => ({
+            label: h.replace(' Line (ft)', ''),
+            pointsFt: [], // store raw feet values
+            color: getDatasetColor(h)
+        }))
+    };
+
+    for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',');
+        const size = parseFloat(cols[0]);
+        data.labels.push(size);
+
+        for (let j = 1; j < cols.length; j++) {
+            const val = cols[j].trim();
+            const numericVal = parseFloat(val);
+            if (!isNaN(numericVal)) {
+                data.datasets[j - 1].pointsFt.push({ x: size, yFt: numericVal });
+            }
+        }
+    }
+    chartData = data;
+}
+
+function getDatasetColor(header) {
+    if (header.includes('Ultra HD')) return '#3b82f6'; // Blue
+    if (header.includes('1080p')) return '#10b981';    // Emerald
+    if (header.includes('720p')) return '#f59e0b';     // Amber
+    if (header.includes('DVD')) return '#ef4444';      // Red
+    return '#8b5cf6'; // Violet
+}
+
+function renderChart() {
+    if (!chartData) return;
+
+    const unit = chartUnitSelect.value;
+    const unitLabel = unitLabels[unit];
+
+    const width = 400;
+    const height = 300;
+    const padding = 45;
+
+    const xMin = Math.min(...chartData.labels);
+    const xMax = Math.max(...chartData.labels);
+
+    // Find the max Y across all datasets in the selected unit
+    let yMaxRaw = 0;
+    chartData.datasets.forEach(ds => {
+        ds.pointsFt.forEach(pt => {
+            const converted = convertFromFeet(pt.yFt, unit);
+            if (converted > yMaxRaw) yMaxRaw = converted;
+        });
+    });
+    // Round yMax up to a nice number
+    const yMax = Math.ceil(yMaxRaw / 5) * 5 || 20;
+    const yStep = yMax <= 10 ? 2 : yMax <= 30 ? 5 : 10;
+
+    const getX = (val) => padding + ((val - xMin) / (xMax - xMin)) * (width - 2 * padding);
+    const getY = (val) => (height - padding) - (val / yMax) * (height - 2 * padding);
+
+    let svgHtml = `<svg viewBox="0 0 ${width} ${height}" class="chart-svg">`;
+
+    // Grid lines & Axes
+    svgHtml += `<line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" class="axis-line" />`;
+    svgHtml += `<line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" class="axis-line" />`;
+
+    // X-Axis Labels (Screen Size)
+    chartData.labels.forEach(val => {
+        const x = getX(val);
+        svgHtml += `<text x="${x}" y="${height - padding + 18}" class="axis-label" text-anchor="middle">${val}"</text>`;
+        svgHtml += `<line x1="${x}" y1="${height - padding}" x2="${x}" y2="${padding}" class="grid-line" />`;
+    });
+
+    // Y-Axis Labels (Distance in selected unit)
+    for (let i = 0; i <= yMax; i += yStep) {
+        const y = getY(i);
+        svgHtml += `<text x="${padding - 8}" y="${y + 4}" class="axis-label" text-anchor="end">${i}${unitLabel}</text>`;
+        svgHtml += `<line x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}" class="grid-line" />`;
+    }
+
+    // Datasets (paths first, then points on top)
+    chartData.datasets.forEach((ds, dsIndex) => {
+        if (ds.pointsFt.length < 2) return;
+
+        const convertedPoints = ds.pointsFt.map(pt => ({
+            x: pt.x,
+            y: convertFromFeet(pt.yFt, unit),
+            yFt: pt.yFt
+        }));
+
+        let pathD = `M ${getX(convertedPoints[0].x)} ${getY(convertedPoints[0].y)}`;
+        for (let i = 1; i < convertedPoints.length; i++) {
+            pathD += ` L ${getX(convertedPoints[i].x)} ${getY(convertedPoints[i].y)}`;
+        }
+
+        svgHtml += `<path d="${pathD}" class="data-line" style="stroke: ${ds.color};" id="path-${dsIndex}" />`;
+    });
+
+    // Points (rendered after paths so they sit on top)
+    chartData.datasets.forEach((ds, dsIndex) => {
+        if (ds.pointsFt.length < 2) return;
+
+        ds.pointsFt.forEach((pt, ptIndex) => {
+            const yConverted = convertFromFeet(pt.yFt, unit);
+            svgHtml += `<circle 
+                cx="${getX(pt.x)}" 
+                cy="${getY(yConverted)}" 
+                r="4" 
+                fill="${ds.color}" 
+                class="data-point" 
+                data-ds="${dsIndex}" 
+                data-pt="${ptIndex}"
+                data-size="${pt.x}" 
+                data-dist-ft="${pt.yFt}"
+                data-label="${ds.label}">
+                <title>${ds.label}: ${yConverted.toFixed(1)}${unitLabel} at ${pt.x}"</title>
+            </circle>`;
+        });
+    });
+
+    svgHtml += `</svg>`;
+    chartContainer.innerHTML = svgHtml;
+
+    // Attach click handlers to data points
+    chartContainer.querySelectorAll('.data-point').forEach(circle => {
+        circle.addEventListener('click', handlePointClick);
+    });
+
+    // Render Legend
+    chartLegend.innerHTML = chartData.datasets.map(ds => `
+        <div class="legend-item">
+            <div class="legend-color" style="background: ${ds.color}"></div>
+            <span>${ds.label}</span>
+        </div>
+    `).join('');
+
+    // Animate lines (only on first open or unit change)
+    if (!chartAnimated) {
+        setTimeout(() => {
+            chartData.datasets.forEach((ds, i) => {
+                const path = document.getElementById(`path-${i}`);
+                if (path) {
+                    const length = path.getTotalLength();
+                    path.style.strokeDasharray = length;
+                    path.style.strokeDashoffset = length;
+                    path.getBoundingClientRect(); // force reflow
+                    path.style.transition = `stroke-dashoffset 1.5s ease-in-out ${i * 0.2}s`;
+                    path.style.strokeDashoffset = '0';
+                }
+            });
+            chartAnimated = true;
+        }, 50);
+    }
+}
+
+function handlePointClick(e) {
+    const circle = e.currentTarget;
+    const sizeInches = parseFloat(circle.dataset.size);
+    const distFt = parseFloat(circle.dataset.distFt);
+    const label = circle.dataset.label;
+    const unit = chartUnitSelect.value;
+    const unitLabel = unitLabels[unit];
+
+    // Convert distance from feet to the calculator's distance unit
+    const distMeters = distFt * 0.3048;
+
+    // Convert screen diagonal (inches) to width using aspect ratio
+    const rW = parseFloat(ratioWInput.value) || 16;
+    const rH = parseFloat(ratioHInput.value) || 9;
+    const angle = Math.atan(rH / rW);
+    const widthInches = sizeInches * Math.cos(angle);
+    const heightInches = sizeInches * Math.sin(angle);
+
+    // Convert to the user-chosen units in the main calculator
+    const widthUnit = widthUnitSelect.value;
+    const heightUnit = heightUnitSelect.value;
+    const distUnit = distUnitSelect.value;
+
+    const inchesToUnit = (inches, targetUnit) => {
+        const meters = inches * 0.0254;
+        return fromMeters(meters, targetUnit);
+    };
+
+    const metersToUnit = (m, targetUnit) => {
+        return fromMeters(m, targetUnit);
+    };
+
+    // Set values into the calculator inputs
+    screenWidthInput.value = parseFloat(inchesToUnit(widthInches, widthUnit).toFixed(1));
+    screenHeightInput.value = parseFloat(inchesToUnit(heightInches, heightUnit).toFixed(1));
+    viewDistanceInput.value = parseFloat(metersToUnit(distMeters, distUnit).toFixed(1));
+
+    // Trigger recalculation
+    calculateAndRender();
+
+    // Show selection feedback
+    const distConverted = convertFromFeet(distFt, unit);
+    chartSelection.classList.remove('hidden');
+    chartSelection.innerHTML = `
+        <span class="sel-icon">📺</span>
+        <span class="sel-text">
+            <strong>${sizeInches}" ${label}</strong> → ${distConverted.toFixed(1)}${unitLabel} away. Values applied!
+        </span>
+    `;
+
+    // Highlight the active point
+    chartContainer.querySelectorAll('.data-point').forEach(c => c.classList.remove('data-point-active'));
+    circle.classList.add('data-point-active');
+}

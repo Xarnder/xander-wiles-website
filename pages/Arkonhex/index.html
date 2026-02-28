@@ -167,6 +167,17 @@
                             High Graphics (G).</p>
                     </div>
                     <div class="setting-row" style="margin-top: 20px;">
+                        <label>Enable LOD: <input type="checkbox" id="lod-enable-toggle" checked></label>
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Check to flatten distant terrain
+                            logic.</p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>LOD Start Distance: <span id="lod-val">4</span> Chunks</label>
+                        <input type="range" id="lod-slider" min="1" max="16" step="1" value="4">
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Distance where detailed bumpy
+                            terrain flattens for performance.</p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
                         <label>GTAO Post-Processing: <span id="gtao-val">1.0</span></label>
                         <input type="range" id="gtao-slider" min="0.0" max="2.0" step="0.1" value="1.0">
                     </div>

@@ -79,3 +79,37 @@ export function getNeighbor(q, r, direction) {
 export function hexDistance(q1, r1, q2, r2) {
     return (Math.abs(q1 - q2) + Math.abs(q1 + r1 - q2 - r2) + Math.abs(r1 - r2)) / 2;
 }
+
+/**
+ * Procedurally generates a consistent block height between 0.6 and 1.0 
+ * if the block above it is air/non-solid.
+ * @param {number} q Axial Q
+ * @param {number} r Axial R 
+ * @param {number} y Grid Y
+ * @param {string} seedStr The world seed
+ * @param {number} blockAboveId ID of the block directly above this one
+ * @param {Function} isSolidFn Function to check if blockAboveId is solid
+ * @returns {number} The physical render height [0.6, 1.0]
+ */
+export function getSeededBlockHeight(q, r, y, seedStr, blockAboveId, isSolidFn) {
+    // If there is a solid block immediately above, force full height
+    if (blockAboveId !== 0 && isSolidFn(blockAboveId)) {
+        return 1.0;
+    }
+
+    // Convert seed string to a quick integer hash
+    let hash = 0;
+    if (seedStr && seedStr.length > 0) {
+        for (let i = 0; i < seedStr.length; i++) {
+            hash = ((hash << 5) - hash) + seedStr.charCodeAt(i);
+            hash |= 0;
+        }
+    }
+
+    // Create a 3D procedural pseudo-random float [0, 1] mapped to [0.6, 1.0]
+    // The exact same parameters must yield the exact same height
+    const n = Math.sin(q * 12.9898 + r * 78.233 + y * 37.719 + hash) * 43758.5453;
+    const rand = n - Math.floor(n);
+
+    return 0.6 + (rand * 0.4);
+}

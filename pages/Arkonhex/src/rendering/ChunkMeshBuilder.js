@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { HEX_SIZE, axialToWorld } from '../utils/HexUtils.js';
+import { HEX_SIZE, axialToWorld, getSeededBlockHeight } from '../utils/HexUtils.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
@@ -59,6 +59,33 @@ export class ChunkMeshBuilder {
                 polygonOffsetFactor: 1,
                 polygonOffsetUnits: 1
             });
+
+            // If this is the water material, hook into the shader for vertex animation
+            if (color === 'blue') {
+                this.waterUniforms = { uTime: { value: 0 } };
+
+                this.transparentMaterials[color].onBeforeCompile = (shader) => {
+                    shader.uniforms.uTime = this.waterUniforms.uTime;
+
+                    shader.vertexShader = `
+                        uniform float uTime;
+                        \n` + shader.vertexShader;
+
+                    // Hook into 'begin_vertex' to apply the wave offset
+                    // Water blocks have their base at y=0 and top at y=0.5. 
+                    // We only want the top surface (y > 0.1) to wave, to prevent tearing from the ground.
+                    const token = `#include <begin_vertex>`;
+                    const customTransform = `
+                        vec3 transformed = vec3( position );
+                        if (transformed.y > 0.1) {
+                            // Simple continuous layered sine wave based on world X and Z, plus time
+                            float wave = sin(position.x * 1.5 + uTime) * cos(position.z * 1.5 + uTime * 0.8) * 0.1;
+                            transformed.y += wave;
+                        }
+                    `;
+                    shader.vertexShader = shader.vertexShader.replace(token, customTransform);
+                };
+            }
         }
 
         // We must export out ordered Arrays for the final THREE.Mesh construction
@@ -71,6 +98,16 @@ export class ChunkMeshBuilder {
             color: 0xffffff,
             linewidth: 3,
             resolution: new THREE.Vector2(window.innerWidth, window.innerHeight)
+        });
+
+        // Shared line material for distant LOD blocks to fake geometric depth
+        this.lodOutlineMaterial = new LineMaterial({
+            color: 0x000000,
+            linewidth: 1, // Reduced for thinner lines as requested
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+            transparent: true,
+            opacity: 0.6,
+            depthWrite: false
         });
 
         // Shared line material for glass outlines (reused across all chunks)
@@ -146,13 +183,61 @@ export class ChunkMeshBuilder {
     }
 
     /**
+     * Updates the color of all LOD Block Outlines dynamically.
+     * When sun is behind camera (dot = -1), lines are white.
+     * When sun is in front of camera (dot = 1), lines are black.
+     * @param {THREE.Camera} camera 
+     * @param {THREE.DirectionalLight} sunLight 
+     * @param {number} timeOfDay - Normalized time 0.0 to 1.0
+     */
+    updateLODOutlineColor(camera, sunLight, timeOfDay) {
+        if (!this.lodOutlineMaterial) return;
+
+        // Define day/night threshold grace
+        const isDaytime = timeOfDay > 0.23 && timeOfDay < 0.77;
+
+        if (!isDaytime) {
+            // Nighttime: static dark gray moonlight outlines
+            this.lodOutlineMaterial.color.setHex(0x333344);
+            return;
+        }
+
+        // Get where camera is pointing
+        const viewDir = new THREE.Vector3();
+        camera.getWorldDirection(viewDir);
+
+        // Get direction FROM camera TO sun
+        const sunDir = sunLight.position.clone().normalize();
+
+        // Dot product: 1 = looking directly at sun. -1 = sun is directly behind
+        const dot = viewDir.dot(sunDir);
+
+        // Map dot [-1, 1] to ratio [0, 1]
+        // dot = -1 (looking away)   -> ratio = 0 (we want white)
+        // dot = 1  (looking at sun) -> ratio = 1 (we want black)
+        let ratio = (dot + 1.0) / 2.0;
+
+        // Optionally, we can exponentiate the ratio to bias the interpolation 
+        // towards white for a wider viewing cone away from the sun.
+        ratio = Math.pow(ratio, 1.5);
+
+        // Interpolate Color
+        const colorFar = new THREE.Color(0xffffff); // White
+        const colorNear = new THREE.Color(0x000000); // Black
+
+        colorFar.lerp(colorNear, ratio);
+        this.lodOutlineMaterial.color.copy(colorFar);
+    }
+
+    /**
      * Builds a single merged BufferGeometry for an entire chunk.
      * Uses vertex colors to distinguish block types and top/base sections.
      * @param {Chunk} chunk - The chunk data structure
      * @param {BlockSystem} blockSystem - Reference to block definitions
      * @param {ChunkSystem} chunkSystem - Reference to chunk system for neighboring queries
+     * @param {string} seed - The world seed for procedural generation logic
      */
-    buildChunkMesh(chunk, blockSystem, chunkSystem) {
+    buildChunkMesh(chunk, blockSystem, chunkSystem, seed = "arkonhex") {
         // We now have multiple materials, so we need a discrete set of buffers for each material index
         const numMaterials = this.materialArray.length;
 
@@ -185,217 +270,329 @@ export class ChunkMeshBuilder {
             { q: 1, r: -1 }
         ];
 
-        // Iterate all blocks in the chunk data
-        // Chunk provides an iterator or array of {q, r, y, blockId}
-        for (const block of chunk.getBlocks()) {
-            if (block.id === 0) continue; // Air
+        // Shared Geometry Helpers
+        const addQuad = (p1, p2, p3, p4, uv1, uv2, uv3, uv4, normal, matIndex) => {
+            let tPos, tNorm, tUv, tInd, currentOffset;
 
-            const def = blockSystem.getBlockDef(block.id);
-            if (!def) continue;
+            // These rely on the specific material indices passed in
+            if (matIndex >= numMaterials) return;
 
-            // Resolve the texture mapped Material Index ID instead of Float32 colors
-            const topColorName = blockSystem.getColorName(def.topColor);
-            const baseColorName = blockSystem.getColorName(def.baseColor);
+            // Translucency arrays are bound to the materials
+            // In Arkonhex, the `isGlass` check is an id-based shortcut, we need a better check later,
+            // but for now, we pass `isTrans` or `isGlass` as a boolean from the outer loop.
+            // Since this is generic, we'll let the outer loop pass target arrays directly, 
+            // OR we just use the global scope arrays. Since this is in `buildChunkMesh`, 
+            // it has access to the arrays above.
 
-            const topMatIndex = this.materialIndexMap.get(topColorName) ?? 0;
-            const baseMatIndex = this.materialIndexMap.get(baseColorName) ?? 0;
+            // To be safe, we'll pass the target array group as arguments down the line,
+            // but for now let's just use a param `type` ('solid', 'trans', 'glass')
+        };
+        // We will just let the callers push directly, or pass the target array explicitly.
+        // Actually, since the variables are hoisted locally, we can let it access them if we know the block type.
 
-            // Determine if we need to render faces based on neighbors (Frustum/Face Culling)
-            // For now, render all faces of active blocks, we will optimize face culling next.
-            const worldPos = axialToWorld(block.q, block.r);
-            const yOffset = block.y * BLOCK_HEIGHT;
+        const pushTri = (p1, p2, p3, uv1, uv2, uv3, normal, matIndex, targetType) => {
+            let tPos, tNorm, tUv, tInd, currentOffset;
 
-            const isTrans = def.transparent || def.translucent;
-            const isGlass = block.id === 9; // Specifically target glass for always-on outlines
-
-            // Helper to add a quad specifically to a material group
-            const addQuad = (p1, p2, p3, p4, uv1, uv2, uv3, uv4, normal, matIndex) => {
-                let tPos, tNorm, tUv, tInd, currentOffset;
-
-                if (isGlass) {
-                    tPos = glassPositions[matIndex];
-                    tNorm = glassNormals[matIndex];
-                    tUv = glassUvs[matIndex];
-                    tInd = glassIndices[matIndex];
-                    currentOffset = glassVertexOffsets[matIndex];
-                    glassVertexOffsets[matIndex] += 4;
-                } else if (isTrans) {
-                    tPos = transPositions[matIndex];
-                    tNorm = transNormals[matIndex];
-                    tUv = transUvs[matIndex];
-                    tInd = transIndices[matIndex];
-                    currentOffset = transVertexOffsets[matIndex];
-                    transVertexOffsets[matIndex] += 4;
-                } else {
-                    tPos = positions[matIndex];
-                    tNorm = normals[matIndex];
-                    tUv = uvs[matIndex];
-                    tInd = indices[matIndex];
-                    currentOffset = vertexOffsets[matIndex];
-                    vertexOffsets[matIndex] += 4;
-                }
-
-                tPos.push(...p1, ...p2, ...p3, ...p4);
-                tUv.push(...uv1, ...uv2, ...uv3, ...uv4);
-                tNorm.push(...normal, ...normal, ...normal, ...normal);
-
-                tInd.push(
-                    currentOffset, currentOffset + 1, currentOffset + 2,
-                    currentOffset + 2, currentOffset + 3, currentOffset
-                );
-            };
-
-            // block.q and block.r are already global owing to chunk.getBlocks()
-            const globalQ = block.q;
-            const globalR = block.r;
-
-            // Helper to add a triangle specifically to a material group (used for hex caps)
-            const addTriangle = (p1, p2, p3, uv1, uv2, uv3, normal, matIndex) => {
-                let tPos, tNorm, tUv, tInd, currentOffset;
-
-                if (isGlass) {
-                    tPos = glassPositions[matIndex];
-                    tNorm = glassNormals[matIndex];
-                    tUv = glassUvs[matIndex];
-                    tInd = glassIndices[matIndex];
-                    currentOffset = glassVertexOffsets[matIndex];
-                    glassVertexOffsets[matIndex] += 3;
-                } else if (isTrans) {
-                    tPos = transPositions[matIndex];
-                    tNorm = transNormals[matIndex];
-                    tUv = transUvs[matIndex];
-                    tInd = transIndices[matIndex];
-                    currentOffset = transVertexOffsets[matIndex];
-                    transVertexOffsets[matIndex] += 3;
-                } else {
-                    tPos = positions[matIndex];
-                    tNorm = normals[matIndex];
-                    tUv = uvs[matIndex];
-                    tInd = indices[matIndex];
-                    currentOffset = vertexOffsets[matIndex];
-                    vertexOffsets[matIndex] += 3;
-                }
-
-                tPos.push(...p1, ...p2, ...p3);
-                tUv.push(...uv1, ...uv2, ...uv3);
-                tNorm.push(...normal, ...normal, ...normal);
-
-                tInd.push(currentOffset, currentOffset + 1, currentOffset + 2);
-            };
-
-            const shouldRenderFace = (gq, gr, gy, myDef) => {
-                if (!chunkSystem) return true;
-                const nid = chunkSystem.getBlockGlobal(gq, gr, gy);
-                if (nid === 0) return true;
-
-                const nDef = blockSystem.getBlockDef(nid);
-                if (!nDef) return true;
-
-                const nTrans = nDef.transparent || nDef.translucent;
-
-                // If neighbor is solid opaque, don't render face against it
-                if (!nTrans) return false;
-
-                // If both are translucent of the same type (e.g. water touching water), cull face
-                if (myDef.translucent && nDef.translucent && nid === block.id) return false;
-
-                // If both are transparent of the same type (e.g. leaves touching leaves), cull face to save polygons
-                if (myDef.transparent && nDef.transparent && nid === block.id) return false;
-
-                return true;
-            };
-
-            // Top Face (Center + 6 corners = 6 triangles)
-            const topY = yOffset + BLOCK_HEIGHT;
-            const splitY = yOffset + (BLOCK_HEIGHT * BASE_RATIO);
-            const baseY = yOffset;
-
-            // Build Top Face
-            if (shouldRenderFace(globalQ, globalR, block.y + 1, def)) {
-                for (let i = 0; i < 6; i++) {
-                    const c1 = corners[i];
-                    const c2 = corners[(i + 1) % 6];
-
-                    // Add center, c2, c1 triangle (reversed winding for top face)
-                    addTriangle(
-                        [worldPos.x, topY, worldPos.z],
-                        [worldPos.x + c2.x, topY, worldPos.z + c2.y],
-                        [worldPos.x + c1.x, topY, worldPos.z + c1.y],
-                        [worldPos.x, worldPos.z],
-                        [worldPos.x + c2.x, worldPos.z + c2.y],
-                        [worldPos.x + c1.x, worldPos.z + c1.y],
-                        [0, 1, 0],
-                        topMatIndex
-                    );
-                }
+            if (targetType === 'glass') {
+                tPos = glassPositions[matIndex];
+                tNorm = glassNormals[matIndex];
+                tUv = glassUvs[matIndex];
+                tInd = glassIndices[matIndex];
+                currentOffset = glassVertexOffsets[matIndex];
+                glassVertexOffsets[matIndex] += 3;
+            } else if (targetType === 'trans') {
+                tPos = transPositions[matIndex];
+                tNorm = transNormals[matIndex];
+                tUv = transUvs[matIndex];
+                tInd = transIndices[matIndex];
+                currentOffset = transVertexOffsets[matIndex];
+                transVertexOffsets[matIndex] += 3;
+            } else {
+                tPos = positions[matIndex];
+                tNorm = normals[matIndex];
+                tUv = uvs[matIndex];
+                tInd = indices[matIndex];
+                currentOffset = vertexOffsets[matIndex];
+                vertexOffsets[matIndex] += 3;
             }
 
-            // Build Bottom Face
-            if (shouldRenderFace(globalQ, globalR, block.y - 1, def)) {
-                for (let i = 0; i < 6; i++) {
-                    const c1 = corners[i];
-                    const c2 = corners[(i + 1) % 6];
+            tPos.push(...p1, ...p2, ...p3);
+            tUv.push(...uv1, ...uv2, ...uv3);
+            tNorm.push(...normal, ...normal, ...normal);
 
-                    // Add center, c1, c2 triangle (normal winding for bottom face)
-                    addTriangle(
-                        [worldPos.x, baseY, worldPos.z],
-                        [worldPos.x + c1.x, baseY, worldPos.z + c1.y],
-                        [worldPos.x + c2.x, baseY, worldPos.z + c2.y],
-                        [worldPos.x, worldPos.z],
-                        [worldPos.x + c1.x, worldPos.z + c1.y],
-                        [worldPos.x + c2.x, worldPos.z + c2.y],
-                        [0, -1, 0],
-                        baseMatIndex
-                    );
-                }
+            tInd.push(currentOffset, currentOffset + 1, currentOffset + 2);
+        };
+
+        const pushQuad = (p1, p2, p3, p4, uv1, uv2, uv3, uv4, normal, matIndex, targetType) => {
+            let tPos, tNorm, tUv, tInd, currentOffset;
+
+            if (targetType === 'glass') {
+                tPos = glassPositions[matIndex];
+                tNorm = glassNormals[matIndex];
+                tUv = glassUvs[matIndex];
+                tInd = glassIndices[matIndex];
+                currentOffset = glassVertexOffsets[matIndex];
+                glassVertexOffsets[matIndex] += 4;
+            } else if (targetType === 'trans') {
+                tPos = transPositions[matIndex];
+                tNorm = transNormals[matIndex];
+                tUv = transUvs[matIndex];
+                tInd = transIndices[matIndex];
+                currentOffset = transVertexOffsets[matIndex];
+                transVertexOffsets[matIndex] += 4;
+            } else {
+                tPos = positions[matIndex];
+                tNorm = normals[matIndex];
+                tUv = uvs[matIndex];
+                tInd = indices[matIndex];
+                currentOffset = vertexOffsets[matIndex];
+                vertexOffsets[matIndex] += 4;
             }
 
-            // Build 6 Sides
-            for (let i = 0; i < 6; i++) {
-                const offset = neighborOffsets[i];
-                if (!shouldRenderFace(globalQ + offset.q, globalR + offset.r, block.y, def)) {
-                    continue;
+            tPos.push(...p1, ...p2, ...p3, ...p4);
+            tUv.push(...uv1, ...uv2, ...uv3, ...uv4);
+            tNorm.push(...normal, ...normal, ...normal, ...normal);
+
+            tInd.push(
+                currentOffset, currentOffset + 1, currentOffset + 2,
+                currentOffset + 2, currentOffset + 3, currentOffset
+            );
+        };
+
+        // ─── FAST-PATH FOR LOD CHUNKS ───
+        if (chunk.isLOD) {
+            // LOD chunks only render the topmost visible surface block. No side faces, no bottoms.
+            for (let lq = 0; lq < CHUNK_SIZE; lq++) {
+                for (let lr = 0; lr < CHUNK_SIZE; lr++) {
+                    const globalQ = chunk.cq * CHUNK_SIZE + lq;
+                    const globalR = chunk.cr * CHUNK_SIZE + lr;
+
+                    // Scan downwards to find highest solid/liquid block
+                    let surfaceY = -1;
+                    let surfaceId = 0;
+                    for (let y = 63; y >= 0; y--) {
+                        const id = chunk.getBlock(lq, lr, y);
+                        if (id !== 0) {
+                            surfaceY = y;
+                            surfaceId = id;
+                            break;
+                        }
+                    }
+
+                    if (surfaceY !== -1) {
+                        const def = blockSystem.getBlockDef(surfaceId);
+                        if (!def) continue;
+
+                        const topColorName = blockSystem.getColorName(def.topColor);
+                        const topMatIndex = this.materialIndexMap.get(topColorName) ?? 0;
+
+                        const worldPos = axialToWorld(globalQ, globalR);
+                        const topY = surfaceY * BLOCK_HEIGHT + 1.0; // LOD chunks are flat 1.0 height
+
+                        // Build ONLY Top Face
+                        for (let i = 0; i < 6; i++) {
+                            const c1 = corners[i];
+                            const c2 = corners[(i + 1) % 6];
+
+                            // Determine if we need to render this top face based on neighbors?
+                            // For LOD, it's so far away we just render all top faces for simplicity and speed.
+
+                            const uv1Top = [worldPos.x, worldPos.z];
+                            const uv2Top = [worldPos.x + c2.x, worldPos.z + c2.y];
+                            const uv3Top = [worldPos.x + c1.x, worldPos.z + c1.y];
+
+                            const isTrans = def.transparent || def.translucent;
+                            const isGlass = surfaceId === 9; // Specifically target glass for always-on outlines
+                            const targetType = isGlass ? 'glass' : (isTrans ? 'trans' : 'solid');
+
+                            // Add center, c2, c1 triangle (reversed winding for top face)
+                            pushTri(
+                                [worldPos.x, topY, worldPos.z],
+                                [worldPos.x + c2.x, topY, worldPos.z + c2.y],
+                                [worldPos.x + c1.x, topY, worldPos.z + c1.y],
+                                uv1Top, uv2Top, uv3Top,
+                                [0, 1, 0],
+                                topMatIndex,
+                                targetType
+                            );
+                        }
+                    }
                 }
-
-                const c1 = corners[i];
-                const c2 = corners[(i + 1) % 6];
-
-                // Normal calculation for the side
-                const dx = c2.x - c1.x;
-                const dz = c2.y - c1.y;
-                const normal = new THREE.Vector3(dz, 0, -dx).normalize().toArray();
-
-                // Texture scale for sides, wrapping smoothly 0->1 across the side horizontally 
-                // and tying seamlessly to exact world Y vertically to prevent arbitrary stretching.
-                // 1 unit equals one physical hex side-width
-                const uv1Top = [0, topY];
-                const uv2Top = [1, topY];
-                const uv2Mid = [1, splitY];
-                const uv1Mid = [0, splitY];
-                const uv2Bot = [1, baseY];
-                const uv1Bot = [0, baseY];
-
-                // Top Section Quad (25%)
-                addQuad(
-                    [worldPos.x + c1.x, topY, worldPos.z + c1.y],
-                    [worldPos.x + c2.x, topY, worldPos.z + c2.y],
-                    [worldPos.x + c2.x, splitY, worldPos.z + c2.y],
-                    [worldPos.x + c1.x, splitY, worldPos.z + c1.y],
-                    uv1Top, uv2Top, uv2Mid, uv1Mid,
-                    normal, topMatIndex
-                );
-
-                // Base Section Quad (75%)
-                addQuad(
-                    [worldPos.x + c1.x, splitY, worldPos.z + c1.y],
-                    [worldPos.x + c2.x, splitY, worldPos.z + c2.y],
-                    [worldPos.x + c2.x, baseY, worldPos.z + c2.y],
-                    [worldPos.x + c1.x, baseY, worldPos.z + c1.y],
-                    uv1Mid, uv2Mid, uv2Bot, uv1Bot,
-                    normal, baseMatIndex
-                );
             }
         }
+        else {
+            // ─── DETAILED CHUNK PATH ───
+            // Iterate all blocks in the chunk data
+            for (const block of chunk.getBlocks()) {
+                if (block.id === 0) continue; // Air
+
+                const def = blockSystem.getBlockDef(block.id);
+                if (!def) continue;
+
+                // Resolve the texture mapped Material Index ID instead of Float32 colors
+                const topColorName = blockSystem.getColorName(def.topColor);
+                const baseColorName = blockSystem.getColorName(def.baseColor);
+
+                const topMatIndex = this.materialIndexMap.get(topColorName) ?? 0;
+                const baseMatIndex = this.materialIndexMap.get(baseColorName) ?? 0;
+
+                // Determine if we need to render faces based on neighbors (Frustum/Face Culling)
+                // For now, render all faces of active blocks, we will optimize face culling next.
+                const worldPos = axialToWorld(block.q, block.r);
+                const yOffset = block.y * BLOCK_HEIGHT;
+
+                const isTrans = def.transparent || def.translucent;
+                const isGlass = block.id === 9; // Specifically target glass for always-on outlines
+                const targetType = isGlass ? 'glass' : (isTrans ? 'trans' : 'solid');
+
+                const isSolidFn = (id) => {
+                    if (id === 0) return false;
+                    const d = blockSystem.getBlockDef(id);
+                    return d && d.hardness > 0;
+                };
+
+                // block.q and block.r are already global owing to chunk.getBlocks()
+                const globalQ = block.q;
+                const globalR = block.r;
+
+                // Calculate exact seeded height, or flatten to 0.5 if it's Water
+                const blockAboveId = chunkSystem ? chunkSystem.getBlockGlobal(globalQ, globalR, block.y + 1) : 0;
+                const blockHeight = chunk.isLOD ? 1.0 : (def.name === 'water' ? 0.5 : getSeededBlockHeight(globalQ, globalR, block.y, seed, blockAboveId, isSolidFn));
+
+                // Top Face (Center + 6 corners = 6 triangles)
+                const topY = yOffset + blockHeight;
+                const splitY = yOffset + (blockHeight * BASE_RATIO);
+                const baseY = yOffset;
+
+                // Updated neighbor face culling logic that factors in variable heights
+                const shouldRenderFace = (gq, gr, gy, myDef, myHeight, isSide = false) => {
+                    if (!chunkSystem) return true;
+                    const nid = chunkSystem.getBlockGlobal(gq, gr, gy);
+
+                    // If no block there, definitely render the face
+                    if (nid === 0) return true;
+
+                    const nDef = blockSystem.getBlockDef(nid);
+                    if (!nDef) return true;
+
+                    const nTrans = nDef.transparent || nDef.translucent;
+
+                    // SPECIAL LOGIC FOR VARIABLE HEIGHT BLOCKS
+                    // Only needed for horizontal side faces
+                    if (isSide && myHeight > 0.4) { // If I am taller than the minimum
+                        // Get the exact height of the neighbor block to see if it covers me
+                        const nBlockAboveId = chunkSystem.getBlockGlobal(gq, gr, gy + 1);
+                        const nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seed, nBlockAboveId, isSolidFn));
+
+                        // If my neighbor is solid but shorter than me, part of my upper side will be exposed!
+                        if (!nTrans && nHeight < myHeight) {
+                            return true;
+                        }
+                    }
+
+                    // If neighbor is solid opaque, don't render face against it
+                    if (!nTrans) return false;
+
+                    // If both are translucent of the same type (e.g. water touching water), cull face
+                    if (myDef.translucent && nDef.translucent && nid === block.id) return false;
+
+                    // If both are transparent of the same type (e.g. leaves touching leaves), cull face to save polygons
+                    if (myDef.transparent && nDef.transparent && nid === block.id) return false;
+
+                    return true;
+                };
+
+                // Build Top Face
+                if (shouldRenderFace(globalQ, globalR, block.y + 1, def, blockHeight, false)) {
+                    for (let i = 0; i < 6; i++) {
+                        const c1 = corners[i];
+                        const c2 = corners[(i + 1) % 6];
+
+                        // Add center, c2, c1 triangle (reversed winding for top face)
+                        pushTri(
+                            [worldPos.x, topY, worldPos.z],
+                            [worldPos.x + c2.x, topY, worldPos.z + c2.y],
+                            [worldPos.x + c1.x, topY, worldPos.z + c1.y],
+                            [worldPos.x, worldPos.z],
+                            [worldPos.x + c2.x, worldPos.z + c2.y],
+                            [worldPos.x + c1.x, worldPos.z + c1.y],
+                            [0, 1, 0],
+                            topMatIndex,
+                            targetType
+                        );
+                    }
+                }
+
+                // Build Bottom Face
+                if (shouldRenderFace(globalQ, globalR, block.y - 1, def, blockHeight, false)) {
+                    for (let i = 0; i < 6; i++) {
+                        const c1 = corners[i];
+                        const c2 = corners[(i + 1) % 6];
+
+                        // Add center, c1, c2 triangle (normal winding for bottom face)
+                        pushTri(
+                            [worldPos.x, baseY, worldPos.z],
+                            [worldPos.x + c1.x, baseY, worldPos.z + c1.y],
+                            [worldPos.x + c2.x, baseY, worldPos.z + c2.y],
+                            [worldPos.x, worldPos.z],
+                            [worldPos.x + c1.x, worldPos.z + c1.y],
+                            [worldPos.x + c2.x, worldPos.z + c2.y],
+                            [0, -1, 0],
+                            baseMatIndex,
+                            targetType
+                        );
+                    }
+                }
+
+                // Build 6 Sides
+                for (let i = 0; i < 6; i++) {
+                    const offset = neighborOffsets[i];
+                    if (!shouldRenderFace(globalQ + offset.q, globalR + offset.r, block.y, def, blockHeight, true)) {
+                        continue;
+                    }
+
+                    const c1 = corners[i];
+                    const c2 = corners[(i + 1) % 6];
+
+                    // Normal calculation for the side
+                    const dx = c2.x - c1.x;
+                    const dz = c2.y - c1.y;
+                    const normal = new THREE.Vector3(dz, 0, -dx).normalize().toArray();
+
+                    // Texture scale for sides, wrapping smoothly 0->1 across the side horizontally 
+                    // and tying seamlessly to exact world Y vertically to prevent arbitrary stretching.
+                    // 1 unit equals one physical hex side-width
+                    const uv1Top = [0, topY];
+                    const uv2Top = [1, topY];
+                    const uv2Mid = [1, splitY];
+                    const uv1Mid = [0, splitY];
+                    const uv2Bot = [1, baseY];
+                    const uv1Bot = [0, baseY];
+
+                    // Top Section Quad (25%)
+                    pushQuad(
+                        [worldPos.x + c1.x, topY, worldPos.z + c1.y],
+                        [worldPos.x + c2.x, topY, worldPos.z + c2.y],
+                        [worldPos.x + c2.x, splitY, worldPos.z + c2.y],
+                        [worldPos.x + c1.x, splitY, worldPos.z + c1.y],
+                        uv1Top, uv2Top, uv2Mid, uv1Mid,
+                        normal, topMatIndex,
+                        targetType
+                    );
+
+                    // Base Section Quad (75%)
+                    pushQuad(
+                        [worldPos.x + c1.x, splitY, worldPos.z + c1.y],
+                        [worldPos.x + c2.x, splitY, worldPos.z + c2.y],
+                        [worldPos.x + c2.x, baseY, worldPos.z + c2.y],
+                        [worldPos.x + c1.x, baseY, worldPos.z + c1.y],
+                        uv1Mid, uv2Mid, uv2Bot, uv1Bot,
+                        normal, baseMatIndex,
+                        targetType
+                    );
+                }
+            }
+        } // End Detailed Path
 
         const buildMesh = (posArr, normArr, uvArr, indArr, materialsArray) => {
             // Flatten arrays and track material group offsets
@@ -456,36 +653,46 @@ export class ChunkMeshBuilder {
         const glassMesh = buildMesh(glassPositions, glassNormals, glassUvs, glassIndices, this.transparentMaterialArray);
 
         const group = new THREE.Group();
-        if (solidMesh) {
+        if (solidMesh && solidMesh.geometry.attributes.position.count > 0) {
             group.add(solidMesh);
 
-            // Add block outlines if enabled
-            if (blockSystem.showOutlines) {
+            // Add block outlines if globally enabled, or if it's an LOD chunk faking depth
+            if (blockSystem.showOutlines || chunk.isLOD) {
                 const edges = new THREE.EdgesGeometry(solidMesh.geometry, 1); // 1 deg threshold for sharp hex edges
-                const lineGeom = new LineSegmentsGeometry().fromEdgesGeometry(edges);
-                const outline = new Line2(lineGeom, this.outlineMaterial);
-                group.add(outline);
+                if (edges.attributes.position.count > 0) {
+                    const lineGeom = new LineSegmentsGeometry().fromEdgesGeometry(edges);
+
+                    // Use black LOD lines for distant chunks, otherwise white standard lines
+                    const mat = chunk.isLOD ? this.lodOutlineMaterial : this.outlineMaterial;
+                    const outline = new Line2(lineGeom, mat);
+
+                    group.add(outline);
+                }
             }
         }
-        if (transMesh) {
+        if (transMesh && transMesh.geometry.attributes.position.count > 0) {
             group.add(transMesh);
 
             // Add outlines for transparent blocks only if enabled
             if (blockSystem.showOutlines) {
                 const edges = new THREE.EdgesGeometry(transMesh.geometry, 1);
-                const lineGeom = new LineSegmentsGeometry().fromEdgesGeometry(edges);
-                const outline = new Line2(lineGeom, this.outlineMaterial);
-                group.add(outline);
+                if (edges.attributes.position.count > 0) {
+                    const lineGeom = new LineSegmentsGeometry().fromEdgesGeometry(edges);
+                    const outline = new Line2(lineGeom, this.outlineMaterial);
+                    group.add(outline);
+                }
             }
         }
-        if (glassMesh) {
+        if (glassMesh && glassMesh.geometry.attributes.position.count > 0) {
             group.add(glassMesh);
 
             // Always add white outlines for glass blocks — reuse shared material
             const glassEdges = new THREE.EdgesGeometry(glassMesh.geometry, 1);
-            const glassLineGeom = new LineSegmentsGeometry().fromEdgesGeometry(glassEdges);
-            const glassOutline = new Line2(glassLineGeom, this.glassOutlineMaterial);
-            group.add(glassOutline);
+            if (glassEdges.attributes.position.count > 0) {
+                const glassLineGeom = new LineSegmentsGeometry().fromEdgesGeometry(glassEdges);
+                const glassOutline = new Line2(glassLineGeom, this.glassOutlineMaterial);
+                group.add(glassOutline);
+            }
         }
 
         return group;

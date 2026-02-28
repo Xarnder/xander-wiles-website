@@ -1,0 +1,382 @@
+:root {
+    --ui-font: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --ui-bg: rgba(0, 0, 0, 0.4);
+    --ui-text: #ffffff;
+    --ui-accent: #00ffcc;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background-color: #000;
+    font-family: var(--ui-font);
+    user-select: none;
+}
+
+#game-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    pointer-events: none;
+    /* Let clicks pass through to canvas by default */
+}
+
+/* UI Hidden State */
+#ui-layer.ui-hidden> :not(#start-screen):not(#world-select-screen):not(#pause-screen) {
+    display: none !important;
+}
+
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    transform: translate(-50%, -50%);
+}
+
+#crosshair::before,
+#crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(255, 255, 255, 0.8);
+}
+
+#crosshair::before {
+    top: 9px;
+    left: 0;
+    width: 20px;
+    height: 2px;
+}
+
+#crosshair::after {
+    top: 0;
+    left: 9px;
+    width: 2px;
+    height: 20px;
+}
+
+#dev-info {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--ui-accent);
+    text-shadow: 1px 1px 2px #000;
+    pointer-events: none;
+    z-index: 100;
+}
+
+#debug-overlay {
+    position: absolute;
+    top: 35px;
+    left: 10px;
+    background: var(--ui-bg);
+    padding: 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 14px;
+    color: var(--ui-text);
+    text-shadow: 1px 1px 0 #000;
+}
+
+#debug-overlay>div {
+    margin-bottom: 4px;
+}
+
+.hotbar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    background: var(--ui-bg);
+    padding: 10px;
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+}
+
+.hotbar-slot {
+    width: 50px;
+    height: 50px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s;
+}
+
+.hotbar-slot.active {
+    border-color: var(--ui-accent);
+    transform: scale(1.1);
+    box-shadow: 0 0 10px var(--ui-accent);
+}
+
+.hotbar-slot-inner {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    /* Placeholder for block icon */
+}
+
+.overlay-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    /* Catch clicks for pointer lock */
+    color: white;
+    text-align: center;
+}
+
+.overlay-screen h1 {
+    font-size: 4rem;
+    margin-bottom: 0.5rem;
+    background: -webkit-linear-gradient(#00ffcc, #0088ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0px 4px 10px rgba(0, 255, 204, 0.3);
+}
+
+.overlay-screen.hidden {
+    display: none !important;
+}
+
+.settings-panel {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 30px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    width: 400px;
+    max-width: 90%;
+    margin-top: 20px;
+    text-align: left;
+}
+
+.setting-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.setting-row label {
+    font-size: 1.1em;
+    font-weight: bold;
+}
+
+.setting-row input[type="range"] {
+    width: 100%;
+    accent-color: var(--ui-accent);
+}
+
+.pause-tabs {
+    display: flex;
+    gap: 10px;
+}
+
+.pause-tab {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1.1em;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+.pause-tab:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.pause-tab.active {
+    background: var(--ui-accent);
+    color: black;
+    font-weight: bold;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Settings Sub-tabs */
+.sub-tab {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    padding: 5px 10px;
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: color 0.2s, border-bottom 0.2s;
+    border-bottom: 2px solid transparent;
+}
+
+.sub-tab:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.sub-tab.active {
+    color: var(--ui-accent);
+    border-bottom-color: var(--ui-accent);
+    font-weight: bold;
+}
+
+.sub-tab-content {
+    display: none;
+}
+
+.sub-tab-content.active {
+    display: block;
+}
+
+#loading-container {
+    width: 300px;
+    margin: 20px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+#loading-bar-border {
+    width: 100%;
+    height: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 5px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+#loading-bar-fill {
+    width: 0%;
+    height: 100%;
+    background: var(--ui-accent);
+    transition: width 0.2s ease-out;
+}
+
+#start-hint {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--ui-accent);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.6;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.6;
+    }
+}
+
+/* ─── World Select Menu ─── */
+
+.world-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.world-entry:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.world-info {
+    text-align: left;
+}
+
+.world-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.world-meta {
+    font-size: 0.8rem;
+    opacity: 0.5;
+}
+
+.world-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.world-play-btn {
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #00b894, #00cec9);
+    border: none;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: transform 0.1s;
+}
+
+.world-play-btn:hover {
+    transform: scale(1.05);
+}
+
+.world-delete-btn {
+    padding: 8px 14px;
+    background: rgba(255, 100, 100, 0.15);
+    border: 1px solid rgba(255, 100, 100, 0.3);
+    color: #ff6b6b;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+}
+
+.world-delete-btn:hover {
+    background: rgba(255, 100, 100, 0.3);
+}

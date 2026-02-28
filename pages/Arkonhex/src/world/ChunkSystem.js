@@ -15,6 +15,7 @@ export class ChunkSystem {
         this.pendingChunks = new Set();
 
         this.renderDistance = 8; // Expanded for further view distance
+        this.lodDistance = 4;    // Blocks past this chunk distance render flat to save geometry
 
         // Debounced save queue — collects modified chunks, flushes every 5 seconds
         this.saveQueue = new Set(); // Set of chunk keys that need saving
@@ -58,10 +59,19 @@ export class ChunkSystem {
                     const key = this.getChunkKey(cq, cr);
                     neededChunks.add(key);
 
+                    const isLOD = dist > this.lodDistance;
+
                     if (!this.chunks.has(key) && !this.pendingChunks.has(key)) {
                         this.pendingChunks.add(key);
                         // Push to queue, we sort by distance shortly
-                        this.chunkGenQueue.push({ cq, cr, key, dist });
+                        this.chunkGenQueue.push({ cq, cr, key, dist, isLOD });
+                    } else if (this.chunks.has(key)) {
+                        // Chunk is already loaded. Did its LOD state change?
+                        const chunk = this.chunks.get(key);
+                        if (chunk.isLOD !== isLOD) {
+                            chunk.isLOD = isLOD;
+                            chunk.isDirty = true; // Force mesh rebuild
+                        }
                     }
                 }
             }
@@ -78,7 +88,7 @@ export class ChunkSystem {
         }
     }
 
-    async loadChunk(cq, cr) {
+    async loadChunk(cq, cr, isLOD = false) {
         const worldId = this.engine.activeWorldId;
 
         // Check IndexedDB first for saved chunk data
@@ -90,6 +100,7 @@ export class ChunkSystem {
                     chunk.blocks = savedBlocks;
                     chunk.isDirty = true;
                     chunk.isModified = false; // It's already saved, not newly modified
+                    chunk.isLOD = isLOD;
                     this.chunks.set(this.getChunkKey(cq, cr), chunk);
 
                     // Dirty neighbors
@@ -103,6 +114,7 @@ export class ChunkSystem {
 
         // Generate procedurally if not in DB
         const chunk = this.worldGen.generateChunk(cq, cr, this.blockSystem);
+        chunk.isLOD = isLOD;
         this.chunks.set(this.getChunkKey(cq, cr), chunk);
 
         // Dirty neighbors to ensure they cull boundary faces correctly
@@ -157,12 +169,17 @@ export class ChunkSystem {
     }
 
     update(delta, time) {
+        // Update water shader time uniform if it exists
+        if (this.meshBuilder && this.meshBuilder.waterUniforms) {
+            this.meshBuilder.waterUniforms.uTime.value = time;
+        }
+
         // Priority 1: Generate 1 chunk's raw block data per frame
         if (this.chunkGenQueue.length > 0) {
             const item = this.chunkGenQueue.shift();
             this.pendingChunks.delete(item.key);
 
-            this.loadChunk(item.cq, item.cr);
+            this.loadChunk(item.cq, item.cr, item.isLOD);
             return; // Give frame back to avoid stutter
         }
 
