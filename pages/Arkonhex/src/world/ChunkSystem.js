@@ -94,10 +94,13 @@ export class ChunkSystem {
         // Check IndexedDB first for saved chunk data
         if (worldId) {
             try {
-                const savedBlocks = await loadChunk(worldId, cq, cr);
-                if (savedBlocks) {
+                const savedData = await loadChunk(worldId, cq, cr);
+                if (savedData && savedData.blocks) {
                     const chunk = new Chunk(cq, cr);
-                    chunk.blocks = savedBlocks;
+                    chunk.blocks = savedData.blocks;
+                    if (savedData.light) {
+                        chunk.light.set(savedData.light);
+                    }
                     chunk.isDirty = true;
                     chunk.isModified = false; // It's already saved, not newly modified
                     chunk.isLOD = isLOD;
@@ -232,6 +235,51 @@ export class ChunkSystem {
         return chunk.getBlock(lq, lr, y);
     }
 
+    getLightGlobal(globalQ, globalR, y) {
+        if (y < 0 || y >= 64) return 0;
+
+        const CHUNK_SIZE = 16;
+        const cq = Math.floor(globalQ / CHUNK_SIZE);
+        const cr = Math.floor(globalR / CHUNK_SIZE);
+
+        const chunk = this.chunks.get(this.getChunkKey(cq, cr));
+        if (!chunk) return 0;
+
+        const lq = globalQ - (cq * CHUNK_SIZE);
+        const lr = globalR - (cr * CHUNK_SIZE);
+
+        return chunk.getLight(lq, lr, y);
+    }
+
+    setLightGlobal(globalQ, globalR, y, value) {
+        if (y < 0 || y >= 64) return false;
+
+        const CHUNK_SIZE = 16;
+        const cq = Math.floor(globalQ / CHUNK_SIZE);
+        const cr = Math.floor(globalR / CHUNK_SIZE);
+
+        const chunk = this.chunks.get(this.getChunkKey(cq, cr));
+        if (!chunk) return false;
+
+        const lq = globalQ - (cq * CHUNK_SIZE);
+        const lr = globalR - (cr * CHUNK_SIZE);
+
+        if (chunk.setLight(lq, lr, y, value)) {
+            // Update neighbors if on the edge
+            if (lq === 0) this._dirtyChunk(cq - 1, cr);
+            if (lq === CHUNK_SIZE - 1) this._dirtyChunk(cq + 1, cr);
+            if (lr === 0) this._dirtyChunk(cq, cr - 1);
+            if (lr === CHUNK_SIZE - 1) this._dirtyChunk(cq, cr + 1);
+            return true;
+        }
+        return false;
+    }
+
+    _dirtyChunk(cq, cr) {
+        const chunk = this.chunks.get(this.getChunkKey(cq, cr));
+        if (chunk) chunk.isDirty = true;
+    }
+
     // ─── Debounced Save System ───
 
     _startSaveLoop() {
@@ -253,7 +301,7 @@ export class ChunkSystem {
             const chunk = this.chunks.get(key);
             if (chunk && chunk.isModified) {
                 try {
-                    await saveChunk(worldId, chunk.cq, chunk.cr, chunk.blocks);
+                    await saveChunk(worldId, chunk.cq, chunk.cr, chunk);
                     chunk.isModified = false;
                 } catch (e) {
                     console.error(`[ChunkSystem] Failed to save chunk ${key}:`, e);

@@ -11,6 +11,9 @@ export class Chunk {
         // Size: 16 * 16 * 64 = 16,384 bytes
         this.blocks = new Uint8Array(CHUNK_AREA * CHUNK_HEIGHT);
 
+        // Light channel: 0 = dark, 15 = fully lit
+        this.light = new Uint8Array(CHUNK_AREA * CHUNK_HEIGHT);
+
         this.isDirty = true; // Needs remesh
         this.isModified = false; // Tracks if player has edited blocks (needs save)
         this.mesh = null;    // The THREE.Group or Mesh holding the rendering
@@ -35,6 +38,24 @@ export class Chunk {
         if (index !== -1) {
             this.blocks[index] = id;
             this.isDirty = true;
+            return true;
+        }
+        return false;
+    }
+
+    getLight(lq, lr, y) {
+        const index = this.getIndex(lq, lr, y);
+        if (index === -1) return 0; // Default dark for out of bounds
+        return this.light[index];
+    }
+
+    setLight(lq, lr, y, value) {
+        const index = this.getIndex(lq, lr, y);
+        if (index !== -1) {
+            if (this.light[index] !== value) {
+                this.light[index] = value;
+                this.isDirty = true;
+            }
             return true;
         }
         return false;

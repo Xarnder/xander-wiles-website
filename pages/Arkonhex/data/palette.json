@@ -50,5 +50,9 @@
     "dark_brown": {
         "color": "#d3a582",
         "opacity": 0.7
+    },
+    "torch_flame": {
+        "color": "#ffeb3b",
+        "opacity": 0.9
     }
 }

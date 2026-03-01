@@ -617,8 +617,8 @@ export class UIManager {
     }
 
     initHotbar() {
-        // Create 9 slots
-        for (let i = 1; i <= 9; i++) {
+        // Create 10 slots
+        for (let i = 1; i <= 10; i++) {
             const slot = document.createElement('div');
             slot.className = 'hotbar-slot' + (i === 1 ? ' active' : '');
 

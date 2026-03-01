@@ -63,5 +63,14 @@
         "baseColor": "white",
         "hardness": 0.5,
         "transparent": true
+    },
+    {
+        "id": 10,
+        "name": "torch",
+        "topColor": "torch_flame",
+        "baseColor": "orange",
+        "hardness": 0.1,
+        "emissive": true,
+        "lightLevel": 15
     }
 ]

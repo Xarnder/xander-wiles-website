@@ -314,7 +314,7 @@ export class PlayerSystem {
         // Number keys
         const digitCodes = [
             'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
-            'Digit6', 'Digit7', 'Digit8', 'Digit9'
+            'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
         ];
         for (let i = 0; i < digitCodes.length; i++) {
             if (this.input.consumeKey(digitCodes[i])) {
@@ -331,9 +331,9 @@ export class PlayerSystem {
         const wheelDelta = this.input.getWheelDelta();
         if (wheelDelta !== 0) {
             if (wheelDelta > 0) {
-                this.selectedHotbarSlot = (this.selectedHotbarSlot + 1) % 9;
+                this.selectedHotbarSlot = (this.selectedHotbarSlot + 1) % 10;
             } else {
-                this.selectedHotbarSlot = (this.selectedHotbarSlot - 1 + 9) % 9;
+                this.selectedHotbarSlot = (this.selectedHotbarSlot - 1 + 10) % 10;
             }
             this.selectedBlockId = this.selectedHotbarSlot + 1;
 
@@ -493,9 +493,17 @@ export class PlayerSystem {
         if (chunk) {
             const lq = GlobalQ - (cq * CHUNK_SIZE);
             const lr = GlobalR - (cr * CHUNK_SIZE);
+
+            const previousId = chunk.getBlock(lq, lr, y);
+
             if (chunk.setBlock(lq, lr, y, id)) {
                 // Mark chunk as modified for saving
                 this.chunkSystem.markChunkModified(cq, cr);
+
+                // Notify Light System
+                if (this.engine.lightSystem) {
+                    this.engine.lightSystem.onBlockChanged(GlobalQ, GlobalR, y, id, previousId);
+                }
 
                 // Determine if we need to update neighboring chunks due to edge changes
                 if (lq === 0) this.dirtyChunk(cq - 1, cr);

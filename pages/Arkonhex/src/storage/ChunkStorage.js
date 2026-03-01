@@ -23,18 +23,20 @@ function chunkKey(worldId, cq, cr) {
  * @param {string} worldId
  * @param {number} cq
  * @param {number} cr
- * @param {Uint8Array} blocks — raw block array (16,384 bytes)
+ * @param {Chunk} chunk — the full chunk object containing block and light arrays
  */
-export async function saveChunk(worldId, cq, cr, blocks) {
+export async function saveChunk(worldId, cq, cr, chunk) {
     const db = await openDB();
-    const compressed = rleEncode(blocks);
+    const compressedBlocks = rleEncode(chunk.blocks);
+    const compressedLight = rleEncode(chunk.light);
 
     const record = {
         key: chunkKey(worldId, cq, cr),
         worldId,
         cq,
         cr,
-        data: compressed
+        data: compressedBlocks,   // Legacy column, keep for backward compatibility
+        lightData: compressedLight // New column
     };
 
     const tx = db.transaction('chunks', 'readwrite');
@@ -50,7 +52,7 @@ export async function saveChunk(worldId, cq, cr, blocks) {
  * @param {string} worldId
  * @param {number} cq
  * @param {number} cr
- * @returns {Promise<Uint8Array|null>} Decompressed block array, or null if not saved
+ * @returns {Promise<{blocks: Uint8Array, light: Uint8Array|null}|null>} Decompressed block/light arrays, or null if not saved
  */
 export async function loadChunk(worldId, cq, cr) {
     const db = await openDB();
@@ -61,7 +63,10 @@ export async function loadChunk(worldId, cq, cr) {
 
     if (!record || !record.data) return null;
 
-    return rleDecode(new Uint8Array(record.data), CHUNK_VOLUME);
+    const blocks = rleDecode(new Uint8Array(record.data), CHUNK_VOLUME);
+    const light = record.lightData ? rleDecode(new Uint8Array(record.lightData), CHUNK_VOLUME) : null;
+
+    return { blocks, light };
 }
 
 /**

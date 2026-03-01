@@ -7,7 +7,6 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 const BLOCK_HEIGHT = 1.0;
 const TOP_RATIO = 0.25; // Top 25%
 const BASE_RATIO = 0.75; // Bottom 75%
-
 // Hexagon corners (pointy-topped)
 const corners = [];
 for (let i = 0; i < 6; i++) {
@@ -19,6 +18,17 @@ for (let i = 0; i < 6; i++) {
     ));
 }
 
+// Slim torch corners
+const torchCorners = [];
+const TORCH_RADIUS = 0.1;
+for (let i = 0; i < 6; i++) {
+    const angle_deg = 60 * i - 30;
+    const angle_rad = Math.PI / 180 * angle_deg;
+    torchCorners.push(new THREE.Vector2(
+        TORCH_RADIUS * Math.cos(angle_rad),
+        TORCH_RADIUS * Math.sin(angle_rad)
+    ));
+}
 export class ChunkMeshBuilder {
     constructor(blockSystem) {
         // Create material dictionaries mapping colour names to their dynamically generated texture material
@@ -62,11 +72,42 @@ export class ChunkMeshBuilder {
                 polygonOffsetUnits: 1
             });
 
+            // Add custom lighting attribute to shaders
+            const onCompileLighting = (shader) => {
+                shader.vertexShader = `
+                    attribute float aLightLevel;
+                    varying float vLightLevel;
+                \n` + shader.vertexShader;
+                shader.vertexShader = shader.vertexShader.replace(
+                    `#include <begin_vertex>`,
+                    `
+                    #include <begin_vertex>
+                    vLightLevel = aLightLevel;
+                    `
+                );
+                shader.fragmentShader = `
+                    varying float vLightLevel;
+                \n` + shader.fragmentShader;
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    `#include <dithering_fragment>`,
+                    `
+                    #include <dithering_fragment>
+                    // Apply baked torch light (multiply by base diffuse color to preserve texture)
+                    vec3 torchTint = vec3(1.0, 0.9, 0.6); // Warm soft glow
+                    float lightIntensity = pow(vLightLevel, 1.4) * 0.8; // Toned down intensity
+                    gl_FragColor.rgb += diffuseColor.rgb * torchTint * lightIntensity;
+                    `
+                );
+            };
+
+            this.materials[color].onBeforeCompile = onCompileLighting;
+
             // If this is the water material, hook into the shader for vertex animation
             if (color === 'blue') {
                 this.waterUniforms = { uTime: { value: 0 } };
 
                 this.transparentMaterials[color].onBeforeCompile = (shader) => {
+                    onCompileLighting(shader); // Chain the global lighting compiler
                     shader.uniforms.uTime = this.waterUniforms.uTime;
 
                     shader.vertexShader = `
@@ -232,18 +273,21 @@ export class ChunkMeshBuilder {
 
         // Arrays of arrays. index 0 corresponds to materialIndexMap mapped to 'red', etc.
         const positions = Array.from({ length: numMaterials }, () => []);
+        const lightLevels = Array.from({ length: numMaterials }, () => []);
         const normals = Array.from({ length: numMaterials }, () => []);
         const uvs = Array.from({ length: numMaterials }, () => []);
         const indices = Array.from({ length: numMaterials }, () => []);
         const vertexOffsets = new Array(numMaterials).fill(0);
 
         const transPositions = Array.from({ length: numMaterials }, () => []);
+        const transLightLevels = Array.from({ length: numMaterials }, () => []);
         const transNormals = Array.from({ length: numMaterials }, () => []);
         const transUvs = Array.from({ length: numMaterials }, () => []);
         const transIndices = Array.from({ length: numMaterials }, () => []);
         const transVertexOffsets = new Array(numMaterials).fill(0);
 
         const glassPositions = Array.from({ length: numMaterials }, () => []);
+        const glassLightLevels = Array.from({ length: numMaterials }, () => []);
         const glassNormals = Array.from({ length: numMaterials }, () => []);
         const glassUvs = Array.from({ length: numMaterials }, () => []);
         const glassIndices = Array.from({ length: numMaterials }, () => []);
@@ -279,14 +323,15 @@ export class ChunkMeshBuilder {
         // We will just let the callers push directly, or pass the target array explicitly.
         // Actually, since the variables are hoisted locally, we can let it access them if we know the block type.
 
-        const pushTri = (p1, p2, p3, uv1, uv2, uv3, normal, matIndex, targetType) => {
-            let tPos, tNorm, tUv, tInd, currentOffset;
+        const pushTri = (p1, p2, p3, uv1, uv2, uv3, normal, matIndex, targetType, lightVal) => {
+            let tPos, tNorm, tUv, tInd, tLight, currentOffset;
 
             if (targetType === 'glass') {
                 tPos = glassPositions[matIndex];
                 tNorm = glassNormals[matIndex];
                 tUv = glassUvs[matIndex];
                 tInd = glassIndices[matIndex];
+                tLight = glassLightLevels[matIndex];
                 currentOffset = glassVertexOffsets[matIndex];
                 glassVertexOffsets[matIndex] += 3;
             } else if (targetType === 'trans') {
@@ -294,6 +339,7 @@ export class ChunkMeshBuilder {
                 tNorm = transNormals[matIndex];
                 tUv = transUvs[matIndex];
                 tInd = transIndices[matIndex];
+                tLight = transLightLevels[matIndex];
                 currentOffset = transVertexOffsets[matIndex];
                 transVertexOffsets[matIndex] += 3;
             } else {
@@ -301,6 +347,7 @@ export class ChunkMeshBuilder {
                 tNorm = normals[matIndex];
                 tUv = uvs[matIndex];
                 tInd = indices[matIndex];
+                tLight = lightLevels[matIndex];
                 currentOffset = vertexOffsets[matIndex];
                 vertexOffsets[matIndex] += 3;
             }
@@ -308,18 +355,20 @@ export class ChunkMeshBuilder {
             tPos.push(...p1, ...p2, ...p3);
             tUv.push(...uv1, ...uv2, ...uv3);
             tNorm.push(...normal, ...normal, ...normal);
+            tLight.push(lightVal, lightVal, lightVal);
 
             tInd.push(currentOffset, currentOffset + 1, currentOffset + 2);
         };
 
-        const pushQuad = (p1, p2, p3, p4, uv1, uv2, uv3, uv4, normal, matIndex, targetType) => {
-            let tPos, tNorm, tUv, tInd, currentOffset;
+        const pushQuad = (p1, p2, p3, p4, uv1, uv2, uv3, uv4, normal, matIndex, targetType, lightVal) => {
+            let tPos, tNorm, tUv, tInd, tLight, currentOffset;
 
             if (targetType === 'glass') {
                 tPos = glassPositions[matIndex];
                 tNorm = glassNormals[matIndex];
                 tUv = glassUvs[matIndex];
                 tInd = glassIndices[matIndex];
+                tLight = glassLightLevels[matIndex];
                 currentOffset = glassVertexOffsets[matIndex];
                 glassVertexOffsets[matIndex] += 4;
             } else if (targetType === 'trans') {
@@ -327,6 +376,7 @@ export class ChunkMeshBuilder {
                 tNorm = transNormals[matIndex];
                 tUv = transUvs[matIndex];
                 tInd = transIndices[matIndex];
+                tLight = transLightLevels[matIndex];
                 currentOffset = transVertexOffsets[matIndex];
                 transVertexOffsets[matIndex] += 4;
             } else {
@@ -334,6 +384,7 @@ export class ChunkMeshBuilder {
                 tNorm = normals[matIndex];
                 tUv = uvs[matIndex];
                 tInd = indices[matIndex];
+                tLight = lightLevels[matIndex];
                 currentOffset = vertexOffsets[matIndex];
                 vertexOffsets[matIndex] += 4;
             }
@@ -341,6 +392,7 @@ export class ChunkMeshBuilder {
             tPos.push(...p1, ...p2, ...p3, ...p4);
             tUv.push(...uv1, ...uv2, ...uv3, ...uv4);
             tNorm.push(...normal, ...normal, ...normal, ...normal);
+            tLight.push(lightVal, lightVal, lightVal, lightVal);
 
             tInd.push(
                 currentOffset, currentOffset + 1, currentOffset + 2,
@@ -399,7 +451,8 @@ export class ChunkMeshBuilder {
                                 uv1Top, uv2Top, uv3Top,
                                 [0, 1, 0],
                                 topMatIndex,
-                                targetType
+                                targetType,
+                                0.0 // LOD has 0 bonus light
                             );
 
                             // --- LOD Boundary Side Faces ---
@@ -454,7 +507,8 @@ export class ChunkMeshBuilder {
                                     [worldPos.x + c1.x, baseY, worldPos.z + c1.y],
                                     uv1T, uv2T, uv2B, uv1B,
                                     normal, topMatIndex,
-                                    targetType
+                                    targetType,
+                                    0.0 // Ensure valid lightVal to prevent NaN shader corruption
                                 );
                             }
                         }
@@ -478,6 +532,9 @@ export class ChunkMeshBuilder {
                 const topMatIndex = this.materialIndexMap.get(topColorName) ?? 0;
                 const baseMatIndex = this.materialIndexMap.get(baseColorName) ?? 0;
 
+                const isTorch = block.id === 10;
+                let activeCorners = isTorch ? torchCorners : corners;
+
                 // Determine if we need to render faces based on neighbors (Frustum/Face Culling)
                 // For now, render all faces of active blocks, we will optimize face culling next.
                 const worldPos = axialToWorld(block.q, block.r);
@@ -499,7 +556,7 @@ export class ChunkMeshBuilder {
 
                 // Calculate exact seeded height, or flatten to 0.5 if it's Water
                 const blockAboveId = chunkSystem ? chunkSystem.getBlockGlobal(globalQ, globalR, block.y + 1) : 0;
-                const blockHeight = chunk.isLOD ? 1.0 : (def.name === 'water' ? 0.5 : getSeededBlockHeight(globalQ, globalR, block.y, seed, blockAboveId, isSolidFn));
+                const blockHeight = isTorch ? 0.8 : (chunk.isLOD ? 1.0 : (def.name === 'water' ? 0.5 : getSeededBlockHeight(globalQ, globalR, block.y, seed, blockAboveId, isSolidFn)));
 
                 // Top Face (Center + 6 corners = 6 triangles)
                 const topY = yOffset + blockHeight;
@@ -532,6 +589,9 @@ export class ChunkMeshBuilder {
                         }
                     }
 
+                    // Slim blocks (torch) don't cover a full hex face, so never cull against them
+                    if (nid === 10) return true; // torch is 0.1 wide — always render adjacent faces
+
                     // If neighbor is solid opaque, don't render face against it
                     if (!nTrans) return false;
 
@@ -547,8 +607,8 @@ export class ChunkMeshBuilder {
                 // Build Top Face
                 if (shouldRenderFace(globalQ, globalR, block.y + 1, def, blockHeight, false)) {
                     for (let i = 0; i < 6; i++) {
-                        const c1 = corners[i];
-                        const c2 = corners[(i + 1) % 6];
+                        const c1 = activeCorners[i];
+                        const c2 = activeCorners[(i + 1) % 6];
 
                         // Add center, c2, c1 triangle (reversed winding for top face)
                         pushTri(
@@ -560,7 +620,8 @@ export class ChunkMeshBuilder {
                             [worldPos.x + c1.x, worldPos.z + c1.y],
                             [0, 1, 0],
                             topMatIndex,
-                            targetType
+                            targetType,
+                            isTorch ? 1.0 : (chunkSystem ? chunkSystem.getLightGlobal(globalQ, globalR, block.y + 1) / 15.0 : 0.0)
                         );
                     }
                 }
@@ -568,8 +629,8 @@ export class ChunkMeshBuilder {
                 // Build Bottom Face
                 if (shouldRenderFace(globalQ, globalR, block.y - 1, def, blockHeight, false)) {
                     for (let i = 0; i < 6; i++) {
-                        const c1 = corners[i];
-                        const c2 = corners[(i + 1) % 6];
+                        const c1 = activeCorners[i];
+                        const c2 = activeCorners[(i + 1) % 6];
 
                         // Add center, c1, c2 triangle (normal winding for bottom face)
                         pushTri(
@@ -581,7 +642,8 @@ export class ChunkMeshBuilder {
                             [worldPos.x + c2.x, worldPos.z + c2.y],
                             [0, -1, 0],
                             baseMatIndex,
-                            targetType
+                            targetType,
+                            isTorch ? 1.0 : (chunkSystem ? chunkSystem.getLightGlobal(globalQ, globalR, block.y - 1) / 15.0 : 0.0)
                         );
                     }
                 }
@@ -593,8 +655,8 @@ export class ChunkMeshBuilder {
                         continue;
                     }
 
-                    const c1 = corners[i];
-                    const c2 = corners[(i + 1) % 6];
+                    const c1 = activeCorners[i];
+                    const c2 = activeCorners[(i + 1) % 6];
 
                     // Normal calculation for the side
                     const dx = c2.x - c1.x;
@@ -611,6 +673,27 @@ export class ChunkMeshBuilder {
                     const uv2Bot = [1, baseY];
                     const uv1Bot = [0, baseY];
 
+                    // Get light value for the side face.
+                    // When a neighbor block is shorter than full height, the upper portion of this
+                    // block's side is visually exposed — but the light BFS treats the neighbor voxel
+                    // as occupied, so light at (neighbor, y) may be 0. We compensate by also sampling
+                    // the light at (neighbor, y+1) which is the air above the short neighbor.
+                    let sideLightVal = 0.0;
+                    if (isTorch) {
+                        sideLightVal = 1.0;
+                    } else if (chunkSystem) {
+                        const nq = globalQ + offset.q;
+                        const nr = globalR + offset.r;
+                        let bestLight = chunkSystem.getLightGlobal(nq, nr, block.y);
+                        bestLight = Math.max(bestLight, chunkSystem.getLightGlobal(globalQ, globalR, block.y));
+                        // Also check light above the neighbor — covers the case where the neighbor
+                        // block exists but is shorter than full height, leaving the upper side exposed.
+                        bestLight = Math.max(bestLight, chunkSystem.getLightGlobal(nq, nr, block.y + 1));
+                        // And check our own block's above light level too
+                        bestLight = Math.max(bestLight, chunkSystem.getLightGlobal(globalQ, globalR, block.y + 1));
+                        sideLightVal = bestLight / 15.0;
+                    }
+
                     // Top Section Quad (25%)
                     pushQuad(
                         [worldPos.x + c1.x, topY, worldPos.z + c1.y],
@@ -619,7 +702,8 @@ export class ChunkMeshBuilder {
                         [worldPos.x + c1.x, splitY, worldPos.z + c1.y],
                         uv1Top, uv2Top, uv2Mid, uv1Mid,
                         normal, topMatIndex,
-                        targetType
+                        targetType,
+                        sideLightVal
                     );
 
                     // Base Section Quad (75%)
@@ -630,18 +714,20 @@ export class ChunkMeshBuilder {
                         [worldPos.x + c1.x, baseY, worldPos.z + c1.y],
                         uv1Mid, uv2Mid, uv2Bot, uv1Bot,
                         normal, baseMatIndex,
-                        targetType
+                        targetType,
+                        sideLightVal
                     );
                 }
             }
         } // End Detailed Path
 
-        const buildMesh = (posArr, normArr, uvArr, indArr, materialsArray) => {
+        const buildMesh = (posArr, normArr, uvArr, indArr, lightArr, materialsArray) => {
             // Flatten arrays and track material group offsets
             const flatPos = [];
             const flatNorm = [];
             const flatUv = [];
             const flatInd = [];
+            const flatLight = [];
             const groups = [];
 
             let indexOffset = 0; // Tracks the running offset of indices mapped so far
@@ -666,6 +752,7 @@ export class ChunkMeshBuilder {
                 flatPos.push(...posArr[i]);
                 flatNorm.push(...normArr[i]);
                 flatUv.push(...uvArr[i]);
+                flatLight.push(...lightArr[i]);
             }
 
             if (flatPos.length === 0) return null;
@@ -674,6 +761,7 @@ export class ChunkMeshBuilder {
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(flatPos, 3));
             geometry.setAttribute('normal', new THREE.Float32BufferAttribute(flatNorm, 3));
             geometry.setAttribute('uv', new THREE.Float32BufferAttribute(flatUv, 2));
+            geometry.setAttribute('aLightLevel', new THREE.Float32BufferAttribute(flatLight, 1));
             geometry.setIndex(flatInd);
 
             for (const g of groups) {
@@ -690,9 +778,9 @@ export class ChunkMeshBuilder {
             return mesh;
         };
 
-        const solidMesh = buildMesh(positions, normals, uvs, indices, this.materialArray);
-        const transMesh = buildMesh(transPositions, transNormals, transUvs, transIndices, this.transparentMaterialArray);
-        const glassMesh = buildMesh(glassPositions, glassNormals, glassUvs, glassIndices, this.transparentMaterialArray);
+        const solidMesh = buildMesh(positions, normals, uvs, indices, lightLevels, this.materialArray);
+        const transMesh = buildMesh(transPositions, transNormals, transUvs, transIndices, transLightLevels, this.transparentMaterialArray);
+        const glassMesh = buildMesh(glassPositions, glassNormals, glassUvs, glassIndices, glassLightLevels, this.transparentMaterialArray);
 
         const group = new THREE.Group();
         if (solidMesh && solidMesh.geometry.attributes.position.count > 0) {

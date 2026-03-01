@@ -12,6 +12,7 @@ import { CloudSystem } from '../rendering/CloudSystem.js';
 import { WorldSelectMenu } from '../ui/WorldSelectMenu.js';
 import { WaypointManager } from '../systems/WaypointManager.js';
 import { AudioManager } from '../systems/AudioManager.js';
+import { LightSystem } from '../systems/LightSystem.js';
 import { loadWorld as loadWorldMeta, savePlayerState, loadPlayerState } from '../storage/WorldManager.js';
 
 export class Engine {
@@ -131,6 +132,8 @@ export class Engine {
         this.chunkSystem = new ChunkSystem(this, this.worldGen, this.blockSystem);
         await this.chunkSystem.init();
 
+        this.lightSystem = new LightSystem(this, this.chunkSystem, this.blockSystem);
+
         // 3. Physics
         await setProgress('Initializing Physics...', 60);
         this.physicsSystem = new PhysicsSystem(this, this.chunkSystem);
@@ -155,6 +158,11 @@ export class Engine {
             // Update chunks around restored position
             const { q, r } = this._worldToAxial(this.playerSystem.position.x, this.playerSystem.position.z);
             this.chunkSystem.updateLoadedChunks(q, r);
+
+            // Restore time of day
+            if (savedPlayer.timeOfDay !== undefined && this.lightingManager) {
+                this.lightingManager.timeOfDay = savedPlayer.timeOfDay;
+            }
         }
 
         // 6. UI Overlay
@@ -212,6 +220,7 @@ export class Engine {
         this.systems = [];
         this.worldGen = null;
         this.chunkSystem = null;
+        this.lightSystem = null;
         this.physicsSystem = null;
         this.playerSystem = null;
         this.uiManager = null;
@@ -237,10 +246,12 @@ export class Engine {
             const pos = this.playerSystem.position;
             const yaw = this.playerSystem.yawObject.rotation.y;
             const pitch = this.playerSystem.pitchObject.rotation.x;
+            const timeOfDay = this.lightingManager ? this.lightingManager.timeOfDay : 0.5;
 
             await savePlayerState(this.activeWorldId,
                 [pos.x, pos.y, pos.z],
-                [yaw, pitch]
+                [yaw, pitch],
+                timeOfDay
             );
         }
     }
