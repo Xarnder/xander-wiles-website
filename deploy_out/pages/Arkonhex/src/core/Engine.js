@@ -285,7 +285,7 @@ export class Engine {
 
             // Update LOD outline color dynamically based on sun angle relative to camera view
             if (this.blockSystem && this.blockSystem.chunkMeshBuilder && this.rendererSystem && this.rendererSystem.camera) {
-                this.blockSystem.chunkMeshBuilder.updateLODOutlineColor(
+                this.blockSystem.chunkMeshBuilder.updateOutlineColors(
                     this.rendererSystem.camera,
                     this.lightingManager.sunLight,
                     this.lightingManager.timeOfDay

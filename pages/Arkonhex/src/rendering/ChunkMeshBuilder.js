@@ -3,6 +3,7 @@ import { HEX_SIZE, axialToWorld, getSeededBlockHeight } from '../utils/HexUtils.
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 const BLOCK_HEIGHT = 1.0;
 const TOP_RATIO = 0.25; // Top 25%
@@ -741,8 +742,16 @@ export class ChunkMeshBuilder {
         if (glassMesh && glassMesh.geometry.attributes.position.count > 0) {
             group.add(glassMesh);
 
+            // Merge geometry vertices perfectly so internal glass wall grids are hidden.
+            let mergedGeom;
+            try {
+                mergedGeom = BufferGeometryUtils.mergeVertices(glassMesh.geometry, 1e-4);
+            } catch (e) {
+                mergedGeom = glassMesh.geometry; // fallback
+            }
+
             // Always add white outlines for glass blocks — reuse shared material
-            const glassEdges = new THREE.EdgesGeometry(glassMesh.geometry, 1);
+            const glassEdges = new THREE.EdgesGeometry(mergedGeom, 1);
             if (glassEdges.attributes.position.count > 0) {
                 const glassLineGeom = new LineSegmentsGeometry().fromEdgesGeometry(glassEdges);
                 const glassOutline = new Line2(glassLineGeom, this.glassOutlineMaterial);
