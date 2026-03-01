@@ -109,9 +109,16 @@ export class PlayerSystem {
             this.camera.updateProjectionMatrix();
         }
 
-        // Update loaded chunks based on player position
+        // Update loaded chunks only when the player crosses a chunk boundary
         const { q, r } = worldToAxial(this.position.x, this.position.z);
-        this.chunkSystem.updateLoadedChunks(q, r);
+        const playerCQ = Math.floor(q / 16);
+        const playerCR = Math.floor(r / 16);
+
+        if (this.lastChunkQ !== playerCQ || this.lastChunkR !== playerCR) {
+            this.lastChunkQ = playerCQ;
+            this.lastChunkR = playerCR;
+            this.chunkSystem.updateLoadedChunks(q, r);
+        }
     }
 
     updateMouseLook() {

@@ -406,6 +406,7 @@ export class ChunkMeshBuilder {
 
         // ─── FAST-PATH FOR LOD CHUNKS ───
         if (chunk.isLOD) {
+            let lodBlocksProcessed = 0;
             // LOD chunks only render the topmost visible surface block. No side faces, no bottoms.
             for (let lq = 0; lq < CHUNK_SIZE; lq++) {
                 for (let lr = 0; lr < CHUNK_SIZE; lr++) {
@@ -517,6 +518,8 @@ export class ChunkMeshBuilder {
                             }
                         }
                     }
+                    lodBlocksProcessed++;
+                    if (lodBlocksProcessed % 32 === 0) yield;
                 }
             }
         }

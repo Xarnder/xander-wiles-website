@@ -13,6 +13,7 @@ export class ChunkSystem {
         this.chunks = new Map(); // string key "${cq},${cr}" -> Chunk
         this.chunkGenQueue = [];
         this.pendingChunks = new Set();
+        this.isLoadingDB = false;
 
         // Generator state for time-slicing
         this.activeGenJob = null;
@@ -206,12 +207,15 @@ export class ChunkSystem {
         }
 
         // Priority 1: Pick a new chunk to generate
-        if (!this.activeGenJob && this.chunkGenQueue.length > 0) {
+        if (!this.activeGenJob && !this.isLoadingDB && this.chunkGenQueue.length > 0) {
             const item = this.chunkGenQueue.shift();
             this.pendingChunks.delete(item.key);
 
             // This handles DB load sync/async, but procedural falls into activeGenJob
-            this.loadChunk(item.cq, item.cr, item.isLOD);
+            this.isLoadingDB = true;
+            this.loadChunk(item.cq, item.cr, item.isLOD).finally(() => {
+                this.isLoadingDB = false;
+            });
             if (performance.now() - startTime >= maxTimeMs) return;
         }
 
