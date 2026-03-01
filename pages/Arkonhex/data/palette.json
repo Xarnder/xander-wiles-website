@@ -1,54 +1,54 @@
 {
     "red": {
-        "color": "#ff4d4d",
+        "color": "#ffadad",
         "opacity": 0.4
     },
     "orange": {
-        "color": "#ffb84d",
+        "color": "#ffd6a5",
         "opacity": 0.4
     },
     "yellow": {
-        "color": "#ffff4d",
+        "color": "#ccce92",
         "opacity": 0.2
     },
     "green": {
-        "color": "#4dff4d",
+        "color": "#4ea24f",
         "opacity": 0.2
     },
     "blue": {
-        "color": "#4d4dff",
+        "color": "#9bf6ff",
         "opacity": 0.4
     },
     "indigo": {
-        "color": "#b84dff",
+        "color": "#a0c4ff",
         "opacity": 0.4
     },
     "violet": {
-        "color": "#ff4dff",
+        "color": "#bdb2ff",
         "opacity": 0.4
     },
     "brown": {
-        "color": "#8b5a2b",
-        "opacity": 0.6
+        "color": "#b99683",
+        "opacity": 0.17
     },
     "white": {
         "color": "#ffffff",
         "opacity": 0.3
     },
     "black": {
-        "color": "#222222",
+        "color": "#333333",
         "opacity": 0.8
     },
     "gray": {
-        "color": "#888888",
+        "color": "#ced4da",
         "opacity": 0.5
     },
     "dark_green": {
-        "color": "#2d8a2d",
+        "color": "#66e5a8",
         "opacity": 0.7
     },
     "dark_brown": {
-        "color": "#5c3a21",
+        "color": "#d3a582",
         "opacity": 0.7
     }
 }

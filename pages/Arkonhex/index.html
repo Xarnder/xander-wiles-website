@@ -129,11 +129,12 @@
                 onclick="event.stopPropagation()">
                 <!-- Sub-tabs for Settings -->
                 <div class="settings-sub-nav"
-                    style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                    style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; overflow-x: auto;">
                     <button class="sub-tab active" data-sub-tab="settings-world">World</button>
                     <button class="sub-tab" data-sub-tab="settings-graphics">Graphics</button>
                     <button class="sub-tab" data-sub-tab="settings-controls">Controls</button>
                     <button class="sub-tab" data-sub-tab="settings-audio">Audio</button>
+                    <button class="sub-tab" data-sub-tab="settings-palette">Palette</button>
                 </div>
 
                 <!-- World Settings -->
@@ -178,12 +179,12 @@
                             terrain flattens for performance.</p>
                     </div>
                     <div class="setting-row" style="margin-top: 20px;">
-                        <label>GTAO Post-Processing: <span id="gtao-val">1.0</span></label>
-                        <input type="range" id="gtao-slider" min="0.0" max="2.0" step="0.1" value="1.0">
+                        <label>GTAO Post-Processing: <span id="gtao-val">0</span></label>
+                        <input type="range" id="gtao-slider" min="0.0" max="2.0" step="0.1" value="0">
                     </div>
                     <div class="setting-row" style="margin-top: 20px;">
-                        <label>Ambient Light: <span id="ambient-val">0.65</span></label>
-                        <input type="range" id="ambient-slider" min="0.0" max="2.0" step="0.05" value="0.65">
+                        <label>Ambient Light: <span id="ambient-val">3.5</span></label>
+                        <input type="range" id="ambient-slider" min="1.0" max="5.0" step="0.05" value="4.65">
                         <p style="font-size:0.8em; color: #888888; margin-top:5px;">Global fill light strength.
                             Brightens shadowed faces.</p>
                     </div>
@@ -231,6 +232,11 @@
                         <label>Mute Ambience: <input type="checkbox" id="mute-ambience-toggle"></label>
                         <p style="font-size:0.8em; color: #888888; margin-top:5px;">Environment background sounds.</p>
                     </div>
+                </div>
+
+                <!-- Palette Settings -->
+                <div id="settings-palette" class="sub-tab-content">
+                    <div id="palette-colors-container"></div>
                 </div>
             </div>
 
@@ -334,7 +340,7 @@
     "></div>
 
     <!-- Main Entry script -->
-    <script type="module" src="src/core/Engine.js?v=6"></script>
+    <script type="module" src="src/core/Engine.js?v=9"></script>
 </body>
 
 </html>

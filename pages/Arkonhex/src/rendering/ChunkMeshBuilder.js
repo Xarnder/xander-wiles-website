@@ -132,7 +132,14 @@ export class ChunkMeshBuilder {
      * Can be recalled by the Settings UI to update AOC strength in real-time.
      */
     rebuildTextures(blockSystem, globalStrength = null) {
-        if (!this.shadowTex || !this.shadowTex.image) return;
+        if (!this.shadowTex || !this.shadowTex.image) {
+            // Fallback: If no texture is loaded, just update the flat colors.
+            for (const [colorName, hexStr] of blockSystem.palette.entries()) {
+                if (this.materials[colorName]) this.materials[colorName].color.set(hexStr);
+                if (this.transparentMaterials[colorName]) this.transparentMaterials[colorName].color.set(hexStr);
+            }
+            return;
+        }
 
         const img = this.shadowTex.image;
         const width = img.width;
@@ -164,12 +171,15 @@ export class ChunkMeshBuilder {
             compositeTex.wrapS = THREE.RepeatWrapping;
             compositeTex.wrapT = THREE.RepeatWrapping;
             compositeTex.colorSpace = THREE.SRGBColorSpace;
+            compositeTex.needsUpdate = true;
 
             // Assign specific mapped textures
+            if (this.materials[colorName].map) this.materials[colorName].map.dispose();
             this.materials[colorName].color.setHex(0xffffff); // Reset flat tint since texture brings colour
             this.materials[colorName].map = compositeTex;
             this.materials[colorName].needsUpdate = true;
 
+            if (this.transparentMaterials[colorName].map) this.transparentMaterials[colorName].map.dispose();
             this.transparentMaterials[colorName].color.setHex(0xffffff); // Reset flat tint
             this.transparentMaterials[colorName].map = compositeTex;
             this.transparentMaterials[colorName].needsUpdate = true;

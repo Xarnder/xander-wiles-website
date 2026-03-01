@@ -151,8 +151,8 @@ export class UIManager {
             aocSlider.addEventListener('change', (e) => {
                 const strength = parseFloat(e.target.value);
                 // The blockSystem configures materials. We tell its builder to rebuild textures!
-                if (this.blockSystem.chunkMeshBuilder && this.blockSystem.chunkMeshBuilder.rebuildTextures) {
-                    this.blockSystem.chunkMeshBuilder.rebuildTextures(this.blockSystem, strength);
+                if (this.playerSystem && this.playerSystem.chunkSystem && this.playerSystem.chunkSystem.meshBuilder && this.playerSystem.chunkSystem.meshBuilder.rebuildTextures) {
+                    this.playerSystem.chunkSystem.meshBuilder.rebuildTextures(this.blockSystem, strength);
                 }
             });
         }
@@ -166,17 +166,17 @@ export class UIManager {
 
             gtaoSlider.addEventListener('change', (e) => {
                 const intensity = parseFloat(e.target.value);
-                if (this.engine.renderer && this.engine.renderer.gtaoPass) {
-                    this.engine.renderer.gtaoPass.blendIntensity = intensity;
-                    this.engine.renderer.gtaoPass.enabled = intensity > 0; // Dynamically eliminate VRAM footprint when turned off
+                if (this.engine.rendererSystem && this.engine.rendererSystem.gtaoPass) {
+                    this.engine.rendererSystem.gtaoPass.blendIntensity = intensity;
+                    this.engine.rendererSystem.gtaoPass.enabled = intensity > 0; // Dynamically eliminate VRAM footprint when turned off
                 }
             });
 
             // Initialize the GTAO pass state from the slider's initial HTML value
             const initialGtaoIntensity = parseFloat(gtaoSlider.value);
-            if (this.engine.renderer && this.engine.renderer.gtaoPass) {
-                this.engine.renderer.gtaoPass.blendIntensity = initialGtaoIntensity;
-                this.engine.renderer.gtaoPass.enabled = initialGtaoIntensity > 0;
+            if (this.engine.rendererSystem && this.engine.rendererSystem.gtaoPass) {
+                this.engine.rendererSystem.gtaoPass.blendIntensity = initialGtaoIntensity;
+                this.engine.rendererSystem.gtaoPass.enabled = initialGtaoIntensity > 0;
             }
         }
 
@@ -185,8 +185,8 @@ export class UIManager {
         if (ambientSlider && ambientValDisplay) {
             ambientSlider.addEventListener('input', (e) => {
                 ambientValDisplay.innerText = e.target.value;
-                if (this.engine.lighting) {
-                    this.engine.lighting.ambientStrength = parseFloat(e.target.value);
+                if (this.engine.lightingManager) {
+                    this.engine.lightingManager.ambientStrength = parseFloat(e.target.value);
                 }
             });
         }
@@ -314,6 +314,8 @@ export class UIManager {
             });
         });
 
+        this.initPaletteMenu();
+
         // Prevent settings panel clicks from unpausing
         const settingsPanels = document.querySelectorAll('.settings-panel');
         settingsPanels.forEach(p => {
@@ -356,6 +358,262 @@ export class UIManager {
                 }
             });
         }
+    }
+
+    initPaletteMenu() {
+        const container = document.getElementById('palette-colors-container');
+        if (!container || !this.blockSystem || !this.blockSystem.palette) return;
+
+        // Clear existing just in case
+        container.innerHTML = `
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-top:0; margin-bottom: 5px;">Block Color Palette</h3>
+                <p style="font-size:0.85em; color: #aaaaaa; margin-top:0;">Tweak colors and click Apply to see changes in-game.</p>
+                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                    <button id="apply-palette-btn" style="padding: 8px 16px; background: #00b894; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Apply New Colors</button>
+                    <button id="copy-palette-btn" style="padding: 8px 16px; background: #6c5ce7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Copy JSON</button>
+                </div>
+            </div>
+            <div id="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 100%; overflow: hidden;"></div>
+        `;
+
+        const grid = document.getElementById('palette-grid');
+
+        document.getElementById('apply-palette-btn').addEventListener('click', () => {
+            // Apply all currently selected values in the inputs to the palette
+            const inputs = document.querySelectorAll('#palette-grid input[type="color"]');
+            inputs.forEach(input => {
+                const colorName = input.getAttribute('data-color-name');
+                if (colorName) {
+                    this.blockSystem.palette.set(colorName, input.value);
+                }
+            });
+
+            // Apply opacity values
+            const opacityInputs = document.querySelectorAll('#palette-grid input[type="range"].opacity-slider');
+            opacityInputs.forEach(input => {
+                const colorName = input.getAttribute('data-opacity-name');
+                if (colorName) {
+                    this.blockSystem.paletteOpacity.set(colorName, parseFloat(input.value));
+                }
+            });
+
+            // Trigger an update visually
+            if (this.playerSystem && this.playerSystem.chunkSystem) {
+                if (this.playerSystem.chunkSystem.meshBuilder && this.playerSystem.chunkSystem.meshBuilder.rebuildTextures) {
+                    this.playerSystem.chunkSystem.meshBuilder.rebuildTextures(this.blockSystem);
+                }
+
+                this.playerSystem.chunkSystem.dirtyAllChunks();
+            }
+
+            // Update hotbar visuals
+            const slots = this.hotbarElement.querySelectorAll('.hotbar-slot-inner');
+            slots.forEach((inner, i) => {
+                const blockDef = this.blockSystem.getBlockDef(i + 1);
+                if (blockDef && blockDef.topColor) {
+                    const latestColor = this.blockSystem.palette.get(blockDef.topColor);
+                    if (latestColor) inner.style.backgroundColor = latestColor;
+                }
+            });
+        });
+
+        // Helper to copy text without navigator.clipboard for unsafe contexts
+        const fallbackCopyTextToClipboard = (text) => {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+
+            // Avoid scrolling to bottom
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+                throw err;
+            }
+
+            document.body.removeChild(textArea);
+        };
+
+        document.getElementById('copy-palette-btn').addEventListener('click', async (e) => {
+            const btn = e.target;
+            try {
+                // Fetch the original json to keep opacities
+                const response = await fetch('data/palette.json');
+                const originalPalette = await response.json();
+
+                // Override with our new hex values and opacities
+                for (const [key, val] of Object.entries(originalPalette)) {
+                    if (this.blockSystem.palette.has(key)) {
+                        const newColor = this.blockSystem.palette.get(key);
+                        const newOpacity = this.blockSystem.paletteOpacity.get(key) ?? 0.8;
+
+                        if (typeof val === 'object') {
+                            val.color = newColor;
+                            val.opacity = newOpacity;
+                        } else {
+                            originalPalette[key] = {
+                                color: newColor,
+                                opacity: newOpacity
+                            };
+                        }
+                    }
+                }
+
+                const jsonStr = JSON.stringify(originalPalette, null, 4);
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(jsonStr);
+                } else {
+                    fallbackCopyTextToClipboard(jsonStr);
+                }
+
+                btn.innerText = "COPIED!";
+                setTimeout(() => btn.innerText = "Copy JSON", 2000);
+            } catch (err) {
+                console.error("Failed to copy palette:", err);
+                btn.innerText = "Error";
+                setTimeout(() => btn.innerText = "Copy JSON", 2000);
+            }
+        });
+
+        this.blockSystem.palette.forEach((hexColor, colorName) => {
+            const row = document.createElement('div');
+            row.className = 'setting-row';
+            row.style.display = 'flex';
+            row.style.flexDirection = 'column';
+            row.style.gap = '8px';
+            row.style.paddingBottom = '10px';
+            row.style.marginBottom = '10px';
+            row.style.borderBottom = '1px solid #444';
+
+            // TOP ROW - Color
+            const topRow = document.createElement('div');
+            topRow.style.display = 'flex';
+            topRow.style.justifyContent = 'space-between';
+            topRow.style.alignItems = 'center';
+
+            const labelContainer = document.createElement('div');
+
+            const colorDot = document.createElement('span');
+            colorDot.style.display = 'inline-block';
+            colorDot.style.width = '12px';
+            colorDot.style.height = '12px';
+            colorDot.style.borderRadius = '50%';
+            colorDot.style.marginRight = '8px';
+            colorDot.style.backgroundColor = hexColor;
+
+            const label = document.createElement('label');
+            label.innerText = colorName;
+            label.style.textTransform = 'capitalize';
+            label.style.cursor = 'pointer';
+            label.style.margin = '0';
+
+            labelContainer.appendChild(colorDot);
+            labelContainer.appendChild(label);
+
+            const colorInputContainer = document.createElement('div');
+            colorInputContainer.style.display = 'flex';
+            colorInputContainer.style.gap = '10px';
+            colorInputContainer.style.alignItems = 'center';
+
+            const hexDisplay = document.createElement('span');
+            // Check for both short (#FFF) and ARGB (#FF000000) formats
+            const cleanHex = hexColor.length > 7 ? hexColor.substring(0, 7) : hexColor;
+            hexDisplay.innerText = cleanHex.toUpperCase();
+            hexDisplay.style.fontFamily = 'monospace';
+            hexDisplay.style.fontSize = '0.85em';
+            hexDisplay.style.color = '#888';
+            hexDisplay.style.cursor = 'pointer';
+            hexDisplay.title = 'Click to Copy';
+
+            const input = document.createElement('input');
+            input.type = 'color';
+            input.value = cleanHex;
+            input.style.cursor = 'pointer';
+            input.setAttribute('data-color-name', colorName);
+
+            input.addEventListener('input', (e) => {
+                const newColor = e.target.value;
+                hexDisplay.innerText = newColor.toUpperCase();
+                colorDot.style.backgroundColor = newColor;
+            });
+
+            // To make text selectable easily
+            hexDisplay.addEventListener('click', () => {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(input.value).catch(() => { });
+                } else {
+                    fallbackCopyTextToClipboard(input.value);
+                }
+                const originalHex = hexDisplay.innerText;
+                hexDisplay.innerText = 'COPIED!';
+                setTimeout(() => hexDisplay.innerText = originalHex, 1000);
+            });
+
+            colorInputContainer.appendChild(hexDisplay);
+            colorInputContainer.appendChild(input);
+
+            topRow.appendChild(labelContainer);
+            topRow.appendChild(colorInputContainer);
+
+            // BOTTOM ROW - Opacity
+            const bottomRow = document.createElement('div');
+            bottomRow.style.display = 'flex';
+            bottomRow.style.justifyContent = 'space-between';
+            bottomRow.style.alignItems = 'center';
+
+            const opacityLabel = document.createElement('span');
+            opacityLabel.innerText = "Overlay Opacity";
+            opacityLabel.style.fontSize = '0.85em';
+            opacityLabel.style.color = '#ccc';
+            opacityLabel.style.marginLeft = '20px';
+
+            const opacityInputContainer = document.createElement('div');
+            opacityInputContainer.style.display = 'flex';
+            opacityInputContainer.style.gap = '10px';
+            opacityInputContainer.style.alignItems = 'center';
+
+            const opacityValueDisplay = document.createElement('span');
+            const currentOpacity = this.blockSystem.paletteOpacity.has(colorName) ? this.blockSystem.paletteOpacity.get(colorName) : 0.8;
+            opacityValueDisplay.innerText = currentOpacity.toFixed(2);
+            opacityValueDisplay.style.fontFamily = 'monospace';
+            opacityValueDisplay.style.fontSize = '0.85em';
+            opacityValueDisplay.style.color = '#888';
+            opacityValueDisplay.style.width = '30px';
+
+            const opacityInput = document.createElement('input');
+            opacityInput.type = 'range';
+            opacityInput.min = '0';
+            opacityInput.max = '1';
+            opacityInput.step = '0.01';
+            opacityInput.value = currentOpacity;
+            opacityInput.className = 'opacity-slider';
+            opacityInput.style.cursor = 'pointer';
+            opacityInput.style.width = '80px';
+            opacityInput.setAttribute('data-opacity-name', colorName);
+
+            opacityInput.addEventListener('input', (e) => {
+                opacityValueDisplay.innerText = parseFloat(e.target.value).toFixed(2);
+            });
+
+            opacityInputContainer.appendChild(opacityInput);
+            opacityInputContainer.appendChild(opacityValueDisplay);
+
+            bottomRow.appendChild(opacityLabel);
+            bottomRow.appendChild(opacityInputContainer);
+
+            row.appendChild(topRow);
+            row.appendChild(bottomRow);
+            grid.appendChild(row);
+        });
     }
 
     initHotbar() {

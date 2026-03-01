@@ -8,7 +8,7 @@ export class LightingManager {
         // 0.0 = Midnight, 0.25 = Sunrise, 0.3 = Noon, 0.75 = Sunset
         this.timeOfDay = 0.5;
         this.timeSpeed = 0.001; // Auto-progression per second
-        this.ambientStrength = 0.65; // User-controlled ambient multiplier
+        this.ambientStrength = 3.5; // User-controlled ambient multiplier
 
         // Ambient light (Soft base lighting)
         // HemisphereLight(skyColor, groundColor, intensity) 

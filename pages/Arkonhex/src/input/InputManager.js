@@ -19,11 +19,11 @@ export class InputManager {
                 if (this.isLocked) {
                     document.exitPointerLock();
 
-                    // Small hack to default to inventory tab if E is pressed
+                    // Default to settings tab if E is pressed
                     if (e.code === 'KeyE') {
                         setTimeout(() => {
-                            const invTab = document.querySelector('[data-tab="inventory-tab"]');
-                            if (invTab) invTab.click();
+                            const setTab = document.querySelector('[data-tab="settings-tab"]');
+                            if (setTab) setTab.click();
                         }, 50);
                     } else if (e.code === 'Escape') {
                         setTimeout(() => {

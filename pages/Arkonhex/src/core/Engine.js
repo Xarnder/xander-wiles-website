@@ -27,6 +27,8 @@ export class Engine {
         // World save state
         this.activeWorldId = null;
         this.activeWorldMeta = null;
+        this.chunksReady = false;
+        this.initialChunkTotal = 0;
     }
 
     /**
@@ -138,7 +140,8 @@ export class Engine {
         this.playerSystem = new PlayerSystem(this, this.inputManager, this.physicsSystem, this.chunkSystem);
 
         // 5. Restore player position if saved
-        const savedPlayer = await loadPlayerState(worldId);
+        this._lastSavedPlayer = await loadPlayerState(worldId);
+        const savedPlayer = this._lastSavedPlayer;
         if (savedPlayer && savedPlayer.position) {
             this.playerSystem.position.set(
                 savedPlayer.position[0],
@@ -167,21 +170,17 @@ export class Engine {
         this.waypointManager = new WaypointManager(this);
         await this.waypointManager.loadWaypoints(worldId);
 
-        // Hide ALL overlay screens — game is ready
-        if (startScreen) startScreen.classList.add('hidden');
-        if (loadingContainer) loadingContainer.style.display = 'none';
-        const worldSelectScreen = document.getElementById('world-select-screen');
-        if (worldSelectScreen) worldSelectScreen.classList.add('hidden');
+        // Keep loading screen visible — the game loop will hide it after initial chunks are built.
+        // Track how many chunks must be generated + built for the initial load.
+        this.chunksReady = false;
+        this.initialChunkTotal = this.chunkSystem.chunkGenQueue.length + this.chunkSystem.chunks.size;
+        if (this.initialChunkTotal === 0) this.initialChunkTotal = 1; // Prevent divide-by-zero
 
-        // Remove the ui-hidden class so game UI (crosshair, hotbar etc.) is visible
-        const uiLayer = document.getElementById('ui-layer');
-        if (uiLayer) uiLayer.classList.remove('ui-hidden');
+        // Update loading text
+        if (loadingText) loadingText.innerText = 'Building Terrain...';
+        if (loadingFill) loadingFill.style.width = '0%';
 
-        // Auto-save on page unload
-        this._beforeUnloadHandler = () => this._saveAndExit();
-        window.addEventListener('beforeunload', this._beforeUnloadHandler);
-
-        // Start the game
+        // Start the game loop (chunks will build progressively)
         this.start();
     }
 
@@ -278,6 +277,86 @@ export class Engine {
 
         const delta = Math.min(this.clock.getDelta(), 0.1); // Max delta 0.1s to prevent huge jumps
         const time = this.clock.getElapsedTime();
+
+        // ── INITIAL CHUNK LOADING GATE ──
+        // While chunks are still being generated/built, only update ChunkSystem (to build chunks)
+        // and show progress on the loading bar. Skip player, lighting, etc.
+        if (!this.chunksReady) {
+            // Let ChunkSystem generate/build chunks
+            if (this.chunkSystem && this.chunkSystem.update) {
+                this.chunkSystem.update(delta, time);
+            }
+
+            // Calculate progress: chunks with no pending generation AND no dirty meshes
+            const totalChunks = this.chunkSystem.chunks.size;
+            const pendingGen = this.chunkSystem.chunkGenQueue.length + this.chunkSystem.pendingChunks.size;
+            let dirtyCount = 0;
+            for (const chunk of this.chunkSystem.chunks.values()) {
+                if (chunk.isDirty) dirtyCount++;
+            }
+
+            const doneCount = totalChunks - dirtyCount;
+            const totalWork = totalChunks + pendingGen;
+            const progress = totalWork > 0 ? Math.floor((doneCount / this.initialChunkTotal) * 100) : 0;
+
+            const loadingFill = document.getElementById('loading-bar-fill');
+            const loadingText = document.getElementById('loading-text');
+            if (loadingFill) loadingFill.style.width = `${Math.min(progress, 100)}%`;
+            if (loadingText) loadingText.innerText = `Building Terrain... ${Math.min(progress, 100)}%`;
+
+            // Check if all initial chunks are generated AND all meshes are built
+            if (pendingGen === 0 && dirtyCount === 0 && totalChunks > 0) {
+                this.chunksReady = true;
+
+                // Find safe spawn Y for the player
+                const spawnQ = 0, spawnR = 0;
+                let safeY = 40; // default fallback
+                for (let y = 63; y >= 0; y--) {
+                    const blockId = this.chunkSystem.getBlockGlobal(spawnQ, spawnR, y);
+                    if (blockId !== 0) {
+                        safeY = y + 2; // Stand on top of the highest block + buffer
+                        break;
+                    }
+                }
+
+                // Only set position if there's no saved position (fresh world)
+                const savedPlayer = this._lastSavedPlayer;
+                if (!savedPlayer || !savedPlayer.position) {
+                    this.playerSystem.position.set(0, safeY, 0);
+                }
+                this.playerSystem.velocity.set(0, 0, 0); // Clear any accumulated fall velocity
+
+                // Immediately sync the camera to the player's position
+                // (normally this happens in update(), but update() requires pointer lock)
+                this.playerSystem.yawObject.position.copy(this.playerSystem.position);
+                this.playerSystem.yawObject.position.y += this.playerSystem.playerHeight;
+
+                // Hide loading screen, show game UI
+                const startScreen = document.getElementById('start-screen');
+                const loadingContainer = document.getElementById('loading-container');
+                const worldSelectScreen = document.getElementById('world-select-screen');
+                const uiLayer = document.getElementById('ui-layer');
+
+                if (startScreen) startScreen.classList.add('hidden');
+                if (loadingContainer) loadingContainer.style.display = 'none';
+                if (worldSelectScreen) worldSelectScreen.classList.add('hidden');
+                if (uiLayer) uiLayer.classList.remove('ui-hidden');
+
+                // Auto-save on page unload
+                this._beforeUnloadHandler = () => this._saveAndExit();
+                window.addEventListener('beforeunload', this._beforeUnloadHandler);
+            }
+
+            // Still render the scene so user can watch chunks load behind the overlay
+            if (this.lightingManager && this.playerSystem) {
+                this.lightingManager.update(this.playerSystem.position, delta, this.inputManager);
+            }
+            // Run only the renderer (not PlayerSystem) so the scene is visible
+            if (this.rendererSystem && this.rendererSystem.update) {
+                this.rendererSystem.update();
+            }
+            return; // Don't run PlayerSystem or other game systems while loading
+        }
 
         // Specific system updates that aren't purely ECS
         if (this.lightingManager && this.playerSystem) {

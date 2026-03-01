@@ -202,8 +202,10 @@ export class PlayerSystem {
         if (this.ambientStarted) {
             this.ambientTime += delta;
 
-            // Slow sine-wave envelope for normal ambients: period ~20s, range [0 .. 0.4]
-            const sineEnvelope = (Math.sin(2 * Math.PI * this.ambientTime / 20.0) + 1) / 2; // 0..1
+            // Slow cosine-wave envelope for normal ambients: period 360s (6 mins), range [0 .. max]
+            // -Math.cos starts at -1 (mapped to 0), ramping up to +1 (mapped to 1) at 3 mins
+            const cycleTime = 360.0;
+            const sineEnvelope = (-Math.cos(2 * Math.PI * this.ambientTime / cycleTime) + 1) / 2; // 0..1
             const maxNormalVol = 0.4;
             const targetNormalVol = isSubmerged ? 0 : sineEnvelope * maxNormalVol;
 
