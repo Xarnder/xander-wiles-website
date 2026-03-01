@@ -14,6 +14,10 @@ export class ChunkSystem {
         this.chunkGenQueue = [];
         this.pendingChunks = new Set();
 
+        // Generator state for time-slicing
+        this.activeGenJob = null;
+        this.activeMeshJob = null;
+
         this.renderDistance = 8; // Expanded for further view distance
         this.lodDistance = 4;    // Blocks past this chunk distance render flat to save geometry
 
@@ -115,8 +119,16 @@ export class ChunkSystem {
             }
         }
 
-        // Generate procedurally if not in DB
-        const chunk = this.worldGen.generateChunk(cq, cr, this.blockSystem);
+        // Generate procedurally if not in DB (Start Generator)
+        this.activeGenJob = {
+            generator: this.worldGen.generateChunkGenerator(cq, cr, this.blockSystem),
+            cq: cq,
+            cr: cr,
+            isLOD: isLOD
+        };
+    }
+
+    _finishChunkLoad(chunk, cq, cr, isLOD) {
         chunk.isLOD = isLOD;
         this.chunks.set(this.getChunkKey(cq, cr), chunk);
 
@@ -177,20 +189,52 @@ export class ChunkSystem {
             this.meshBuilder.waterUniforms.uTime.value = time;
         }
 
-        // Priority 1: Generate 1 chunk's raw block data per frame
-        if (this.chunkGenQueue.length > 0) {
+        const maxTimeMs = 12; // Leave some headroom for 16ms (60fps) target
+        const startTime = performance.now();
+
+        // 1. Process active generation job (if any)
+        if (this.activeGenJob) {
+            while (performance.now() - startTime < maxTimeMs) {
+                const result = this.activeGenJob.generator.next();
+                if (result.done) {
+                    this._finishChunkLoad(result.value, this.activeGenJob.cq, this.activeGenJob.cr, this.activeGenJob.isLOD);
+                    this.activeGenJob = null;
+                    break;
+                }
+            }
+            if (performance.now() - startTime >= maxTimeMs) return; // Yield frame
+        }
+
+        // Priority 1: Pick a new chunk to generate
+        if (!this.activeGenJob && this.chunkGenQueue.length > 0) {
             const item = this.chunkGenQueue.shift();
             this.pendingChunks.delete(item.key);
 
+            // This handles DB load sync/async, but procedural falls into activeGenJob
             this.loadChunk(item.cq, item.cr, item.isLOD);
-            return; // Give frame back to avoid stutter
+            if (performance.now() - startTime >= maxTimeMs) return;
         }
 
-        // Priority 2: Build 1 chunk mesh per frame
-        for (const chunk of this.chunks.values()) {
-            if (chunk.isDirty) {
-                this.rebuildChunkMesh(chunk);
-                break; // Only build ONE mesh per frame!
+        // 2. Process active meshing job (if any)
+        if (this.activeMeshJob) {
+            while (performance.now() - startTime < maxTimeMs) {
+                const result = this.activeMeshJob.generator.next();
+                if (result.done) {
+                    this._finishChunkMesh(this.activeMeshJob.chunk, result.value);
+                    this.activeMeshJob = null;
+                    break;
+                }
+            }
+            if (performance.now() - startTime >= maxTimeMs) return; // Yield frame
+        }
+
+        // Priority 2: Pick a new chunk to mesh
+        if (!this.activeMeshJob && !this.activeGenJob) {
+            for (const chunk of this.chunks.values()) {
+                if (chunk.isDirty) {
+                    this.rebuildChunkMesh(chunk);
+                    break; // Just start one mesh job
+                }
             }
         }
     }
@@ -204,13 +248,19 @@ export class ChunkSystem {
             chunk.mesh = null;
         }
 
-        const mesh = this.meshBuilder.buildChunkMesh(chunk, this.blockSystem, this);
+        chunk.isDirty = false; // Mark clean so we don't pick it again while building
+
+        this.activeMeshJob = {
+            generator: this.meshBuilder.buildChunkMeshGenerator(chunk, this.blockSystem, this),
+            chunk: chunk
+        };
+    }
+
+    _finishChunkMesh(chunk, mesh) {
         if (mesh) {
             chunk.mesh = mesh;
             this.engine.scene.add(mesh);
         }
-
-        chunk.isDirty = false;
     }
 
     dirtyAllChunks() {

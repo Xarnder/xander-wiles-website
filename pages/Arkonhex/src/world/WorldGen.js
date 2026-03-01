@@ -31,13 +31,13 @@ export class WorldGen {
     }
 
     /**
-     * Generates a single chunk of blocks
+     * Generator function that yields periodically to prevent blocking the main thread during heavy procedural generation.
      * @param {number} cq Chunk q coordinate
      * @param {number} cr Chunk r coordinate
      * @param {BlockSystem} blockSystem 
-     * @returns {Chunk} The generated chunk
+     * @returns {Generator<undefined, Chunk, unknown>} 
      */
-    generateChunk(cq, cr, blockSystem) {
+    *generateChunkGenerator(cq, cr, blockSystem) {
         const chunk = new Chunk(cq, cr);
 
         const qOffset = cq * CHUNK_SIZE;
@@ -149,9 +149,27 @@ export class WorldGen {
                     }
                 }
             }
+
+            // Yield every 2 rows of the chunk to let the main thread render a frame
+            if (lr % 2 === 0) {
+                yield;
+            }
         }
 
         return chunk;
+    }
+
+    /**
+     * Synchronous wrapper for fallback compatibility.
+     * Fully consumes the generator in one go.
+     */
+    generateChunk(cq, cr, blockSystem) {
+        const gen = this.generateChunkGenerator(cq, cr, blockSystem);
+        let result = gen.next();
+        while (!result.done) {
+            result = gen.next();
+        }
+        return result.value;
     }
 
     /**

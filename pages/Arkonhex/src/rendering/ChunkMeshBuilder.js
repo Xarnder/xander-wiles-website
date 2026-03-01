@@ -267,7 +267,11 @@ export class ChunkMeshBuilder {
      * @param {ChunkSystem} chunkSystem - Reference to chunk system for neighboring queries
      * @param {string} seed - The world seed for procedural generation logic
      */
-    buildChunkMesh(chunk, blockSystem, chunkSystem, seed = "arkonhex") {
+    /**
+     * Generator function to build a chunk mesh over multiple frames.
+     * @returns {Generator<undefined, THREE.Group|null, unknown>}
+     */
+    *buildChunkMeshGenerator(chunk, blockSystem, chunkSystem, seed = "arkonhex") {
         // We now have multiple materials, so we need a discrete set of buffers for each material index
         const numMaterials = this.materialArray.length;
 
@@ -518,6 +522,7 @@ export class ChunkMeshBuilder {
         }
         else {
             // ─── DETAILED CHUNK PATH ───
+            let blocksProcessed = 0;
             // Iterate all blocks in the chunk data
             for (const block of chunk.getBlocks()) {
                 if (block.id === 0) continue; // Air
@@ -717,6 +722,12 @@ export class ChunkMeshBuilder {
                         targetType,
                         sideLightVal
                     );
+                } // end for 6 sides
+
+                // Yield to main thread every ~400 solid blocks to prevent frame drops
+                blocksProcessed++;
+                if (blocksProcessed % 400 === 0) {
+                    yield;
                 }
             }
         } // End Detailed Path
@@ -786,8 +797,8 @@ export class ChunkMeshBuilder {
         if (solidMesh && solidMesh.geometry.attributes.position.count > 0) {
             group.add(solidMesh);
 
-            // Add block outlines if globally enabled, or if it's an LOD chunk faking depth
-            if (blockSystem.showOutlines || chunk.isLOD) {
+            // Add block outlines if globally enabled. LOD chunks never get outlines.
+            if (blockSystem.showOutlines && !chunk.isLOD) {
                 const edges = new THREE.EdgesGeometry(solidMesh.geometry, 1); // 1 deg threshold for sharp hex edges
                 if (edges.attributes.position.count > 0) {
                     const lineGeom = new LineSegmentsGeometry().fromEdgesGeometry(edges);
@@ -818,5 +829,18 @@ export class ChunkMeshBuilder {
         }
 
         return group;
+    }
+
+    /**
+     * Synchronous wrapper for fallback compatibility.
+     * Fully consumes the generator in one go.
+     */
+    buildChunkMesh(chunk, blockSystem, chunkSystem, seed = "arkonhex") {
+        const gen = this.buildChunkMeshGenerator(chunk, blockSystem, chunkSystem, seed);
+        let result = gen.next();
+        while (!result.done) {
+            result = gen.next();
+        }
+        return result.value;
     }
 }

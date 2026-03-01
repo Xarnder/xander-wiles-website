@@ -4,6 +4,7 @@ export class UIManager {
         this.playerSystem = playerSystem;
         this.worldGen = worldGen;
         this.blockSystem = blockSystem;
+        this.abortController = new AbortController();
 
         this.fpsElement = document.getElementById('fps-counter');
         this.seedElement = document.getElementById('seed-display');
@@ -52,7 +53,7 @@ export class UIManager {
 
             slider.addEventListener('input', (e) => {
                 valDisplay.innerText = e.target.value;
-            });
+            }, { signal: this.abortController.signal });
 
             slider.addEventListener('change', (e) => {
                 const newDist = parseInt(e.target.value);
@@ -78,7 +79,7 @@ export class UIManager {
 
             lodSlider.addEventListener('input', (e) => {
                 lodValDisplay.innerText = e.target.value;
-            });
+            }, { signal: this.abortController.signal });
 
             lodSlider.addEventListener('change', (e) => {
                 const newLodDist = parseInt(e.target.value);
@@ -109,7 +110,7 @@ export class UIManager {
 
                     this.playerSystem.chunkSystem.updateLoadedChunks(axial.q, axial.r);
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const fovSlider = document.getElementById('fov-slider');
@@ -124,7 +125,7 @@ export class UIManager {
                 if (this.playerSystem) {
                     this.playerSystem.baseFov = parseInt(e.target.value);
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const cloudShadowToggle = document.getElementById('cloud-shadows-toggle');
@@ -138,7 +139,7 @@ export class UIManager {
                         mesh.receiveShadow = e.target.checked;
                     });
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const aocSlider = document.getElementById('aoc-slider');
@@ -146,7 +147,7 @@ export class UIManager {
         if (aocSlider && aocValDisplay) {
             aocSlider.addEventListener('input', (e) => {
                 aocValDisplay.innerText = e.target.value;
-            });
+            }, { signal: this.abortController.signal });
 
             aocSlider.addEventListener('change', (e) => {
                 const strength = parseFloat(e.target.value);
@@ -162,7 +163,7 @@ export class UIManager {
         if (gtaoSlider && gtaoValDisplay) {
             gtaoSlider.addEventListener('input', (e) => {
                 gtaoValDisplay.innerText = e.target.value;
-            });
+            }, { signal: this.abortController.signal });
 
             gtaoSlider.addEventListener('change', (e) => {
                 const intensity = parseFloat(e.target.value);
@@ -170,7 +171,7 @@ export class UIManager {
                     this.engine.rendererSystem.gtaoPass.blendIntensity = intensity;
                     this.engine.rendererSystem.gtaoPass.enabled = intensity > 0; // Dynamically eliminate VRAM footprint when turned off
                 }
-            });
+            }, { signal: this.abortController.signal });
 
             // Initialize the GTAO pass state from the slider's initial HTML value
             const initialGtaoIntensity = parseFloat(gtaoSlider.value);
@@ -188,7 +189,7 @@ export class UIManager {
                 if (this.engine.lightingManager) {
                     this.engine.lightingManager.ambientStrength = parseFloat(e.target.value);
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         // Audio Toggle Listeners
@@ -196,21 +197,21 @@ export class UIManager {
         if (muteAllToggle) {
             muteAllToggle.addEventListener('change', (e) => {
                 this.engine.audioManager.toggleMuteAll(e.target.checked);
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const muteSFXToggle = document.getElementById('mute-sfx-toggle');
         if (muteSFXToggle) {
             muteSFXToggle.addEventListener('change', (e) => {
                 this.engine.audioManager.toggleMuteSFX(e.target.checked);
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const muteAmbienceToggle = document.getElementById('mute-ambience-toggle');
         if (muteAmbienceToggle) {
             muteAmbienceToggle.addEventListener('change', (e) => {
                 this.engine.audioManager.toggleMuteAmbience(e.target.checked);
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const shadowResSelect = document.getElementById('shadow-res-select');
@@ -228,7 +229,7 @@ export class UIManager {
                         shadow.map = null;
                     }
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         // Initial hold delay slider (how long before 2nd action fires)
@@ -240,7 +241,7 @@ export class UIManager {
             initDelaySlider.addEventListener('input', (e) => {
                 initDelayVal.innerText = e.target.value;
                 this.playerSystem.blockInitialDelay = parseInt(e.target.value) / 1000;
-            });
+            }, { signal: this.abortController.signal });
         }
 
         // Repeat delay slider (cadence after 2nd action)
@@ -252,7 +253,7 @@ export class UIManager {
             repeatDelaySlider.addEventListener('input', (e) => {
                 repeatDelayVal.innerText = e.target.value;
                 this.playerSystem.blockRepeatDelay = parseInt(e.target.value) / 1000;
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const blockOutlineToggle = document.getElementById('block-outline-toggle');
@@ -272,7 +273,7 @@ export class UIManager {
                         this.playerSystem.chunkSystem.dirtyAllChunks();
                     }
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         // Main Tab logic
@@ -295,7 +296,7 @@ export class UIManager {
                 if (targetId === 'waypoints-tab') {
                     this.refreshWaypointList();
                 }
-            });
+            }, { signal: this.abortController.signal });
         });
 
         // Sub-tab logic (for settings)
@@ -311,7 +312,7 @@ export class UIManager {
                 const targetSubId = subTab.getAttribute('data-sub-tab');
                 const targetSubContent = document.getElementById(targetSubId);
                 if (targetSubContent) targetSubContent.classList.add('active');
-            });
+            }, { signal: this.abortController.signal });
         });
 
         this.initPaletteMenu();
@@ -321,7 +322,7 @@ export class UIManager {
         settingsPanels.forEach(p => {
             p.addEventListener('click', (e) => {
                 e.stopPropagation();
-            });
+            }, { signal: this.abortController.signal });
         });
 
         // Exit to World Menu button
@@ -338,25 +339,9 @@ export class UIManager {
                 // Save world state before exiting
                 await this.engine._saveAndExit();
 
-                // Stop the game loop
-                this.engine.stop();
-
-                // Hide pause screen and game UI layer
-                const pauseScreen = document.getElementById('pause-screen');
-                if (pauseScreen) pauseScreen.classList.add('hidden');
-                const uiLayer = document.getElementById('ui-layer');
-                if (uiLayer) uiLayer.classList.add('ui-hidden');
-
-                // Clear active world
-                this.engine.activeWorldId = null;
-                this.engine.activeWorldMeta = null;
-
-                // Show the world select screen
-                if (this.engine.worldSelectMenu) {
-                    await this.engine.worldSelectMenu.refresh();
-                    this.engine.worldSelectMenu.show();
-                }
-            });
+                // Restart the whole page to avoid UI duplication and mouse lock issues
+                window.location.reload();
+            }, { signal: this.abortController.signal });
         }
     }
 
@@ -416,7 +401,7 @@ export class UIManager {
                     if (latestColor) inner.style.backgroundColor = latestColor;
                 }
             });
-        });
+        }, { signal: this.abortController.signal });
 
         // Helper to copy text without navigator.clipboard for unsafe contexts
         const fallbackCopyTextToClipboard = (text) => {
@@ -482,7 +467,7 @@ export class UIManager {
                 btn.innerText = "Error";
                 setTimeout(() => btn.innerText = "Copy JSON", 2000);
             }
-        });
+        }, { signal: this.abortController.signal });
 
         this.blockSystem.palette.forEach((hexColor, colorName) => {
             const row = document.createElement('div');
@@ -806,5 +791,30 @@ export class UIManager {
 
             this.graphicsElement.innerText = `Graphics: ${this.highGraphics ? 'High' : 'Low'} (Press G to toggle)`;
         }
+    }
+
+    initWaypointMenu() {
+        const pTag = document.querySelector('#waypoints-tab p strong');
+        if (pTag) {
+            // For example, if we wanted to add a listener here, we'd use the signal
+        }
+    }
+
+    dispose() {
+        // 1. Clear added debug elements
+        if (this.graphicsElement && this.graphicsElement.parentNode) {
+            this.graphicsElement.parentNode.removeChild(this.graphicsElement);
+        }
+        if (this.flyElement && this.flyElement.parentNode) {
+            this.flyElement.parentNode.removeChild(this.flyElement);
+        }
+
+        // 2. Clear hotbar slots
+        if (this.hotbarElement) {
+            this.hotbarElement.innerHTML = '';
+        }
+
+        // 3. Abort all attached event listeners
+        this.abortController.abort();
     }
 }

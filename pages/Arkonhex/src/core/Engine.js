@@ -223,7 +223,10 @@ export class Engine {
         this.lightSystem = null;
         this.physicsSystem = null;
         this.playerSystem = null;
-        this.uiManager = null;
+        if (this.uiManager) {
+            this.uiManager.dispose();
+            this.uiManager = null;
+        }
         this.cloudSystem = null;
         if (this.waypointManager) {
             this.waypointManager.clearAll();
