@@ -19,14 +19,14 @@ There is **no build step**, no bundler, and no Node server. It runs directly via
 
 ## 2. Phase Numbering Convention ⚠️
 
-All development work on this engine is tracked by **Phase numbers**. The most recent completed phase is **Phase 35**.
+All development work on this engine is tracked by **Phase numbers**. The most recent completed phase is **Phase 36**.
 
 **When you add a new feature or fix, always:**
 1. Name it **Phase 36**, then **Phase 37**, etc. — never reset or repeat numbers.
 2. Record it in the conversation walkthrough or any documentation you maintain.
 3. Keep this file updated with the current highest phase number.
 
-> **Current highest phase: 35**
+> **Current highest phase: 36**
 
 ---
 
@@ -301,3 +301,19 @@ When starting any new feature:
 - **Water body is non-solid** (`hardness: 0.0`) — players physically pass through it. Buoyancy / swim physics are not yet implemented.
 - **No build step** — if you add new JS files, import them directly with relative `../path/to/file.js` paths. No bundling required.
 - **Delta is capped at 0.1s** in the engine loop — prevents physics explosions when the tab is backgrounded.
+
+---
+
+## 12. Performance & Thread Management ⚠️
+
+Arkonhex is a high-performance voxel engine running in a single-threaded environment. To prevent freezing or stutters, follow these strict rules:
+
+### 12.1 Frame Yielding (No Main Thread Blocking)
+ALL mesh building, block iterating, and chunk loading logic MUST use **Generator functions** (`function*`) and `yield` control back to the main thread periodically. Do not allow `for` loops to iterate over thousands of blocks synchronously. Use time-slicing logic (e.g., `if (count % 32 === 0) yield;`).
+
+### 12.2 Event-Driven Grid Updates
+**NEVER** execute grid-wide recalculations inside a continuous `update(delta)` loop if they can be avoided.
+When checking if chunks need loading, unloading, or mesh rebaking based on player position, track the player's active **Chunk Coordinates** (`cq`, `cr`) and ONLY trigger chunk-system updates when the player enters a new chunk border. Avoid polling large arrays 60 times a second.
+
+### 12.3 Async Semaphore Locking
+When querying IndexedDB (via `ChunkStorage.js`) or other asynchronous data sources, maintain explicit boolean locks (e.g., `this.isLoadingDB = true`). Do not queue parallel microtasks that try to initialize generators simultaneously, as they will overwrite each other's state and stall the engine.

@@ -735,8 +735,7 @@ export class ChunkMeshBuilder {
             }
         } // End Detailed Path
 
-        const buildMesh = (posArr, normArr, uvArr, indArr, lightArr, materialsArray) => {
-            // Flatten arrays and track material group offsets
+        const buildMeshGen = function* (posArr, normArr, uvArr, indArr, lightArr, materialsArray) {
             const flatPos = [];
             const flatNorm = [];
             const flatUv = [];
@@ -744,20 +743,15 @@ export class ChunkMeshBuilder {
             const flatLight = [];
             const groups = [];
 
-            let indexOffset = 0; // Tracks the running offset of indices mapped so far
-
             for (let i = 0; i < numMaterials; i++) {
                 if (posArr[i].length === 0) continue;
 
-                // Create a group entry matching the material Index
-                // `start` is the index of the first element in the indices array for this group
                 groups.push({
                     start: flatInd.length,
                     count: indArr[i].length,
                     materialIndex: i
                 });
 
-                // Vertices must be offset by the current vertex count in flatPos
                 const vertexOffset = flatPos.length / 3;
                 for (let j = 0; j < indArr[i].length; j++) {
                     flatInd.push(indArr[i][j] + vertexOffset);
@@ -767,6 +761,9 @@ export class ChunkMeshBuilder {
                 flatNorm.push(...normArr[i]);
                 flatUv.push(...uvArr[i]);
                 flatLight.push(...lightArr[i]);
+
+                // Yield per material compiled to keep frame smooth
+                yield;
             }
 
             if (flatPos.length === 0) return null;
@@ -784,6 +781,8 @@ export class ChunkMeshBuilder {
 
             geometry.computeBoundingSphere();
             geometry.computeBoundingBox();
+
+            yield; // Compute vertex normals can be heavy
             geometry.computeVertexNormals();
 
             const mesh = new THREE.Mesh(geometry, materialsArray);
@@ -792,9 +791,24 @@ export class ChunkMeshBuilder {
             return mesh;
         };
 
-        const solidMesh = buildMesh(positions, normals, uvs, indices, lightLevels, this.materialArray);
-        const transMesh = buildMesh(transPositions, transNormals, transUvs, transIndices, transLightLevels, this.transparentMaterialArray);
-        const glassMesh = buildMesh(glassPositions, glassNormals, glassUvs, glassIndices, glassLightLevels, this.transparentMaterialArray);
+        // Execute and yield out the nested generators
+        let solidMesh = null;
+        const solidGen = buildMeshGen(positions, normals, uvs, indices, lightLevels, this.materialArray);
+        let solidRes = solidGen.next();
+        while (!solidRes.done) { yield; solidRes = solidGen.next(); }
+        solidMesh = solidRes.value;
+
+        let transMesh = null;
+        const transGen = buildMeshGen(transPositions, transNormals, transUvs, transIndices, transLightLevels, this.transparentMaterialArray);
+        let transRes = transGen.next();
+        while (!transRes.done) { yield; transRes = transGen.next(); }
+        transMesh = transRes.value;
+
+        let glassMesh = null;
+        const glassGen = buildMeshGen(glassPositions, glassNormals, glassUvs, glassIndices, glassLightLevels, this.transparentMaterialArray);
+        let glassRes = glassGen.next();
+        while (!glassRes.done) { yield; glassRes = glassGen.next(); }
+        glassMesh = glassRes.value;
 
         const group = new THREE.Group();
         if (solidMesh && solidMesh.geometry.attributes.position.count > 0) {

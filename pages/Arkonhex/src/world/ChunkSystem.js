@@ -208,14 +208,16 @@ export class ChunkSystem {
 
         // Priority 1: Pick a new chunk to generate
         if (!this.activeGenJob && !this.isLoadingDB && this.chunkGenQueue.length > 0) {
+            this.isLoadingDB = true;
             const item = this.chunkGenQueue.shift();
             this.pendingChunks.delete(item.key);
 
             // This handles DB load sync/async, but procedural falls into activeGenJob
-            this.isLoadingDB = true;
-            this.loadChunk(item.cq, item.cr, item.isLOD).finally(() => {
-                this.isLoadingDB = false;
-            });
+            this.loadChunk(item.cq, item.cr, item.isLOD)
+                .catch(e => console.error("Chunk load failed", e))
+                .finally(() => {
+                    this.isLoadingDB = false;
+                });
             if (performance.now() - startTime >= maxTimeMs) return;
         }
 
@@ -244,14 +246,6 @@ export class ChunkSystem {
     }
 
     rebuildChunkMesh(chunk) {
-        if (chunk.mesh) {
-            this.engine.scene.remove(chunk.mesh);
-            chunk.mesh.traverse((child) => {
-                if (child.isMesh) child.geometry.dispose();
-            });
-            chunk.mesh = null;
-        }
-
         chunk.isDirty = false; // Mark clean so we don't pick it again while building
 
         this.activeMeshJob = {
@@ -261,6 +255,13 @@ export class ChunkSystem {
     }
 
     _finishChunkMesh(chunk, mesh) {
+        if (chunk.mesh) {
+            this.engine.scene.remove(chunk.mesh);
+            chunk.mesh.traverse((child) => {
+                if (child.isMesh) child.geometry.dispose();
+            });
+        }
+
         if (mesh) {
             chunk.mesh = mesh;
             this.engine.scene.add(mesh);
