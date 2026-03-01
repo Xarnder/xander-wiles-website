@@ -6,6 +6,7 @@ export class InputManager {
         this.buttons = new Set();
         this.movementX = 0;
         this.movementY = 0;
+        this.wheelDeltaY = 0;
         this.isLocked = false;
 
         this.initEventListeners();
@@ -51,6 +52,12 @@ export class InputManager {
             if (this.isLocked) {
                 this.movementX += e.movementX;
                 this.movementY += e.movementY;
+            }
+        });
+
+        document.addEventListener('wheel', (e) => {
+            if (this.isLocked) {
+                this.wheelDeltaY += Math.sign(e.deltaY); // Normalize scroll amount
             }
         });
 
@@ -113,5 +120,11 @@ export class InputManager {
         this.movementX = 0;
         this.movementY = 0;
         return { x: mx, y: my };
+    }
+
+    getWheelDelta() {
+        const dy = this.wheelDeltaY;
+        this.wheelDeltaY = 0;
+        return dy;
     }
 }

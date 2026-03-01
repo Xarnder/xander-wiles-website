@@ -51,6 +51,8 @@ export class ChunkMeshBuilder {
                 color: blockSystem.palette.get(color),
                 roughness: 0.1,
                 metalness: 0.1,
+                emissive: 0x000000,
+                emissiveIntensity: 0.0,
                 transparent: true,
                 opacity: 0.6,
                 depthWrite: false, // Critical for water 
@@ -113,7 +115,7 @@ export class ChunkMeshBuilder {
         // Shared line material for glass outlines (reused across all chunks)
         this.glassOutlineMaterial = new LineMaterial({
             color: 0xffffff,
-            linewidth: 2,
+            linewidth: 4,
             resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
             transparent: true,
             opacity: 0.8,
@@ -389,13 +391,10 @@ export class ChunkMeshBuilder {
                         const worldPos = axialToWorld(globalQ, globalR);
                         const topY = surfaceY * BLOCK_HEIGHT + 1.0; // LOD chunks are flat 1.0 height
 
-                        // Build ONLY Top Face
+                        // Build Top Face
                         for (let i = 0; i < 6; i++) {
                             const c1 = corners[i];
                             const c2 = corners[(i + 1) % 6];
-
-                            // Determine if we need to render this top face based on neighbors?
-                            // For LOD, it's so far away we just render all top faces for simplicity and speed.
 
                             const uv1Top = [worldPos.x, worldPos.z];
                             const uv2Top = [worldPos.x + c2.x, worldPos.z + c2.y];
@@ -415,6 +414,62 @@ export class ChunkMeshBuilder {
                                 topMatIndex,
                                 targetType
                             );
+
+                            // --- LOD Boundary Side Faces ---
+                            // To prevent LOD blocks from looking like floating paper-thin planes,
+                            // we drop a huge quad down to y=0 for the chunk's outer edges. 
+                            const offset = neighborOffsets[i];
+                            const nlq = lq + offset.q;
+                            const nlr = lr + offset.r;
+
+                            // Check if this specific face points OUTSIDE the chunk 
+                            // (or points to a much lower neighbor inside the chunk)
+                            let needsSide = false;
+
+                            if (nlq < 0 || nlq >= CHUNK_SIZE || nlr < 0 || nlr >= CHUNK_SIZE) {
+                                // Face points outside this chunk's boundaries.
+                                // In a perfect LOD system we'd check the neighbor chunk's LOD height,
+                                // but dropping a solid side skirt guarantees no holes when looking horizontally.
+                                needsSide = true;
+                            } else {
+                                // Face points inside the chunk. Only draw a side if the neighbor is significantly lower.
+                                // Scan neighbor's surface
+                                let nSurfaceY = -1;
+                                for (let ny = 63; ny >= 0; ny--) {
+                                    if (chunk.getBlock(nlq, nlr, ny) !== 0) {
+                                        nSurfaceY = ny;
+                                        break;
+                                    }
+                                }
+                                if (nSurfaceY < surfaceY) {
+                                    needsSide = true; // Drop a cliff down to neighbor's level
+                                }
+                            }
+
+                            if (needsSide) {
+                                // Draw a huge side plane from topY down to 0
+                                const baseY = 0;
+
+                                const dx = c2.x - c1.x;
+                                const dz = c2.y - c1.y;
+                                const normal = new THREE.Vector3(dz, 0, -dx).normalize().toArray();
+
+                                // Simple stretched UVs just to get the base terrain color mapped
+                                const uv1T = [0, topY];
+                                const uv2T = [1, topY];
+                                const uv2B = [1, baseY];
+                                const uv1B = [0, baseY];
+
+                                pushQuad(
+                                    [worldPos.x + c1.x, topY, worldPos.z + c1.y],
+                                    [worldPos.x + c2.x, topY, worldPos.z + c2.y],
+                                    [worldPos.x + c2.x, baseY, worldPos.z + c2.y],
+                                    [worldPos.x + c1.x, baseY, worldPos.z + c1.y],
+                                    uv1T, uv2T, uv2B, uv1B,
+                                    normal, topMatIndex,
+                                    targetType
+                                );
+                            }
                         }
                     }
                 }

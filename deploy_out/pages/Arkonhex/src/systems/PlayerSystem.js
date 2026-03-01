@@ -36,6 +36,7 @@ export class PlayerSystem {
         this.placeHoldCount = 0;
 
         this.baseFov = 75;
+        this.targetFov = this.baseFov;
 
         // Audio state
         this.isWalking = false;
@@ -95,6 +96,18 @@ export class PlayerSystem {
         // Sync visual objects
         this.yawObject.position.copy(this.position);
         this.yawObject.position.y += this.playerHeight;
+
+        // Smooth Zoom 'C'
+        if (this.input.isKeyDown('KeyC')) {
+            this.targetFov = 30; // Zoomed in FOV
+        } else {
+            this.targetFov = this.baseFov; // Normal FOV
+        }
+
+        if (Math.abs(this.camera.fov - this.targetFov) > 0.1) {
+            this.camera.fov += (this.targetFov - this.camera.fov) * 10 * delta;
+            this.camera.updateProjectionMatrix();
+        }
 
         // Update loaded chunks based on player position
         const { q, r } = worldToAxial(this.position.x, this.position.z);
@@ -297,9 +310,10 @@ export class PlayerSystem {
     }
 
     /**
-     * Handle number keys 1-9 for hotbar slot selection.
+     * Handle number keys 1-9 for hotbar slot selection, and scroll wheel.
      */
     updateHotbarKeys() {
+        // Number keys
         const digitCodes = [
             'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
             'Digit6', 'Digit7', 'Digit8', 'Digit9'
@@ -307,13 +321,26 @@ export class PlayerSystem {
         for (let i = 0; i < digitCodes.length; i++) {
             if (this.input.consumeKey(digitCodes[i])) {
                 this.selectedHotbarSlot = i;
-                // Map slot to block ID (slot i => block id i+1)
                 this.selectedBlockId = i + 1;
-                // Notify UIManager to update hotbar highlight
                 if (this.engine.uiManager) {
                     this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
                 }
                 break;
+            }
+        }
+
+        // Scroll wheel (delta normalized to 1 or -1 in InputManager)
+        const wheelDelta = this.input.getWheelDelta();
+        if (wheelDelta !== 0) {
+            if (wheelDelta > 0) {
+                this.selectedHotbarSlot = (this.selectedHotbarSlot + 1) % 9;
+            } else {
+                this.selectedHotbarSlot = (this.selectedHotbarSlot - 1 + 9) % 9;
+            }
+            this.selectedBlockId = this.selectedHotbarSlot + 1;
+
+            if (this.engine.uiManager) {
+                this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
             }
         }
     }
