@@ -192,6 +192,16 @@ export class UIManager {
             }, { signal: this.abortController.signal });
         }
 
+        const dayNightToggle = document.getElementById('day-night-toggle');
+        if (dayNightToggle) {
+            dayNightToggle.checked = this.engine.lightingManager ? this.engine.lightingManager.cycleEnabled : false;
+            dayNightToggle.addEventListener('change', (e) => {
+                if (this.engine.lightingManager) {
+                    this.engine.lightingManager.cycleEnabled = e.target.checked;
+                }
+            }, { signal: this.abortController.signal });
+        }
+
         // Audio Toggle Listeners
         const muteAllToggle = document.getElementById('mute-all-toggle');
         if (muteAllToggle) {

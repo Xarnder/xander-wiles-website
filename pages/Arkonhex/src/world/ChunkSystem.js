@@ -44,6 +44,8 @@ export class ChunkSystem {
     }
 
     updateLoadedChunks(playerQ, playerR) {
+        const startTime = performance.now();
+
         // Player is at q, r. Which chunk are they in?
         const CHUNK_SIZE = 16;
         const playerCQ = Math.floor(playerQ / CHUNK_SIZE);
@@ -91,6 +93,9 @@ export class ChunkSystem {
                 this.unloadChunk(key);
             }
         }
+
+        const timeTaken = performance.now() - startTime;
+        if (timeTaken > 15) console.warn(`[PerfWarning] updateLoadedChunks took ${timeTaken.toFixed(1)}ms!`);
     }
 
     async loadChunk(cq, cr, isLOD = false) {
@@ -195,7 +200,10 @@ export class ChunkSystem {
 
         // 1. Process active generation job (if any)
         if (this.activeGenJob) {
+            let genIterCount = 0;
+            const genStartTime = performance.now();
             while (performance.now() - startTime < maxTimeMs) {
+                genIterCount++;
                 const result = this.activeGenJob.generator.next();
                 if (result.done) {
                     this._finishChunkLoad(result.value, this.activeGenJob.cq, this.activeGenJob.cr, this.activeGenJob.isLOD);
@@ -203,6 +211,8 @@ export class ChunkSystem {
                     break;
                 }
             }
+            const genTime = performance.now() - genStartTime;
+            if (genTime > 20) console.warn(`[PerfWarning] ChunkGen hold took ${genTime.toFixed(1)}ms (${genIterCount} iters)`);
             if (performance.now() - startTime >= maxTimeMs) return; // Yield frame
         }
 
@@ -213,17 +223,23 @@ export class ChunkSystem {
             this.pendingChunks.delete(item.key);
 
             // This handles DB load sync/async, but procedural falls into activeGenJob
+            const dbStartTime = performance.now();
             this.loadChunk(item.cq, item.cr, item.isLOD)
                 .catch(e => console.error("Chunk load failed", e))
                 .finally(() => {
                     this.isLoadingDB = false;
+                    const dbTime = performance.now() - dbStartTime;
+                    if (dbTime > 50) console.log(`[Perf] DB Load took ${dbTime.toFixed(1)}ms async`);
                 });
             if (performance.now() - startTime >= maxTimeMs) return;
         }
 
         // 2. Process active meshing job (if any)
         if (this.activeMeshJob) {
+            let meshIterCount = 0;
+            const meshStartTime = performance.now();
             while (performance.now() - startTime < maxTimeMs) {
+                meshIterCount++;
                 const result = this.activeMeshJob.generator.next();
                 if (result.done) {
                     this._finishChunkMesh(this.activeMeshJob.chunk, result.value);
@@ -231,6 +247,8 @@ export class ChunkSystem {
                     break;
                 }
             }
+            const meshTime = performance.now() - meshStartTime;
+            if (meshTime > 20) console.warn(`[PerfWarning] ChunkMeshBuilder hold took ${meshTime.toFixed(1)}ms (${meshIterCount} iters)`);
             if (performance.now() - startTime >= maxTimeMs) return; // Yield frame
         }
 
@@ -242,6 +260,7 @@ export class ChunkSystem {
                     break; // Just start one mesh job
                 }
             }
+            if (performance.now() - startTime > 10) console.warn(`[PerfWarning] Chunk dirty-scan took ${(performance.now() - startTime).toFixed(1)}ms!`);
         }
     }
 

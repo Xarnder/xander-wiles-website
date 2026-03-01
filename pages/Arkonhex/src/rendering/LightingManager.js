@@ -9,6 +9,7 @@ export class LightingManager {
         this.timeOfDay = 0.5;
         this.timeSpeed = 0.001; // Auto-progression per second
         this.ambientStrength = 3.5; // User-controlled ambient multiplier
+        this.cycleEnabled = false; // Toggle for auto day/night progression
 
         // Ambient light (Soft base lighting)
         // HemisphereLight(skyColor, groundColor, intensity) 
@@ -201,7 +202,9 @@ export class LightingManager {
 
     update(playerPosition, delta, inputManager) {
         // Automatic Time Progression
-        this.timeOfDay += this.timeSpeed * delta;
+        if (this.cycleEnabled) {
+            this.timeOfDay += this.timeSpeed * delta;
+        }
 
         // Manual Time Controls mapping [ ] keys
         if (inputManager) {

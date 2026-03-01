@@ -163,6 +163,9 @@ export class Engine {
             if (savedPlayer.timeOfDay !== undefined && this.lightingManager) {
                 this.lightingManager.timeOfDay = savedPlayer.timeOfDay;
             }
+            if (savedPlayer.cycleEnabled !== undefined && this.lightingManager) {
+                this.lightingManager.cycleEnabled = savedPlayer.cycleEnabled;
+            }
         }
 
         // 6. UI Overlay
@@ -250,11 +253,13 @@ export class Engine {
             const yaw = this.playerSystem.yawObject.rotation.y;
             const pitch = this.playerSystem.pitchObject.rotation.x;
             const timeOfDay = this.lightingManager ? this.lightingManager.timeOfDay : 0.5;
+            const cycleEnabled = this.lightingManager ? this.lightingManager.cycleEnabled : false;
 
             await savePlayerState(this.activeWorldId,
                 [pos.x, pos.y, pos.z],
                 [yaw, pitch],
-                timeOfDay
+                timeOfDay,
+                cycleEnabled
             );
         }
     }
