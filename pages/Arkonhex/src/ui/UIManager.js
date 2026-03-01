@@ -180,6 +180,17 @@ export class UIManager {
             }
         }
 
+        const ambientSlider = document.getElementById('ambient-slider');
+        const ambientValDisplay = document.getElementById('ambient-val');
+        if (ambientSlider && ambientValDisplay) {
+            ambientSlider.addEventListener('input', (e) => {
+                ambientValDisplay.innerText = e.target.value;
+                if (this.engine.lighting) {
+                    this.engine.lighting.ambientStrength = parseFloat(e.target.value);
+                }
+            });
+        }
+
         // Audio Toggle Listeners
         const muteAllToggle = document.getElementById('mute-all-toggle');
         if (muteAllToggle) {

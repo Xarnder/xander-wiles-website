@@ -197,10 +197,6 @@ export class PlayerSystem {
         // Ambient audio crossfade — start both on first movement, then crossfade between states
         if (!this.ambientStarted && moveDir.lengthSq() > 0) {
             this.ambientStarted = true;
-            this.normalAmbient.play().catch(e => console.warn(e));
-            this.normalAmbient.volume = isSubmerged ? 0 : 0.35;
-            this.underwaterAmbient.play().catch(e => console.warn(e));
-            this.underwaterAmbient.volume = isSubmerged ? 0.45 : 0;
         }
 
         if (this.ambientStarted) {

@@ -197,10 +197,6 @@ export class PlayerSystem {
         // Ambient audio crossfade — start both on first movement, then crossfade between states
         if (!this.ambientStarted && moveDir.lengthSq() > 0) {
             this.ambientStarted = true;
-            this.normalAmbient.play().catch(e => console.warn(e));
-            this.normalAmbient.volume = isSubmerged ? 0 : 0.35;
-            this.underwaterAmbient.play().catch(e => console.warn(e));
-            this.underwaterAmbient.volume = isSubmerged ? 0.45 : 0;
         }
 
         if (this.ambientStarted) {
@@ -363,7 +359,7 @@ export class PlayerSystem {
             closestIntersection = intersects[0];
         }
 
-        if (closestIntersection) {
+        if (closestIntersection && closestIntersection.face) {
             // Find block coordinate
             const hitPoint = closestIntersection.point;
             // Nudge point slightly inside the block using the face normal
@@ -459,6 +455,10 @@ export class PlayerSystem {
     }
 
     placeBlock(q, r, y, id) {
+        // --- Prevent placing into an already-occupied block ---
+        const existingId = this.chunkSystem.getBlockGlobal(q, r, y);
+        if (existingId !== 0) return;
+
         // --- Prevent placing inside player body (feet or camera) ---
         // Convert target hex to world position to compare with player
         const playerAxial = worldToAxial(this.position.x, this.position.z);

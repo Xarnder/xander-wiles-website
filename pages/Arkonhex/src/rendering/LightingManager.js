@@ -8,11 +8,12 @@ export class LightingManager {
         // 0.0 = Midnight, 0.25 = Sunrise, 0.3 = Noon, 0.75 = Sunset
         this.timeOfDay = 0.5;
         this.timeSpeed = 0.001; // Auto-progression per second
+        this.ambientStrength = 0.65; // User-controlled ambient multiplier
 
         // Ambient light (Soft base lighting)
         // HemisphereLight(skyColor, groundColor, intensity) 
         // We balance this precisely so shadows aren't pitch black, but baked AOC textures aren't flooded out
-        this.ambientLight = new THREE.HemisphereLight(0xffffff, 0x666666, 0.65);
+        this.ambientLight = new THREE.HemisphereLight(0xffffff, 0x666666, this.ambientStrength);
         this.scene.add(this.ambientLight);
 
         // Directional Sunlight (Dynamic, casts shadows)
@@ -268,5 +269,9 @@ export class LightingManager {
 
         this.sunLight.color.copy(this.interpolateColor(this.colors.sunLight, this.timeOfDay));
         this.ambientLight.color.copy(this.interpolateColor(this.colors.ambientLight, this.timeOfDay));
+
+        // Scale ambient intensity with day/night: full strength at noon, dim at night
+        const dayFactor = Math.max(0.15, Math.sin(Math.max(0, (this.timeOfDay - 0.2) / 0.6) * Math.PI));
+        this.ambientLight.intensity = this.ambientStrength * dayFactor;
     }
 }

@@ -186,50 +186,49 @@ export class ChunkMeshBuilder {
     }
 
     /**
-     * Updates the color of all LOD Block Outlines dynamically.
-     * When sun is behind camera (dot = -1), lines are white.
-     * When sun is in front of camera (dot = 1), lines are black.
+     * Updates the color of LOD outlines and Glass outlines dynamically based on time of day.
      * @param {THREE.Camera} camera 
      * @param {THREE.DirectionalLight} sunLight 
      * @param {number} timeOfDay - Normalized time 0.0 to 1.0
      */
-    updateLODOutlineColor(camera, sunLight, timeOfDay) {
-        if (!this.lodOutlineMaterial) return;
+    updateOutlineColors(camera, sunLight, timeOfDay) {
+        // --- LOD outline logic ---
+        if (this.lodOutlineMaterial) {
+            const isDaytime = timeOfDay > 0.23 && timeOfDay < 0.77;
 
-        // Define day/night threshold grace
-        const isDaytime = timeOfDay > 0.23 && timeOfDay < 0.77;
+            if (!isDaytime) {
+                // Nighttime: static dark gray moonlight outlines
+                this.lodOutlineMaterial.color.setHex(0x1a1a1a);
+            } else {
+                // Daytime: Dynamic silhouetting based on look direction vs sun
+                const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
 
-        if (!isDaytime) {
-            // Nighttime: static dark gray moonlight outlines
-            this.lodOutlineMaterial.color.setHex(0x333344);
-            return;
+                const sunDir = new THREE.Vector3().copy(sunLight.position).normalize();
+                const dot = lookDir.dot(sunDir);
+
+                const normalizedDot = (dot + 1) / 2;
+
+                const sunColor = new THREE.Color(0x000000); // Black when facing sun
+                const awayColor = new THREE.Color(0xffffff); // White when facing away
+
+                this.lodOutlineMaterial.color.copy(awayColor).lerp(sunColor, normalizedDot);
+            }
         }
 
-        // Get where camera is pointing
-        const viewDir = new THREE.Vector3();
-        camera.getWorldDirection(viewDir);
+        // --- Glass outline logic ---
+        if (this.glassOutlineMaterial) {
+            // Day = 0.5 is noon. Using Math.sin to map 0.0 -> 1.0
+            // Shift phase so peak daytime (0.5) = 1.0, midnight (0.0/1.0) = -1.0
+            let dayCycle = Math.max(0, Math.sin((timeOfDay - 0.25) * Math.PI * 2));
 
-        // Get direction FROM camera TO sun
-        const sunDir = sunLight.position.clone().normalize();
+            // Bias the dayCycle so the glass transitions to black faster at sunset, avoiding lingering glows
+            dayCycle = Math.pow(dayCycle, 2.0);
 
-        // Dot product: 1 = looking directly at sun. -1 = sun is directly behind
-        const dot = viewDir.dot(sunDir);
+            const nightColor = new THREE.Color(0x000000); // Pitch black
+            const dayColor = new THREE.Color(0x666666);   // Mid-grey
 
-        // Map dot [-1, 1] to ratio [0, 1]
-        // dot = -1 (looking away)   -> ratio = 0 (we want white)
-        // dot = 1  (looking at sun) -> ratio = 1 (we want black)
-        let ratio = (dot + 1.0) / 2.0;
-
-        // Optionally, we can exponentiate the ratio to bias the interpolation 
-        // towards white for a wider viewing cone away from the sun.
-        ratio = Math.pow(ratio, 1.5);
-
-        // Interpolate Color
-        const colorFar = new THREE.Color(0xffffff); // White
-        const colorNear = new THREE.Color(0x000000); // Black
-
-        colorFar.lerp(colorNear, ratio);
-        this.lodOutlineMaterial.color.copy(colorFar);
+            this.glassOutlineMaterial.color.copy(nightColor).lerp(dayColor, dayCycle);
+        }
     }
 
     /**
@@ -262,6 +261,10 @@ export class ChunkMeshBuilder {
         const glassUvs = Array.from({ length: numMaterials }, () => []);
         const glassIndices = Array.from({ length: numMaterials }, () => []);
         const glassVertexOffsets = new Array(numMaterials).fill(0);
+
+        // Manually collected glass boundary line segments (pairs of [x,y,z] endpoints)
+        // We build these during the block loop instead of using EdgesGeometry
+        const glassLinePositions = [];
 
         const CHUNK_SIZE = 16;
         const neighborOffsets = [
@@ -648,6 +651,72 @@ export class ChunkMeshBuilder {
                     );
                 }
             }
+
+            // ─── GLASS BOUNDARY OUTLINE COLLECTION ───
+            // For glass blocks, we manually collect line segments only for edges
+            // that border non-glass blocks (the outer perimeter of glass structures)
+            if (isGlass && chunkSystem) {
+                // Check each of the 6 hex side neighbors
+                for (let i = 0; i < 6; i++) {
+                    const offset = neighborOffsets[i];
+                    const nq = globalQ + offset.q;
+                    const nr = globalR + offset.r;
+                    const neighborId = chunkSystem.getBlockGlobal(nq, nr, block.y);
+
+                    // Only draw the edge if the neighbor is NOT glass
+                    if (neighborId !== 9) {
+                        const c1 = corners[i];
+                        const c2 = corners[(i + 1) % 6];
+
+                        // Top horizontal edge of this side
+                        glassLinePositions.push(
+                            worldPos.x + c1.x, topY, worldPos.z + c1.y,
+                            worldPos.x + c2.x, topY, worldPos.z + c2.y
+                        );
+                        // Bottom horizontal edge of this side
+                        glassLinePositions.push(
+                            worldPos.x + c1.x, baseY, worldPos.z + c1.y,
+                            worldPos.x + c2.x, baseY, worldPos.z + c2.y
+                        );
+                        // Left vertical edge of this side
+                        glassLinePositions.push(
+                            worldPos.x + c1.x, topY, worldPos.z + c1.y,
+                            worldPos.x + c1.x, baseY, worldPos.z + c1.y
+                        );
+                        // Right vertical edge of this side
+                        glassLinePositions.push(
+                            worldPos.x + c2.x, topY, worldPos.z + c2.y,
+                            worldPos.x + c2.x, baseY, worldPos.z + c2.y
+                        );
+                    }
+                }
+
+                // Top face perimeter: draw hex edge if block above is NOT glass
+                const aboveId = chunkSystem.getBlockGlobal(globalQ, globalR, block.y + 1);
+                if (aboveId !== 9) {
+                    for (let i = 0; i < 6; i++) {
+                        const c1 = corners[i];
+                        const c2 = corners[(i + 1) % 6];
+                        glassLinePositions.push(
+                            worldPos.x + c1.x, topY, worldPos.z + c1.y,
+                            worldPos.x + c2.x, topY, worldPos.z + c2.y
+                        );
+                    }
+                }
+
+                // Bottom face perimeter: draw hex edge if block below is NOT glass
+                const belowId = chunkSystem.getBlockGlobal(globalQ, globalR, block.y - 1);
+                if (belowId !== 9) {
+                    for (let i = 0; i < 6; i++) {
+                        const c1 = corners[i];
+                        const c2 = corners[(i + 1) % 6];
+                        glassLinePositions.push(
+                            worldPos.x + c1.x, baseY, worldPos.z + c1.y,
+                            worldPos.x + c2.x, baseY, worldPos.z + c2.y
+                        );
+                    }
+                }
+            }
         } // End Detailed Path
 
         const buildMesh = (posArr, normArr, uvArr, indArr, materialsArray) => {
@@ -742,18 +811,10 @@ export class ChunkMeshBuilder {
         if (glassMesh && glassMesh.geometry.attributes.position.count > 0) {
             group.add(glassMesh);
 
-            // Merge geometry vertices perfectly so internal glass wall grids are hidden.
-            let mergedGeom;
-            try {
-                mergedGeom = BufferGeometryUtils.mergeVertices(glassMesh.geometry, 1e-4);
-            } catch (e) {
-                mergedGeom = glassMesh.geometry; // fallback
-            }
-
-            // Always add white outlines for glass blocks — reuse shared material
-            const glassEdges = new THREE.EdgesGeometry(mergedGeom, 1);
-            if (glassEdges.attributes.position.count > 0) {
-                const glassLineGeom = new LineSegmentsGeometry().fromEdgesGeometry(glassEdges);
+            // Build outline from manually collected boundary line segments
+            if (glassLinePositions.length > 0) {
+                const glassLineGeom = new LineSegmentsGeometry();
+                glassLineGeom.setPositions(glassLinePositions);
                 const glassOutline = new Line2(glassLineGeom, this.glassOutlineMaterial);
                 group.add(glassOutline);
             }

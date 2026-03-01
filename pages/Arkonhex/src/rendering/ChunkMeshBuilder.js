@@ -3,7 +3,6 @@ import { HEX_SIZE, axialToWorld, getSeededBlockHeight } from '../utils/HexUtils.
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
-import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 const BLOCK_HEIGHT = 1.0;
 const TOP_RATIO = 0.25; // Top 25%
@@ -113,15 +112,7 @@ export class ChunkMeshBuilder {
             depthWrite: false
         });
 
-        // Shared line material for glass outlines (reused across all chunks)
-        this.glassOutlineMaterial = new LineMaterial({
-            color: 0xffffff,
-            linewidth: 4,
-            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
-            transparent: true,
-            opacity: 0.8,
-            depthWrite: false
-        });
+
 
         // Dynamically build Canvas Textures using the shadow map
         const loader = new THREE.TextureLoader();
@@ -186,50 +177,35 @@ export class ChunkMeshBuilder {
     }
 
     /**
-     * Updates the color of all LOD Block Outlines dynamically.
-     * When sun is behind camera (dot = -1), lines are white.
-     * When sun is in front of camera (dot = 1), lines are black.
+     * Updates the color of LOD outlines and Glass outlines dynamically based on time of day.
      * @param {THREE.Camera} camera 
      * @param {THREE.DirectionalLight} sunLight 
      * @param {number} timeOfDay - Normalized time 0.0 to 1.0
      */
-    updateLODOutlineColor(camera, sunLight, timeOfDay) {
-        if (!this.lodOutlineMaterial) return;
+    updateOutlineColors(camera, sunLight, timeOfDay) {
+        // --- LOD outline logic ---
+        if (this.lodOutlineMaterial) {
+            const isDaytime = timeOfDay > 0.23 && timeOfDay < 0.77;
 
-        // Define day/night threshold grace
-        const isDaytime = timeOfDay > 0.23 && timeOfDay < 0.77;
+            if (!isDaytime) {
+                // Nighttime: static dark gray moonlight outlines
+                this.lodOutlineMaterial.color.setHex(0x1a1a1a);
+            } else {
+                // Daytime: Dynamic silhouetting based on look direction vs sun
+                const lookDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
 
-        if (!isDaytime) {
-            // Nighttime: static dark gray moonlight outlines
-            this.lodOutlineMaterial.color.setHex(0x333344);
-            return;
+                const sunDir = new THREE.Vector3().copy(sunLight.position).normalize();
+                const dot = lookDir.dot(sunDir);
+
+                const normalizedDot = (dot + 1) / 2;
+
+                const sunColor = new THREE.Color(0x000000); // Black when facing sun
+                const awayColor = new THREE.Color(0xffffff); // White when facing away
+
+                this.lodOutlineMaterial.color.copy(awayColor).lerp(sunColor, normalizedDot);
+            }
         }
 
-        // Get where camera is pointing
-        const viewDir = new THREE.Vector3();
-        camera.getWorldDirection(viewDir);
-
-        // Get direction FROM camera TO sun
-        const sunDir = sunLight.position.clone().normalize();
-
-        // Dot product: 1 = looking directly at sun. -1 = sun is directly behind
-        const dot = viewDir.dot(sunDir);
-
-        // Map dot [-1, 1] to ratio [0, 1]
-        // dot = -1 (looking away)   -> ratio = 0 (we want white)
-        // dot = 1  (looking at sun) -> ratio = 1 (we want black)
-        let ratio = (dot + 1.0) / 2.0;
-
-        // Optionally, we can exponentiate the ratio to bias the interpolation 
-        // towards white for a wider viewing cone away from the sun.
-        ratio = Math.pow(ratio, 1.5);
-
-        // Interpolate Color
-        const colorFar = new THREE.Color(0xffffff); // White
-        const colorNear = new THREE.Color(0x000000); // Black
-
-        colorFar.lerp(colorNear, ratio);
-        this.lodOutlineMaterial.color.copy(colorFar);
     }
 
     /**
@@ -741,22 +717,6 @@ export class ChunkMeshBuilder {
         }
         if (glassMesh && glassMesh.geometry.attributes.position.count > 0) {
             group.add(glassMesh);
-
-            // Merge geometry vertices perfectly so internal glass wall grids are hidden.
-            let mergedGeom;
-            try {
-                mergedGeom = BufferGeometryUtils.mergeVertices(glassMesh.geometry, 1e-4);
-            } catch (e) {
-                mergedGeom = glassMesh.geometry; // fallback
-            }
-
-            // Always add white outlines for glass blocks — reuse shared material
-            const glassEdges = new THREE.EdgesGeometry(mergedGeom, 1);
-            if (glassEdges.attributes.position.count > 0) {
-                const glassLineGeom = new LineSegmentsGeometry().fromEdgesGeometry(glassEdges);
-                const glassOutline = new Line2(glassLineGeom, this.glassOutlineMaterial);
-                group.add(glassOutline);
-            }
         }
 
         return group;
