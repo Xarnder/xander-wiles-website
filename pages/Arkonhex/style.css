@@ -2,7 +2,7 @@
     --ui-font: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --ui-bg: rgba(0, 0, 0, 0.4);
     --ui-text: #ffffff;
-    --ui-accent: #00ffcc;
+    --ui-accent: #2ecc71;
 }
 
 * {
@@ -163,11 +163,11 @@ body {
 .overlay-screen h1 {
     font-size: 4rem;
     margin-bottom: 0.5rem;
-    background: -webkit-linear-gradient(#00ffcc, #0088ff);
+    background: -webkit-linear-gradient(#c0ff33, #27ae60);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-shadow: 0px 4px 10px rgba(0, 255, 204, 0.3);
+    text-shadow: 0px 4px 10px rgba(46, 204, 113, 0.3);
 }
 
 .overlay-screen.hidden {
@@ -354,7 +354,7 @@ body {
 
 .world-play-btn {
     padding: 8px 20px;
-    background: linear-gradient(135deg, #00b894, #00cec9);
+    background: linear-gradient(135deg, #27ae60, #2ecc71);
     border: none;
     color: white;
     border-radius: 6px;

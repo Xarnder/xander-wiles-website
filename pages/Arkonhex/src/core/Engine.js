@@ -289,6 +289,23 @@ export class Engine {
         const delta = Math.min(this.clock.getDelta(), 0.1); // Max delta 0.1s to prevent huge jumps
         const time = this.clock.getElapsedTime();
 
+        // ── DYNAMIC CHUNK LOADING LOCK ──
+        // If we suddenly queue a massive amount of chunks (e.g. changing render distance)
+        // drop back into the loading state to prevent the game from freezing.
+        const pendingGen = (this.chunkSystem ? this.chunkSystem.chunkGenQueue.length + this.chunkSystem.pendingChunks.size : 0);
+
+        if (this.chunksReady && pendingGen > 50) {
+            this.chunksReady = false;
+            this.initialChunkTotal = this.chunkSystem.chunks.size + pendingGen;
+
+            // Show loading UI again
+            const loadingContainer = document.getElementById('loading-container');
+            const startScreen = document.getElementById('start-screen');
+            if (loadingContainer) loadingContainer.style.display = '';
+            // We don't show the full start screen background again, just the overlay bar
+            // so they can watch the world build in real time from the pause menu.
+        }
+
         // ── INITIAL CHUNK LOADING GATE ──
         // While chunks are still being generated/built, only update ChunkSystem (to build chunks)
         // and show progress on the loading bar. Skip player, lighting, etc.
