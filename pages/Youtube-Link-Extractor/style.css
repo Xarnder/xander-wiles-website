@@ -38,8 +38,8 @@ body {
     border-radius: 20px;
     padding: 40px;
     width: 100%;
-    max-width: 500px;
-    /* Slim width for aesthetics */
+    max-width: 900px;
+    /* Increased for wider table */
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     transition: transform 0.3s ease;
 }

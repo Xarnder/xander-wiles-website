@@ -130,11 +130,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const title = item.snippet.title;
                 const videoId = item.snippet.resourceId.videoId;
                 const channel = item.snippet.videoOwnerChannelTitle || item.snippet.channelTitle || 'Unknown';
+                const publishedAt = item.snippet.publishedAt;
                 // Exclude "Private video" or "Deleted video" entries usually lacking IDs
                 if (videoId) {
                     videos.push({
                         title: title,
                         channel: channel,
+                        publishedAt: publishedAt,
                         url: `https://www.youtube.com/watch?v=${videoId}`
                     });
                 }
@@ -152,13 +154,14 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Generating CSV...");
 
         // CSV Header
-        let csvContent = "Title,Channel,URL\n";
+        let csvContent = "Title,Channel,Published,URL\n";
 
         videoList.forEach(video => {
             // Escape quotes in titles by doubling them, wrap title in quotes
             const safeTitle = `"${video.title.replace(/"/g, '""')}"`;
             const safeChannel = `"${video.channel.replace(/"/g, '""')}"`;
-            csvContent += `${safeTitle},${safeChannel},${video.url}\n`;
+            const safeDate = `"${new Date(video.publishedAt).toLocaleDateString()}"`;
+            csvContent += `${safeTitle},${safeChannel},${safeDate},${video.url}\n`;
         });
 
         const filename = `playlist_export_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -220,6 +223,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const channelCell = document.createElement('td');
             channelCell.textContent = video.channel;
 
+            const dateCell = document.createElement('td');
+            dateCell.textContent = new Date(video.publishedAt).toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+
             const linkCell = document.createElement('td');
             const link = document.createElement('a');
             link.href = video.url;
@@ -237,6 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             row.appendChild(titleCell);
             row.appendChild(channelCell);
+            row.appendChild(dateCell);
             row.appendChild(linkCell);
             row.appendChild(qrCell);
 
