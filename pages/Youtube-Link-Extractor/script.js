@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsTableBody = document.querySelector('#resultsTable tbody');
     const bigQRBtn = document.getElementById('showBigQRBtn');
     const bigQRModal = document.getElementById('bigQRModal');
+    const downloadBigQRBtn = document.getElementById('downloadBigQRBtn');
     const closeModal = document.querySelector('.close-modal');
     const bigQRContainer = document.getElementById('bigQRCode');
 
@@ -235,11 +236,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // Generate small QR
             new QRCode(qrDiv, {
                 text: video.url,
-                width: 60,
-                height: 60,
+                width: 120,
+                height: 120,
                 colorDark: "#ffffff",
                 colorLight: "rgba(0,0,0,0)",
-                correctLevel: QRCode.CorrectLevel.H
+                correctLevel: QRCode.CorrectLevel.M // Medium correction for slightly faster scanning
             });
         });
 
@@ -289,22 +290,40 @@ document.addEventListener('DOMContentLoaded', () => {
         // Encode all video titles and links
         const bigQRData = extractedVideos.map(v => `${v.title}: ${v.url}`).join('\n');
 
-        // Note: Large amount of data might exceed QR capacity if playlist is too big.
-        // QRCode.js will handle errors if data is too long.
         try {
             new QRCode(bigQRContainer, {
                 text: bigQRData,
-                width: 256,
-                height: 256,
-                colorDark: "#ffffff",
-                colorLight: "rgba(0,0,0,0)",
-                correctLevel: QRCode.CorrectLevel.L // Low correction to fit more data
+                width: 400,
+                height: 400,
+                colorDark: "#000000", // Fix: Black on white background
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.L
             });
         } catch (e) {
             console.error("Big QR Generation Error:", e);
             bigQRContainer.innerHTML = '<p class="error-text">Table too large for a single QR code.</p>';
         }
     }
+
+    downloadBigQRBtn.addEventListener('click', () => {
+        // Try finding the image first (QRCode.js generates an <img>)
+        const qrImage = bigQRContainer.querySelector('img');
+        if (qrImage && qrImage.src) {
+            const link = document.createElement('a');
+            link.download = 'youtube_playlist_qr.png';
+            link.href = qrImage.src;
+            link.click();
+        } else {
+            // Fallback for canvas if <img> isn't ready or used
+            const qrCanvas = bigQRContainer.querySelector('canvas');
+            if (qrCanvas) {
+                const link = document.createElement('a');
+                link.download = 'youtube_playlist_qr.png';
+                link.href = qrCanvas.toDataURL('image/png');
+                link.click();
+            }
+        }
+    });
 
     // UI Helpers
     function showStatus(msg, type) {

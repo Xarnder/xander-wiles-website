@@ -337,7 +337,7 @@ td a:hover {
 
 .modal-content {
     position: relative;
-    max-width: 400px !important;
+    max-width: 500px !important;
     text-align: center;
     animation: modalScale 0.3s ease-out;
 }
