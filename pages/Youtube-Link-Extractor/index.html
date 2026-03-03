@@ -54,7 +54,20 @@
             <div id="statusMessage" class="status-box hidden"></div>
 
             <div id="resultsContainer" class="results-container hidden">
-                <button id="downloadBtn" class="action-btn secondary" style="margin-bottom: 20px;">Download CSV</button>
+                <div class="results-actions">
+                    <button id="downloadBtn" class="action-btn secondary">Download CSV</button>
+                    <button id="showBigQRBtn" class="action-btn secondary">Show Big QR</button>
+                </div>
+
+                <div id="bigQRModal" class="modal hidden">
+                    <div class="modal-content glass-card">
+                        <span class="close-modal">&times;</span>
+                        <h3>All Videos QR Code</h3>
+                        <p>This QR code contains the titles and URLs of all extracted videos.</p>
+                        <div id="bigQRCode" class="qr-container-big"></div>
+                    </div>
+                </div>
+
                 <h3>Extracted Videos</h3>
                 <div class="table-wrapper">
                     <table id="resultsTable">
@@ -63,6 +76,7 @@
                                 <th>Title</th>
                                 <th>Channel</th>
                                 <th style="width: 100px;">Link</th>
+                                <th style="width: 80px;">QR</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -73,6 +87,9 @@
             </div>
         </div>
     </main>
+
+    <!-- QR Code Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <!-- Global Nav Script -->
     <script src="/assets/js/nav-loader.js"></script>

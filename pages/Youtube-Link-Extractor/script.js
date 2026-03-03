@@ -5,6 +5,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const playlistInput = document.getElementById('playlistUrl');
     const resultsContainer = document.getElementById('resultsContainer');
     const resultsTableBody = document.querySelector('#resultsTable tbody');
+    const bigQRBtn = document.getElementById('showBigQRBtn');
+    const bigQRModal = document.getElementById('bigQRModal');
+    const closeModal = document.querySelector('.close-modal');
+    const bigQRContainer = document.getElementById('bigQRCode');
 
     // TODO: Replace with your actual API Key and restrict it in Google Cloud Console
     const API_KEY = 'AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk';
@@ -214,15 +218,92 @@ document.addEventListener('DOMContentLoaded', () => {
             link.rel = "noopener noreferrer";
 
             linkCell.appendChild(link);
+
+            const qrCell = document.createElement('td');
+            qrCell.className = 'qr-cell';
+            const qrDiv = document.createElement('div');
+            qrDiv.className = 'qr-container-small';
+            qrCell.appendChild(qrDiv);
+
             row.appendChild(titleCell);
             row.appendChild(channelCell);
             row.appendChild(linkCell);
+            row.appendChild(qrCell);
 
             resultsTableBody.appendChild(row);
+
+            // Generate small QR
+            new QRCode(qrDiv, {
+                text: video.url,
+                width: 60,
+                height: 60,
+                colorDark: "#ffffff",
+                colorLight: "rgba(0,0,0,0)",
+                correctLevel: QRCode.CorrectLevel.H
+            });
         });
 
         // Show container
         resultsContainer.classList.remove('hidden');
+    }
+
+    // UI Helpers
+    function showStatus(msg, type) {
+        statusDiv.textContent = msg;
+        statusDiv.className = `status-box ${type}`; // Removes 'hidden'
+    }
+
+    function setLoading(isLoading) {
+        if (isLoading) {
+            extractBtn.disabled = true;
+            extractBtn.textContent = "Extracting...";
+            showStatus("Fetching data from YouTube... This might take a moment.", "loading");
+            // Hide previous results while loading new ones
+            resultsContainer.classList.add('hidden');
+            extractedVideos = []; // Clear previous data
+        } else {
+            extractBtn.disabled = false;
+            extractBtn.textContent = "Extract Videos"; // Changed text to reflect action
+        }
+    }
+
+    // Modal Logic
+    bigQRBtn.addEventListener('click', () => {
+        generateBigQRCode();
+        bigQRModal.classList.remove('hidden');
+    });
+
+    closeModal.addEventListener('click', () => {
+        bigQRModal.classList.add('hidden');
+    });
+
+    window.addEventListener('click', (event) => {
+        if (event.target === bigQRModal) {
+            bigQRModal.classList.add('hidden');
+        }
+    });
+
+    function generateBigQRCode() {
+        bigQRContainer.innerHTML = ''; // Clear previous
+
+        // Encode all video titles and links
+        const bigQRData = extractedVideos.map(v => `${v.title}: ${v.url}`).join('\n');
+
+        // Note: Large amount of data might exceed QR capacity if playlist is too big.
+        // QRCode.js will handle errors if data is too long.
+        try {
+            new QRCode(bigQRContainer, {
+                text: bigQRData,
+                width: 256,
+                height: 256,
+                colorDark: "#ffffff",
+                colorLight: "rgba(0,0,0,0)",
+                correctLevel: QRCode.CorrectLevel.L // Low correction to fit more data
+            });
+        } catch (e) {
+            console.error("Big QR Generation Error:", e);
+            bigQRContainer.innerHTML = '<p class="error-text">Table too large for a single QR code.</p>';
+        }
     }
 
     // UI Helpers
