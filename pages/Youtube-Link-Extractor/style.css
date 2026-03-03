@@ -280,12 +280,14 @@ td a:hover {
 /* Results Actions Layout */
 .results-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 15px;
     margin-bottom: 25px;
 }
 
 .results-actions .action-btn {
     flex: 1;
+    min-width: 150px;
 }
 
 /* QR Code Containers */

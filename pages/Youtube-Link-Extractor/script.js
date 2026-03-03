@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const bigQRBtn = document.getElementById('showBigQRBtn');
     const bigQRModal = document.getElementById('bigQRModal');
     const downloadBigQRBtn = document.getElementById('downloadBigQRBtn');
+    const exportAllQRsBtn = document.getElementById('exportAllQRsBtn');
     const closeModal = document.querySelector('.close-modal');
     const bigQRContainer = document.getElementById('bigQRCode');
 
@@ -78,6 +79,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         downloadCSV(extractedVideos);
+    });
+
+    exportAllQRsBtn.addEventListener('click', () => {
+        if (!extractedVideos || extractedVideos.length === 0) {
+            showStatus("No videos to export. Please extract first.", "error");
+            return;
+        }
+        exportAllQRs();
     });
 
     // Helper: Extract ID from URL
@@ -324,6 +333,103 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+
+    async function exportAllQRs() {
+        const zip = new JSZip();
+        const folderName = `youtube_qr_codes_${new Date().toISOString().slice(0, 10)}`;
+        const qrFolder = zip.folder(folderName);
+
+        showStatus(`Generating QR ZIP... Progress: 0/${extractedVideos.length}`, "loading");
+        exportAllQRsBtn.disabled = true;
+
+        // Hidden container for temporary QR generation
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'absolute';
+        tempContainer.style.left = '-9999px';
+        document.body.appendChild(tempContainer);
+
+        for (let i = 0; i < extractedVideos.length; i++) {
+            const video = extractedVideos[i];
+
+            // Generate QR in temp container
+            const qrDiv = document.createElement('div');
+            tempContainer.appendChild(qrDiv);
+
+            new QRCode(qrDiv, {
+                text: video.url,
+                width: 400,
+                height: 400,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.M
+            });
+
+            // Wait a tiny bit for QRCode.js to render
+            await new Promise(r => setTimeout(r, 100));
+
+            const qrImg = qrDiv.querySelector('img');
+            const qrCanvas = qrDiv.querySelector('canvas');
+            const source = (qrImg && qrImg.src) ? qrImg : qrCanvas;
+
+            // Create canvas with metadata
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            // Dimensions for the final image (QR + Text above)
+            const margin = 40;
+            const textHeight = 100;
+            canvas.width = 400 + (margin * 2);
+            canvas.height = 400 + textHeight + (margin * 2);
+
+            // Background
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Metadata (Song & Artist/Channel)
+            ctx.fillStyle = "#000000";
+            ctx.textAlign = "center";
+
+            // Title
+            ctx.font = "bold 20px Segoe UI, Arial";
+            const titleText = video.title.length > 35 ? video.title.substring(0, 32) + '...' : video.title;
+            ctx.fillText(titleText, canvas.width / 2, margin + 40);
+
+            // Channel/Artist
+            ctx.font = "16px Segoe UI, Arial";
+            const channelText = video.channel.length > 40 ? video.channel.substring(0, 37) + '...' : video.channel;
+            ctx.fillText(channelText, canvas.width / 2, margin + 70);
+
+            // Draw QR Code
+            ctx.drawImage(source, margin, margin + textHeight);
+
+            // Convert to blob and add to zip
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            const safeTitle = video.title.replace(/[/\\?%*:|"<>]/g, '-').substring(0, 50);
+            const filename = `${i + 1}_${safeTitle}.png`;
+            qrFolder.file(filename, blob);
+
+            tempContainer.removeChild(qrDiv);
+            showStatus(`Generating QR ZIP... Progress: ${i + 1}/${extractedVideos.length}`, "loading");
+        }
+
+        document.body.removeChild(tempContainer);
+
+        try {
+            const content = await zip.generateAsync({ type: "blob" });
+            const zipFilename = `youtube_qrs_${new Date().getTime()}.zip`;
+
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(content);
+            link.download = zipFilename;
+            link.click();
+            showStatus(`Success! Exported ${extractedVideos.length} QR codes in a ZIP.`, "success");
+        } catch (err) {
+            console.error("ZIP Generation Error:", err);
+            showStatus("Failed to generate ZIP file.", "error");
+        } finally {
+            exportAllQRsBtn.disabled = false;
+        }
+    }
 
     // UI Helpers
     function showStatus(msg, type) {
