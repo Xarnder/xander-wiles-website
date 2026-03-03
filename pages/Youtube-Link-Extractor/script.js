@@ -296,21 +296,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateBigQRCode() {
         bigQRContainer.innerHTML = ''; // Clear previous
 
-        // Encode all video titles and links
-        const bigQRData = extractedVideos.map(v => `${v.title}: ${v.url}`).join('\n');
+        const playlistUrl = playlistInput.value.trim();
+
+        if (!playlistUrl) {
+            bigQRContainer.innerHTML = '<p class="error-text">No Playlist URL found.</p>';
+            return;
+        }
 
         try {
             new QRCode(bigQRContainer, {
-                text: bigQRData,
+                text: playlistUrl,
                 width: 400,
                 height: 400,
-                colorDark: "#000000", // Fix: Black on white background
+                colorDark: "#000000",
                 colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.L
+                correctLevel: QRCode.CorrectLevel.H // High correction for maximum scannability
             });
         } catch (e) {
             console.error("Big QR Generation Error:", e);
-            bigQRContainer.innerHTML = '<p class="error-text">Table too large for a single QR code.</p>';
+            bigQRContainer.innerHTML = '<p class="error-text">Failed to generate QR code.</p>';
         }
     }
 
