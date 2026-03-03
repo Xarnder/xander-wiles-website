@@ -429,6 +429,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.body.removeChild(tempContainer);
 
+        // Add CSV metadata to the ZIP
+        let csvContent = "Title,Channel,Published,URL\n";
+        extractedVideos.forEach(video => {
+            const safeTitle = `"${video.title.replace(/"/g, '""')}"`;
+            const safeChannel = `"${video.channel.replace(/"/g, '""')}"`;
+            const safeDate = `"${new Date(video.publishedAt).toLocaleDateString()}"`;
+            csvContent += `${safeTitle},${safeChannel},${safeDate},${video.url}\n`;
+        });
+        zip.file("playlist_metadata_complete.csv", csvContent);
+
         try {
             const content = await zip.generateAsync({ type: "blob" });
             const zipFilename = `youtube_qrs_${new Date().getTime()}.zip`;
