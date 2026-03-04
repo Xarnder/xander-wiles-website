@@ -1,18 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, getDocs, where } from 'firebase/firestore';
 import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
-import { Tag, Plus, Trash2, TrendingUp } from 'lucide-react';
+import { Tag, Plus, Trash2, TrendingUp, Calendar, ArrowRight } from 'lucide-react';
 
 export default function TagsView() {
     const { currentUser } = useAuth();
+    const navigate = useNavigate();
     const [tags, setTags] = useState([]);
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [newTagName, setNewTagName] = useState('');
     const [newTagColor, setNewTagColor] = useState('#8b5cf6'); // Default primary purple
     const [isAdding, setIsAdding] = useState(false);
+    const [selectedTagId, setSelectedTagId] = useState(null);
 
     // Fetch tags
     useEffect(() => {
@@ -78,7 +81,8 @@ export default function TagsView() {
         }
     };
 
-    const handleDeleteTag = async (tagId) => {
+    const handleDeleteTag = async (e, tagId) => {
+        e.stopPropagation();
         if (!currentUser || !window.confirm("Are you sure you want to delete this tag? This will not remove the tag from previous entries, but it will no longer be available as an option.")) return;
 
         try {
@@ -123,6 +127,24 @@ export default function TagsView() {
 
         return stats;
     }, [tags, entries]);
+    // Helper to extract title
+    const extractTitle = (content, storedTitle) => {
+        if (!content) return storedTitle || '';
+        const match = content.match(/(?:\*\*)?\+\+(.*?)\+\+(?:\*\*)?/);
+        if (match && match[1]) {
+            const parts = match[1].split(' - ');
+            if (parts.length >= 2) return parts.slice(1).join(' - ').trim();
+            return match[1].trim();
+        }
+        return storedTitle || '';
+    };
+
+    const selectedTagEntries = useMemo(() => {
+        if (!selectedTagId) return [];
+        return entries
+            .filter(e => e.tags && e.tags.includes(selectedTagId))
+            .sort((a, b) => b.id.localeCompare(a.id)); // Newest first
+    }, [entries, selectedTagId]);
 
     if (loading) {
         return (
@@ -208,7 +230,11 @@ export default function TagsView() {
                                     {tags.map(tag => {
                                         const stat = tagStats[tag.id] || { week: 0, month: 0, sixMonths: 0, year: 0 };
                                         return (
-                                            <tr key={tag.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                            <tr
+                                                key={tag.id}
+                                                onClick={() => setSelectedTagId(selectedTagId === tag.id ? null : tag.id)}
+                                                className={`border-b border-white/5 transition-colors cursor-pointer ${selectedTagId === tag.id ? 'bg-primary/20' : 'hover:bg-white/5'}`}
+                                            >
                                                 <td className="py-3 px-2">
                                                     <div className="flex items-center gap-2">
                                                         <span
@@ -232,7 +258,7 @@ export default function TagsView() {
                                                 </td>
                                                 <td className="py-3 px-2 text-right">
                                                     <button
-                                                        onClick={() => handleDeleteTag(tag.id)}
+                                                        onClick={(e) => handleDeleteTag(e, tag.id)}
                                                         className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                                                         title="Delete Tag"
                                                     >
@@ -248,6 +274,55 @@ export default function TagsView() {
                     )}
                 </div>
             </div>
+
+            {/* Selected Tag Entries List */}
+            {selectedTagId && (
+                <div className="glass-card p-6 animation-fade-in mt-6">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-lg font-serif font-bold text-white flex items-center gap-2">
+                            <Calendar className="w-5 h-5 text-primary" />
+                            Entries for "{tags.find(t => t.id === selectedTagId)?.name}"
+                        </h3>
+                        <span className="text-sm font-medium text-text-muted bg-white/5 px-3 py-1 rounded-full">
+                            {selectedTagEntries.length} {selectedTagEntries.length === 1 ? 'Entry' : 'Entries'}
+                        </span>
+                    </div>
+
+                    {selectedTagEntries.length === 0 ? (
+                        <div className="text-center py-8 text-text-muted">
+                            No entries found with this tag in the past year.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {selectedTagEntries.map(entry => {
+                                const title = extractTitle(entry.content, entry.title) || 'Untitled Entry';
+                                const entryDate = parseISO(entry.id);
+                                const validDate = !isNaN(entryDate.getTime());
+
+                                return (
+                                    <div
+                                        key={entry.id}
+                                        onClick={() => navigate(`/entry/${entry.id}`)}
+                                        className="bg-white/5 border border-white/10 p-4 rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all cursor-pointer group flex flex-col justify-between min-h-[100px]"
+                                    >
+                                        <div>
+                                            <div className="text-xs text-primary font-bold mb-1 uppercase tracking-wider">
+                                                {validDate ? format(entryDate, 'MMM d, yyyy') : entry.id}
+                                            </div>
+                                            <div className="text-white font-medium line-clamp-2 mb-2 group-hover:text-primary transition-colors">
+                                                {title}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center text-xs text-text-muted group-hover:text-white transition-colors mt-auto">
+                                            Read Entry <ArrowRight className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
