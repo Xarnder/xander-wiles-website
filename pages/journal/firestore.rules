@@ -7,5 +7,8 @@ service cloud.firestore {
       // (User just wants it to work for them, but usually for personal projects we can just allow auth.uid check)
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+    match /users/{userId}/tags/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
   }
 }

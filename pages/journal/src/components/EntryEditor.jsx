@@ -4,13 +4,13 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { db } from '../firebase';
-import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, onSnapshot } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
 import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
 import { format, parseISO, getDay, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2 } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
@@ -37,6 +37,10 @@ export default function EntryEditor() {
     const [uploading, setUploading] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+    // Tags State
+    const [availableTags, setAvailableTags] = useState([]);
+    const [selectedTags, setSelectedTags] = useState([]);
 
     // Caption State
     const [editingCaptionIndex, setEditingCaptionIndex] = useState(null);
@@ -163,6 +167,7 @@ export default function EntryEditor() {
                     const data = docSnap.data();
                     setContent(data.content || '');
                     setTitle(data.title || '');
+                    setSelectedTags(data.tags || []);
 
                     // Handle new schema vs legacy schema
                     if (data.images && Array.isArray(data.images)) {
@@ -190,6 +195,7 @@ export default function EntryEditor() {
                     setContent('');
                     setTitle('');
                     setImages([]);
+                    setSelectedTags([]);
                 }
             } catch (error) {
                 console.error("Error fetching entry:", error);
@@ -200,6 +206,21 @@ export default function EntryEditor() {
 
         fetchEntry();
     }, [date, currentUser]);
+
+    // Fetch available tags
+    useEffect(() => {
+        if (!currentUser) return;
+        const tagsQuery = query(collection(db, 'users', currentUser.uid, 'tags'));
+        const unsubscribe = onSnapshot(tagsQuery, (snapshot) => {
+            const fetchedTags = [];
+            snapshot.forEach(doc => {
+                fetchedTags.push({ id: doc.id, ...doc.data() });
+            });
+            fetchedTags.sort((a, b) => a.name.localeCompare(b.name));
+            setAvailableTags(fetchedTags);
+        });
+        return () => unsubscribe();
+    }, [currentUser]);
 
     // Parse title logic
     useEffect(() => {
@@ -370,6 +391,7 @@ export default function EntryEditor() {
                     content: content,
                     updatedAt: serverTimestamp(),
                     images: images, // Array of {url, path, size}
+                    tags: selectedTags, // Array of tag IDs
                     // Backward compatibility fields
                     imageUrl: mainImage ? mainImage.url : null,
                     imageSize: mainImage ? mainImage.size : 0,
@@ -551,6 +573,26 @@ export default function EntryEditor() {
                             </div>
                             <h2 className="text-xl sm:text-2xl font-serif font-bold text-white break-words">{displayDate}</h2>
                             {title && !isEditing && <p className="text-secondary font-medium opacity-90 break-words">{title}</p>}
+
+                            {!isEditing && selectedTags.length > 0 && availableTags.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                    {selectedTags.map(tagId => {
+                                        const tag = availableTags.find(t => t.id === tagId);
+                                        if (!tag) return null;
+                                        return (
+                                            <span
+                                                key={tagId}
+                                                className="px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5"
+                                                style={{ backgroundColor: `${tag.color}20`, color: tag.color, border: `1px solid ${tag.color}40` }}
+                                            >
+                                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.color }}></div>
+                                                {tag.name}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
                             {!isEditing && (
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mt-1">
                                     <p className="text-xs text-text-muted">{wordCount} words</p>
@@ -699,6 +741,47 @@ export default function EntryEditor() {
                                 className={`w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-6 p-0 resize-none overflow-hidden ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
                             />
                         </div>
+
+                        {/* Tags Editor Area */}
+                        {availableTags.length > 0 && (
+                            <div className="mb-6">
+                                <label className="flex items-center text-sm font-medium text-text-muted mb-2">
+                                    <Tag className="w-4 h-4 mr-2" /> Tags
+                                </label>
+                                <div className="flex flex-wrap gap-2">
+                                    {availableTags.map(tag => {
+                                        const isSelected = selectedTags.includes(tag.id);
+                                        return (
+                                            <button
+                                                key={tag.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (isSelected) {
+                                                        setSelectedTags(prev => prev.filter(id => id !== tag.id));
+                                                    } else {
+                                                        setSelectedTags(prev => [...prev, tag.id]);
+                                                    }
+                                                }}
+                                                className={`px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-2 transition-all duration-200 border ${isSelected
+                                                        ? 'bg-white/10 shadow-sm'
+                                                        : 'bg-transparent hover:bg-white/5 opacity-60 hover:opacity-100'
+                                                    }`}
+                                                style={{
+                                                    borderColor: isSelected ? tag.color : 'rgba(255,255,255,0.1)',
+                                                    color: isSelected ? tag.color : 'var(--text-muted)'
+                                                }}
+                                            >
+                                                <div
+                                                    className="w-2 h-2 rounded-full"
+                                                    style={{ backgroundColor: tag.color }}
+                                                />
+                                                {tag.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Image Upload Area */}
                         <div className="mb-4">
