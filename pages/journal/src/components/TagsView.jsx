@@ -5,6 +5,7 @@ import { db } from '../firebase';
 import { collection, query, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, getDocs, where } from 'firebase/firestore';
 import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
 import { Tag, Plus, Trash2, TrendingUp, Calendar, ArrowRight } from 'lucide-react';
+import ConfirmModal from './ConfirmModal';
 
 export default function TagsView() {
     const { currentUser } = useAuth();
@@ -16,6 +17,8 @@ export default function TagsView() {
     const [newTagColor, setNewTagColor] = useState('#8b5cf6'); // Default primary purple
     const [isAdding, setIsAdding] = useState(false);
     const [selectedTagId, setSelectedTagId] = useState(null);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [tagToDelete, setTagToDelete] = useState(null);
 
     // Fetch tags
     useEffect(() => {
@@ -81,14 +84,25 @@ export default function TagsView() {
         }
     };
 
-    const handleDeleteTag = async (e, tagId) => {
+    const handleDeleteTagClick = (e, tagId) => {
         e.stopPropagation();
-        if (!currentUser || !window.confirm("Are you sure you want to delete this tag? This will not remove the tag from previous entries, but it will no longer be available as an option.")) return;
+        setTagToDelete(tagId);
+        setIsDeleteModalOpen(true);
+    };
+
+    const confirmDeleteTag = async () => {
+        if (!currentUser || !tagToDelete) return;
 
         try {
-            await deleteDoc(doc(db, 'users', currentUser.uid, 'tags', tagId));
+            await deleteDoc(doc(db, 'users', currentUser.uid, 'tags', tagToDelete));
+            if (selectedTagId === tagToDelete) {
+                setSelectedTagId(null);
+            }
         } catch (error) {
             console.error("Error deleting tag:", error);
+        } finally {
+            setTagToDelete(null);
+            setIsDeleteModalOpen(false);
         }
     };
 
@@ -258,7 +272,7 @@ export default function TagsView() {
                                                 </td>
                                                 <td className="py-3 px-2 text-right">
                                                     <button
-                                                        onClick={(e) => handleDeleteTag(e, tag.id)}
+                                                        onClick={(e) => handleDeleteTagClick(e, tag.id)}
                                                         className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                                                         title="Delete Tag"
                                                     >
@@ -323,6 +337,16 @@ export default function TagsView() {
                     )}
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                onConfirm={confirmDeleteTag}
+                title="Delete Tag"
+                message="Are you sure you want to delete this tag? This will not remove the tag from previous entries, but it will no longer be available as an option."
+                confirmText="Delete Tag"
+                isDangerous={true}
+            />
         </div>
     );
 }
