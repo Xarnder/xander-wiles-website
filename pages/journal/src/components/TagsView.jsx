@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, getDocs, where } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, getDocs, where, updateDoc } from 'firebase/firestore';
 import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
-import { Tag, Plus, Trash2, TrendingUp, Calendar, ArrowRight } from 'lucide-react';
+import { Tag, Plus, Trash2, TrendingUp, Calendar, ArrowRight, Edit2, Check, X as XIcon } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 
 export default function TagsView() {
@@ -19,6 +19,10 @@ export default function TagsView() {
     const [selectedTagId, setSelectedTagId] = useState(null);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [tagToDelete, setTagToDelete] = useState(null);
+    const [editingTagId, setEditingTagId] = useState(null);
+    const [editTagName, setEditTagName] = useState('');
+    const [editTagColor, setEditTagColor] = useState('');
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
 
     // Fetch tags
     useEffect(() => {
@@ -106,6 +110,38 @@ export default function TagsView() {
         }
     };
 
+    const handleEditTagClick = (e, tag) => {
+        e.stopPropagation();
+        setEditingTagId(tag.id);
+        setEditTagName(tag.name);
+        setEditTagColor(tag.color);
+    };
+
+    const handleCancelEdit = (e) => {
+        e.stopPropagation();
+        setEditingTagId(null);
+        setEditTagName('');
+        setEditTagColor('');
+    };
+
+    const handleSaveTagEdit = async (e, tagId) => {
+        e.stopPropagation();
+        if (!editTagName.trim() || !currentUser) return;
+
+        setIsSavingEdit(true);
+        try {
+            await updateDoc(doc(db, 'users', currentUser.uid, 'tags', tagId), {
+                name: editTagName.trim(),
+                color: editTagColor
+            });
+            setEditingTagId(null);
+        } catch (error) {
+            console.error("Error updating tag:", error);
+        } finally {
+            setIsSavingEdit(false);
+        }
+    };
+
     // Calculate tag statistics
     const tagStats = useMemo(() => {
         const stats = {};
@@ -117,7 +153,7 @@ export default function TagsView() {
 
         // Initialize stats object for all existing tags
         tags.forEach(tag => {
-            stats[tag.id] = { weed: 0, month: 0, sixMonths: 0, year: 0 };
+            stats[tag.id] = { week: 0, month: 0, sixMonths: 0, year: 0 };
         });
 
         entries.forEach(entry => {
@@ -201,7 +237,7 @@ export default function TagsView() {
                                     type="color"
                                     value={newTagColor}
                                     onChange={(e) => setNewTagColor(e.target.value)}
-                                    className="h-10 w-16 p-1 bg-white/5 border border-white/10 rounded-lg cursor-pointer"
+                                    className="h-10 w-16 p-0 bg-transparent border border-white/20 shadow-sm rounded-lg cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50 overflow-hidden [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-lg [&::-moz-color-swatch]:border-none [&::-moz-color-swatch]:rounded-lg"
                                 />
                                 <div className="text-sm font-mono text-text-muted">{newTagColor}</div>
                             </div>
@@ -231,13 +267,13 @@ export default function TagsView() {
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="border-b border-white/10 text-text-muted text-sm">
-                                        <th className="pb-3 px-2 font-medium">Tag</th>
-                                        <th className="pb-3 px-2 font-medium text-center">Past Week</th>
-                                        <th className="pb-3 px-2 font-medium text-center">Past Month</th>
-                                        <th className="pb-3 px-2 font-medium text-center">Past 6 Months</th>
-                                        <th className="pb-3 px-2 font-medium text-center">Past Year</th>
-                                        <th className="pb-3 px-2 font-medium text-right">Actions</th>
+                                    <tr className="border-b border-white/10 text-text-muted text-xs sm:text-sm">
+                                        <th className="pb-3 px-1 sm:px-2 font-medium">Tag</th>
+                                        <th className="pb-3 px-1 sm:px-2 font-medium text-center">Week</th>
+                                        <th className="pb-3 px-1 sm:px-2 font-medium text-center">Month</th>
+                                        <th className="pb-3 px-1 sm:px-2 font-medium text-center">6 Mos</th>
+                                        <th className="pb-3 px-1 sm:px-2 font-medium text-center">Year</th>
+                                        <th className="pb-3 px-1 sm:px-2 font-medium text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -246,38 +282,90 @@ export default function TagsView() {
                                         return (
                                             <tr
                                                 key={tag.id}
-                                                onClick={() => setSelectedTagId(selectedTagId === tag.id ? null : tag.id)}
-                                                className={`border-b border-white/5 transition-colors cursor-pointer ${selectedTagId === tag.id ? 'bg-primary/20' : 'hover:bg-white/5'}`}
+                                                onClick={() => {
+                                                    if (editingTagId !== tag.id) {
+                                                        setSelectedTagId(selectedTagId === tag.id ? null : tag.id);
+                                                    }
+                                                }}
+                                                className={`border-b border-white/5 transition-colors ${editingTagId !== tag.id ? 'cursor-pointer' : ''} ${selectedTagId === tag.id ? 'bg-primary/20' : 'hover:bg-white/5'}`}
                                             >
                                                 <td className="py-3 px-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <span
-                                                            className="w-3 h-3 rounded-full shadow-sm"
-                                                            style={{ backgroundColor: tag.color }}
-                                                        />
-                                                        <span className="font-medium text-white">{tag.name}</span>
-                                                    </div>
+                                                    {editingTagId === tag.id ? (
+                                                        <div className="flex items-center gap-1 sm:gap-2" onClick={e => e.stopPropagation()}>
+                                                            <input
+                                                                type="color"
+                                                                value={editTagColor}
+                                                                onChange={(e) => setEditTagColor(e.target.value)}
+                                                                className="h-6 w-6 sm:w-8 p-0 bg-transparent border border-white/20 shadow-sm rounded cursor-pointer shrink-0 focus:outline-none focus:ring-1 focus:ring-primary overflow-hidden [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded [&::-moz-color-swatch]:border-none [&::-moz-color-swatch]:rounded"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={editTagName}
+                                                                onChange={(e) => setEditTagName(e.target.value)}
+                                                                className="bg-white/10 border border-white/20 rounded px-1 sm:px-2 py-1 text-white text-xs sm:text-sm w-full focus:outline-none focus:border-primary min-w-[60px] sm:min-w-[120px]"
+                                                                autoFocus
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-1 sm:gap-2 break-all">
+                                                            <span
+                                                                className="w-2 h-2 sm:w-3 sm:h-3 rounded-full shadow-sm shrink-0"
+                                                                style={{ backgroundColor: tag.color }}
+                                                            />
+                                                            <span className="font-medium text-white text-xs sm:text-sm">{tag.name}</span>
+                                                        </div>
+                                                    )}
                                                 </td>
-                                                <td className="py-3 px-2 text-center text-text-muted">
+                                                <td className="py-2 sm:py-3 px-1 sm:px-2 text-center text-text-muted text-xs sm:text-sm">
                                                     {stat.week > 0 ? <span className="text-blue-400 font-bold">{stat.week}</span> : '0'}
                                                 </td>
-                                                <td className="py-3 px-2 text-center text-text-muted">
+                                                <td className="py-2 sm:py-3 px-1 sm:px-2 text-center text-text-muted text-xs sm:text-sm">
                                                     {stat.month > 0 ? <span className="text-green-400 font-bold">{stat.month}</span> : '0'}
                                                 </td>
-                                                <td className="py-3 px-2 text-center text-text-muted">
+                                                <td className="py-2 sm:py-3 px-1 sm:px-2 text-center text-text-muted text-xs sm:text-sm">
                                                     {stat.sixMonths > 0 ? <span className="text-yellow-400 font-bold">{stat.sixMonths}</span> : '0'}
                                                 </td>
-                                                <td className="py-3 px-2 text-center text-text-muted">
+                                                <td className="py-2 sm:py-3 px-1 sm:px-2 text-center text-text-muted text-xs sm:text-sm">
                                                     {stat.year > 0 ? <span className="text-purple-400 font-bold">{stat.year}</span> : '0'}
                                                 </td>
-                                                <td className="py-3 px-2 text-right">
-                                                    <button
-                                                        onClick={(e) => handleDeleteTagClick(e, tag.id)}
-                                                        className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                        title="Delete Tag"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
+                                                <td className="py-2 sm:py-3 px-1 sm:px-2 text-right">
+                                                    {editingTagId === tag.id ? (
+                                                        <div className="flex justify-end gap-1">
+                                                            <button
+                                                                onClick={(e) => handleSaveTagEdit(e, tag.id)}
+                                                                disabled={isSavingEdit || !editTagName.trim()}
+                                                                className="p-2 text-green-400 hover:bg-green-500/10 rounded-lg transition-colors disabled:opacity-50"
+                                                                title="Save Changes"
+                                                            >
+                                                                <Check className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={handleCancelEdit}
+                                                                disabled={isSavingEdit}
+                                                                className="p-2 text-text-muted hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                                                                title="Cancel"
+                                                            >
+                                                                <XIcon className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex justify-end gap-1">
+                                                            <button
+                                                                onClick={(e) => handleEditTagClick(e, tag)}
+                                                                className="p-2 text-text-muted hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                                                title="Edit Tag"
+                                                            >
+                                                                <Edit2 className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => handleDeleteTagClick(e, tag.id)}
+                                                                className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                                title="Delete Tag"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
