@@ -9,6 +9,10 @@ export default function StorageStats({ variant = 'entry', entryTextSize = 0, ent
     const [totalSize, setTotalSize] = useState(0);
     const [loading, setLoading] = useState(true);
 
+    // 5GB Maximum Storage Allowance
+    const MAX_STORAGE_BYTES = 5 * 1024 * 1024 * 1024;
+    const maxStorageFormatted = '5 GB';
+
     // Format bytes to readable string (KB, MB)
     const formatBytes = (bytes, decimals = 2) => {
         if (!bytes) return '0 B';
@@ -164,15 +168,40 @@ export default function StorageStats({ variant = 'entry', entryTextSize = 0, ent
                         </div>
                     )}
 
-                    {/* Global Total */}
+                    {/* Global Total w/ limit check */}
                     <div>
-                        <div className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
-                            Total Account Usage
+                        <div className="flex justify-between items-end mb-2">
+                            <div className="text-xs font-bold text-text-muted uppercase tracking-wider">
+                                Total Account Usage
+                            </div>
+                            <div className="text-xs font-mono text-primary/80">
+                                {((totalSize / MAX_STORAGE_BYTES) * 100).toFixed(2)}%
+                            </div>
                         </div>
-                        <div className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                            {formatBytes(totalSize)}
+
+                        <div className="flex items-baseline gap-2 mb-3">
+                            <div className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                                {formatBytes(totalSize)}
+                            </div>
+                            <div className="text-sm text-text-muted font-medium">
+                                / {maxStorageFormatted}
+                            </div>
                         </div>
-                        <p className="text-xs text-text-muted mt-1">Total space used across all entries</p>
+
+                        {/* Progress Bar */}
+                        <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden shadow-inner">
+                            <div
+                                className={`h-full rounded-full transition-all duration-1000 ${(totalSize / MAX_STORAGE_BYTES) > 0.9
+                                        ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
+                                        : (totalSize / MAX_STORAGE_BYTES) > 0.75
+                                            ? 'bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]'
+                                            : 'bg-primary shadow-[0_0_10px_rgba(139,92,246,0.5)]'
+                                    }`}
+                                style={{ width: `${Math.min((totalSize / MAX_STORAGE_BYTES) * 100, 100)}%` }}
+                            />
+                        </div>
+
+                        <p className="text-xs text-text-muted mt-3">Total space consumed by text and images across all entries</p>
                     </div>
                 </div>
             )}

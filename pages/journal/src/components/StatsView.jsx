@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, documentId, onSnapshot } from 'firebase/firestore';
 import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
-import { BarChart as BarChartIcon, TrendingUp, Type, MessageSquare } from 'lucide-react';
+import { BarChart as BarChartIcon, TrendingUp, Type, MessageSquare, Tag, Image as ImageIcon } from 'lucide-react';
 import {
     ComposedChart,
     Bar,
@@ -47,6 +47,7 @@ export default function StatsView() {
     const navigate = useNavigate();
     const [timeRange, setTimeRange] = useState('month'); // week, month, 6months, year
     const [entries, setEntries] = useState([]);
+    const [tags, setTags] = useState({});
     const [loading, setLoading] = useState(true);
 
     // Time Range definitions
@@ -56,6 +57,20 @@ export default function StatsView() {
         '6months': { label: '6 Months', days: 180 },
         year: { label: 'Year', days: 365 }
     };
+
+    // Fetch tags
+    useEffect(() => {
+        if (!currentUser) return;
+        const tagsQuery = query(collection(db, 'users', currentUser.uid, 'tags'));
+        const unsubscribe = onSnapshot(tagsQuery, (snapshot) => {
+            const tagsMap = {};
+            snapshot.forEach(doc => {
+                tagsMap[doc.id] = doc.data();
+            });
+            setTags(tagsMap);
+        });
+        return () => unsubscribe();
+    }, [currentUser]);
 
     // Fetch entries based on selected range
     useEffect(() => {
@@ -127,7 +142,9 @@ export default function StatsView() {
     // Compute Statistics
     const stats = useMemo(() => {
         let totalWords = 0;
+        let totalImages = 0;
         const wordCounts = {};
+        const tagCounts = {};
         const chartData = [];
 
         // Map entries to chart data
@@ -143,6 +160,9 @@ export default function StatsView() {
 
             totalWords += count;
 
+            const imageCount = entry.images ? entry.images.length : (entry.imageUrl || entry.imageMetadata ? 1 : 0);
+            totalImages += imageCount;
+
             // Extract title or use stored title
             const displayTitle = extractTitle(text, entry.title);
             entryMap.set(entry.id, { count, title: displayTitle });
@@ -153,6 +173,13 @@ export default function StatsView() {
                     wordCounts[word] = (wordCounts[word] || 0) + 1;
                 }
             });
+
+            // Tag frequency analysis
+            if (entry.tags && Array.isArray(entry.tags)) {
+                entry.tags.forEach(tagId => {
+                    tagCounts[tagId] = (tagCounts[tagId] || 0) + 1;
+                });
+            }
         });
 
         // Generate chart data based on range
@@ -201,13 +228,23 @@ export default function StatsView() {
             .slice(0, 10)
             .map(([word, count]) => ({ word, count }));
 
+        // Top Tags
+        const sortedTags = Object.entries(tagCounts)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 10)
+            .map(([tagId, count]) => ({ tagId, count, data: tags[tagId] }))
+            .filter(item => item.data);
+
         return {
             totalWords,
+            totalImages,
             averageWordsPerEntry: entries.length > 0 ? Math.round(totalWords / entries.length) : 0,
+            averageImagesPerEntry: entries.length > 0 ? (totalImages / entries.length).toFixed(1) : 0,
             chartData: data,
-            topWords: sortedWords
+            topWords: sortedWords,
+            topTags: sortedTags
         };
-    }, [entries, timeRange]);
+    }, [entries, timeRange, tags]);
 
     const CustomTooltip = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
@@ -326,7 +363,7 @@ export default function StatsView() {
             </div>
 
             {/* Secondary Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                 {/* Top Words */}
                 <div className="glass-card p-6">
                     <h3 className="text-lg font-serif font-bold text-white mb-4 flex items-center gap-2">
@@ -357,29 +394,77 @@ export default function StatsView() {
                     </div>
                 </div>
 
+                {/* Top Tags */}
+                <div className="glass-card p-6">
+                    <h3 className="text-lg font-serif font-bold text-white mb-4 flex items-center gap-2">
+                        <Tag className="w-5 h-5 text-purple-400" /> Top Used Tags
+                    </h3>
+                    <div className="space-y-3">
+                        {stats.topTags.map((item, index) => (
+                            <div key={item.tagId} className="flex justify-between items-center group">
+                                <div className="flex items-center gap-2 flex-1">
+                                    <span className="w-6 text-xs text-text-muted">{index + 1}.</span>
+                                    <span
+                                        className="w-3 h-3 rounded-full shadow-sm shrink-0"
+                                        style={{ backgroundColor: item.data.color }}
+                                    />
+                                    <span className="text-white group-hover:text-primary transition-colors truncate max-w-[120px]">{item.data.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-primary/70 rounded-full"
+                                            style={{ width: `${(item.count / stats.topTags[0].count) * 100}%` }}
+                                        />
+                                    </div>
+                                    <span className="text-sm text-text-muted w-8 text-right font-bold">{item.count}</span>
+                                </div>
+                            </div>
+                        ))}
+                        {stats.topTags.length === 0 && (
+                            <div className="text-text-muted text-sm italic">No tags used in this period.</div>
+                        )}
+                    </div>
+                </div>
+
                 {/* Quick Stats Cards */}
-                <div className="space-y-6 flex flex-col h-full">
-                    <div className="glass-card p-6 flex flex-col justify-center items-center text-center flex-1">
+                <div className="space-y-6 flex flex-col">
+                    <div className="glass-card p-6 flex flex-col justify-center items-center text-center">
                         <Type className="w-8 h-8 text-blue-400 mb-2" />
-                        <div className="text-3xl font-bold text-white mb-1">{stats.totalWords.toLocaleString()}</div>
-                        <div className="text-sm text-text-muted">Total Words Written</div>
-                        <div className="text-xs text-text-muted/60 mt-1">in selected range</div>
+                        <div className="flex gap-6 w-full justify-center">
+                            <div>
+                                <div className="text-3xl font-bold text-white mb-1">{stats.totalWords.toLocaleString()}</div>
+                                <div className="text-sm text-text-muted">Total Words</div>
+                            </div>
+                            <div>
+                                <div className="text-3xl font-bold text-white mb-1">{stats.averageWordsPerEntry.toLocaleString()}</div>
+                                <div className="text-sm text-text-muted">Avg / Entry</div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="glass-card p-6 flex flex-col justify-center items-center text-center flex-1">
-                        <TrendingUp className="w-8 h-8 text-pink-400 mb-2" />
-                        <div className="text-3xl font-bold text-white mb-1">{stats.averageWordsPerEntry.toLocaleString()}</div>
-                        <div className="text-sm text-text-muted">Average Words / Entry</div>
+                    <div className="glass-card p-6 flex flex-col justify-center items-center text-center">
+                        <ImageIcon className="w-8 h-8 text-purple-400 mb-2" />
+                        <div className="flex gap-6 w-full justify-center">
+                            <div>
+                                <div className="text-3xl font-bold text-white mb-1">{stats.totalImages.toLocaleString()}</div>
+                                <div className="text-sm text-text-muted">Total Images</div>
+                            </div>
+                            <div>
+                                <div className="text-3xl font-bold text-white mb-1">{stats.averageImagesPerEntry}</div>
+                                <div className="text-sm text-text-muted">Avg / Entry</div>
+                            </div>
+                        </div>
                     </div>
 
                     <StorageStats
                         variant="global"
                         entries={entries}
                         timeFrameLabel={ranges[timeRange]?.label}
-                        className="flex-1 flex flex-col justify-center items-center text-center"
+                        className="flex flex-col justify-center items-center text-center"
                     />
 
-                    <FirestoreUsage className="flex-1 flex flex-col justify-center text-center" />
+                    <FirestoreUsage className="flex flex-col justify-center text-center" />
                 </div>
             </div>
         </div>
