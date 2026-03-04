@@ -9,7 +9,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 export default function CalendarView() {
     const { currentUser } = useAuth();
     const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-    const [entries, setEntries] = useState(new Map()); // Map<DateString, { wordCount: number }>
+    const [entries, setEntries] = useState(new Map()); // Map<DateString, { wordCount: number, tags: string[] }>
+    const [tags, setTags] = useState({}); // Map of tagId -> tag data
     const [totalEntries, setTotalEntries] = useState(0);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
@@ -21,6 +22,20 @@ export default function CalendarView() {
         if (!str) return 0;
         return str.trim().split(/\s+/).length;
     };
+
+    // Fetch tags
+    useEffect(() => {
+        if (!currentUser) return;
+        const tagsQuery = query(collection(db, 'users', currentUser.uid, 'tags'));
+        const unsubscribe = onSnapshot(tagsQuery, (snapshot) => {
+            const tagsMap = {};
+            snapshot.forEach(doc => {
+                tagsMap[doc.id] = doc.data();
+            });
+            setTags(tagsMap);
+        });
+        return () => unsubscribe();
+    }, [currentUser]);
 
     // Fetch entries for the selected year with real-time listener
     useEffect(() => {
@@ -47,7 +62,8 @@ export default function CalendarView() {
                         entryData.set(doc.id, {
                             wordCount: countWords(data.content || ''),
                             imageCount: (data.images ? data.images.length : (data.imageUrl || data.imageMetadata ? 1 : 0)),
-                            hasTitle: !!data.title && data.title.trim().length > 0
+                            hasTitle: !!data.title && data.title.trim().length > 0,
+                            tags: data.tags || []
                         });
                     });
                     setEntries(entryData);
@@ -267,6 +283,23 @@ export default function CalendarView() {
                                                         {/* Title Only Indicator - Red Dot on Left */}
                                                         {isTitleOnly && (
                                                             <div className="absolute top-1/2 left-0 w-1.5 h-1.5 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 ml-1"></div>
+                                                        )}
+
+                                                        {/* Tag Indicators - Max 4 Dots at bottom */}
+                                                        {entry && entry.tags && entry.tags.length > 0 && (
+                                                            <div className="absolute bottom-1 left-0 right-0 flex justify-center gap-0.5 px-0.5 pointer-events-none">
+                                                                {entry.tags.slice(0, 4).map(tagId => {
+                                                                    const tagColor = tags[tagId]?.color;
+                                                                    if (!tagColor) return null;
+                                                                    return (
+                                                                        <div
+                                                                            key={tagId}
+                                                                            className="w-1.5 h-1.5 rounded-full shadow-sm"
+                                                                            style={{ backgroundColor: tagColor }}
+                                                                        />
+                                                                    );
+                                                                })}
+                                                            </div>
                                                         )}
                                                     </button>
                                                 );
