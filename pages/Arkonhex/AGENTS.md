@@ -317,3 +317,6 @@ When checking if chunks need loading, unloading, or mesh rebaking based on playe
 
 ### 12.3 Async Semaphore Locking
 When querying IndexedDB (via `ChunkStorage.js`) or other asynchronous data sources, maintain explicit boolean locks (e.g., `this.isLoadingDB = true`). Do not queue parallel microtasks that try to initialize generators simultaneously, as they will overwrite each other's state and stall the engine.
+
+### 12.4 No Dynamic Load Locks
+**NEVER** implement artificial "dynamic load locks" that freeze `PlayerSystem` or `PhysicsSystem` updates while chunks are loading (e.g. checking `pendingGen > 50` in the main loop to disable movement). The player must always be able to move and look around seamlessly while terrain generates in the background. If a player falls out of the world because terrain hasn't loaded, rely on the existing fall-off-world protection in `PlayerSystem` to gracefully teleport them back to safety.
