@@ -108,23 +108,22 @@ body {
 }
 
 #block-name-popup {
-    position: absolute;
-    bottom: calc(20px + 64px + 20px);
-    /* sit above the hotbar */
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.65);
-    color: white;
-    font-size: 1.3rem;
-    font-weight: 700;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.45);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1rem;
+    font-weight: 600;
     letter-spacing: 0.5px;
-    padding: 6px 24px;
-    border-radius: 10px;
+    padding: 5px 16px;
+    border-radius: 8px;
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.25s ease;
     backdrop-filter: blur(6px);
     white-space: nowrap;
+    z-index: 200;
 }
 
 #block-name-popup.visible {
@@ -431,39 +430,41 @@ body {
 /* ─── Controls Toast ─── */
 #controls-toast {
     position: fixed;
-    bottom: 50px;
-    left: 50%;
-    transform: translateX(-50%) translateY(200px);
-    background: rgba(10, 15, 25, 0.90);
-    border: 2px solid rgba(0, 206, 201, 0.5);
-    border-radius: 16px;
-    padding: 24px 40px;
-    color: white;
-    text-align: center;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(12px);
+    top: 60px;
+    /* below block-name-popup */
+    right: 20px;
+    left: auto;
+    transform: translateX(120%);
+    background: rgba(10, 15, 25, 0.55);
+    border: 1px solid rgba(0, 206, 201, 0.35);
+    border-radius: 12px;
+    padding: 14px 22px;
+    color: rgba(255, 255, 255, 0.92);
+    text-align: left;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(10px);
     z-index: 1000;
     opacity: 0;
-    transition: transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s;
+    transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.35s;
     pointer-events: none;
 }
 
 #controls-toast .toast-title {
-    font-size: 1.6rem;
-    font-weight: 800;
-    margin-bottom: 12px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 8px;
     color: #00cec9;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
 }
 
 #controls-toast .toast-body {
-    font-size: 1.2rem;
+    font-size: 0.9rem;
     line-height: 1.6;
-    opacity: 0.95;
+    opacity: 0.9;
 }
 
 #controls-toast.show {
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(0);
     opacity: 1;
 }
 
