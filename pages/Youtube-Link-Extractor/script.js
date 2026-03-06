@@ -374,7 +374,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function exportAllQRs() {
         const zip = new JSZip();
-        const safePlaylistTitle = playlistTitle.replace(/[/\\?%*:|"<>]/g, '-').substring(0, 100);
+        // Remove emojis and other non-standard characters from playlist title for safer filenames
+        const sanitizedTitle = playlistTitle.replace(/\p{Extended_Pictographic}/ug, '').trim() || 'youtube_playlist';
+        const safePlaylistTitle = sanitizedTitle.replace(/[/\\?%*:|"<>]/g, '-').substring(0, 100);
         const folderName = `${safePlaylistTitle}_qr_codes`;
         const qrFolder = zip.folder(folderName);
 
@@ -511,7 +513,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const content = await zip.generateAsync({ type: "blob" });
-            const zipFilename = `${safePlaylistTitle}_qrs.zip`;
+            // Re-calculate sanitized title for the zip filename itself
+            const sanitizedTitle = playlistTitle.replace(/\p{Extended_Pictographic}/ug, '').trim() || 'youtube_playlist';
+            const safeZipTitle = sanitizedTitle.replace(/[/\\?%*:|"<>]/g, '-').substring(0, 100);
+            const zipFilename = `${safeZipTitle}_qrs.zip`;
 
             const link = document.createElement("a");
             link.href = URL.createObjectURL(content);
