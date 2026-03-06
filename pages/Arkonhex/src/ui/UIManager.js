@@ -839,4 +839,22 @@ export class UIManager {
         // 3. Abort all attached event listeners
         this.abortController.abort();
     }
+
+    /**
+     * Shows a sliding toast notification for game controls
+     */
+    showControlsToast() {
+        if (this.controlsToastShown) return; // Only show once per session
+        this.controlsToastShown = true;
+
+        const toast = document.getElementById('controls-toast');
+        if (toast) {
+            toast.classList.add('show');
+
+            // Hide after 8 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 8000);
+        }
+    }
 }
