@@ -109,8 +109,7 @@ body {
 
 #block-name-popup {
     position: fixed;
-    bottom: calc(20px + 64px + 35px);
-    /* Moved higher (from 16px to 35px) */
+    bottom: 155px;
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.45);
@@ -161,6 +160,40 @@ body {
     border-color: var(--ui-accent);
     transform: scale(1.1);
     box-shadow: 0 0 12px var(--ui-accent);
+}
+
+.slot-number {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: bold;
+    pointer-events: none;
+}
+
+#height-bar-container {
+    position: absolute;
+    bottom: 104px;
+    /* Just above the hotbar (20px bottom + 84px height) */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 730px;
+    /* Matching inner hotbar width: 10*64 + 9*10 */
+    height: 6px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 3px;
+    overflow: hidden;
+    z-index: 100;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#height-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #00cec9, #0984e3);
+    box-shadow: 0 0 8px rgba(0, 206, 201, 0.6);
+    transition: width 0.2s ease-out;
 }
 
 .hotbar-slot-inner {

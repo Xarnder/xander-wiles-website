@@ -13,6 +13,8 @@ export class UIManager {
         this.selectedBlockElement = document.getElementById('selected-block-info');
         this.hotbarElement = document.getElementById('hotbar');
         this.smoothToolDisplay = document.getElementById('smooth-tool-display');
+        this.heightBarContainer = document.getElementById('height-bar-container');
+        this.heightBarFill = document.getElementById('height-bar-fill');
 
         this.dateElement = document.getElementById('system-date');
         this.timeElement = document.getElementById('in-game-time');
@@ -636,6 +638,12 @@ export class UIManager {
             const inner = document.createElement('div');
             inner.className = 'hotbar-slot-inner';
 
+            // Add slot number
+            const num = document.createElement('span');
+            num.className = 'slot-number';
+            num.innerText = i < 10 ? i : 0;
+            slot.appendChild(num);
+
             // Map 1-10 to block IDs
             const blockDef = this.blockSystem.getBlockDef(i);
             if (blockDef) {
@@ -679,15 +687,22 @@ export class UIManager {
 
         const heightTxt = smoothHeight === 0 ? "Random" : (smoothHeight / 10.0).toFixed(1);
 
+        // Update height bar
+        if (this.heightBarFill) {
+            this.heightBarFill.style.width = `${smoothHeight * 10}%`;
+        }
+
         if (tool === 'smooth') {
             this.smoothToolDisplay.innerText = `Smooth Tool: ${heightTxt}`;
             this.smoothToolDisplay.style.display = 'block';
             if (this.hotbarElement) this.hotbarElement.style.display = 'none';
+            if (this.heightBarContainer) this.heightBarContainer.style.display = 'none';
             if (icon) icon.style.display = 'flex';
         } else {
             this.smoothToolDisplay.innerText = `Placement Height: ${heightTxt}`;
             this.smoothToolDisplay.style.display = 'block';
             if (this.hotbarElement) this.hotbarElement.style.display = 'flex';
+            if (this.heightBarContainer) this.heightBarContainer.style.display = 'block';
             if (icon) icon.style.display = 'none';
         }
     }
