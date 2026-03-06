@@ -351,8 +351,8 @@ export class Engine {
                 if (uiLayer) {
                     uiLayer.classList.remove('ui-hidden');
 
-                    // Show Controls Prompt
-                    if (this.uiManager) {
+                    // Show Controls Prompt — only for brand new worlds (no saved position)
+                    if (this.uiManager && !this._lastSavedPlayer) {
                         this.uiManager.showControlsToast();
                     }
                 }

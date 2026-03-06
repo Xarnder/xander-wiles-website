@@ -109,14 +109,16 @@ body {
 
 #block-name-popup {
     position: fixed;
-    top: 20px;
-    right: 20px;
+    bottom: calc(20px + 64px + 16px);
+    /* just above the hotbar */
+    left: 50%;
+    transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.45);
     color: rgba(255, 255, 255, 0.9);
     font-size: 1rem;
     font-weight: 600;
     letter-spacing: 0.5px;
-    padding: 5px 16px;
+    padding: 5px 18px;
     border-radius: 8px;
     pointer-events: none;
     opacity: 0;
@@ -430,11 +432,11 @@ body {
 /* ─── Controls Toast ─── */
 #controls-toast {
     position: fixed;
-    top: 60px;
-    /* below block-name-popup */
-    right: 20px;
-    left: auto;
-    transform: translateX(120%);
+    top: 20px;
+    left: 20px;
+    /* top-left corner */
+    right: auto;
+    transform: translateX(-120%);
     background: rgba(10, 15, 25, 0.55);
     border: 1px solid rgba(0, 206, 201, 0.35);
     border-radius: 12px;
