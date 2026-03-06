@@ -18,6 +18,8 @@ body {
     overflow: hidden;
     background-color: #000;
     font-family: var(--ui-font);
+    font-size: 18px;
+    /* Boost base font size */
     user-select: none;
 }
 
@@ -50,8 +52,8 @@ body {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     transform: translate(-50%, -50%);
 }
 
@@ -63,17 +65,17 @@ body {
 }
 
 #crosshair::before {
-    top: 9px;
+    top: 11px;
     left: 0;
-    width: 20px;
+    width: 24px;
     height: 2px;
 }
 
 #crosshair::after {
     top: 0;
-    left: 9px;
+    left: 11px;
     width: 2px;
-    height: 20px;
+    height: 24px;
 }
 
 #dev-info {
@@ -119,10 +121,10 @@ body {
 }
 
 .hotbar-slot {
-    width: 50px;
-    height: 50px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
+    width: 64px;
+    height: 64px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
     position: relative;
     display: flex;
     align-items: center;
@@ -133,13 +135,13 @@ body {
 .hotbar-slot.active {
     border-color: var(--ui-accent);
     transform: scale(1.1);
-    box-shadow: 0 0 10px var(--ui-accent);
+    box-shadow: 0 0 12px var(--ui-accent);
 }
 
 .hotbar-slot-inner {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
     /* Placeholder for block icon */
 }
 
@@ -161,8 +163,10 @@ body {
 }
 
 .overlay-screen h1 {
-    font-size: 4rem;
+    font-size: 5rem;
     margin-bottom: 0.5rem;
+    font-weight: 800;
+    letter-spacing: 2px;
     background: -webkit-linear-gradient(#c0ff33, #27ae60);
     -webkit-background-clip: text;
     background-clip: text;

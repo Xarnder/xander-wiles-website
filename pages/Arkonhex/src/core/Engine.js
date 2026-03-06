@@ -39,35 +39,19 @@ export class Engine {
     async initCore() {
         console.log("Arkonhex Engine Initializing...");
 
-        const loadingText = document.getElementById('loading-text');
-        const loadingFill = document.getElementById('loading-bar-fill');
-        const loadingContainer = document.getElementById('loading-container');
-
-        const setProgress = async (text, percent) => {
-            if (loadingText) loadingText.innerText = text;
-            if (loadingFill) loadingFill.style.width = `${percent}%`;
-            console.log(`[Load] ${text}`);
-            return new Promise(resolve => setTimeout(resolve, 300));
-        };
-
         // 1. Core Data
-        await setProgress('Loading Core Data...', 20);
         this.blockSystem = new BlockSystem();
         await this.blockSystem.init();
 
         // 2. Rendering Base
-        await setProgress('Initializing Renderer...', 50);
         this.rendererSystem = new Renderer(this);
         this.lightingManager = new LightingManager(this);
 
         // 3. Input
-        await setProgress('Initializing Input...', 70);
         this.inputManager = new InputManager(this);
 
         // 4. Audio
         this.audioManager = new AudioManager(this);
-
-        await setProgress('Ready!', 100);
 
         // Hide the initial start/loading screen entirely
         const startScreen = document.getElementById('start-screen');
