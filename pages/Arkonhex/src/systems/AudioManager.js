@@ -18,6 +18,7 @@ export class AudioManager {
         this.sfx.walk = this._createAudio('assets/sounds/walking.mp3', 0.3, true);
         this.sfx.swim = this._createAudio('assets/sounds/swimming.mp3', 0.4, true);
         this.sfx.splash = this._createAudio('assets/sounds/splash.mp3', 0.7);
+        this.sfx.correct = this._createAudio('assets/sounds/correct.mp3', 0.8);
 
         // Ambience
         this.ambience.underwater = this._createAudio('assets/sounds/underwater-ambients.mp3', 0, true);

@@ -819,30 +819,9 @@ export class UIManager {
             const im = this.engine.inputManager;
             const tc = this.activeToastControls;
 
-            const markDone = (key) => {
-                if (!tc[key]) {
-                    tc[key] = true;
-                    const el = document.getElementById(`toast-inst-${key}`);
-                    if (el) el.classList.add('completed');
-                }
-            };
-
-            // WASD Move
-            if (im.keys.has('KeyW') || im.keys.has('KeyA') || im.keys.has('KeyS') || im.keys.has('KeyD')) markDone('move');
-            // Jump
-            if (im.keys.has('Space')) markDone('jump');
-            // Sprint
-            if (im.keys.has('ShiftLeft') || im.keys.has('ShiftRight')) markDone('sprint');
-            // Break (left click)
-            if (im.buttons.has(0)) markDone('break');
-            // Place (right click)
-            if (im.buttons.has(2)) markDone('place');
-            // Menu
-            if (im.keys.has('KeyE')) markDone('menu');
-            // Fly
-            if (im.keys.has('KeyF')) markDone('fly');
-            // Zoom
-            if (im.keys.has('KeyC')) markDone('zoom');
+            // Mouse buttons checked in update loop (they're not consumed like keys)
+            if (im.buttons.has(0)) this._markToastDone('break');
+            if (im.buttons.has(2)) this._markToastDone('place');
 
             // Check if all actions are done
             const allDone = Object.values(tc).every(v => v === true);
@@ -889,21 +868,52 @@ export class UIManager {
         this.controlsToastShown = true;
 
         const toast = document.getElementById('controls-toast');
-        if (toast) {
-            toast.classList.add('show');
+        if (!toast) return;
 
-            // Set up state tracker for dynamic completion
-            this.activeToastControls = {
-                move: false,
-                jump: false,
-                sprint: false,
-                break: false,
-                place: false,
-                menu: false,
-                fly: false,
-                zoom: false
+        toast.classList.add('show');
+
+        // Set up state tracker for dynamic completion
+        this.activeToastControls = {
+            move: false,
+            jump: false,
+            sprint: false,
+            break: false,
+            place: false,
+            menu: false,
+            fly: false,
+            zoom: false
+        };
+        this.toastCountdownStarted = false;
+
+        // Use raw keydown listener to detect keys that are consumed by other systems (e.g. KeyF)
+        this._toastKeyListener = (e) => {
+            if (!this.activeToastControls || this.toastCountdownStarted) return;
+            const keyMap = {
+                'KeyW': 'move', 'KeyA': 'move', 'KeyS': 'move', 'KeyD': 'move',
+                'Space': 'jump',
+                'ShiftLeft': 'sprint', 'ShiftRight': 'sprint',
+                'KeyE': 'menu',
+                'KeyF': 'fly',
+                'KeyC': 'zoom'
             };
-            this.toastCountdownStarted = false;
+            const action = keyMap[e.code];
+            if (action) this._markToastDone(action);
+        };
+        document.addEventListener('keydown', this._toastKeyListener);
+    }
+
+    /**
+     * Mark a single toast control as completed with a sound and visual feedback
+     */
+    _markToastDone(key) {
+        if (!this.activeToastControls || this.activeToastControls[key]) return;
+        this.activeToastControls[key] = true;
+        const el = document.getElementById(`toast-inst-${key}`);
+        if (el) el.classList.add('completed');
+
+        // Play the correct sound
+        if (this.engine.audioManager) {
+            this.engine.audioManager.playSFX('correct', true);
         }
     }
 }
