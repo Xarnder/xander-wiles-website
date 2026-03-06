@@ -364,7 +364,13 @@ export class Engine {
                 if (startScreen) startScreen.classList.add('hidden');
                 if (loadingContainer) loadingContainer.style.display = 'none';
                 if (worldSelectScreen) worldSelectScreen.classList.add('hidden');
-                if (uiLayer) uiLayer.classList.remove('ui-hidden');
+                if (uiLayer) {
+                    uiLayer.classList.remove('ui-hidden');
+
+                    // Show Controls Prompt
+                    const ui = this.systems.find(s => typeof s.showControlsToast === 'function');
+                    if (ui) ui.showControlsToast();
+                }
 
                 // Auto-save on page unload
                 this._beforeUnloadHandler = () => this._saveAndExit();

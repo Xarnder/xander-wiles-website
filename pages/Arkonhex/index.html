@@ -65,62 +65,87 @@
             <h1>ARKONHEX</h1>
             <h2 style="margin-bottom: 20px; opacity: 0.7; font-weight: 300;">Select World</h2>
 
-            <div id="world-list"
-                style="max-height: 320px; overflow-y: auto; margin-bottom: 20px; width: 100%; max-width: 500px;">
-                <!-- World entries injected by WorldSelectMenu.js -->
+            <!-- Main Hub -->
+            <div id="ws-main-menu" class="ws-sub-menu">
+                <div
+                    style="display: flex; flex-direction: column; align-items: center; gap: 15px; margin-bottom: 20px;">
+                    <button id="play-now-btn" style="
+                        padding: 16px 40px; font-size: 1.2rem;
+                        background: linear-gradient(135deg, #00b894, #00cec9);
+                        border: none; color: white; border-radius: 12px;
+                        cursor: pointer; font-weight: bold; width: 100%; max-width: 300px;
+                        box-shadow: 0 4px 15px rgba(0, 184, 148, 0.4); transition: transform 0.2s, box-shadow 0.2s;
+                    ">Play Now</button>
+
+                    <button id="nav-create-world-btn" style="
+                        padding: 10px 20px; font-size: 0.95rem;
+                        background: transparent;
+                        border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.8); border-radius: 8px;
+                        cursor: pointer; font-weight: 500; transition: background 0.2s; width: 100%; max-width: 300px;
+                    ">Custom World Options</button>
+
+                    <button id="nav-existing-world-btn" style="
+                        padding: 10px 20px; font-size: 0.95rem;
+                        background: transparent;
+                        border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.8); border-radius: 8px;
+                        cursor: pointer; font-weight: 500; transition: background 0.2s; width: 100%; max-width: 300px;
+                    ">Play Existing World</button>
+                </div>
             </div>
 
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 20px;">
-                <button id="play-now-btn" style="
-                    padding: 16px 40px; font-size: 1.2rem;
-                    background: linear-gradient(135deg, #00b894, #00cec9);
-                    border: none; color: white; border-radius: 12px;
-                    cursor: pointer; font-weight: bold; width: 100%; max-width: 300px;
-                    box-shadow: 0 4px 15px rgba(0, 184, 148, 0.4); transition: transform 0.2s, box-shadow 0.2s;
-                ">Play Now</button>
-
-                <button id="show-create-form-btn" style="
-                    padding: 8px 20px; font-size: 0.9rem;
+            <!-- Existing Worlds List -->
+            <div id="ws-list-menu" class="ws-sub-menu hidden">
+                <div id="world-list"
+                    style="max-height: 320px; overflow-y: auto; margin-bottom: 20px; width: 100%; max-width: 500px;">
+                    <!-- World entries injected by WorldSelectMenu.js -->
+                </div>
+                <button class="ws-back-btn" style="
+                    padding: 8px 16px; font-size: 0.9rem;
                     background: transparent;
-                    border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.7); border-radius: 8px;
+                    border: 1px solid rgba(255,100,100,0.4); color: #ff6b6b; border-radius: 6px;
                     cursor: pointer; font-weight: 500; transition: background 0.2s;
-                ">Custom World Options</button>
+                ">&#x2190; Back</button>
             </div>
 
-            <div id="create-world-form" class="hidden" style="
-                background: rgba(255,255,255,0.05); border-radius: 10px;
-                padding: 20px; max-width: 400px; width: 100%;
-                border: 1px solid rgba(255,255,255,0.1);
-            ">
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">World
-                        Name</label>
-                    <input id="world-name-input" type="text" placeholder="My World" style="
-                        width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
-                        border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
-                        color: white; font-size: 1rem; box-sizing: border-box;
-                    ">
+            <!-- Custom World Form -->
+            <div id="ws-create-menu" class="ws-sub-menu hidden">
+                <div id="create-world-form" style="
+                    background: rgba(255,255,255,0.05); border-radius: 10px;
+                    padding: 20px; max-width: 400px; width: 100%;
+                    border: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;
+                ">
+                    <div style="margin-bottom: 12px; text-align: left;">
+                        <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">World
+                            Name</label>
+                        <input id="world-name-input" type="text" placeholder="My World" style="
+                            width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
+                            border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+                            color: white; font-size: 1rem; box-sizing: border-box;
+                        ">
+                    </div>
+                    <div style="margin-bottom: 15px; text-align: left;">
+                        <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">Seed
+                            (optional)</label>
+                        <input id="world-seed-input" type="text" placeholder="Random" style="
+                            width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
+                            border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+                            color: white; font-size: 1rem; box-sizing: border-box;
+                        ">
+                    </div>
+                    <button id="create-world-btn" style="
+                        padding: 10px 25px; font-size: 1rem;
+                        background: linear-gradient(135deg, #00b894, #00cec9);
+                        border: none; color: white; border-radius: 6px;
+                        cursor: pointer; font-weight: 600; width: 100%;
+                    ">Create &amp; Play</button>
                 </div>
-                <div style="margin-bottom: 15px;">
-                    <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">Seed
-                        (optional)</label>
-                    <input id="world-seed-input" type="text" placeholder="Random" style="
-                        width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
-                        border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
-                        color: white; font-size: 1rem; box-sizing: border-box;
-                    ">
-                </div>
-                <button id="create-world-btn" style="
-                    padding: 10px 25px; font-size: 1rem;
-                    background: linear-gradient(135deg, #00b894, #00cec9);
-                    border: none; color: white; border-radius: 6px;
-                    cursor: pointer; font-weight: 600;
-                ">Create &amp; Play</button>
+                <button class="ws-back-btn" style="
+                    padding: 8px 16px; font-size: 0.9rem;
+                    background: transparent;
+                    border: 1px solid rgba(255,100,100,0.4); color: #ff6b6b; border-radius: 6px;
+                    cursor: pointer; font-weight: 500; transition: background 0.2s;
+                ">&#x2190; Back</button>
             </div>
-
-            <p style="margin-top: 20px; opacity: 0.4; font-size: 0.85rem;">WASD to move, Space to Jump, Shift to Sprint.
-                <strong>E</strong> for Menu. Click to Break, Right Click to Place.
-            </p>
         </div>
 
         <div id="pause-screen" class="overlay-screen hidden"
@@ -350,6 +375,16 @@
             </div>
 
             <p style="margin-top:12px; pointer-events: none;">Click anywhere outside to resume.</p>
+        </div>
+    </div>
+
+    <!-- Controls Toast Notification -->
+    <div id="controls-toast">
+        <div style="font-weight: bold; margin-bottom: 4px; color: #00cec9;">Welcome to Arkonhex</div>
+        <div style="font-size: 0.85rem; opacity: 0.9;">
+            <b>WASD</b> Move • <b>Space</b> Jump • <b>Shift</b> Sprint<br>
+            <b>Click</b> Break • <b>Right Click</b> Place<br>
+            <b>E</b> Menu • <b>F</b> Fly • <b>C</b> Zoom
         </div>
     </div>
 

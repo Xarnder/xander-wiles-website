@@ -16,10 +16,23 @@ export class WorldSelectMenu {
         this.onWorldSelected = onWorldSelected;
         this.container = document.getElementById('world-select-screen');
         this.worldListEl = document.getElementById('world-list');
+
+        // Menus
+        this.mainMenu = document.getElementById('ws-main-menu');
+        this.createMenu = document.getElementById('ws-create-menu');
+        this.listMenu = document.getElementById('ws-list-menu');
+
+        // Main Menu Buttons
+        this.playNowBtn = document.getElementById('play-now-btn');
+        this.navCreateBtn = document.getElementById('nav-create-world-btn');
+        this.navExistingBtn = document.getElementById('nav-existing-world-btn');
+
+        // Create Menu
         this.createForm = document.getElementById('create-world-form');
         this.createBtn = document.getElementById('create-world-btn');
-        this.showCreateBtn = document.getElementById('show-create-form-btn');
-        this.playNowBtn = document.getElementById('play-now-btn');
+
+        // Back Buttons
+        this.backBtns = document.querySelectorAll('.ws-back-btn');
 
         if (!this.container) {
             console.error('[WorldSelectMenu] #world-select-screen not found');
@@ -31,10 +44,30 @@ export class WorldSelectMenu {
     }
 
     _bindEvents() {
-        // Show/hide create form
-        if (this.showCreateBtn) {
-            this.showCreateBtn.addEventListener('click', () => {
-                this.createForm.classList.toggle('hidden');
+        // Navigation Functions
+        const showMenu = (menuToShow) => {
+            if (this.mainMenu) this.mainMenu.classList.add('hidden');
+            if (this.createMenu) this.createMenu.classList.add('hidden');
+            if (this.listMenu) this.listMenu.classList.add('hidden');
+
+            if (menuToShow) menuToShow.classList.remove('hidden');
+        };
+
+        // Navigation Buttons
+        if (this.navCreateBtn) {
+            this.navCreateBtn.addEventListener('click', () => showMenu(this.createMenu));
+        }
+
+        if (this.navExistingBtn) {
+            this.navExistingBtn.addEventListener('click', () => {
+                this.refresh();
+                showMenu(this.listMenu);
+            });
+        }
+
+        if (this.backBtns) {
+            this.backBtns.forEach(btn => {
+                btn.addEventListener('click', () => showMenu(this.mainMenu));
             });
         }
 
