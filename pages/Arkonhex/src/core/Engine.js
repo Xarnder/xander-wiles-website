@@ -352,8 +352,9 @@ export class Engine {
                     uiLayer.classList.remove('ui-hidden');
 
                     // Show Controls Prompt
-                    const ui = this.systems.find(s => typeof s.showControlsToast === 'function');
-                    if (ui) ui.showControlsToast();
+                    if (this.uiManager) {
+                        this.uiManager.showControlsToast();
+                    }
                 }
 
                 // Auto-save on page unload
