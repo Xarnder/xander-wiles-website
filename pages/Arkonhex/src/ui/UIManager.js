@@ -15,6 +15,7 @@ export class UIManager {
 
         this.dateElement = document.getElementById('system-date');
         this.timeElement = document.getElementById('in-game-time');
+        this.coordsElement = document.getElementById('coords-display');
 
         if (this.dateElement) {
             this.dateElement.innerText = new Date().toISOString().split('T')[0];
@@ -788,6 +789,12 @@ export class UIManager {
             const minutesStr = minutes < 10 ? '0' + minutes : minutes;
 
             this.timeElement.innerText = `${hours12}:${minutesStr} ${ampm}`;
+        }
+
+        // Coordinates Update
+        if (this.coordsElement && this.playerSystem) {
+            const pos = this.playerSystem.position;
+            this.coordsElement.innerText = `X: ${pos.x.toFixed(1)} Y: ${pos.y.toFixed(1)} Z: ${pos.z.toFixed(1)}`;
         }
 
         // Debug info - Selected Block
