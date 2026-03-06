@@ -470,8 +470,14 @@ export class PlayerSystem {
     }
 
     breakBlock(q, r, y) {
-        if (this.setBlockGlobal(q, r, y, 0)) { // Air
-            this.audioManager.playSFX('break');
+        const blockId = this.chunkSystem.getBlockGlobal(q, r, y);
+        if (blockId !== 0) {
+            const blockDef = this.chunkSystem.engine.blockSystem.getBlockDef(blockId);
+            const destroySound = blockDef ? blockDef.destroySound : 'break';
+
+            if (this.setBlockGlobal(q, r, y, 0)) { // Air
+                this.audioManager.playBlockSound('destroy', destroySound);
+            }
         }
     }
 
@@ -499,7 +505,9 @@ export class PlayerSystem {
 
         const success = this.setBlockGlobal(q, r, y, id);
         if (success) {
-            this.audioManager.playSFX('place');
+            const blockDef = this.chunkSystem.engine.blockSystem.getBlockDef(id);
+            const placeSound = blockDef ? blockDef.placeSound : 'place';
+            this.audioManager.playBlockSound('place', placeSound);
         }
     }
 
