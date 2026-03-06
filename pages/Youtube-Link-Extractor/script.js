@@ -372,11 +372,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Helper: Sanitize Filename (Strict)
+    function sanitizeFilename(name, maxLength = 50) {
+        if (!name) return 'file';
+        // Remove emojis and special symbols
+        let sanitized = name.replace(/\p{Extended_Pictographic}/ug, '');
+        // Remove illegal characters for files
+        sanitized = sanitized.replace(/[/\\?%*:|"<>]/g, '-');
+        // Replace multiple spaces/dashes with single ones
+        sanitized = sanitized.replace(/[\s-]+/g, ' ').trim();
+        return sanitized.substring(0, maxLength);
+    }
+
     async function exportAllQRs() {
         const zip = new JSZip();
         // Remove emojis and other non-standard characters from playlist title for safer filenames
-        const sanitizedTitle = playlistTitle.replace(/\p{Extended_Pictographic}/ug, '').trim() || 'youtube_playlist';
-        const safePlaylistTitle = sanitizedTitle.replace(/[/\\?%*:|"<>]/g, '-').substring(0, 100);
+        const safePlaylistTitle = sanitizeFilename(playlistTitle, 100) || 'youtube_playlist';
         const folderName = `${safePlaylistTitle}_qr_codes`;
         const qrFolder = zip.folder(folderName);
 
@@ -431,7 +442,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Export as JPG (quality 0.9)
             const bigBlob = await new Promise(resolve => finalBigCanvas.toBlob(resolve, 'image/jpeg', 0.9));
-            qrFolder.file("00_PLAYLIST_QR_CODE.jpg", bigBlob);
+            if (bigBlob) {
+                qrFolder.file("00_PLAYLIST_QR_CODE.jpg", bigBlob);
+            }
             tempContainer.removeChild(bigQrDiv);
         }
 
@@ -478,12 +491,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Title
             ctx.font = "bold 20px Segoe UI, Arial";
-            const titleText = video.title.length > 35 ? video.title.substring(0, 32) + '...' : video.title;
+            const titleText = sanitizeFilename(video.title, 35);
             ctx.fillText(titleText, canvas.width / 2, margin + 40);
 
             // Channel/Artist
             ctx.font = "16px Segoe UI, Arial";
-            const channelText = video.channel.length > 40 ? video.channel.substring(0, 37) + '...' : video.channel;
+            const channelText = sanitizeFilename(video.channel, 40);
             ctx.fillText(channelText, canvas.width / 2, margin + 70);
 
             // Draw QR Code
@@ -491,9 +504,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Convert to blob and add to zip
             const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-            const safeTitle = video.title.replace(/[/\\?%*:|"<>]/g, '-').substring(0, 50);
-            const filename = `${i + 1}_${safeTitle}.png`;
-            qrFolder.file(filename, blob);
+            if (blob) {
+                const safeTitle = sanitizeFilename(video.title, 50);
+                const filename = `${i + 1}_${safeTitle}.png`;
+                qrFolder.file(filename, blob);
+            }
 
             tempContainer.removeChild(qrDiv);
             showStatus(`Generating QR ZIP... Progress: ${i + 1}/${extractedVideos.length}`, "loading");
@@ -512,10 +527,15 @@ document.addEventListener('DOMContentLoaded', () => {
         zip.file("playlist_metadata_complete.csv", csvContent);
 
         try {
-            const content = await zip.generateAsync({ type: "blob" });
+            // macOS Archive Utility is picky. Using DEFLATE compression often helps.
+            const content = await zip.generateAsync({
+                type: "blob",
+                compression: "DEFLATE",
+                compressionOptions: { level: 6 }
+            });
+
             // Re-calculate sanitized title for the zip filename itself
-            const sanitizedTitle = playlistTitle.replace(/\p{Extended_Pictographic}/ug, '').trim() || 'youtube_playlist';
-            const safeZipTitle = sanitizedTitle.replace(/[/\\?%*:|"<>]/g, '-').substring(0, 100);
+            const safeZipTitle = sanitizeFilename(playlistTitle, 100) || 'youtube_playlist';
             const zipFilename = `${safeZipTitle}_qrs.zip`;
 
             const link = document.createElement("a");
