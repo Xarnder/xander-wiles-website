@@ -516,8 +516,9 @@ export class PlayerSystem {
             const previousId = chunk.getBlock(lq, lr, y);
 
             if (chunk.setBlock(lq, lr, y, id)) {
-                // Mark chunk as modified for saving
+                // Mark chunk as modified for saving and dirty it for remeshing
                 this.chunkSystem.markChunkModified(cq, cr);
+                this.chunkSystem.markChunkDirty(chunk);
 
                 // Notify Light System
                 if (this.engine.lightSystem) {
@@ -537,6 +538,9 @@ export class PlayerSystem {
 
     dirtyChunk(cq, cr) {
         const chunk = this.chunkSystem.chunks.get(`${cq},${cr}`);
-        if (chunk) chunk.isDirty = true;
+        if (chunk) {
+            chunk.isDirty = true;
+            this.chunkSystem.markChunkDirty(chunk); // Push to the chunk mesh rebuild queue
+        }
     }
 }
