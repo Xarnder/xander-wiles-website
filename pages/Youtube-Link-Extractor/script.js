@@ -372,16 +372,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Helper: Sanitize Filename (Strict)
+    // Helper: Sanitize Filename (Strict ASCII for macOS Archive Utility compatibility)
     function sanitizeFilename(name, maxLength = 50) {
         if (!name) return 'file';
-        // Remove emojis and special symbols
-        let sanitized = name.replace(/\p{Extended_Pictographic}/ug, '');
-        // Remove illegal characters for files
-        sanitized = sanitized.replace(/[/\\?%*:|"<>]/g, '-');
-        // Replace multiple spaces/dashes with single ones
-        sanitized = sanitized.replace(/[\s-]+/g, ' ').trim();
-        return sanitized.substring(0, maxLength);
+        // Strictly allow only alphanumeric, space, dot, dash, underscore, parentheses
+        let sanitized = name.replace(/[^a-zA-Z0-9 .\-_()]/g, '');
+        // Replace multiple spaces with single one
+        sanitized = sanitized.replace(/\s+/g, ' ').trim();
+        return sanitized.substring(0, maxLength) || 'file';
     }
 
     async function exportAllQRs() {
@@ -527,12 +525,8 @@ document.addEventListener('DOMContentLoaded', () => {
         zip.file("playlist_metadata_complete.csv", csvContent);
 
         try {
-            // macOS Archive Utility is picky. Using DEFLATE compression often helps.
-            const content = await zip.generateAsync({
-                type: "blob",
-                compression: "DEFLATE",
-                compressionOptions: { level: 6 }
-            });
+            // Revert to default compression (STORE) as the issue was likely Unicode filenames
+            const content = await zip.generateAsync({ type: "blob" });
 
             // Re-calculate sanitized title for the zip filename itself
             const safeZipTitle = sanitizeFilename(playlistTitle, 100) || 'youtube_playlist';
