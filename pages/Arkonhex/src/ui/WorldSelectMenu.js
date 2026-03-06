@@ -16,6 +16,9 @@ export class WorldSelectMenu {
         this.onWorldSelected = onWorldSelected;
         this.container = document.getElementById('world-select-screen');
         this.worldListEl = document.getElementById('world-list');
+        this.createForm = document.getElementById('create-world-form');
+        this.createBtn = document.getElementById('create-world-btn');
+        this.showCreateBtn = document.getElementById('show-create-form-btn');
         this.playNowBtn = document.getElementById('play-now-btn');
 
         if (!this.container) {
@@ -28,29 +31,46 @@ export class WorldSelectMenu {
     }
 
     _bindEvents() {
-        // "Play Now" immediately loads/creates "Default World"
+        // Show/hide create form
+        if (this.showCreateBtn) {
+            this.showCreateBtn.addEventListener('click', () => {
+                this.createForm.classList.toggle('hidden');
+            });
+        }
+
+        // Play Now button - load or create "Default World"
         if (this.playNowBtn) {
             this.playNowBtn.addEventListener('click', async () => {
                 const worlds = await listWorlds();
                 let defaultWorld = worlds.find(w => w.name === 'Default World');
 
                 if (!defaultWorld) {
-                    defaultWorld = await createWorld('Default World', null);
+                    defaultWorld = await createWorld('Default World', null); // Use random seed
                 }
 
-                // Auto-play
                 this.hide();
                 this.onWorldSelected(defaultWorld);
             });
+        }
 
-            // Add hover juice
-            this.playNowBtn.addEventListener('mouseenter', () => {
-                this.playNowBtn.style.transform = 'scale(1.05)';
-                this.playNowBtn.style.boxShadow = '0 6px 20px rgba(108, 92, 231, 0.6)';
-            });
-            this.playNowBtn.addEventListener('mouseleave', () => {
-                this.playNowBtn.style.transform = 'scale(1)';
-                this.playNowBtn.style.boxShadow = '0 4px 15px rgba(108, 92, 231, 0.4)';
+        // Create world form submit
+        if (this.createBtn) {
+            this.createBtn.addEventListener('click', async () => {
+                const nameInput = document.getElementById('world-name-input');
+                const seedInput = document.getElementById('world-seed-input');
+                const name = nameInput ? nameInput.value.trim() : '';
+                const seed = seedInput ? seedInput.value.trim() : '';
+
+                const world = await createWorld(name || 'New World', seed || null);
+
+                // Reset inputs
+                if (nameInput) nameInput.value = '';
+                if (seedInput) seedInput.value = '';
+                this.createForm.classList.add('hidden');
+
+                // Auto-play the newly created world
+                this.hide();
+                this.onWorldSelected(world);
             });
         }
     }
