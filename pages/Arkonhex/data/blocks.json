@@ -2,8 +2,8 @@
     {
         "id": 1,
         "name": "grass",
-        "topColor": "green",
-        "baseColor": "brown",
+        "topColor": "light_indigo",
+        "baseColor": "indigo",
         "hardness": 1.0,
         "placeSound": "grass_place",
         "destroySound": "break"
@@ -11,8 +11,8 @@
     {
         "id": 2,
         "name": "dirt",
-        "topColor": "brown",
-        "baseColor": "brown",
+        "topColor": "gray",
+        "baseColor": "dark_brown",
         "hardness": 1.0,
         "placeSound": "dirt_place",
         "destroySound": "break"
@@ -21,7 +21,7 @@
         "id": 3,
         "name": "stone",
         "topColor": "gray",
-        "baseColor": "gray",
+        "baseColor": "black",
         "hardness": 2.0,
         "placeSound": "stone_place",
         "destroySound": "stone_break"
@@ -29,8 +29,8 @@
     {
         "id": 4,
         "name": "sand",
-        "topColor": "yellow",
-        "baseColor": "yellow",
+        "topColor": "light_gray",
+        "baseColor": "light_gray",
         "hardness": 0.5,
         "placeSound": "sand_place",
         "destroySound": "sand_break"
@@ -38,8 +38,8 @@
     {
         "id": 5,
         "name": "water",
-        "topColor": "blue",
-        "baseColor": "blue",
+        "topColor": "violet",
+        "baseColor": "violet",
         "hardness": 0.0,
         "translucent": true,
         "placeSound": "splash",
@@ -48,8 +48,8 @@
     {
         "id": 6,
         "name": "wood",
-        "topColor": "orange",
-        "baseColor": "orange",
+        "topColor": "black",
+        "baseColor": "dark_green",
         "hardness": 1.5,
         "placeSound": "wood_place",
         "destroySound": "break"
@@ -57,8 +57,8 @@
     {
         "id": 7,
         "name": "leaves",
-        "topColor": "dark_green",
-        "baseColor": "dark_green",
+        "topColor": "indigo",
+        "baseColor": "indigo",
         "hardness": 0.2,
         "placeSound": "leaves_place",
         "destroySound": "leaves_break"

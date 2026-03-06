@@ -24,13 +24,13 @@ export class CloudSystem {
         // Cloud Material
         // USER CONFIG: Tweak 'opacity' for translucency, and 'emissiveIntensity' to make them brighter white!
         this.material = new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            emissive: 0xffffff, // Full white glow base
+            color: 0x222222,
+            emissive: 0x222222, // Full white glow base
             emissiveIntensity: 0.8, // USER CONFIG: Increase this to make clouds glow brighter white
             roughness: 0.8,
             metalness: 0.1,
             transparent: true,
-            opacity: 0.8, // USER CONFIG: Tweak this for whiter/more transparent clouds
+            opacity: 0.7, // USER CONFIG: Tweak this for whiter/more transparent clouds
             depthWrite: false, // Completely eliminates Z-fighting for overlapping transparent meshes
             side: THREE.FrontSide
         });
@@ -72,7 +72,16 @@ export class CloudSystem {
         }
 
         // Slowly drift the entire group so chunks don't change internal shapes
-        this.cloudGroup.position.x += delta * this.cloudSpeed;
+        let currentSpeed = this.cloudSpeed;
+        if (this.engine.inputManager) {
+            if (this.engine.inputManager.isKeyDown('BracketRight')) {
+                currentSpeed += 150.0; // Fast Forward clouds with time
+            }
+            if (this.engine.inputManager.isKeyDown('BracketLeft')) {
+                currentSpeed -= 150.0; // Rewind clouds with time
+            }
+        }
+        this.cloudGroup.position.x += delta * currentSpeed;
 
         // Periodically check chunks to spawn/despawn clouds, using relative player pos
         if (this.engine.playerSystem) {
@@ -139,11 +148,13 @@ export class CloudSystem {
         density = (density + 1) / 2; // [0, 1]
 
         // MACRO NOISE MASK: Evaluate the noise at a massive zoomed-out scale to carve huge blue-sky gaps
-        let macroNoise = this.noise.noise2D(nx * 0.05, nz * 0.05);
+        // Lower scale (0.01) makes the clear sky gaps much wider/longer periods
+        let macroNoise = this.noise.noise2D(nx * 0.01, nz * 0.01);
         macroNoise = (macroNoise + 1) / 2; // [0, 1]
 
         // If the region rolls low on the macro scale, explicitly kill the clouds in this chunk
-        if (macroNoise < 0.45) { // 45% of the world will be vast open blue skies
+        // Decreased threshold to 0.4 means 40% of the sky is empty (Good cloud cover)
+        if (macroNoise < 0.4) {
             density = 0;
         }
 

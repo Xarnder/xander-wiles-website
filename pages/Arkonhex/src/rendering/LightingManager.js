@@ -58,45 +58,21 @@ export class LightingManager {
     }
 
     initSkyDome() {
-        const vertexShader = `
-            varying vec3 vWorldPosition;
-            void main() {
-                vec4 worldPosition = modelMatrix * vec4( position, 1.0 );
-                vWorldPosition = worldPosition.xyz;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-            }
-        `;
-
-        const fragmentShader = `
-            uniform vec3 topColor;
-            uniform vec3 bottomColor;
-            uniform float offset;
-            uniform float exponent;
-            varying vec3 vWorldPosition;
-            void main() {
-                float h = normalize( vWorldPosition ).y;
-                gl_FragColor = vec4( mix( bottomColor, topColor, max( pow( max( h , 0.0), exponent ), 0.0 ) ), 1.0 );
-            }
-        `;
-
-        // Pass uniforms that we will interpolate during loop
-        this.skyUniforms = {
-            "topColor": { value: new THREE.Color(0x0077ff) },
-            "bottomColor": { value: new THREE.Color(0xffffff) },
-            "offset": { value: 33 },
-            "exponent": { value: 0.6 }
-        };
-
+        // Create a highly glossy, slightly metallic material for the sky
         const skyGeo = new THREE.SphereGeometry(3000, 32, 15);
-        const skyMat = new THREE.ShaderMaterial({
-            uniforms: this.skyUniforms,
-            vertexShader: vertexShader,
-            fragmentShader: fragmentShader,
+        this.skyMat = new THREE.MeshPhysicalMaterial({
+            color: 0xff2222, // Set via interpolation later
+            metalness: 0.8, // High metalness for a deep sheen
+            roughness: 0.1, // Low roughness makes it very glossy/reflective
+            clearcoat: 1.0, // Add a clearcoat layer for extra gloss
+            clearcoatRoughness: 0.05,
             side: THREE.BackSide,
             depthWrite: false
         });
 
-        this.skyMesh = new THREE.Mesh(skyGeo, skyMat);
+        // We will no longer interpolate uniforms, we'll interpolate the material color directly
+        // Keep the color arrays from before
+        this.skyMesh = new THREE.Mesh(skyGeo, this.skyMat);
         this.scene.add(this.skyMesh);
     }
 
@@ -142,48 +118,48 @@ export class LightingManager {
         // 1.000: Midnight
         this.colors = {
             skyTop: [
-                new THREE.Color(0x020111), // 0: Midnight
-                new THREE.Color(0x020111), // 1: Midnight
-                new THREE.Color(0x20124d), // 2: Sunrise
-                new THREE.Color(0x1a65d6), // 3: Morning
-                new THREE.Color(0x1a65d6), // 4: Noon
-                new THREE.Color(0x1a65d6), // 5: Afternoon
-                new THREE.Color(0x20124d), // 6: Sunset
-                new THREE.Color(0x020111), // 7: Midnight
-                new THREE.Color(0x020111)  // 8: Midnight
+                new THREE.Color(0x2a0f0f), // 0: Midnight
+                new THREE.Color(0x2a0f0f), // 1: Midnight
+                new THREE.Color(0x590808), // 2: Sunrise (Deep Dark Red)
+                new THREE.Color(0xff2222), // 3: Morning (Saturated Bright Red)
+                new THREE.Color(0xff2222), // 4: Noon
+                new THREE.Color(0xff2222), // 5: Afternoon
+                new THREE.Color(0x590808), // 6: Sunset (Deep Dark Red)
+                new THREE.Color(0x2a0f0f), // 7: Midnight
+                new THREE.Color(0x2a0f0f)  // 8: Midnight
             ],
             skyBottom: [
-                new THREE.Color(0x000022), // 0: Midnight
-                new THREE.Color(0x000022), // 1: Midnight
-                new THREE.Color(0xffa07a), // 2: Sunrise
-                new THREE.Color(0x87CEEB), // 3: Morning
-                new THREE.Color(0x87CEEB), // 4: Noon
-                new THREE.Color(0x87CEEB), // 5: Afternoon
-                new THREE.Color(0xffa07a), // 6: Sunset
-                new THREE.Color(0x000022), // 7: Midnight
-                new THREE.Color(0x000022)  // 8: Midnight
+                new THREE.Color(0x1a0505), // 0: Midnight
+                new THREE.Color(0x1a0505), // 1: Midnight
+                new THREE.Color(0x801010), // 2: Sunrise (Dark Crimson Horizon)
+                new THREE.Color(0xff5555), // 3: Morning (Softer Bright Red)
+                new THREE.Color(0xff5555), // 4: Noon
+                new THREE.Color(0xff5555), // 5: Afternoon
+                new THREE.Color(0x801010), // 6: Sunset (Dark Crimson Horizon)
+                new THREE.Color(0x1a0505), // 7: Midnight
+                new THREE.Color(0x1a0505)  // 8: Midnight
             ],
             sunLight: [
-                new THREE.Color(0x111122), // 0: Moonlight
-                new THREE.Color(0x111122), // 1: Moonlight
-                new THREE.Color(0xffaa55), // 2: Sunrise
-                new THREE.Color(0xffffee), // 3: Morning
-                new THREE.Color(0xffffee), // 4: Noon
-                new THREE.Color(0xffffee), // 5: Afternoon
-                new THREE.Color(0xffaa55), // 6: Sunset
-                new THREE.Color(0x111122), // 7: Moonlight
-                new THREE.Color(0x111122)  // 8: Moonlight
+                new THREE.Color(0x221111), // 0: Moonlight (Dark Red)
+                new THREE.Color(0x221111), // 1: Moonlight
+                new THREE.Color(0xff4422), // 2: Sunrise (Bright Red-Orange)
+                new THREE.Color(0xff8888), // 3: Morning (Soft Red daylight)
+                new THREE.Color(0xffaaaa), // 4: Noon (Light pinkish-red daylight)
+                new THREE.Color(0xff8888), // 5: Afternoon
+                new THREE.Color(0xff4422), // 6: Sunset
+                new THREE.Color(0x221111), // 7: Moonlight
+                new THREE.Color(0x221111)  // 8: Moonlight
             ],
             ambientLight: [
-                new THREE.Color(0x111122), // 0: Midnight
-                new THREE.Color(0x111122), // 1: Midnight
-                new THREE.Color(0x664444), // 2: Sunrise
-                new THREE.Color(0xbbbbbb), // 3: Morning
-                new THREE.Color(0xbbbbbb), // 4: Noon
-                new THREE.Color(0xbbbbbb), // 5: Afternoon
-                new THREE.Color(0x664444), // 6: Sunset
-                new THREE.Color(0x111122), // 7: Midnight
-                new THREE.Color(0x111122)  // 8: Midnight
+                new THREE.Color(0x221111), // 0: Midnight (Dark Red Ambient)
+                new THREE.Color(0x221111), // 1: Midnight
+                new THREE.Color(0x883333), // 2: Sunrise
+                new THREE.Color(0xffaaaa), // 3: Morning (Red ambient base)
+                new THREE.Color(0xffcccc), // 4: Noon (Lighter pinkish-red base)
+                new THREE.Color(0xffaaaa), // 5: Afternoon
+                new THREE.Color(0x883333), // 6: Sunset
+                new THREE.Color(0x221111), // 7: Midnight
+                new THREE.Color(0x221111)  // 8: Midnight
             ]
         };
     }
@@ -266,9 +242,11 @@ export class LightingManager {
         }
         this.stars.material.opacity = starAlpha;
 
-        // 4. Color Interpolation Logic
-        this.skyUniforms.topColor.value.copy(this.interpolateColor(this.colors.skyTop, this.timeOfDay));
-        this.skyUniforms.bottomColor.value.copy(this.interpolateColor(this.colors.skyBottom, this.timeOfDay));
+        // 4. Color Interpolation Logic (Simplified for glossy material)
+        // Since it's a physical material, we only have one base color. 
+        // We'll use the skyTop colors for the main hue. The sun's light/specular highlights will naturally
+        // create a gradient effect on the glossy sphere.
+        this.skyMat.color.copy(this.interpolateColor(this.colors.skyTop, this.timeOfDay));
 
         this.sunLight.color.copy(this.interpolateColor(this.colors.sunLight, this.timeOfDay));
         this.ambientLight.color.copy(this.interpolateColor(this.colors.ambientLight, this.timeOfDay));
