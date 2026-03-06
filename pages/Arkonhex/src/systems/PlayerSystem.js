@@ -29,7 +29,7 @@ export class PlayerSystem {
 
         // Smooth Tool state
         this.activeTool = 'block'; // 'block' or 'smooth'
-        this.smoothHeight = 10; // 1-10 mapped to 0.1-1.0
+        this.smoothHeight = 0; // 0 = Random, 1-10 = 0.1-1.0
 
         // Hold-to-place/break timing
         this.blockInitialDelay = 0.4;  // s (default 400ms)
@@ -353,9 +353,6 @@ export class PlayerSystem {
                 if (this.activeTool === 'smooth') {
                     // Update smooth height (1-9 map to index+1, 0 maps to index 9 + 1 = 10)
                     this.smoothHeight = i + 1;
-                    if (this.engine.uiManager) {
-                        this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
-                    }
                 } else {
                     // Normal hotbar
                     this.selectedHotbarSlot = i;
@@ -364,7 +361,24 @@ export class PlayerSystem {
                         this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
                     }
                 }
+                if (this.engine.uiManager) {
+                    this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
+                }
                 break;
+            }
+        }
+
+        // Arrow keys for height adjustment
+        if (this.input.consumeKey('ArrowUp')) {
+            this.smoothHeight = (this.smoothHeight + 1) % 11;
+            if (this.engine.uiManager) {
+                this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
+            }
+        }
+        if (this.input.consumeKey('ArrowDown')) {
+            this.smoothHeight = (this.smoothHeight - 1 + 11) % 11;
+            if (this.engine.uiManager) {
+                this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
             }
         }
 
@@ -441,10 +455,8 @@ export class PlayerSystem {
             if (breakHeld) {
                 if (this.breakHoldCount === 0) {
                     if (this.activeTool === 'smooth') {
-                        // Left click in smooth mode sets the height of the looked-at block
-                        if (this.chunkSystem.getBlockGlobal(q, r, y) !== 0) {
-                            this.chunkSystem.setHeightGlobal(q, r, y, this.smoothHeight);
-                        }
+                        // Left click in smooth mode ALWAYS breaks normally now
+                        this.breakBlock(q, r, y);
                     } else {
                         // Phase 0: instant first break
                         this.breakBlock(q, r, y);
@@ -454,18 +466,12 @@ export class PlayerSystem {
                 } else {
                     this.breakHoldTimer += delta;
                     const threshold = this.breakHoldCount === 1
-                        ? this.blockInitialDelay * 2  // phase 1: 2× initial delay
-                        : this.blockRepeatDelay;       // phase 2+: normal repeat
+                        ? this.blockInitialDelay * 2
+                        : this.blockRepeatDelay;
                     if (this.breakHoldTimer >= threshold) {
                         this.breakHoldTimer = 0;
                         this.breakHoldCount++;
-                        if (this.activeTool === 'smooth') {
-                            if (this.chunkSystem.getBlockGlobal(q, r, y) !== 0) {
-                                this.chunkSystem.setHeightGlobal(q, r, y, this.smoothHeight);
-                            }
-                        } else {
-                            this.breakBlock(q, r, y);
-                        }
+                        this.breakBlock(q, r, y); // Both modes break on left hold
                     }
                 }
             } else {
@@ -490,10 +496,17 @@ export class PlayerSystem {
                 }
 
                 if (this.placeHoldCount === 0) {
-                    // Phase 0: instant first place
-                    this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
                     if (this.activeTool === 'smooth') {
-                        this.chunkSystem.setHeightGlobal(placeQ, placeR, placeY, this.smoothHeight);
+                        // Right click in Smooth Tool mode adjusts existing block height
+                        if (this.chunkSystem.getBlockGlobal(q, r, y) !== 0) {
+                            this.chunkSystem.setHeightGlobal(q, r, y, this.smoothHeight);
+                        }
+                    } else {
+                        // Normal mode: Place block with current smoothHeight
+                        this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                        if (this.smoothHeight > 0) {
+                            this.chunkSystem.setHeightGlobal(placeQ, placeR, placeY, this.smoothHeight);
+                        }
                     }
                     this.placeHoldCount = 1;
                     this.placeHoldTimer = 0;
@@ -505,9 +518,15 @@ export class PlayerSystem {
                     if (this.placeHoldTimer >= threshold) {
                         this.placeHoldTimer = 0;
                         this.placeHoldCount++;
-                        this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
                         if (this.activeTool === 'smooth') {
-                            this.chunkSystem.setHeightGlobal(placeQ, placeR, placeY, this.smoothHeight);
+                            if (this.chunkSystem.getBlockGlobal(q, r, y) !== 0) {
+                                this.chunkSystem.setHeightGlobal(q, r, y, this.smoothHeight);
+                            }
+                        } else {
+                            this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                            if (this.smoothHeight > 0) {
+                                this.chunkSystem.setHeightGlobal(placeQ, placeR, placeY, this.smoothHeight);
+                            }
                         }
                     }
                 }

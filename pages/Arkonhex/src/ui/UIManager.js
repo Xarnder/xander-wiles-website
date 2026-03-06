@@ -677,14 +677,16 @@ export class UIManager {
 
         const icon = document.getElementById('smooth-tool-icon');
 
+        const heightTxt = smoothHeight === 0 ? "Random" : (smoothHeight / 10.0).toFixed(1);
+
         if (tool === 'smooth') {
-            const displayHeight = (smoothHeight / 10.0).toFixed(1);
-            this.smoothToolDisplay.innerText = `Smooth Tool: ${displayHeight}`;
+            this.smoothToolDisplay.innerText = `Smooth Tool: ${heightTxt}`;
             this.smoothToolDisplay.style.display = 'block';
             if (this.hotbarElement) this.hotbarElement.style.display = 'none';
             if (icon) icon.style.display = 'flex';
         } else {
-            this.smoothToolDisplay.style.display = 'none';
+            this.smoothToolDisplay.innerText = `Placement Height: ${heightTxt}`;
+            this.smoothToolDisplay.style.display = 'block';
             if (this.hotbarElement) this.hotbarElement.style.display = 'flex';
             if (icon) icon.style.display = 'none';
         }
