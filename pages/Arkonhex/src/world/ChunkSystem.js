@@ -13,6 +13,7 @@ export class ChunkSystem {
         this.chunks = new Map(); // string key "${cq},${cr}" -> Chunk
         this.chunkGenQueue = [];
         this.pendingChunks = new Set();
+        this.dirtyChunks = new Set();
         this.isLoadingDB = false;
 
         // Generator state for time-slicing
@@ -41,6 +42,12 @@ export class ChunkSystem {
 
     getChunkKey(cq, cr) {
         return `${cq},${cr}`;
+    }
+
+    markChunkDirty(chunk) {
+        if (!chunk) return;
+        chunk.isDirty = true;
+        this.dirtyChunks.add(chunk);
     }
 
     updateLoadedChunks(playerQ, playerR) {
@@ -77,7 +84,7 @@ export class ChunkSystem {
                         const chunk = this.chunks.get(key);
                         if (chunk.isLOD !== isLOD) {
                             chunk.isLOD = isLOD;
-                            chunk.isDirty = true; // Force mesh rebuild
+                            this.markChunkDirty(chunk); // Force mesh rebuild
                         }
                     }
                 }
@@ -95,7 +102,7 @@ export class ChunkSystem {
         }
 
         const timeTaken = performance.now() - startTime;
-        if (timeTaken > 15) console.warn(`[PerfWarning] updateLoadedChunks took ${timeTaken.toFixed(1)}ms!`);
+        if (timeTaken > 15) console.warn(`[FreezeTracker] [PerfWarning] updateLoadedChunks took ${timeTaken.toFixed(1)}ms!`);
     }
 
     async loadChunk(cq, cr, isLOD = false) {
@@ -111,10 +118,10 @@ export class ChunkSystem {
                     if (savedData.light) {
                         chunk.light.set(savedData.light);
                     }
-                    chunk.isDirty = true;
                     chunk.isModified = false; // It's already saved, not newly modified
                     chunk.isLOD = isLOD;
                     this.chunks.set(this.getChunkKey(cq, cr), chunk);
+                    this.markChunkDirty(chunk);
 
                     // Dirty neighbors
                     this._dirtyNeighbors(cq, cr);
@@ -137,6 +144,7 @@ export class ChunkSystem {
     _finishChunkLoad(chunk, cq, cr, isLOD) {
         chunk.isLOD = isLOD;
         this.chunks.set(this.getChunkKey(cq, cr), chunk);
+        this.markChunkDirty(chunk);
 
         // Dirty neighbors to ensure they cull boundary faces correctly
         this._dirtyNeighbors(cq, cr);
@@ -147,7 +155,7 @@ export class ChunkSystem {
             for (let dcr = -1; dcr <= 1; dcr++) {
                 if (dcq === 0 && dcr === 0) continue;
                 const neighbor = this.chunks.get(this.getChunkKey(cq + dcq, cr + dcr));
-                if (neighbor) neighbor.isDirty = true;
+                if (neighbor) this.markChunkDirty(neighbor);
             }
         }
     }
@@ -173,6 +181,7 @@ export class ChunkSystem {
         }
         this.chunks.delete(key);
         this.pendingChunks.delete(key);
+        this.dirtyChunks.delete(chunk);
         // Remove from queue if it was pending
         this.chunkGenQueue = this.chunkGenQueue.filter(item => item.key !== key);
     }
@@ -212,7 +221,7 @@ export class ChunkSystem {
                 }
             }
             const genTime = performance.now() - genStartTime;
-            if (genTime > 20) console.warn(`[PerfWarning] ChunkGen hold took ${genTime.toFixed(1)}ms (${genIterCount} iters)`);
+            if (genTime > 20) console.warn(`[FreezeTracker] [PerfWarning] ChunkGen hold took ${genTime.toFixed(1)}ms (${genIterCount} iters) on chunk ${this.activeGenJob?.cq},${this.activeGenJob?.cr}`);
             if (performance.now() - startTime >= maxTimeMs) return; // Yield frame
         }
 
@@ -229,7 +238,7 @@ export class ChunkSystem {
                 .finally(() => {
                     this.isLoadingDB = false;
                     const dbTime = performance.now() - dbStartTime;
-                    if (dbTime > 50) console.log(`[Perf] DB Load took ${dbTime.toFixed(1)}ms async`);
+                    if (dbTime > 50) console.log(`[FreezeTracker] [Perf] DB Load took ${dbTime.toFixed(1)}ms async for chunk ${item.cq},${item.cr}`);
                 });
             if (performance.now() - startTime >= maxTimeMs) return;
         }
@@ -248,24 +257,23 @@ export class ChunkSystem {
                 }
             }
             const meshTime = performance.now() - meshStartTime;
-            if (meshTime > 20) console.warn(`[PerfWarning] ChunkMeshBuilder hold took ${meshTime.toFixed(1)}ms (${meshIterCount} iters)`);
+            if (meshTime > 20) console.warn(`[FreezeTracker] [PerfWarning] ChunkMeshBuilder hold took ${meshTime.toFixed(1)}ms (${meshIterCount} iters) for chunk ${this.activeMeshJob?.chunk?.cq},${this.activeMeshJob?.chunk?.cr}`);
             if (performance.now() - startTime >= maxTimeMs) return; // Yield frame
         }
 
         // Priority 2: Pick a new chunk to mesh
         if (!this.activeMeshJob && !this.activeGenJob) {
-            for (const chunk of this.chunks.values()) {
-                if (chunk.isDirty) {
-                    this.rebuildChunkMesh(chunk);
-                    break; // Just start one mesh job
-                }
+            if (this.dirtyChunks.size > 0) {
+                const chunk = this.dirtyChunks.values().next().value;
+                this.dirtyChunks.delete(chunk);
+                this.rebuildChunkMesh(chunk);
             }
-            if (performance.now() - startTime > 10) console.warn(`[PerfWarning] Chunk dirty-scan took ${(performance.now() - startTime).toFixed(1)}ms!`);
         }
     }
 
     rebuildChunkMesh(chunk) {
         chunk.isDirty = false; // Mark clean so we don't pick it again while building
+        this.dirtyChunks.delete(chunk);
 
         this.activeMeshJob = {
             generator: this.meshBuilder.buildChunkMeshGenerator(chunk, this.blockSystem, this),
@@ -289,7 +297,7 @@ export class ChunkSystem {
 
     dirtyAllChunks() {
         for (const chunk of this.chunks.values()) {
-            chunk.isDirty = true;
+            this.markChunkDirty(chunk);
         }
     }
 
@@ -339,6 +347,7 @@ export class ChunkSystem {
         const lr = globalR - (cr * CHUNK_SIZE);
 
         if (chunk.setLight(lq, lr, y, value)) {
+            this.markChunkDirty(chunk);
             // Update neighbors if on the edge
             if (lq === 0) this._dirtyChunk(cq - 1, cr);
             if (lq === CHUNK_SIZE - 1) this._dirtyChunk(cq + 1, cr);
@@ -351,7 +360,7 @@ export class ChunkSystem {
 
     _dirtyChunk(cq, cr) {
         const chunk = this.chunks.get(this.getChunkKey(cq, cr));
-        if (chunk) chunk.isDirty = true;
+        if (chunk) this.markChunkDirty(chunk);
     }
 
     // ─── Debounced Save System ───

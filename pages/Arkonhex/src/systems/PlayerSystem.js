@@ -83,10 +83,17 @@ export class PlayerSystem {
     update(delta, time) {
         if (!this.input.isLocked) return;
 
+        const startPerf = performance.now();
+
         this.updateMouseLook();
         this.updateMovement(delta);
         this.updateHotbarKeys();
         this.updateInteraction(delta);
+
+        const updateTime = performance.now() - startPerf;
+        if (updateTime > 5) {
+            console.warn(`[FreezeTracker] PlayerSystem update took ${updateTime.toFixed(2)}ms`);
+        }
 
         // P key — place waypoint
         if (this.input.consumeKey('KeyP') && this.engine.waypointManager) {
@@ -279,6 +286,7 @@ export class PlayerSystem {
             this.physics.gravity = -30;
         }
 
+        const physicsStart = performance.now();
         // Apply physics
         const result = this.physics.resolveCollision(
             this.position,
@@ -287,6 +295,10 @@ export class PlayerSystem {
             this.playerHeight,
             delta
         );
+        const physicsTime = performance.now() - physicsStart;
+        if (physicsTime > 3) {
+            console.warn(`[FreezeTracker] Physics collision resolution took ${physicsTime.toFixed(2)}ms`);
+        }
 
         this.onGround = result.onGround;
 

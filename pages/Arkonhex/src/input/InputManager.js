@@ -8,6 +8,7 @@ export class InputManager {
         this.movementY = 0;
         this.wheelDeltaY = 0;
         this.isLocked = false;
+        this.movementIntent = false;
 
         this.initEventListeners();
     }
@@ -15,6 +16,17 @@ export class InputManager {
     initEventListeners() {
         document.addEventListener('keydown', (e) => {
             this.keys.add(e.code);
+
+            // Track if user is trying to move while frozen
+            if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
+                this.movementIntent = true;
+                if (this.engine.isRunning && !this.engine.chunksReady) {
+                    console.warn(`[FreezeTracker] Movement key ${e.code} pressed, but GAME IS FROZEN (chunksReady=false). Player cannot move.`);
+                } else if (!this.isLocked) {
+                    console.log(`[FreezeTracker] Movement key ${e.code} pressed, but pointer is not locked.`);
+                }
+            }
+
             if (e.code === 'KeyE' || e.code === 'Escape') {
                 if (this.isLocked) {
                     document.exitPointerLock();
@@ -39,7 +51,12 @@ export class InputManager {
                 }
             }
         });
-        document.addEventListener('keyup', (e) => this.keys.delete(e.code));
+        document.addEventListener('keyup', (e) => {
+            this.keys.delete(e.code);
+            if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
+                this.movementIntent = false;
+            }
+        });
 
         document.addEventListener('mousedown', (e) => {
             if (this.isLocked) {
