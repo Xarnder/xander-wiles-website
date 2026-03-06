@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const API_KEY = 'AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk';
 
     let extractedVideos = []; // Store videos for download
+    let playlistTitle = 'youtube_playlist'; // Default title
 
     console.log("App Initialized. Waiting for user input.");
 
@@ -48,6 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Starting fetch for Playlist ID: ${playlistId}`);
 
         try {
+            // Fetch playlist metadata (title)
+            playlistTitle = await fetchPlaylistMetadata(playlistId, apiKey);
+            console.log(`Playlist Title: ${playlistTitle}`);
+
             const videos = await fetchAllPlaylistVideos(playlistId, apiKey);
 
             if (videos.length === 0) {
@@ -147,6 +152,24 @@ document.addEventListener('DOMContentLoaded', () => {
         } while (nextPageToken);
 
         return videos;
+    }
+
+    // Helper: Fetch Playlist Metadata (Title)
+    async function fetchPlaylistMetadata(playlistId, apiKey) {
+        const url = 'https://www.googleapis.com/youtube/v3/playlists';
+        const params = new URLSearchParams({
+            part: 'snippet',
+            id: playlistId,
+            key: apiKey
+        });
+
+        const response = await fetch(`${url}?${params}`);
+        const data = await response.json();
+
+        if (response.ok && data.items && data.items.length > 0) {
+            return data.items[0].snippet.title;
+        }
+        return 'youtube_playlist';
     }
 
     // Helper: Generate and Download CSV
@@ -351,7 +374,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function exportAllQRs() {
         const zip = new JSZip();
-        const folderName = `youtube_qr_codes_${new Date().toISOString().slice(0, 10)}`;
+        const safePlaylistTitle = playlistTitle.replace(/[/\\?%*:|"<>]/g, '-').substring(0, 100);
+        const folderName = `${safePlaylistTitle}_qr_codes`;
         const qrFolder = zip.folder(folderName);
 
         showStatus(`Generating QR ZIP... Progress: 0/${extractedVideos.length}`, "loading");
@@ -362,6 +386,52 @@ document.addEventListener('DOMContentLoaded', () => {
         tempContainer.style.position = 'absolute';
         tempContainer.style.left = '-9999px';
         document.body.appendChild(tempContainer);
+
+        // Include the Playlist (Big) QR Code as JPG
+        const playlistUrl = playlistInput.value.trim();
+        if (playlistUrl) {
+            const bigQrDiv = document.createElement('div');
+            tempContainer.appendChild(bigQrDiv);
+
+            new QRCode(bigQrDiv, {
+                text: playlistUrl,
+                width: 1000,
+                height: 1000,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            // Wait for render
+            await new Promise(r => setTimeout(r, 200));
+
+            const bigQrImg = bigQrDiv.querySelector('img');
+            const bigQrCanvas = bigQrDiv.querySelector('canvas');
+            const bigSource = (bigQrImg && bigQrImg.src) ? bigQrImg : bigQrCanvas;
+
+            // Final Canvas for Big QR (Adding Title Label)
+            const finalBigCanvas = document.createElement('canvas');
+            const fbcCtx = finalBigCanvas.getContext('2d');
+            const bigMargin = 60;
+            const bigTextHeight = 120;
+            finalBigCanvas.width = 1000 + (bigMargin * 2);
+            finalBigCanvas.height = 1000 + bigTextHeight + (bigMargin * 2);
+
+            fbcCtx.fillStyle = "#ffffff";
+            fbcCtx.fillRect(0, 0, finalBigCanvas.width, finalBigCanvas.height);
+
+            fbcCtx.fillStyle = "#000000";
+            fbcCtx.textAlign = "center";
+            fbcCtx.font = "bold 48px Segoe UI, Arial";
+            fbcCtx.fillText(playlistTitle, finalBigCanvas.width / 2, bigMargin + 60);
+
+            fbcCtx.drawImage(bigSource, bigMargin, bigMargin + bigTextHeight, 1000, 1000);
+
+            // Export as JPG (quality 0.9)
+            const bigBlob = await new Promise(resolve => finalBigCanvas.toBlob(resolve, 'image/jpeg', 0.9));
+            qrFolder.file("00_PLAYLIST_QR_CODE.jpg", bigBlob);
+            tempContainer.removeChild(bigQrDiv);
+        }
 
         for (let i = 0; i < extractedVideos.length; i++) {
             const video = extractedVideos[i];
@@ -441,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const content = await zip.generateAsync({ type: "blob" });
-            const zipFilename = `youtube_qrs_${new Date().getTime()}.zip`;
+            const zipFilename = `${safePlaylistTitle}_qrs.zip`;
 
             const link = document.createElement("a");
             link.href = URL.createObjectURL(content);
