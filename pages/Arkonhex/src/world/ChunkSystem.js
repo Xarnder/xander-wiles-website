@@ -20,6 +20,8 @@ export class ChunkSystem {
         this.activeGenJob = null;
         this.activeMeshJob = null;
 
+        this.enableFlyInAnimation = true; // Default to true, updated by UI Settings
+
         this.renderDistance = 8; // Expanded for further view distance
         this.lodDistance = 100;    // Increased above renderDistance to disable LOD flat rendering completely
 
@@ -312,7 +314,7 @@ export class ChunkSystem {
         if (mesh) {
             chunk.mesh = mesh;
 
-            if (isNewSpawn && this.engine.chunksReady) {
+            if (isNewSpawn && this.engine.chunksReady && this.enableFlyInAnimation) {
                 // Fly-in effect for newly generated chunks during active gameplay
                 chunk.currentY = -150;
                 chunk.isAnimating = true;

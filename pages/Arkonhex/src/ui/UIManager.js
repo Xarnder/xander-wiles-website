@@ -113,6 +113,18 @@ export class UIManager {
             }, { signal: this.abortController.signal });
         }
 
+        const animEnableToggle = document.getElementById('anim-enable-toggle');
+        if (animEnableToggle) {
+            // Wait for Engine or ChunkSystem to exist. ChunkSystem initializes on init().
+            // We wait to read default property
+            animEnableToggle.checked = true; // We default true, or check from localStorage if added
+            animEnableToggle.addEventListener('change', (e) => {
+                if (this.playerSystem.chunkSystem) {
+                    this.playerSystem.chunkSystem.enableFlyInAnimation = e.target.checked;
+                }
+            }, { signal: this.abortController.signal });
+        }
+
         const fovSlider = document.getElementById('fov-slider');
         const fovValDisplay = document.getElementById('fov-val');
 
