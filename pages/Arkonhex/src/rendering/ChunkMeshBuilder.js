@@ -564,7 +564,13 @@ export class ChunkMeshBuilder {
 
                 // Calculate exact seeded height, or flatten to 0.5 if it's Water
                 const blockAboveId = chunkSystem ? chunkSystem.getBlockGlobal(globalQ, globalR, block.y + 1) : 0;
-                const blockHeight = isTorch ? 0.8 : (chunk.isLOD ? 1.0 : (def.name === 'water' ? 0.5 : getSeededBlockHeight(globalQ, globalR, block.y, seed, blockAboveId, isSolidFn)));
+
+                // Determine actual height factoring in the Smooth Tool custom heights
+                let blockHeight = isTorch ? 0.8 : (chunk.isLOD ? 1.0 : (def.name === 'water' ? 0.5 : getSeededBlockHeight(globalQ, globalR, block.y, seed, blockAboveId, isSolidFn)));
+                const customHeightVal = chunkSystem ? chunkSystem.getHeightGlobal(globalQ, globalR, block.y) : 0;
+                if (customHeightVal > 0) {
+                    blockHeight = customHeightVal / 10.0;
+                }
 
                 // Top Face (Center + 6 corners = 6 triangles)
                 const topY = yOffset + blockHeight;
@@ -585,11 +591,27 @@ export class ChunkMeshBuilder {
                     const nTrans = nDef.transparent || nDef.translucent;
 
                     // SPECIAL LOGIC FOR VARIABLE HEIGHT BLOCKS
-                    // Only needed for horizontal side faces
-                    if (isSide && myHeight > 0.4) { // If I am taller than the minimum
+                    if (!isSide) {
+                        if (gy > block.y && myHeight < 1.0) {
+                            return true; // Gap above me, so render my top face
+                        } else if (gy < block.y) {
+                            const nBlockAboveId = chunkSystem.getBlockGlobal(gq, gr, gy + 1);
+                            let nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seed, nBlockAboveId, isSolidFn));
+                            const nCustomHeightVal = chunkSystem.getHeightGlobal(gq, gr, gy);
+                            if (nCustomHeightVal > 0) {
+                                nHeight = nCustomHeightVal / 10.0;
+                            }
+                            // Gap below me, so render my bottom face
+                            if (nHeight < 1.0) return true;
+                        }
+                    } else if (isSide) { // Allow all heights to render side faces appropriately
                         // Get the exact height of the neighbor block to see if it covers me
                         const nBlockAboveId = chunkSystem.getBlockGlobal(gq, gr, gy + 1);
-                        const nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seed, nBlockAboveId, isSolidFn));
+                        let nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seed, nBlockAboveId, isSolidFn));
+                        const nCustomHeightVal = chunkSystem.getHeightGlobal(gq, gr, gy);
+                        if (nCustomHeightVal > 0) {
+                            nHeight = nCustomHeightVal / 10.0;
+                        }
 
                         // If my neighbor is solid but shorter than me, part of my upper side will be exposed!
                         if (!nTrans && nHeight < myHeight) {

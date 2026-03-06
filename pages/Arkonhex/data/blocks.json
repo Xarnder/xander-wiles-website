@@ -24,7 +24,7 @@
         "baseColor": "gray",
         "hardness": 2.0,
         "placeSound": "stone_place",
-        "destroySound": "break"
+        "destroySound": "stone_break"
     },
     {
         "id": 4,
@@ -33,7 +33,7 @@
         "baseColor": "yellow",
         "hardness": 0.5,
         "placeSound": "sand_place",
-        "destroySound": "break"
+        "destroySound": "sand_break"
     },
     {
         "id": 5,
@@ -61,7 +61,7 @@
         "baseColor": "dark_green",
         "hardness": 0.2,
         "placeSound": "leaves_place",
-        "destroySound": "break"
+        "destroySound": "leaves_break"
     },
     {
         "id": 8,
@@ -70,7 +70,7 @@
         "baseColor": "black",
         "hardness": -1.0,
         "placeSound": "stone_place",
-        "destroySound": "break"
+        "destroySound": "stone_break"
     },
     {
         "id": 9,
@@ -80,7 +80,7 @@
         "hardness": 0.5,
         "transparent": true,
         "placeSound": "glass_place",
-        "destroySound": "break"
+        "destroySound": "glass_break"
     },
     {
         "id": 10,

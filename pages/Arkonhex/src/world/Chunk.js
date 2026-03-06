@@ -14,6 +14,9 @@ export class Chunk {
         // Light channel: 0 = dark, 15 = fully lit
         this.light = new Uint8Array(CHUNK_AREA * CHUNK_HEIGHT);
 
+        // Custom heights: 0 = default, 1..10 = 0.1..1.0
+        this.heights = new Uint8Array(CHUNK_AREA * CHUNK_HEIGHT);
+
         this.isDirty = true; // Needs remesh
         this.isModified = false; // Tracks if player has edited blocks (needs save)
         this.isLOD = false; // Start opaque
@@ -62,6 +65,25 @@ export class Chunk {
             if (this.light[index] !== value) {
                 this.light[index] = value;
                 this.isDirty = true;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    getHeight(lq, lr, y) {
+        const index = this.getIndex(lq, lr, y);
+        if (index === -1) return 0; // Default height for out of bounds
+        return this.heights[index];
+    }
+
+    setHeight(lq, lr, y, value) {
+        const index = this.getIndex(lq, lr, y);
+        if (index !== -1) {
+            if (this.heights[index] !== value) {
+                this.heights[index] = value;
+                this.isDirty = true;
+                this.isModified = true;
             }
             return true;
         }

@@ -29,6 +29,7 @@ export async function saveChunk(worldId, cq, cr, chunk) {
     const db = await openDB();
     const compressedBlocks = rleEncode(chunk.blocks);
     const compressedLight = rleEncode(chunk.light);
+    const compressedHeights = rleEncode(chunk.heights);
 
     const record = {
         key: chunkKey(worldId, cq, cr),
@@ -36,7 +37,8 @@ export async function saveChunk(worldId, cq, cr, chunk) {
         cq,
         cr,
         data: compressedBlocks,   // Legacy column, keep for backward compatibility
-        lightData: compressedLight // New column
+        lightData: compressedLight, // New column
+        heightData: compressedHeights // New column for Smooth Tool
     };
 
     const tx = db.transaction('chunks', 'readwrite');
@@ -65,8 +67,9 @@ export async function loadChunk(worldId, cq, cr) {
 
     const blocks = rleDecode(new Uint8Array(record.data), CHUNK_VOLUME);
     const light = record.lightData ? rleDecode(new Uint8Array(record.lightData), CHUNK_VOLUME) : null;
+    const heights = record.heightData ? rleDecode(new Uint8Array(record.heightData), CHUNK_VOLUME) : null;
 
-    return { blocks, light };
+    return { blocks, light, heights };
 }
 
 /**

@@ -27,6 +27,10 @@ export class PlayerSystem {
         this.selectedHotbarSlot = 0;
         this.selectedBlockId = 1;
 
+        // Smooth Tool state
+        this.activeTool = 'block'; // 'block' or 'smooth'
+        this.smoothHeight = 10; // 1-10 mapped to 0.1-1.0
+
         // Hold-to-place/break timing
         this.blockInitialDelay = 0.4;  // s (default 400ms)
         this.blockRepeatDelay = 0.15;  // s (default 150ms)
@@ -335,12 +339,30 @@ export class PlayerSystem {
             'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
             'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
         ];
+
+        // Toggle tool mode
+        if (this.input.consumeKey('KeyY')) {
+            this.activeTool = this.activeTool === 'block' ? 'smooth' : 'block';
+            if (this.engine.uiManager) {
+                this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
+            }
+        }
+
         for (let i = 0; i < digitCodes.length; i++) {
             if (this.input.consumeKey(digitCodes[i])) {
-                this.selectedHotbarSlot = i;
-                this.selectedBlockId = i + 1;
-                if (this.engine.uiManager) {
-                    this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
+                if (this.activeTool === 'smooth') {
+                    // Update smooth height (1-9 map to index+1, 0 maps to index 9 + 1 = 10)
+                    this.smoothHeight = i + 1;
+                    if (this.engine.uiManager) {
+                        this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
+                    }
+                } else {
+                    // Normal hotbar
+                    this.selectedHotbarSlot = i;
+                    this.selectedBlockId = i + 1;
+                    if (this.engine.uiManager) {
+                        this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
+                    }
                 }
                 break;
             }
@@ -349,15 +371,26 @@ export class PlayerSystem {
         // Scroll wheel (delta normalized to 1 or -1 in InputManager)
         const wheelDelta = this.input.getWheelDelta();
         if (wheelDelta !== 0) {
-            if (wheelDelta > 0) {
-                this.selectedHotbarSlot = (this.selectedHotbarSlot + 1) % 10;
+            if (this.activeTool === 'smooth') {
+                if (wheelDelta > 0) {
+                    this.smoothHeight = Math.min(10, this.smoothHeight + 1);
+                } else {
+                    this.smoothHeight = Math.max(1, this.smoothHeight - 1);
+                }
+                if (this.engine.uiManager) {
+                    this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
+                }
             } else {
-                this.selectedHotbarSlot = (this.selectedHotbarSlot - 1 + 10) % 10;
-            }
-            this.selectedBlockId = this.selectedHotbarSlot + 1;
+                if (wheelDelta > 0) {
+                    this.selectedHotbarSlot = (this.selectedHotbarSlot + 1) % 10;
+                } else {
+                    this.selectedHotbarSlot = (this.selectedHotbarSlot - 1 + 10) % 10;
+                }
+                this.selectedBlockId = this.selectedHotbarSlot + 1;
 
-            if (this.engine.uiManager) {
-                this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
+                if (this.engine.uiManager) {
+                    this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
+                }
             }
         }
     }
@@ -404,11 +437,18 @@ export class PlayerSystem {
             const breakHeld = this.input.isButtonDown(0);
             const placeHeld = this.input.isButtonDown(2);
 
-            // BREAK
+            // BREAK / LEFT CLICK
             if (breakHeld) {
                 if (this.breakHoldCount === 0) {
-                    // Phase 0: instant first break
-                    this.breakBlock(q, r, y);
+                    if (this.activeTool === 'smooth') {
+                        // Left click in smooth mode sets the height of the looked-at block
+                        if (this.chunkSystem.getBlockGlobal(q, r, y) !== 0) {
+                            this.chunkSystem.setHeightGlobal(q, r, y, this.smoothHeight);
+                        }
+                    } else {
+                        // Phase 0: instant first break
+                        this.breakBlock(q, r, y);
+                    }
                     this.breakHoldCount = 1;
                     this.breakHoldTimer = 0;
                 } else {
@@ -419,7 +459,13 @@ export class PlayerSystem {
                     if (this.breakHoldTimer >= threshold) {
                         this.breakHoldTimer = 0;
                         this.breakHoldCount++;
-                        this.breakBlock(q, r, y);
+                        if (this.activeTool === 'smooth') {
+                            if (this.chunkSystem.getBlockGlobal(q, r, y) !== 0) {
+                                this.chunkSystem.setHeightGlobal(q, r, y, this.smoothHeight);
+                            }
+                        } else {
+                            this.breakBlock(q, r, y);
+                        }
                     }
                 }
             } else {
@@ -427,7 +473,7 @@ export class PlayerSystem {
                 this.breakHoldCount = 0;
             }
 
-            // PLACE
+            // PLACE / RIGHT CLICK
             if (placeHeld) {
                 // Compute target placement position once
                 const norm = closestIntersection.face.normal;
@@ -446,6 +492,9 @@ export class PlayerSystem {
                 if (this.placeHoldCount === 0) {
                     // Phase 0: instant first place
                     this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                    if (this.activeTool === 'smooth') {
+                        this.chunkSystem.setHeightGlobal(placeQ, placeR, placeY, this.smoothHeight);
+                    }
                     this.placeHoldCount = 1;
                     this.placeHoldTimer = 0;
                 } else {
@@ -457,6 +506,9 @@ export class PlayerSystem {
                         this.placeHoldTimer = 0;
                         this.placeHoldCount++;
                         this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                        if (this.activeTool === 'smooth') {
+                            this.chunkSystem.setHeightGlobal(placeQ, placeR, placeY, this.smoothHeight);
+                        }
                     }
                 }
             } else {
@@ -476,6 +528,7 @@ export class PlayerSystem {
             const destroySound = blockDef ? blockDef.destroySound : 'break';
 
             if (this.setBlockGlobal(q, r, y, 0)) { // Air
+                this.chunkSystem.setHeightGlobal(q, r, y, 0); // Reset custom height
                 this.audioManager.playBlockSound('destroy', destroySound);
             }
         }
@@ -505,6 +558,7 @@ export class PlayerSystem {
 
         const success = this.setBlockGlobal(q, r, y, id);
         if (success) {
+            this.chunkSystem.setHeightGlobal(q, r, y, 0); // Reset custom height before optional smooth override
             const blockDef = this.chunkSystem.engine.blockSystem.getBlockDef(id);
             const placeSound = blockDef ? blockDef.placeSound : 'place';
             this.audioManager.playBlockSound('place', placeSound);

@@ -52,6 +52,13 @@
         <div id="hotbar" class="hotbar">
             <!-- Items injected by UI manager -->
         </div>
+        <div id="smooth-tool-icon"
+            style="display: none; position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; background: rgba(0,0,0,0.6); border: 3px solid #00cec9; border-radius: 8px; align-items: center; justify-content: center; font-size: 32px; box-shadow: 0 0 15px rgba(0, 206, 201, 0.5); z-index: 100;">
+            ⛏️
+        </div>
+        <div id="smooth-tool-display"
+            style="display: none; position: absolute; bottom: 95px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); color: #fff; padding: 5px 15px; border-radius: 5px; font-weight: bold; pointer-events: none; z-index: 100;">
+            Smooth Tool: 1.0</div>
 
         <div id="start-screen" class="overlay-screen">
             <h1>ARKONHEX</h1>
@@ -360,6 +367,14 @@
                         <tr>
                             <td style="padding:5px 8px;"><kbd>P</kbd></td>
                             <td style="padding:5px 8px;">Place Waypoint</td>
+                        </tr>
+                        <tr style="border-top: 1px solid rgba(255,255,255,0.1);">
+                            <td style="padding:5px 8px;"><kbd>Y</kbd></td>
+                            <td style="padding:5px 8px;"><b>Toggle Smooth Tool</b></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>1 – 0</kbd></td>
+                            <td style="padding:5px 8px;">Set Smooth Height (0.1 - 1.0)</td>
                         </tr>
                     </tbody>
                 </table>

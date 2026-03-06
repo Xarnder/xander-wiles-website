@@ -12,6 +12,7 @@ export class UIManager {
         this.seedElement = document.getElementById('seed-display');
         this.selectedBlockElement = document.getElementById('selected-block-info');
         this.hotbarElement = document.getElementById('hotbar');
+        this.smoothToolDisplay = document.getElementById('smooth-tool-display');
 
         this.dateElement = document.getElementById('system-date');
         this.timeElement = document.getElementById('in-game-time');
@@ -664,6 +665,29 @@ export class UIManager {
         // Show block name popup above hotbar
         const blockId = slotIndex + 1;
         this.showBlockNamePopup(blockId);
+    }
+
+    /**
+     * Updates the UI to show the current active tool and its parameters.
+     * @param {string} tool - 'block' or 'smooth'
+     * @param {number} smoothHeight - 1 to 10
+     */
+    updateToolDisplay(tool, smoothHeight) {
+        if (!this.smoothToolDisplay) return;
+
+        const icon = document.getElementById('smooth-tool-icon');
+
+        if (tool === 'smooth') {
+            const displayHeight = (smoothHeight / 10.0).toFixed(1);
+            this.smoothToolDisplay.innerText = `Smooth Tool: ${displayHeight}`;
+            this.smoothToolDisplay.style.display = 'block';
+            if (this.hotbarElement) this.hotbarElement.style.display = 'none';
+            if (icon) icon.style.display = 'flex';
+        } else {
+            this.smoothToolDisplay.style.display = 'none';
+            if (this.hotbarElement) this.hotbarElement.style.display = 'flex';
+            if (icon) icon.style.display = 'none';
+        }
     }
 
     /**
