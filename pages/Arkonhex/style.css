@@ -90,9 +90,10 @@ body {
     z-index: 100;
 }
 
-#debug-overlay,
-#top-right-info {
+#debug-overlay {
     position: absolute;
+    top: 35px;
+    left: 10px;
     background: var(--ui-bg);
     padding: 10px;
     border-radius: 4px;
@@ -102,19 +103,7 @@ body {
     text-shadow: 1px 1px 0 #000;
 }
 
-#debug-overlay {
-    top: 35px;
-    left: 10px;
-}
-
-#top-right-info {
-    top: 10px;
-    right: 10px;
-    z-index: 100;
-}
-
-#debug-overlay>div,
-#top-right-info>div {
+#debug-overlay>div {
     margin-bottom: 4px;
 }
 
@@ -444,10 +433,10 @@ body {
 #controls-toast {
     position: fixed;
     top: 20px;
-    left: 20px;
-    /* top-left corner */
-    right: auto;
-    transform: translateX(-120%);
+    right: 20px;
+    /* top-right corner */
+    left: auto;
+    transform: translateX(120%);
     background: rgba(10, 15, 25, 0.55);
     border: 1px solid rgba(0, 206, 201, 0.35);
     border-radius: 12px;
