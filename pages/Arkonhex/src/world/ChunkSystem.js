@@ -21,7 +21,7 @@ export class ChunkSystem {
         this.activeMeshJob = null;
 
         this.renderDistance = 8; // Expanded for further view distance
-        this.lodDistance = 4;    // Blocks past this chunk distance render flat to save geometry
+        this.lodDistance = 100;    // Increased above renderDistance to disable LOD flat rendering completely
 
         // Debounced save queue — collects modified chunks, flushes every 5 seconds
         this.saveQueue = new Set(); // Set of chunk keys that need saving
@@ -269,6 +269,23 @@ export class ChunkSystem {
                 this.rebuildChunkMesh(chunk);
             }
         }
+
+        // 3. Animate currently generating chunks
+        // Delta time for frame-rate independent physics
+        for (const chunk of this.chunks.values()) {
+            if (chunk.isAnimating && chunk.mesh) {
+                // Lerp towards 0
+                chunk.currentY += (chunk.targetY - chunk.currentY) * 5 * delta;
+
+                // Snap if close enough
+                if (Math.abs(chunk.targetY - chunk.currentY) < 0.1) {
+                    chunk.currentY = chunk.targetY;
+                    chunk.isAnimating = false; // Done animating
+                }
+
+                chunk.mesh.position.y = chunk.currentY;
+            }
+        }
     }
 
     rebuildChunkMesh(chunk) {
@@ -282,6 +299,9 @@ export class ChunkSystem {
     }
 
     _finishChunkMesh(chunk, mesh) {
+        // Was this an existing mesh update or a fresh insertion?
+        const isNewSpawn = (chunk.mesh === null);
+
         if (chunk.mesh) {
             this.engine.scene.remove(chunk.mesh);
             chunk.mesh.traverse((child) => {
@@ -291,6 +311,22 @@ export class ChunkSystem {
 
         if (mesh) {
             chunk.mesh = mesh;
+
+            if (isNewSpawn && this.engine.chunksReady) {
+                // Fly-in effect for newly generated chunks during active gameplay
+                chunk.currentY = -150;
+                chunk.isAnimating = true;
+                chunk.mesh.position.y = chunk.currentY;
+            } else if (!this.engine.chunksReady) {
+                // During initial loading screen, just snap them directly to position 0
+                chunk.currentY = 0;
+                chunk.isAnimating = false;
+                chunk.mesh.position.y = 0;
+            } else {
+                // Just an existing mesh update (like placing a block), maintain height
+                chunk.mesh.position.y = chunk.currentY;
+            }
+
             this.engine.scene.add(mesh);
         }
     }

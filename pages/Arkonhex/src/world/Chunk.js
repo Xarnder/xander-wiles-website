@@ -16,6 +16,13 @@ export class Chunk {
 
         this.isDirty = true; // Needs remesh
         this.isModified = false; // Tracks if player has edited blocks (needs save)
+        this.isLOD = false; // Start opaque
+
+        // Animation state
+        this.targetY = 0;
+        this.currentY = -150; // Fly in from 150 blocks below the world
+        this.isAnimating = false; // We only start animating when the mesh is built
+
         this.mesh = null;    // The THREE.Group or Mesh holding the rendering
     }
 
