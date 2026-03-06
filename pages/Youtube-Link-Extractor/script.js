@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportAllQRsBtn = document.getElementById('exportAllQRsBtn');
     const closeModal = document.querySelector('.close-modal');
     const bigQRContainer = document.getElementById('bigQRCode');
+    const progressBarContainer = document.getElementById('progressBarContainer');
+    const progressBar = document.getElementById('progressBar');
 
     // TODO: Replace with your actual API Key and restrict it in Google Cloud Console
     const API_KEY = 'AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk';
@@ -392,6 +394,10 @@ document.addEventListener('DOMContentLoaded', () => {
         showStatus(`Generating QR ZIP... Progress: 0/${extractedVideos.length}`, "loading");
         exportAllQRsBtn.disabled = true;
 
+        // Show progress bar
+        progressBarContainer.classList.remove('hidden');
+        progressBar.style.width = '0%';
+
         // Hidden container for temporary QR generation
         const tempContainer = document.createElement('div');
         tempContainer.style.position = 'absolute';
@@ -509,6 +515,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             tempContainer.removeChild(qrDiv);
+            const progress = Math.round(((i + 1) / extractedVideos.length) * 100);
+            progressBar.style.width = `${progress}%`;
             showStatus(`Generating QR ZIP... Progress: ${i + 1}/${extractedVideos.length}`, "loading");
         }
 
@@ -542,6 +550,11 @@ document.addEventListener('DOMContentLoaded', () => {
             showStatus("Failed to generate ZIP file.", "error");
         } finally {
             exportAllQRsBtn.disabled = false;
+            // Hide progress bar after a short delay
+            setTimeout(() => {
+                progressBarContainer.classList.add('hidden');
+                progressBar.style.width = '0%';
+            }, 2000);
         }
     }
 
