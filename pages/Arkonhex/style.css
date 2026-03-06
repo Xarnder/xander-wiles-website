@@ -107,6 +107,30 @@ body {
     margin-bottom: 4px;
 }
 
+#block-name-popup {
+    position: absolute;
+    bottom: calc(20px + 64px + 20px);
+    /* sit above the hotbar */
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.65);
+    color: white;
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 6px 24px;
+    border-radius: 10px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    backdrop-filter: blur(6px);
+    white-space: nowrap;
+}
+
+#block-name-popup.visible {
+    opacity: 1;
+}
+
 .hotbar {
     position: absolute;
     bottom: 20px;
@@ -141,8 +165,11 @@ body {
 .hotbar-slot-inner {
     width: 40px;
     height: 40px;
-    border-radius: 5px;
-    /* Placeholder for block icon */
+    border-radius: 3px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .overlay-screen {

@@ -1,3 +1,5 @@
+import { renderBlockIcon } from './BlockIconRenderer.js';
+
 export class UIManager {
     constructor(engine, playerSystem, worldGen, blockSystem) {
         this.engine = engine;
@@ -624,7 +626,7 @@ export class UIManager {
     }
 
     initHotbar() {
-        // Create 10 slots
+        // Create 10 slots with isometric block icon previews
         for (let i = 1; i <= 10; i++) {
             const slot = document.createElement('div');
             slot.className = 'hotbar-slot' + (i === 1 ? ' active' : '');
@@ -632,14 +634,15 @@ export class UIManager {
             const inner = document.createElement('div');
             inner.className = 'hotbar-slot-inner';
 
-            // Map 1-9 to first 9 blocks in our palette
+            // Map 1-10 to block IDs
             const blockDef = this.blockSystem.getBlockDef(i);
             if (blockDef) {
-                // The palette now stores the raw hex strings from the JSON
-                const hexColor = this.blockSystem.palette.get(blockDef.topColor) || '#ffffff';
-                inner.style.backgroundColor = hexColor;
+                const iconCanvas = renderBlockIcon(blockDef, this.blockSystem.palette, 54);
+                iconCanvas.style.width = '100%';
+                iconCanvas.style.height = '100%';
+                inner.appendChild(iconCanvas);
             } else {
-                inner.style.backgroundColor = 'transparent';
+                inner.style.backgroundColor = 'rgba(255,255,255,0.05)';
             }
 
             slot.appendChild(inner);
@@ -656,6 +659,30 @@ export class UIManager {
         slots.forEach((slot, i) => {
             slot.classList.toggle('active', i === slotIndex);
         });
+
+        // Show block name popup above hotbar
+        const blockId = slotIndex + 1;
+        this.showBlockNamePopup(blockId);
+    }
+
+    /**
+     * Show a temporary popup above the hotbar displaying the selected block name.
+     */
+    showBlockNamePopup(blockId) {
+        const blockDef = this.blockSystem.getBlockDef(blockId);
+        if (!blockDef) return;
+
+        const name = blockDef.name.charAt(0).toUpperCase() + blockDef.name.slice(1);
+        let popup = document.getElementById('block-name-popup');
+        if (!popup) return;
+
+        popup.textContent = name;
+        popup.classList.add('visible');
+
+        clearTimeout(this._blockNameTimeout);
+        this._blockNameTimeout = setTimeout(() => {
+            popup.classList.remove('visible');
+        }, 2000);
     }
 
     /**
