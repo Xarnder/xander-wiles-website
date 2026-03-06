@@ -813,6 +813,47 @@ export class UIManager {
 
             this.graphicsElement.innerText = `Graphics: ${this.highGraphics ? 'High' : 'Low'} (Press G to toggle)`;
         }
+
+        // ─── Dynamic Controls Toast Tracking ───
+        if (this.activeToastControls && !this.toastCountdownStarted) {
+            const im = this.engine.inputManager;
+            const tc = this.activeToastControls;
+
+            const markDone = (key) => {
+                if (!tc[key]) {
+                    tc[key] = true;
+                    const el = document.getElementById(`toast-inst-${key}`);
+                    if (el) el.classList.add('completed');
+                }
+            };
+
+            // WASD Move
+            if (im.keys.has('KeyW') || im.keys.has('KeyA') || im.keys.has('KeyS') || im.keys.has('KeyD')) markDone('move');
+            // Jump
+            if (im.keys.has('Space')) markDone('jump');
+            // Sprint
+            if (im.keys.has('ShiftLeft') || im.keys.has('ShiftRight')) markDone('sprint');
+            // Break (left click)
+            if (im.buttons.has(0)) markDone('break');
+            // Place (right click)
+            if (im.buttons.has(2)) markDone('place');
+            // Menu
+            if (im.keys.has('KeyE')) markDone('menu');
+            // Fly
+            if (im.keys.has('KeyF')) markDone('fly');
+            // Zoom
+            if (im.keys.has('KeyC')) markDone('zoom');
+
+            // Check if all actions are done
+            const allDone = Object.values(tc).every(v => v === true);
+            if (allDone) {
+                this.toastCountdownStarted = true;
+                setTimeout(() => {
+                    const toast = document.getElementById('controls-toast');
+                    if (toast) toast.classList.remove('show');
+                }, 2000);
+            }
+        }
     }
 
     initWaypointMenu() {
@@ -851,10 +892,18 @@ export class UIManager {
         if (toast) {
             toast.classList.add('show');
 
-            // Hide after 8 seconds
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 8000);
+            // Set up state tracker for dynamic completion
+            this.activeToastControls = {
+                move: false,
+                jump: false,
+                sprint: false,
+                break: false,
+                place: false,
+                menu: false,
+                fly: false,
+                zoom: false
+            };
+            this.toastCountdownStarted = false;
         }
     }
 }
