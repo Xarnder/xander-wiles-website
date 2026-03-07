@@ -779,10 +779,19 @@ export class ChunkMeshBuilder {
                     flatInd.push(indArr[i][j] + vertexOffset);
                 }
 
-                flatPos.push(...posArr[i]);
-                flatNorm.push(...normArr[i]);
-                flatUv.push(...uvArr[i]);
-                flatLight.push(...lightArr[i]);
+                // Use classical loops instead of spread operator (...) to prevent 
+                // "RangeError: Maximum call stack size exceeded" on massive structures
+                const pArr = posArr[i];
+                for (let v = 0; v < pArr.length; v++) flatPos.push(pArr[v]);
+
+                const nArr = normArr[i];
+                for (let v = 0; v < nArr.length; v++) flatNorm.push(nArr[v]);
+
+                const uArr = uvArr[i];
+                for (let v = 0; v < uArr.length; v++) flatUv.push(uArr[v]);
+
+                const lArr = lightArr[i];
+                for (let v = 0; v < lArr.length; v++) flatLight.push(lArr[v]);
 
                 // Yield per material compiled to keep frame smooth
                 yield;

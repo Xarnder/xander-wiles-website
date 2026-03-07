@@ -153,6 +153,39 @@ export class WaypointManager {
     }
 
     /**
+     * Locate the absolutely nearest castle and create a waypoint for it.
+     */
+    async locateNearestCastle() {
+        if (!this.engine.worldGen || !this.engine.worldGen.castleGen) {
+            console.warn("[WaypointManager] Engine WorldGen or CastleGen not initialized.");
+            return null;
+        }
+
+        const playerQ = this.engine.playerSystem.q;
+        const playerR = this.engine.playerSystem.r;
+
+        // Find closest castle (default radius is 10 regions = ~640 chunks = huge distance)
+        const castleInfo = this.engine.worldGen.castleGen.findClosestCastle(playerQ, playerR);
+
+        if (!castleInfo) {
+            alert("No castle found nearby (within 10 regions). Try moving further out.");
+            return null;
+        }
+
+        // We have the Q/R axial coordinates, we need the World X/Z
+        const castlePos = axialToWorld(castleInfo.q, castleInfo.r);
+
+        // Find exact surface height so beam is anchored properly
+        const surfaceY = this.engine.worldGen.getSurfaceHeight(castleInfo.q, castleInfo.r);
+
+        castlePos.y = surfaceY;
+
+        // Create the waypoint
+        const wp = await this.createWaypoint(`Castle Gateway`, castlePos);
+        return wp;
+    }
+
+    /**
      * Remove all beams from the scene (used on world exit).
      */
     clearAll() {

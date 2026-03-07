@@ -1,54 +1,66 @@
 {
     "red": {
-        "color": "#ff4d4d",
+        "color": "#ff1a40",
         "opacity": 0.4
     },
     "orange": {
-        "color": "#ffb84d",
+        "color": "#ff5050",
         "opacity": 0.4
     },
     "yellow": {
-        "color": "#ffff4d",
+        "color": "#ffbaba",
         "opacity": 0.2
     },
     "green": {
-        "color": "#4dff4d",
+        "color": "#d96694",
         "opacity": 0.2
     },
     "blue": {
-        "color": "#4d4dff",
+        "color": "#22b5ff",
         "opacity": 0.4
     },
     "indigo": {
-        "color": "#b84dff",
+        "color": "#7620a2",
+        "opacity": 0.4
+    },
+    "light_indigo": {
+        "color": "#a865b5",
         "opacity": 0.4
     },
     "violet": {
-        "color": "#ff4dff",
+        "color": "#7723a4",
         "opacity": 0.4
     },
     "brown": {
-        "color": "#8b5a2b",
-        "opacity": 0.6
+        "color": "#584457",
+        "opacity": 0.17
     },
     "white": {
         "color": "#ffffff",
         "opacity": 0.3
     },
     "black": {
-        "color": "#222222",
+        "color": "#161021",
         "opacity": 0.8
     },
     "gray": {
-        "color": "#888888",
+        "color": "#56385d",
+        "opacity": 0.5
+    },
+    "light_gray": {
+        "color": "#875a80",
         "opacity": 0.5
     },
     "dark_green": {
-        "color": "#2d8a2d",
+        "color": "#2c1538",
         "opacity": 0.7
     },
     "dark_brown": {
-        "color": "#5c3a21",
+        "color": "#382030",
         "opacity": 0.7
+    },
+    "torch_flame": {
+        "color": "#ffeb3b",
+        "opacity": 0.9
     }
 }

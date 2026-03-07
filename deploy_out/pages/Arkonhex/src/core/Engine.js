@@ -12,6 +12,7 @@ import { CloudSystem } from '../rendering/CloudSystem.js';
 import { WorldSelectMenu } from '../ui/WorldSelectMenu.js';
 import { WaypointManager } from '../systems/WaypointManager.js';
 import { AudioManager } from '../systems/AudioManager.js';
+import { LightSystem } from '../systems/LightSystem.js';
 import { loadWorld as loadWorldMeta, savePlayerState, loadPlayerState } from '../storage/WorldManager.js';
 
 export class Engine {
@@ -27,6 +28,8 @@ export class Engine {
         // World save state
         this.activeWorldId = null;
         this.activeWorldMeta = null;
+        this.chunksReady = false;
+        this.initialChunkTotal = 0;
     }
 
     /**
@@ -36,35 +39,19 @@ export class Engine {
     async initCore() {
         console.log("Arkonhex Engine Initializing...");
 
-        const loadingText = document.getElementById('loading-text');
-        const loadingFill = document.getElementById('loading-bar-fill');
-        const loadingContainer = document.getElementById('loading-container');
-
-        const setProgress = async (text, percent) => {
-            if (loadingText) loadingText.innerText = text;
-            if (loadingFill) loadingFill.style.width = `${percent}%`;
-            console.log(`[Load] ${text}`);
-            return new Promise(resolve => setTimeout(resolve, 300));
-        };
-
         // 1. Core Data
-        await setProgress('Loading Core Data...', 20);
         this.blockSystem = new BlockSystem();
         await this.blockSystem.init();
 
         // 2. Rendering Base
-        await setProgress('Initializing Renderer...', 50);
         this.rendererSystem = new Renderer(this);
         this.lightingManager = new LightingManager(this);
 
         // 3. Input
-        await setProgress('Initializing Input...', 70);
         this.inputManager = new InputManager(this);
 
         // 4. Audio
         this.audioManager = new AudioManager(this);
-
-        await setProgress('Ready!', 100);
 
         // Hide the initial start/loading screen entirely
         const startScreen = document.getElementById('start-screen');
@@ -129,6 +116,8 @@ export class Engine {
         this.chunkSystem = new ChunkSystem(this, this.worldGen, this.blockSystem);
         await this.chunkSystem.init();
 
+        this.lightSystem = new LightSystem(this, this.chunkSystem, this.blockSystem);
+
         // 3. Physics
         await setProgress('Initializing Physics...', 60);
         this.physicsSystem = new PhysicsSystem(this, this.chunkSystem);
@@ -138,7 +127,8 @@ export class Engine {
         this.playerSystem = new PlayerSystem(this, this.inputManager, this.physicsSystem, this.chunkSystem);
 
         // 5. Restore player position if saved
-        const savedPlayer = await loadPlayerState(worldId);
+        this._lastSavedPlayer = await loadPlayerState(worldId);
+        const savedPlayer = this._lastSavedPlayer;
         if (savedPlayer && savedPlayer.position) {
             this.playerSystem.position.set(
                 savedPlayer.position[0],
@@ -152,6 +142,14 @@ export class Engine {
             // Update chunks around restored position
             const { q, r } = this._worldToAxial(this.playerSystem.position.x, this.playerSystem.position.z);
             this.chunkSystem.updateLoadedChunks(q, r);
+
+            // Restore time of day
+            if (savedPlayer.timeOfDay !== undefined && this.lightingManager) {
+                this.lightingManager.timeOfDay = savedPlayer.timeOfDay;
+            }
+            if (savedPlayer.cycleEnabled !== undefined && this.lightingManager) {
+                this.lightingManager.cycleEnabled = savedPlayer.cycleEnabled;
+            }
         }
 
         // 6. UI Overlay
@@ -167,21 +165,17 @@ export class Engine {
         this.waypointManager = new WaypointManager(this);
         await this.waypointManager.loadWaypoints(worldId);
 
-        // Hide ALL overlay screens — game is ready
-        if (startScreen) startScreen.classList.add('hidden');
-        if (loadingContainer) loadingContainer.style.display = 'none';
-        const worldSelectScreen = document.getElementById('world-select-screen');
-        if (worldSelectScreen) worldSelectScreen.classList.add('hidden');
+        // Keep loading screen visible — the game loop will hide it after initial chunks are built.
+        // Track how many chunks must be generated + built for the initial load.
+        this.chunksReady = false;
+        this.initialChunkTotal = this.chunkSystem.chunkGenQueue.length + this.chunkSystem.chunks.size;
+        if (this.initialChunkTotal === 0) this.initialChunkTotal = 1; // Prevent divide-by-zero
 
-        // Remove the ui-hidden class so game UI (crosshair, hotbar etc.) is visible
-        const uiLayer = document.getElementById('ui-layer');
-        if (uiLayer) uiLayer.classList.remove('ui-hidden');
+        // Update loading text
+        if (loadingText) loadingText.innerText = 'Building Terrain...';
+        if (loadingFill) loadingFill.style.width = '0%';
 
-        // Auto-save on page unload
-        this._beforeUnloadHandler = () => this._saveAndExit();
-        window.addEventListener('beforeunload', this._beforeUnloadHandler);
-
-        // Start the game
+        // Start the game loop (chunks will build progressively)
         this.start();
     }
 
@@ -213,9 +207,13 @@ export class Engine {
         this.systems = [];
         this.worldGen = null;
         this.chunkSystem = null;
+        this.lightSystem = null;
         this.physicsSystem = null;
         this.playerSystem = null;
-        this.uiManager = null;
+        if (this.uiManager) {
+            this.uiManager.dispose();
+            this.uiManager = null;
+        }
         this.cloudSystem = null;
         if (this.waypointManager) {
             this.waypointManager.clearAll();
@@ -238,10 +236,14 @@ export class Engine {
             const pos = this.playerSystem.position;
             const yaw = this.playerSystem.yawObject.rotation.y;
             const pitch = this.playerSystem.pitchObject.rotation.x;
+            const timeOfDay = this.lightingManager ? this.lightingManager.timeOfDay : 0.5;
+            const cycleEnabled = this.lightingManager ? this.lightingManager.cycleEnabled : false;
 
             await savePlayerState(this.activeWorldId,
                 [pos.x, pos.y, pos.z],
-                [yaw, pitch]
+                [yaw, pitch],
+                timeOfDay,
+                cycleEnabled
             );
         }
     }
@@ -278,6 +280,98 @@ export class Engine {
 
         const delta = Math.min(this.clock.getDelta(), 0.1); // Max delta 0.1s to prevent huge jumps
         const time = this.clock.getElapsedTime();
+
+        if (delta > 0.05) {
+            console.warn(`[FreezeTracker] Engine loop delta was ${Math.round(delta * 1000)}ms (approx ${Math.round(1 / delta)} FPS)`);
+        }
+
+        // ── INITIAL CHUNK LOADING GATE ──
+        // While chunks are still being generated/built, only update ChunkSystem (to build chunks)
+        // and show progress on the loading bar. Skip player, lighting, etc.
+        if (!this.chunksReady) {
+            // Let ChunkSystem generate/build chunks
+            if (this.chunkSystem && this.chunkSystem.update) {
+                this.chunkSystem.update(delta, time);
+            }
+
+            // Calculate progress: chunks with no pending generation AND no dirty meshes
+            const totalChunks = this.chunkSystem.chunks.size;
+            const pendingGen = this.chunkSystem.chunkGenQueue.length + this.chunkSystem.pendingChunks.size;
+            let dirtyCount = 0;
+            for (const chunk of this.chunkSystem.chunks.values()) {
+                if (chunk.isDirty) dirtyCount++;
+            }
+
+            const doneCount = totalChunks - dirtyCount;
+            const totalWork = totalChunks + pendingGen;
+            const progress = totalWork > 0 ? Math.floor((doneCount / this.initialChunkTotal) * 100) : 0;
+
+            const loadingFill = document.getElementById('loading-bar-fill');
+            const loadingText = document.getElementById('loading-text');
+            if (loadingFill) loadingFill.style.width = `${Math.min(progress, 100)}%`;
+            if (loadingText) loadingText.innerText = `Building Terrain... ${Math.min(progress, 100)}%`;
+
+            // Check if all initial chunks are generated AND all meshes are built
+            if (pendingGen === 0 && dirtyCount === 0 && totalChunks > 0 && !this.chunksReady) {
+                console.log(`[FreezeTracker] LOAD LOCK RELEASED. All chunks built. Game systems resuming.`);
+                this.chunksReady = true;
+
+                // Find safe spawn Y for the player
+                const spawnQ = 0, spawnR = 0;
+                let safeY = 40; // default fallback
+                for (let y = 63; y >= 0; y--) {
+                    const blockId = this.chunkSystem.getBlockGlobal(spawnQ, spawnR, y);
+                    if (blockId !== 0) {
+                        safeY = y + 2; // Stand on top of the highest block + buffer
+                        break;
+                    }
+                }
+
+                // Only set position if there's no saved position (fresh world)
+                const savedPlayer = this._lastSavedPlayer;
+                if (!savedPlayer || !savedPlayer.position) {
+                    this.playerSystem.position.set(0, safeY, 0);
+                }
+                this.playerSystem.velocity.set(0, 0, 0); // Clear any accumulated fall velocity
+
+                // Immediately sync the camera to the player's position
+                // (normally this happens in update(), but update() requires pointer lock)
+                this.playerSystem.yawObject.position.copy(this.playerSystem.position);
+                this.playerSystem.yawObject.position.y += this.playerSystem.playerHeight;
+
+                // Hide loading screen, show game UI
+                const startScreen = document.getElementById('start-screen');
+                const loadingContainer = document.getElementById('loading-container');
+                const worldSelectScreen = document.getElementById('world-select-screen');
+                const uiLayer = document.getElementById('ui-layer');
+
+                if (startScreen) startScreen.classList.add('hidden');
+                if (loadingContainer) loadingContainer.style.display = 'none';
+                if (worldSelectScreen) worldSelectScreen.classList.add('hidden');
+                if (uiLayer) {
+                    uiLayer.classList.remove('ui-hidden');
+
+                    // Show Controls Prompt — only for brand new worlds (no saved position)
+                    if (this.uiManager && !this._lastSavedPlayer) {
+                        this.uiManager.showControlsToast();
+                    }
+                }
+
+                // Auto-save on page unload
+                this._beforeUnloadHandler = () => this._saveAndExit();
+                window.addEventListener('beforeunload', this._beforeUnloadHandler);
+            }
+
+            // Still render the scene so user can watch chunks load behind the overlay
+            if (this.lightingManager && this.playerSystem) {
+                this.lightingManager.update(this.playerSystem.position, delta, this.inputManager);
+            }
+            // Run only the renderer (not PlayerSystem) so the scene is visible
+            if (this.rendererSystem && this.rendererSystem.update) {
+                this.rendererSystem.update();
+            }
+            return; // Don't run PlayerSystem or other game systems while loading
+        }
 
         // Specific system updates that aren't purely ECS
         if (this.lightingManager && this.playerSystem) {

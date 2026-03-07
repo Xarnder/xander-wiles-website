@@ -21,6 +21,7 @@ export class PlayerSystem {
         this.playerRadius = 0.4;
 
         this.isFlying = false;
+        this.isNoclip = false;
         this.lastSpacePress = 0;
 
         // Block selection — hotbar slot (0-indexed) and block ID to place
@@ -163,7 +164,17 @@ export class PlayerSystem {
         // Toggle Fly Mode with 'F'
         if (this.input.consumeKey('KeyF')) {
             this.isFlying = !this.isFlying;
-            if (this.isFlying) this.velocity.y = 0;
+            if (this.isFlying) {
+                this.velocity.y = 0;
+            } else {
+                // Leaving fly mode disables noclip too
+                this.isNoclip = false;
+            }
+        }
+
+        // Toggle Noclip with 'N' (only while flying)
+        if (this.input.consumeKey('KeyN') && this.isFlying) {
+            this.isNoclip = !this.isNoclip;
         }
 
         // Jump
@@ -290,21 +301,28 @@ export class PlayerSystem {
             this.physics.gravity = -30;
         }
 
-        const physicsStart = performance.now();
-        // Apply physics
-        const result = this.physics.resolveCollision(
-            this.position,
-            this.velocity,
-            this.playerRadius,
-            this.playerHeight,
-            delta
-        );
-        const physicsTime = performance.now() - physicsStart;
-        if (physicsTime > 3) {
-            console.warn(`[FreezeTracker] Physics collision resolution took ${physicsTime.toFixed(2)}ms`);
+        // Apply physics (skip collision entirely in noclip mode)
+        if (this.isNoclip) {
+            // In noclip, just apply velocity directly — no collision
+            this.position.x += this.velocity.x * delta;
+            this.position.y += this.velocity.y * delta;
+            this.position.z += this.velocity.z * delta;
+            this.onGround = false;
+        } else {
+            const physicsStart = performance.now();
+            const result = this.physics.resolveCollision(
+                this.position,
+                this.velocity,
+                this.playerRadius,
+                this.playerHeight,
+                delta
+            );
+            const physicsTime = performance.now() - physicsStart;
+            if (physicsTime > 3) {
+                console.warn(`[FreezeTracker] Physics collision resolution took ${physicsTime.toFixed(2)}ms`);
+            }
+            this.onGround = result.onGround;
         }
-
-        this.onGround = result.onGround;
 
         // Handle Walk Audio
         const horizontalSpeedSq = this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z;

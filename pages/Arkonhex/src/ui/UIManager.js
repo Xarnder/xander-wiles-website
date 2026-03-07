@@ -327,6 +327,36 @@ export class UIManager {
             }, { signal: this.abortController.signal });
         });
 
+        const locateCastleBtn = document.getElementById('locate-castle-btn');
+        if (locateCastleBtn) {
+            locateCastleBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const btn = e.target;
+                const originalText = btn.innerText;
+
+                try {
+                    btn.disabled = true;
+                    btn.innerText = "Locating...";
+
+                    const wp = await this.engine.waypointManager.locateNearestCastle();
+                    if (wp) {
+                        this.refreshWaypointList();
+                        btn.innerText = "Found!";
+                        setTimeout(() => btn.innerText = originalText, 1500);
+                    } else {
+                        btn.innerText = "None Nearby";
+                        setTimeout(() => btn.innerText = originalText, 2000);
+                    }
+                } catch (error) {
+                    console.error("[UIManager] Error locating castle:", error);
+                    btn.innerText = "Error";
+                    setTimeout(() => btn.innerText = originalText, 2000);
+                } finally {
+                    btn.disabled = false;
+                }
+            }, { signal: this.abortController.signal });
+        }
+
         // Sub-tab logic (for settings)
         const subTabs = document.querySelectorAll('.sub-tab');
         const subContents = document.querySelectorAll('.sub-tab-content');
@@ -866,7 +896,8 @@ export class UIManager {
 
         // Fly Mode Info
         if (this.playerSystem.isFlying) {
-            this.flyElement.innerText = "[ FLY MODE ENABLED - Space: Up, Shift: Down ]";
+            const noclipTag = this.playerSystem.isNoclip ? ' | NOCLIP ON (N)' : '';
+            this.flyElement.innerText = `[ FLY MODE ENABLED - Space: Up, Shift: Down${noclipTag} ]`;
         } else {
             this.flyElement.innerText = "";
         }
@@ -906,6 +937,69 @@ export class UIManager {
                     const toast = document.getElementById('controls-toast');
                     if (toast) toast.classList.remove('show');
                 }, 2000);
+            }
+        }
+
+        // ─── Castle Compass Tracking ───
+        const compassEl = document.getElementById('castle-compass');
+        const arrowEl = document.getElementById('castle-compass-arrow');
+
+        if (compassEl && arrowEl && this.engine.worldGen && this.engine.worldGen.castleGen) {
+            // Only recalculate the nearest castle every 2 seconds to save performance
+            if (!this.lastCastleCheckTime || time - this.lastCastleCheckTime > 2.0) {
+                this.lastCastleCheckTime = time;
+                const playerQ = this.engine.playerSystem.q;
+                const playerR = this.engine.playerSystem.r;
+                this.nearestCastleInfo = this.engine.worldGen.castleGen.findClosestCastle(playerQ, playerR);
+            }
+
+            if (this.nearestCastleInfo) {
+                // If castle is within 1 region (roughly < 64 chunks), show the compass
+                // If they are literally inside it, we can still show it or hide it. Let's just show it if dist > 0.
+                if (this.nearestCastleInfo.dist > 15) {
+                    compassEl.style.display = 'flex';
+
+                    // Determine the world position of the castle
+                    // (We don't need Y coordinates, just X/Z map coords to point the needle)
+                    const castlePos = window.HexUtils ? window.HexUtils.axialToWorld(this.nearestCastleInfo.q, this.nearestCastleInfo.r) : { x: 0, z: 0 };
+                    const playerPos = this.engine.playerSystem.camera.position;
+
+                    const dx = castlePos.x - playerPos.x;
+                    const dz = castlePos.z - playerPos.z;
+
+                    // Angle to castle (North is -Z in ThreeJS)
+                    // Math.atan2(dz, dx) gives angle from X axis.
+                    // ThreeJS camera rotation: Y rotation is yaw.
+
+                    const angleToCastle = Math.atan2(dz, dx);
+
+                    // The camera's forward vector
+                    const cameraDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.engine.playerSystem.camera.quaternion);
+                    // Angle the camera is facing on the X/Z plane
+                    const cameraAngle = Math.atan2(cameraDir.z, cameraDir.x);
+
+                    // The difference between where we are looking and where the castle is.
+                    // In CSS, 0deg points UP. So we need to map the difference to CSS rotation.
+                    // If camera faces castle directly, difference is 0.
+                    let relativeAngle = angleToCastle - cameraAngle;
+
+                    // Normalize to (-PI, PI]
+                    while (relativeAngle <= -Math.PI) relativeAngle += Math.PI * 2;
+                    while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
+
+                    // Convert to degrees. Subtract 90 because 0deg in atan2 is Right (X axis), 
+                    // but in CSS 0deg is Up (Y axis), and in game Forward is -Z.
+                    // The math works out that adding 90 degrees orients it perfectly to the screen.
+                    const rotationDeg = (relativeAngle * 180 / Math.PI) + 90;
+
+                    arrowEl.style.transform = `rotate(${rotationDeg}deg)`;
+
+                } else {
+                    // Too close, hiding compass
+                    compassEl.style.display = 'none';
+                }
+            } else {
+                compassEl.style.display = 'none';
             }
         }
     }

@@ -2,59 +2,75 @@
     {
         "id": 1,
         "name": "grass",
-        "topColor": "green",
-        "baseColor": "brown",
-        "hardness": 1.0
+        "topColor": "light_indigo",
+        "baseColor": "indigo",
+        "hardness": 1.0,
+        "placeSound": "grass_place",
+        "destroySound": "break"
     },
     {
         "id": 2,
         "name": "dirt",
-        "topColor": "brown",
-        "baseColor": "brown",
-        "hardness": 1.0
+        "topColor": "gray",
+        "baseColor": "dark_brown",
+        "hardness": 1.0,
+        "placeSound": "dirt_place",
+        "destroySound": "break"
     },
     {
         "id": 3,
         "name": "stone",
         "topColor": "gray",
-        "baseColor": "gray",
-        "hardness": 2.0
+        "baseColor": "black",
+        "hardness": 2.0,
+        "placeSound": "stone_place",
+        "destroySound": "stone_break"
     },
     {
         "id": 4,
         "name": "sand",
-        "topColor": "yellow",
-        "baseColor": "yellow",
-        "hardness": 0.5
+        "topColor": "light_gray",
+        "baseColor": "light_gray",
+        "hardness": 0.5,
+        "placeSound": "sand_place",
+        "destroySound": "sand_break"
     },
     {
         "id": 5,
         "name": "water",
-        "topColor": "blue",
-        "baseColor": "blue",
+        "topColor": "violet",
+        "baseColor": "violet",
         "hardness": 0.0,
-        "translucent": true
+        "translucent": true,
+        "placeSound": "splash",
+        "destroySound": "splash"
     },
     {
         "id": 6,
         "name": "wood",
-        "topColor": "orange",
-        "baseColor": "dark_brown",
-        "hardness": 1.5
+        "topColor": "black",
+        "baseColor": "dark_green",
+        "hardness": 1.5,
+        "placeSound": "wood_place",
+        "destroySound": "break"
     },
     {
         "id": 7,
         "name": "leaves",
-        "topColor": "dark_green",
-        "baseColor": "dark_green",
-        "hardness": 0.2
+        "topColor": "indigo",
+        "baseColor": "indigo",
+        "hardness": 0.2,
+        "placeSound": "leaves_place",
+        "destroySound": "leaves_break"
     },
     {
         "id": 8,
         "name": "bedrock",
         "topColor": "black",
         "baseColor": "black",
-        "hardness": -1.0
+        "hardness": -1.0,
+        "placeSound": "stone_place",
+        "destroySound": "stone_break"
     },
     {
         "id": 9,
@@ -62,6 +78,19 @@
         "topColor": "white",
         "baseColor": "white",
         "hardness": 0.5,
-        "transparent": true
+        "transparent": true,
+        "placeSound": "glass_place",
+        "destroySound": "glass_break"
+    },
+    {
+        "id": 10,
+        "name": "torch",
+        "topColor": "torch_flame",
+        "baseColor": "orange",
+        "hardness": 0.1,
+        "emissive": true,
+        "lightLevel": 15,
+        "placeSound": "wood_place",
+        "destroySound": "break"
     }
 ]

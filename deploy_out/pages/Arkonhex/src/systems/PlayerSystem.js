@@ -21,11 +21,16 @@ export class PlayerSystem {
         this.playerRadius = 0.4;
 
         this.isFlying = false;
+        this.isNoclip = false;
         this.lastSpacePress = 0;
 
         // Block selection — hotbar slot (0-indexed) and block ID to place
         this.selectedHotbarSlot = 0;
         this.selectedBlockId = 1;
+
+        // Smooth Tool state
+        this.activeTool = 'block'; // 'block' or 'smooth'
+        this.smoothHeight = 0; // 0 = Random, 1-10 = 0.1-1.0
 
         // Hold-to-place/break timing
         this.blockInitialDelay = 0.4;  // s (default 400ms)
@@ -83,10 +88,17 @@ export class PlayerSystem {
     update(delta, time) {
         if (!this.input.isLocked) return;
 
+        const startPerf = performance.now();
+
         this.updateMouseLook();
         this.updateMovement(delta);
         this.updateHotbarKeys();
         this.updateInteraction(delta);
+
+        const updateTime = performance.now() - startPerf;
+        if (updateTime > 5) {
+            console.warn(`[FreezeTracker] PlayerSystem update took ${updateTime.toFixed(2)}ms`);
+        }
 
         // P key — place waypoint
         if (this.input.consumeKey('KeyP') && this.engine.waypointManager) {
@@ -109,9 +121,16 @@ export class PlayerSystem {
             this.camera.updateProjectionMatrix();
         }
 
-        // Update loaded chunks based on player position
+        // Update loaded chunks only when the player crosses a chunk boundary
         const { q, r } = worldToAxial(this.position.x, this.position.z);
-        this.chunkSystem.updateLoadedChunks(q, r);
+        const playerCQ = Math.floor(q / 16);
+        const playerCR = Math.floor(r / 16);
+
+        if (this.lastChunkQ !== playerCQ || this.lastChunkR !== playerCR) {
+            this.lastChunkQ = playerCQ;
+            this.lastChunkR = playerCR;
+            this.chunkSystem.updateLoadedChunks(q, r);
+        }
     }
 
     updateMouseLook() {
@@ -145,7 +164,17 @@ export class PlayerSystem {
         // Toggle Fly Mode with 'F'
         if (this.input.consumeKey('KeyF')) {
             this.isFlying = !this.isFlying;
-            if (this.isFlying) this.velocity.y = 0;
+            if (this.isFlying) {
+                this.velocity.y = 0;
+            } else {
+                // Leaving fly mode disables noclip too
+                this.isNoclip = false;
+            }
+        }
+
+        // Toggle Noclip with 'N' (only while flying)
+        if (this.input.consumeKey('KeyN') && this.isFlying) {
+            this.isNoclip = !this.isNoclip;
         }
 
         // Jump
@@ -202,8 +231,10 @@ export class PlayerSystem {
         if (this.ambientStarted) {
             this.ambientTime += delta;
 
-            // Slow sine-wave envelope for normal ambients: period ~20s, range [0 .. 0.4]
-            const sineEnvelope = (Math.sin(2 * Math.PI * this.ambientTime / 20.0) + 1) / 2; // 0..1
+            // Slow cosine-wave envelope for normal ambients: period 360s (6 mins), range [0 .. max]
+            // -Math.cos starts at -1 (mapped to 0), ramping up to +1 (mapped to 1) at 3 mins
+            const cycleTime = 360.0;
+            const sineEnvelope = (-Math.cos(2 * Math.PI * this.ambientTime / cycleTime) + 1) / 2; // 0..1
             const maxNormalVol = 0.4;
             const targetNormalVol = isSubmerged ? 0 : sineEnvelope * maxNormalVol;
 
@@ -270,16 +301,28 @@ export class PlayerSystem {
             this.physics.gravity = -30;
         }
 
-        // Apply physics
-        const result = this.physics.resolveCollision(
-            this.position,
-            this.velocity,
-            this.playerRadius,
-            this.playerHeight,
-            delta
-        );
-
-        this.onGround = result.onGround;
+        // Apply physics (skip collision entirely in noclip mode)
+        if (this.isNoclip) {
+            // In noclip, just apply velocity directly — no collision
+            this.position.x += this.velocity.x * delta;
+            this.position.y += this.velocity.y * delta;
+            this.position.z += this.velocity.z * delta;
+            this.onGround = false;
+        } else {
+            const physicsStart = performance.now();
+            const result = this.physics.resolveCollision(
+                this.position,
+                this.velocity,
+                this.playerRadius,
+                this.playerHeight,
+                delta
+            );
+            const physicsTime = performance.now() - physicsStart;
+            if (physicsTime > 3) {
+                console.warn(`[FreezeTracker] Physics collision resolution took ${physicsTime.toFixed(2)}ms`);
+            }
+            this.onGround = result.onGround;
+        }
 
         // Handle Walk Audio
         const horizontalSpeedSq = this.velocity.x * this.velocity.x + this.velocity.z * this.velocity.z;
@@ -312,31 +355,74 @@ export class PlayerSystem {
         // Number keys
         const digitCodes = [
             'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
-            'Digit6', 'Digit7', 'Digit8', 'Digit9'
+            'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
         ];
+
+        // Toggle tool mode
+        if (this.input.consumeKey('KeyY')) {
+            this.activeTool = this.activeTool === 'block' ? 'smooth' : 'block';
+            if (this.engine.uiManager) {
+                this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
+            }
+        }
+
         for (let i = 0; i < digitCodes.length; i++) {
             if (this.input.consumeKey(digitCodes[i])) {
-                this.selectedHotbarSlot = i;
-                this.selectedBlockId = i + 1;
+                if (this.activeTool === 'smooth') {
+                    // Update smooth height (1-9 map to index+1, 0 maps to index 9 + 1 = 10)
+                    this.smoothHeight = i + 1;
+                } else {
+                    // Normal hotbar
+                    this.selectedHotbarSlot = i;
+                    this.selectedBlockId = i + 1;
+                    if (this.engine.uiManager) {
+                        this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
+                    }
+                }
                 if (this.engine.uiManager) {
-                    this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
+                    this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
                 }
                 break;
+            }
+        }
+
+        // Arrow keys for height adjustment
+        if (this.input.consumeKey('ArrowUp')) {
+            this.smoothHeight = (this.smoothHeight + 1) % 11;
+            if (this.engine.uiManager) {
+                this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
+            }
+        }
+        if (this.input.consumeKey('ArrowDown')) {
+            this.smoothHeight = (this.smoothHeight - 1 + 11) % 11;
+            if (this.engine.uiManager) {
+                this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
             }
         }
 
         // Scroll wheel (delta normalized to 1 or -1 in InputManager)
         const wheelDelta = this.input.getWheelDelta();
         if (wheelDelta !== 0) {
-            if (wheelDelta > 0) {
-                this.selectedHotbarSlot = (this.selectedHotbarSlot + 1) % 9;
+            if (this.activeTool === 'smooth') {
+                if (wheelDelta > 0) {
+                    this.smoothHeight = Math.min(10, this.smoothHeight + 1);
+                } else {
+                    this.smoothHeight = Math.max(1, this.smoothHeight - 1);
+                }
+                if (this.engine.uiManager) {
+                    this.engine.uiManager.updateToolDisplay(this.activeTool, this.smoothHeight);
+                }
             } else {
-                this.selectedHotbarSlot = (this.selectedHotbarSlot - 1 + 9) % 9;
-            }
-            this.selectedBlockId = this.selectedHotbarSlot + 1;
+                if (wheelDelta > 0) {
+                    this.selectedHotbarSlot = (this.selectedHotbarSlot + 1) % 10;
+                } else {
+                    this.selectedHotbarSlot = (this.selectedHotbarSlot - 1 + 10) % 10;
+                }
+                this.selectedBlockId = this.selectedHotbarSlot + 1;
 
-            if (this.engine.uiManager) {
-                this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
+                if (this.engine.uiManager) {
+                    this.engine.uiManager.updateHotbarSelection(this.selectedHotbarSlot);
+                }
             }
         }
     }
@@ -359,7 +445,7 @@ export class PlayerSystem {
             closestIntersection = intersects[0];
         }
 
-        if (closestIntersection) {
+        if (closestIntersection && closestIntersection.face) {
             // Find block coordinate
             const hitPoint = closestIntersection.point;
             // Nudge point slightly inside the block using the face normal
@@ -383,22 +469,27 @@ export class PlayerSystem {
             const breakHeld = this.input.isButtonDown(0);
             const placeHeld = this.input.isButtonDown(2);
 
-            // BREAK
+            // BREAK / LEFT CLICK
             if (breakHeld) {
                 if (this.breakHoldCount === 0) {
-                    // Phase 0: instant first break
-                    this.breakBlock(q, r, y);
+                    if (this.activeTool === 'smooth') {
+                        // Left click in smooth mode ALWAYS breaks normally now
+                        this.breakBlock(q, r, y);
+                    } else {
+                        // Phase 0: instant first break
+                        this.breakBlock(q, r, y);
+                    }
                     this.breakHoldCount = 1;
                     this.breakHoldTimer = 0;
                 } else {
                     this.breakHoldTimer += delta;
                     const threshold = this.breakHoldCount === 1
-                        ? this.blockInitialDelay * 2  // phase 1: 2× initial delay
-                        : this.blockRepeatDelay;       // phase 2+: normal repeat
+                        ? this.blockInitialDelay * 2
+                        : this.blockRepeatDelay;
                     if (this.breakHoldTimer >= threshold) {
                         this.breakHoldTimer = 0;
                         this.breakHoldCount++;
-                        this.breakBlock(q, r, y);
+                        this.breakBlock(q, r, y); // Both modes break on left hold
                     }
                 }
             } else {
@@ -406,7 +497,7 @@ export class PlayerSystem {
                 this.breakHoldCount = 0;
             }
 
-            // PLACE
+            // PLACE / RIGHT CLICK
             if (placeHeld) {
                 // Compute target placement position once
                 const norm = closestIntersection.face.normal;
@@ -423,8 +514,18 @@ export class PlayerSystem {
                 }
 
                 if (this.placeHoldCount === 0) {
-                    // Phase 0: instant first place
-                    this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                    if (this.activeTool === 'smooth') {
+                        // Right click in Smooth Tool mode adjusts existing block height
+                        if (this.chunkSystem.getBlockGlobal(q, r, y) !== 0) {
+                            this.chunkSystem.setHeightGlobal(q, r, y, this.smoothHeight);
+                        }
+                    } else {
+                        // Normal mode: Place block with current smoothHeight
+                        this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                        if (this.smoothHeight > 0) {
+                            this.chunkSystem.setHeightGlobal(placeQ, placeR, placeY, this.smoothHeight);
+                        }
+                    }
                     this.placeHoldCount = 1;
                     this.placeHoldTimer = 0;
                 } else {
@@ -435,7 +536,16 @@ export class PlayerSystem {
                     if (this.placeHoldTimer >= threshold) {
                         this.placeHoldTimer = 0;
                         this.placeHoldCount++;
-                        this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                        if (this.activeTool === 'smooth') {
+                            if (this.chunkSystem.getBlockGlobal(q, r, y) !== 0) {
+                                this.chunkSystem.setHeightGlobal(q, r, y, this.smoothHeight);
+                            }
+                        } else {
+                            this.placeBlock(placeQ, placeR, placeY, this.selectedBlockId);
+                            if (this.smoothHeight > 0) {
+                                this.chunkSystem.setHeightGlobal(placeQ, placeR, placeY, this.smoothHeight);
+                            }
+                        }
                     }
                 }
             } else {
@@ -449,12 +559,23 @@ export class PlayerSystem {
     }
 
     breakBlock(q, r, y) {
-        if (this.setBlockGlobal(q, r, y, 0)) { // Air
-            this.audioManager.playSFX('break');
+        const blockId = this.chunkSystem.getBlockGlobal(q, r, y);
+        if (blockId !== 0) {
+            const blockDef = this.chunkSystem.engine.blockSystem.getBlockDef(blockId);
+            const destroySound = blockDef ? blockDef.destroySound : 'break';
+
+            if (this.setBlockGlobal(q, r, y, 0)) { // Air
+                this.chunkSystem.setHeightGlobal(q, r, y, 0); // Reset custom height
+                this.audioManager.playBlockSound('destroy', destroySound);
+            }
         }
     }
 
     placeBlock(q, r, y, id) {
+        // --- Prevent placing into an already-occupied block ---
+        const existingId = this.chunkSystem.getBlockGlobal(q, r, y);
+        if (existingId !== 0) return;
+
         // --- Prevent placing inside player body (feet or camera) ---
         // Convert target hex to world position to compare with player
         const playerAxial = worldToAxial(this.position.x, this.position.z);
@@ -474,7 +595,10 @@ export class PlayerSystem {
 
         const success = this.setBlockGlobal(q, r, y, id);
         if (success) {
-            this.audioManager.playSFX('place');
+            this.chunkSystem.setHeightGlobal(q, r, y, 0); // Reset custom height before optional smooth override
+            const blockDef = this.chunkSystem.engine.blockSystem.getBlockDef(id);
+            const placeSound = blockDef ? blockDef.placeSound : 'place';
+            this.audioManager.playBlockSound('place', placeSound);
         }
     }
 
@@ -487,9 +611,18 @@ export class PlayerSystem {
         if (chunk) {
             const lq = GlobalQ - (cq * CHUNK_SIZE);
             const lr = GlobalR - (cr * CHUNK_SIZE);
+
+            const previousId = chunk.getBlock(lq, lr, y);
+
             if (chunk.setBlock(lq, lr, y, id)) {
-                // Mark chunk as modified for saving
+                // Mark chunk as modified for saving and dirty it for remeshing
                 this.chunkSystem.markChunkModified(cq, cr);
+                this.chunkSystem.markChunkDirty(chunk);
+
+                // Notify Light System
+                if (this.engine.lightSystem) {
+                    this.engine.lightSystem.onBlockChanged(GlobalQ, GlobalR, y, id, previousId);
+                }
 
                 // Determine if we need to update neighboring chunks due to edge changes
                 if (lq === 0) this.dirtyChunk(cq - 1, cr);
@@ -504,6 +637,9 @@ export class PlayerSystem {
 
     dirtyChunk(cq, cr) {
         const chunk = this.chunkSystem.chunks.get(`${cq},${cr}`);
-        if (chunk) chunk.isDirty = true;
+        if (chunk) {
+            chunk.isDirty = true;
+            this.chunkSystem.markChunkDirty(chunk); // Push to the chunk mesh rebuild queue
+        }
     }
 }

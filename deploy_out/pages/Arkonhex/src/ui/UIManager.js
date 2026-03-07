@@ -1,17 +1,24 @@
+import { renderBlockIcon } from './BlockIconRenderer.js';
+
 export class UIManager {
     constructor(engine, playerSystem, worldGen, blockSystem) {
         this.engine = engine;
         this.playerSystem = playerSystem;
         this.worldGen = worldGen;
         this.blockSystem = blockSystem;
+        this.abortController = new AbortController();
 
         this.fpsElement = document.getElementById('fps-counter');
         this.seedElement = document.getElementById('seed-display');
         this.selectedBlockElement = document.getElementById('selected-block-info');
         this.hotbarElement = document.getElementById('hotbar');
+        this.smoothToolDisplay = document.getElementById('smooth-tool-display');
+        this.heightBarContainer = document.getElementById('height-bar-container');
+        this.heightBarFill = document.getElementById('height-bar-fill');
 
         this.dateElement = document.getElementById('system-date');
         this.timeElement = document.getElementById('in-game-time');
+        this.coordsElement = document.getElementById('coords-display');
 
         if (this.dateElement) {
             this.dateElement.innerText = new Date().toISOString().split('T')[0];
@@ -52,7 +59,7 @@ export class UIManager {
 
             slider.addEventListener('input', (e) => {
                 valDisplay.innerText = e.target.value;
-            });
+            }, { signal: this.abortController.signal });
 
             slider.addEventListener('change', (e) => {
                 const newDist = parseInt(e.target.value);
@@ -78,7 +85,7 @@ export class UIManager {
 
             lodSlider.addEventListener('input', (e) => {
                 lodValDisplay.innerText = e.target.value;
-            });
+            }, { signal: this.abortController.signal });
 
             lodSlider.addEventListener('change', (e) => {
                 const newLodDist = parseInt(e.target.value);
@@ -109,7 +116,19 @@ export class UIManager {
 
                     this.playerSystem.chunkSystem.updateLoadedChunks(axial.q, axial.r);
                 }
-            });
+            }, { signal: this.abortController.signal });
+        }
+
+        const animEnableToggle = document.getElementById('anim-enable-toggle');
+        if (animEnableToggle) {
+            // Wait for Engine or ChunkSystem to exist. ChunkSystem initializes on init().
+            // We wait to read default property
+            animEnableToggle.checked = true; // We default true, or check from localStorage if added
+            animEnableToggle.addEventListener('change', (e) => {
+                if (this.playerSystem.chunkSystem) {
+                    this.playerSystem.chunkSystem.enableFlyInAnimation = e.target.checked;
+                }
+            }, { signal: this.abortController.signal });
         }
 
         const fovSlider = document.getElementById('fov-slider');
@@ -124,7 +143,7 @@ export class UIManager {
                 if (this.playerSystem) {
                     this.playerSystem.baseFov = parseInt(e.target.value);
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const cloudShadowToggle = document.getElementById('cloud-shadows-toggle');
@@ -138,7 +157,7 @@ export class UIManager {
                         mesh.receiveShadow = e.target.checked;
                     });
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const aocSlider = document.getElementById('aoc-slider');
@@ -146,13 +165,13 @@ export class UIManager {
         if (aocSlider && aocValDisplay) {
             aocSlider.addEventListener('input', (e) => {
                 aocValDisplay.innerText = e.target.value;
-            });
+            }, { signal: this.abortController.signal });
 
             aocSlider.addEventListener('change', (e) => {
                 const strength = parseFloat(e.target.value);
                 // The blockSystem configures materials. We tell its builder to rebuild textures!
-                if (this.blockSystem.chunkMeshBuilder && this.blockSystem.chunkMeshBuilder.rebuildTextures) {
-                    this.blockSystem.chunkMeshBuilder.rebuildTextures(this.blockSystem, strength);
+                if (this.playerSystem && this.playerSystem.chunkSystem && this.playerSystem.chunkSystem.meshBuilder && this.playerSystem.chunkSystem.meshBuilder.rebuildTextures) {
+                    this.playerSystem.chunkSystem.meshBuilder.rebuildTextures(this.blockSystem, strength);
                 }
             });
         }
@@ -162,22 +181,43 @@ export class UIManager {
         if (gtaoSlider && gtaoValDisplay) {
             gtaoSlider.addEventListener('input', (e) => {
                 gtaoValDisplay.innerText = e.target.value;
-            });
+            }, { signal: this.abortController.signal });
 
             gtaoSlider.addEventListener('change', (e) => {
                 const intensity = parseFloat(e.target.value);
-                if (this.engine.renderer && this.engine.renderer.gtaoPass) {
-                    this.engine.renderer.gtaoPass.blendIntensity = intensity;
-                    this.engine.renderer.gtaoPass.enabled = intensity > 0; // Dynamically eliminate VRAM footprint when turned off
+                if (this.engine.rendererSystem && this.engine.rendererSystem.gtaoPass) {
+                    this.engine.rendererSystem.gtaoPass.blendIntensity = intensity;
+                    this.engine.rendererSystem.gtaoPass.enabled = intensity > 0; // Dynamically eliminate VRAM footprint when turned off
                 }
-            });
+            }, { signal: this.abortController.signal });
 
             // Initialize the GTAO pass state from the slider's initial HTML value
             const initialGtaoIntensity = parseFloat(gtaoSlider.value);
-            if (this.engine.renderer && this.engine.renderer.gtaoPass) {
-                this.engine.renderer.gtaoPass.blendIntensity = initialGtaoIntensity;
-                this.engine.renderer.gtaoPass.enabled = initialGtaoIntensity > 0;
+            if (this.engine.rendererSystem && this.engine.rendererSystem.gtaoPass) {
+                this.engine.rendererSystem.gtaoPass.blendIntensity = initialGtaoIntensity;
+                this.engine.rendererSystem.gtaoPass.enabled = initialGtaoIntensity > 0;
             }
+        }
+
+        const ambientSlider = document.getElementById('ambient-slider');
+        const ambientValDisplay = document.getElementById('ambient-val');
+        if (ambientSlider && ambientValDisplay) {
+            ambientSlider.addEventListener('input', (e) => {
+                ambientValDisplay.innerText = e.target.value;
+                if (this.engine.lightingManager) {
+                    this.engine.lightingManager.ambientStrength = parseFloat(e.target.value);
+                }
+            }, { signal: this.abortController.signal });
+        }
+
+        const dayNightToggle = document.getElementById('day-night-toggle');
+        if (dayNightToggle) {
+            dayNightToggle.checked = this.engine.lightingManager ? this.engine.lightingManager.cycleEnabled : false;
+            dayNightToggle.addEventListener('change', (e) => {
+                if (this.engine.lightingManager) {
+                    this.engine.lightingManager.cycleEnabled = e.target.checked;
+                }
+            }, { signal: this.abortController.signal });
         }
 
         // Audio Toggle Listeners
@@ -185,21 +225,21 @@ export class UIManager {
         if (muteAllToggle) {
             muteAllToggle.addEventListener('change', (e) => {
                 this.engine.audioManager.toggleMuteAll(e.target.checked);
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const muteSFXToggle = document.getElementById('mute-sfx-toggle');
         if (muteSFXToggle) {
             muteSFXToggle.addEventListener('change', (e) => {
                 this.engine.audioManager.toggleMuteSFX(e.target.checked);
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const muteAmbienceToggle = document.getElementById('mute-ambience-toggle');
         if (muteAmbienceToggle) {
             muteAmbienceToggle.addEventListener('change', (e) => {
                 this.engine.audioManager.toggleMuteAmbience(e.target.checked);
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const shadowResSelect = document.getElementById('shadow-res-select');
@@ -217,7 +257,7 @@ export class UIManager {
                         shadow.map = null;
                     }
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         // Initial hold delay slider (how long before 2nd action fires)
@@ -229,7 +269,7 @@ export class UIManager {
             initDelaySlider.addEventListener('input', (e) => {
                 initDelayVal.innerText = e.target.value;
                 this.playerSystem.blockInitialDelay = parseInt(e.target.value) / 1000;
-            });
+            }, { signal: this.abortController.signal });
         }
 
         // Repeat delay slider (cadence after 2nd action)
@@ -241,7 +281,7 @@ export class UIManager {
             repeatDelaySlider.addEventListener('input', (e) => {
                 repeatDelayVal.innerText = e.target.value;
                 this.playerSystem.blockRepeatDelay = parseInt(e.target.value) / 1000;
-            });
+            }, { signal: this.abortController.signal });
         }
 
         const blockOutlineToggle = document.getElementById('block-outline-toggle');
@@ -261,7 +301,7 @@ export class UIManager {
                         this.playerSystem.chunkSystem.dirtyAllChunks();
                     }
                 }
-            });
+            }, { signal: this.abortController.signal });
         }
 
         // Main Tab logic
@@ -284,8 +324,38 @@ export class UIManager {
                 if (targetId === 'waypoints-tab') {
                     this.refreshWaypointList();
                 }
-            });
+            }, { signal: this.abortController.signal });
         });
+
+        const locateCastleBtn = document.getElementById('locate-castle-btn');
+        if (locateCastleBtn) {
+            locateCastleBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const btn = e.target;
+                const originalText = btn.innerText;
+
+                try {
+                    btn.disabled = true;
+                    btn.innerText = "Locating...";
+
+                    const wp = await this.engine.waypointManager.locateNearestCastle();
+                    if (wp) {
+                        this.refreshWaypointList();
+                        btn.innerText = "Found!";
+                        setTimeout(() => btn.innerText = originalText, 1500);
+                    } else {
+                        btn.innerText = "None Nearby";
+                        setTimeout(() => btn.innerText = originalText, 2000);
+                    }
+                } catch (error) {
+                    console.error("[UIManager] Error locating castle:", error);
+                    btn.innerText = "Error";
+                    setTimeout(() => btn.innerText = originalText, 2000);
+                } finally {
+                    btn.disabled = false;
+                }
+            }, { signal: this.abortController.signal });
+        }
 
         // Sub-tab logic (for settings)
         const subTabs = document.querySelectorAll('.sub-tab');
@@ -300,15 +370,17 @@ export class UIManager {
                 const targetSubId = subTab.getAttribute('data-sub-tab');
                 const targetSubContent = document.getElementById(targetSubId);
                 if (targetSubContent) targetSubContent.classList.add('active');
-            });
+            }, { signal: this.abortController.signal });
         });
+
+        this.initPaletteMenu();
 
         // Prevent settings panel clicks from unpausing
         const settingsPanels = document.querySelectorAll('.settings-panel');
         settingsPanels.forEach(p => {
             p.addEventListener('click', (e) => {
                 e.stopPropagation();
-            });
+            }, { signal: this.abortController.signal });
         });
 
         // Exit to World Menu button
@@ -325,45 +397,292 @@ export class UIManager {
                 // Save world state before exiting
                 await this.engine._saveAndExit();
 
-                // Stop the game loop
-                this.engine.stop();
-
-                // Hide pause screen and game UI layer
-                const pauseScreen = document.getElementById('pause-screen');
-                if (pauseScreen) pauseScreen.classList.add('hidden');
-                const uiLayer = document.getElementById('ui-layer');
-                if (uiLayer) uiLayer.classList.add('ui-hidden');
-
-                // Clear active world
-                this.engine.activeWorldId = null;
-                this.engine.activeWorldMeta = null;
-
-                // Show the world select screen
-                if (this.engine.worldSelectMenu) {
-                    await this.engine.worldSelectMenu.refresh();
-                    this.engine.worldSelectMenu.show();
-                }
-            });
+                // Restart the whole page to avoid UI duplication and mouse lock issues
+                window.location.reload();
+            }, { signal: this.abortController.signal });
         }
     }
 
+    initPaletteMenu() {
+        const container = document.getElementById('palette-colors-container');
+        if (!container || !this.blockSystem || !this.blockSystem.palette) return;
+
+        // Clear existing just in case
+        container.innerHTML = `
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-top:0; margin-bottom: 5px;">Block Color Palette</h3>
+                <p style="font-size:0.85em; color: #aaaaaa; margin-top:0;">Tweak colors and click Apply to see changes in-game.</p>
+                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                    <button id="apply-palette-btn" style="padding: 8px 16px; background: #00b894; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Apply New Colors</button>
+                    <button id="copy-palette-btn" style="padding: 8px 16px; background: #6c5ce7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Copy JSON</button>
+                </div>
+            </div>
+            <div id="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 100%; overflow: hidden;"></div>
+        `;
+
+        const grid = document.getElementById('palette-grid');
+
+        document.getElementById('apply-palette-btn').addEventListener('click', () => {
+            // Apply all currently selected values in the inputs to the palette
+            const inputs = document.querySelectorAll('#palette-grid input[type="color"]');
+            inputs.forEach(input => {
+                const colorName = input.getAttribute('data-color-name');
+                if (colorName) {
+                    this.blockSystem.palette.set(colorName, input.value);
+                }
+            });
+
+            // Apply opacity values
+            const opacityInputs = document.querySelectorAll('#palette-grid input[type="range"].opacity-slider');
+            opacityInputs.forEach(input => {
+                const colorName = input.getAttribute('data-opacity-name');
+                if (colorName) {
+                    this.blockSystem.paletteOpacity.set(colorName, parseFloat(input.value));
+                }
+            });
+
+            // Trigger an update visually
+            if (this.playerSystem && this.playerSystem.chunkSystem) {
+                if (this.playerSystem.chunkSystem.meshBuilder && this.playerSystem.chunkSystem.meshBuilder.rebuildTextures) {
+                    this.playerSystem.chunkSystem.meshBuilder.rebuildTextures(this.blockSystem);
+                }
+
+                this.playerSystem.chunkSystem.dirtyAllChunks();
+            }
+
+            // Update hotbar visuals
+            const slots = this.hotbarElement.querySelectorAll('.hotbar-slot-inner');
+            slots.forEach((inner, i) => {
+                const blockDef = this.blockSystem.getBlockDef(i + 1);
+                if (blockDef && blockDef.topColor) {
+                    const latestColor = this.blockSystem.palette.get(blockDef.topColor);
+                    if (latestColor) inner.style.backgroundColor = latestColor;
+                }
+            });
+        }, { signal: this.abortController.signal });
+
+        // Helper to copy text without navigator.clipboard for unsafe contexts
+        const fallbackCopyTextToClipboard = (text) => {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+
+            // Avoid scrolling to bottom
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Fallback: Oops, unable to copy', err);
+                throw err;
+            }
+
+            document.body.removeChild(textArea);
+        };
+
+        document.getElementById('copy-palette-btn').addEventListener('click', async (e) => {
+            const btn = e.target;
+            try {
+                // Fetch the original json to keep opacities
+                const response = await fetch('data/palette.json');
+                const originalPalette = await response.json();
+
+                // Override with our new hex values and opacities
+                for (const [key, val] of Object.entries(originalPalette)) {
+                    if (this.blockSystem.palette.has(key)) {
+                        const newColor = this.blockSystem.palette.get(key);
+                        const newOpacity = this.blockSystem.paletteOpacity.get(key) ?? 0.8;
+
+                        if (typeof val === 'object') {
+                            val.color = newColor;
+                            val.opacity = newOpacity;
+                        } else {
+                            originalPalette[key] = {
+                                color: newColor,
+                                opacity: newOpacity
+                            };
+                        }
+                    }
+                }
+
+                const jsonStr = JSON.stringify(originalPalette, null, 4);
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(jsonStr);
+                } else {
+                    fallbackCopyTextToClipboard(jsonStr);
+                }
+
+                btn.innerText = "COPIED!";
+                setTimeout(() => btn.innerText = "Copy JSON", 2000);
+            } catch (err) {
+                console.error("Failed to copy palette:", err);
+                btn.innerText = "Error";
+                setTimeout(() => btn.innerText = "Copy JSON", 2000);
+            }
+        }, { signal: this.abortController.signal });
+
+        this.blockSystem.palette.forEach((hexColor, colorName) => {
+            const row = document.createElement('div');
+            row.className = 'setting-row';
+            row.style.display = 'flex';
+            row.style.flexDirection = 'column';
+            row.style.gap = '8px';
+            row.style.paddingBottom = '10px';
+            row.style.marginBottom = '10px';
+            row.style.borderBottom = '1px solid #444';
+
+            // TOP ROW - Color
+            const topRow = document.createElement('div');
+            topRow.style.display = 'flex';
+            topRow.style.justifyContent = 'space-between';
+            topRow.style.alignItems = 'center';
+
+            const labelContainer = document.createElement('div');
+
+            const colorDot = document.createElement('span');
+            colorDot.style.display = 'inline-block';
+            colorDot.style.width = '12px';
+            colorDot.style.height = '12px';
+            colorDot.style.borderRadius = '50%';
+            colorDot.style.marginRight = '8px';
+            colorDot.style.backgroundColor = hexColor;
+
+            const label = document.createElement('label');
+            label.innerText = colorName;
+            label.style.textTransform = 'capitalize';
+            label.style.cursor = 'pointer';
+            label.style.margin = '0';
+
+            labelContainer.appendChild(colorDot);
+            labelContainer.appendChild(label);
+
+            const colorInputContainer = document.createElement('div');
+            colorInputContainer.style.display = 'flex';
+            colorInputContainer.style.gap = '10px';
+            colorInputContainer.style.alignItems = 'center';
+
+            const hexDisplay = document.createElement('span');
+            // Check for both short (#FFF) and ARGB (#FF000000) formats
+            const cleanHex = hexColor.length > 7 ? hexColor.substring(0, 7) : hexColor;
+            hexDisplay.innerText = cleanHex.toUpperCase();
+            hexDisplay.style.fontFamily = 'monospace';
+            hexDisplay.style.fontSize = '0.85em';
+            hexDisplay.style.color = '#888';
+            hexDisplay.style.cursor = 'pointer';
+            hexDisplay.title = 'Click to Copy';
+
+            const input = document.createElement('input');
+            input.type = 'color';
+            input.value = cleanHex;
+            input.style.cursor = 'pointer';
+            input.setAttribute('data-color-name', colorName);
+
+            input.addEventListener('input', (e) => {
+                const newColor = e.target.value;
+                hexDisplay.innerText = newColor.toUpperCase();
+                colorDot.style.backgroundColor = newColor;
+            });
+
+            // To make text selectable easily
+            hexDisplay.addEventListener('click', () => {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(input.value).catch(() => { });
+                } else {
+                    fallbackCopyTextToClipboard(input.value);
+                }
+                const originalHex = hexDisplay.innerText;
+                hexDisplay.innerText = 'COPIED!';
+                setTimeout(() => hexDisplay.innerText = originalHex, 1000);
+            });
+
+            colorInputContainer.appendChild(hexDisplay);
+            colorInputContainer.appendChild(input);
+
+            topRow.appendChild(labelContainer);
+            topRow.appendChild(colorInputContainer);
+
+            // BOTTOM ROW - Opacity
+            const bottomRow = document.createElement('div');
+            bottomRow.style.display = 'flex';
+            bottomRow.style.justifyContent = 'space-between';
+            bottomRow.style.alignItems = 'center';
+
+            const opacityLabel = document.createElement('span');
+            opacityLabel.innerText = "Overlay Opacity";
+            opacityLabel.style.fontSize = '0.85em';
+            opacityLabel.style.color = '#ccc';
+            opacityLabel.style.marginLeft = '20px';
+
+            const opacityInputContainer = document.createElement('div');
+            opacityInputContainer.style.display = 'flex';
+            opacityInputContainer.style.gap = '10px';
+            opacityInputContainer.style.alignItems = 'center';
+
+            const opacityValueDisplay = document.createElement('span');
+            const currentOpacity = this.blockSystem.paletteOpacity.has(colorName) ? this.blockSystem.paletteOpacity.get(colorName) : 0.8;
+            opacityValueDisplay.innerText = currentOpacity.toFixed(2);
+            opacityValueDisplay.style.fontFamily = 'monospace';
+            opacityValueDisplay.style.fontSize = '0.85em';
+            opacityValueDisplay.style.color = '#888';
+            opacityValueDisplay.style.width = '30px';
+
+            const opacityInput = document.createElement('input');
+            opacityInput.type = 'range';
+            opacityInput.min = '0';
+            opacityInput.max = '1';
+            opacityInput.step = '0.01';
+            opacityInput.value = currentOpacity;
+            opacityInput.className = 'opacity-slider';
+            opacityInput.style.cursor = 'pointer';
+            opacityInput.style.width = '80px';
+            opacityInput.setAttribute('data-opacity-name', colorName);
+
+            opacityInput.addEventListener('input', (e) => {
+                opacityValueDisplay.innerText = parseFloat(e.target.value).toFixed(2);
+            });
+
+            opacityInputContainer.appendChild(opacityInput);
+            opacityInputContainer.appendChild(opacityValueDisplay);
+
+            bottomRow.appendChild(opacityLabel);
+            bottomRow.appendChild(opacityInputContainer);
+
+            row.appendChild(topRow);
+            row.appendChild(bottomRow);
+            grid.appendChild(row);
+        });
+    }
+
     initHotbar() {
-        // Create 9 slots
-        for (let i = 1; i <= 9; i++) {
+        // Create 10 slots with isometric block icon previews
+        for (let i = 1; i <= 10; i++) {
             const slot = document.createElement('div');
             slot.className = 'hotbar-slot' + (i === 1 ? ' active' : '');
 
             const inner = document.createElement('div');
             inner.className = 'hotbar-slot-inner';
 
-            // Map 1-9 to first 9 blocks in our palette
+            // Add slot number
+            const num = document.createElement('span');
+            num.className = 'slot-number';
+            num.innerText = i < 10 ? i : 0;
+            slot.appendChild(num);
+
+            // Map 1-10 to block IDs
             const blockDef = this.blockSystem.getBlockDef(i);
             if (blockDef) {
-                // The palette now stores the raw hex strings from the JSON
-                const hexColor = this.blockSystem.palette.get(blockDef.topColor) || '#ffffff';
-                inner.style.backgroundColor = hexColor;
+                const iconCanvas = renderBlockIcon(blockDef, this.blockSystem.palette, 54);
+                iconCanvas.style.width = '100%';
+                iconCanvas.style.height = '100%';
+                inner.appendChild(iconCanvas);
             } else {
-                inner.style.backgroundColor = 'transparent';
+                inner.style.backgroundColor = 'rgba(255,255,255,0.05)';
             }
 
             slot.appendChild(inner);
@@ -380,6 +699,62 @@ export class UIManager {
         slots.forEach((slot, i) => {
             slot.classList.toggle('active', i === slotIndex);
         });
+
+        // Show block name popup above hotbar
+        const blockId = slotIndex + 1;
+        this.showBlockNamePopup(blockId);
+    }
+
+    /**
+     * Updates the UI to show the current active tool and its parameters.
+     * @param {string} tool - 'block' or 'smooth'
+     * @param {number} smoothHeight - 1 to 10
+     */
+    updateToolDisplay(tool, smoothHeight) {
+        if (!this.smoothToolDisplay) return;
+
+        const icon = document.getElementById('smooth-tool-icon');
+
+        const heightTxt = smoothHeight === 0 ? "Random" : (smoothHeight / 10.0).toFixed(1);
+
+        // Update height bar
+        if (this.heightBarFill) {
+            this.heightBarFill.style.width = `${smoothHeight * 10}%`;
+        }
+
+        if (tool === 'smooth') {
+            this.smoothToolDisplay.innerText = `Smooth Tool: ${heightTxt}`;
+            this.smoothToolDisplay.style.display = 'block';
+            if (this.hotbarElement) this.hotbarElement.style.display = 'none';
+            if (this.heightBarContainer) this.heightBarContainer.style.display = 'none';
+            if (icon) icon.style.display = 'flex';
+        } else {
+            this.smoothToolDisplay.innerText = `Placement Height: ${heightTxt}`;
+            this.smoothToolDisplay.style.display = 'block';
+            if (this.hotbarElement) this.hotbarElement.style.display = 'flex';
+            if (this.heightBarContainer) this.heightBarContainer.style.display = 'block';
+            if (icon) icon.style.display = 'none';
+        }
+    }
+
+    /**
+     * Show a temporary popup above the hotbar displaying the selected block name.
+     */
+    showBlockNamePopup(blockId) {
+        const blockDef = this.blockSystem.getBlockDef(blockId);
+        if (!blockDef) return;
+
+        const name = blockDef.name.charAt(0).toUpperCase() + blockDef.name.slice(1);
+        let popup = document.getElementById('block-name-popup');
+        if (!popup) return;
+
+        popup.textContent = name;
+        popup.classList.add('visible');
+
+        clearTimeout(this._blockNameTimeout);
+        this._blockNameTimeout = setTimeout(() => {
+            popup.classList.remove('visible');
+        }, 2000);
     }
 
     /**
@@ -487,6 +862,12 @@ export class UIManager {
             this.timeElement.innerText = `${hours12}:${minutesStr} ${ampm}`;
         }
 
+        // Coordinates Update
+        if (this.coordsElement && this.playerSystem) {
+            const pos = this.playerSystem.position;
+            this.coordsElement.innerText = `X: ${pos.x.toFixed(1)} Y: ${pos.y.toFixed(1)} Z: ${pos.z.toFixed(1)}`;
+        }
+
         // Debug info - Selected Block
         if (this.playerSystem.selectedBlock) {
             const sb = this.playerSystem.selectedBlock;
@@ -515,7 +896,8 @@ export class UIManager {
 
         // Fly Mode Info
         if (this.playerSystem.isFlying) {
-            this.flyElement.innerText = "[ FLY MODE ENABLED - Space: Up, Shift: Down ]";
+            const noclipTag = this.playerSystem.isNoclip ? ' | NOCLIP ON (N)' : '';
+            this.flyElement.innerText = `[ FLY MODE ENABLED - Space: Up, Shift: Down${noclipTag} ]`;
         } else {
             this.flyElement.innerText = "";
         }
@@ -536,6 +918,171 @@ export class UIManager {
             }
 
             this.graphicsElement.innerText = `Graphics: ${this.highGraphics ? 'High' : 'Low'} (Press G to toggle)`;
+        }
+
+        // ─── Dynamic Controls Toast Tracking ───
+        if (this.activeToastControls && !this.toastCountdownStarted) {
+            const im = this.engine.inputManager;
+            const tc = this.activeToastControls;
+
+            // Mouse buttons checked in update loop (they're not consumed like keys)
+            if (im.buttons.has(0)) this._markToastDone('break');
+            if (im.buttons.has(2)) this._markToastDone('place');
+
+            // Check if all actions are done
+            const allDone = Object.values(tc).every(v => v === true);
+            if (allDone) {
+                this.toastCountdownStarted = true;
+                setTimeout(() => {
+                    const toast = document.getElementById('controls-toast');
+                    if (toast) toast.classList.remove('show');
+                }, 2000);
+            }
+        }
+
+        // ─── Castle Compass Tracking ───
+        const compassEl = document.getElementById('castle-compass');
+        const arrowEl = document.getElementById('castle-compass-arrow');
+
+        if (compassEl && arrowEl && this.engine.worldGen && this.engine.worldGen.castleGen) {
+            // Only recalculate the nearest castle every 2 seconds to save performance
+            if (!this.lastCastleCheckTime || time - this.lastCastleCheckTime > 2.0) {
+                this.lastCastleCheckTime = time;
+                const playerQ = this.engine.playerSystem.q;
+                const playerR = this.engine.playerSystem.r;
+                this.nearestCastleInfo = this.engine.worldGen.castleGen.findClosestCastle(playerQ, playerR);
+            }
+
+            if (this.nearestCastleInfo) {
+                // If castle is within 1 region (roughly < 64 chunks), show the compass
+                // If they are literally inside it, we can still show it or hide it. Let's just show it if dist > 0.
+                if (this.nearestCastleInfo.dist > 15) {
+                    compassEl.style.display = 'flex';
+
+                    // Determine the world position of the castle
+                    // (We don't need Y coordinates, just X/Z map coords to point the needle)
+                    const castlePos = window.HexUtils ? window.HexUtils.axialToWorld(this.nearestCastleInfo.q, this.nearestCastleInfo.r) : { x: 0, z: 0 };
+                    const playerPos = this.engine.playerSystem.camera.position;
+
+                    const dx = castlePos.x - playerPos.x;
+                    const dz = castlePos.z - playerPos.z;
+
+                    // Angle to castle (North is -Z in ThreeJS)
+                    // Math.atan2(dz, dx) gives angle from X axis.
+                    // ThreeJS camera rotation: Y rotation is yaw.
+
+                    const angleToCastle = Math.atan2(dz, dx);
+
+                    // The camera's forward vector
+                    const cameraDir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.engine.playerSystem.camera.quaternion);
+                    // Angle the camera is facing on the X/Z plane
+                    const cameraAngle = Math.atan2(cameraDir.z, cameraDir.x);
+
+                    // The difference between where we are looking and where the castle is.
+                    // In CSS, 0deg points UP. So we need to map the difference to CSS rotation.
+                    // If camera faces castle directly, difference is 0.
+                    let relativeAngle = angleToCastle - cameraAngle;
+
+                    // Normalize to (-PI, PI]
+                    while (relativeAngle <= -Math.PI) relativeAngle += Math.PI * 2;
+                    while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
+
+                    // Convert to degrees. Subtract 90 because 0deg in atan2 is Right (X axis), 
+                    // but in CSS 0deg is Up (Y axis), and in game Forward is -Z.
+                    // The math works out that adding 90 degrees orients it perfectly to the screen.
+                    const rotationDeg = (relativeAngle * 180 / Math.PI) + 90;
+
+                    arrowEl.style.transform = `rotate(${rotationDeg}deg)`;
+
+                } else {
+                    // Too close, hiding compass
+                    compassEl.style.display = 'none';
+                }
+            } else {
+                compassEl.style.display = 'none';
+            }
+        }
+    }
+
+    initWaypointMenu() {
+        const pTag = document.querySelector('#waypoints-tab p strong');
+        if (pTag) {
+            // For example, if we wanted to add a listener here, we'd use the signal
+        }
+    }
+
+    dispose() {
+        // 1. Clear added debug elements
+        if (this.graphicsElement && this.graphicsElement.parentNode) {
+            this.graphicsElement.parentNode.removeChild(this.graphicsElement);
+        }
+        if (this.flyElement && this.flyElement.parentNode) {
+            this.flyElement.parentNode.removeChild(this.flyElement);
+        }
+
+        // 2. Clear hotbar slots
+        if (this.hotbarElement) {
+            this.hotbarElement.innerHTML = '';
+        }
+
+        // 3. Abort all attached event listeners
+        this.abortController.abort();
+    }
+
+    /**
+     * Shows a sliding toast notification for game controls
+     */
+    showControlsToast() {
+        if (this.controlsToastShown) return; // Only show once per session
+        this.controlsToastShown = true;
+
+        const toast = document.getElementById('controls-toast');
+        if (!toast) return;
+
+        toast.classList.add('show');
+
+        // Set up state tracker for dynamic completion
+        this.activeToastControls = {
+            move: false,
+            jump: false,
+            sprint: false,
+            break: false,
+            place: false,
+            menu: false,
+            fly: false,
+            zoom: false
+        };
+        this.toastCountdownStarted = false;
+
+        // Use raw keydown listener to detect keys that are consumed by other systems (e.g. KeyF)
+        this._toastKeyListener = (e) => {
+            if (!this.activeToastControls || this.toastCountdownStarted) return;
+            const keyMap = {
+                'KeyW': 'move', 'KeyA': 'move', 'KeyS': 'move', 'KeyD': 'move',
+                'Space': 'jump',
+                'ShiftLeft': 'sprint', 'ShiftRight': 'sprint',
+                'KeyE': 'menu',
+                'KeyF': 'fly',
+                'KeyC': 'zoom'
+            };
+            const action = keyMap[e.code];
+            if (action) this._markToastDone(action);
+        };
+        document.addEventListener('keydown', this._toastKeyListener);
+    }
+
+    /**
+     * Mark a single toast control as completed with a sound and visual feedback
+     */
+    _markToastDone(key) {
+        if (!this.activeToastControls || this.activeToastControls[key]) return;
+        this.activeToastControls[key] = true;
+        const el = document.getElementById(`toast-inst-${key}`);
+        if (el) el.classList.add('completed');
+
+        // Play the correct sound
+        if (this.engine.audioManager) {
+            this.engine.audioManager.playSFX('correct', true);
         }
     }
 }

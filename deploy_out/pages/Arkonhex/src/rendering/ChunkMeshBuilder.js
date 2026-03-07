@@ -3,12 +3,10 @@ import { HEX_SIZE, axialToWorld, getSeededBlockHeight } from '../utils/HexUtils.
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
-import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 const BLOCK_HEIGHT = 1.0;
 const TOP_RATIO = 0.25; // Top 25%
 const BASE_RATIO = 0.75; // Bottom 75%
-
 // Hexagon corners (pointy-topped)
 const corners = [];
 for (let i = 0; i < 6; i++) {
@@ -20,6 +18,17 @@ for (let i = 0; i < 6; i++) {
     ));
 }
 
+// Slim torch corners
+const torchCorners = [];
+const TORCH_RADIUS = 0.1;
+for (let i = 0; i < 6; i++) {
+    const angle_deg = 60 * i - 30;
+    const angle_rad = Math.PI / 180 * angle_deg;
+    torchCorners.push(new THREE.Vector2(
+        TORCH_RADIUS * Math.cos(angle_rad),
+        TORCH_RADIUS * Math.sin(angle_rad)
+    ));
+}
 export class ChunkMeshBuilder {
     constructor(blockSystem) {
         // Create material dictionaries mapping colour names to their dynamically generated texture material
@@ -63,11 +72,42 @@ export class ChunkMeshBuilder {
                 polygonOffsetUnits: 1
             });
 
+            // Add custom lighting attribute to shaders
+            const onCompileLighting = (shader) => {
+                shader.vertexShader = `
+                    attribute float aLightLevel;
+                    varying float vLightLevel;
+                \n` + shader.vertexShader;
+                shader.vertexShader = shader.vertexShader.replace(
+                    `#include <begin_vertex>`,
+                    `
+                    #include <begin_vertex>
+                    vLightLevel = aLightLevel;
+                    `
+                );
+                shader.fragmentShader = `
+                    varying float vLightLevel;
+                \n` + shader.fragmentShader;
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    `#include <dithering_fragment>`,
+                    `
+                    #include <dithering_fragment>
+                    // Apply baked torch light (multiply by base diffuse color to preserve texture)
+                    vec3 torchTint = vec3(1.0, 0.9, 0.6); // Warm soft glow
+                    float lightIntensity = pow(vLightLevel, 1.4) * 0.8; // Toned down intensity
+                    gl_FragColor.rgb += diffuseColor.rgb * torchTint * lightIntensity;
+                    `
+                );
+            };
+
+            this.materials[color].onBeforeCompile = onCompileLighting;
+
             // If this is the water material, hook into the shader for vertex animation
             if (color === 'blue') {
                 this.waterUniforms = { uTime: { value: 0 } };
 
                 this.transparentMaterials[color].onBeforeCompile = (shader) => {
+                    onCompileLighting(shader); // Chain the global lighting compiler
                     shader.uniforms.uTime = this.waterUniforms.uTime;
 
                     shader.vertexShader = `
@@ -113,15 +153,7 @@ export class ChunkMeshBuilder {
             depthWrite: false
         });
 
-        // Shared line material for glass outlines (reused across all chunks)
-        this.glassOutlineMaterial = new LineMaterial({
-            color: 0xffffff,
-            linewidth: 4,
-            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
-            transparent: true,
-            opacity: 0.8,
-            depthWrite: false
-        });
+
 
         // Dynamically build Canvas Textures using the shadow map
         const loader = new THREE.TextureLoader();
@@ -141,7 +173,14 @@ export class ChunkMeshBuilder {
      * Can be recalled by the Settings UI to update AOC strength in real-time.
      */
     rebuildTextures(blockSystem, globalStrength = null) {
-        if (!this.shadowTex || !this.shadowTex.image) return;
+        if (!this.shadowTex || !this.shadowTex.image) {
+            // Fallback: If no texture is loaded, just update the flat colors.
+            for (const [colorName, hexStr] of blockSystem.palette.entries()) {
+                if (this.materials[colorName]) this.materials[colorName].color.set(hexStr);
+                if (this.transparentMaterials[colorName]) this.transparentMaterials[colorName].color.set(hexStr);
+            }
+            return;
+        }
 
         const img = this.shadowTex.image;
         const width = img.width;
@@ -173,12 +212,15 @@ export class ChunkMeshBuilder {
             compositeTex.wrapS = THREE.RepeatWrapping;
             compositeTex.wrapT = THREE.RepeatWrapping;
             compositeTex.colorSpace = THREE.SRGBColorSpace;
+            compositeTex.needsUpdate = true;
 
             // Assign specific mapped textures
+            if (this.materials[colorName].map) this.materials[colorName].map.dispose();
             this.materials[colorName].color.setHex(0xffffff); // Reset flat tint since texture brings colour
             this.materials[colorName].map = compositeTex;
             this.materials[colorName].needsUpdate = true;
 
+            if (this.transparentMaterials[colorName].map) this.transparentMaterials[colorName].map.dispose();
             this.transparentMaterials[colorName].color.setHex(0xffffff); // Reset flat tint
             this.transparentMaterials[colorName].map = compositeTex;
             this.transparentMaterials[colorName].needsUpdate = true;
@@ -215,20 +257,6 @@ export class ChunkMeshBuilder {
             }
         }
 
-        // --- Glass outline logic ---
-        if (this.glassOutlineMaterial) {
-            // Day = 0.5 is noon. Using Math.sin to map 0.0 -> 1.0
-            // Shift phase so peak daytime (0.5) = 1.0, midnight (0.0/1.0) = -1.0
-            let dayCycle = Math.max(0, Math.sin((timeOfDay - 0.25) * Math.PI * 2));
-
-            // Bias the dayCycle so the glass transitions to black faster at sunset, avoiding lingering glows
-            dayCycle = Math.pow(dayCycle, 2.0);
-
-            const nightColor = new THREE.Color(0x000000); // Pitch black
-            const dayColor = new THREE.Color(0x666666);   // Mid-grey
-
-            this.glassOutlineMaterial.color.copy(nightColor).lerp(dayColor, dayCycle);
-        }
     }
 
     /**
@@ -239,32 +267,35 @@ export class ChunkMeshBuilder {
      * @param {ChunkSystem} chunkSystem - Reference to chunk system for neighboring queries
      * @param {string} seed - The world seed for procedural generation logic
      */
-    buildChunkMesh(chunk, blockSystem, chunkSystem, seed = "arkonhex") {
+    /**
+     * Generator function to build a chunk mesh over multiple frames.
+     * @returns {Generator<undefined, THREE.Group|null, unknown>}
+     */
+    *buildChunkMeshGenerator(chunk, blockSystem, chunkSystem, seed = "arkonhex") {
         // We now have multiple materials, so we need a discrete set of buffers for each material index
         const numMaterials = this.materialArray.length;
 
         // Arrays of arrays. index 0 corresponds to materialIndexMap mapped to 'red', etc.
         const positions = Array.from({ length: numMaterials }, () => []);
+        const lightLevels = Array.from({ length: numMaterials }, () => []);
         const normals = Array.from({ length: numMaterials }, () => []);
         const uvs = Array.from({ length: numMaterials }, () => []);
         const indices = Array.from({ length: numMaterials }, () => []);
         const vertexOffsets = new Array(numMaterials).fill(0);
 
         const transPositions = Array.from({ length: numMaterials }, () => []);
+        const transLightLevels = Array.from({ length: numMaterials }, () => []);
         const transNormals = Array.from({ length: numMaterials }, () => []);
         const transUvs = Array.from({ length: numMaterials }, () => []);
         const transIndices = Array.from({ length: numMaterials }, () => []);
         const transVertexOffsets = new Array(numMaterials).fill(0);
 
         const glassPositions = Array.from({ length: numMaterials }, () => []);
+        const glassLightLevels = Array.from({ length: numMaterials }, () => []);
         const glassNormals = Array.from({ length: numMaterials }, () => []);
         const glassUvs = Array.from({ length: numMaterials }, () => []);
         const glassIndices = Array.from({ length: numMaterials }, () => []);
         const glassVertexOffsets = new Array(numMaterials).fill(0);
-
-        // Manually collected glass boundary line segments (pairs of [x,y,z] endpoints)
-        // We build these during the block loop instead of using EdgesGeometry
-        const glassLinePositions = [];
 
         const CHUNK_SIZE = 16;
         const neighborOffsets = [
@@ -296,14 +327,15 @@ export class ChunkMeshBuilder {
         // We will just let the callers push directly, or pass the target array explicitly.
         // Actually, since the variables are hoisted locally, we can let it access them if we know the block type.
 
-        const pushTri = (p1, p2, p3, uv1, uv2, uv3, normal, matIndex, targetType) => {
-            let tPos, tNorm, tUv, tInd, currentOffset;
+        const pushTri = (p1, p2, p3, uv1, uv2, uv3, normal, matIndex, targetType, lightVal) => {
+            let tPos, tNorm, tUv, tInd, tLight, currentOffset;
 
             if (targetType === 'glass') {
                 tPos = glassPositions[matIndex];
                 tNorm = glassNormals[matIndex];
                 tUv = glassUvs[matIndex];
                 tInd = glassIndices[matIndex];
+                tLight = glassLightLevels[matIndex];
                 currentOffset = glassVertexOffsets[matIndex];
                 glassVertexOffsets[matIndex] += 3;
             } else if (targetType === 'trans') {
@@ -311,6 +343,7 @@ export class ChunkMeshBuilder {
                 tNorm = transNormals[matIndex];
                 tUv = transUvs[matIndex];
                 tInd = transIndices[matIndex];
+                tLight = transLightLevels[matIndex];
                 currentOffset = transVertexOffsets[matIndex];
                 transVertexOffsets[matIndex] += 3;
             } else {
@@ -318,6 +351,7 @@ export class ChunkMeshBuilder {
                 tNorm = normals[matIndex];
                 tUv = uvs[matIndex];
                 tInd = indices[matIndex];
+                tLight = lightLevels[matIndex];
                 currentOffset = vertexOffsets[matIndex];
                 vertexOffsets[matIndex] += 3;
             }
@@ -325,18 +359,20 @@ export class ChunkMeshBuilder {
             tPos.push(...p1, ...p2, ...p3);
             tUv.push(...uv1, ...uv2, ...uv3);
             tNorm.push(...normal, ...normal, ...normal);
+            tLight.push(lightVal, lightVal, lightVal);
 
             tInd.push(currentOffset, currentOffset + 1, currentOffset + 2);
         };
 
-        const pushQuad = (p1, p2, p3, p4, uv1, uv2, uv3, uv4, normal, matIndex, targetType) => {
-            let tPos, tNorm, tUv, tInd, currentOffset;
+        const pushQuad = (p1, p2, p3, p4, uv1, uv2, uv3, uv4, normal, matIndex, targetType, lightVal) => {
+            let tPos, tNorm, tUv, tInd, tLight, currentOffset;
 
             if (targetType === 'glass') {
                 tPos = glassPositions[matIndex];
                 tNorm = glassNormals[matIndex];
                 tUv = glassUvs[matIndex];
                 tInd = glassIndices[matIndex];
+                tLight = glassLightLevels[matIndex];
                 currentOffset = glassVertexOffsets[matIndex];
                 glassVertexOffsets[matIndex] += 4;
             } else if (targetType === 'trans') {
@@ -344,6 +380,7 @@ export class ChunkMeshBuilder {
                 tNorm = transNormals[matIndex];
                 tUv = transUvs[matIndex];
                 tInd = transIndices[matIndex];
+                tLight = transLightLevels[matIndex];
                 currentOffset = transVertexOffsets[matIndex];
                 transVertexOffsets[matIndex] += 4;
             } else {
@@ -351,6 +388,7 @@ export class ChunkMeshBuilder {
                 tNorm = normals[matIndex];
                 tUv = uvs[matIndex];
                 tInd = indices[matIndex];
+                tLight = lightLevels[matIndex];
                 currentOffset = vertexOffsets[matIndex];
                 vertexOffsets[matIndex] += 4;
             }
@@ -358,6 +396,7 @@ export class ChunkMeshBuilder {
             tPos.push(...p1, ...p2, ...p3, ...p4);
             tUv.push(...uv1, ...uv2, ...uv3, ...uv4);
             tNorm.push(...normal, ...normal, ...normal, ...normal);
+            tLight.push(lightVal, lightVal, lightVal, lightVal);
 
             tInd.push(
                 currentOffset, currentOffset + 1, currentOffset + 2,
@@ -367,6 +406,7 @@ export class ChunkMeshBuilder {
 
         // ─── FAST-PATH FOR LOD CHUNKS ───
         if (chunk.isLOD) {
+            let lodBlocksProcessed = 0;
             // LOD chunks only render the topmost visible surface block. No side faces, no bottoms.
             for (let lq = 0; lq < CHUNK_SIZE; lq++) {
                 for (let lr = 0; lr < CHUNK_SIZE; lr++) {
@@ -416,7 +456,8 @@ export class ChunkMeshBuilder {
                                 uv1Top, uv2Top, uv3Top,
                                 [0, 1, 0],
                                 topMatIndex,
-                                targetType
+                                targetType,
+                                0.0 // LOD has 0 bonus light
                             );
 
                             // --- LOD Boundary Side Faces ---
@@ -471,16 +512,20 @@ export class ChunkMeshBuilder {
                                     [worldPos.x + c1.x, baseY, worldPos.z + c1.y],
                                     uv1T, uv2T, uv2B, uv1B,
                                     normal, topMatIndex,
-                                    targetType
+                                    targetType,
+                                    0.0 // Ensure valid lightVal to prevent NaN shader corruption
                                 );
                             }
                         }
                     }
+                    lodBlocksProcessed++;
+                    if (lodBlocksProcessed % 32 === 0) yield;
                 }
             }
         }
         else {
             // ─── DETAILED CHUNK PATH ───
+            let blocksProcessed = 0;
             // Iterate all blocks in the chunk data
             for (const block of chunk.getBlocks()) {
                 if (block.id === 0) continue; // Air
@@ -494,6 +539,9 @@ export class ChunkMeshBuilder {
 
                 const topMatIndex = this.materialIndexMap.get(topColorName) ?? 0;
                 const baseMatIndex = this.materialIndexMap.get(baseColorName) ?? 0;
+
+                const isTorch = block.id === 10;
+                let activeCorners = isTorch ? torchCorners : corners;
 
                 // Determine if we need to render faces based on neighbors (Frustum/Face Culling)
                 // For now, render all faces of active blocks, we will optimize face culling next.
@@ -516,7 +564,13 @@ export class ChunkMeshBuilder {
 
                 // Calculate exact seeded height, or flatten to 0.5 if it's Water
                 const blockAboveId = chunkSystem ? chunkSystem.getBlockGlobal(globalQ, globalR, block.y + 1) : 0;
-                const blockHeight = chunk.isLOD ? 1.0 : (def.name === 'water' ? 0.5 : getSeededBlockHeight(globalQ, globalR, block.y, seed, blockAboveId, isSolidFn));
+
+                // Determine actual height factoring in the Smooth Tool custom heights
+                let blockHeight = isTorch ? 0.8 : (chunk.isLOD ? 1.0 : (def.name === 'water' ? 0.5 : getSeededBlockHeight(globalQ, globalR, block.y, seed, blockAboveId, isSolidFn)));
+                const customHeightVal = chunkSystem ? chunkSystem.getHeightGlobal(globalQ, globalR, block.y) : 0;
+                if (customHeightVal > 0) {
+                    blockHeight = customHeightVal / 10.0;
+                }
 
                 // Top Face (Center + 6 corners = 6 triangles)
                 const topY = yOffset + blockHeight;
@@ -537,17 +591,36 @@ export class ChunkMeshBuilder {
                     const nTrans = nDef.transparent || nDef.translucent;
 
                     // SPECIAL LOGIC FOR VARIABLE HEIGHT BLOCKS
-                    // Only needed for horizontal side faces
-                    if (isSide && myHeight > 0.4) { // If I am taller than the minimum
+                    if (!isSide) {
+                        if (gy > block.y && myHeight < 1.0) {
+                            return true; // Gap above me, so render my top face
+                        } else if (gy < block.y) {
+                            const nBlockAboveId = chunkSystem.getBlockGlobal(gq, gr, gy + 1);
+                            let nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seed, nBlockAboveId, isSolidFn));
+                            const nCustomHeightVal = chunkSystem.getHeightGlobal(gq, gr, gy);
+                            if (nCustomHeightVal > 0) {
+                                nHeight = nCustomHeightVal / 10.0;
+                            }
+                            // Gap below me, so render my bottom face
+                            if (nHeight < 1.0) return true;
+                        }
+                    } else if (isSide) { // Allow all heights to render side faces appropriately
                         // Get the exact height of the neighbor block to see if it covers me
                         const nBlockAboveId = chunkSystem.getBlockGlobal(gq, gr, gy + 1);
-                        const nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seed, nBlockAboveId, isSolidFn));
+                        let nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seed, nBlockAboveId, isSolidFn));
+                        const nCustomHeightVal = chunkSystem.getHeightGlobal(gq, gr, gy);
+                        if (nCustomHeightVal > 0) {
+                            nHeight = nCustomHeightVal / 10.0;
+                        }
 
                         // If my neighbor is solid but shorter than me, part of my upper side will be exposed!
                         if (!nTrans && nHeight < myHeight) {
                             return true;
                         }
                     }
+
+                    // Slim blocks (torch) don't cover a full hex face, so never cull against them
+                    if (nid === 10) return true; // torch is 0.1 wide — always render adjacent faces
 
                     // If neighbor is solid opaque, don't render face against it
                     if (!nTrans) return false;
@@ -564,8 +637,8 @@ export class ChunkMeshBuilder {
                 // Build Top Face
                 if (shouldRenderFace(globalQ, globalR, block.y + 1, def, blockHeight, false)) {
                     for (let i = 0; i < 6; i++) {
-                        const c1 = corners[i];
-                        const c2 = corners[(i + 1) % 6];
+                        const c1 = activeCorners[i];
+                        const c2 = activeCorners[(i + 1) % 6];
 
                         // Add center, c2, c1 triangle (reversed winding for top face)
                         pushTri(
@@ -577,7 +650,8 @@ export class ChunkMeshBuilder {
                             [worldPos.x + c1.x, worldPos.z + c1.y],
                             [0, 1, 0],
                             topMatIndex,
-                            targetType
+                            targetType,
+                            isTorch ? 1.0 : (chunkSystem ? chunkSystem.getLightGlobal(globalQ, globalR, block.y + 1) / 15.0 : 0.0)
                         );
                     }
                 }
@@ -585,8 +659,8 @@ export class ChunkMeshBuilder {
                 // Build Bottom Face
                 if (shouldRenderFace(globalQ, globalR, block.y - 1, def, blockHeight, false)) {
                     for (let i = 0; i < 6; i++) {
-                        const c1 = corners[i];
-                        const c2 = corners[(i + 1) % 6];
+                        const c1 = activeCorners[i];
+                        const c2 = activeCorners[(i + 1) % 6];
 
                         // Add center, c1, c2 triangle (normal winding for bottom face)
                         pushTri(
@@ -598,7 +672,8 @@ export class ChunkMeshBuilder {
                             [worldPos.x + c2.x, worldPos.z + c2.y],
                             [0, -1, 0],
                             baseMatIndex,
-                            targetType
+                            targetType,
+                            isTorch ? 1.0 : (chunkSystem ? chunkSystem.getLightGlobal(globalQ, globalR, block.y - 1) / 15.0 : 0.0)
                         );
                     }
                 }
@@ -610,8 +685,8 @@ export class ChunkMeshBuilder {
                         continue;
                     }
 
-                    const c1 = corners[i];
-                    const c2 = corners[(i + 1) % 6];
+                    const c1 = activeCorners[i];
+                    const c2 = activeCorners[(i + 1) % 6];
 
                     // Normal calculation for the side
                     const dx = c2.x - c1.x;
@@ -628,6 +703,27 @@ export class ChunkMeshBuilder {
                     const uv2Bot = [1, baseY];
                     const uv1Bot = [0, baseY];
 
+                    // Get light value for the side face.
+                    // When a neighbor block is shorter than full height, the upper portion of this
+                    // block's side is visually exposed — but the light BFS treats the neighbor voxel
+                    // as occupied, so light at (neighbor, y) may be 0. We compensate by also sampling
+                    // the light at (neighbor, y+1) which is the air above the short neighbor.
+                    let sideLightVal = 0.0;
+                    if (isTorch) {
+                        sideLightVal = 1.0;
+                    } else if (chunkSystem) {
+                        const nq = globalQ + offset.q;
+                        const nr = globalR + offset.r;
+                        let bestLight = chunkSystem.getLightGlobal(nq, nr, block.y);
+                        bestLight = Math.max(bestLight, chunkSystem.getLightGlobal(globalQ, globalR, block.y));
+                        // Also check light above the neighbor — covers the case where the neighbor
+                        // block exists but is shorter than full height, leaving the upper side exposed.
+                        bestLight = Math.max(bestLight, chunkSystem.getLightGlobal(nq, nr, block.y + 1));
+                        // And check our own block's above light level too
+                        bestLight = Math.max(bestLight, chunkSystem.getLightGlobal(globalQ, globalR, block.y + 1));
+                        sideLightVal = bestLight / 15.0;
+                    }
+
                     // Top Section Quad (25%)
                     pushQuad(
                         [worldPos.x + c1.x, topY, worldPos.z + c1.y],
@@ -636,7 +732,8 @@ export class ChunkMeshBuilder {
                         [worldPos.x + c1.x, splitY, worldPos.z + c1.y],
                         uv1Top, uv2Top, uv2Mid, uv1Mid,
                         normal, topMatIndex,
-                        targetType
+                        targetType,
+                        sideLightVal
                     );
 
                     // Base Section Quad (75%)
@@ -647,108 +744,57 @@ export class ChunkMeshBuilder {
                         [worldPos.x + c1.x, baseY, worldPos.z + c1.y],
                         uv1Mid, uv2Mid, uv2Bot, uv1Bot,
                         normal, baseMatIndex,
-                        targetType
+                        targetType,
+                        sideLightVal
                     );
-                }
-            }
+                } // end for 6 sides
 
-            // ─── GLASS BOUNDARY OUTLINE COLLECTION ───
-            // For glass blocks, we manually collect line segments only for edges
-            // that border non-glass blocks (the outer perimeter of glass structures)
-            if (isGlass && chunkSystem) {
-                // Check each of the 6 hex side neighbors
-                for (let i = 0; i < 6; i++) {
-                    const offset = neighborOffsets[i];
-                    const nq = globalQ + offset.q;
-                    const nr = globalR + offset.r;
-                    const neighborId = chunkSystem.getBlockGlobal(nq, nr, block.y);
-
-                    // Only draw the edge if the neighbor is NOT glass
-                    if (neighborId !== 9) {
-                        const c1 = corners[i];
-                        const c2 = corners[(i + 1) % 6];
-
-                        // Top horizontal edge of this side
-                        glassLinePositions.push(
-                            worldPos.x + c1.x, topY, worldPos.z + c1.y,
-                            worldPos.x + c2.x, topY, worldPos.z + c2.y
-                        );
-                        // Bottom horizontal edge of this side
-                        glassLinePositions.push(
-                            worldPos.x + c1.x, baseY, worldPos.z + c1.y,
-                            worldPos.x + c2.x, baseY, worldPos.z + c2.y
-                        );
-                        // Left vertical edge of this side
-                        glassLinePositions.push(
-                            worldPos.x + c1.x, topY, worldPos.z + c1.y,
-                            worldPos.x + c1.x, baseY, worldPos.z + c1.y
-                        );
-                        // Right vertical edge of this side
-                        glassLinePositions.push(
-                            worldPos.x + c2.x, topY, worldPos.z + c2.y,
-                            worldPos.x + c2.x, baseY, worldPos.z + c2.y
-                        );
-                    }
-                }
-
-                // Top face perimeter: draw hex edge if block above is NOT glass
-                const aboveId = chunkSystem.getBlockGlobal(globalQ, globalR, block.y + 1);
-                if (aboveId !== 9) {
-                    for (let i = 0; i < 6; i++) {
-                        const c1 = corners[i];
-                        const c2 = corners[(i + 1) % 6];
-                        glassLinePositions.push(
-                            worldPos.x + c1.x, topY, worldPos.z + c1.y,
-                            worldPos.x + c2.x, topY, worldPos.z + c2.y
-                        );
-                    }
-                }
-
-                // Bottom face perimeter: draw hex edge if block below is NOT glass
-                const belowId = chunkSystem.getBlockGlobal(globalQ, globalR, block.y - 1);
-                if (belowId !== 9) {
-                    for (let i = 0; i < 6; i++) {
-                        const c1 = corners[i];
-                        const c2 = corners[(i + 1) % 6];
-                        glassLinePositions.push(
-                            worldPos.x + c1.x, baseY, worldPos.z + c1.y,
-                            worldPos.x + c2.x, baseY, worldPos.z + c2.y
-                        );
-                    }
+                // Yield to main thread every ~400 solid blocks to prevent frame drops
+                blocksProcessed++;
+                if (blocksProcessed % 400 === 0) {
+                    yield;
                 }
             }
         } // End Detailed Path
 
-        const buildMesh = (posArr, normArr, uvArr, indArr, materialsArray) => {
-            // Flatten arrays and track material group offsets
+        const buildMeshGen = function* (posArr, normArr, uvArr, indArr, lightArr, materialsArray) {
             const flatPos = [];
             const flatNorm = [];
             const flatUv = [];
             const flatInd = [];
+            const flatLight = [];
             const groups = [];
-
-            let indexOffset = 0; // Tracks the running offset of indices mapped so far
 
             for (let i = 0; i < numMaterials; i++) {
                 if (posArr[i].length === 0) continue;
 
-                // Create a group entry matching the material Index
-                // `start` is the index of the first element in the indices array for this group
                 groups.push({
                     start: flatInd.length,
                     count: indArr[i].length,
                     materialIndex: i
                 });
 
-                // Vertices must be offset by the current vertex count in flatPos
                 const vertexOffset = flatPos.length / 3;
                 for (let j = 0; j < indArr[i].length; j++) {
                     flatInd.push(indArr[i][j] + vertexOffset);
                 }
 
-                flatPos.push(...posArr[i]);
-                flatNorm.push(...normArr[i]);
-                flatUv.push(...uvArr[i]);
+                // Use classical loops instead of spread operator (...) to prevent 
+                // "RangeError: Maximum call stack size exceeded" on massive structures
+                const pArr = posArr[i];
+                for (let v = 0; v < pArr.length; v++) flatPos.push(pArr[v]);
+
+                const nArr = normArr[i];
+                for (let v = 0; v < nArr.length; v++) flatNorm.push(nArr[v]);
+
+                const uArr = uvArr[i];
+                for (let v = 0; v < uArr.length; v++) flatUv.push(uArr[v]);
+
+                const lArr = lightArr[i];
+                for (let v = 0; v < lArr.length; v++) flatLight.push(lArr[v]);
+
+                // Yield per material compiled to keep frame smooth
+                yield;
             }
 
             if (flatPos.length === 0) return null;
@@ -757,6 +803,7 @@ export class ChunkMeshBuilder {
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(flatPos, 3));
             geometry.setAttribute('normal', new THREE.Float32BufferAttribute(flatNorm, 3));
             geometry.setAttribute('uv', new THREE.Float32BufferAttribute(flatUv, 2));
+            geometry.setAttribute('aLightLevel', new THREE.Float32BufferAttribute(flatLight, 1));
             geometry.setIndex(flatInd);
 
             for (const g of groups) {
@@ -765,6 +812,8 @@ export class ChunkMeshBuilder {
 
             geometry.computeBoundingSphere();
             geometry.computeBoundingBox();
+
+            yield; // Compute vertex normals can be heavy
             geometry.computeVertexNormals();
 
             const mesh = new THREE.Mesh(geometry, materialsArray);
@@ -773,16 +822,31 @@ export class ChunkMeshBuilder {
             return mesh;
         };
 
-        const solidMesh = buildMesh(positions, normals, uvs, indices, this.materialArray);
-        const transMesh = buildMesh(transPositions, transNormals, transUvs, transIndices, this.transparentMaterialArray);
-        const glassMesh = buildMesh(glassPositions, glassNormals, glassUvs, glassIndices, this.transparentMaterialArray);
+        // Execute and yield out the nested generators
+        let solidMesh = null;
+        const solidGen = buildMeshGen(positions, normals, uvs, indices, lightLevels, this.materialArray);
+        let solidRes = solidGen.next();
+        while (!solidRes.done) { yield; solidRes = solidGen.next(); }
+        solidMesh = solidRes.value;
+
+        let transMesh = null;
+        const transGen = buildMeshGen(transPositions, transNormals, transUvs, transIndices, transLightLevels, this.transparentMaterialArray);
+        let transRes = transGen.next();
+        while (!transRes.done) { yield; transRes = transGen.next(); }
+        transMesh = transRes.value;
+
+        let glassMesh = null;
+        const glassGen = buildMeshGen(glassPositions, glassNormals, glassUvs, glassIndices, glassLightLevels, this.transparentMaterialArray);
+        let glassRes = glassGen.next();
+        while (!glassRes.done) { yield; glassRes = glassGen.next(); }
+        glassMesh = glassRes.value;
 
         const group = new THREE.Group();
         if (solidMesh && solidMesh.geometry.attributes.position.count > 0) {
             group.add(solidMesh);
 
-            // Add block outlines if globally enabled, or if it's an LOD chunk faking depth
-            if (blockSystem.showOutlines || chunk.isLOD) {
+            // Add block outlines if globally enabled. LOD chunks never get outlines.
+            if (blockSystem.showOutlines && !chunk.isLOD) {
                 const edges = new THREE.EdgesGeometry(solidMesh.geometry, 1); // 1 deg threshold for sharp hex edges
                 if (edges.attributes.position.count > 0) {
                     const lineGeom = new LineSegmentsGeometry().fromEdgesGeometry(edges);
@@ -810,16 +874,21 @@ export class ChunkMeshBuilder {
         }
         if (glassMesh && glassMesh.geometry.attributes.position.count > 0) {
             group.add(glassMesh);
-
-            // Build outline from manually collected boundary line segments
-            if (glassLinePositions.length > 0) {
-                const glassLineGeom = new LineSegmentsGeometry();
-                glassLineGeom.setPositions(glassLinePositions);
-                const glassOutline = new Line2(glassLineGeom, this.glassOutlineMaterial);
-                group.add(glassOutline);
-            }
         }
 
         return group;
+    }
+
+    /**
+     * Synchronous wrapper for fallback compatibility.
+     * Fully consumes the generator in one go.
+     */
+    buildChunkMesh(chunk, blockSystem, chunkSystem, seed = "arkonhex") {
+        const gen = this.buildChunkMeshGenerator(chunk, blockSystem, chunkSystem, seed);
+        let result = gen.next();
+        while (!result.done) {
+            result = gen.next();
+        }
+        return result.value;
     }
 }

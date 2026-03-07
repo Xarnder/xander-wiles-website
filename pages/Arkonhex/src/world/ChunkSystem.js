@@ -14,6 +14,7 @@ export class ChunkSystem {
         this.chunkGenQueue = [];
         this.pendingChunks = new Set();
         this.dirtyChunks = new Set();
+        this.priorityDirtyChunks = new Set(); // Queue for player-modified chunks
         this.isLoadingDB = false;
 
         // Generator state for time-slicing
@@ -46,10 +47,19 @@ export class ChunkSystem {
         return `${cq},${cr}`;
     }
 
-    markChunkDirty(chunk) {
+    markChunkDirty(chunk, isPriority = false) {
         if (!chunk) return;
         chunk.isDirty = true;
-        this.dirtyChunks.add(chunk);
+
+        if (isPriority) {
+            this.dirtyChunks.delete(chunk);
+            this.priorityDirtyChunks.add(chunk);
+        } else {
+            // Only add to standard dirty if it's not already in priority
+            if (!this.priorityDirtyChunks.has(chunk)) {
+                this.dirtyChunks.add(chunk);
+            }
+        }
     }
 
     updateLoadedChunks(playerQ, playerR) {
@@ -187,6 +197,7 @@ export class ChunkSystem {
         this.chunks.delete(key);
         this.pendingChunks.delete(key);
         this.dirtyChunks.delete(chunk);
+        this.priorityDirtyChunks.delete(chunk);
         // Remove from queue if it was pending
         this.chunkGenQueue = this.chunkGenQueue.filter(item => item.key !== key);
     }
@@ -200,6 +211,9 @@ export class ChunkSystem {
         if (chunk) {
             chunk.isModified = true;
             this.saveQueue.add(key);
+
+            // Re-mesh it immediately with priority flag
+            this.markChunkDirty(chunk, true);
         }
     }
 
@@ -268,7 +282,13 @@ export class ChunkSystem {
 
         // Priority 2: Pick a new chunk to mesh
         if (!this.activeMeshJob && !this.activeGenJob) {
-            if (this.dirtyChunks.size > 0) {
+            if (this.priorityDirtyChunks.size > 0) {
+                // Instantly mesh player-modified chunks
+                const chunk = this.priorityDirtyChunks.values().next().value;
+                this.priorityDirtyChunks.delete(chunk);
+                this.rebuildChunkMesh(chunk);
+            } else if (this.dirtyChunks.size > 0) {
+                // Background meshing
                 const chunk = this.dirtyChunks.values().next().value;
                 this.dirtyChunks.delete(chunk);
                 this.rebuildChunkMesh(chunk);

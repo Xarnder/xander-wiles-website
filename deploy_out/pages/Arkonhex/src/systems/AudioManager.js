@@ -12,16 +12,53 @@ export class AudioManager {
     }
 
     _initSounds() {
-        // SFX
+        // SFX - Base
         this.sfx.place = this._createAudio('assets/sounds/place.mp3', 0.5);
         this.sfx.break = this._createAudio('assets/sounds/break.mp3', 0.8);
         this.sfx.walk = this._createAudio('assets/sounds/walking.mp3', 0.3, true);
         this.sfx.swim = this._createAudio('assets/sounds/swimming.mp3', 0.4, true);
         this.sfx.splash = this._createAudio('assets/sounds/splash.mp3', 0.7);
+        this.sfx.correct = this._createAudio('assets/sounds/correct.mp3', 0.8);
+
+        // SFX - Block Specific (Dynamic)
+        this.blockSounds = {
+            place: {},
+            destroy: {}
+        };
 
         // Ambience
         this.ambience.underwater = this._createAudio('assets/sounds/underwater-ambients.mp3', 0, true);
         this.ambience.normal = this._createAudio('assets/sounds/normal-ambients.mp3', 0, true);
+    }
+
+    playBlockSound(type, soundName) {
+        if (this.isMutedAll || this.isMutedSFX) return;
+
+        // Determine correct base name and fallback
+        const category = type === 'place' ? 'place' : 'destroy';
+        const fallbackSound = category === 'place' ? 'place' : 'break';
+        const subdirectory = category === 'place' ? 'place' : 'destroy';
+
+        // Check if cached
+        if (!this.blockSounds[category][soundName]) {
+            // Dynamic load from subdirectory
+            const path = `assets/sounds/${subdirectory}/${soundName}.mp3`;
+            this.blockSounds[category][soundName] = this._createAudio(path, category === 'place' ? 0.5 : 0.8);
+        }
+
+        const sound = this.blockSounds[category][soundName];
+        if (sound) {
+            sound.currentTime = 0;
+            sound.play().catch(e => {
+                // Fallback to generic sound in sfx if specific one fails
+                if (soundName !== fallbackSound) {
+                    console.warn(`Failed to play ${type} sound "${soundName}" from ${subdirectory}/, falling back to generic.`);
+                    this.playSFX(fallbackSound);
+                }
+            });
+        } else {
+            this.playSFX(fallbackSound);
+        }
     }
 
     _createAudio(src, volume, loop = false) {

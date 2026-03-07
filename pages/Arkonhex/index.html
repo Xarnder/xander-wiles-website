@@ -63,6 +63,15 @@
             style="display: none; position: absolute; bottom: 119px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); color: #fff; padding: 5px 15px; border-radius: 5px; font-weight: bold; pointer-events: none; z-index: 100;">
             Smooth Tool: 1.0</div>
 
+        <!-- Castle Compass -->
+        <div id="castle-compass"
+            style="display: none; position: absolute; bottom: 20px; left: calc(50% + 230px); width: 64px; height: 64px; background: rgba(0,0,0,0.6); border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 50%; align-items: center; justify-content: center; z-index: 100; box-shadow: inset 0 0 10px rgba(0,0,0,0.8);">
+            <div id="castle-compass-arrow"
+                style="font-size: 32px; transition: transform 0.1s linear; transform-origin: center center;">
+                🧭
+            </div>
+        </div>
+
         <div id="start-screen" class="overlay-screen">
             <h1>ARKONHEX</h1>
             <div id="loading-container">
@@ -306,9 +315,24 @@
 
             <div id="waypoints-tab" class="settings-panel tab-content" style="pointer-events: auto;"
                 onclick="event.stopPropagation()">
-                <h2 style="margin-top: 0;">Waypoints</h2>
-                <p style="opacity: 0.5; font-size: 0.85rem; margin-bottom: 12px;">Press <strong>P</strong> in-game to
-                    place a waypoint. Manage them here.</p>
+                <div
+                    style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                    <div>
+                        <h2 style="margin-top: 0; margin-bottom: 5px;">Waypoints</h2>
+                        <p style="opacity: 0.5; font-size: 0.85rem; margin: 0;">Press <strong>P</strong> in-game to
+                            place a waypoint. Manage them here.</p>
+                    </div>
+                    <button id="locate-castle-btn" style="
+                        padding: 8px 16px; font-size: 0.85rem;
+                        background: linear-gradient(135deg, #10ac84, #1dd1a1);
+                        border: none; color: white; border-radius: 6px;
+                        cursor: pointer; font-weight: 600;
+                        box-shadow: 0 2px 8px rgba(16, 172, 132, 0.4); transition: transform 0.1s;
+                    ">Locate Nearest Castle</button>
+                </div>
+                <!-- Adding a visible separator for cleaner UI -->
+                <div style="height: 1px; background: rgba(255,255,255,0.1); margin-bottom: 15px;"></div>
+
                 <div id="waypoint-list" style="max-height: 300px; overflow-y: auto;"></div>
             </div>
 

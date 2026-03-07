@@ -43,12 +43,33 @@
             Arkonhex <span id="system-date"></span> - <span id="in-game-time">12:00 AM</span> - v0.1.0 Alpha
         </div>
         <div id="debug-overlay">
+            <div id="coords-display">X: 0 Y: 0 Z: 0</div>
             <div id="fps-counter">FPS: 0</div>
             <div id="seed-display">Seed: 0</div>
             <div id="selected-block-info">Selected: None</div>
         </div>
+        <div id="block-name-popup"></div>
         <div id="hotbar" class="hotbar">
             <!-- Items injected by UI manager -->
+        </div>
+        <div id="height-bar-container">
+            <div id="height-bar-fill"></div>
+        </div>
+        <div id="smooth-tool-icon"
+            style="display: none; position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 64px; height: 64px; background: rgba(0,0,0,0.6); border: 3px solid #00cec9; border-radius: 8px; align-items: center; justify-content: center; font-size: 32px; box-shadow: 0 0 15px rgba(0, 206, 201, 0.5); z-index: 100;">
+            ⛏️
+        </div>
+        <div id="smooth-tool-display"
+            style="display: none; position: absolute; bottom: 119px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.6); color: #fff; padding: 5px 15px; border-radius: 5px; font-weight: bold; pointer-events: none; z-index: 100;">
+            Smooth Tool: 1.0</div>
+
+        <!-- Castle Compass -->
+        <div id="castle-compass"
+            style="display: none; position: absolute; bottom: 20px; left: calc(50% + 230px); width: 64px; height: 64px; background: rgba(0,0,0,0.6); border: 2px solid rgba(255, 255, 255, 0.4); border-radius: 50%; align-items: center; justify-content: center; z-index: 100; box-shadow: inset 0 0 10px rgba(0,0,0,0.8);">
+            <div id="castle-compass-arrow"
+                style="font-size: 32px; transition: transform 0.1s linear; transform-origin: center center;">
+                🧭
+            </div>
         </div>
 
         <div id="start-screen" class="overlay-screen">
@@ -63,53 +84,89 @@
 
         <div id="world-select-screen" class="overlay-screen hidden">
             <h1>ARKONHEX</h1>
-            <h2 style="margin-bottom: 20px; opacity: 0.7; font-weight: 300;">Select World</h2>
 
-            <div id="world-list"
-                style="max-height: 320px; overflow-y: auto; margin-bottom: 20px; width: 100%; max-width: 500px;">
-                <!-- World entries injected by WorldSelectMenu.js -->
+            <!-- Main Hub -->
+            <div id="ws-main-menu" class="ws-sub-menu">
+                <div
+                    style="display: flex; flex-direction: column; align-items: center; gap: 15px; margin-bottom: 20px;">
+                    <button id="play-now-btn" style="
+                        padding: 20px 50px; font-size: 1.5rem;
+                        background: linear-gradient(135deg, #7620a2, #a865b5); /* Purple Gradient */
+                        border: none; color: white; border-radius: 12px;
+                        cursor: pointer; font-weight: bold; width: 100%; max-width: 350px;
+                        box-shadow: 0 4px 15px rgba(118, 32, 162, 0.4); transition: transform 0.2s, box-shadow 0.2s;
+                    ">Play Now</button>
+
+                    <button id="nav-create-world-btn" style="
+                        padding: 14px 25px; font-size: 1.1rem;
+                        background: transparent;
+                        border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.8); border-radius: 8px;
+                        cursor: pointer; font-weight: 500; transition: background 0.2s; width: 100%; max-width: 350px;
+                    ">Custom World Options</button>
+
+                    <button id="nav-existing-world-btn" style="
+                        padding: 14px 25px; font-size: 1.1rem;
+                        background: transparent;
+                        border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.8); border-radius: 8px;
+                        cursor: pointer; font-weight: 500; transition: background 0.2s; width: 100%; max-width: 350px;
+                    ">Play Existing World</button>
+                </div>
             </div>
 
-            <button id="show-create-form-btn" style="
-                padding: 12px 30px; font-size: 1rem;
-                background: linear-gradient(135deg, #4a9eff, #6c5ce7);
-                border: none; color: white; border-radius: 8px;
-                cursor: pointer; font-weight: 600; margin-bottom: 15px;
-            ">+ Create New World</button>
-
-            <div id="create-world-form" class="hidden" style="
-                background: rgba(255,255,255,0.05); border-radius: 10px;
-                padding: 20px; max-width: 400px; width: 100%;
-                border: 1px solid rgba(255,255,255,0.1);
-            ">
-                <div style="margin-bottom: 12px;">
-                    <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">World
-                        Name</label>
-                    <input id="world-name-input" type="text" placeholder="My World" style="
-                        width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
-                        border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
-                        color: white; font-size: 1rem; box-sizing: border-box;
-                    ">
+            <!-- Existing Worlds List -->
+            <div id="ws-list-menu" class="ws-sub-menu hidden">
+                <h2 style="margin-bottom: 20px; opacity: 0.7; font-weight: 300;">Select World</h2>
+                <div id="world-list"
+                    style="max-height: 320px; overflow-y: auto; margin-bottom: 20px; width: 100%; max-width: 500px;">
+                    <!-- World entries injected by WorldSelectMenu.js -->
                 </div>
-                <div style="margin-bottom: 15px;">
-                    <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">Seed
-                        (optional)</label>
-                    <input id="world-seed-input" type="text" placeholder="Random" style="
-                        width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
-                        border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
-                        color: white; font-size: 1rem; box-sizing: border-box;
-                    ">
-                </div>
-                <button id="create-world-btn" style="
-                    padding: 10px 25px; font-size: 1rem;
-                    background: linear-gradient(135deg, #00b894, #00cec9);
-                    border: none; color: white; border-radius: 6px;
-                    cursor: pointer; font-weight: 600;
-                ">Create &amp; Play</button>
+                <button class="ws-back-btn" style="
+                    padding: 8px 16px; font-size: 0.9rem;
+                    background: transparent;
+                    border: 1px solid rgba(255,100,100,0.4); color: #ff6b6b; border-radius: 6px;
+                    cursor: pointer; font-weight: 500; transition: background 0.2s;
+                ">&#x2190; Back</button>
             </div>
 
-            <p style="margin-top: 20px; opacity: 0.4; font-size: 0.85rem;">Controls: WASD to move, Space to Jump, Shift
-                to Sprint. Click to Break, Right Click to Place.</p>
+            <!-- Custom World Form -->
+            <div id="ws-create-menu" class="ws-sub-menu hidden">
+                <div id="create-world-form" style="
+                    background: rgba(255,255,255,0.05); border-radius: 10px;
+                    padding: 20px; max-width: 400px; width: 100%;
+                    border: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;
+                ">
+                    <div style="margin-bottom: 12px; text-align: left;">
+                        <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">World
+                            Name</label>
+                        <input id="world-name-input" type="text" placeholder="My World" style="
+                            width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
+                            border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+                            color: white; font-size: 1rem; box-sizing: border-box;
+                        ">
+                    </div>
+                    <div style="margin-bottom: 15px; text-align: left;">
+                        <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">Seed
+                            (optional)</label>
+                        <input id="world-seed-input" type="text" placeholder="Random" style="
+                            width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
+                            border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+                            color: white; font-size: 1rem; box-sizing: border-box;
+                        ">
+                    </div>
+                    <button id="create-world-btn" style="
+                        padding: 10px 25px; font-size: 1rem;
+                        background: linear-gradient(135deg, #7620a2, #a865b5); /* Purple Gradient */
+                        border: none; color: white; border-radius: 6px;
+                        cursor: pointer; font-weight: 600; width: 100%;
+                    ">Create &amp; Play</button>
+                </div>
+                <button class="ws-back-btn" style="
+                    padding: 8px 16px; font-size: 0.9rem;
+                    background: transparent;
+                    border: 1px solid rgba(255,100,100,0.4); color: #ff6b6b; border-radius: 6px;
+                    cursor: pointer; font-weight: 500; transition: background 0.2s;
+                ">&#x2190; Back</button>
+            </div>
         </div>
 
         <div id="pause-screen" class="overlay-screen hidden"
@@ -129,11 +186,12 @@
                 onclick="event.stopPropagation()">
                 <!-- Sub-tabs for Settings -->
                 <div class="settings-sub-nav"
-                    style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                    style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; overflow-x: auto;">
                     <button class="sub-tab active" data-sub-tab="settings-world">World</button>
                     <button class="sub-tab" data-sub-tab="settings-graphics">Graphics</button>
                     <button class="sub-tab" data-sub-tab="settings-controls">Controls</button>
                     <button class="sub-tab" data-sub-tab="settings-audio">Audio</button>
+                    <button class="sub-tab" data-sub-tab="settings-palette">Palette</button>
                 </div>
 
                 <!-- World Settings -->
@@ -178,8 +236,24 @@
                             terrain flattens for performance.</p>
                     </div>
                     <div class="setting-row" style="margin-top: 20px;">
-                        <label>GTAO Post-Processing: <span id="gtao-val">1.0</span></label>
-                        <input type="range" id="gtao-slider" min="0.0" max="2.0" step="0.1" value="1.0">
+                        <label>Chunk Fly-In Animation: <input type="checkbox" id="anim-enable-toggle" checked></label>
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Animate new chunks rising from the
+                            ground.</p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>GTAO Post-Processing: <span id="gtao-val">0</span></label>
+                        <input type="range" id="gtao-slider" min="0.0" max="2.0" step="0.1" value="0">
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>Day/Night Cycle: <input type="checkbox" id="day-night-toggle"></label>
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Enable automatic time progression.
+                        </p>
+                    </div>
+                    <div class="setting-row" style="margin-top: 20px;">
+                        <label>Ambient Light: <span id="ambient-val">3.5</span></label>
+                        <input type="range" id="ambient-slider" min="1.0" max="5.0" step="0.05" value="4.65">
+                        <p style="font-size:0.8em; color: #888888; margin-top:5px;">Global fill light strength.
+                            Brightens shadowed faces.</p>
                     </div>
                     <div class="setting-row" style="margin-top: 20px;">
                         <label>Terrain Shadow Resolution:
@@ -226,6 +300,11 @@
                         <p style="font-size:0.8em; color: #888888; margin-top:5px;">Environment background sounds.</p>
                     </div>
                 </div>
+
+                <!-- Palette Settings -->
+                <div id="settings-palette" class="sub-tab-content">
+                    <div id="palette-colors-container"></div>
+                </div>
             </div>
 
             <div id="inventory-tab" class="settings-panel tab-content" style="pointer-events: auto;"
@@ -236,9 +315,24 @@
 
             <div id="waypoints-tab" class="settings-panel tab-content" style="pointer-events: auto;"
                 onclick="event.stopPropagation()">
-                <h2 style="margin-top: 0;">Waypoints</h2>
-                <p style="opacity: 0.5; font-size: 0.85rem; margin-bottom: 12px;">Press <strong>P</strong> in-game to
-                    place a waypoint. Manage them here.</p>
+                <div
+                    style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                    <div>
+                        <h2 style="margin-top: 0; margin-bottom: 5px;">Waypoints</h2>
+                        <p style="opacity: 0.5; font-size: 0.85rem; margin: 0;">Press <strong>P</strong> in-game to
+                            place a waypoint. Manage them here.</p>
+                    </div>
+                    <button id="locate-castle-btn" style="
+                        padding: 8px 16px; font-size: 0.85rem;
+                        background: linear-gradient(135deg, #10ac84, #1dd1a1);
+                        border: none; color: white; border-radius: 6px;
+                        cursor: pointer; font-weight: 600;
+                        box-shadow: 0 2px 8px rgba(16, 172, 132, 0.4); transition: transform 0.1s;
+                    ">Locate Nearest Castle</button>
+                </div>
+                <!-- Adding a visible separator for cleaner UI -->
+                <div style="height: 1px; background: rgba(255,255,255,0.1); margin-bottom: 15px;"></div>
+
                 <div id="waypoint-list" style="max-height: 300px; overflow-y: auto;"></div>
             </div>
 
@@ -266,7 +360,7 @@
                             <td style="padding:5px 8px;">Sprint / Fly Down</td>
                         </tr>
                         <tr>
-                            <td style="padding:5px 8px;"><kbd>Double Space</kbd></td>
+                            <td style="padding:5px 8px;"><kbd>F</kbd></td>
                             <td style="padding:5px 8px;">Toggle Fly Mode</td>
                         </tr>
                         <tr>
@@ -282,12 +376,16 @@
                             <td style="padding:5px 8px;">Select Hotbar Slot</td>
                         </tr>
                         <tr>
-                            <td style="padding:5px 8px;"><kbd>E</kbd></td>
-                            <td style="padding:5px 8px;">Open Inventory</td>
+                            <td style="padding:5px 8px;"><kbd>E</kbd> / <kbd>Esc</kbd></td>
+                            <td style="padding:5px 8px;">Open Menu / Settings</td>
                         </tr>
                         <tr>
-                            <td style="padding:5px 8px;"><kbd>Escape</kbd></td>
-                            <td style="padding:5px 8px;">Pause / Settings</td>
+                            <td style="padding:5px 8px;"><kbd>C</kbd></td>
+                            <td style="padding:5px 8px;">Zoom Camera</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>[ / ]</kbd></td>
+                            <td style="padding:5px 8px;">Change Time of Day</td>
                         </tr>
                         <tr>
                             <td style="padding:5px 8px;"><kbd>G</kbd></td>
@@ -296,6 +394,18 @@
                         <tr>
                             <td style="padding:5px 8px;"><kbd>P</kbd></td>
                             <td style="padding:5px 8px;">Place Waypoint</td>
+                        </tr>
+                        <tr style="border-top: 1px solid rgba(255,255,255,0.1);">
+                            <td style="padding:5px 8px;"><kbd>Y</kbd></td>
+                            <td style="padding:5px 8px;"><b>Toggle Smooth Tool</b> (Left: Break, Right: Chisel)</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>Up / Down</kbd></td>
+                            <td style="padding:5px 8px;">Set Height (0.1 - 1.0, Random)</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:5px 8px;"><kbd>1 – 0</kbd></td>
+                            <td style="padding:5px 8px;">Quick Set Height (Normal & Smooth)</td>
                         </tr>
                     </tbody>
                 </table>
@@ -316,6 +426,21 @@
         </div>
     </div>
 
+    <!-- Controls Toast Notification -->
+    <div id="controls-toast">
+        <div class="toast-title">Welcome to Arkonhex</div>
+        <div class="toast-body">
+            <span id="toast-inst-move"><b>WASD</b> Move</span> &bull;
+            <span id="toast-inst-jump"><b>Space</b> Jump</span> &bull;
+            <span id="toast-inst-sprint"><b>Shift</b> Sprint</span><br>
+            <span id="toast-inst-break"><b>Left Click</b> Break</span> &bull;
+            <span id="toast-inst-place"><b>Right Click</b> Place</span><br>
+            <span id="toast-inst-menu"><b>E</b> Menu</span> &bull;
+            <span id="toast-inst-fly"><b>F</b> Fly</span> &bull;
+            <span id="toast-inst-zoom"><b>C</b> Zoom</span>
+        </div>
+    </div>
+
     <!-- Water submersion overlay — must live OUTSIDE #ui-layer to avoid ui-hidden suppression -->
     <div id="water-overlay" class="hidden" style="
         position: fixed;
@@ -328,7 +453,7 @@
     "></div>
 
     <!-- Main Entry script -->
-    <script type="module" src="src/core/Engine.js?v=3"></script>
+    <script type="module" src="src/core/Engine.js?v=9"></script>
 </body>
 
 </html>

@@ -174,14 +174,18 @@ export async function renameWorld(id, newName) {
  * @param {string} worldId
  * @param {number[]} position — [x, y, z]
  * @param {number[]} rotation — [yaw, pitch]
+ * @param {number} timeOfDay — current world time (0.0 - 1.0)
+ * @param {boolean} cycleEnabled — whether auto day/night is on
  */
-export async function savePlayerState(worldId, position, rotation) {
+export async function savePlayerState(worldId, position, rotation, timeOfDay, cycleEnabled) {
     const db = await openDB();
     const tx = db.transaction('player', 'readwrite');
     tx.objectStore('player').put({
         worldId,
         position,
-        rotation
+        rotation,
+        timeOfDay,
+        cycleEnabled
     });
 
     return new Promise((resolve, reject) => {
