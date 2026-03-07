@@ -616,8 +616,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Shuffle words dynamically based on setting
         if (settingRandomizeEnabled) {
-            normalWords.sort(() => Math.random() - 0.5);
-            priorityWords.sort(() => Math.random() - 0.5);
+            // Fisher-Yates shuffle for true randomness
+            for (let i = normalWords.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [normalWords[i], normalWords[j]] = [normalWords[j], normalWords[i]];
+            }
+            for (let i = priorityWords.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [priorityWords[i], priorityWords[j]] = [priorityWords[j], priorityWords[i]];
+            }
             console.log("🔵 [DEBUG] Words loaded and shuffled.");
         } else {
             console.log("🔵 [DEBUG] Words loaded in original order.");
