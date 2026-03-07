@@ -45,10 +45,11 @@ export class LightingManager {
         this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
         this.scene.add(this.sunMesh);
 
-        // Moon placeholder (Darker gray version of sun)
+        // Moon placeholder (Dark gray version of sun)
         const moonGeo = new THREE.CylinderGeometry(120, 120, 4, 6);
         moonGeo.rotateX(Math.PI / 2);
-        const moonMat = new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.8 });
+        // Opaque dark gray, not transparent, so stars don't shine through
+        const moonMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
         this.moonMesh = new THREE.Mesh(moonGeo, moonMat);
         this.scene.add(this.moonMesh);
 
@@ -79,6 +80,7 @@ export class LightingManager {
     initStars() {
         const starGeo = new THREE.BufferGeometry();
         const starPos = [];
+        const starPhases = []; // For individual twinkling
         const STAR_COUNT = 2500;
         const RADIUS = 2800; // Far behind clouds, inside SkyDome
 
@@ -96,11 +98,55 @@ export class LightingManager {
             // Only add upper hemisphere stars
             if (y > -500) {
                 starPos.push(x, y, z);
+                // Assign a random starting phase (0 to 2PI) for the sine wave twinkle
+                starPhases.push(Math.random() * Math.PI * 2);
             }
         }
 
         starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-        const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 4, transparent: true, opacity: 0.0, depthWrite: false });
+        starGeo.setAttribute('phase', new THREE.Float32BufferAttribute(starPhases, 1));
+
+        // Use a ShaderMaterial to animate twinkling per-star based on time and phase
+        const vertexShader = `
+            attribute float phase;
+            varying float vPhase;
+            void main() {
+                vPhase = phase;
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_PointSize = 4.0;
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `;
+
+        const fragmentShader = `
+            uniform float time;
+            uniform float globalAlpha;
+            varying float vPhase;
+            void main() {
+                // Determine twinkle base on a sine wave using time and the random phase
+                float twinkle = (sin(time * 2.0 + vPhase) + 1.0) / 2.0; // 0.0 to 1.0
+                
+                // Keep stars mostly bright, dip to 0.3 opacity briefly
+                float localAlpha = mix(0.3, 1.0, twinkle);
+                
+                // Multiply the individual twinkle by the day/night global alpha
+                gl_FragColor = vec4(1.0, 1.0, 1.0, localAlpha * globalAlpha);
+            }
+        `;
+
+        this.starUniforms = {
+            time: { value: 0 },
+            globalAlpha: { value: 0.0 }
+        };
+
+        const starMat = new THREE.ShaderMaterial({
+            uniforms: this.starUniforms,
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            transparent: true,
+            depthWrite: false
+        });
+
         this.stars = new THREE.Points(starGeo, starMat);
         this.scene.add(this.stars);
     }
@@ -118,26 +164,26 @@ export class LightingManager {
         // 1.000: Midnight
         this.colors = {
             skyTop: [
-                new THREE.Color(0x2a0f0f), // 0: Midnight
-                new THREE.Color(0x2a0f0f), // 1: Midnight
+                new THREE.Color(0x1a0f0f), // 0: Midnight (Darkest)
+                new THREE.Color(0x4a0808), // 1: Pre-Sunrise (Lingering Red)
                 new THREE.Color(0x590808), // 2: Sunrise (Deep Dark Red)
                 new THREE.Color(0xff2222), // 3: Morning (Saturated Bright Red)
                 new THREE.Color(0xff2222), // 4: Noon
                 new THREE.Color(0xff2222), // 5: Afternoon
                 new THREE.Color(0x590808), // 6: Sunset (Deep Dark Red)
-                new THREE.Color(0x2a0f0f), // 7: Midnight
-                new THREE.Color(0x2a0f0f)  // 8: Midnight
+                new THREE.Color(0x4a0808), // 7: Post-Sunset (Lingering Red)
+                new THREE.Color(0x1a0f0f)  // 8: Midnight (Darkest)
             ],
             skyBottom: [
-                new THREE.Color(0x1a0505), // 0: Midnight
-                new THREE.Color(0x1a0505), // 1: Midnight
+                new THREE.Color(0x0a0505), // 0: Midnight (Darkest)
+                new THREE.Color(0x3d0505), // 1: Pre-Sunrise (Lingering Red)
                 new THREE.Color(0x801010), // 2: Sunrise (Dark Crimson Horizon)
                 new THREE.Color(0xff5555), // 3: Morning (Softer Bright Red)
                 new THREE.Color(0xff5555), // 4: Noon
                 new THREE.Color(0xff5555), // 5: Afternoon
                 new THREE.Color(0x801010), // 6: Sunset (Dark Crimson Horizon)
-                new THREE.Color(0x1a0505), // 7: Midnight
-                new THREE.Color(0x1a0505)  // 8: Midnight
+                new THREE.Color(0x3d0505), // 7: Post-Sunset (Lingering Red)
+                new THREE.Color(0x0a0505)  // 8: Midnight (Darkest)
             ],
             sunLight: [
                 new THREE.Color(0x221111), // 0: Moonlight (Dark Red)
@@ -233,14 +279,24 @@ export class LightingManager {
         this.skyMesh.position.copy(playerPosition);
         this.stars.position.copy(playerPosition);
 
-        // Calculate a strict star fade that maxes out slightly after sunset
-        let starAlpha = 0.0;
-        if (this.timeOfDay > 0.76) {
-            starAlpha = Math.min(1.0, (this.timeOfDay - 0.76) * 10.0);
-        } else if (this.timeOfDay < 0.24) {
-            starAlpha = Math.min(1.0, (0.24 - this.timeOfDay) * 10.0);
+        // Calculate star fade: very faint during the day, full at night
+        let globalStarAlpha = 0.02; // Barely visible faint visibility during the day
+        if (this.timeOfDay > 0.7) { // Sunset starts around 0.75, fade up a bit earlier
+            // Scale opacity from 0.02 to 1.0 between 0.7 and 0.8
+            globalStarAlpha = 0.02 + Math.min(0.98, (this.timeOfDay - 0.7) * 9.8);
+        } else if (this.timeOfDay < 0.3) { // Sunrise ending around 0.25, fade down later
+            // Scale opacity down from 1.0 to 0.02 between 0.2 and 0.3
+            globalStarAlpha = 1.0 - Math.min(0.98, Math.max(0, this.timeOfDay - 0.2) * 9.8);
         }
-        this.stars.material.opacity = starAlpha;
+
+        // Update Shader uniforms
+        if (this.starUniforms) {
+            this.starUniforms.globalAlpha.value = globalStarAlpha;
+            // The engine clock delta isn't passed here to increment a raw timer, 
+            // so we'll use performance.now() or timeOfDay * huge_number for a continuous time signal.
+            // Using timeOfDay means they twinkle faster if the user fast-forwards time, which is cool!
+            this.starUniforms.time.value = performance.now() * 0.001;
+        }
 
         // 4. Color Interpolation Logic (Simplified for glossy material)
         // Since it's a physical material, we only have one base color. 
