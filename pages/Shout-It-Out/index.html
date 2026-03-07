@@ -31,6 +31,21 @@
 
     <!-- Game Specific Stylesheet -->
     <link rel="stylesheet" href="app.css">
+
+    <!-- Polyfill for crypto.randomUUID (for browser extensions) -->
+    <script>
+        if (!window.crypto) {
+            window.crypto = {};
+        }
+        if (!window.crypto.randomUUID) {
+            window.crypto.randomUUID = function () {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            };
+        }
+    </script>
 </head>
 
 <body>
@@ -74,6 +89,10 @@
                 <div id="priority-word-counter" style="text-align: right; opacity: 0.8; font-size: 0.95rem;">0 words
                 </div>
             </div>
+
+            <input type="text" id="player-name-input" class="glass-input" placeholder="Player Name (Optional)"
+                maxlength="30" style="margin-bottom: 20px; font-size: 1.1rem; text-align: center; width: 100%;">
+
             <div class="setup-actions">
                 <button id="instructions-btn" class="neon-btn secondary">How to Play</button>
                 <button id="categories-btn" class="neon-btn secondary">Categories</button>
@@ -85,6 +104,8 @@
                 style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
                 <h3 style="margin-bottom: 10px; opacity: 0.8; font-size: 1.1rem;">Last Game Stats</h3>
                 <div id="last-game-full-stats" style="margin-bottom: 20px;">
+                    <p id="last-game-player-name" class="hidden"
+                        style="font-size: 1.2rem; font-weight: 600; color: #fff; margin-bottom: 5px;"></p>
                     <p id="last-game-score"
                         style="font-size: 1.5rem; font-weight: bold; color: #00d2ff; margin-bottom: 5px;">Score: 0</p>
                     <div id="last-game-detailed-stats"
@@ -211,6 +232,12 @@
                     <ul id="skipped-words-list" class="word-list"></ul>
                 </div>
             </div>
+            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                <button id="export-csv-btn" class="neon-btn secondary"
+                    style="flex: 1; font-size: 0.9rem; padding: 10px;">Export CSV</button>
+                <button id="export-txt-btn" class="neon-btn secondary"
+                    style="flex: 1; font-size: 0.9rem; padding: 10px;">Export TXT</button>
+            </div>
             <button id="close-review-btn" class="neon-btn secondary">Close</button>
         </div>
 
@@ -235,6 +262,7 @@
         <!-- Screen 3: Game Over -->
         <div id="end-screen" class="glass-card hidden">
             <h1>Game Over!</h1>
+            <h2 id="final-player-name" class="hidden" style="font-size: 1.5rem; margin-bottom: 5px; opacity: 0.9;"></h2>
             <h2 id="final-score">Score: 0</h2>
             <p id="final-stats" class="stats-text">0 correct out of 0 (0%)</p>
             <ul id="results-list"></ul>

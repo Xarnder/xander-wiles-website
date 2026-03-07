@@ -57,6 +57,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const lastGameStatsContainer = document.getElementById('last-game-stats-container');
     const lastGameScoreEl = document.getElementById('last-game-score');
     const lastGameDetailedStatsEl = document.getElementById('last-game-detailed-stats');
+    const playerNameInput = document.getElementById('player-name-input');
+    const lastGamePlayerNameEl = document.getElementById('last-game-player-name');
+    const finalPlayerNameEl = document.getElementById('final-player-name');
+    const exportCsvBtn = document.getElementById('export-csv-btn');
+    const exportTxtBtn = document.getElementById('export-txt-btn');
 
     // --- Game State Variables ---
     let words = [];
@@ -73,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let answerTimes = [];
     let correctWordsArr = [];
     let skippedWordsArr = [];
+    let currentPlayerName = '';
 
     // --- Settings State ---
     let settingGameTime = 60;
@@ -454,6 +460,103 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (exportCsvBtn) {
+        exportCsvBtn.addEventListener('click', () => {
+            let nameToExport = currentPlayerName ? currentPlayerName : "Anonymous";
+
+            const totalPlayed = currentWordIndex;
+            let percentage = totalPlayed > 0 ? Math.round((score / totalPlayed) * 100) : 0;
+            let fastestTime = "N/A";
+            let averageTime = "N/A";
+            if (answerTimes.length > 0) {
+                fastestTime = Math.min(...answerTimes).toFixed(1) + "s";
+                const sumTimes = answerTimes.reduce((a, b) => a + b, 0);
+                averageTime = (sumTimes / answerTimes.length).toFixed(1) + "s";
+            }
+
+            let csvContent = `"Shout It Out Game Stats"\n`;
+            csvContent += `"Player Name","${nameToExport}"\n`;
+            csvContent += `"Score","${score}"\n`;
+            csvContent += `"Correct out of Total","${score} out of ${totalPlayed} (${percentage}%)"\n`;
+            csvContent += `"Fastest Guess","${fastestTime}"\n`;
+            csvContent += `"Avg. Time per Word","${averageTime}"\n\n`;
+            csvContent += `"Player Name","Word","Correctness","Time Taken","Is Priority"\n`;
+
+            correctWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? "*" : "";
+                // Escape quotes in word just in case
+                let cleanWord = wordObj.text.replace(/"/g, '""');
+                let timeStr = wordObj.timeTaken ? wordObj.timeTaken.toFixed(1) + "s" : "N/A";
+                csvContent += `"${nameToExport}","${cleanWord}","Correct","${timeStr}","${prioMarker}"\n`;
+            });
+
+            skippedWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? "*" : "";
+                let cleanWord = wordObj.text.replace(/"/g, '""');
+                let timeStr = wordObj.timeTaken ? wordObj.timeTaken.toFixed(1) + "s" : "N/A";
+                csvContent += `"${nameToExport}","${cleanWord}","Skipped","${timeStr}","${prioMarker}"\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `shout_it_out_${nameToExport.replace(/\s+/g, '_')}_stats.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    }
+
+    if (exportTxtBtn) {
+        exportTxtBtn.addEventListener('click', () => {
+            let txtContent = "";
+            let nameToExport = currentPlayerName ? currentPlayerName : "Anonymous";
+
+            const totalPlayed = currentWordIndex;
+            let percentage = totalPlayed > 0 ? Math.round((score / totalPlayed) * 100) : 0;
+            let fastestTime = "N/A";
+            let averageTime = "N/A";
+            if (answerTimes.length > 0) {
+                fastestTime = Math.min(...answerTimes).toFixed(1) + "s";
+                const sumTimes = answerTimes.reduce((a, b) => a + b, 0);
+                averageTime = (sumTimes / answerTimes.length).toFixed(1) + "s";
+            }
+
+            txtContent += "--- Shout It Out Game Stats ---\n\n";
+            txtContent += `Player Name: ${nameToExport}\n`;
+            txtContent += `Score: ${score}\n`;
+            txtContent += `${score} correct out of ${totalPlayed} (${percentage}%)\n`;
+            txtContent += `Fastest Guess: ${fastestTime}\n`;
+            txtContent += `Avg. Time per Word: ${averageTime}\n\n`;
+
+            txtContent += `--- Correct Words ---\n`;
+            if (correctWordsArr.length === 0) txtContent += "None\n";
+            correctWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? " *" : "";
+                let timeStr = wordObj.timeTaken ? ` (${wordObj.timeTaken.toFixed(1)}s)` : "";
+                txtContent += `- ${wordObj.text}${timeStr}${prioMarker}\n`;
+            });
+
+            txtContent += `\n--- Skipped Words ---\n`;
+            if (skippedWordsArr.length === 0) txtContent += "None\n";
+            skippedWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? " *" : "";
+                let timeStr = wordObj.timeTaken ? ` (${wordObj.timeTaken.toFixed(1)}s)` : "";
+                txtContent += `- ${wordObj.text}${timeStr}${prioMarker}\n`;
+            });
+
+            const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `shout_it_out_${nameToExport.replace(/\s+/g, '_')}_stats.txt`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    }
+
     if (closeSettingsBtn) {
         // Toggle Custom Time Input
         timeSelect.addEventListener('change', () => {
@@ -498,6 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Parse user input
         const rawText = wordListInput.value.trim();
         const rawPrioText = priorityWordListInput ? priorityWordListInput.value.trim() : '';
+        currentPlayerName = playerNameInput ? playerNameInput.value.trim() : '';
 
         if (!rawText && !rawPrioText) {
             console.warn("🟠 [DEBUG] Input is empty. User needs to provide words.");
@@ -717,6 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function recordAnswerTime() {
         const timeTakenMs = performance.now() - currentWordStartTime;
         answerTimes.push(timeTakenMs / 1000); // Convert to seconds
+        words[currentWordIndex].timeTaken = timeTakenMs / 1000;
     }
 
     function markCorrect() {
@@ -866,6 +971,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         playScreen.classList.add('hidden');
         endScreen.classList.remove('hidden');
+
+        if (currentPlayerName) {
+            finalPlayerNameEl.innerText = currentPlayerName;
+            finalPlayerNameEl.classList.remove('hidden');
+        } else {
+            finalPlayerNameEl.innerText = '';
+            finalPlayerNameEl.classList.add('hidden');
+        }
+
         finalScoreEl.innerText = `Score: ${score}`;
 
         finalStatsEl.innerHTML = generateStatsHtml();
@@ -891,6 +1005,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Restart ---
     function updateMainMenuStats() {
+        if (currentPlayerName) {
+            lastGamePlayerNameEl.innerText = currentPlayerName;
+            lastGamePlayerNameEl.classList.remove('hidden');
+        } else {
+            lastGamePlayerNameEl.innerText = '';
+            lastGamePlayerNameEl.classList.add('hidden');
+        }
         lastGameScoreEl.innerText = `Score: ${score}`;
         lastGameDetailedStatsEl.innerHTML = generateStatsHtml();
         lastGameStatsContainer.classList.remove('hidden');
