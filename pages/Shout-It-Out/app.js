@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const endScreen = document.getElementById('end-screen');
     const wordListInput = document.getElementById('word-list');
     const wordCounterEl = document.getElementById('word-counter');
+    const priorityWordListInput = document.getElementById('priority-word-list');
+    const priorityWordCounterEl = document.getElementById('priority-word-counter');
+    const priorityFrequencySelect = document.getElementById('priority-frequency');
     const startBtn = document.getElementById('start-btn');
     const settingsBtn = document.getElementById('settings-btn');
     const closeSettingsBtn = document.getElementById('close-settings-btn');
@@ -223,14 +226,24 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedCategories = new Set();
 
     function updateWordCount() {
-        if (!wordCounterEl) return;
-        const text = wordListInput.value.trim();
-        if (!text) {
-            wordCounterEl.innerText = "0 words";
-            return;
+        if (wordCounterEl) {
+            const text = wordListInput.value.trim();
+            if (!text) {
+                wordCounterEl.innerText = "0 words";
+            } else {
+                const count = text.split('\n').map(w => w.trim()).filter(w => w.length > 0).length;
+                wordCounterEl.innerText = `${count} word${count === 1 ? '' : 's'}`;
+            }
         }
-        const count = text.split('\n').map(w => w.trim()).filter(w => w.length > 0).length;
-        wordCounterEl.innerText = `${count} word${count === 1 ? '' : 's'}`;
+        if (priorityWordCounterEl && priorityWordListInput) {
+            const prioText = priorityWordListInput.value.trim();
+            if (!prioText) {
+                priorityWordCounterEl.innerText = "0 words";
+            } else {
+                const count = prioText.split('\n').map(w => w.trim()).filter(w => w.length > 0).length;
+                priorityWordCounterEl.innerText = `${count} word${count === 1 ? '' : 's'}`;
+            }
+        }
     }
 
     if (wordListInput) {
@@ -247,6 +260,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedCategories.add(defaultCategory);
             }
         }
+    }
+
+    if (priorityWordListInput) {
+        priorityWordListInput.addEventListener('input', updateWordCount);
     }
 
     if (categoriesGrid) {
@@ -480,7 +497,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Parse user input
         const rawText = wordListInput.value.trim();
-        if (!rawText) {
+        const rawPrioText = priorityWordListInput ? priorityWordListInput.value.trim() : '';
+
+        if (!rawText && !rawPrioText) {
             console.warn("🟠 [DEBUG] Input is empty. User needs to provide words.");
             alertMessage.innerText = "Please enter some words first!";
             alertModal.classList.remove('hidden');
@@ -488,14 +507,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Split by new line, clean up empty strings
-        words = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+        let normalWords = rawText ? rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0) : [];
+        let priorityWords = rawPrioText ? rawPrioText.split('\n').map(w => w.trim()).filter(w => w.length > 0) : [];
 
         // Shuffle words dynamically based on setting
         if (settingRandomizeEnabled) {
-            words.sort(() => Math.random() - 0.5);
+            normalWords.sort(() => Math.random() - 0.5);
+            priorityWords.sort(() => Math.random() - 0.5);
             console.log("🔵 [DEBUG] Words loaded and shuffled.");
         } else {
             console.log("🔵 [DEBUG] Words loaded in original order.");
+        }
+
+        // Interleave priority words
+        words = [];
+        const freqStr = priorityFrequencySelect ? priorityFrequencySelect.value : "3";
+        const frequency = parseInt(freqStr);
+
+        let normalIdx = 0;
+        let prioIdx = 0;
+        let counter = 1;
+
+        while (normalIdx < normalWords.length || prioIdx < priorityWords.length) {
+            if ((counter % frequency === 0 && prioIdx < priorityWords.length) || normalIdx >= normalWords.length) {
+                words.push({ text: priorityWords[prioIdx], isPriority: true });
+                prioIdx++;
+            } else if (normalIdx < normalWords.length) {
+                words.push({ text: normalWords[normalIdx], isPriority: false });
+                normalIdx++;
+            }
+            counter++;
         }
 
         // Request Device Orientation Permissions (Required for iOS 13+)
@@ -599,7 +640,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Setup the past word text (if we have one and setting is enabled)
         if (settingShowPastWord && currentWordIndex > 0 && pastWordEl) {
-            pastWordEl.innerText = words[currentWordIndex - 1];
+            pastWordEl.innerText = words[currentWordIndex - 1].text;
+            if (words[currentWordIndex - 1].isPriority) {
+                pastWordEl.classList.add('priority-word');
+            } else {
+                pastWordEl.classList.remove('priority-word');
+            }
             pastWordEl.classList.remove('hidden');
         } else if (pastWordEl) {
             pastWordEl.classList.add('hidden');
@@ -609,11 +655,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Apply roll-in animation to the new current word
         currentWordEl.classList.remove('roll-in');
         void currentWordEl.offsetWidth; // Trigger reflow
-        currentWordEl.innerText = words[currentWordIndex];
+        currentWordEl.innerText = words[currentWordIndex].text;
+
+        if (words[currentWordIndex].isPriority) {
+            currentWordEl.classList.add('priority-word');
+        } else {
+            currentWordEl.classList.remove('priority-word');
+        }
+
         currentWordEl.classList.add('roll-in');
 
         currentWordStartTime = performance.now();
-        console.log(`🔵 [DEBUG] Displaying word: ${words[currentWordIndex]}`);
+        console.log(`🔵 [DEBUG] Displaying word: ${words[currentWordIndex].text}`);
 
         if (settingShowGoBack && currentWordIndex > 0) {
             if (goBackBtn) goBackBtn.classList.remove('hidden');
@@ -668,7 +721,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function markCorrect() {
         if (!isPlaying || tiltCooldown) return;
-        console.log("🟢 [DEBUG] Action: CORRECT. Word was:", words[currentWordIndex]);
+        console.log("🟢 [DEBUG] Action: CORRECT. Word was:", words[currentWordIndex].text);
         correctWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
         playSound('correct');
@@ -679,7 +732,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function markSkip() {
         if (!isPlaying || tiltCooldown) return;
-        console.log("🟠 [DEBUG] Action: SKIP. Word was:", words[currentWordIndex]);
+        console.log("🟠 [DEBUG] Action: SKIP. Word was:", words[currentWordIndex].text);
         skippedWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
         playSound('skip');
@@ -821,15 +874,17 @@ document.addEventListener('DOMContentLoaded', () => {
         correctWordsList.innerHTML = '';
         skippedWordsList.innerHTML = '';
 
-        correctWordsArr.forEach(word => {
+        correctWordsArr.forEach(wordObj => {
             const li = document.createElement('li');
-            li.textContent = word;
+            li.textContent = wordObj.text;
+            if (wordObj.isPriority) li.classList.add('priority-word');
             correctWordsList.appendChild(li);
         });
 
-        skippedWordsArr.forEach(word => {
+        skippedWordsArr.forEach(wordObj => {
             const li = document.createElement('li');
-            li.textContent = word;
+            li.textContent = wordObj.text;
+            if (wordObj.isPriority) li.classList.add('priority-word');
             skippedWordsList.appendChild(li);
         });
     }
@@ -856,15 +911,22 @@ document.addEventListener('DOMContentLoaded', () => {
             updateMainMenuStats();
             setupScreen.classList.remove('hidden');
 
-            // Remove played words from the textarea
-            const playedWordsText = words.slice(0, currentWordIndex).map(w => w.toLowerCase());
+            // Remove played words from the textareas
+            const playedNormalText = words.slice(0, currentWordIndex).filter(w => !w.isPriority).map(w => w.text.toLowerCase());
+            const playedPriorityText = words.slice(0, currentWordIndex).filter(w => w.isPriority).map(w => w.text.toLowerCase());
 
             const rawText = wordListInput.value;
             const originalWords = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
-
-            const remainingWords = originalWords.filter(w => !playedWordsText.includes(w.toLowerCase()));
-
+            const remainingWords = originalWords.filter(w => !playedNormalText.includes(w.toLowerCase()));
             wordListInput.value = remainingWords.join('\n');
+
+            if (priorityWordListInput) {
+                const rawPrioText = priorityWordListInput.value;
+                const originalPrioWords = rawPrioText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+                const remainingPrioWords = originalPrioWords.filter(w => !playedPriorityText.includes(w.toLowerCase()));
+                priorityWordListInput.value = remainingPrioWords.join('\n');
+            }
+
             updateWordCount();
         });
     }
