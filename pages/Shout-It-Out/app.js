@@ -988,18 +988,73 @@ document.addEventListener('DOMContentLoaded', () => {
         correctWordsList.innerHTML = '';
         skippedWordsList.innerHTML = '';
 
-        correctWordsArr.forEach(wordObj => {
+        let allReviewedWords = [...correctWordsArr, ...skippedWordsArr];
+        let maxTimeTaken = Math.max(1, ...allReviewedWords.map(w => w.timeTaken || 0));
+
+        function createWordListItem(wordObj) {
             const li = document.createElement('li');
-            li.textContent = wordObj.text;
-            if (wordObj.isPriority) li.classList.add('priority-word');
-            correctWordsList.appendChild(li);
+            li.style.display = 'flex';
+            li.style.flexDirection = 'column';
+            li.style.gap = '8px';
+            li.style.marginBottom = '12px';
+            li.style.padding = '8px 12px';
+            li.style.background = 'rgba(255, 255, 255, 0.05)';
+            li.style.borderRadius = '8px';
+            li.style.borderBottom = 'none'; // reset css
+
+            const topRow = document.createElement('div');
+            topRow.style.display = 'flex';
+            topRow.style.justifyContent = 'space-between';
+            topRow.style.alignItems = 'center';
+            topRow.style.gap = '10px';
+
+            const wordSpan = document.createElement('span');
+            wordSpan.textContent = wordObj.text;
+            wordSpan.style.fontWeight = '600';
+            wordSpan.style.wordBreak = 'break-word';
+            if (wordObj.isPriority) wordSpan.classList.add('priority-word');
+
+            let timeVal = wordObj.timeTaken || 0;
+            const timeSpan = document.createElement('span');
+            timeSpan.style.fontSize = '0.9rem';
+            timeSpan.style.opacity = '0.8';
+            timeSpan.style.whiteSpace = 'nowrap';
+            timeSpan.textContent = timeVal.toFixed(1) + 's';
+
+            topRow.appendChild(wordSpan);
+            topRow.appendChild(timeSpan);
+
+            const barContainer = document.createElement('div');
+            barContainer.style.width = '100%';
+            barContainer.style.height = '6px';
+            barContainer.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+            barContainer.style.borderRadius = '3px';
+            barContainer.style.overflow = 'hidden';
+
+            const barFill = document.createElement('div');
+            barFill.style.height = '100%';
+
+            let percent = maxTimeTaken > 0 ? (timeVal / maxTimeTaken) : 0;
+            barFill.style.width = `${Math.max(2, percent * 100)}%`;
+
+            let hue = (1 - percent) * 120; // 0 = red (long time), 120 = green (short time)
+            barFill.style.backgroundColor = `hsl(${hue}, 80%, 50%)`;
+            barFill.style.borderRadius = '3px';
+
+            barContainer.appendChild(barFill);
+
+            li.appendChild(topRow);
+            li.appendChild(barContainer);
+
+            return li;
+        }
+
+        correctWordsArr.forEach(wordObj => {
+            correctWordsList.appendChild(createWordListItem(wordObj));
         });
 
         skippedWordsArr.forEach(wordObj => {
-            const li = document.createElement('li');
-            li.textContent = wordObj.text;
-            if (wordObj.isPriority) li.classList.add('priority-word');
-            skippedWordsList.appendChild(li);
+            skippedWordsList.appendChild(createWordListItem(wordObj));
         });
     }
 
@@ -1012,7 +1067,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lastGamePlayerNameEl.innerText = '';
             lastGamePlayerNameEl.classList.add('hidden');
         }
-        lastGameScoreEl.innerText = `Score: ${score}`;
+        lastGameScoreEl.innerText = `Score: ${score} `;
         lastGameDetailedStatsEl.innerHTML = generateStatsHtml();
         lastGameStatsContainer.classList.remove('hidden');
     }
