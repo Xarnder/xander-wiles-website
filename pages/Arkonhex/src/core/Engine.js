@@ -174,6 +174,7 @@ export class Engine {
         // Update loading text
         if (loadingText) loadingText.innerText = 'Building Terrain...';
         if (loadingFill) loadingFill.style.width = '0%';
+        this.loadingStartTime = performance.now();
 
         // Start the game loop (chunks will build progressively)
         this.start();
@@ -306,10 +307,28 @@ export class Engine {
             const totalWork = totalChunks + pendingGen;
             const progress = totalWork > 0 ? Math.floor((doneCount / this.initialChunkTotal) * 100) : 0;
 
+            // Estimate time remaining
+            let estimateStr = '';
+            const elapsed = (performance.now() - this.loadingStartTime) / 1000;
+            if (doneCount > 50 && elapsed > 2.0) { // Wait for rate to stabilize
+                const rate = doneCount / elapsed; // chunks per second
+                const remaining = this.initialChunkTotal - doneCount;
+                if (remaining > 0 && rate > 0) {
+                    const estSecondsTotal = Math.ceil(remaining / rate);
+                    if (estSecondsTotal >= 60) {
+                        const m = Math.floor(estSecondsTotal / 60);
+                        const s = estSecondsTotal % 60;
+                        estimateStr = ` (Est. ${m}m ${s}s)`;
+                    } else {
+                        estimateStr = ` (Est. ${estSecondsTotal}s)`;
+                    }
+                }
+            }
+
             const loadingFill = document.getElementById('loading-bar-fill');
             const loadingText = document.getElementById('loading-text');
             if (loadingFill) loadingFill.style.width = `${Math.min(progress, 100)}%`;
-            if (loadingText) loadingText.innerText = `Building Terrain... ${Math.min(progress, 100)}%`;
+            if (loadingText) loadingText.innerText = `Building Terrain... ${Math.min(progress, 100)}%${estimateStr}`;
 
             // Check if all initial chunks are generated AND all meshes are built
             if (pendingGen === 0 && dirtyCount === 0 && totalChunks > 0 && !this.chunksReady) {

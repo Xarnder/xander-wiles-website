@@ -7,6 +7,7 @@
 
 import { listWorlds, createWorld, deleteWorld, renameWorld } from '../storage/WorldManager.js';
 import { getWorldStorageSize } from '../storage/ChunkStorage.js';
+import { exportWorld, importWorld } from '../storage/WorldExporter.js';
 
 export class WorldSelectMenu {
     /**
@@ -106,6 +107,38 @@ export class WorldSelectMenu {
                 this.onWorldSelected(world);
             });
         }
+
+        // Import world file input
+        const importInput = document.getElementById('world-import-input');
+        if (importInput) {
+            importInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                try {
+                    await importWorld(file);
+                    this.refresh();
+                    // Switch to the list menu to show the imported world
+                    if (this.mainMenu) this.mainMenu.classList.add('hidden');
+                    if (this.createMenu) this.createMenu.classList.add('hidden');
+                    if (this.listMenu) this.listMenu.classList.remove('hidden');
+                } catch (err) {
+                    alert('Failed to import world: ' + err.message);
+                    console.error('[WorldSelectMenu] Import failed:', err);
+                }
+
+                // Reset file input so re-selecting same file works
+                importInput.value = '';
+            });
+        }
+
+        // Import World button triggers the hidden file input
+        const importBtn = document.getElementById('import-world-btn');
+        if (importBtn && importInput) {
+            importBtn.addEventListener('click', () => {
+                importInput.click();
+            });
+        }
     }
 
     /**
@@ -127,6 +160,7 @@ export class WorldSelectMenu {
             entry.className = 'world-entry';
 
             const lastPlayed = new Date(world.lastPlayed).toLocaleDateString();
+            const createdAt = new Date(world.createdAt).toLocaleDateString();
 
             // Fetch storage size asynchronously
             const bytes = await getWorldStorageSize(world.id);
@@ -136,13 +170,14 @@ export class WorldSelectMenu {
                 <div class="world-info">
                     <div class="world-name">${this._escapeHTML(world.name)}</div>
                     <div class="world-meta">
-                        Seed: ${world.seed} &bull; Last played: ${lastPlayed} &bull; Size: ${sizeStr}
+                        Created: ${createdAt} &bull; Played: ${lastPlayed} &bull; Seed: ${world.seed} &bull; Size: ${sizeStr}
                     </div>
                 </div>
-                <div class="world-actions">
-                    <button class="world-play-btn">Play</button>
-                    <button class="world-rename-btn" title="Rename world">✏</button>
-                    <button class="world-delete-btn" title="Delete world">🗑</button>
+                <div class="world-actions" style="align-items: center;">
+                    <button class="world-play-btn btn-pill btn-primary" style="padding: 6px 18px; font-size: 0.85rem;">Play</button>
+                    <button class="world-download-btn btn-icon btn-outline-blue" title="Download world">⬇</button>
+                    <button class="world-rename-btn btn-icon btn-outline" title="Rename world">✏</button>
+                    <button class="world-delete-btn btn-icon btn-outline-red" title="Delete world">🗑</button>
                 </div>
             `;
 
@@ -150,6 +185,24 @@ export class WorldSelectMenu {
             entry.querySelector('.world-play-btn').addEventListener('click', () => {
                 this.hide();
                 this.onWorldSelected(world);
+            });
+
+            // Download button
+            entry.querySelector('.world-download-btn').addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const btn = e.currentTarget;
+                const prevText = btn.textContent;
+                btn.textContent = '⏳';
+                btn.disabled = true;
+                try {
+                    await exportWorld(world.id);
+                    btn.textContent = '✅';
+                    setTimeout(() => { btn.textContent = prevText; btn.disabled = false; }, 2000);
+                } catch (err) {
+                    alert('Export failed: ' + err.message);
+                    btn.textContent = prevText;
+                    btn.disabled = false;
+                }
             });
 
             // Rename button

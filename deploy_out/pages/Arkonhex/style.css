@@ -466,6 +466,118 @@ body {
     background: rgba(255, 100, 100, 0.3);
 }
 
+/* ─── Modern Global UI Classes ─── */
+
+.btn-pill {
+    padding: 10px 28px;
+    border-radius: 30px;
+    border: none;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    backdrop-filter: blur(4px);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #ff5555, #7620a2);
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 85, 85, 0.3);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(255, 85, 85, 0.5);
+    filter: brightness(1.1);
+}
+
+.btn-outline {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.btn-outline:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+}
+
+.btn-outline-red {
+    background: rgba(255, 100, 100, 0.05);
+    border: 1px solid rgba(255, 100, 100, 0.3);
+    color: #ff6b6b;
+}
+
+.btn-outline-red:hover {
+    background: rgba(255, 100, 100, 0.15);
+    border-color: #ff6b6b;
+    transform: translateY(-2px);
+}
+
+.btn-outline-blue {
+    background: rgba(100, 200, 255, 0.05);
+    border: 1px solid rgba(100, 200, 255, 0.3);
+    color: #64c8ff;
+}
+
+.btn-outline-blue:hover {
+    background: rgba(100, 200, 255, 0.15);
+    border-color: #64c8ff;
+    transform: translateY(-2px);
+}
+
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+/* Modern Inputs */
+.modern-input-group {
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.modern-input-label {
+    display: block;
+    margin-bottom: 6px;
+    opacity: 0.6;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.modern-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: white;
+    font-size: 1rem;
+    transition: all 0.2s;
+    backdrop-filter: blur(8px);
+}
+
+.modern-input:focus {
+    outline: none;
+    border-color: var(--ui-accent);
+    background: rgba(0, 0, 0, 0.7);
+    box-shadow: 0 0 10px rgba(168, 101, 181, 0.3);
+}
+
 /* ─── Controls Toast ─── */
 #controls-toast {
     position: fixed;

@@ -87,29 +87,18 @@
 
             <!-- Main Hub -->
             <div id="ws-main-menu" class="ws-sub-menu">
-                <div
-                    style="display: flex; flex-direction: column; align-items: center; gap: 15px; margin-bottom: 20px;">
-                    <button id="play-now-btn" style="
-                        padding: 20px 50px; font-size: 1.5rem;
-                        background: linear-gradient(135deg, #7620a2, #a865b5); /* Purple Gradient */
-                        border: none; color: white; border-radius: 12px;
-                        cursor: pointer; font-weight: bold; width: 100%; max-width: 350px;
-                        box-shadow: 0 4px 15px rgba(118, 32, 162, 0.4); transition: transform 0.2s, box-shadow 0.2s;
-                    ">Play Now</button>
-
-                    <button id="nav-create-world-btn" style="
-                        padding: 14px 25px; font-size: 1.1rem;
-                        background: transparent;
-                        border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.8); border-radius: 8px;
-                        cursor: pointer; font-weight: 500; transition: background 0.2s; width: 100%; max-width: 350px;
-                    ">Custom World Options</button>
-
-                    <button id="nav-existing-world-btn" style="
-                        padding: 14px 25px; font-size: 1.1rem;
-                        background: transparent;
-                        border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.8); border-radius: 8px;
-                        cursor: pointer; font-weight: 500; transition: background 0.2s; width: 100%; max-width: 350px;
-                    ">Play Existing World</button>
+                <div style="display: flex; flex-direction: column; gap: 15px; width: 100%; align-items: center;">
+                    <button id="play-now-btn" class="btn-pill btn-primary" style="width: 100%; max-width: 350px;">
+                        Quick Play
+                    </button>
+                    <button id="nav-create-world-btn" class="btn-pill btn-outline"
+                        style="width: 100%; max-width: 350px;">
+                        Custom World Options
+                    </button>
+                    <button id="nav-existing-world-btn" class="btn-pill btn-outline"
+                        style="width: 100%; max-width: 350px;">
+                        Play Existing World
+                    </button>
                 </div>
             </div>
 
@@ -120,52 +109,41 @@
                     style="max-height: 320px; overflow-y: auto; margin-bottom: 20px; width: 100%; max-width: 500px;">
                     <!-- World entries injected by WorldSelectMenu.js -->
                 </div>
-                <button class="ws-back-btn" style="
-                    padding: 8px 16px; font-size: 0.9rem;
-                    background: transparent;
-                    border: 1px solid rgba(255,100,100,0.4); color: #ff6b6b; border-radius: 6px;
-                    cursor: pointer; font-weight: 500; transition: background 0.2s;
-                ">&#x2190; Back</button>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <button class="ws-back-btn btn-pill btn-outline-red">
+                        &#x2190; Back
+                    </button>
+                    <button id="import-world-btn" class="btn-pill btn-outline-blue">
+                        &#x1F4E5; Import World
+                    </button>
+                </div>
+                <input type="file" id="world-import-input" accept=".arkonhex" style="display: none;">
             </div>
 
             <!-- Custom World Form -->
             <div id="ws-create-menu" class="ws-sub-menu hidden">
                 <div id="create-world-form" style="
-                    background: rgba(255,255,255,0.05); border-radius: 10px;
-                    padding: 20px; max-width: 400px; width: 100%;
-                    border: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;
+                    background: rgba(255,255,255,0.03); border-radius: 20px;
+                    padding: 30px; max-width: 440px; width: 100%;
+                    border: 1px solid rgba(255,255,255,0.08); margin-bottom: 20px;
+                    backdrop-filter: blur(10px);
                 ">
-                    <div style="margin-bottom: 12px; text-align: left;">
-                        <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">World
-                            Name</label>
-                        <input id="world-name-input" type="text" placeholder="My World" style="
-                            width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
-                            border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
-                            color: white; font-size: 1rem; box-sizing: border-box;
-                        ">
+                    <div class="modern-input-group">
+                        <label class="modern-input-label">World Name</label>
+                        <input id="world-name-input" type="text" placeholder="My Epic World" class="modern-input">
                     </div>
-                    <div style="margin-bottom: 15px; text-align: left;">
-                        <label style="display:block; margin-bottom: 4px; opacity: 0.7; font-size: 0.85rem;">Seed
-                            (optional)</label>
-                        <input id="world-seed-input" type="text" placeholder="Random" style="
-                            width: 100%; padding: 10px; background: rgba(0,0,0,0.4);
-                            border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
-                            color: white; font-size: 1rem; box-sizing: border-box;
-                        ">
+                    <div class="modern-input-group">
+                        <label class="modern-input-label">Seed (optional)</label>
+                        <input id="world-seed-input" type="text" placeholder="Leave blank for random"
+                            class="modern-input">
                     </div>
-                    <button id="create-world-btn" style="
-                        padding: 10px 25px; font-size: 1rem;
-                        background: linear-gradient(135deg, #7620a2, #a865b5); /* Purple Gradient */
-                        border: none; color: white; border-radius: 6px;
-                        cursor: pointer; font-weight: 600; width: 100%;
-                    ">Create &amp; Play</button>
+                    <button id="create-world-btn" class="btn-pill btn-primary" style="width: 100%;">
+                        Generate World
+                    </button>
                 </div>
-                <button class="ws-back-btn" style="
-                    padding: 8px 16px; font-size: 0.9rem;
-                    background: transparent;
-                    border: 1px solid rgba(255,100,100,0.4); color: #ff6b6b; border-radius: 6px;
-                    cursor: pointer; font-weight: 500; transition: background 0.2s;
-                ">&#x2190; Back</button>
+                <button class="ws-back-btn btn-pill btn-outline-red">
+                    &#x2190; Cancel
+                </button>
             </div>
         </div>
 

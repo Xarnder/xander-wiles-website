@@ -164,48 +164,48 @@ export class LightingManager {
         // 1.000: Midnight
         this.colors = {
             skyTop: [
-                new THREE.Color(0x1a0f0f), // 0: Midnight (Darkest)
+                new THREE.Color(0x0c0505), // 0: Midnight (Slightly warmer black)
                 new THREE.Color(0x4a0808), // 1: Pre-Sunrise (Lingering Red)
-                new THREE.Color(0x590808), // 2: Sunrise (Deep Dark Red)
+                new THREE.Color(0xff4422), // 2: Sunrise Start (Bright Blood Orange)
                 new THREE.Color(0xff2222), // 3: Morning (Saturated Bright Red)
                 new THREE.Color(0xff2222), // 4: Noon
                 new THREE.Color(0xff2222), // 5: Afternoon
-                new THREE.Color(0x590808), // 6: Sunset (Deep Dark Red)
-                new THREE.Color(0x4a0808), // 7: Post-Sunset (Lingering Red)
-                new THREE.Color(0x1a0f0f)  // 8: Midnight (Darkest)
+                new THREE.Color(0xff2222), // 6: Sunset Start (Saturated Bright Red)
+                new THREE.Color(0xff4422), // 7: Sunset Deep (Bright Blood Orange)
+                new THREE.Color(0x0c0505)  // 8: Midnight
             ],
             skyBottom: [
-                new THREE.Color(0x0a0505), // 0: Midnight (Darkest)
-                new THREE.Color(0x3d0505), // 1: Pre-Sunrise (Lingering Red)
-                new THREE.Color(0x801010), // 2: Sunrise (Dark Crimson Horizon)
-                new THREE.Color(0xff5555), // 3: Morning (Softer Bright Red)
-                new THREE.Color(0xff5555), // 4: Noon
-                new THREE.Color(0xff5555), // 5: Afternoon
-                new THREE.Color(0x801010), // 6: Sunset (Dark Crimson Horizon)
-                new THREE.Color(0x3d0505), // 7: Post-Sunset (Lingering Red)
-                new THREE.Color(0x0a0505)  // 8: Midnight (Darkest)
+                new THREE.Color(0x050202), // 0: Midnight
+                new THREE.Color(0x801010), // 1: Pre-Sunrise
+                new THREE.Color(0xff5500), // 2: Sunrise Horizon (Vivid Orange-Red)
+                new THREE.Color(0xff6666), // 3: Morning (Warm Red Horizon)
+                new THREE.Color(0xff6666), // 4: Noon
+                new THREE.Color(0xff6666), // 5: Afternoon
+                new THREE.Color(0xff5500), // 6: Sunset Horizon (Vivid Orange-Red)
+                new THREE.Color(0x801010), // 7: Post-Sunset
+                new THREE.Color(0x050202)  // 8: Midnight
             ],
             sunLight: [
                 new THREE.Color(0x221111), // 0: Moonlight (Dark Red)
-                new THREE.Color(0x221111), // 1: Moonlight
-                new THREE.Color(0xff4422), // 2: Sunrise (Bright Red-Orange)
-                new THREE.Color(0xff8888), // 3: Morning (Soft Red daylight)
-                new THREE.Color(0xffaaaa), // 4: Noon (Light pinkish-red daylight)
-                new THREE.Color(0xff8888), // 5: Afternoon
-                new THREE.Color(0xff4422), // 6: Sunset
-                new THREE.Color(0x221111), // 7: Moonlight
+                new THREE.Color(0x221111), // 1: Pre-Sunrise
+                new THREE.Color(0xff6600), // 2: Sunrise (Vibrant Orange)
+                new THREE.Color(0xffaaaa), // 3: Morning (Soft Red daylight)
+                new THREE.Color(0xffcccc), // 4: Noon (Lightest red daylight)
+                new THREE.Color(0xffaaaa), // 5: Afternoon
+                new THREE.Color(0xff6600), // 6: Sunset (Vibrant Orange)
+                new THREE.Color(0x221111), // 7: Post-Sunset
                 new THREE.Color(0x221111)  // 8: Moonlight
             ],
             ambientLight: [
-                new THREE.Color(0x221111), // 0: Midnight (Dark Red Ambient)
-                new THREE.Color(0x221111), // 1: Midnight
-                new THREE.Color(0x883333), // 2: Sunrise
-                new THREE.Color(0xffaaaa), // 3: Morning (Red ambient base)
-                new THREE.Color(0xffcccc), // 4: Noon (Lighter pinkish-red base)
-                new THREE.Color(0xffaaaa), // 5: Afternoon
-                new THREE.Color(0x883333), // 6: Sunset
-                new THREE.Color(0x221111), // 7: Midnight
-                new THREE.Color(0x221111)  // 8: Midnight
+                new THREE.Color(0x1a0808), // 0: Midnight
+                new THREE.Color(0x1a0808), // 1: Midnight
+                new THREE.Color(0xff3300), // 2: Sunrise (Warm Orange Glow)
+                new THREE.Color(0xff8888), // 3: Morning
+                new THREE.Color(0xffaaaa), // 4: Noon
+                new THREE.Color(0xff8888), // 5: Afternoon
+                new THREE.Color(0xff3300), // 6: Sunset (Warm Orange Glow)
+                new THREE.Color(0x1a0808), // 7: Midnight
+                new THREE.Color(0x1a0808)  // 8: Midnight
             ]
         };
     }
@@ -270,11 +270,19 @@ export class LightingManager {
         // 3. Render Sky Meshes
         this.sunMesh.position.set(sunX, sunY, sunZ).add(playerPosition);
         this.sunMesh.lookAt(playerPosition);
-        this.sunMesh.visible = isDaytime;
+        // Horizon Persistence: Sun and Moon stay visible even when below horizon
+        this.sunMesh.visible = true;
 
         this.moonMesh.position.set(-sunX, -sunY, -sunZ).add(playerPosition);
         this.moonMesh.lookAt(playerPosition);
-        this.moonMesh.visible = !isDaytime;
+        this.moonMesh.visible = true;
+
+        // Adjust mesh opacity based on height for a smoother fade at the very edge of the world sphere
+        const sunHeightFactor = Math.max(0, Math.min(1, (sunY / sunRadius) + 0.5));
+        const moonHeightFactor = Math.max(0, Math.min(1, (-sunY / sunRadius) + 0.5));
+
+        this.sunMesh.material.opacity = Math.max(0.2, sunHeightFactor);
+        this.moonMesh.material.opacity = Math.max(0.4, moonHeightFactor);
 
         this.skyMesh.position.copy(playerPosition);
         this.stars.position.copy(playerPosition);
