@@ -21,7 +21,7 @@
         "id": 3,
         "name": "stone",
         "topColor": "gray",
-        "baseColor": "black",
+        "baseColor": "gray",
         "hardness": 2.0,
         "placeSound": "stone_place",
         "destroySound": "stone_break"

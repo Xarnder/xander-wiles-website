@@ -111,7 +111,7 @@ export class PlayerSystem {
 
         // Smooth Zoom 'C'
         if (this.input.isKeyDown('KeyC')) {
-            this.targetFov = 30; // Zoomed in FOV
+            this.targetFov = 5; // Zoomed in FOV
         } else {
             this.targetFov = this.baseFov; // Normal FOV
         }
@@ -615,9 +615,8 @@ export class PlayerSystem {
             const previousId = chunk.getBlock(lq, lr, y);
 
             if (chunk.setBlock(lq, lr, y, id)) {
-                // Mark chunk as modified for saving and dirty it for remeshing
+                // Mark chunk as modified for saving and dirty it for priority remeshing
                 this.chunkSystem.markChunkModified(cq, cr);
-                this.chunkSystem.markChunkDirty(chunk);
 
                 // Notify Light System
                 if (this.engine.lightSystem) {

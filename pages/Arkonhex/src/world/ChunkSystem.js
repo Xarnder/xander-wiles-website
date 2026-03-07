@@ -264,34 +264,41 @@ export class ChunkSystem {
 
         // 2. Process active meshing job (if any)
         if (this.activeMeshJob) {
-            let meshIterCount = 0;
-            const meshStartTime = performance.now();
-            while (performance.now() - startTime < maxTimeMs) {
-                meshIterCount++;
-                const result = this.activeMeshJob.generator.next();
-                if (result.done) {
-                    this._finishChunkMesh(this.activeMeshJob.chunk, result.value);
-                    this.activeMeshJob = null;
-                    break;
+            // If a priority chunk is waiting and the current job is NOT priority, cancel it
+            if (this.priorityDirtyChunks.size > 0 && !this.activeMeshJob.isPriority) {
+                // Re-queue the interrupted chunk back to dirtyChunks
+                this.dirtyChunks.add(this.activeMeshJob.chunk);
+                this.activeMeshJob = null;
+            } else {
+                let meshIterCount = 0;
+                const meshStartTime = performance.now();
+                while (performance.now() - startTime < maxTimeMs) {
+                    meshIterCount++;
+                    const result = this.activeMeshJob.generator.next();
+                    if (result.done) {
+                        this._finishChunkMesh(this.activeMeshJob.chunk, result.value);
+                        this.activeMeshJob = null;
+                        break;
+                    }
                 }
+                const meshTime = performance.now() - meshStartTime;
+                if (meshTime > 20) console.warn(`[FreezeTracker] [PerfWarning] ChunkMeshBuilder hold took ${meshTime.toFixed(1)}ms (${meshIterCount} iters) for chunk ${this.activeMeshJob?.chunk?.cq},${this.activeMeshJob?.chunk?.cr}`);
+                if (performance.now() - startTime >= maxTimeMs) return; // Yield frame
             }
-            const meshTime = performance.now() - meshStartTime;
-            if (meshTime > 20) console.warn(`[FreezeTracker] [PerfWarning] ChunkMeshBuilder hold took ${meshTime.toFixed(1)}ms (${meshIterCount} iters) for chunk ${this.activeMeshJob?.chunk?.cq},${this.activeMeshJob?.chunk?.cr}`);
-            if (performance.now() - startTime >= maxTimeMs) return; // Yield frame
         }
 
         // Priority 2: Pick a new chunk to mesh
-        if (!this.activeMeshJob && !this.activeGenJob) {
+        if (!this.activeMeshJob) {
             if (this.priorityDirtyChunks.size > 0) {
-                // Instantly mesh player-modified chunks
+                // Instantly mesh player-modified chunks (skip activeGenJob check)
                 const chunk = this.priorityDirtyChunks.values().next().value;
                 this.priorityDirtyChunks.delete(chunk);
-                this.rebuildChunkMesh(chunk);
-            } else if (this.dirtyChunks.size > 0) {
-                // Background meshing
+                this.rebuildChunkMesh(chunk, true);
+            } else if (!this.activeGenJob && this.dirtyChunks.size > 0) {
+                // Background meshing (only if no gen job running)
                 const chunk = this.dirtyChunks.values().next().value;
                 this.dirtyChunks.delete(chunk);
-                this.rebuildChunkMesh(chunk);
+                this.rebuildChunkMesh(chunk, false);
             }
         }
 
@@ -313,13 +320,15 @@ export class ChunkSystem {
         }
     }
 
-    rebuildChunkMesh(chunk) {
+    rebuildChunkMesh(chunk, isPriority = false) {
         chunk.isDirty = false; // Mark clean so we don't pick it again while building
         this.dirtyChunks.delete(chunk);
+        this.priorityDirtyChunks.delete(chunk);
 
         this.activeMeshJob = {
             generator: this.meshBuilder.buildChunkMeshGenerator(chunk, this.blockSystem, this),
-            chunk: chunk
+            chunk: chunk,
+            isPriority: isPriority
         };
     }
 
