@@ -256,14 +256,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (wordListInput) {
-        wordListInput.addEventListener('input', updateWordCount);
+        wordListInput.addEventListener('input', () => {
+            updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+        });
 
-        // Pre-load Historical Figures if empty to allow instant play
-        if (wordListInput.value.trim() === '') {
+        // Load from local storage or pre-load Historical Figures if empty
+        const savedNormalWords = localStorage.getItem('SHOUT_IT_OUT_NORMAL_WORDS');
+        if (savedNormalWords !== null) {
+            wordListInput.value = savedNormalWords;
+            updateWordCount();
+        } else if (wordListInput.value.trim() === '') {
             const defaultCategory = "📜 Historical Figures";
             if (categoriesData[defaultCategory]) {
                 wordListInput.value = categoriesData[defaultCategory].join('\n');
                 updateWordCount();
+                localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
 
                 // Add to selected UI state so user knows it's active
                 selectedCategories.add(defaultCategory);
@@ -272,7 +280,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (priorityWordListInput) {
-        priorityWordListInput.addEventListener('input', updateWordCount);
+        priorityWordListInput.addEventListener('input', () => {
+            updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
+        });
+
+        const savedPriorityWords = localStorage.getItem('SHOUT_IT_OUT_PRIORITY_WORDS');
+        if (savedPriorityWords !== null) {
+            priorityWordListInput.value = savedPriorityWords;
+            updateWordCount();
+        }
     }
 
     if (categoriesGrid) {
@@ -322,6 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             wordListInput.value = currentWords.join('\n');
             updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
             categoriesModal.classList.add('hidden');
         });
     }
@@ -348,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentWords = currentWords.filter(w => !wordsToRemove.has(w.toLowerCase()));
             wordListInput.value = currentWords.join('\n');
             updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
             categoriesModal.classList.add('hidden');
         });
     }
@@ -356,6 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearListBtn.addEventListener('click', () => {
             wordListInput.value = '';
             updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', '');
             selectedCategories.clear();
             document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
             categoriesModal.classList.add('hidden');
@@ -1114,6 +1134,42 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             updateWordCount();
+
+            // Save to cache locally
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            if (priorityWordListInput) {
+                localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
+            }
+            showToast("Words list has been saved to cache locally.");
         });
     }
 });
+
+function showToast(message) {
+    const toast = document.createElement('div');
+    toast.innerText = message;
+    toast.style.position = 'fixed';
+    toast.style.bottom = '20px';
+    toast.style.left = '50%';
+    toast.style.transform = 'translateX(-50%)';
+    toast.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    toast.style.color = '#fff';
+    toast.style.padding = '10px 20px';
+    toast.style.borderRadius = '8px';
+    toast.style.zIndex = '10000';
+    toast.style.fontFamily = "'Outfit', sans-serif";
+    toast.style.fontSize = '0.95rem';
+    toast.style.boxShadow = '0 0 10px rgba(0, 210, 255, 0.5)';
+    toast.style.border = '1px solid rgba(0, 210, 255, 0.3)';
+    toast.style.transition = 'opacity 0.3s ease-in-out';
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            if (document.body.contains(toast)) {
+                document.body.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
+}
