@@ -1167,7 +1167,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (pauseSlider) {
+        let validSlide = false;
+
+        function checkValidSlide(clientX) {
+            const rect = pauseSlider.getBoundingClientRect();
+            const clickPosition = (clientX - rect.left) / rect.width;
+            validSlide = clickPosition < 0.3;
+        }
+
+        pauseSlider.addEventListener('mousedown', (e) => {
+            checkValidSlide(e.clientX);
+        });
+
+        pauseSlider.addEventListener('touchstart', (e) => {
+            if (e.touches && e.touches.length > 0) {
+                checkValidSlide(e.touches[0].clientX);
+            }
+        }, { passive: true });
+
         pauseSlider.addEventListener('input', (e) => {
+            if (!validSlide && e.target.value > 10) {
+                e.target.value = 0;
+                return;
+            }
             if (e.target.value > 90) {
                 if (!isPaused) {
                     isPaused = true;
