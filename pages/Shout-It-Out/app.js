@@ -817,26 +817,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Dynamically scale text based on length
         const wordLength = newWord.length;
-        let dynamicFontSize = "8rem"; // default max size
+        let dynamicFontSize = "12rem"; // Huge max size for short words
 
         if (wordLength > 20) {
-            dynamicFontSize = "3rem";
-        } else if (wordLength > 15) {
             dynamicFontSize = "4rem";
+        } else if (wordLength > 15) {
+            dynamicFontSize = "6rem";
         } else if (wordLength > 10) {
-            dynamicFontSize = "5.5rem";
+            dynamicFontSize = "8rem";
+        } else if (wordLength > 5) {
+            dynamicFontSize = "10rem";
         }
 
         // Apply media query specific overrides if on mobile
         if (window.innerWidth <= 768 || window.innerHeight <= 600) {
             if (wordLength > 20) {
-                dynamicFontSize = "1.5rem";
+                dynamicFontSize = "2rem";
             } else if (wordLength > 15) {
-                dynamicFontSize = "1.8rem";
+                dynamicFontSize = "2.5rem";
             } else if (wordLength > 10) {
-                dynamicFontSize = "2.2rem";
+                dynamicFontSize = "3.2rem";
+            } else if (wordLength > 5) {
+                dynamicFontSize = "4rem";
             } else {
-                dynamicFontSize = "3rem";
+                dynamicFontSize = "5rem";
             }
         }
 

@@ -249,8 +249,6 @@
                 <button id="skip-btn" class="side-btn skip-btn">SKIP<br>▼</button>
 
                 <div class="word-display-container">
-                    <button id="go-back-btn" class="go-back-btn hidden">↩ Go Back</button>
-                    <p id="timer">Time: 60s</p>
                     <div class="word-animator">
                         <h3 id="past-word" class="past-word hidden"></h3>
                         <h2 id="current-word">Word</h2>
@@ -263,9 +261,24 @@
 
             <!-- Pause Slider Area -->
             <div id="pause-slider-area" class="glass-card"
-                style="text-align: center; padding: 25px; width: 100%; margin: 0 auto;">
-                <p style="margin-bottom: 10px; font-weight: 600; opacity: 0.9;">Slide to Pause</p>
-                <input type="range" id="pause-slider" min="0" max="100" value="0" class="custom-slider">
+                style="display: flex; align-items: stretch; justify-content: space-between; padding: 10px 20px; width: 100%; margin: 0 auto; gap: 15px;">
+                <div id="timer-wrapper"
+                    style="display: flex; align-items: center; justify-content: center; min-width: 100px;">
+                    <p id="timer" style="margin: 0;">Time: 60s</p>
+                </div>
+
+                <div
+                    style="flex: 1; text-align: center; display: flex; flex-direction: column; justify-content: center; position: relative;">
+                    <p
+                        style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; font-weight: 600; opacity: 0.5; pointer-events: none; z-index: 1;">
+                        Slide to Pause</p>
+                    <input type="range" id="pause-slider" min="0" max="100" value="0" class="custom-slider">
+                </div>
+
+                <div id="go-back-wrapper"
+                    style="display: flex; justify-content: center; align-items: stretch; min-width: 130px;">
+                    <button id="go-back-btn" class="go-back-btn hidden">↩ Go Back</button>
+                </div>
             </div>
         </div>
 
