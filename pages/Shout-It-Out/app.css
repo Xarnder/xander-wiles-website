@@ -584,3 +584,60 @@ textarea:focus {
     color: #e040fb !important;
     text-shadow: 0 0 10px rgba(224, 64, 251, 0.4) !important;
 }
+
+/* Custom Slider for Pause */
+.custom-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    max-width: 350px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    outline: none;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    position: relative;
+    cursor: pointer;
+    margin: 10px auto;
+    display: block;
+}
+
+.custom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #00d2ff;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(0, 210, 255, 0.8), inset 0 0 5px rgba(255, 255, 255, 0.5);
+    border: 2px solid white;
+    transition: transform 0.2s ease;
+}
+
+.custom-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.custom-slider::-moz-range-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #00d2ff;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(0, 210, 255, 0.8), inset 0 0 5px rgba(255, 255, 255, 0.5);
+    border: 2px solid white;
+}
+
+.custom-slider::-moz-range-progress {
+    background: rgba(0, 210, 255, 0.4);
+    height: 12px;
+    border-radius: 10px;
+}
+
+/* Disabled states when paused */
+.disabled-game {
+    pointer-events: none;
+    opacity: 0.5;
+    filter: grayscale(100%);
+}

@@ -242,21 +242,46 @@
         </div>
 
         <!-- Screen 2: Game Play -->
-        <div id="play-screen" class="glass-card hidden">
-            <!-- Fallback Buttons -->
-            <button id="skip-btn" class="side-btn skip-btn">SKIP<br>▼</button>
+        <div id="play-screen-wrapper" class="hidden"
+            style="width: 100%; max-width: 1000px; display: flex; flex-direction: column; gap: 20px;">
+            <div id="play-screen" class="glass-card">
+                <!-- Fallback Buttons -->
+                <button id="skip-btn" class="side-btn skip-btn">SKIP<br>▼</button>
 
-            <div class="word-display-container">
-                <button id="go-back-btn" class="go-back-btn hidden">↩ Go Back</button>
-                <p id="timer">Time: 60s</p>
-                <div class="word-animator">
-                    <h3 id="past-word" class="past-word hidden"></h3>
-                    <h2 id="current-word">Word</h2>
+                <div class="word-display-container">
+                    <button id="go-back-btn" class="go-back-btn hidden">↩ Go Back</button>
+                    <p id="timer">Time: 60s</p>
+                    <div class="word-animator">
+                        <h3 id="past-word" class="past-word hidden"></h3>
+                        <h2 id="current-word">Word</h2>
+                    </div>
+                    <p id="instruction-text">Tilt UP = Correct | Tilt DOWN = Skip</p>
                 </div>
-                <p id="instruction-text">Tilt UP = Correct | Tilt DOWN = Skip</p>
+
+                <button id="correct-btn" class="side-btn correct-btn">CORRECT<br>▲</button>
             </div>
 
-            <button id="correct-btn" class="side-btn correct-btn">CORRECT<br>▲</button>
+            <!-- Pause Slider Area -->
+            <div id="pause-slider-area" class="glass-card"
+                style="text-align: center; padding: 25px; width: 100%; margin: 0 auto;">
+                <p style="margin-bottom: 10px; font-weight: 600; opacity: 0.9;">Slide to Pause</p>
+                <input type="range" id="pause-slider" min="0" max="100" value="0" class="custom-slider">
+            </div>
+        </div>
+
+        <!-- Pause Modal -->
+        <div id="pause-modal" class="glass-card hidden"
+            style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2000; max-width: 400px; width: 90%;">
+            <h2>Paused</h2>
+            <p id="pause-timer-display" style="font-size: 2rem; font-weight: bold; color: #00d2ff; margin: 10px 0;">
+                Time: 60s</p>
+            <p id="pause-score-display" style="font-size: 1.1rem; opacity: 0.9; margin-bottom: 20px;">0 correct out of 0
+                (0%)</p>
+            <div class="setup-actions" style="margin-top: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <button id="resume-btn" class="neon-btn">Continue Playing</button>
+                <button id="pause-end-keep-btn" class="neon-btn secondary">Quit to Main Menu</button>
+                <button id="pause-end-remove-btn" class="neon-btn secondary">Quit & Remove Used</button>
+            </div>
         </div>
 
         <!-- Screen 3: Game Over -->

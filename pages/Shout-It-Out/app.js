@@ -62,6 +62,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const finalPlayerNameEl = document.getElementById('final-player-name');
     const exportCsvBtn = document.getElementById('export-csv-btn');
     const exportTxtBtn = document.getElementById('export-txt-btn');
+    const playScreenWrapper = document.getElementById('play-screen-wrapper');
+    const mainNavPlaceholder = document.getElementById('main-nav-placeholder');
+    const pauseSliderArea = document.getElementById('pause-slider-area');
+    const pauseSlider = document.getElementById('pause-slider');
+    const pauseModal = document.getElementById('pause-modal');
+    const resumeBtn = document.getElementById('resume-btn');
+    const pauseTimerDisplay = document.getElementById('pause-timer-display');
+    const pauseScoreDisplay = document.getElementById('pause-score-display');
+    const pauseEndKeepBtn = document.getElementById('pause-end-keep-btn');
+    const pauseEndRemoveBtn = document.getElementById('pause-end-remove-btn');
 
     // --- Game State Variables ---
     let words = [];
@@ -79,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let correctWordsArr = [];
     let skippedWordsArr = [];
     let currentPlayerName = '';
+    let isPaused = false;
 
     // --- Settings State ---
     let settingGameTime = 60;
@@ -715,7 +726,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Switch UI Screens
         setupScreen.classList.add('hidden');
         endScreen.classList.add('hidden');
-        playScreen.classList.remove('hidden');
+        if (mainNavPlaceholder) mainNavPlaceholder.classList.add('hidden');
+        playScreenWrapper.classList.remove('hidden');
+        isPaused = false;
+        if (pauseSlider) pauseSlider.value = 0;
 
         if (!settingShowButtons) {
             skipBtn.classList.add('hidden');
@@ -740,7 +754,9 @@ document.addEventListener('DOMContentLoaded', () => {
         showNextWord();
 
         // Start Timer
+        if (gameInterval) clearInterval(gameInterval);
         gameInterval = setInterval(() => {
+            if (isPaused) return;
             timer--;
             updateTimerDisplay();
 
@@ -812,7 +828,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Go Back ---
     if (goBackBtn) {
         goBackBtn.addEventListener('click', () => {
-            if (!isPlaying || tiltCooldown || currentWordIndex === 0) return;
+            if (!isPlaying || tiltCooldown || currentWordIndex === 0 || isPaused) return;
             tiltCooldown = true;
 
             const prevWord = words[currentWordIndex - 1];
@@ -855,7 +871,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function markCorrect() {
-        if (!isPlaying || tiltCooldown) return;
+        if (!isPlaying || tiltCooldown || isPaused) return;
         console.log("🟢 [DEBUG] Action: CORRECT. Word was:", words[currentWordIndex].text);
         correctWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
@@ -866,7 +882,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function markSkip() {
-        if (!isPlaying || tiltCooldown) return;
+        if (!isPlaying || tiltCooldown || isPaused) return;
         console.log("🟠 [DEBUG] Action: SKIP. Word was:", words[currentWordIndex].text);
         skippedWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
@@ -913,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Device Orientation Logic ---
     function handleOrientation(event) {
-        if (!isPlaying || tiltCooldown || !settingTiltEnabled) return;
+        if (!isPlaying || tiltCooldown || !settingTiltEnabled || isPaused) return;
 
         const beta = event.beta;   // Front-to-back tilt [-180, 180]
         const gamma = event.gamma; // Left-to-right tilt [-90, 90]
@@ -962,7 +978,7 @@ document.addEventListener('DOMContentLoaded', () => {
     correctBtn.addEventListener('click', markCorrect);
 
     document.addEventListener('keydown', (e) => {
-        if (!isPlaying || tiltCooldown) return;
+        if (!isPlaying || tiltCooldown || isPaused) return;
         if (e.key === 'ArrowUp') {
             markCorrect();
         } else if (e.key === 'ArrowDown') {
@@ -999,7 +1015,13 @@ document.addEventListener('DOMContentLoaded', () => {
         stopSound('all');
         playSound('end');
 
-        playScreen.classList.add('hidden');
+        playScreenWrapper.classList.add('hidden');
+        if (mainNavPlaceholder) mainNavPlaceholder.classList.remove('hidden');
+        playScreen.classList.remove('disabled-game');
+        pauseSliderArea.classList.remove('disabled-game');
+        pauseModal.classList.add('hidden');
+        if (pauseSlider) pauseSlider.value = 0;
+
         endScreen.classList.remove('hidden');
 
         if (currentPlayerName) {
@@ -1141,6 +1163,101 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
             }
             showToast("Words list has been saved to cache locally.");
+        });
+    }
+
+    if (pauseSlider) {
+        pauseSlider.addEventListener('input', (e) => {
+            if (e.target.value > 90) {
+                if (!isPaused) {
+                    isPaused = true;
+                    playScreen.classList.add('disabled-game');
+                    pauseSliderArea.classList.add('disabled-game');
+
+                    if (pauseTimerDisplay) {
+                        const m = Math.floor(timer / 60);
+                        const s = timer % 60;
+                        pauseTimerDisplay.innerText = `Time: ${m}:${s.toString().padStart(2, '0')}`;
+                    }
+                    if (pauseScoreDisplay) {
+                        const totalPlayed = currentWordIndex;
+                        const percentage = totalPlayed > 0 ? Math.round((score / totalPlayed) * 100) : 0;
+                        pauseScoreDisplay.innerText = `${score} correct out of ${totalPlayed} (${percentage}%)`;
+                    }
+
+                    pauseModal.classList.remove('hidden');
+                }
+            }
+        });
+        pauseSlider.addEventListener('change', (e) => {
+            if (e.target.value <= 90) {
+                e.target.value = 0; // snap back if not full
+            }
+        });
+    }
+
+    if (resumeBtn) {
+        resumeBtn.addEventListener('click', () => {
+            isPaused = false;
+            playScreen.classList.remove('disabled-game');
+            pauseSliderArea.classList.remove('disabled-game');
+            pauseModal.classList.add('hidden');
+            pauseSlider.value = 0;
+        });
+    }
+
+    function goBackToStartMenu(removeUsed) {
+        isPaused = false;
+        clearInterval(gameInterval);
+        isPlaying = false;
+        stopSound('all');
+
+        playScreenWrapper.classList.add('hidden');
+        if (mainNavPlaceholder) mainNavPlaceholder.classList.remove('hidden');
+        playScreen.classList.remove('disabled-game');
+        pauseSliderArea.classList.remove('disabled-game');
+        pauseModal.classList.add('hidden');
+        if (pauseSlider) pauseSlider.value = 0;
+
+        updateMainMenuStats();
+        setupScreen.classList.remove('hidden');
+
+        if (removeUsed) {
+            // Remove played words from the textareas
+            const playedNormalText = words.slice(0, currentWordIndex).filter(w => !w.isPriority).map(w => w.text.toLowerCase());
+            const playedPriorityText = words.slice(0, currentWordIndex).filter(w => w.isPriority).map(w => w.text.toLowerCase());
+
+            const rawText = wordListInput.value;
+            const originalWords = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+            const remainingWords = originalWords.filter(w => !playedNormalText.includes(w.toLowerCase()));
+            wordListInput.value = remainingWords.join('\n');
+
+            if (priorityWordListInput) {
+                const rawPrioText = priorityWordListInput.value;
+                const originalPrioWords = rawPrioText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+                const remainingPrioWords = originalPrioWords.filter(w => !playedPriorityText.includes(w.toLowerCase()));
+                priorityWordListInput.value = remainingPrioWords.join('\n');
+            }
+
+            updateWordCount();
+
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            if (priorityWordListInput) {
+                localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
+            }
+            showToast("Words list has been updated and saved to cache.");
+        }
+    }
+
+    if (pauseEndKeepBtn) {
+        pauseEndKeepBtn.addEventListener('click', () => {
+            goBackToStartMenu(false);
+        });
+    }
+
+    if (pauseEndRemoveBtn) {
+        pauseEndRemoveBtn.addEventListener('click', () => {
+            goBackToStartMenu(true);
         });
     }
 });
