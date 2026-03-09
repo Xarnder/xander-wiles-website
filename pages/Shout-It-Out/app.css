@@ -600,6 +600,7 @@ textarea:focus {
     cursor: pointer;
     margin: 10px auto;
     display: block;
+    padding: 0 3px;
 }
 
 .custom-slider::-webkit-slider-thumb {
