@@ -379,6 +379,15 @@ textarea:focus {
 }
 
 /* Gameplay Screen (Landscape Optimized) */
+#play-screen-wrapper {
+    height: calc(100vh - 40px);
+    /* Fill screen minus body padding */
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    /* Give a neat space before the pause slider */
+}
+
 #play-screen {
     display: flex;
     flex-direction: row;
@@ -386,7 +395,8 @@ textarea:focus {
     align-items: center;
     max-width: 1000px;
     width: 100%;
-    height: 80vh;
+    flex: 1;
+    /* Stretch to fill available space */
     padding: 10px;
     gap: 15px;
 }
@@ -399,6 +409,8 @@ textarea:focus {
     align-items: center;
     position: relative;
     width: 100%;
+    align-self: stretch;
+    /* Stretch to fill full card height */
 }
 
 #timer {
@@ -415,7 +427,6 @@ textarea:focus {
 .word-animator {
     position: relative;
     width: 100%;
-    min-height: 120px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -426,10 +437,8 @@ textarea:focus {
     font-size: 1.5rem;
     font-weight: 600;
     opacity: 0.4;
-    position: absolute;
-    top: -55px;
-    /* Added more space above the previous phrase */
-    margin: 0;
+    margin: 0 0 20px 0;
+    /* Creates the padding below the previous word */
     transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
@@ -599,13 +608,21 @@ textarea:focus {
 
 /* Fix for Short Landscape Screens (Low Res Phones) */
 @media (max-height: 600px) and (orientation: landscape) {
+    .app-container {
+        padding: 5px;
+        /* Reduce outer padding */
+    }
+
     #play-screen-wrapper {
-        gap: 10px !important;
+        gap: 5px !important;
+        height: 100%;
+        min-height: 90vh;
+        /* Stretch the whole wrapper */
     }
 
     #play-screen {
-        height: auto;
-        min-height: 55vh;
+        flex: 1;
+        /* Automatically fill remaining vertical space */
         padding: 5px 10px;
         align-items: stretch;
         /* Allow children to stretch */
@@ -621,12 +638,14 @@ textarea:focus {
     }
 
     .word-animator {
-        min-height: 70px;
+        min-height: 80px;
+        /* Ensure enough height for large text to center within */
     }
 
     #past-word {
         font-size: 1rem;
-        top: -15px;
+        margin: 0 0 5px 0;
+        /* Scaled down padding */
     }
 
     #instruction-text {
