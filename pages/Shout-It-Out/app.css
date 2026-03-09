@@ -397,6 +397,8 @@ textarea:focus {
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    position: relative;
+    width: 100%;
 }
 
 #timer {
@@ -404,7 +406,8 @@ textarea:focus {
     font-weight: 800;
     color: #00d2ff;
     text-shadow: 0 0 10px rgba(0, 210, 255, 0.4);
-    margin-bottom: 10px;
+    margin-bottom: 30px;
+    /* Increased from 10px to space out from past-word */
 }
 
 .word-animator {
@@ -422,18 +425,25 @@ textarea:focus {
     font-weight: 600;
     opacity: 0.4;
     position: absolute;
-    top: -20px;
+    top: -55px;
+    /* Added more space above the previous phrase */
     margin: 0;
     transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 #current-word {
-    font-size: 4rem;
+    font-size: 8rem;
+    /* Doubled from 4rem */
     font-weight: 800;
     text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
     margin: 0;
     text-align: center;
     transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1), font-size 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.timer-warning {
+    animation: flash-red-text 0.5s infinite alternate;
+    /* Sped up the flash */
 }
 
 /* Animations */
@@ -448,6 +458,21 @@ textarea:focus {
 
 .roll-out-reverse {
     animation: rollOutReverse 0.3s ease-in forwards;
+}
+
+@keyframes flash-red-text {
+    0% {
+        opacity: 1;
+        color: #ffffff;
+        text-shadow: 0 0 25px rgba(255, 255, 255, 1);
+    }
+
+    100% {
+        opacity: 0.8;
+        color: #ffbaba;
+        /* light red */
+        text-shadow: 0 0 15px rgba(255, 75, 75, 0.8);
+    }
 }
 
 @keyframes rollIn {
@@ -478,10 +503,21 @@ textarea:focus {
     font-size: 1.2rem;
     opacity: 0.8;
     transition: opacity 0.5s ease;
+    position: absolute;
+    bottom: 5px;
+    /* Brought back up so it isn't hidden by overflow or card padding */
+    width: 100%;
+    text-align: center;
 }
 
 /* Go Back Button */
 .go-back-btn {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    /* Recenter */
+    transform: translateX(-50%);
+    /* Recenter translation */
     background: rgba(255, 204, 0, 0.2);
     border: 1px solid #ffcc00;
     color: #ffcc00;
@@ -490,26 +526,30 @@ textarea:focus {
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    margin-bottom: 15px;
     transition: all 0.2s ease;
     box-shadow: 0 4px 15px rgba(255, 204, 0, 0.2);
+    z-index: 10;
 }
 
 .go-back-btn:hover {
     background: rgba(255, 204, 0, 0.3);
     box-shadow: 0 6px 20px rgba(255, 204, 0, 0.4);
-    transform: translateY(-2px);
+    transform: translateX(-50%) translateY(-2px);
+    /* Maintain centering during hover */
 }
 
 .go-back-btn:active {
-    transform: scale(0.95);
+    transform: translateX(-50%) scale(0.95);
+    /* Maintain centering during click */
 }
 
 /* Side Fallback Buttons */
 .side-btn {
     width: 25vw;
     max-width: 200px;
-    height: 100%;
+    align-self: stretch;
+    /* Make it fill the height */
+    min-height: 100%;
     border-radius: 20px;
     border: 3px solid rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.05);
@@ -561,16 +601,82 @@ textarea:focus {
     }
 }
 
+/* Fix for Short Landscape Screens (Low Res Phones) */
+@media (max-height: 600px) and (orientation: landscape) {
+    #play-screen-wrapper {
+        gap: 10px !important;
+    }
+
+    #play-screen {
+        height: auto;
+        min-height: 55vh;
+        padding: 5px 10px;
+        align-items: stretch;
+        /* Allow children to stretch */
+    }
+
+    #timer {
+        font-size: 1.5rem;
+        margin-bottom: 5px;
+    }
+
+    #current-word {
+        font-size: 2.2rem;
+    }
+
+    .word-animator {
+        min-height: 70px;
+    }
+
+    #past-word {
+        font-size: 1rem;
+        top: -15px;
+    }
+
+    #instruction-text {
+        font-size: 0.9rem;
+        margin-bottom: 0px;
+    }
+
+    .go-back-btn {
+        padding: 4px 12px;
+        font-size: 0.85rem;
+        margin-bottom: 5px;
+    }
+
+    .side-btn {
+        font-size: 1.1rem;
+        min-height: auto;
+        /* Let it dictate its height via align-self */
+    }
+
+    #pause-slider-area {
+        padding: 10px !important;
+    }
+
+    #pause-slider-area p {
+        margin-bottom: 5px !important;
+        font-size: 0.9rem;
+    }
+
+    .custom-slider {
+        height: 30px;
+    }
+}
+
 @media (orientation: portrait) {
     #play-screen {
         flex-direction: column;
         height: 85vh;
+        align-items: center;
+        /* Override back for portrait */
     }
 
     .side-btn {
         width: 100%;
         max-width: none;
         height: 15vh;
+        min-height: auto;
         flex-direction: row;
         gap: 10px;
     }

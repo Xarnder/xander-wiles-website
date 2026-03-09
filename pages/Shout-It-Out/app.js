@@ -779,7 +779,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateTimerDisplay() {
         const m = Math.floor(timer / 60);
         const s = timer % 60;
-        timerEl.innerText = `${m}:${s.toString().padStart(2, '0')}`;
+        timerEl.innerText = `Time: ${m}:${s.toString().padStart(2, '0')}`;
+
+        if (timer <= 10) {
+            timerEl.classList.add('timer-warning');
+        } else {
+            timerEl.classList.remove('timer-warning');
+        }
     }
 
     function showNextWord() {
@@ -805,7 +811,36 @@ document.addEventListener('DOMContentLoaded', () => {
         // Apply roll-in animation to the new current word
         currentWordEl.classList.remove('roll-in');
         void currentWordEl.offsetWidth; // Trigger reflow
-        currentWordEl.innerText = words[currentWordIndex].text;
+
+        const newWord = words[currentWordIndex].text;
+        currentWordEl.innerText = newWord;
+
+        // Dynamically scale text based on length
+        const wordLength = newWord.length;
+        let dynamicFontSize = "8rem"; // default max size
+
+        if (wordLength > 20) {
+            dynamicFontSize = "3rem";
+        } else if (wordLength > 15) {
+            dynamicFontSize = "4rem";
+        } else if (wordLength > 10) {
+            dynamicFontSize = "5.5rem";
+        }
+
+        // Apply media query specific overrides if on mobile
+        if (window.innerWidth <= 768 || window.innerHeight <= 600) {
+            if (wordLength > 20) {
+                dynamicFontSize = "1.5rem";
+            } else if (wordLength > 15) {
+                dynamicFontSize = "1.8rem";
+            } else if (wordLength > 10) {
+                dynamicFontSize = "2.2rem";
+            } else {
+                dynamicFontSize = "3rem";
+            }
+        }
+
+        currentWordEl.style.fontSize = dynamicFontSize;
 
         if (words[currentWordIndex].isPriority) {
             currentWordEl.classList.add('priority-word');
