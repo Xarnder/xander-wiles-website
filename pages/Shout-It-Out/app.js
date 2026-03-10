@@ -1000,6 +1000,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (passScreen) passScreen.classList.add('hidden');
                 if (playScreen) playScreen.classList.remove('disabled-game');
                 isPassingPhone = false;
+                playSound('ui'); // Sound for turn completion
                 showNextWord();
                 tiltCooldown = false;
             } else {

@@ -400,6 +400,7 @@ textarea:focus {
     /* Stretch to fill available space */
     padding: 10px;
     gap: 15px;
+    position: relative;
 }
 
 .word-display-container {
@@ -769,18 +770,20 @@ textarea:focus {
 
 /* Pass Screen Overlay */
 #pass-screen {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 10;
+    width: 100vw;
+    height: 100vh;
+    z-index: 5000;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    background: rgba(15, 12, 41, 0.98);
-    border-radius: 24px;
+    background: #0f0c29;
+    /* Solid opaque background */
+    border-radius: 0;
+    /* No radius since it's full viewport */
     animation: fadeIn 0.3s ease-out;
 }
 
