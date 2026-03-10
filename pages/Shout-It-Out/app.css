@@ -775,7 +775,12 @@ textarea:focus {
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: 5000;
+    max-width: none !important;
+    /* Override glass-card */
+    max-height: none !important;
+    /* Override glass-card */
+    z-index: 9999;
+    /* Ensure it's on top of everything */
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -783,7 +788,7 @@ textarea:focus {
     background: #0f0c29;
     /* Solid opaque background */
     border-radius: 0;
-    /* No radius since it's full viewport */
+    /* No radius for full-screen */
     animation: fadeIn 0.3s ease-out;
 }
 
