@@ -263,23 +263,46 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedCategories = new Set();
 
     function updateWordCount() {
-        if (wordCounterEl) {
-            const text = wordListInput.value.trim();
-            if (!text) {
-                wordCounterEl.innerText = "0 words";
-            } else {
-                const count = text.split('\n').map(w => w.trim()).filter(w => w.length > 0).length;
-                wordCounterEl.innerText = `${count} word${count === 1 ? '' : 's'}`;
-            }
+        const wordCount = wordListInput.value.split('\n').filter(w => w.trim().length > 0).length;
+        wordCounterEl.innerText = `${wordCount} Words Total`;
+
+        if (priorityWordListInput && priorityWordCounterEl) {
+            const prioCount = priorityWordListInput.value.split('\n').filter(w => w.trim().length > 0).length;
+            priorityWordCounterEl.innerText = `${prioCount} Priority Words`;
         }
-        if (priorityWordCounterEl && priorityWordListInput) {
-            const prioText = priorityWordListInput.value.trim();
-            if (!prioText) {
-                priorityWordCounterEl.innerText = "0 words";
-            } else {
-                const count = prioText.split('\n').map(w => w.trim()).filter(w => w.length > 0).length;
-                priorityWordCounterEl.innerText = `${count} word${count === 1 ? '' : 's'}`;
-            }
+    }
+
+    /**
+     * Dynamically adjust font size to fit container width
+     * @param {HTMLElement} el The element containing text
+     * @param {number} maxFontSize Max font size in rem
+     * @param {number} minFontSize Min font size in rem
+     */
+    function fitText(el, maxFontSizeRem = 10, minFontSizePx = 24) {
+        if (!el) return;
+
+        // Convert rem to px for easier internal math (assuming 16px base)
+        let currentSize = maxFontSizeRem * 16;
+        el.style.fontSize = currentSize + "px";
+        el.style.whiteSpace = "nowrap";
+
+        const parent = el.closest('.word-display-container');
+        if (!parent) return;
+
+        // The parent is the central column. We want to fit within its width minus padding.
+        // Side buttons are 150px each. #play-screen has 15px gap. 
+        // We'll just use the clientWidth of the container which should already be constrained.
+        const maxWidth = parent.clientWidth - 80; // 40px padding on each side
+
+        // Iteratively shrink font size until it fits width
+        while (el.scrollWidth > maxWidth && currentSize > minFontSizePx) {
+            currentSize -= 2; // Shrink by 2px steps for precision
+            el.style.fontSize = currentSize + "px";
+        }
+
+        // If it still doesn't fit, allow wrapping but keep it at min size
+        if (el.scrollWidth > maxWidth) {
+            el.style.whiteSpace = "normal";
         }
     }
 
@@ -853,36 +876,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const newWord = words[currentWordIndex].text;
         currentWordEl.innerText = newWord;
 
-        // Dynamically scale text based on length
-        const wordLength = newWord.length;
-        let dynamicFontSize = "12rem"; // Huge max size for short words
+        // Dynamically scale text based on container width
+        const isMobile = window.innerWidth <= 768 || window.innerHeight <= 600;
+        const maxFs = isMobile ? 5 : 10;
+        fitText(currentWordEl, maxFs, isMobile ? 20 : 24);
 
-        if (wordLength > 20) {
-            dynamicFontSize = "4rem";
-        } else if (wordLength > 15) {
-            dynamicFontSize = "6rem";
-        } else if (wordLength > 10) {
-            dynamicFontSize = "8rem";
-        } else if (wordLength > 5) {
-            dynamicFontSize = "10rem";
+        // Also fit past word if it exists
+        if (pastWordEl && !pastWordEl.classList.contains('hidden')) {
+            fitText(pastWordEl, isMobile ? 1.5 : 2, isMobile ? 16 : 18);
         }
-
-        // Apply media query specific overrides if on mobile
-        if (window.innerWidth <= 768 || window.innerHeight <= 600) {
-            if (wordLength > 20) {
-                dynamicFontSize = "2rem";
-            } else if (wordLength > 15) {
-                dynamicFontSize = "2.5rem";
-            } else if (wordLength > 10) {
-                dynamicFontSize = "3.2rem";
-            } else if (wordLength > 5) {
-                dynamicFontSize = "4rem";
-            } else {
-                dynamicFontSize = "5rem";
-            }
-        }
-
-        currentWordEl.style.fontSize = dynamicFontSize;
 
         if (words[currentWordIndex].isPriority) {
             currentWordEl.classList.add('priority-word');

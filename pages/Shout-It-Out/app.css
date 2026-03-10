@@ -395,7 +395,9 @@ textarea:focus {
     justify-content: space-between;
     align-items: center;
     max-width: 1000px;
-    width: 100%;
+    width: 95vw;
+    /* Stable viewport-based width */
+    margin: 0 auto;
     flex: 1;
     /* Stretch to fill available space */
     padding: 10px;
@@ -410,9 +412,13 @@ textarea:focus {
     justify-content: center;
     align-items: center;
     position: relative;
-    width: 100%;
+    overflow: hidden;
+    /* Prevent overflow jitters */
     align-self: stretch;
-    /* Stretch to fill full card height */
+    padding: 0 40px;
+    /* Gap from buttons */
+    min-width: 0;
+    /* Crucial for flex child scrollWidth measurement */
 }
 
 #timer {
@@ -446,12 +452,14 @@ textarea:focus {
 
 #current-word {
     font-size: 8rem;
-    /* Doubled from 4rem */
     font-weight: 800;
-    text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
     margin: 0;
     text-align: center;
-    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1), font-size 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    width: 100%;
+    line-height: 1.1;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    word-wrap: break-word;
+    /* Final fallback */
 }
 
 .timer-warning {
@@ -552,12 +560,16 @@ textarea:focus {
 
 /* Side Fallback Buttons */
 .side-btn {
-    width: 25vw;
-    max-width: 200px;
+    width: 150px;
+    /* Fixed width */
+    flex-shrink: 0;
+    /* Prevent shrinking */
     align-self: stretch;
     /* Make it fill the height */
     min-height: 100%;
     border-radius: 20px;
+    z-index: 10;
+    /* Keep buttons above any scaling text if overlap happens */
     border: 3px solid rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.05);
     color: white;
