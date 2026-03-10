@@ -193,6 +193,23 @@
                 <label for="show-pastword-toggle">Show Previous Word Indicator</label>
             </div>
 
+            <div class="setting-group checkbox-group">
+                <input type="checkbox" id="multi-person-toggle">
+                <label for="multi-person-toggle">Multi Person Mode</label>
+            </div>
+
+            <div id="multi-person-settings" class="hidden"
+                style="margin-left: 20px; border-left: 2px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                <div class="setting-group">
+                    <label for="phrases-per-player">Phrases per Player:</label>
+                    <input type="number" id="phrases-per-player" class="glass-input" value="3" min="1" max="20">
+                </div>
+                <div class="setting-group">
+                    <label for="pass-time">Pass Time (seconds):</label>
+                    <input type="number" id="pass-time" class="glass-input" value="5" min="1" max="30">
+                </div>
+            </div>
+
             <button id="close-settings-btn" class="neon-btn">Save & Close</button>
         </div>
 
@@ -256,6 +273,13 @@
                 </div>
 
                 <button id="correct-btn" class="side-btn correct-btn">CORRECT<br>▲</button>
+            </div>
+
+            <!-- Pass Screen Overlay -->
+            <div id="pass-screen" class="glass-card hidden">
+                <h2 style="font-size: 2.5rem; margin-bottom: 20px; color: #e040fb;">PASS TO NEXT PLAYER</h2>
+                <div id="pass-countdown">5</div>
+                <p style="margin-top: 20px; opacity: 0.8;">Get ready!</p>
             </div>
 
             <!-- Pause Slider Area -->

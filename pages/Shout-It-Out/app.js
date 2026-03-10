@@ -72,6 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const pauseScoreDisplay = document.getElementById('pause-score-display');
     const pauseEndKeepBtn = document.getElementById('pause-end-keep-btn');
     const pauseEndRemoveBtn = document.getElementById('pause-end-remove-btn');
+    const multiPersonToggle = document.getElementById('multi-person-toggle');
+    const multiPersonSettings = document.getElementById('multi-person-settings');
+    const phrasesPerPlayerInput = document.getElementById('phrases-per-player');
+    const passTimeInput = document.getElementById('pass-time');
+    const passScreen = document.getElementById('pass-screen');
+    const passCountdownEl = document.getElementById('pass-countdown');
 
     // --- Game State Variables ---
     let words = [];
@@ -90,6 +96,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let skippedWordsArr = [];
     let currentPlayerName = '';
     let isPaused = false;
+    let isPassingPhone = false;
+    let phrasesShownInCurrentTurn = 0;
 
     // --- Settings State ---
     let settingGameTime = 60;
@@ -100,6 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingShowButtons = true;
     let settingShowGoBack = true;
     let settingShowPastWord = true;
+    let settingMultiPersonEnabled = false;
+    let settingPhrasesPerPlayer = 3;
+    let settingPassTime = 5;
 
     // --- Audio System ---
     const correctAudio = new Audio('Correct.mp3');
@@ -415,6 +426,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showButtonsToggle) showButtonsToggle.checked = settingShowButtons;
             if (showGoBackToggle) showGoBackToggle.checked = settingShowGoBack;
             if (showPastWordToggle) showPastWordToggle.checked = settingShowPastWord;
+            if (multiPersonToggle) {
+                multiPersonToggle.checked = settingMultiPersonEnabled;
+                if (settingMultiPersonEnabled) multiPersonSettings.classList.remove('hidden');
+                else multiPersonSettings.classList.add('hidden');
+            }
+            if (phrasesPerPlayerInput) phrasesPerPlayerInput.value = settingPhrasesPerPlayer;
+            if (passTimeInput) passTimeInput.value = settingPassTime;
 
             setupScreen.classList.add('hidden');
             settingsScreen.classList.remove('hidden');
@@ -601,6 +619,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        if (multiPersonToggle) {
+            multiPersonToggle.addEventListener('change', (e) => {
+                if (e.target.checked) multiPersonSettings.classList.remove('hidden');
+                else multiPersonSettings.classList.add('hidden');
+            });
+        }
+
         closeSettingsBtn.addEventListener('click', () => {
             if (timeSelect.value === 'custom') {
                 let customMinutes = parseInt(customTimeInput.value);
@@ -618,6 +643,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showButtonsToggle) settingShowButtons = showButtonsToggle.checked;
             if (showGoBackToggle) settingShowGoBack = showGoBackToggle.checked;
             if (showPastWordToggle) settingShowPastWord = showPastWordToggle.checked;
+
+            if (multiPersonToggle) settingMultiPersonEnabled = multiPersonToggle.checked;
+            if (phrasesPerPlayerInput) settingPhrasesPerPlayer = parseInt(phrasesPerPlayerInput.value) || 3;
+            if (passTimeInput) settingPassTime = parseInt(passTimeInput.value) || 5;
 
             settingsScreen.classList.add('hidden');
             setupScreen.classList.remove('hidden');
@@ -719,6 +748,9 @@ document.addEventListener('DOMContentLoaded', () => {
         answerTimes = [];
         correctWordsArr = [];
         skippedWordsArr = [];
+        phrasesShownInCurrentTurn = 0;
+        isPassingPhone = false;
+        if (passScreen) passScreen.classList.add('hidden');
 
         // Initialize Timer Display
         updateTimerDisplay();
@@ -756,7 +788,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Start Timer
         if (gameInterval) clearInterval(gameInterval);
         gameInterval = setInterval(() => {
-            if (isPaused) return;
+            if (isPaused || isPassingPhone) return;
             timer--;
             updateTimerDisplay();
 
@@ -867,7 +899,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Go Back ---
     if (goBackBtn) {
         goBackBtn.addEventListener('click', () => {
-            if (!isPlaying || tiltCooldown || currentWordIndex === 0 || isPaused) return;
+            if (!isPlaying || tiltCooldown || currentWordIndex === 0 || isPaused || isPassingPhone) return;
             tiltCooldown = true;
 
             const prevWord = words[currentWordIndex - 1];
@@ -910,7 +942,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function markCorrect() {
-        if (!isPlaying || tiltCooldown || isPaused) return;
+        if (!isPlaying || tiltCooldown || isPaused || isPassingPhone) return;
         console.log("🟢 [DEBUG] Action: CORRECT. Word was:", words[currentWordIndex].text);
         correctWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
@@ -921,7 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function markSkip() {
-        if (!isPlaying || tiltCooldown || isPaused) return;
+        if (!isPlaying || tiltCooldown || isPaused || isPassingPhone) return;
         console.log("🟠 [DEBUG] Action: SKIP. Word was:", words[currentWordIndex].text);
         skippedWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
@@ -933,6 +965,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function advanceGame() {
         tiltCooldown = true;
         currentWordIndex++;
+        phrasesShownInCurrentTurn++;
 
         // Trigger transition out animation
         if (settingShowPastWord && currentWordEl && pastWordEl) {
@@ -941,9 +974,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
         setTimeout(() => {
             if (currentWordEl) currentWordEl.classList.remove('transition-up');
-            showNextWord();
-            tiltCooldown = false;
+
+            if (settingMultiPersonEnabled && phrasesShownInCurrentTurn >= settingPhrasesPerPlayer && currentWordIndex < words.length) {
+                startPassScreen();
+            } else {
+                showNextWord();
+                tiltCooldown = false;
+            }
         }, 400); // Wait for transition animation
+    }
+
+    function startPassScreen() {
+        isPassingPhone = true;
+        phrasesShownInCurrentTurn = 0;
+        if (passScreen) passScreen.classList.remove('hidden');
+        if (playScreen) playScreen.classList.add('disabled-game');
+
+        let passTimerLimit = settingPassTime;
+        if (passCountdownEl) passCountdownEl.innerText = passTimerLimit;
+
+        const passInterval = setInterval(() => {
+            passTimerLimit--;
+            if (passTimerLimit <= 0) {
+                clearInterval(passInterval);
+                if (passScreen) passScreen.classList.add('hidden');
+                if (playScreen) playScreen.classList.remove('disabled-game');
+                isPassingPhone = false;
+                showNextWord();
+                tiltCooldown = false;
+            } else {
+                if (passCountdownEl) passCountdownEl.innerText = passTimerLimit;
+            }
+        }, 1000);
     }
 
     function triggerVisualFeedback(type) {
@@ -968,7 +1030,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Device Orientation Logic ---
     function handleOrientation(event) {
-        if (!isPlaying || tiltCooldown || !settingTiltEnabled || isPaused) return;
+        if (!isPlaying || tiltCooldown || !settingTiltEnabled || isPaused || isPassingPhone) return;
 
         const beta = event.beta;   // Front-to-back tilt [-180, 180]
         const gamma = event.gamma; // Left-to-right tilt [-90, 90]
