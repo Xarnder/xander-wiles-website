@@ -121,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const thirtySecAudio = new Audio('30-Seconds-Remaining.mp3');
     const oneMinAudio = new Audio('1-minute-remaing.mp3');
     const twoMinAudio = new Audio('2-minutes-remaing.mp3');
+    const passAudio = new Audio('pass.mp3');
 
     function playSound(type) {
         if (!settingSoundEnabled) return;
@@ -149,6 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (type === 'ui') {
             uiAudio.currentTime = 0;
             uiAudio.play().catch(e => console.log('Audio error:', e));
+        } else if (type === 'pass') {
+            passAudio.currentTime = 0;
+            passAudio.play().catch(e => console.log('Audio error:', e));
         }
     }
 
@@ -162,11 +166,13 @@ document.addEventListener('DOMContentLoaded', () => {
             oneMinAudio.pause();
             twoMinAudio.pause();
             uiAudio.pause();
+            passAudio.pause();
             countdownAudio.currentTime = 0;
             thirtySecAudio.currentTime = 0;
             oneMinAudio.currentTime = 0;
             twoMinAudio.currentTime = 0;
             uiAudio.currentTime = 0;
+            passAudio.currentTime = 0;
         }
     }
 
@@ -176,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (audioInitialized) return;
 
         // Play and immediately pause all sounds silently
-        const sounds = [correctAudio, skipAudio, endAudio, countdownAudio, uiAudio, thirtySecAudio, oneMinAudio, twoMinAudio];
+        const sounds = [correctAudio, skipAudio, endAudio, countdownAudio, uiAudio, thirtySecAudio, oneMinAudio, twoMinAudio, passAudio];
         sounds.forEach(audio => {
             audio.volume = 0; // mute temporarily
             audio.play().then(() => {
@@ -987,6 +993,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function startPassScreen() {
         isPassingPhone = true;
         phrasesShownInCurrentTurn = 0;
+        playSound('pass'); // Sound for pass start
         if (passScreen) passScreen.classList.remove('hidden');
         if (playScreen) playScreen.classList.add('disabled-game');
 
