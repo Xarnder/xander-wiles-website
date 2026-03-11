@@ -21,6 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const genListModal = document.getElementById('gen-list-modal');
     const genTopicInput = document.getElementById('gen-topic-input');
     const genLoadingState = document.getElementById('gen-loading-state');
+    const genResultsState = document.getElementById('gen-results-state');
+    const genResultsTextarea = document.getElementById('gen-results-textarea');
+    const genAddBtn = document.getElementById('gen-add-btn');
+    const genReplaceBtn = document.getElementById('gen-replace-btn');
+    const genActionsState = document.getElementById('gen-actions-state');
     const submitGenListBtn = document.getElementById('submit-gen-list-btn');
     const closeGenListBtn = document.getElementById('close-gen-list-btn');
     const closeCategoriesBtn = document.getElementById('close-categories-btn');
@@ -457,6 +462,8 @@ document.addEventListener('DOMContentLoaded', () => {
         genCustomListBtn.addEventListener('click', () => {
             genTopicInput.value = '';
             genLoadingState.classList.add('hidden');
+            genResultsState.classList.add('hidden');
+            genActionsState.classList.remove('hidden');
             genTopicInput.classList.remove('hidden');
             submitGenListBtn.disabled = false;
             submitGenListBtn.style.opacity = '1';
@@ -496,19 +503,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
                 
                 if (data.words && data.words.length > 0) {
-                    // Append to existing words or replace if empty
-                    const existingText = wordListInput.value.trim();
                     const newText = data.words.join('\n');
                     
-                    if (existingText) {
-                        wordListInput.value = existingText + '\n' + newText;
-                    } else {
-                        wordListInput.value = newText;
-                    }
-                    
-                    updateWordCount();
-                    localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
-                    genListModal.classList.add('hidden');
+                    // Show results state
+                    genResultsTextarea.value = newText;
+                    genLoadingState.classList.add('hidden');
+                    genActionsState.classList.add('hidden');
+                    genResultsState.classList.remove('hidden');
                 } else {
                      alert("Could not generate words. Please try again.");
                      genLoadingState.classList.add('hidden');
@@ -524,6 +525,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 submitGenListBtn.disabled = false;
                 submitGenListBtn.style.opacity = '1';
             }
+        });
+    }
+
+    if (genAddBtn) {
+        genAddBtn.addEventListener('click', () => {
+            const existingText = wordListInput.value.trim();
+            const newText = genResultsTextarea.value.trim();
+            if (!newText) return;
+
+            if (existingText) {
+                wordListInput.value = existingText + '\n' + newText;
+            } else {
+                wordListInput.value = newText;
+            }
+            
+            updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            genListModal.classList.add('hidden');
+        });
+    }
+
+    if (genReplaceBtn) {
+        genReplaceBtn.addEventListener('click', () => {
+            const newText = genResultsTextarea.value.trim();
+            if (!newText) return;
+
+            wordListInput.value = newText;
+            
+            updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            genListModal.classList.add('hidden');
         });
     }
 

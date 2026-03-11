@@ -28,15 +28,15 @@ export default async function handler(request) {
       });
     }
 
-    const apiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const apiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-    const prompt = `Generate a list of exactly 20 short, specific, and common examples for the following topic: "${topic}".
-The output must be strictly one item per line. Do not use numbers, bullet points, asterisks, preflight formatting, preambles, or any Markdown formatting. Simply provide the list of items separated by new lines.`;
+    const prompt = `Generate a list of exactly 30 short, specific, and common examples for the following topic: "${topic}".
+The output must be strictly one item per line, with no extra text. Do not use numbers, bullet points, asterisks, preflight formatting, preambles, or any Markdown formatting. Simply provide the list of exactly 30 items separated by new lines.`;
 
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        maxOutputTokens: 200,
+        maxOutputTokens: 1000,
         temperature: 0.7,
       }
     };
