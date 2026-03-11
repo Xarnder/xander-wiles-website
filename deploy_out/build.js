@@ -16,7 +16,7 @@ fs.mkdirSync(deployOut, { recursive: true });
 // 2. Copy Everything (The Global Site)
 console.log('Copying global site...');
 const items = fs.readdirSync(rootDir);
-const excludeList = ['.git', 'node_modules', 'deploy_out', '.DS_Store', '.env'];
+const excludeList = ['.git', 'node_modules', 'deploy_out', '.DS_Store'];
 
 for (const item of items) {
     if (excludeList.includes(item)) {

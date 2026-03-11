@@ -9,11 +9,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const endScreen = document.getElementById('end-screen');
     const wordListInput = document.getElementById('word-list');
     const wordCounterEl = document.getElementById('word-counter');
+    const priorityWordListInput = document.getElementById('priority-word-list');
+    const priorityWordCounterEl = document.getElementById('priority-word-counter');
+    const priorityFrequencySelect = document.getElementById('priority-frequency');
     const startBtn = document.getElementById('start-btn');
     const settingsBtn = document.getElementById('settings-btn');
     const closeSettingsBtn = document.getElementById('close-settings-btn');
     const categoriesBtn = document.getElementById('categories-btn');
     const categoriesModal = document.getElementById('categories-modal');
+    const genCustomListBtn = document.getElementById('gen-custom-list-btn');
+    const genListModal = document.getElementById('gen-list-modal');
+    const genTopicInput = document.getElementById('gen-topic-input');
+    const genLoadingState = document.getElementById('gen-loading-state');
+    const submitGenListBtn = document.getElementById('submit-gen-list-btn');
+    const closeGenListBtn = document.getElementById('close-gen-list-btn');
     const closeCategoriesBtn = document.getElementById('close-categories-btn');
     const addCategoriesBtn = document.getElementById('add-categories-btn');
     const removeCategoriesBtn = document.getElementById('remove-categories-btn');
@@ -54,6 +63,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const lastGameStatsContainer = document.getElementById('last-game-stats-container');
     const lastGameScoreEl = document.getElementById('last-game-score');
     const lastGameDetailedStatsEl = document.getElementById('last-game-detailed-stats');
+    const playerNameInput = document.getElementById('player-name-input');
+    const lastGamePlayerNameEl = document.getElementById('last-game-player-name');
+    const finalPlayerNameEl = document.getElementById('final-player-name');
+    const exportCsvBtn = document.getElementById('export-csv-btn');
+    const exportTxtBtn = document.getElementById('export-txt-btn');
+    const playScreenWrapper = document.getElementById('play-screen-wrapper');
+    const mainNavPlaceholder = document.getElementById('main-nav-placeholder');
+    const pauseSliderArea = document.getElementById('pause-slider-area');
+    const pauseSlider = document.getElementById('pause-slider');
+    const pauseModal = document.getElementById('pause-modal');
+    const resumeBtn = document.getElementById('resume-btn');
+    const pauseTimerDisplay = document.getElementById('pause-timer-display');
+    const pauseScoreDisplay = document.getElementById('pause-score-display');
+    const pauseEndKeepBtn = document.getElementById('pause-end-keep-btn');
+    const pauseEndRemoveBtn = document.getElementById('pause-end-remove-btn');
+    const multiPersonToggle = document.getElementById('multi-person-toggle');
+    const multiPersonSettings = document.getElementById('multi-person-settings');
+    const phrasesPerPlayerInput = document.getElementById('phrases-per-player');
+    const passTimeInput = document.getElementById('pass-time');
+    const passScreen = document.getElementById('pass-screen');
+    const passCountdownEl = document.getElementById('pass-countdown');
 
     // --- Game State Variables ---
     let words = [];
@@ -70,6 +100,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let answerTimes = [];
     let correctWordsArr = [];
     let skippedWordsArr = [];
+    let currentPlayerName = '';
+    let isPaused = false;
+    let isPassingPhone = false;
+    let phrasesShownInCurrentTurn = 0;
 
     // --- Settings State ---
     let settingGameTime = 60;
@@ -80,6 +114,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingShowButtons = true;
     let settingShowGoBack = true;
     let settingShowPastWord = true;
+    let settingMultiPersonEnabled = false;
+    let settingPhrasesPerPlayer = 3;
+    let settingPassTime = 5;
 
     // --- Audio System ---
     const correctAudio = new Audio('Correct.mp3');
@@ -90,6 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const thirtySecAudio = new Audio('30-Seconds-Remaining.mp3');
     const oneMinAudio = new Audio('1-minute-remaing.mp3');
     const twoMinAudio = new Audio('2-minutes-remaing.mp3');
+    const passAudio = new Audio('pass.mp3');
 
     function playSound(type) {
         if (!settingSoundEnabled) return;
@@ -118,6 +156,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (type === 'ui') {
             uiAudio.currentTime = 0;
             uiAudio.play().catch(e => console.log('Audio error:', e));
+        } else if (type === 'pass') {
+            passAudio.currentTime = 0;
+            passAudio.play().catch(e => console.log('Audio error:', e));
         }
     }
 
@@ -131,11 +172,13 @@ document.addEventListener('DOMContentLoaded', () => {
             oneMinAudio.pause();
             twoMinAudio.pause();
             uiAudio.pause();
+            passAudio.pause();
             countdownAudio.currentTime = 0;
             thirtySecAudio.currentTime = 0;
             oneMinAudio.currentTime = 0;
             twoMinAudio.currentTime = 0;
             uiAudio.currentTime = 0;
+            passAudio.currentTime = 0;
         }
     }
 
@@ -145,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (audioInitialized) return;
 
         // Play and immediately pause all sounds silently
-        const sounds = [correctAudio, skipAudio, endAudio, countdownAudio, uiAudio, thirtySecAudio, oneMinAudio, twoMinAudio];
+        const sounds = [correctAudio, skipAudio, endAudio, countdownAudio, uiAudio, thirtySecAudio, oneMinAudio, twoMinAudio, passAudio];
         sounds.forEach(audio => {
             audio.volume = 0; // mute temporarily
             audio.play().then(() => {
@@ -192,7 +235,10 @@ document.addEventListener('DOMContentLoaded', () => {
             "Agent Smith", "Ahsoka Tano", "Albus Dumbledore", "Alice", "Alien", "Aragorn", "Arya Stark", "Barbie", "Bart Simpson", "Batman", "Beatrix Kiddo", "Bilbo Baggins", "Black Panther", "Black Widow", "Bowser", "Bugs Bunny", "Buzz Lightyear", "Captain America", "Chewbacca", "Daenerys Targaryen", "Darth Vader", "Deadpool", "Doctor Strange", "Dominic Toretto", "Donkey", "Dorothy Gale", "Dracula", "Dwight Schrute", "Eleven", "Ellen Ripley", "Elsa", "Ethan Hunt", "Forrest Gump", "Frankenstein", "Freddy Krueger", "Frodo Baggins", "Furiosa", "Gandalf", "Geralt of Rivia", "Godzilla", "Goku", "Grogu", "Groot", "Gru", "Han Solo", "Hannibal Lecter", "Harley Quinn", "Harry Potter", "Hermione Granger", "Homer Simpson", "Hulk", "Indiana Jones", "Iron Man", "Jack Sparrow", "James Bond", "James T. Kirk", "Jason Bourne", "Jason Voorhees", "Jaws", "Jesse Pinkman", "Jim Hopper", "John Wick", "Jon Snow", "Katniss Everdeen", "Ken", "King Arthur", "King Kong", "Kratos", "Lara Croft", "Legolas", "Link", "Loki", "Lord Voldemort", "Luigi", "Luke Skywalker", "Mario", "Mary Poppins", "Master Chief", "Michael Myers", "Michael Scott", "Mickey Mouse", "Moana", "Monkey D. Luffy", "Mulan", "Mummy", "Naruto Uzumaki", "Neo", "Obi-Wan Kenobi", "Olaf", "Pennywise", "Peter Pan", "Pikachu", "Po", "Predator", "Princess Leia", "Princess Peach", "Rambo", "Robin Hood", "RoboCop", "Rocket Raccoon", "Rocky Balboa", "Ron Weasley", "Sarah Connor", "Saul Goodman", "Scarlet Witch", "Scooby-Doo", "Severus Snape", "Sherlock Holmes", "Shrek", "Simba", "Sonic the Hedgehog", "Spider-Man", "Spock", "SpongeBob SquarePants", "Star-Lord", "Steve Harrington", "Stitch", "Superman", "Terminator", "Thanos", "The Doctor", "The Grinch", "The Joker", "The Mandalorian", "Thor", "Tony Soprano", "Trinity", "Tyrion Lannister", "Walter White", "Wednesday Addams", "Werewolf", "Willy Wonka", "Wolverine", "Wonder Woman", "Woody", "Yoda", "Zelda", "Zorro"
         ],
         "📜 Historical Figures": [
-            "Abraham Lincoln", "Albert Einstein", "Alexander the Great", "Aristotle", "Buddha", "Charles Darwin", "Cleopatra", "Confucius", "Galileo Galilei", "Genghis Khan", "George Washington", "Isaac Newton", "Jesus Christ", "Joan of Arc", "Julius Caesar", "Leonardo da Vinci", "Mahatma Gandhi", "Marie Curie", "Mark Twain", "Martin Luther King Jr.", "Michelangelo", "Moses", "Mother Teresa", "Muhammad", "Napoleon Bonaparte", "Nikola Tesla", "Pablo Picasso", "Plato", "Queen Elizabeth I", "Queen Victoria", "Sigmund Freud", "Socrates", "Steve Jobs", "Thomas Edison", "Vincent van Gogh", "William Shakespeare", "Winston Churchill"
+            "Abraham Lincoln", "Albert Einstein", "Alexander the Great", "Aristotle", "Buddha", "Charles Darwin", "Cleopatra", "Confucius", "Galileo Galilei", "Genghis Khan", "George Washington", "Isaac Newton", "Jesus Christ", "Joan of Arc", "Julius Caesar", "Leonardo da Vinci", "Mahatma Gandhi", "Marie Curie", "Mark Twain", "Martin Luther King Jr.", "Michelangelo", "Moses", "Mother Teresa", "Muhammad", "Napoleon Bonaparte", "Nikola Tesla", "Pablo Picasso", "Plato", "Queen Elizabeth II", "Queen Victoria", "Sigmund Freud", "Socrates", "Steve Jobs", "Thomas Edison", "Vincent van Gogh", "William Shakespeare", "Winston Churchill"
+        ],
+        "🌍 Countries": [
+            "Afghanistan", "Albania", "Algeria", "Argentina", "Australia", "Austria", "Bahamas", "Bangladesh", "Belgium", "Bolivia", "Brazil", "Canada", "Chile", "China", "Colombia", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Denmark", "Dominican Republic", "Ecuador", "Egypt", "Ethiopia", "Fiji", "Finland", "France", "Germany", "Ghana", "Greece", "Guatemala", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kenya", "Kuwait", "Lebanon", "Libya", "Madagascar", "Malaysia", "Maldives", "Mali", "Mexico", "Monaco", "Mongolia", "Morocco", "Nepal", "Netherlands", "New Zealand", "Nigeria", "North Korea", "Norway", "Pakistan", "Panama", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Saudi Arabia", "Senegal", "Serbia", "Singapore", "Slovakia", "South Africa", "South Korea", "Spain", "Sri Lanka", "Sudan", "Sweden", "Switzerland", "Syria", "Taiwan", "Thailand", "Turkey", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vatican City", "Venezuela", "Vietnam", "Zimbabwe"
         ],
         "📢 Activists & Other Public Figures": [
             "Greta Thunberg", "Jeffrey Epstein", "Andrew Tate"
@@ -223,29 +269,83 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedCategories = new Set();
 
     function updateWordCount() {
-        if (!wordCounterEl) return;
-        const text = wordListInput.value.trim();
-        if (!text) {
-            wordCounterEl.innerText = "0 words";
-            return;
+        const wordCount = wordListInput.value.split('\n').filter(w => w.trim().length > 0).length;
+        wordCounterEl.innerText = `${wordCount} Words Total`;
+
+        if (priorityWordListInput && priorityWordCounterEl) {
+            const prioCount = priorityWordListInput.value.split('\n').filter(w => w.trim().length > 0).length;
+            priorityWordCounterEl.innerText = `${prioCount} Priority Words`;
         }
-        const count = text.split('\n').map(w => w.trim()).filter(w => w.length > 0).length;
-        wordCounterEl.innerText = `${count} word${count === 1 ? '' : 's'}`;
+    }
+
+    /**
+     * Dynamically adjust font size to fit container width
+     * @param {HTMLElement} el The element containing text
+     * @param {number} maxFontSize Max font size in rem
+     * @param {number} minFontSize Min font size in rem
+     */
+    function fitText(el, maxFontSizeRem = 10, minFontSizePx = 24) {
+        if (!el) return;
+
+        // Convert rem to px for easier internal math (assuming 16px base)
+        let currentSize = maxFontSizeRem * 16;
+        el.style.fontSize = currentSize + "px";
+        el.style.whiteSpace = "nowrap";
+
+        const parent = el.closest('.word-display-container');
+        if (!parent) return;
+
+        // The parent is the central column. We want to fit within its width minus padding.
+        // Side buttons are 150px each. #play-screen has 15px gap. 
+        // We'll just use the clientWidth of the container which should already be constrained.
+        const maxWidth = parent.clientWidth - 80; // 40px padding on each side
+
+        // Iteratively shrink font size until it fits width
+        while (el.scrollWidth > maxWidth && currentSize > minFontSizePx) {
+            currentSize -= 2; // Shrink by 2px steps for precision
+            el.style.fontSize = currentSize + "px";
+        }
+
+        // If it still doesn't fit, allow wrapping but keep it at min size
+        if (el.scrollWidth > maxWidth) {
+            el.style.whiteSpace = "normal";
+        }
     }
 
     if (wordListInput) {
-        wordListInput.addEventListener('input', updateWordCount);
+        wordListInput.addEventListener('input', () => {
+            updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+        });
 
-        // Pre-load Historical Figures if empty to allow instant play
-        if (wordListInput.value.trim() === '') {
+        // Load from local storage or pre-load Historical Figures if empty
+        const savedNormalWords = localStorage.getItem('SHOUT_IT_OUT_NORMAL_WORDS');
+        if (savedNormalWords !== null) {
+            wordListInput.value = savedNormalWords;
+            updateWordCount();
+        } else if (wordListInput.value.trim() === '') {
             const defaultCategory = "📜 Historical Figures";
             if (categoriesData[defaultCategory]) {
                 wordListInput.value = categoriesData[defaultCategory].join('\n');
                 updateWordCount();
+                localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
 
                 // Add to selected UI state so user knows it's active
                 selectedCategories.add(defaultCategory);
             }
+        }
+    }
+
+    if (priorityWordListInput) {
+        priorityWordListInput.addEventListener('input', () => {
+            updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
+        });
+
+        const savedPriorityWords = localStorage.getItem('SHOUT_IT_OUT_PRIORITY_WORDS');
+        if (savedPriorityWords !== null) {
+            priorityWordListInput.value = savedPriorityWords;
+            updateWordCount();
         }
     }
 
@@ -296,6 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             wordListInput.value = currentWords.join('\n');
             updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
             categoriesModal.classList.add('hidden');
         });
     }
@@ -322,6 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentWords = currentWords.filter(w => !wordsToRemove.has(w.toLowerCase()));
             wordListInput.value = currentWords.join('\n');
             updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
             categoriesModal.classList.add('hidden');
         });
     }
@@ -330,6 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearListBtn.addEventListener('click', () => {
             wordListInput.value = '';
             updateWordCount();
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', '');
             selectedCategories.clear();
             document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
             categoriesModal.classList.add('hidden');
@@ -350,6 +453,80 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (genCustomListBtn) {
+        genCustomListBtn.addEventListener('click', () => {
+            genTopicInput.value = '';
+            genLoadingState.classList.add('hidden');
+            genTopicInput.classList.remove('hidden');
+            submitGenListBtn.disabled = false;
+            submitGenListBtn.style.opacity = '1';
+            genListModal.classList.remove('hidden');
+        });
+    }
+
+    if (closeGenListBtn) {
+        closeGenListBtn.addEventListener('click', () => {
+            genListModal.classList.add('hidden');
+        });
+    }
+
+    if (submitGenListBtn) {
+        submitGenListBtn.addEventListener('click', async () => {
+            const topic = genTopicInput.value.trim();
+            if (!topic) return;
+
+            // Show loading
+            genLoadingState.classList.remove('hidden');
+            genTopicInput.classList.add('hidden');
+            submitGenListBtn.disabled = true;
+            submitGenListBtn.style.opacity = '0.5';
+
+            try {
+                const response = await fetch('/api/generate-list', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic })
+                });
+                
+                if (!response.ok) {
+                    const errorJson = await response.json();
+                    throw new Error(errorJson.error || 'Network response was not ok');
+                }
+                
+                const data = await response.json();
+                
+                if (data.words && data.words.length > 0) {
+                    // Append to existing words or replace if empty
+                    const existingText = wordListInput.value.trim();
+                    const newText = data.words.join('\n');
+                    
+                    if (existingText) {
+                        wordListInput.value = existingText + '\n' + newText;
+                    } else {
+                        wordListInput.value = newText;
+                    }
+                    
+                    updateWordCount();
+                    localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+                    genListModal.classList.add('hidden');
+                } else {
+                     alert("Could not generate words. Please try again.");
+                     genLoadingState.classList.add('hidden');
+                     genTopicInput.classList.remove('hidden');
+                     submitGenListBtn.disabled = false;
+                     submitGenListBtn.style.opacity = '1';
+                }
+            } catch (error) {
+                console.error("Error generating list:", error);
+                alert("Error connecting to the AI. Please try again.");
+                genLoadingState.classList.add('hidden');
+                genTopicInput.classList.remove('hidden');
+                submitGenListBtn.disabled = false;
+                submitGenListBtn.style.opacity = '1';
+            }
+        });
+    }
+
     if (settingsBtn) {
         settingsBtn.addEventListener('click', () => {
             if (tiltToggle) tiltToggle.checked = settingTiltEnabled;
@@ -358,6 +535,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showButtonsToggle) showButtonsToggle.checked = settingShowButtons;
             if (showGoBackToggle) showGoBackToggle.checked = settingShowGoBack;
             if (showPastWordToggle) showPastWordToggle.checked = settingShowPastWord;
+            if (multiPersonToggle) {
+                multiPersonToggle.checked = settingMultiPersonEnabled;
+                if (settingMultiPersonEnabled) multiPersonSettings.classList.remove('hidden');
+                else multiPersonSettings.classList.add('hidden');
+            }
+            if (phrasesPerPlayerInput) phrasesPerPlayerInput.value = settingPhrasesPerPlayer;
+            if (passTimeInput) passTimeInput.value = settingPassTime;
 
             setupScreen.classList.add('hidden');
             settingsScreen.classList.remove('hidden');
@@ -437,6 +621,103 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (exportCsvBtn) {
+        exportCsvBtn.addEventListener('click', () => {
+            let nameToExport = currentPlayerName ? currentPlayerName : "Anonymous";
+
+            const totalPlayed = currentWordIndex;
+            let percentage = totalPlayed > 0 ? Math.round((score / totalPlayed) * 100) : 0;
+            let fastestTime = "N/A";
+            let averageTime = "N/A";
+            if (answerTimes.length > 0) {
+                fastestTime = Math.min(...answerTimes).toFixed(1) + "s";
+                const sumTimes = answerTimes.reduce((a, b) => a + b, 0);
+                averageTime = (sumTimes / answerTimes.length).toFixed(1) + "s";
+            }
+
+            let csvContent = `"Shout It Out Game Stats"\n`;
+            csvContent += `"Player Name","${nameToExport}"\n`;
+            csvContent += `"Score","${score}"\n`;
+            csvContent += `"Correct out of Total","${score} out of ${totalPlayed} (${percentage}%)"\n`;
+            csvContent += `"Fastest Guess","${fastestTime}"\n`;
+            csvContent += `"Avg. Time per Word","${averageTime}"\n\n`;
+            csvContent += `"Player Name","Word","Correctness","Time Taken","Is Priority"\n`;
+
+            correctWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? "*" : "";
+                // Escape quotes in word just in case
+                let cleanWord = wordObj.text.replace(/"/g, '""');
+                let timeStr = wordObj.timeTaken ? wordObj.timeTaken.toFixed(1) + "s" : "N/A";
+                csvContent += `"${nameToExport}","${cleanWord}","Correct","${timeStr}","${prioMarker}"\n`;
+            });
+
+            skippedWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? "*" : "";
+                let cleanWord = wordObj.text.replace(/"/g, '""');
+                let timeStr = wordObj.timeTaken ? wordObj.timeTaken.toFixed(1) + "s" : "N/A";
+                csvContent += `"${nameToExport}","${cleanWord}","Skipped","${timeStr}","${prioMarker}"\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `shout_it_out_${nameToExport.replace(/\s+/g, '_')}_stats.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    }
+
+    if (exportTxtBtn) {
+        exportTxtBtn.addEventListener('click', () => {
+            let txtContent = "";
+            let nameToExport = currentPlayerName ? currentPlayerName : "Anonymous";
+
+            const totalPlayed = currentWordIndex;
+            let percentage = totalPlayed > 0 ? Math.round((score / totalPlayed) * 100) : 0;
+            let fastestTime = "N/A";
+            let averageTime = "N/A";
+            if (answerTimes.length > 0) {
+                fastestTime = Math.min(...answerTimes).toFixed(1) + "s";
+                const sumTimes = answerTimes.reduce((a, b) => a + b, 0);
+                averageTime = (sumTimes / answerTimes.length).toFixed(1) + "s";
+            }
+
+            txtContent += "--- Shout It Out Game Stats ---\n\n";
+            txtContent += `Player Name: ${nameToExport}\n`;
+            txtContent += `Score: ${score}\n`;
+            txtContent += `${score} correct out of ${totalPlayed} (${percentage}%)\n`;
+            txtContent += `Fastest Guess: ${fastestTime}\n`;
+            txtContent += `Avg. Time per Word: ${averageTime}\n\n`;
+
+            txtContent += `--- Correct Words ---\n`;
+            if (correctWordsArr.length === 0) txtContent += "None\n";
+            correctWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? " *" : "";
+                let timeStr = wordObj.timeTaken ? ` (${wordObj.timeTaken.toFixed(1)}s)` : "";
+                txtContent += `- ${wordObj.text}${timeStr}${prioMarker}\n`;
+            });
+
+            txtContent += `\n--- Skipped Words ---\n`;
+            if (skippedWordsArr.length === 0) txtContent += "None\n";
+            skippedWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? " *" : "";
+                let timeStr = wordObj.timeTaken ? ` (${wordObj.timeTaken.toFixed(1)}s)` : "";
+                txtContent += `- ${wordObj.text}${timeStr}${prioMarker}\n`;
+            });
+
+            const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `shout_it_out_${nameToExport.replace(/\s+/g, '_')}_stats.txt`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    }
+
     if (closeSettingsBtn) {
         // Toggle Custom Time Input
         timeSelect.addEventListener('change', () => {
@@ -446,6 +727,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 customTimeInput.classList.add('hidden');
             }
         });
+
+        if (multiPersonToggle) {
+            multiPersonToggle.addEventListener('change', (e) => {
+                if (e.target.checked) multiPersonSettings.classList.remove('hidden');
+                else multiPersonSettings.classList.add('hidden');
+            });
+        }
 
         closeSettingsBtn.addEventListener('click', () => {
             if (timeSelect.value === 'custom') {
@@ -465,6 +753,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showGoBackToggle) settingShowGoBack = showGoBackToggle.checked;
             if (showPastWordToggle) settingShowPastWord = showPastWordToggle.checked;
 
+            if (multiPersonToggle) settingMultiPersonEnabled = multiPersonToggle.checked;
+            if (phrasesPerPlayerInput) settingPhrasesPerPlayer = parseInt(phrasesPerPlayerInput.value) || 3;
+            if (passTimeInput) settingPassTime = parseInt(passTimeInput.value) || 5;
+
             settingsScreen.classList.add('hidden');
             setupScreen.classList.remove('hidden');
         });
@@ -480,7 +772,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Parse user input
         const rawText = wordListInput.value.trim();
-        if (!rawText) {
+        const rawPrioText = priorityWordListInput ? priorityWordListInput.value.trim() : '';
+        currentPlayerName = playerNameInput ? playerNameInput.value.trim() : '';
+
+        if (!rawText && !rawPrioText) {
             console.warn("🟠 [DEBUG] Input is empty. User needs to provide words.");
             alertMessage.innerText = "Please enter some words first!";
             alertModal.classList.remove('hidden');
@@ -488,14 +783,43 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Split by new line, clean up empty strings
-        words = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+        let normalWords = rawText ? rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0) : [];
+        let priorityWords = rawPrioText ? rawPrioText.split('\n').map(w => w.trim()).filter(w => w.length > 0) : [];
 
         // Shuffle words dynamically based on setting
         if (settingRandomizeEnabled) {
-            words.sort(() => Math.random() - 0.5);
+            // Fisher-Yates shuffle for true randomness
+            for (let i = normalWords.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [normalWords[i], normalWords[j]] = [normalWords[j], normalWords[i]];
+            }
+            for (let i = priorityWords.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [priorityWords[i], priorityWords[j]] = [priorityWords[j], priorityWords[i]];
+            }
             console.log("🔵 [DEBUG] Words loaded and shuffled.");
         } else {
             console.log("🔵 [DEBUG] Words loaded in original order.");
+        }
+
+        // Interleave priority words
+        words = [];
+        const freqStr = priorityFrequencySelect ? priorityFrequencySelect.value : "3";
+        const frequency = parseInt(freqStr);
+
+        let normalIdx = 0;
+        let prioIdx = 0;
+        let counter = 1;
+
+        while (normalIdx < normalWords.length || prioIdx < priorityWords.length) {
+            if ((counter % frequency === 0 && prioIdx < priorityWords.length) || normalIdx >= normalWords.length) {
+                words.push({ text: priorityWords[prioIdx], isPriority: true });
+                prioIdx++;
+            } else if (normalIdx < normalWords.length) {
+                words.push({ text: normalWords[normalIdx], isPriority: false });
+                normalIdx++;
+            }
+            counter++;
         }
 
         // Request Device Orientation Permissions (Required for iOS 13+)
@@ -533,6 +857,9 @@ document.addEventListener('DOMContentLoaded', () => {
         answerTimes = [];
         correctWordsArr = [];
         skippedWordsArr = [];
+        phrasesShownInCurrentTurn = 0;
+        isPassingPhone = false;
+        if (passScreen) passScreen.classList.add('hidden');
 
         // Initialize Timer Display
         updateTimerDisplay();
@@ -540,7 +867,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Switch UI Screens
         setupScreen.classList.add('hidden');
         endScreen.classList.add('hidden');
-        playScreen.classList.remove('hidden');
+        if (mainNavPlaceholder) mainNavPlaceholder.classList.add('hidden');
+        playScreenWrapper.classList.remove('hidden');
+        isPaused = false;
+        if (pauseSlider) pauseSlider.value = 0;
 
         if (!settingShowButtons) {
             skipBtn.classList.add('hidden');
@@ -565,7 +895,9 @@ document.addEventListener('DOMContentLoaded', () => {
         showNextWord();
 
         // Start Timer
+        if (gameInterval) clearInterval(gameInterval);
         gameInterval = setInterval(() => {
+            if (isPaused || isPassingPhone) return;
             timer--;
             updateTimerDisplay();
 
@@ -588,7 +920,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateTimerDisplay() {
         const m = Math.floor(timer / 60);
         const s = timer % 60;
-        timerEl.innerText = `${m}:${s.toString().padStart(2, '0')}`;
+        timerEl.innerText = `Time: ${m}:${s.toString().padStart(2, '0')}`;
+
+        if (timer <= 10) {
+            timerEl.classList.add('timer-warning');
+        } else {
+            timerEl.classList.remove('timer-warning');
+        }
     }
 
     function showNextWord() {
@@ -599,7 +937,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Setup the past word text (if we have one and setting is enabled)
         if (settingShowPastWord && currentWordIndex > 0 && pastWordEl) {
-            pastWordEl.innerText = words[currentWordIndex - 1];
+            pastWordEl.innerText = words[currentWordIndex - 1].text;
+            if (words[currentWordIndex - 1].isPriority) {
+                pastWordEl.classList.add('priority-word');
+            } else {
+                pastWordEl.classList.remove('priority-word');
+            }
             pastWordEl.classList.remove('hidden');
         } else if (pastWordEl) {
             pastWordEl.classList.add('hidden');
@@ -609,11 +952,30 @@ document.addEventListener('DOMContentLoaded', () => {
         // Apply roll-in animation to the new current word
         currentWordEl.classList.remove('roll-in');
         void currentWordEl.offsetWidth; // Trigger reflow
-        currentWordEl.innerText = words[currentWordIndex];
+
+        const newWord = words[currentWordIndex].text;
+        currentWordEl.innerText = newWord;
+
+        // Dynamically scale text based on container width
+        const isMobile = window.innerWidth <= 768 || window.innerHeight <= 600;
+        const maxFs = isMobile ? 5 : 10;
+        fitText(currentWordEl, maxFs, isMobile ? 20 : 24);
+
+        // Also fit past word if it exists
+        if (pastWordEl && !pastWordEl.classList.contains('hidden')) {
+            fitText(pastWordEl, isMobile ? 1.5 : 2, isMobile ? 16 : 18);
+        }
+
+        if (words[currentWordIndex].isPriority) {
+            currentWordEl.classList.add('priority-word');
+        } else {
+            currentWordEl.classList.remove('priority-word');
+        }
+
         currentWordEl.classList.add('roll-in');
 
         currentWordStartTime = performance.now();
-        console.log(`🔵 [DEBUG] Displaying word: ${words[currentWordIndex]}`);
+        console.log(`🔵 [DEBUG] Displaying word: ${words[currentWordIndex].text}`);
 
         if (settingShowGoBack && currentWordIndex > 0) {
             if (goBackBtn) goBackBtn.classList.remove('hidden');
@@ -625,7 +987,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Go Back ---
     if (goBackBtn) {
         goBackBtn.addEventListener('click', () => {
-            if (!isPlaying || tiltCooldown || currentWordIndex === 0) return;
+            if (!isPlaying || tiltCooldown || currentWordIndex === 0 || isPaused || isPassingPhone) return;
             tiltCooldown = true;
 
             const prevWord = words[currentWordIndex - 1];
@@ -664,11 +1026,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function recordAnswerTime() {
         const timeTakenMs = performance.now() - currentWordStartTime;
         answerTimes.push(timeTakenMs / 1000); // Convert to seconds
+        words[currentWordIndex].timeTaken = timeTakenMs / 1000;
     }
 
     function markCorrect() {
-        if (!isPlaying || tiltCooldown) return;
-        console.log("🟢 [DEBUG] Action: CORRECT. Word was:", words[currentWordIndex]);
+        if (!isPlaying || tiltCooldown || isPaused || isPassingPhone) return;
+        console.log("🟢 [DEBUG] Action: CORRECT. Word was:", words[currentWordIndex].text);
         correctWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
         playSound('correct');
@@ -678,8 +1041,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function markSkip() {
-        if (!isPlaying || tiltCooldown) return;
-        console.log("🟠 [DEBUG] Action: SKIP. Word was:", words[currentWordIndex]);
+        if (!isPlaying || tiltCooldown || isPaused || isPassingPhone) return;
+        console.log("🟠 [DEBUG] Action: SKIP. Word was:", words[currentWordIndex].text);
         skippedWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
         playSound('skip');
@@ -690,6 +1053,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function advanceGame() {
         tiltCooldown = true;
         currentWordIndex++;
+        phrasesShownInCurrentTurn++;
 
         // Trigger transition out animation
         if (settingShowPastWord && currentWordEl && pastWordEl) {
@@ -698,9 +1062,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
         setTimeout(() => {
             if (currentWordEl) currentWordEl.classList.remove('transition-up');
-            showNextWord();
-            tiltCooldown = false;
+
+            if (settingMultiPersonEnabled && phrasesShownInCurrentTurn >= settingPhrasesPerPlayer && currentWordIndex < words.length) {
+                startPassScreen();
+            } else {
+                showNextWord();
+                tiltCooldown = false;
+            }
         }, 400); // Wait for transition animation
+    }
+
+    function startPassScreen() {
+        isPassingPhone = true;
+        phrasesShownInCurrentTurn = 0;
+        playSound('pass'); // Sound for pass start
+        if (passScreen) passScreen.classList.remove('hidden');
+        if (playScreen) playScreen.classList.add('disabled-game');
+
+        let passTimerLimit = settingPassTime;
+        if (passCountdownEl) passCountdownEl.innerText = passTimerLimit;
+
+        const passInterval = setInterval(() => {
+            passTimerLimit--;
+            if (passTimerLimit <= 0) {
+                clearInterval(passInterval);
+                if (passScreen) passScreen.classList.add('hidden');
+                if (playScreen) playScreen.classList.remove('disabled-game');
+                isPassingPhone = false;
+                playSound('ui'); // Sound for turn completion
+                showNextWord();
+                tiltCooldown = false;
+            } else {
+                if (passCountdownEl) passCountdownEl.innerText = passTimerLimit;
+            }
+        }, 1000);
     }
 
     function triggerVisualFeedback(type) {
@@ -725,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Device Orientation Logic ---
     function handleOrientation(event) {
-        if (!isPlaying || tiltCooldown || !settingTiltEnabled) return;
+        if (!isPlaying || tiltCooldown || !settingTiltEnabled || isPaused || isPassingPhone) return;
 
         const beta = event.beta;   // Front-to-back tilt [-180, 180]
         const gamma = event.gamma; // Left-to-right tilt [-90, 90]
@@ -774,7 +1169,7 @@ document.addEventListener('DOMContentLoaded', () => {
     correctBtn.addEventListener('click', markCorrect);
 
     document.addEventListener('keydown', (e) => {
-        if (!isPlaying || tiltCooldown) return;
+        if (!isPlaying || tiltCooldown || isPaused) return;
         if (e.key === 'ArrowUp') {
             markCorrect();
         } else if (e.key === 'ArrowDown') {
@@ -811,8 +1206,23 @@ document.addEventListener('DOMContentLoaded', () => {
         stopSound('all');
         playSound('end');
 
-        playScreen.classList.add('hidden');
+        playScreenWrapper.classList.add('hidden');
+        if (mainNavPlaceholder) mainNavPlaceholder.classList.remove('hidden');
+        playScreen.classList.remove('disabled-game');
+        pauseSliderArea.classList.remove('disabled-game');
+        pauseModal.classList.add('hidden');
+        if (pauseSlider) pauseSlider.value = 0;
+
         endScreen.classList.remove('hidden');
+
+        if (currentPlayerName) {
+            finalPlayerNameEl.innerText = currentPlayerName;
+            finalPlayerNameEl.classList.remove('hidden');
+        } else {
+            finalPlayerNameEl.innerText = '';
+            finalPlayerNameEl.classList.add('hidden');
+        }
+
         finalScoreEl.innerText = `Score: ${score}`;
 
         finalStatsEl.innerHTML = generateStatsHtml();
@@ -821,22 +1231,86 @@ document.addEventListener('DOMContentLoaded', () => {
         correctWordsList.innerHTML = '';
         skippedWordsList.innerHTML = '';
 
-        correctWordsArr.forEach(word => {
+        let allReviewedWords = [...correctWordsArr, ...skippedWordsArr];
+        let maxTimeTaken = Math.max(1, ...allReviewedWords.map(w => w.timeTaken || 0));
+
+        function createWordListItem(wordObj) {
             const li = document.createElement('li');
-            li.textContent = word;
-            correctWordsList.appendChild(li);
+            li.style.display = 'flex';
+            li.style.flexDirection = 'column';
+            li.style.gap = '8px';
+            li.style.marginBottom = '12px';
+            li.style.padding = '8px 12px';
+            li.style.background = 'rgba(255, 255, 255, 0.05)';
+            li.style.borderRadius = '8px';
+            li.style.borderBottom = 'none'; // reset css
+
+            const topRow = document.createElement('div');
+            topRow.style.display = 'flex';
+            topRow.style.justifyContent = 'space-between';
+            topRow.style.alignItems = 'center';
+            topRow.style.gap = '10px';
+
+            const wordSpan = document.createElement('span');
+            wordSpan.textContent = wordObj.text;
+            wordSpan.style.fontWeight = '600';
+            wordSpan.style.wordBreak = 'break-word';
+            if (wordObj.isPriority) wordSpan.classList.add('priority-word');
+
+            let timeVal = wordObj.timeTaken || 0;
+            const timeSpan = document.createElement('span');
+            timeSpan.style.fontSize = '0.9rem';
+            timeSpan.style.opacity = '0.8';
+            timeSpan.style.whiteSpace = 'nowrap';
+            timeSpan.textContent = timeVal.toFixed(1) + 's';
+
+            topRow.appendChild(wordSpan);
+            topRow.appendChild(timeSpan);
+
+            const barContainer = document.createElement('div');
+            barContainer.style.width = '100%';
+            barContainer.style.height = '6px';
+            barContainer.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+            barContainer.style.borderRadius = '3px';
+            barContainer.style.overflow = 'hidden';
+
+            const barFill = document.createElement('div');
+            barFill.style.height = '100%';
+
+            let percent = maxTimeTaken > 0 ? (timeVal / maxTimeTaken) : 0;
+            barFill.style.width = `${Math.max(2, percent * 100)}%`;
+
+            let hue = (1 - percent) * 120; // 0 = red (long time), 120 = green (short time)
+            barFill.style.backgroundColor = `hsl(${hue}, 80%, 50%)`;
+            barFill.style.borderRadius = '3px';
+
+            barContainer.appendChild(barFill);
+
+            li.appendChild(topRow);
+            li.appendChild(barContainer);
+
+            return li;
+        }
+
+        correctWordsArr.forEach(wordObj => {
+            correctWordsList.appendChild(createWordListItem(wordObj));
         });
 
-        skippedWordsArr.forEach(word => {
-            const li = document.createElement('li');
-            li.textContent = word;
-            skippedWordsList.appendChild(li);
+        skippedWordsArr.forEach(wordObj => {
+            skippedWordsList.appendChild(createWordListItem(wordObj));
         });
     }
 
     // --- Restart ---
     function updateMainMenuStats() {
-        lastGameScoreEl.innerText = `Score: ${score}`;
+        if (currentPlayerName) {
+            lastGamePlayerNameEl.innerText = currentPlayerName;
+            lastGamePlayerNameEl.classList.remove('hidden');
+        } else {
+            lastGamePlayerNameEl.innerText = '';
+            lastGamePlayerNameEl.classList.add('hidden');
+        }
+        lastGameScoreEl.innerText = `Score: ${score} `;
         lastGameDetailedStatsEl.innerHTML = generateStatsHtml();
         lastGameStatsContainer.classList.remove('hidden');
     }
@@ -856,16 +1330,176 @@ document.addEventListener('DOMContentLoaded', () => {
             updateMainMenuStats();
             setupScreen.classList.remove('hidden');
 
-            // Remove played words from the textarea
-            const playedWordsText = words.slice(0, currentWordIndex).map(w => w.toLowerCase());
+            // Remove played words from the textareas
+            const playedNormalText = words.slice(0, currentWordIndex).filter(w => !w.isPriority).map(w => w.text.toLowerCase());
+            const playedPriorityText = words.slice(0, currentWordIndex).filter(w => w.isPriority).map(w => w.text.toLowerCase());
 
             const rawText = wordListInput.value;
             const originalWords = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
-
-            const remainingWords = originalWords.filter(w => !playedWordsText.includes(w.toLowerCase()));
-
+            const remainingWords = originalWords.filter(w => !playedNormalText.includes(w.toLowerCase()));
             wordListInput.value = remainingWords.join('\n');
+
+            if (priorityWordListInput) {
+                const rawPrioText = priorityWordListInput.value;
+                const originalPrioWords = rawPrioText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+                const remainingPrioWords = originalPrioWords.filter(w => !playedPriorityText.includes(w.toLowerCase()));
+                priorityWordListInput.value = remainingPrioWords.join('\n');
+            }
+
             updateWordCount();
+
+            // Save to cache locally
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            if (priorityWordListInput) {
+                localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
+            }
+            showToast("Words list has been saved to cache locally.");
+        });
+    }
+
+    if (pauseSlider) {
+        let validSlide = false;
+
+        function checkValidSlide(clientX) {
+            const rect = pauseSlider.getBoundingClientRect();
+            const clickPosition = (clientX - rect.left) / rect.width;
+            validSlide = clickPosition < 0.3;
+        }
+
+        pauseSlider.addEventListener('mousedown', (e) => {
+            checkValidSlide(e.clientX);
+        });
+
+        pauseSlider.addEventListener('touchstart', (e) => {
+            if (e.touches && e.touches.length > 0) {
+                checkValidSlide(e.touches[0].clientX);
+            }
+        }, { passive: true });
+
+        pauseSlider.addEventListener('input', (e) => {
+            if (!validSlide && e.target.value > 10) {
+                e.target.value = 0;
+                return;
+            }
+            if (e.target.value > 90) {
+                if (!isPaused) {
+                    isPaused = true;
+                    playScreen.classList.add('disabled-game');
+                    pauseSliderArea.classList.add('disabled-game');
+
+                    if (pauseTimerDisplay) {
+                        const m = Math.floor(timer / 60);
+                        const s = timer % 60;
+                        pauseTimerDisplay.innerText = `Time: ${m}:${s.toString().padStart(2, '0')}`;
+                    }
+                    if (pauseScoreDisplay) {
+                        const totalPlayed = currentWordIndex;
+                        const percentage = totalPlayed > 0 ? Math.round((score / totalPlayed) * 100) : 0;
+                        pauseScoreDisplay.innerText = `${score} correct out of ${totalPlayed} (${percentage}%)`;
+                    }
+
+                    pauseModal.classList.remove('hidden');
+                }
+            }
+        });
+        pauseSlider.addEventListener('change', (e) => {
+            if (e.target.value <= 90) {
+                e.target.value = 0; // snap back if not full
+            }
+        });
+    }
+
+    if (resumeBtn) {
+        resumeBtn.addEventListener('click', () => {
+            isPaused = false;
+            playScreen.classList.remove('disabled-game');
+            pauseSliderArea.classList.remove('disabled-game');
+            pauseModal.classList.add('hidden');
+            pauseSlider.value = 0;
+        });
+    }
+
+    function goBackToStartMenu(removeUsed) {
+        isPaused = false;
+        clearInterval(gameInterval);
+        isPlaying = false;
+        stopSound('all');
+
+        playScreenWrapper.classList.add('hidden');
+        if (mainNavPlaceholder) mainNavPlaceholder.classList.remove('hidden');
+        playScreen.classList.remove('disabled-game');
+        pauseSliderArea.classList.remove('disabled-game');
+        pauseModal.classList.add('hidden');
+        if (pauseSlider) pauseSlider.value = 0;
+
+        updateMainMenuStats();
+        setupScreen.classList.remove('hidden');
+
+        if (removeUsed) {
+            // Remove played words from the textareas
+            const playedNormalText = words.slice(0, currentWordIndex).filter(w => !w.isPriority).map(w => w.text.toLowerCase());
+            const playedPriorityText = words.slice(0, currentWordIndex).filter(w => w.isPriority).map(w => w.text.toLowerCase());
+
+            const rawText = wordListInput.value;
+            const originalWords = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+            const remainingWords = originalWords.filter(w => !playedNormalText.includes(w.toLowerCase()));
+            wordListInput.value = remainingWords.join('\n');
+
+            if (priorityWordListInput) {
+                const rawPrioText = priorityWordListInput.value;
+                const originalPrioWords = rawPrioText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+                const remainingPrioWords = originalPrioWords.filter(w => !playedPriorityText.includes(w.toLowerCase()));
+                priorityWordListInput.value = remainingPrioWords.join('\n');
+            }
+
+            updateWordCount();
+
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            if (priorityWordListInput) {
+                localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
+            }
+            showToast("Words list has been updated and saved to cache.");
+        }
+    }
+
+    if (pauseEndKeepBtn) {
+        pauseEndKeepBtn.addEventListener('click', () => {
+            goBackToStartMenu(false);
+        });
+    }
+
+    if (pauseEndRemoveBtn) {
+        pauseEndRemoveBtn.addEventListener('click', () => {
+            goBackToStartMenu(true);
         });
     }
 });
+
+function showToast(message) {
+    const toast = document.createElement('div');
+    toast.innerText = message;
+    toast.style.position = 'fixed';
+    toast.style.bottom = '20px';
+    toast.style.left = '50%';
+    toast.style.transform = 'translateX(-50%)';
+    toast.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+    toast.style.color = '#fff';
+    toast.style.padding = '10px 20px';
+    toast.style.borderRadius = '8px';
+    toast.style.zIndex = '10000';
+    toast.style.fontFamily = "'Outfit', sans-serif";
+    toast.style.fontSize = '0.95rem';
+    toast.style.boxShadow = '0 0 10px rgba(0, 210, 255, 0.5)';
+    toast.style.border = '1px solid rgba(0, 210, 255, 0.3)';
+    toast.style.transition = 'opacity 0.3s ease-in-out';
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            if (document.body.contains(toast)) {
+                document.body.removeChild(toast);
+            }
+        }, 300);
+    }, 3000);
+}

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>House Design Journal</title>
+    <meta name="description" content="A modern skeuomorphic multi-section house design journal.">
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-shell">
+        <header class="topbar card soft">
+            <div class="brand">
+                <div class="brand-icon">⌂</div>
+                <div>
+                    <p class="eyebrow">Luxury editorial UI</p>
+                    <h1>House Design</h1>
+                </div>
+            </div>
+            <button id="themeToggle" class="btn">Toggle theme</button>
+        </header>
+
+        <section class="hero card deep">
+            <div class="hero-copy">
+                <p class="eyebrow">Dream house journal</p>
+                <h2>Beautiful modern skeuomorphic house design magazine experience</h2>
+                <p>
+                    A responsive multi-page-feel home design blog inspired by your PDF ideas: exterior, layout,
+                    kitchen, bedrooms, living spaces, bathrooms, garden, utility rooms, office, and future tech.
+                </p>
+                <div class="hero-actions">
+                    <a class="btn primary" href="#page/home">Open journal</a>
+                    <a class="btn" href="#page/exterior">Browse categories</a>
+                </div>
+                <div class="hero-stats">
+                    <div class="stat inset"><strong>10+</strong><span>Categories</span></div>
+                    <div class="stat inset"><strong>60·30·10</strong><span>Colour rule</span></div>
+                    <div class="stat inset"><strong>Responsive</strong><span>Desktop to phone</span></div>
+                </div>
+            </div>
+            <div class="hero-visual card glow">
+                <div class="hero-gradient"></div>
+                <div class="window-grid">
+                    <span></span><span></span><span></span><span></span>
+                </div>
+                <div class="glass-chip">City-view residence</div>
+            </div>
+        </section>
+
+        <section class="toolbar">
+            <div class="card soft search-card">
+                <label class="search-wrap">
+                    <span>⌕</span>
+                    <input id="searchInput" type="search" placeholder="Search ideas, rooms, lighting, storage...">
+                </label>
+            </div>
+            <div class="card soft chip-panel">
+                <div class="toolbar-head">
+                    <p class="eyebrow">Categories</p>
+                    <span id="categoryCount" class="glass-chip">0 loaded</span>
+                </div>
+                <nav id="chips" class="chips"></nav>
+            </div>
+        </section>
+
+        <main class="main-grid">
+            <aside class="sidebar card soft">
+                <div>
+                    <p class="eyebrow">Pages</p>
+                    <nav id="sideNav" class="side-nav"></nav>
+                </div>
+                <div class="inset tips">
+                    <p class="eyebrow">Debugging</p>
+                    <p>Open the browser console. The JavaScript prints clear debug messages for routing, rendering,
+                        search, and missing DOM elements.</p>
+                </div>
+            </aside>
+
+            <section class="content card deep">
+                <div class="page-head">
+                    <div>
+                        <p id="pageEyebrow" class="eyebrow">Welcome</p>
+                        <h2 id="pageTitle">House Design Journal</h2>
+                        <p id="pageDescription" class="page-description">Browse the collection.</p>
+                    </div>
+                    <div id="pageBadge" class="glass-chip">Overview</div>
+                </div>
+
+                <div id="featured" class="featured"></div>
+                <div id="cards" class="cards"></div>
+            </section>
+        </main>
+    </div>
+
+    <template id="cardTemplate">
+        <article class="idea-card card soft">
+            <div class="idea-top">
+                <span class="glass-chip idea-tag"></span>
+                <span class="idea-icon"></span>
+            </div>
+            <h3 class="idea-title"></h3>
+            <p class="idea-copy"></p>
+        </article>
+    </template>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

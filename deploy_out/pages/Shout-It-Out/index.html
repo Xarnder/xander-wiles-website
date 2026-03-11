@@ -31,6 +31,21 @@
 
     <!-- Game Specific Stylesheet -->
     <link rel="stylesheet" href="app.css">
+
+    <!-- Polyfill for crypto.randomUUID (for browser extensions) -->
+    <script>
+        if (!window.crypto) {
+            window.crypto = {};
+        }
+        if (!window.crypto.randomUUID) {
+            window.crypto.randomUUID = function () {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            };
+        }
+    </script>
 </head>
 
 <body>
@@ -55,9 +70,33 @@
             <div id="word-counter"
                 style="text-align: right; margin-top: -15px; margin-bottom: 20px; opacity: 0.8; font-size: 0.95rem;">0
                 words</div>
+            <p style="margin-top: 10px;">Paste your <strong style="color: #e040fb;">Priority List</strong> below
+                (optional):</p>
+            <textarea id="priority-word-list" placeholder="Words that show up more frequently..."></textarea>
+            <div
+                style="display: flex; justify-content: space-between; align-items: start; margin-top: -15px; margin-bottom: 20px;">
+                <div
+                    style="text-align: left; opacity: 0.8; font-size: 0.95rem; display: flex; align-items: center; gap: 10px;">
+                    <label for="priority-frequency">Frequency:</label>
+                    <select id="priority-frequency" class="glass-input"
+                        style="padding: 5px 10px; width: auto; font-size: 0.9rem;">
+                        <option value="5">Low (1 in 5)</option>
+                        <option value="3" selected>Normal (1 in 3)</option>
+                        <option value="2">High (1 in 2)</option>
+                        <option value="1">Always (1 in 1)</option>
+                    </select>
+                </div>
+                <div id="priority-word-counter" style="text-align: right; opacity: 0.8; font-size: 0.95rem;">0 words
+                </div>
+            </div>
+
+            <input type="text" id="player-name-input" class="glass-input" placeholder="Player Name (Optional)"
+                maxlength="30" style="margin-bottom: 20px; font-size: 1.1rem; text-align: center; width: 100%;">
+
             <div class="setup-actions">
                 <button id="instructions-btn" class="neon-btn secondary">How to Play</button>
                 <button id="categories-btn" class="neon-btn secondary">Categories</button>
+                <button id="gen-custom-list-btn" class="neon-btn secondary">Generate Custom List</button>
                 <button id="settings-btn" class="neon-btn secondary">Settings</button>
             </div>
 
@@ -66,6 +105,8 @@
                 style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
                 <h3 style="margin-bottom: 10px; opacity: 0.8; font-size: 1.1rem;">Last Game Stats</h3>
                 <div id="last-game-full-stats" style="margin-bottom: 20px;">
+                    <p id="last-game-player-name" class="hidden"
+                        style="font-size: 1.2rem; font-weight: 600; color: #fff; margin-bottom: 5px;"></p>
                     <p id="last-game-score"
                         style="font-size: 1.5rem; font-weight: bold; color: #00d2ff; margin-bottom: 5px;">Score: 0</p>
                     <div id="last-game-detailed-stats"
@@ -91,6 +132,21 @@
                 </div>
                 <button id="close-categories-btn" class="neon-btn secondary"
                     style="border: none; box-shadow: none; opacity: 0.8;">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Generate Custom List Modal -->
+        <div id="gen-list-modal" class="glass-card hidden" style="max-width: 600px;">
+            <h2 style="margin-bottom: 5px;">Generate Custom List</h2>
+            <p style="text-align: center; margin-bottom: 25px; opacity: 0.8; font-size: 0.95rem;">Enter a topic, and AI will generate a list for you!</p>
+            <input type="text" id="gen-topic-input" class="glass-input" placeholder="e.g. Football players, 90s movies..." style="margin-bottom: 20px; font-size: 1.1rem; width: 100%;">
+            <div id="gen-loading-state" class="hidden" style="margin-bottom: 20px; text-align: center;">
+                <div class="loader" style="margin: 0 auto;"></div>
+                <p style="margin-top: 10px; opacity: 0.8;">Generating list with AI...</p>
+            </div>
+            <div class="category-actions" style="display: flex; flex-direction: column; gap: 15px; margin-top: 10px;">
+                <button id="submit-gen-list-btn" class="neon-btn">Generate</button>
+                <button id="close-gen-list-btn" class="neon-btn secondary" style="border: none; box-shadow: none; opacity: 0.8;">Cancel</button>
             </div>
         </div>
 
@@ -153,6 +209,23 @@
                 <label for="show-pastword-toggle">Show Previous Word Indicator</label>
             </div>
 
+            <div class="setting-group checkbox-group">
+                <input type="checkbox" id="multi-person-toggle">
+                <label for="multi-person-toggle">Multi Person Mode</label>
+            </div>
+
+            <div id="multi-person-settings" class="hidden"
+                style="margin-left: 20px; border-left: 2px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                <div class="setting-group">
+                    <label for="phrases-per-player">Phrases per Player:</label>
+                    <input type="number" id="phrases-per-player" class="glass-input" value="3" min="1" max="20">
+                </div>
+                <div class="setting-group">
+                    <label for="pass-time">Pass Time (seconds):</label>
+                    <input type="number" id="pass-time" class="glass-input" value="5" min="1" max="30">
+                </div>
+            </div>
+
             <button id="close-settings-btn" class="neon-btn">Save & Close</button>
         </div>
 
@@ -192,30 +265,81 @@
                     <ul id="skipped-words-list" class="word-list"></ul>
                 </div>
             </div>
+            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                <button id="export-csv-btn" class="neon-btn secondary"
+                    style="flex: 1; font-size: 0.9rem; padding: 10px;">Export CSV</button>
+                <button id="export-txt-btn" class="neon-btn secondary"
+                    style="flex: 1; font-size: 0.9rem; padding: 10px;">Export TXT</button>
+            </div>
             <button id="close-review-btn" class="neon-btn secondary">Close</button>
         </div>
 
         <!-- Screen 2: Game Play -->
-        <div id="play-screen" class="glass-card hidden">
-            <!-- Fallback Buttons -->
-            <button id="skip-btn" class="side-btn skip-btn">SKIP<br>▼</button>
+        <div id="play-screen-wrapper" class="hidden">
+            <div id="play-screen" class="glass-card">
+                <!-- Fallback Buttons -->
+                <button id="skip-btn" class="side-btn skip-btn">SKIP<br>▼</button>
 
-            <div class="word-display-container">
-                <button id="go-back-btn" class="go-back-btn hidden">↩ Go Back</button>
-                <p id="timer">Time: 60s</p>
-                <div class="word-animator">
-                    <h3 id="past-word" class="past-word hidden"></h3>
-                    <h2 id="current-word">Word</h2>
+                <div class="word-display-container">
+                    <div class="word-animator">
+                        <h3 id="past-word" class="past-word hidden"></h3>
+                        <h2 id="current-word">Word</h2>
+                    </div>
+                    <p id="instruction-text">Tilt UP = Correct | Tilt DOWN = Skip</p>
                 </div>
-                <p id="instruction-text">Tilt UP = Correct | Tilt DOWN = Skip</p>
+
+                <button id="correct-btn" class="side-btn correct-btn">CORRECT<br>▲</button>
             </div>
 
-            <button id="correct-btn" class="side-btn correct-btn">CORRECT<br>▲</button>
+            <!-- Pass Screen Overlay -->
+            <div id="pass-screen" class="glass-card hidden">
+                <h2 style="font-size: 2.5rem; margin-bottom: 20px; color: #e040fb;">PASS TO NEXT PLAYER</h2>
+                <div id="pass-countdown">5</div>
+                <p style="margin-top: 20px; opacity: 0.8;">Get ready!</p>
+            </div>
+
+            <!-- Pause Slider Area -->
+            <div id="pause-slider-area" class="glass-card"
+                style="display: flex; align-items: stretch; justify-content: space-between; padding: 10px 20px; width: 100%; margin: 0 auto; gap: 15px;">
+                <div id="timer-wrapper"
+                    style="display: flex; align-items: center; justify-content: center; min-width: 100px;">
+                    <p id="timer" style="margin: 0;">Time: 60s</p>
+                </div>
+
+                <div
+                    style="flex: 1; text-align: center; display: flex; flex-direction: column; justify-content: center; position: relative;">
+                    <p
+                        style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); margin: 0; font-weight: 600; opacity: 0.5; pointer-events: none; z-index: 1;">
+                        Slide to Pause</p>
+                    <input type="range" id="pause-slider" min="0" max="100" value="0" class="custom-slider">
+                </div>
+
+                <div id="go-back-wrapper"
+                    style="display: flex; justify-content: center; align-items: stretch; min-width: 130px;">
+                    <button id="go-back-btn" class="go-back-btn hidden">↩ Go Back</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pause Modal -->
+        <div id="pause-modal" class="glass-card hidden"
+            style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2000; max-width: 400px; width: 90%;">
+            <h2>Paused</h2>
+            <p id="pause-timer-display" style="font-size: 2rem; font-weight: bold; color: #00d2ff; margin: 10px 0;">
+                Time: 60s</p>
+            <p id="pause-score-display" style="font-size: 1.1rem; opacity: 0.9; margin-bottom: 20px;">0 correct out of 0
+                (0%)</p>
+            <div class="setup-actions" style="margin-top: 20px; display: flex; flex-direction: column; gap: 15px;">
+                <button id="resume-btn" class="neon-btn">Continue Playing</button>
+                <button id="pause-end-keep-btn" class="neon-btn secondary">Quit to Main Menu</button>
+                <button id="pause-end-remove-btn" class="neon-btn secondary">Quit & Remove Used</button>
+            </div>
         </div>
 
         <!-- Screen 3: Game Over -->
         <div id="end-screen" class="glass-card hidden">
             <h1>Game Over!</h1>
+            <h2 id="final-player-name" class="hidden" style="font-size: 1.5rem; margin-bottom: 5px; opacity: 0.9;"></h2>
             <h2 id="final-score">Score: 0</h2>
             <p id="final-stats" class="stats-text">0 correct out of 0 (0%)</p>
             <ul id="results-list"></ul>

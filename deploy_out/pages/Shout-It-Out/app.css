@@ -290,6 +290,20 @@ textarea:focus {
     box-shadow: 0 4px 15px rgba(0, 210, 255, 0.4) !important;
 }
 
+/* Loading Animation */
+.loader {
+    border: 4px solid rgba(255, 255, 255, 0.1);
+    border-top: 4px solid #00d2ff;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 /* Custom Alert, Instructions, & Review Modal */
 #alert-modal,
 #instructions-modal,
@@ -379,16 +393,30 @@ textarea:focus {
 }
 
 /* Gameplay Screen (Landscape Optimized) */
+#play-screen-wrapper {
+    height: calc(100vh - 40px);
+    /* Fill screen minus body padding */
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    position: relative;
+    /* Essential for absolute centering of children */
+}
+
 #play-screen {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
     max-width: 1000px;
-    width: 100%;
-    height: 80vh;
+    width: 95vw;
+    /* Stable viewport-based width */
+    margin: 0 auto;
+    flex: 1;
+    /* Stretch to fill available space */
     padding: 10px;
     gap: 15px;
+    position: relative;
 }
 
 .word-display-container {
@@ -397,20 +425,30 @@ textarea:focus {
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    position: relative;
+    overflow: hidden;
+    /* Prevent overflow jitters */
+    align-self: stretch;
+    padding: 0 40px;
+    /* Gap from buttons */
+    min-width: 0;
+    /* Crucial for flex child scrollWidth measurement */
 }
 
 #timer {
-    font-size: 2.5rem;
+    font-size: 1.5rem;
+    /* Shrunk to fit beside slider */
     font-weight: 800;
     color: #00d2ff;
     text-shadow: 0 0 10px rgba(0, 210, 255, 0.4);
-    margin-bottom: 10px;
+    margin-bottom: 0;
+    /* Reset since it's now in the flex row */
+    white-space: nowrap;
 }
 
 .word-animator {
     position: relative;
     width: 100%;
-    min-height: 120px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -421,19 +459,26 @@ textarea:focus {
     font-size: 1.5rem;
     font-weight: 600;
     opacity: 0.4;
-    position: absolute;
-    top: -20px;
-    margin: 0;
+    margin: 0 0 20px 0;
+    /* Creates the padding below the previous word */
     transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 #current-word {
-    font-size: 4rem;
+    font-size: 8rem;
     font-weight: 800;
-    text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
     margin: 0;
     text-align: center;
-    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1), font-size 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    width: 100%;
+    line-height: 1.1;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    word-wrap: break-word;
+    /* Final fallback */
+}
+
+.timer-warning {
+    animation: flash-red-text 0.5s infinite alternate;
+    /* Sped up the flash */
 }
 
 /* Animations */
@@ -448,6 +493,21 @@ textarea:focus {
 
 .roll-out-reverse {
     animation: rollOutReverse 0.3s ease-in forwards;
+}
+
+@keyframes flash-red-text {
+    0% {
+        opacity: 1;
+        color: #ffffff;
+        text-shadow: 0 0 25px rgba(255, 255, 255, 1);
+    }
+
+    100% {
+        opacity: 0.8;
+        color: #ffbaba;
+        /* light red */
+        text-shadow: 0 0 15px rgba(255, 75, 75, 0.8);
+    }
 }
 
 @keyframes rollIn {
@@ -478,6 +538,9 @@ textarea:focus {
     font-size: 1.2rem;
     opacity: 0.8;
     transition: opacity 0.5s ease;
+    margin-top: 10px;
+    /* Snug up to the main phrase */
+    text-align: center;
 }
 
 /* Go Back Button */
@@ -485,14 +548,18 @@ textarea:focus {
     background: rgba(255, 204, 0, 0.2);
     border: 1px solid #ffcc00;
     color: #ffcc00;
-    padding: 8px 16px;
+    padding: 12px 24px;
     border-radius: 20px;
-    font-size: 1rem;
+    /* Reduced to match the UI blockiness */
+    font-size: 1.25rem;
+    /* Large font */
     font-weight: 600;
     cursor: pointer;
-    margin-bottom: 15px;
     transition: all 0.2s ease;
     box-shadow: 0 4px 15px rgba(255, 204, 0, 0.2);
+    white-space: nowrap;
+    width: 100%;
+    height: 100%;
 }
 
 .go-back-btn:hover {
@@ -507,10 +574,16 @@ textarea:focus {
 
 /* Side Fallback Buttons */
 .side-btn {
-    width: 25vw;
-    max-width: 200px;
-    height: 100%;
+    width: 150px;
+    /* Fixed width */
+    flex-shrink: 0;
+    /* Prevent shrinking */
+    align-self: stretch;
+    /* Make it fill the height */
+    min-height: 100%;
     border-radius: 20px;
+    z-index: 10;
+    /* Keep buttons above any scaling text if overlap happens */
     border: 3px solid rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.05);
     color: white;
@@ -561,21 +634,204 @@ textarea:focus {
     }
 }
 
+/* Fix for Short Landscape Screens (Low Res Phones) */
+@media (max-height: 600px) and (orientation: landscape) {
+    .app-container {
+        padding: 5px;
+        /* Reduce outer padding */
+    }
+
+    #play-screen-wrapper {
+        gap: 5px !important;
+        height: 100%;
+        min-height: 90vh;
+        /* Stretch the whole wrapper */
+    }
+
+    #play-screen {
+        flex: 1;
+        /* Automatically fill remaining vertical space */
+        padding: 5px 10px;
+        align-items: stretch;
+        /* Allow children to stretch */
+    }
+
+    #timer {
+        font-size: 1.25rem;
+        margin-bottom: 0;
+    }
+
+    #current-word {
+        font-size: 2.2rem;
+    }
+
+    .word-animator {
+        min-height: 80px;
+        /* Ensure enough height for large text to center within */
+    }
+
+    #past-word {
+        font-size: 1rem;
+        margin: 0 0 5px 0;
+        /* Scaled down padding */
+    }
+
+    #instruction-text {
+        font-size: 0.9rem;
+        margin-bottom: 0px;
+    }
+
+    .go-back-btn {
+        padding: 4px 12px;
+        font-size: 0.85rem;
+        margin-bottom: 5px;
+    }
+
+    .side-btn {
+        font-size: 1.1rem;
+        min-height: auto;
+        /* Let it dictate its height via align-self */
+    }
+
+    #pause-slider-area {
+        padding: 10px !important;
+    }
+
+    #pause-slider-area p {
+        margin-bottom: 5px !important;
+        font-size: 0.9rem;
+    }
+
+    .custom-slider {
+        height: 30px;
+    }
+}
+
 @media (orientation: portrait) {
     #play-screen {
         flex-direction: column;
         height: 85vh;
+        align-items: center;
+        /* Override back for portrait */
     }
 
     .side-btn {
         width: 100%;
         max-width: none;
         height: 15vh;
+        min-height: auto;
         flex-direction: row;
         gap: 10px;
     }
 
     .side-btn br {
         display: none;
+    }
+}
+
+.priority-word {
+    color: #e040fb !important;
+    text-shadow: 0 0 10px rgba(224, 64, 251, 0.4) !important;
+}
+
+/* Custom Slider for Pause */
+.custom-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    max-width: 350px;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.2);
+    /* Muted semi-transparent back */
+    border-radius: 20px;
+    outline: none;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    position: relative;
+    cursor: pointer;
+    margin: 0 auto;
+    display: block;
+    padding: 0 3px;
+    z-index: 2;
+}
+
+.custom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #00d2ff;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(0, 210, 255, 0.8), inset 0 0 5px rgba(255, 255, 255, 0.5);
+    border: 2px solid white;
+    transition: transform 0.2s ease;
+}
+
+.custom-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.custom-slider::-moz-range-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #00d2ff;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(0, 210, 255, 0.8), inset 0 0 5px rgba(255, 255, 255, 0.5);
+    border: 2px solid white;
+}
+
+.custom-slider::-moz-range-progress {
+    background: rgba(0, 210, 255, 0.4);
+    height: 12px;
+    border-radius: 10px;
+}
+
+/* Disabled states when paused */
+.disabled-game {
+    pointer-events: none;
+    opacity: 0.5;
+    filter: grayscale(100%);
+}
+
+/* Pass Screen Overlay */
+#pass-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    max-width: none !important;
+    /* Override glass-card */
+    max-height: none !important;
+    /* Override glass-card */
+    z-index: 9999;
+    /* Ensure it's on top of everything */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: #0f0c29;
+    /* Solid opaque background */
+    border-radius: 0;
+    /* No radius for full-screen */
+    animation: fadeIn 0.3s ease-out;
+}
+
+#pass-countdown {
+    font-size: 6rem;
+    font-weight: 800;
+    color: #00d2ff;
+    text-shadow: 0 0 30px rgba(0, 210, 255, 0.6);
+    margin: 20px 0;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
     }
 }

@@ -1159,6 +1159,63 @@ input:checked+.slider-small:before {
     .list-column {
         scroll-snap-align: center;
     }
+
+    /* Slim Mobile Compact Header */
+    @media (max-width: 450px) {
+        .app-header {
+            margin: 5px 10px;
+            padding: 8px 10px;
+            gap: 5px;
+        }
+
+        .header-left {
+            gap: 8px;
+        }
+
+        .project-title-input {
+            font-size: 1.1rem;
+            max-width: 150px;
+        }
+
+        .header-controls {
+            gap: 4px;
+        }
+
+        .btn {
+            padding: 6px 10px;
+            font-size: 0.75rem;
+            border-radius: 6px;
+        }
+
+        .icon-btn-large {
+            font-size: 1.2rem;
+            padding: 4px;
+        }
+
+        .toggle-group {
+            padding: 2px;
+            gap: 1px;
+        }
+
+        .toggle-group .label {
+            display: none;
+        }
+
+        .mode-btn {
+            padding: 3px 6px;
+            font-size: 0.7rem;
+        }
+
+        .glass-select {
+            padding: 4px;
+            font-size: 0.75rem;
+        }
+
+        .total-count-badge {
+            font-size: 0.75rem;
+            padding: 2px 6px;
+        }
+    }
 }
 
 .hidden {

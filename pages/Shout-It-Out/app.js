@@ -17,6 +17,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeSettingsBtn = document.getElementById('close-settings-btn');
     const categoriesBtn = document.getElementById('categories-btn');
     const categoriesModal = document.getElementById('categories-modal');
+    const genCustomListBtn = document.getElementById('gen-custom-list-btn');
+    const genListModal = document.getElementById('gen-list-modal');
+    const genTopicInput = document.getElementById('gen-topic-input');
+    const genLoadingState = document.getElementById('gen-loading-state');
+    const submitGenListBtn = document.getElementById('submit-gen-list-btn');
+    const closeGenListBtn = document.getElementById('close-gen-list-btn');
     const closeCategoriesBtn = document.getElementById('close-categories-btn');
     const addCategoriesBtn = document.getElementById('add-categories-btn');
     const removeCategoriesBtn = document.getElementById('remove-categories-btn');
@@ -444,6 +450,80 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeCategoriesBtn) {
         closeCategoriesBtn.addEventListener('click', () => {
             categoriesModal.classList.add('hidden');
+        });
+    }
+
+    if (genCustomListBtn) {
+        genCustomListBtn.addEventListener('click', () => {
+            genTopicInput.value = '';
+            genLoadingState.classList.add('hidden');
+            genTopicInput.classList.remove('hidden');
+            submitGenListBtn.disabled = false;
+            submitGenListBtn.style.opacity = '1';
+            genListModal.classList.remove('hidden');
+        });
+    }
+
+    if (closeGenListBtn) {
+        closeGenListBtn.addEventListener('click', () => {
+            genListModal.classList.add('hidden');
+        });
+    }
+
+    if (submitGenListBtn) {
+        submitGenListBtn.addEventListener('click', async () => {
+            const topic = genTopicInput.value.trim();
+            if (!topic) return;
+
+            // Show loading
+            genLoadingState.classList.remove('hidden');
+            genTopicInput.classList.add('hidden');
+            submitGenListBtn.disabled = true;
+            submitGenListBtn.style.opacity = '0.5';
+
+            try {
+                const response = await fetch('/api/generate-list', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic })
+                });
+                
+                if (!response.ok) {
+                    const errorJson = await response.json();
+                    throw new Error(errorJson.error || 'Network response was not ok');
+                }
+                
+                const data = await response.json();
+                
+                if (data.words && data.words.length > 0) {
+                    // Append to existing words or replace if empty
+                    const existingText = wordListInput.value.trim();
+                    const newText = data.words.join('\n');
+                    
+                    if (existingText) {
+                        wordListInput.value = existingText + '\n' + newText;
+                    } else {
+                        wordListInput.value = newText;
+                    }
+                    
+                    updateWordCount();
+                    localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+                    genListModal.classList.add('hidden');
+                } else {
+                     alert("Could not generate words. Please try again.");
+                     genLoadingState.classList.add('hidden');
+                     genTopicInput.classList.remove('hidden');
+                     submitGenListBtn.disabled = false;
+                     submitGenListBtn.style.opacity = '1';
+                }
+            } catch (error) {
+                console.error("Error generating list:", error);
+                alert("Error connecting to the AI. Please try again.");
+                genLoadingState.classList.add('hidden');
+                genTopicInput.classList.remove('hidden');
+                submitGenListBtn.disabled = false;
+                submitGenListBtn.style.opacity = '1';
+            }
         });
     }
 

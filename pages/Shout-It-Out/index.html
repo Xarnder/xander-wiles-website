@@ -96,6 +96,7 @@
             <div class="setup-actions">
                 <button id="instructions-btn" class="neon-btn secondary">How to Play</button>
                 <button id="categories-btn" class="neon-btn secondary">Categories</button>
+                <button id="gen-custom-list-btn" class="neon-btn secondary">Generate Custom List</button>
                 <button id="settings-btn" class="neon-btn secondary">Settings</button>
             </div>
 
@@ -131,6 +132,21 @@
                 </div>
                 <button id="close-categories-btn" class="neon-btn secondary"
                     style="border: none; box-shadow: none; opacity: 0.8;">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Generate Custom List Modal -->
+        <div id="gen-list-modal" class="glass-card hidden" style="max-width: 600px;">
+            <h2 style="margin-bottom: 5px;">Generate Custom List</h2>
+            <p style="text-align: center; margin-bottom: 25px; opacity: 0.8; font-size: 0.95rem;">Enter a topic, and AI will generate a list for you!</p>
+            <input type="text" id="gen-topic-input" class="glass-input" placeholder="e.g. Football players, 90s movies..." style="margin-bottom: 20px; font-size: 1.1rem; width: 100%;">
+            <div id="gen-loading-state" class="hidden" style="margin-bottom: 20px; text-align: center;">
+                <div class="loader" style="margin: 0 auto;"></div>
+                <p style="margin-top: 10px; opacity: 0.8;">Generating list with AI...</p>
+            </div>
+            <div class="category-actions" style="display: flex; flex-direction: column; gap: 15px; margin-top: 10px;">
+                <button id="submit-gen-list-btn" class="neon-btn">Generate</button>
+                <button id="close-gen-list-btn" class="neon-btn secondary" style="border: none; box-shadow: none; opacity: 0.8;">Cancel</button>
             </div>
         </div>
 
