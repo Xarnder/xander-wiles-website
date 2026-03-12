@@ -84,6 +84,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const pauseScoreDisplay = document.getElementById('pause-score-display');
     const pauseEndKeepBtn = document.getElementById('pause-end-keep-btn');
     const pauseEndRemoveBtn = document.getElementById('pause-end-remove-btn');
+    const priorityContainer = document.getElementById('priority-container');
+    const priorityToggle = document.getElementById('priority-toggle');
     const multiPersonToggle = document.getElementById('multi-person-toggle');
     const multiPersonSettings = document.getElementById('multi-person-settings');
     const phrasesPerPlayerInput = document.getElementById('phrases-per-player');
@@ -121,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingShowButtons = true;
     let settingShowGoBack = true;
     let settingShowPastWord = true;
+    let settingPriorityEnabled = false;
     let settingMultiPersonEnabled = false;
     let settingPhrasesPerPlayer = 3;
     let settingPassTime = 5;
@@ -448,9 +451,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (categoriesBtn) {
         categoriesBtn.addEventListener('click', () => {
-            selectedCategories.clear();
-            document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
-            categoriesModal.classList.remove('hidden');
+            if (!categoriesModal.classList.contains('hidden')) {
+                categoriesModal.classList.add('hidden');
+            } else {
+                selectedCategories.clear();
+                document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
+                categoriesModal.classList.remove('hidden');
+            }
         });
     }
 
@@ -569,6 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showButtonsToggle) showButtonsToggle.checked = settingShowButtons;
             if (showGoBackToggle) showGoBackToggle.checked = settingShowGoBack;
             if (showPastWordToggle) showPastWordToggle.checked = settingShowPastWord;
+            if (priorityToggle) priorityToggle.checked = settingPriorityEnabled;
             if (multiPersonToggle) {
                 multiPersonToggle.checked = settingMultiPersonEnabled;
                 if (settingMultiPersonEnabled) multiPersonSettings.classList.remove('hidden');
@@ -802,6 +810,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showGoBackToggle) settingShowGoBack = showGoBackToggle.checked;
             if (showPastWordToggle) settingShowPastWord = showPastWordToggle.checked;
 
+            if (priorityToggle) {
+                settingPriorityEnabled = priorityToggle.checked;
+                if (settingPriorityEnabled) {
+                    priorityContainer.classList.remove('hidden');
+                } else {
+                    priorityContainer.classList.add('hidden');
+                }
+            }
+
             if (multiPersonToggle) settingMultiPersonEnabled = multiPersonToggle.checked;
             if (phrasesPerPlayerInput) settingPhrasesPerPlayer = parseInt(phrasesPerPlayerInput.value) || 3;
             if (passTimeInput) settingPassTime = parseInt(passTimeInput.value) || 5;
@@ -821,7 +838,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Parse user input
         const rawText = wordListInput.value.trim();
-        const rawPrioText = priorityWordListInput ? priorityWordListInput.value.trim() : '';
+        const rawPrioText = (priorityWordListInput && settingPriorityEnabled) ? priorityWordListInput.value.trim() : '';
         currentPlayerName = playerNameInput ? playerNameInput.value.trim() : '';
 
         if (!rawText && !rawPrioText) {

@@ -70,23 +70,25 @@
             <div id="word-counter"
                 style="text-align: right; margin-top: -15px; margin-bottom: 20px; opacity: 0.8; font-size: 0.95rem;">0
                 words</div>
-            <p style="margin-top: 10px;">Paste your <strong style="color: #e040fb;">Priority List</strong> below
-                (optional):</p>
-            <textarea id="priority-word-list" placeholder="Words that show up more frequently..."></textarea>
-            <div
-                style="display: flex; justify-content: space-between; align-items: start; margin-top: -15px; margin-bottom: 20px;">
+            <div id="priority-container" class="hidden">
+                <p style="margin-top: 10px;">Paste your <strong style="color: #ed87ff;">Priority List</strong> below
+                    (optional):</p>
+                <textarea id="priority-word-list" placeholder="Words that show up more frequently..."></textarea>
                 <div
-                    style="text-align: left; opacity: 0.8; font-size: 0.95rem; display: flex; align-items: center; gap: 10px;">
-                    <label for="priority-frequency">Frequency:</label>
-                    <select id="priority-frequency" class="glass-input"
-                        style="padding: 5px 10px; width: auto; font-size: 0.9rem;">
-                        <option value="5">Low (1 in 5)</option>
-                        <option value="3" selected>Normal (1 in 3)</option>
-                        <option value="2">High (1 in 2)</option>
-                        <option value="1">Always (1 in 1)</option>
-                    </select>
-                </div>
-                <div id="priority-word-counter" style="text-align: right; opacity: 0.8; font-size: 0.95rem;">0 words
+                    style="display: flex; justify-content: space-between; align-items: start; margin-top: -15px; margin-bottom: 20px;">
+                    <div
+                        style="text-align: left; opacity: 0.8; font-size: 0.95rem; display: flex; align-items: center; gap: 10px;">
+                        <label for="priority-frequency">Frequency:</label>
+                        <select id="priority-frequency" class="glass-input"
+                            style="padding: 5px 10px; width: auto; font-size: 0.9rem;">
+                            <option value="5">Low (1 in 5)</option>
+                            <option value="3" selected>Normal (1 in 3)</option>
+                            <option value="2">High (1 in 2)</option>
+                            <option value="1">Always (1 in 1)</option>
+                        </select>
+                    </div>
+                    <div id="priority-word-counter" style="text-align: right; opacity: 0.8; font-size: 0.95rem;">0 words
+                    </div>
                 </div>
             </div>
 
@@ -218,6 +220,11 @@
             <div class="setting-group checkbox-group">
                 <input type="checkbox" id="show-pastword-toggle" checked>
                 <label for="show-pastword-toggle">Show Previous Word Indicator</label>
+            </div>
+
+            <div class="setting-group checkbox-group">
+                <input type="checkbox" id="priority-toggle">
+                <label for="priority-toggle">Enable Priority Words</label>
             </div>
 
             <div class="setting-group checkbox-group">

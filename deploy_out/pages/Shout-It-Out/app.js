@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainMenuReviewBtn = document.getElementById('main-menu-review-btn');
     const correctWordsList = document.getElementById('correct-words-list');
     const skippedWordsList = document.getElementById('skipped-words-list');
+    const timedOutWordsList = document.getElementById('timed-out-words-list');
     const lastGameStatsContainer = document.getElementById('last-game-stats-container');
     const lastGameScoreEl = document.getElementById('last-game-score');
     const lastGameDetailedStatsEl = document.getElementById('last-game-detailed-stats');
@@ -83,6 +84,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const pauseScoreDisplay = document.getElementById('pause-score-display');
     const pauseEndKeepBtn = document.getElementById('pause-end-keep-btn');
     const pauseEndRemoveBtn = document.getElementById('pause-end-remove-btn');
+    const priorityContainer = document.getElementById('priority-container');
+    const priorityToggle = document.getElementById('priority-toggle');
     const multiPersonToggle = document.getElementById('multi-person-toggle');
     const multiPersonSettings = document.getElementById('multi-person-settings');
     const phrasesPerPlayerInput = document.getElementById('phrases-per-player');
@@ -105,6 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let answerTimes = [];
     let correctWordsArr = [];
     let skippedWordsArr = [];
+    let timedOutWordsArr = [];
     let currentPlayerName = '';
     let isPaused = false;
     let isPassingPhone = false;
@@ -119,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingShowButtons = true;
     let settingShowGoBack = true;
     let settingShowPastWord = true;
+    let settingPriorityEnabled = false;
     let settingMultiPersonEnabled = false;
     let settingPhrasesPerPlayer = 3;
     let settingPassTime = 5;
@@ -446,9 +451,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (categoriesBtn) {
         categoriesBtn.addEventListener('click', () => {
-            selectedCategories.clear();
-            document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
-            categoriesModal.classList.remove('hidden');
+            if (!categoriesModal.classList.contains('hidden')) {
+                categoriesModal.classList.add('hidden');
+            } else {
+                selectedCategories.clear();
+                document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
+                categoriesModal.classList.remove('hidden');
+            }
         });
     }
 
@@ -567,6 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showButtonsToggle) showButtonsToggle.checked = settingShowButtons;
             if (showGoBackToggle) showGoBackToggle.checked = settingShowGoBack;
             if (showPastWordToggle) showPastWordToggle.checked = settingShowPastWord;
+            if (priorityToggle) priorityToggle.checked = settingPriorityEnabled;
             if (multiPersonToggle) {
                 multiPersonToggle.checked = settingMultiPersonEnabled;
                 if (settingMultiPersonEnabled) multiPersonSettings.classList.remove('hidden');
@@ -690,6 +700,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 csvContent += `"${nameToExport}","${cleanWord}","Skipped","${timeStr}","${prioMarker}"\n`;
             });
 
+            timedOutWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? "*" : "";
+                let cleanWord = wordObj.text.replace(/"/g, '""');
+                let timeStr = wordObj.timeTaken ? wordObj.timeTaken.toFixed(1) + "s" : "N/A";
+                csvContent += `"${nameToExport}","${cleanWord}","Timed Out","${timeStr}","${prioMarker}"\n`;
+            });
+
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -734,6 +751,14 @@ document.addEventListener('DOMContentLoaded', () => {
             txtContent += `\n--- Skipped Words ---\n`;
             if (skippedWordsArr.length === 0) txtContent += "None\n";
             skippedWordsArr.forEach(wordObj => {
+                let prioMarker = wordObj.isPriority ? " *" : "";
+                let timeStr = wordObj.timeTaken ? ` (${wordObj.timeTaken.toFixed(1)}s)` : "";
+                txtContent += `- ${wordObj.text}${timeStr}${prioMarker}\n`;
+            });
+
+            txtContent += `\n--- Timed Out Words ---\n`;
+            if (timedOutWordsArr.length === 0) txtContent += "None\n";
+            timedOutWordsArr.forEach(wordObj => {
                 let prioMarker = wordObj.isPriority ? " *" : "";
                 let timeStr = wordObj.timeTaken ? ` (${wordObj.timeTaken.toFixed(1)}s)` : "";
                 txtContent += `- ${wordObj.text}${timeStr}${prioMarker}\n`;
@@ -785,6 +810,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showGoBackToggle) settingShowGoBack = showGoBackToggle.checked;
             if (showPastWordToggle) settingShowPastWord = showPastWordToggle.checked;
 
+            if (priorityToggle) {
+                settingPriorityEnabled = priorityToggle.checked;
+                if (settingPriorityEnabled) {
+                    priorityContainer.classList.remove('hidden');
+                } else {
+                    priorityContainer.classList.add('hidden');
+                }
+            }
+
             if (multiPersonToggle) settingMultiPersonEnabled = multiPersonToggle.checked;
             if (phrasesPerPlayerInput) settingPhrasesPerPlayer = parseInt(phrasesPerPlayerInput.value) || 3;
             if (passTimeInput) settingPassTime = parseInt(passTimeInput.value) || 5;
@@ -804,7 +838,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Parse user input
         const rawText = wordListInput.value.trim();
-        const rawPrioText = priorityWordListInput ? priorityWordListInput.value.trim() : '';
+        const rawPrioText = (priorityWordListInput && settingPriorityEnabled) ? priorityWordListInput.value.trim() : '';
         currentPlayerName = playerNameInput ? playerNameInput.value.trim() : '';
 
         if (!rawText && !rawPrioText) {
@@ -889,6 +923,7 @@ document.addEventListener('DOMContentLoaded', () => {
         answerTimes = [];
         correctWordsArr = [];
         skippedWordsArr = [];
+        timedOutWordsArr = [];
         phrasesShownInCurrentTurn = 0;
         isPassingPhone = false;
         if (passScreen) passScreen.classList.add('hidden');
@@ -1238,6 +1273,13 @@ document.addEventListener('DOMContentLoaded', () => {
         stopSound('all');
         playSound('end');
 
+        // Capture word on screen if game timed out
+        if (timer <= 0 && currentWordIndex < words.length) {
+            console.log("🟠 [DEBUG] Game Timed Out. Capturing current word:", words[currentWordIndex].text);
+            timedOutWordsArr.push(words[currentWordIndex]);
+            recordAnswerTime(); // Record how long they were on it anyway
+        }
+
         playScreenWrapper.classList.add('hidden');
         if (mainNavPlaceholder) mainNavPlaceholder.classList.remove('hidden');
         playScreen.classList.remove('disabled-game');
@@ -1262,11 +1304,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Populate Review Lists
         correctWordsList.innerHTML = '';
         skippedWordsList.innerHTML = '';
+        if (timedOutWordsList) timedOutWordsList.innerHTML = '';
 
-        let allReviewedWords = [...correctWordsArr, ...skippedWordsArr];
+        let allReviewedWords = [...correctWordsArr, ...skippedWordsArr, ...timedOutWordsArr];
         let maxTimeTaken = Math.max(1, ...allReviewedWords.map(w => w.timeTaken || 0));
 
-        function createWordListItem(wordObj) {
+        function createWordListItem(wordObj, overrideColor = null) {
             const li = document.createElement('li');
             li.style.display = 'flex';
             li.style.flexDirection = 'column';
@@ -1312,8 +1355,12 @@ document.addEventListener('DOMContentLoaded', () => {
             let percent = maxTimeTaken > 0 ? (timeVal / maxTimeTaken) : 0;
             barFill.style.width = `${Math.max(2, percent * 100)}%`;
 
-            let hue = (1 - percent) * 120; // 0 = red (long time), 120 = green (short time)
-            barFill.style.backgroundColor = `hsl(${hue}, 80%, 50%)`;
+            if (overrideColor) {
+                barFill.style.backgroundColor = overrideColor;
+            } else {
+                let hue = (1 - percent) * 120; // 0 = red (long time), 120 = green (short time)
+                barFill.style.backgroundColor = `hsl(${hue}, 80%, 50%)`;
+            }
             barFill.style.borderRadius = '3px';
 
             barContainer.appendChild(barFill);
@@ -1330,6 +1377,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         skippedWordsArr.forEach(wordObj => {
             skippedWordsList.appendChild(createWordListItem(wordObj));
+        });
+
+        timedOutWordsArr.forEach(wordObj => {
+            const li = createWordListItem(wordObj, '#ffeb3b');
+            if (timedOutWordsList) timedOutWordsList.appendChild(li);
         });
     }
 
