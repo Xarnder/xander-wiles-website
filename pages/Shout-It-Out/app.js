@@ -114,6 +114,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPassingPhone = false;
     let phrasesShownInCurrentTurn = 0;
 
+    // --- NoSleep.js Instance ---
+    const noSleep = new NoSleep();
+
     // --- Settings State ---
     let settingGameTime = 60;
     let settingSensitivity = 45; // angle threshold
@@ -836,6 +839,9 @@ document.addEventListener('DOMContentLoaded', () => {
             initializeAudio();
         }
 
+        // Enable NoSleep to prevent screen dimming
+        noSleep.enable();
+
         // Parse user input
         const rawText = wordListInput.value.trim();
         const rawPrioText = (priorityWordListInput && settingPriorityEnabled) ? priorityWordListInput.value.trim() : '';
@@ -1270,6 +1276,9 @@ document.addEventListener('DOMContentLoaded', () => {
         isPlaying = false;
         clearInterval(gameInterval);
 
+        // Disable NoSleep
+        noSleep.disable();
+
         stopSound('all');
         playSound('end');
 
@@ -1468,6 +1477,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target.value > 90) {
                 if (!isPaused) {
                     isPaused = true;
+                    // Disable NoSleep while paused
+                    noSleep.disable();
                     playScreen.classList.add('disabled-game');
                     pauseSliderArea.classList.add('disabled-game');
 
@@ -1496,6 +1507,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (resumeBtn) {
         resumeBtn.addEventListener('click', () => {
             isPaused = false;
+            // Re-enable NoSleep when resuming gameplay
+            noSleep.enable();
             playScreen.classList.remove('disabled-game');
             pauseSliderArea.classList.remove('disabled-game');
             pauseModal.classList.add('hidden');
@@ -1508,6 +1521,9 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(gameInterval);
         isPlaying = false;
         stopSound('all');
+        
+        // Disable NoSleep
+        noSleep.disable();
 
         playScreenWrapper.classList.add('hidden');
         if (mainNavPlaceholder) mainNavPlaceholder.classList.remove('hidden');
