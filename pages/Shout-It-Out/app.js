@@ -123,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingTiltEnabled = true;
     let settingRandomizeEnabled = true;
     let settingSoundEnabled = true;
+    let settingVibrationEnabled = true;
     let settingShowButtons = true;
     let settingShowGoBack = true;
     let settingShowPastWord = true;
@@ -576,6 +577,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tiltToggle) tiltToggle.checked = settingTiltEnabled;
             if (randomizeToggle) randomizeToggle.checked = settingRandomizeEnabled;
             if (soundToggle) soundToggle.checked = settingSoundEnabled;
+            const vibrationToggle = document.getElementById('vibration-toggle');
+            if (vibrationToggle) vibrationToggle.checked = settingVibrationEnabled;
             if (showButtonsToggle) showButtonsToggle.checked = settingShowButtons;
             if (showGoBackToggle) showGoBackToggle.checked = settingShowGoBack;
             if (showPastWordToggle) showPastWordToggle.checked = settingShowPastWord;
@@ -807,8 +810,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             settingSensitivity = parseInt(sensitivitySelect.value);
             settingTiltEnabled = tiltToggle.checked;
-            settingRandomizeEnabled = randomizeToggle.checked;
-            settingSoundEnabled = soundToggle.checked;
+            if (randomizeToggle) settingRandomizeEnabled = randomizeToggle.checked;
+            if (soundToggle) settingSoundEnabled = soundToggle.checked;
+            
+            const vibrationToggle = document.getElementById('vibration-toggle');
+            if (vibrationToggle) settingVibrationEnabled = vibrationToggle.checked;
+
             if (showButtonsToggle) settingShowButtons = showButtonsToggle.checked;
             if (showGoBackToggle) settingShowGoBack = showGoBackToggle.checked;
             if (showPastWordToggle) settingShowPastWord = showPastWordToggle.checked;
@@ -1108,6 +1115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         correctWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
         playSound('correct');
+        if (settingVibrationEnabled && navigator.vibrate) navigator.vibrate(50); // Short pulse
         score++;
         triggerVisualFeedback('correct');
         advanceGame();
@@ -1119,6 +1127,7 @@ document.addEventListener('DOMContentLoaded', () => {
         skippedWordsArr.push(words[currentWordIndex]);
         recordAnswerTime();
         playSound('skip');
+        if (settingVibrationEnabled && navigator.vibrate) navigator.vibrate([50, 100, 50]); // Double pulse
         triggerVisualFeedback('skip');
         advanceGame();
     }
@@ -1157,12 +1166,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const passInterval = setInterval(() => {
             passTimerLimit--;
+            if (settingVibrationEnabled && navigator.vibrate) navigator.vibrate(30); // Tick vibration
             if (passTimerLimit <= 0) {
                 clearInterval(passInterval);
                 if (passScreen) passScreen.classList.add('hidden');
                 if (playScreen) playScreen.classList.remove('disabled-game');
                 isPassingPhone = false;
                 playSound('ui'); // Sound for turn completion
+                if (settingVibrationEnabled && navigator.vibrate) navigator.vibrate([100, 50, 100]); // Turn start vibration
                 showNextWord();
                 tiltCooldown = false;
             } else {
