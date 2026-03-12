@@ -992,6 +992,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (liveReactionPreview) {
                 liveReactionPreview.srcObject = reactionVideoStream;
                 liveReactionPreview.classList.remove('hidden');
+                liveReactionPreview.play().catch(e => console.warn("Could not auto-play live preview:", e));
             }
 
             reactionMediaRecorder.ondataavailable = (event) => {
@@ -1014,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
 
-            reactionMediaRecorder.start(1000); // Record in 1s chunks
+            reactionMediaRecorder.start(); // Record as a single continuous stream
             console.log("🔴 [DEBUG] Reaction recording started.");
         } catch (error) {
             console.error("🔴 [DEBUG] Failed to start reaction recording:", error);
