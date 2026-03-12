@@ -217,8 +217,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (e) => {
         const btn = e.target.tagName === 'BUTTON' ? e.target : e.target.closest('button');
         if (btn) {
-            if (btn.id === 'skip-btn' || btn.id === 'correct-btn' || btn.classList.contains('category-btn')) {
-                return; // Exclude gameplay/category ones that don't need UI sound
+            if (btn.id === 'skip-btn' || btn.id === 'correct-btn' || btn.classList.contains('category-btn') || isPassingPhone) {
+                return; // Exclude gameplay/category ones that don't need UI sound, and avoid interrupting pass audio
             }
             playSound('ui');
         }
