@@ -306,14 +306,23 @@ textarea:focus {
 
 /* Custom Alert, Instructions, & Review Modal */
 #alert-modal,
-#instructions-modal,
-#review-modal {
+#instructions-modal {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     max-width: 500px;
     width: 90%;
+    z-index: 1000;
+}
+
+#review-modal {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 800px;
+    width: 95%;
     z-index: 1000;
 }
 
@@ -631,6 +640,11 @@ textarea:focus {
 (orientation: portrait) {
     #current-word {
         font-size: 2.5rem;
+    }
+
+    .review-lists {
+        flex-direction: column;
+        max-height: 50vh;
     }
 }
 
