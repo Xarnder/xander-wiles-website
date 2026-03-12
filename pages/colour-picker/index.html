@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Color Analyzer</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Website Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Page Specific Styles -->
+    <link rel="stylesheet" href="css/app.css">
+</head>
+
+<body>
+    <!-- Global Main Nav Placeholder -->
+    <div id="main-nav-placeholder"></div>
+
+    <main class="container">
+        <header class="page-header">
+            <h1>Color Analyzer</h1>
+            <p>Take a photo and drag over an area to extract the average color.</p>
+        </header>
+
+        <!-- Hidden input for mobile camera/file selection -->
+        <input type="file" id="camera-input" accept="image/*" capture="environment" hidden>
+
+        <div class="controls">
+            <button id="capture-btn" class="glass-btn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                    <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+                Take Photo / Upload
+            </button>
+        </div>
+
+        <!-- The Image Display & Selection Area -->
+        <div class="image-workspace glass-card" id="image-workspace" style="display: none;">
+            <div id="image-container">
+                <img id="source-image" alt="Captured image" draggable="false">
+                <div id="selection-box"></div>
+            </div>
+            <p class="instruction-text">Drag to select an area</p>
+        </div>
+
+        <!-- The Results Output Area -->
+        <div class="results-card glass-card" id="results-card" style="display: none;">
+            <h2>Average Color</h2>
+
+            <div class="color-display">
+                <div id="color-swatch" class="swatch"></div>
+                <div class="color-details">
+                    <div class="color-row">
+                        <span class="color-label">HEX</span>
+                        <span class="color-value" id="val-hex">#--</span>
+                    </div>
+                    <div class="color-row">
+                        <span class="color-label">RGB</span>
+                        <span class="color-value" id="val-rgb">--</span>
+                    </div>
+                    <div class="color-row">
+                        <span class="color-label">HSV</span>
+                        <span class="color-value" id="val-hsv">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Global Website Script -->
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Page Specific Script -->
+    <script src="js/app.js"></script>
+</body>
+
+</html>

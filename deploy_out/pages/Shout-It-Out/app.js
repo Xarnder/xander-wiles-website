@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reviewModal = document.getElementById('review-modal');
     const closeReviewBtn = document.getElementById('close-review-btn');
     const mainMenuReviewBtn = document.getElementById('main-menu-review-btn');
+    const mainMenuReactionBtn = document.getElementById('main-menu-reaction-btn');
     const correctWordsList = document.getElementById('correct-words-list');
     const skippedWordsList = document.getElementById('skipped-words-list');
     const timedOutWordsList = document.getElementById('timed-out-words-list');
@@ -86,12 +87,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const pauseEndRemoveBtn = document.getElementById('pause-end-remove-btn');
     const priorityContainer = document.getElementById('priority-container');
     const priorityToggle = document.getElementById('priority-toggle');
+    const recordReactionsToggle = document.getElementById('record-reactions-toggle');
     const multiPersonToggle = document.getElementById('multi-person-toggle');
     const multiPersonSettings = document.getElementById('multi-person-settings');
     const phrasesPerPlayerInput = document.getElementById('phrases-per-player');
     const passTimeInput = document.getElementById('pass-time');
     const passScreen = document.getElementById('pass-screen');
     const passCountdownEl = document.getElementById('pass-countdown');
+    const downloadReactionBtn = document.getElementById('download-reaction-btn');
+    const reactionVideoContainer = document.getElementById('reaction-video-container');
+    const reactionVideoPlayer = document.getElementById('reaction-video-player');
 
     // --- Game State Variables ---
     let words = [];
@@ -113,6 +118,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPaused = false;
     let isPassingPhone = false;
     let phrasesShownInCurrentTurn = 0;
+
+    // --- Reaction Recording State ---
+    let settingRecordReactionsEnabled = false;
+    let reactionMediaRecorder = null;
+    let reactionRecordedChunks = [];
+    let reactionVideoStream = null;
+    let reactionVideoBlob = null;
+    let reactionVideoBlobUrl = null;
+    let reactionVideoExt = 'webm';
 
     // --- NoSleep.js Instance ---
     const noSleep = new NoSleep();
@@ -591,6 +605,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showGoBackToggle) showGoBackToggle.checked = settingShowGoBack;
             if (showPastWordToggle) showPastWordToggle.checked = settingShowPastWord;
             if (priorityToggle) priorityToggle.checked = settingPriorityEnabled;
+            if (recordReactionsToggle) recordReactionsToggle.checked = settingRecordReactionsEnabled;
             if (multiPersonToggle) {
                 multiPersonToggle.checked = settingMultiPersonEnabled;
                 if (settingMultiPersonEnabled) multiPersonSettings.classList.remove('hidden');
@@ -678,6 +693,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (mainMenuReviewBtn) {
         mainMenuReviewBtn.addEventListener('click', () => {
             reviewModal.classList.remove('hidden');
+        });
+    }
+
+    if (mainMenuReactionBtn) {
+        mainMenuReactionBtn.addEventListener('click', () => {
+            if (reactionVideoBlobUrl && reactionVideoContainer && reactionVideoPlayer) {
+                 reactionVideoPlayer.src = reactionVideoBlobUrl;
+                 reactionVideoContainer.classList.remove('hidden');
+                 
+                 // Hide start screen and show end screen with video
+                 setupScreen.classList.add('hidden');
+                 endScreen.classList.remove('hidden');
+            }
         });
     }
 
@@ -841,6 +869,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            if (recordReactionsToggle) {
+                settingRecordReactionsEnabled = recordReactionsToggle.checked;
+            }
+
             if (multiPersonToggle) settingMultiPersonEnabled = multiPersonToggle.checked;
             if (phrasesPerPlayerInput) settingPhrasesPerPlayer = parseInt(phrasesPerPlayerInput.value) || 3;
             if (passTimeInput) settingPassTime = parseInt(passTimeInput.value) || 5;
@@ -939,6 +971,102 @@ document.addEventListener('DOMContentLoaded', () => {
         startGame();
     });
 
+    // --- Reaction Recording Logic ---
+    async function startRecordingReactions() {
+        if (!settingRecordReactionsEnabled) return;
+        try {
+            const mimeType = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4';
+            reactionVideoExt = mimeType.includes('webm') ? 'webm' : 'mp4';
+            
+            reactionVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+            reactionMediaRecorder = new MediaRecorder(reactionVideoStream, { mimeType: mimeType });
+            reactionRecordedChunks = [];
+
+            reactionMediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    reactionRecordedChunks.push(event.data);
+                }
+            };
+
+            reactionMediaRecorder.onstop = () => {
+                reactionVideoBlob = new Blob(reactionRecordedChunks, { type: reactionMediaRecorder.mimeType || mimeType });
+                if (reactionVideoBlobUrl) {
+                    URL.revokeObjectURL(reactionVideoBlobUrl);
+                }
+                reactionVideoBlobUrl = URL.createObjectURL(reactionVideoBlob);
+                if (downloadReactionBtn) downloadReactionBtn.classList.remove('hidden');
+                
+                if (reactionVideoContainer && reactionVideoPlayer) {
+                    reactionVideoPlayer.src = reactionVideoBlobUrl;
+                    reactionVideoContainer.classList.remove('hidden');
+                }
+            };
+
+            reactionMediaRecorder.start(1000); // Record in 1s chunks
+            console.log("🔴 [DEBUG] Reaction recording started.");
+        } catch (error) {
+            console.error("🔴 [DEBUG] Failed to start reaction recording:", error);
+            settingRecordReactionsEnabled = false; // Disable if permission denied
+            if (recordReactionsToggle) recordReactionsToggle.checked = false;
+            showToast("Camera permission denied. Recording disabled.");
+        }
+    }
+
+    function stopRecordingReactions() {
+        if (reactionMediaRecorder && reactionMediaRecorder.state !== 'inactive') {
+            reactionMediaRecorder.stop();
+            console.log("🔴 [DEBUG] Reaction recording stopped.");
+        }
+        if (reactionVideoStream) {
+            reactionVideoStream.getTracks().forEach(track => track.stop());
+            reactionVideoStream = null;
+        }
+    }
+
+    if (downloadReactionBtn) {
+        downloadReactionBtn.addEventListener('click', async () => {
+            if (reactionVideoBlob) {
+                const fileName = `shout_it_out_reaction_${Date.now()}.${reactionVideoExt}`;
+
+                // Fallback standard download function
+                const downloadFallback = () => {
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = reactionVideoBlobUrl;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        // We don't hide the button immediately so they can try again if it fails
+                    }, 100);
+                };
+                
+                // Attempt native sharing for mobile devices
+                try {
+                    const file = new File([reactionVideoBlob], fileName, { type: reactionVideoBlob.type });
+                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                            title: 'Shout It Out Reaction',
+                            files: [file]
+                        });
+                        console.log("🟢 [DEBUG] Native share successful.");
+                        return; // Exit if share was successful
+                    }
+                } catch (err) {
+                    console.log("🟠 [DEBUG] Native share cancelled or failed:", err);
+                    if (err.name === 'AbortError') {
+                        // User intentionally cancelled the share dialog, do not trigger fallback download
+                        return;
+                    }
+                }
+
+                // Fallback for desktop and untrusted environments
+                downloadFallback();
+            }
+        });
+    }
+
     function startGame() {
         // Reset state
         currentWordIndex = 0;
@@ -952,6 +1080,12 @@ document.addEventListener('DOMContentLoaded', () => {
         phrasesShownInCurrentTurn = 0;
         isPassingPhone = false;
         if (passScreen) passScreen.classList.add('hidden');
+        if (downloadReactionBtn) downloadReactionBtn.classList.add('hidden');
+
+        // Start Recording if enabled
+        if (settingRecordReactionsEnabled) {
+            startRecordingReactions();
+        }
 
         // Initialize Timer Display
         updateTimerDisplay();
@@ -1429,6 +1563,15 @@ document.addEventListener('DOMContentLoaded', () => {
         lastGameScoreEl.innerText = `Score: ${score} `;
         lastGameDetailedStatsEl.innerHTML = generateStatsHtml();
         lastGameStatsContainer.classList.remove('hidden');
+
+        // Show/hide the main menu reaction button based on whether we have a video
+        if (mainMenuReactionBtn) {
+            if (reactionVideoBlobUrl) {
+                mainMenuReactionBtn.classList.remove('hidden');
+            } else {
+                mainMenuReactionBtn.classList.add('hidden');
+            }
+        }
     }
 
     restartBtn.addEventListener('click', () => {
@@ -1436,6 +1579,8 @@ document.addEventListener('DOMContentLoaded', () => {
         endScreen.classList.add('hidden');
         updateMainMenuStats();
         setupScreen.classList.remove('hidden');
+        if (reactionVideoContainer) reactionVideoContainer.classList.add('hidden');
+        if (reactionVideoPlayer) reactionVideoPlayer.src = '';
         // Purposely NOT clearing wordListInput.value so words persist for the next round
     });
 
@@ -1445,6 +1590,8 @@ document.addEventListener('DOMContentLoaded', () => {
             endScreen.classList.add('hidden');
             updateMainMenuStats();
             setupScreen.classList.remove('hidden');
+            if (reactionVideoContainer) reactionVideoContainer.classList.add('hidden');
+            if (reactionVideoPlayer) reactionVideoPlayer.src = '';
 
             // Remove played words from the textareas
             const playedNormalText = words.slice(0, currentWordIndex).filter(w => !w.isPriority).map(w => w.text.toLowerCase());
@@ -1544,6 +1691,10 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(gameInterval);
         isPlaying = false;
         stopSound('all');
+        stopRecordingReactions();
+        if (downloadReactionBtn) downloadReactionBtn.classList.add('hidden');
+        if (reactionVideoContainer) reactionVideoContainer.classList.add('hidden');
+        if (reactionVideoPlayer) reactionVideoPlayer.src = '';
         
         // Disable NoSleep
         noSleep.disable();

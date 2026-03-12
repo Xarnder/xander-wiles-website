@@ -117,8 +117,9 @@
                     <div id="last-game-detailed-stats"
                         style="font-size: 0.9rem; opacity: 0.8; display: flex; flex-direction: column; gap: 5px;"></div>
                 </div>
-                <button id="main-menu-review-btn" class="neon-btn secondary" style="width: 100%;">Review Last Game
+                <button id="main-menu-review-btn" class="neon-btn secondary" style="width: 100%; margin-bottom: 10px;">Review Last Game
                     Words</button>
+                <button id="main-menu-reaction-btn" class="neon-btn secondary hidden" style="width: 100%; background-color: #2196F3;">Review Reaction Video</button>
             </div>
         </div>
 
@@ -241,6 +242,11 @@
             <div class="setting-group checkbox-group">
                 <input type="checkbox" id="priority-toggle">
                 <label for="priority-toggle">Enable Priority Words</label>
+            </div>
+
+            <div class="setting-group checkbox-group">
+                <input type="checkbox" id="record-reactions-toggle">
+                <label for="record-reactions-toggle">Enable Reaction Recording (Front Camera)</label>
             </div>
 
             <div class="setting-group checkbox-group">
@@ -389,8 +395,15 @@
             <h2 id="final-player-name" class="hidden" style="font-size: 1.5rem; margin-bottom: 5px; opacity: 0.9;"></h2>
             <h2 id="final-score">Score: 0</h2>
             <p id="final-stats" class="stats-text">0 correct out of 0 (0%)</p>
+            
+            <div id="reaction-video-container" class="hidden" style="margin-bottom: 20px; width: 100%; display: flex; flex-direction: column; align-items: center;">
+                 <h3 style="margin-bottom: 10px; font-size: 1.1rem;">Your Reaction</h3>
+                 <video id="reaction-video-player" controls playsinline style="width: 100%; max-width: 400px; max-height: 300px; background-color: #000; border-radius: 10px; border: 2px solid rgba(255,255,255,0.2); margin-bottom: 15px;"></video>
+            </div>
+
             <ul id="results-list"></ul>
             <div class="setup-actions">
+                <button id="download-reaction-btn" class="neon-btn hidden" style="font-size: 1rem; margin-bottom: 10px; background-color: #2196F3;">Download Reaction Video</button>
                 <button id="review-words-btn" class="neon-btn secondary" style="font-size: 1rem;">Review Words</button>
                 <button id="restart-remove-btn" class="neon-btn secondary" style="font-size: 1rem;">Play Again (Remove
                     Used)</button>
