@@ -461,6 +461,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedCategories.clear();
                 document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
                 categoriesModal.classList.remove('hidden');
+                // Smooth scroll to the categories modal
+                setTimeout(() => {
+                    categoriesModal.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 10);
             }
         });
     }
@@ -481,6 +485,10 @@ document.addEventListener('DOMContentLoaded', () => {
             submitGenListBtn.disabled = false;
             submitGenListBtn.style.opacity = '1';
             genListModal.classList.remove('hidden');
+            // Smooth scroll to the custom list modal
+            setTimeout(() => {
+                genListModal.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 10);
         });
     }
 
@@ -642,6 +650,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (instructionsBtn) {
         instructionsBtn.addEventListener('click', () => {
             instructionsModal.classList.remove('hidden');
+            // Smooth scroll to the instructions modal
+            setTimeout(() => {
+                instructionsModal.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 10);
         });
     }
 

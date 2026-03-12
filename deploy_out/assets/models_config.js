@@ -31,6 +31,10 @@ export const models = [
         path: '/assets/models/Guildford-Plaza-Flipped.glb'
     },
     {
+        name: 'Guildford Plaza V10',
+        path: '/assets/models/Guildford-Plaza-V10.glb'
+    },
+    {
         name: 'Bedroom',
         path: '/assets/models/Bedroom.glb'
     }
