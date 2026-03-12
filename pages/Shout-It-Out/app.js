@@ -97,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadReactionBtn = document.getElementById('download-reaction-btn');
     const reactionVideoContainer = document.getElementById('reaction-video-container');
     const reactionVideoPlayer = document.getElementById('reaction-video-player');
+    const liveReactionPreview = document.getElementById('live-reaction-preview');
 
     // --- Game State Variables ---
     let words = [];
@@ -309,8 +310,8 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * Dynamically adjust font size to fit container width
      * @param {HTMLElement} el The element containing text
-     * @param {number} maxFontSize Max font size in rem
-     * @param {number} minFontSize Min font size in rem
+     * @param {number} maxFontSize Rem
+     * @param {number} minFontSize Px
      */
     function fitText(el, maxFontSizeRem = 10, minFontSizePx = 24) {
         if (!el) return;
@@ -978,9 +979,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const mimeType = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4';
             reactionVideoExt = mimeType.includes('webm') ? 'webm' : 'mp4';
             
-            reactionVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+            try {
+                reactionVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+            } catch (err) {
+                console.warn("Audio/Video access failed, retrying without audio...", err);
+                reactionVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            }
+            
             reactionMediaRecorder = new MediaRecorder(reactionVideoStream, { mimeType: mimeType });
             reactionRecordedChunks = [];
+
+            if (liveReactionPreview) {
+                liveReactionPreview.srcObject = reactionVideoStream;
+                liveReactionPreview.classList.remove('hidden');
+            }
 
             reactionMediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -1013,6 +1025,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function stopRecordingReactions() {
+        if (liveReactionPreview) {
+             liveReactionPreview.classList.add('hidden');
+             liveReactionPreview.srcObject = null;
+        }
+
         if (reactionMediaRecorder && reactionMediaRecorder.state !== 'inactive') {
             reactionMediaRecorder.stop();
             console.log("🔴 [DEBUG] Reaction recording stopped.");
@@ -1438,6 +1455,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         stopSound('all');
         playSound('end');
+        
+        stopRecordingReactions();
 
         // Capture word on screen if game timed out
         if (timer <= 0 && currentWordIndex < words.length) {
