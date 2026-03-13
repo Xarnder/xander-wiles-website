@@ -99,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reactionVideoContainer = document.getElementById('reaction-video-container');
     const reactionVideoPlayer = document.getElementById('reaction-video-player');
     const liveReactionPreview = document.getElementById('live-reaction-preview');
+    const hideListToggle = document.getElementById('hide-list-toggle');
 
     // --- Game State Variables ---
     let words = [];
@@ -148,6 +149,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingMultiPersonEnabled = false;
     let settingPhrasesPerPlayer = 3;
     let settingPassTime = 5;
+    let isListHidden = localStorage.getItem('SHOUT_IT_OUT_HIDE_LIST') === 'true';
+
+    // --- Original Word Storage (for when hidden) ---
+    let originalNormalWords = localStorage.getItem('SHOUT_IT_OUT_NORMAL_WORDS') || '';
+    let originalPriorityWords = localStorage.getItem('SHOUT_IT_OUT_PRIORITY_WORDS') || '';
+    let originalGenWords = '';
 
     // --- Audio System ---
     const correctAudio = new Audio('Correct.mp3');
@@ -300,13 +307,81 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedCategories = new Set();
 
     function updateWordCount() {
-        const wordCount = wordListInput.value.split('\n').filter(w => w.trim().length > 0).length;
+        // When hidden, we count from the original storage variables
+        const currentNormText = isListHidden ? originalNormalWords : wordListInput.value;
+        const wordCount = currentNormText.split('\n').filter(w => w.trim().length > 0).length;
         wordCounterEl.innerText = `${wordCount} Words Total`;
 
         if (priorityWordListInput && priorityWordCounterEl) {
-            const prioCount = priorityWordListInput.value.split('\n').filter(w => w.trim().length > 0).length;
+            const currentPrioText = isListHidden ? originalPriorityWords : priorityWordListInput.value;
+            const prioCount = currentPrioText.split('\n').filter(w => w.trim().length > 0).length;
             priorityWordCounterEl.innerText = `${prioCount} Priority Words`;
         }
+    }
+
+    function maskText(text) {
+        if (!text) return "";
+        return text.split('\n').map(line => line.trim().length > 0 ? "____" : "").join('\n');
+    }
+
+    function refreshMaskedState() {
+        if (isListHidden) {
+            wordListInput.value = maskText(originalNormalWords);
+            wordListInput.readOnly = true;
+            wordListInput.style.opacity = '0.6';
+            wordListInput.style.cursor = 'not-allowed';
+
+            if (priorityWordListInput) {
+                priorityWordListInput.value = maskText(originalPriorityWords);
+                priorityWordListInput.readOnly = true;
+                priorityWordListInput.style.opacity = '0.6';
+                priorityWordListInput.style.cursor = 'not-allowed';
+            }
+
+            if (genResultsTextarea) {
+                genResultsTextarea.value = maskText(originalGenWords);
+                genResultsTextarea.readOnly = true;
+                genResultsTextarea.style.opacity = '0.6';
+                genResultsTextarea.style.cursor = 'not-allowed';
+            }
+        } else {
+            wordListInput.value = originalNormalWords;
+            wordListInput.readOnly = false;
+            wordListInput.style.opacity = '1';
+            wordListInput.style.cursor = 'auto';
+
+            if (priorityWordListInput) {
+                priorityWordListInput.value = originalPriorityWords;
+                priorityWordListInput.readOnly = false;
+                priorityWordListInput.style.opacity = '1';
+                priorityWordListInput.style.cursor = 'auto';
+            }
+
+            if (genResultsTextarea) {
+                genResultsTextarea.value = originalGenWords;
+                genResultsTextarea.readOnly = false;
+                genResultsTextarea.style.opacity = '1';
+                genResultsTextarea.style.cursor = 'auto';
+            }
+        }
+        updateWordCount();
+    }
+
+    if (hideListToggle) {
+        hideListToggle.checked = isListHidden;
+        hideListToggle.addEventListener('change', (e) => {
+            isListHidden = e.target.checked;
+            localStorage.setItem('SHOUT_IT_OUT_HIDE_LIST', isListHidden);
+            
+            // If hiding, capture current text as the latest original state
+            if (isListHidden) {
+                originalNormalWords = wordListInput.value;
+                if (priorityWordListInput) originalPriorityWords = priorityWordListInput.value;
+                if (genResultsTextarea) originalGenWords = genResultsTextarea.value;
+            }
+            
+            refreshMaskedState();
+        });
     }
 
     /**
@@ -345,21 +420,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (wordListInput) {
         wordListInput.addEventListener('input', () => {
+            if (!isListHidden) {
+                originalNormalWords = wordListInput.value;
+                localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', originalNormalWords);
+            }
             updateWordCount();
-            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
         });
 
         // Load from local storage or pre-load Historical Figures if empty
-        const savedNormalWords = localStorage.getItem('SHOUT_IT_OUT_NORMAL_WORDS');
-        if (savedNormalWords !== null) {
-            wordListInput.value = savedNormalWords;
+        if (originalNormalWords) {
             updateWordCount();
+            refreshMaskedState();
         } else if (wordListInput.value.trim() === '') {
             const defaultCategory = "📜 Historical Figures";
             if (categoriesData[defaultCategory]) {
-                wordListInput.value = categoriesData[defaultCategory].join('\n');
+                originalNormalWords = categoriesData[defaultCategory].join('\n');
+                localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', originalNormalWords);
                 updateWordCount();
-                localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+                refreshMaskedState();
 
                 // Add to selected UI state so user knows it's active
                 selectedCategories.add(defaultCategory);
@@ -369,14 +447,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (priorityWordListInput) {
         priorityWordListInput.addEventListener('input', () => {
+            if (!isListHidden) {
+                originalPriorityWords = priorityWordListInput.value;
+                localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', originalPriorityWords);
+            }
             updateWordCount();
-            localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
         });
 
-        const savedPriorityWords = localStorage.getItem('SHOUT_IT_OUT_PRIORITY_WORDS');
-        if (savedPriorityWords !== null) {
-            priorityWordListInput.value = savedPriorityWords;
+        if (originalPriorityWords) {
             updateWordCount();
+            refreshMaskedState();
         }
     }
 
@@ -412,7 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const currentText = wordListInput.value.trim();
+            const currentText = originalNormalWords.trim();
             let currentWords = currentText ? currentText.split('\n').map(w => w.trim()).filter(w => w.length > 0) : [];
             let currentWordsLower = new Set(currentWords.map(w => w.toLowerCase()));
 
@@ -425,9 +505,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            wordListInput.value = currentWords.join('\n');
-            updateWordCount();
-            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            originalNormalWords = currentWords.join('\n');
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', originalNormalWords);
+            refreshMaskedState();
             categoriesModal.classList.add('hidden');
         });
     }
@@ -439,7 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const currentText = wordListInput.value.trim();
+            const currentText = originalNormalWords.trim();
             if (!currentText) {
                 categoriesModal.classList.add('hidden');
                 return;
@@ -452,18 +532,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             currentWords = currentWords.filter(w => !wordsToRemove.has(w.toLowerCase()));
-            wordListInput.value = currentWords.join('\n');
-            updateWordCount();
-            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            originalNormalWords = currentWords.join('\n');
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', originalNormalWords);
+            refreshMaskedState();
             categoriesModal.classList.add('hidden');
         });
     }
 
     if (clearListBtn) {
         clearListBtn.addEventListener('click', () => {
-            wordListInput.value = '';
-            updateWordCount();
+            originalNormalWords = '';
             localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', '');
+            refreshMaskedState();
             selectedCategories.clear();
             document.querySelectorAll('.category-btn').forEach(btn => btn.classList.remove('category-selected'));
             categoriesModal.classList.add('hidden');
@@ -541,13 +621,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
                 
                 if (data.words && data.words.length > 0) {
-                    const newText = data.words.join('\n');
+                    originalGenWords = data.words.join('\n');
                     
                     // Show results state
-                    genResultsTextarea.value = newText;
                     genLoadingState.classList.add('hidden');
                     genActionsState.classList.add('hidden');
                     genResultsState.classList.remove('hidden');
+                    refreshMaskedState();
                 } else {
                      alert("Could not generate words. Please try again.");
                      genLoadingState.classList.add('hidden');
@@ -568,32 +648,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (genAddBtn) {
         genAddBtn.addEventListener('click', () => {
-            const existingText = wordListInput.value.trim();
-            const newText = genResultsTextarea.value.trim();
+            const existingText = originalNormalWords.trim();
+            const newText = isListHidden ? originalGenWords.trim() : genResultsTextarea.value.trim();
             if (!newText) return;
 
             if (existingText) {
-                wordListInput.value = existingText + '\n' + newText;
+                originalNormalWords = existingText + '\n' + newText;
             } else {
-                wordListInput.value = newText;
+                originalNormalWords = newText;
             }
             
-            updateWordCount();
-            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', originalNormalWords);
+            refreshMaskedState();
             genListModal.classList.add('hidden');
         });
     }
 
     if (genReplaceBtn) {
         genReplaceBtn.addEventListener('click', () => {
-            const newText = genResultsTextarea.value.trim();
+            const newText = isListHidden ? originalGenWords.trim() : genResultsTextarea.value.trim();
             if (!newText) return;
 
-            wordListInput.value = newText;
+            originalNormalWords = newText;
             
-            updateWordCount();
-            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', originalNormalWords);
+            refreshMaskedState();
             genListModal.classList.add('hidden');
+        });
+    }
+
+    if (genResultsTextarea) {
+        genResultsTextarea.addEventListener('input', () => {
+            if (!isListHidden) {
+                originalGenWords = genResultsTextarea.value;
+            }
         });
     }
 
@@ -899,8 +987,8 @@ document.addEventListener('DOMContentLoaded', () => {
         noSleep.enable();
 
         // Parse user input
-        const rawText = wordListInput.value.trim();
-        const rawPrioText = (priorityWordListInput && settingPriorityEnabled) ? priorityWordListInput.value.trim() : '';
+        const rawText = originalNormalWords.trim();
+        const rawPrioText = (originalPriorityWords && settingPriorityEnabled) ? originalPriorityWords.trim() : '';
         currentPlayerName = playerNameInput ? playerNameInput.value.trim() : '';
 
         if (!rawText && !rawPrioText) {
@@ -1643,28 +1731,26 @@ document.addEventListener('DOMContentLoaded', () => {
             if (reactionVideoContainer) reactionVideoContainer.classList.add('hidden');
             if (reactionVideoPlayer) reactionVideoPlayer.src = '';
 
-            // Remove played words from the textareas
+            // Remove played words from the original storage variables
             const playedNormalText = words.slice(0, currentWordIndex).filter(w => !w.isPriority).map(w => w.text.toLowerCase());
             const playedPriorityText = words.slice(0, currentWordIndex).filter(w => w.isPriority).map(w => w.text.toLowerCase());
 
-            const rawText = wordListInput.value;
-            const originalWords = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
-            const remainingWords = originalWords.filter(w => !playedNormalText.includes(w.toLowerCase()));
-            wordListInput.value = remainingWords.join('\n');
+            const normalWords = originalNormalWords.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+            const remainingWords = normalWords.filter(w => !playedNormalText.includes(w.toLowerCase()));
+            originalNormalWords = remainingWords.join('\n');
 
             if (priorityWordListInput) {
-                const rawPrioText = priorityWordListInput.value;
-                const originalPrioWords = rawPrioText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
-                const remainingPrioWords = originalPrioWords.filter(w => !playedPriorityText.includes(w.toLowerCase()));
-                priorityWordListInput.value = remainingPrioWords.join('\n');
+                const priorityWords = originalPriorityWords.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+                const remainingPrioWords = priorityWords.filter(w => !playedPriorityText.includes(w.toLowerCase()));
+                originalPriorityWords = remainingPrioWords.join('\n');
             }
 
-            updateWordCount();
+            refreshMaskedState();
 
             // Save to cache locally
-            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', originalNormalWords);
             if (priorityWordListInput) {
-                localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
+                localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', originalPriorityWords);
             }
             showToast("Words list has been saved to cache locally.");
         });
@@ -1760,27 +1846,25 @@ document.addEventListener('DOMContentLoaded', () => {
         setupScreen.classList.remove('hidden');
 
         if (removeUsed) {
-            // Remove played words from the textareas
+            // Remove played words from the original storage variables
             const playedNormalText = words.slice(0, currentWordIndex).filter(w => !w.isPriority).map(w => w.text.toLowerCase());
             const playedPriorityText = words.slice(0, currentWordIndex).filter(w => w.isPriority).map(w => w.text.toLowerCase());
 
-            const rawText = wordListInput.value;
-            const originalWords = rawText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
-            const remainingWords = originalWords.filter(w => !playedNormalText.includes(w.toLowerCase()));
-            wordListInput.value = remainingWords.join('\n');
+            const normalWords = originalNormalWords.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+            const remainingWords = normalWords.filter(w => !playedNormalText.includes(w.toLowerCase()));
+            originalNormalWords = remainingWords.join('\n');
 
             if (priorityWordListInput) {
-                const rawPrioText = priorityWordListInput.value;
-                const originalPrioWords = rawPrioText.split('\n').map(w => w.trim()).filter(w => w.length > 0);
-                const remainingPrioWords = originalPrioWords.filter(w => !playedPriorityText.includes(w.toLowerCase()));
-                priorityWordListInput.value = remainingPrioWords.join('\n');
+                const priorityWords = originalPriorityWords.split('\n').map(w => w.trim()).filter(w => w.length > 0);
+                const remainingPrioWords = priorityWords.filter(w => !playedPriorityText.includes(w.toLowerCase()));
+                originalPriorityWords = remainingPrioWords.join('\n');
             }
 
-            updateWordCount();
+            refreshMaskedState();
 
-            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', wordListInput.value);
+            localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', originalNormalWords);
             if (priorityWordListInput) {
-                localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', priorityWordListInput.value);
+                localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', originalPriorityWords);
             }
             showToast("Words list has been updated and saved to cache.");
         }

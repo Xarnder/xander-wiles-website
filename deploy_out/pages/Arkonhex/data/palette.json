@@ -39,6 +39,10 @@
         "color": "#ffffff",
         "opacity": 0.3
     },
+    "white_glass": {
+        "color": "#ffffff",
+        "opacity": 0.05
+    },
     "black": {
         "color": "#161021",
         "opacity": 0.8

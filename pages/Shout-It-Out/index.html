@@ -68,11 +68,56 @@
         <div id="setup-screen" class="glass-card">
             <h1>Shout it Out!</h1>
             <button id="start-btn" class="neon-btn start-top-btn">Start Game</button>
+
+            <!-- 3x3 Category Grid -->
+            <div class="category-image-grid">
+                <button class="grid-cat-btn" data-category="🐉 Fictional Characters">
+                    <img src="cat_fictional.png" alt="Fictional">
+                    <span>Fictional</span>
+                </button>
+                <button class="grid-cat-btn" data-category="🎬 Actors & Actresses">
+                    <img src="cat_actors.png" alt="Actors">
+                    <span>Actors</span>
+                </button>
+                <button class="grid-cat-btn" data-category="🎤 Musicians & Bands">
+                    <img src="cat_musicians.png" alt="Musicians">
+                    <span>Music</span>
+                </button>
+                <button class="grid-cat-btn" data-category="🚀 Space & Astronomy">
+                    <img src="cat_space.png" alt="Space">
+                    <span>Space</span>
+                </button>
+                <button class="grid-cat-btn" data-category="🌍 Countries">
+                    <img src="cat_countries.png" alt="Countries">
+                    <span>Countries</span>
+                </button>
+                <button class="grid-cat-btn" data-category="🦄 Mythical Creatures">
+                    <img src="cat_mythical.png" alt="Mythical">
+                    <span>Mythical</span>
+                </button>
+                <button class="grid-cat-btn" data-category="📜 Historical Figures">
+                    <img src="cat_historical.png" alt="History">
+                    <span>History</span>
+                </button>
+                <button class="grid-cat-btn" data-category="🏅 Actual Sports">
+                    <img src="cat_sports.png" alt="Sports">
+                    <span>Sports</span>
+                </button>
+                <button class="grid-cat-btn" data-category="📦 Common Objects">
+                    <img src="cat_objects.png" alt="Objects">
+                    <span>Objects</span>
+                </button>
+            </div>
             <p>Paste your list of words below (one per line):</p>
             <textarea id="word-list" placeholder="Apple&#10;Banana&#10;Eiffel Tower&#10;Spider-Man"></textarea>
             <div id="word-counter"
                 style="text-align: right; margin-top: -15px; margin-bottom: 20px; opacity: 0.8; font-size: 0.95rem;">0
                 words</div>
+
+            <div class="setting-group checkbox-group" style="margin-top: -10px; margin-bottom: 20px; opacity: 0.9;">
+                <input type="checkbox" id="hide-list-toggle">
+                <label for="hide-list-toggle" style="font-weight: 400; font-size: 1rem; margin-bottom: 0;">Hide Lists</label>
+            </div>
             <div id="priority-container" class="hidden">
                 <p style="margin-top: 10px;">Paste your <strong style="color: #ed87ff;">Priority List</strong> below
                     (optional):</p>

@@ -1052,6 +1052,7 @@ export class UIManager {
      * Shows a sliding toast notification for game controls
      */
     showControlsToast() {
+        if (this.engine.inputManager && this.engine.inputManager.isTouchDevice) return;
         if (this.controlsToastShown) return; // Only show once per session
         this.controlsToastShown = true;
 

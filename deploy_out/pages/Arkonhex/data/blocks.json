@@ -75,8 +75,8 @@
     {
         "id": 9,
         "name": "glass",
-        "topColor": "white",
-        "baseColor": "white",
+        "topColor": "white_glass",
+        "baseColor": "white_glass",
         "hardness": 0.5,
         "transparent": true,
         "placeSound": "glass_place",

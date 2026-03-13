@@ -304,6 +304,72 @@ textarea:focus {
     100% { transform: rotate(360deg); }
 }
 
+/* Category Image Grid (3x3) */
+.category-image-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 20px 0 30px 0;
+    width: 100%;
+}
+
+.grid-cat-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 16px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    color: white;
+    text-transform: capitalize;
+    overflow: hidden;
+}
+
+.grid-cat-btn img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: contain;
+    border-radius: 8px;
+    transition: transform 0.3s ease;
+}
+
+.grid-cat-btn span {
+    font-size: 0.85rem;
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.grid-cat-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-3px);
+    box-shadow: 0 4px 15px rgba(0, 210, 255, 0.2);
+    border-color: rgba(0, 210, 255, 0.4);
+}
+
+.grid-cat-btn:hover img {
+    transform: scale(1.1);
+}
+
+.grid-cat-btn:active {
+    transform: scale(0.95);
+}
+
+@media (max-width: 480px) {
+    .category-image-grid {
+        gap: 8px;
+    }
+    .grid-cat-btn {
+        padding: 5px;
+    }
+    .grid-cat-btn span {
+        font-size: 0.75rem;
+    }
+}
+
 /* Custom Alert, Instructions, & Review Modal */
 #alert-modal,
 #instructions-modal {

@@ -635,6 +635,23 @@ body {
 }
 
 /* ─── Touch Controls ─── */
+.touch-device {
+    touch-action: none; /* Prevent iOS Safari from intercepting drags for scrolling */
+}
+
+.touch-device #dev-info {
+    font-size: 8px;
+    top: 5px;
+}
+
+.touch-device #debug-overlay {
+    font-size: 7px;
+    padding: 3px;
+    top: 20px;
+    width: 45%;
+    overflow-wrap: break-word;
+}
+
 .touch-device #touch-controls {
     display: block !important;
 }
@@ -735,9 +752,54 @@ body {
 /* Adjust hotbar on touch so it doesn't overlap action buttons */
 .touch-device .hotbar {
     bottom: unset;
-    top: 20px;
+    top: 5px;
+    gap: 4px;
+    padding: 6px;
+    /* Scale down the entire hotbar layout cleanly */
+    transform: translateX(-50%) scale(0.65);
+    transform-origin: top center;
+    /* Ensure it receives touches ABOVE the look-zone */
+    z-index: 100;
+    pointer-events: auto;
 }
 .touch-device #height-bar-container {
     bottom: unset;
-    top: 104px;
+    top: 60px;
+    transform: translateX(-50%) scale(0.65);
+    transform-origin: top center;
+}
+
+/* ─── E-Menu / Pause Screen Mobile Landscape Optimizations ─── */
+@media (max-height: 500px) and (orientation: landscape) {
+    .touch-device .overlay-screen h1 {
+        font-size: 2.2rem;
+        margin-bottom: 0px;
+        margin-top: 5px;
+    }
+    
+    .touch-device .settings-panel {
+        width: 95%;
+        max-height: 85vh;
+        padding: 15px 20px;
+        margin-top: 5px;
+    }
+
+    .touch-device .pause-tabs {
+        margin-top: 5px !important;
+    }
+
+    .touch-device .pause-tab {
+        padding: 6px 12px;
+        font-size: 0.9em;
+    }
+
+    .touch-device .setting-row {
+        gap: 5px;
+        margin-top: 10px !important;
+    }
+
+    .touch-device .btn-pill {
+        padding: 6px 16px;
+        font-size: 0.85rem;
+    }
 }

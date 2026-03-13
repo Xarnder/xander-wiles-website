@@ -378,6 +378,10 @@ export class Engine {
                     }
                 }
 
+                if (this.inputManager.isTouchDevice) {
+                    this.inputManager.lockPointer();
+                }
+
                 // Auto-save on page unload
                 this._beforeUnloadHandler = () => this._saveAndExit();
                 window.addEventListener('beforeunload', this._beforeUnloadHandler);
