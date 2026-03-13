@@ -1095,6 +1095,12 @@ document.addEventListener('DOMContentLoaded', () => {
         score = 0;
         timer = settingGameTime;
         isPlaying = true;
+        // Give a 1-second grace period for the user to get their phone into position
+        tiltCooldown = true;
+        setTimeout(() => tiltCooldown = false, 1000);
+        // Force them to start in a neutral position before registering a tilt
+        waitingForNeutral = true;
+        
         answerTimes = [];
         correctWordsArr = [];
         skippedWordsArr = [];
