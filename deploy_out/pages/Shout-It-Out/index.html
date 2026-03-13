@@ -234,9 +234,18 @@
                 <label for="show-goback-toggle">Show 'Go Back' Button</label>
             </div>
 
+            <div class="setting-group">
+                <label for="show-pastword-select">Previous Word Indicator:</label>
+                <select id="show-pastword-select" class="glass-input">
+                    <option value="always">Always Show</option>
+                    <option value="skip_only" selected>Show on Skip Only</option>
+                    <option value="off">Off</option>
+                </select>
+            </div>
+
             <div class="setting-group checkbox-group">
-                <input type="checkbox" id="show-pastword-toggle" checked>
-                <label for="show-pastword-toggle">Show Previous Word Indicator</label>
+                <input type="checkbox" id="show-pastword-label-toggle" checked>
+                <label for="show-pastword-label-toggle">Show 'Last Word = ' Label</label>
             </div>
 
             <div class="setting-group checkbox-group">

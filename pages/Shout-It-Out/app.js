@@ -41,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const soundToggle = document.getElementById('sound-toggle');
     const showButtonsToggle = document.getElementById('show-buttons-toggle');
     const showGoBackToggle = document.getElementById('show-goback-toggle');
-    const showPastWordToggle = document.getElementById('show-pastword-toggle');
+    const showPastWordSelect = document.getElementById('show-pastword-select');
+    const showPastWordLabelToggle = document.getElementById('show-pastword-label-toggle');
     const alertModal = document.getElementById('alert-modal');
     const alertCloseBtn = document.getElementById('alert-close-btn');
     const alertMessage = document.getElementById('alert-message');
@@ -141,7 +142,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingVibrationEnabled = true;
     let settingShowButtons = true;
     let settingShowGoBack = true;
-    let settingShowPastWord = true;
+    let settingShowPastWord = 'skip_only';
+    let settingShowPastWordLabel = true;
     let settingPriorityEnabled = false;
     let settingMultiPersonEnabled = false;
     let settingPhrasesPerPlayer = 3;
@@ -604,7 +606,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (vibrationToggle) vibrationToggle.checked = settingVibrationEnabled;
             if (showButtonsToggle) showButtonsToggle.checked = settingShowButtons;
             if (showGoBackToggle) showGoBackToggle.checked = settingShowGoBack;
-            if (showPastWordToggle) showPastWordToggle.checked = settingShowPastWord;
+            if (showPastWordSelect) showPastWordSelect.value = settingShowPastWord;
+            if (showPastWordLabelToggle) showPastWordLabelToggle.checked = settingShowPastWordLabel;
             if (priorityToggle) priorityToggle.checked = settingPriorityEnabled;
             if (recordReactionsToggle) recordReactionsToggle.checked = settingRecordReactionsEnabled;
             if (multiPersonToggle) {
@@ -859,7 +862,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (showButtonsToggle) settingShowButtons = showButtonsToggle.checked;
             if (showGoBackToggle) settingShowGoBack = showGoBackToggle.checked;
-            if (showPastWordToggle) settingShowPastWord = showPastWordToggle.checked;
+            if (showPastWordSelect) settingShowPastWord = showPastWordSelect.value;
+            if (showPastWordLabelToggle) settingShowPastWordLabel = showPastWordLabelToggle.checked;
 
             if (priorityToggle) {
                 settingPriorityEnabled = priorityToggle.checked;
@@ -1180,8 +1184,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Setup the past word text (if we have one and setting is enabled)
-        if (settingShowPastWord && currentWordIndex > 0 && pastWordEl) {
-            pastWordEl.innerText = words[currentWordIndex - 1].text;
+        let shouldShowPastWord = false;
+        if (settingShowPastWord === 'always') {
+            shouldShowPastWord = true;
+        } else if (settingShowPastWord === 'skip_only' && currentWordIndex > 0) {
+            const prevWord = words[currentWordIndex - 1];
+            if (skippedWordsArr.length > 0 && skippedWordsArr[skippedWordsArr.length - 1] === prevWord) {
+                shouldShowPastWord = true;
+            }
+        }
+
+        if (shouldShowPastWord && currentWordIndex > 0 && pastWordEl) {
+            let labelText = settingShowPastWordLabel ? "Last Word = " : "";
+            pastWordEl.innerText = labelText + words[currentWordIndex - 1].text;
             if (words[currentWordIndex - 1].isPriority) {
                 pastWordEl.classList.add('priority-word');
             } else {
@@ -1302,7 +1317,16 @@ document.addEventListener('DOMContentLoaded', () => {
         phrasesShownInCurrentTurn++;
 
         // Trigger transition out animation
-        if (settingShowPastWord && currentWordEl && pastWordEl) {
+        let transitionUp = false;
+        if (settingShowPastWord === 'always') {
+            transitionUp = true;
+        } else if (settingShowPastWord === 'skip_only') {
+            if (skippedWordsArr.length > 0 && skippedWordsArr[skippedWordsArr.length - 1] === words[currentWordIndex]) {
+                transitionUp = true;
+            }
+        }
+
+        if (transitionUp && currentWordEl && pastWordEl) {
             currentWordEl.classList.add('transition-up');
         }
 
