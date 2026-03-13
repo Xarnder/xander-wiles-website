@@ -326,42 +326,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function refreshMaskedState() {
         if (isListHidden) {
-            wordListInput.value = maskText(originalNormalWords);
-            wordListInput.readOnly = true;
-            wordListInput.style.opacity = '0.6';
-            wordListInput.style.cursor = 'not-allowed';
-
-            if (priorityWordListInput) {
-                priorityWordListInput.value = maskText(originalPriorityWords);
-                priorityWordListInput.readOnly = true;
-                priorityWordListInput.style.opacity = '0.6';
-                priorityWordListInput.style.cursor = 'not-allowed';
-            }
-
-            if (genResultsTextarea) {
-                genResultsTextarea.value = maskText(originalGenWords);
-                genResultsTextarea.readOnly = true;
-                genResultsTextarea.style.opacity = '0.6';
-                genResultsTextarea.style.cursor = 'not-allowed';
-            }
-        } else {
             wordListInput.value = originalNormalWords;
-            wordListInput.readOnly = false;
-            wordListInput.style.opacity = '1';
-            wordListInput.style.cursor = 'auto';
+            wordListInput.classList.add('blurred-input');
+            wordListInput.setAttribute('tabindex', '-1');
 
             if (priorityWordListInput) {
                 priorityWordListInput.value = originalPriorityWords;
-                priorityWordListInput.readOnly = false;
-                priorityWordListInput.style.opacity = '1';
-                priorityWordListInput.style.cursor = 'auto';
+                priorityWordListInput.classList.add('blurred-input');
+                priorityWordListInput.setAttribute('tabindex', '-1');
             }
 
             if (genResultsTextarea) {
                 genResultsTextarea.value = originalGenWords;
-                genResultsTextarea.readOnly = false;
-                genResultsTextarea.style.opacity = '1';
-                genResultsTextarea.style.cursor = 'auto';
+                genResultsTextarea.classList.add('blurred-input');
+                genResultsTextarea.setAttribute('tabindex', '-1');
+            }
+        } else {
+            wordListInput.value = originalNormalWords;
+            wordListInput.classList.remove('blurred-input');
+            wordListInput.removeAttribute('tabindex');
+
+            if (priorityWordListInput) {
+                priorityWordListInput.value = originalPriorityWords;
+                priorityWordListInput.classList.remove('blurred-input');
+                priorityWordListInput.removeAttribute('tabindex');
+            }
+
+            if (genResultsTextarea) {
+                genResultsTextarea.value = originalGenWords;
+                genResultsTextarea.classList.remove('blurred-input');
+                genResultsTextarea.removeAttribute('tabindex');
             }
         }
         updateWordCount();
