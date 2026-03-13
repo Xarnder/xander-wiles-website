@@ -100,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reactionVideoPlayer = document.getElementById('reaction-video-player');
     const liveReactionPreview = document.getElementById('live-reaction-preview');
     const hideListToggle = document.getElementById('hide-list-toggle');
+    const swapTiltToggle = document.getElementById('swap-tilt-toggle');
 
     // --- Game State Variables ---
     let words = [];
@@ -150,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingPhrasesPerPlayer = 3;
     let settingPassTime = 5;
     let isListHidden = localStorage.getItem('SHOUT_IT_OUT_HIDE_LIST') === 'true';
+    let settingSwapTilt = localStorage.getItem('SHOUT_IT_OUT_SWAP_TILT') === 'true';
 
     // --- Original Word Storage (for when hidden) ---
     let originalNormalWords = localStorage.getItem('SHOUT_IT_OUT_NORMAL_WORDS') || '';
@@ -731,6 +733,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showPastWordSelect) showPastWordSelect.value = settingShowPastWord;
             if (showPastWordLabelToggle) showPastWordLabelToggle.checked = settingShowPastWordLabel;
             if (priorityToggle) priorityToggle.checked = settingPriorityEnabled;
+            if (swapTiltToggle) swapTiltToggle.checked = settingSwapTilt;
             if (recordReactionsToggle) recordReactionsToggle.checked = settingRecordReactionsEnabled;
             if (multiPersonToggle) {
                 multiPersonToggle.checked = settingMultiPersonEnabled;
@@ -1000,6 +1003,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 settingRecordReactionsEnabled = recordReactionsToggle.checked;
             }
 
+            if (swapTiltToggle) {
+                settingSwapTilt = swapTiltToggle.checked;
+                localStorage.setItem('SHOUT_IT_OUT_SWAP_TILT', settingSwapTilt);
+                updateInstructionText();
+            }
+
             if (multiPersonToggle) settingMultiPersonEnabled = multiPersonToggle.checked;
             if (phrasesPerPlayerInput) settingPhrasesPerPlayer = parseInt(phrasesPerPlayerInput.value) || 3;
             if (passTimeInput) settingPassTime = parseInt(passTimeInput.value) || 5;
@@ -1167,6 +1176,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function updateInstructionText() {
+        const correctDir = settingSwapTilt ? "DOWN" : "UP";
+        const skipDir = settingSwapTilt ? "UP" : "DOWN";
+
+        if (instructionTextEl) {
+            instructionTextEl.innerHTML = `Tilt ${correctDir} = Correct | Tilt ${skipDir} = Skip`;
+        }
+
+        const instrCorrectEl = document.getElementById('instr-correct');
+        const instrSkipEl = document.getElementById('instr-skip');
+
+        if (instrCorrectEl) {
+            instrCorrectEl.innerHTML = `<strong>4.</strong> Tilt your phone <strong>${correctDir}</strong> to mark it <strong>Correct</strong>.`;
+        }
+        if (instrSkipEl) {
+            instrSkipEl.innerHTML = `<strong>5.</strong> Tilt your phone <strong>${skipDir}</strong> to <strong>Skip</strong>.`;
+        }
+    }
+
     if (downloadReactionBtn) {
         downloadReactionBtn.addEventListener('click', async () => {
             if (reactionVideoBlob) {
@@ -1239,6 +1267,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Initialize Timer Display
         updateTimerDisplay();
+        updateInstructionText();
 
         // Switch UI Screens
         setupScreen.classList.add('hidden');
@@ -1550,17 +1579,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (isTiltedUp) {
-            console.log("📡 [DEBUG] Sensor Threshold Met: TILTED UP - Correct");
+            console.log(`📡 [DEBUG] Sensor Threshold Met: TILTED UP - ${settingSwapTilt ? 'Skip' : 'Correct'}`);
             hasTiltedUp = true;
             waitingForNeutral = true;
             updateInstructions();
-            markCorrect();
+            if (settingSwapTilt) markSkip();
+            else markCorrect();
         } else if (isTiltedDown) {
-            console.log("📡 [DEBUG] Sensor Threshold Met: TILTED DOWN - Skip");
+            console.log(`📡 [DEBUG] Sensor Threshold Met: TILTED DOWN - ${settingSwapTilt ? 'Correct' : 'Skip'}`);
             hasTiltedDown = true;
             waitingForNeutral = true;
             updateInstructions();
-            markSkip();
+            if (settingSwapTilt) markCorrect();
+            else markSkip();
         }
     }
 
