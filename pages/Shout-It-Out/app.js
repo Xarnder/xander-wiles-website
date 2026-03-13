@@ -397,6 +397,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.grid-cat-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const category = btn.getAttribute('data-category');
+            if (category === 'Custom') {
+                if (genCustomListBtn) genCustomListBtn.click();
+                return;
+            }
             if (category) {
                 launchCategoryGame(category);
             }
@@ -1272,6 +1276,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Switch UI Screens
         setupScreen.classList.add('hidden');
         endScreen.classList.add('hidden');
+        if (categoriesModal) categoriesModal.classList.add('hidden');
+        if (genListModal) genListModal.classList.add('hidden');
         if (mainNavPlaceholder) mainNavPlaceholder.classList.add('hidden');
         playScreenWrapper.classList.remove('hidden');
         isPaused = false;
