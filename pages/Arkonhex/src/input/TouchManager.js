@@ -15,6 +15,10 @@ export class TouchManager {
         this.lastLookX = 0;
         this.lastLookY = 0;
 
+        this.hotbarTouchId = null;
+        this.hotbarStartX = 0;
+        this.lastHotbarSwipeTime = 0;
+
         // Ensure container exists
         this.initDOM();
 
@@ -61,6 +65,14 @@ export class TouchManager {
 
     initEvents() {
         if (!this.container) return;
+
+        this.hotbarContainer = document.querySelector('.hotbar');
+        if (this.hotbarContainer) {
+            this.hotbarContainer.addEventListener('touchstart', (e) => this.handleHotbarStart(e), { passive: false });
+            this.hotbarContainer.addEventListener('touchmove', (e) => this.handleHotbarMove(e), { passive: false });
+            this.hotbarContainer.addEventListener('touchend', (e) => this.handleHotbarEnd(e), { passive: false });
+            this.hotbarContainer.addEventListener('touchcancel', (e) => this.handleHotbarEnd(e), { passive: false });
+        }
 
         // Joystick Logic
         this.joystickZone.addEventListener('touchstart', (e) => this.handleJoystickStart(e), { passive: false });
@@ -136,8 +148,9 @@ export class TouchManager {
         this.joystickTouchId = touch.identifier;
         this.joystickActive = true;
 
-        this.joystickBaseX = touch.clientX;
-        this.joystickBaseY = touch.clientY;
+        const rect = this.joystickZone.getBoundingClientRect();
+        this.joystickBaseX = touch.clientX - rect.left;
+        this.joystickBaseY = touch.clientY - rect.top;
 
         this.joystickBase.style.left = `${this.joystickBaseX}px`;
         this.joystickBase.style.top = `${this.joystickBaseY}px`;
@@ -153,7 +166,8 @@ export class TouchManager {
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
             if (touch.identifier === this.joystickTouchId) {
-                this.updateJoystickKnob(touch.clientX, touch.clientY);
+                const rect = this.joystickZone.getBoundingClientRect();
+                this.updateJoystickKnob(touch.clientX - rect.left, touch.clientY - rect.top);
                 break;
             }
         }
@@ -234,10 +248,49 @@ export class TouchManager {
         }
     }
 
+    handleHotbarStart(e) {
+        if (this.hotbarTouchId !== null) return;
+        const touch = e.changedTouches[0];
+        this.hotbarTouchId = touch.identifier;
+        this.hotbarStartX = touch.clientX;
+    }
+
+    handleHotbarMove(e) {
+        e.preventDefault(); // Prevent page scroll on hotbar swipe
+        if (this.hotbarTouchId === null) return;
+
+        const now = Date.now();
+        if (now - this.lastHotbarSwipeTime < 150) return; // Debounce swipes to prevent rapid spinning
+
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (touch.identifier === this.hotbarTouchId) {
+                const deltaX = touch.clientX - this.hotbarStartX;
+                if (Math.abs(deltaX) > 40) { // Swipe threshold
+                    // Set virtual mouse wheel delta in InputManager
+                    this.inputManager.wheelDeltaY = deltaX > 0 ? 1 : -1;
+                    this.hotbarStartX = touch.clientX; // Reset start so you can keep swiping
+                    this.lastHotbarSwipeTime = now;
+                }
+                break;
+            }
+        }
+    }
+
+    handleHotbarEnd(e) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (touch.identifier === this.hotbarTouchId) {
+                this.hotbarTouchId = null;
+                break;
+            }
+        }
+    }
+
     getMovementVector() {
         return {
             x: this.joystickMoveX,
-            z: this.joystickMoveY
+            y: this.joystickMoveY
         };
     }
 }

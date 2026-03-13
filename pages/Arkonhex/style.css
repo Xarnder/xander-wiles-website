@@ -635,6 +635,23 @@ body {
 }
 
 /* ─── Touch Controls ─── */
+.touch-device {
+    touch-action: none; /* Prevent iOS Safari from intercepting drags for scrolling */
+}
+
+.touch-device #dev-info {
+    font-size: 8px;
+    top: 5px;
+}
+
+.touch-device #debug-overlay {
+    font-size: 7px;
+    padding: 3px;
+    top: 20px;
+    width: 45%;
+    overflow-wrap: break-word;
+}
+
 .touch-device #touch-controls {
     display: block !important;
 }
@@ -735,9 +752,19 @@ body {
 /* Adjust hotbar on touch so it doesn't overlap action buttons */
 .touch-device .hotbar {
     bottom: unset;
-    top: 20px;
+    top: 5px;
+    gap: 4px;
+    padding: 6px;
+    /* Scale down the entire hotbar layout cleanly */
+    transform: translateX(-50%) scale(0.65);
+    transform-origin: top center;
+    /* Ensure it receives touches ABOVE the look-zone */
+    z-index: 100;
+    pointer-events: auto;
 }
 .touch-device #height-bar-container {
     bottom: unset;
-    top: 104px;
+    top: 60px;
+    transform: translateX(-50%) scale(0.65);
+    transform-origin: top center;
 }
