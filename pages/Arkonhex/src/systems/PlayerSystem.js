@@ -154,10 +154,18 @@ export class PlayerSystem {
 
         // Input direction
         let moveDir = new THREE.Vector3(0, 0, 0);
-        if (this.input.isKeyDown('KeyW')) moveDir.add(forward);
-        if (this.input.isKeyDown('KeyS')) moveDir.sub(forward);
-        if (this.input.isKeyDown('KeyA')) moveDir.sub(right);
-        if (this.input.isKeyDown('KeyD')) moveDir.add(right);
+        if (this.engine.touchManager && this.engine.touchManager.joystickActive) {
+            const tMove = this.engine.touchManager.getMovementVector();
+            if (tMove.y < 0) moveDir.add(forward.clone().multiplyScalar(-tMove.y));
+            if (tMove.y > 0) moveDir.sub(forward.clone().multiplyScalar(tMove.y));
+            if (tMove.x < 0) moveDir.sub(right.clone().multiplyScalar(-tMove.x));
+            if (tMove.x > 0) moveDir.add(right.clone().multiplyScalar(tMove.x));
+        } else {
+            if (this.input.isKeyDown('KeyW')) moveDir.add(forward);
+            if (this.input.isKeyDown('KeyS')) moveDir.sub(forward);
+            if (this.input.isKeyDown('KeyA')) moveDir.sub(right);
+            if (this.input.isKeyDown('KeyD')) moveDir.add(right);
+        }
 
         if (moveDir.lengthSq() > 0) moveDir.normalize();
 

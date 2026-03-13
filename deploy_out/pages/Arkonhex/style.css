@@ -633,3 +633,111 @@ body {
     text-shadow: 0 0 10px rgba(0, 230, 118, 0.4);
     transform: scale(1.05);
 }
+
+/* ─── Touch Controls ─── */
+.touch-device #touch-controls {
+    display: block !important;
+}
+
+#touch-controls {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 50; 
+}
+
+#tc-joystick-zone {
+    position: absolute;
+    bottom: 0; left: 0;
+    width: 40vw; height: 50vh;
+    pointer-events: auto;
+}
+
+#tc-joystick-base {
+    position: absolute;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 0.2s;
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
+#tc-joystick-knob {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 50px; height: 50px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    pointer-events: none;
+}
+
+#tc-look-zone {
+    position: absolute;
+    top: 0; right: 0;
+    width: 60vw; height: 100vh;
+    pointer-events: auto;
+}
+
+#tc-actions {
+    position: absolute;
+    bottom: 30px; right: 30px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    pointer-events: auto;
+}
+
+.tc-btn {
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    font-size: 24px;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: auto;
+    transition: background 0.1s, transform 0.1s;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.tc-btn:active, .tc-btn.active {
+    background: rgba(255, 255, 255, 0.4);
+    transform: scale(0.95);
+}
+
+.tc-btn-large {
+    width: 70px; height: 70px;
+    font-size: 32px;
+}
+
+.tc-btn-small {
+    width: 55px; height: 55px;
+    font-size: 24px;
+}
+
+.tc-top-right {
+    position: absolute;
+    top: 20px; right: 20px;
+    pointer-events: auto;
+}
+
+/* Adjust hotbar on touch so it doesn't overlap action buttons */
+.touch-device .hotbar {
+    bottom: unset;
+    top: 20px;
+}
+.touch-device #height-bar-container {
+    bottom: unset;
+    top: 104px;
+}

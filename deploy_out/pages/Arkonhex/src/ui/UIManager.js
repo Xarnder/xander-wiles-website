@@ -665,6 +665,25 @@ export class UIManager {
             const slot = document.createElement('div');
             slot.className = 'hotbar-slot' + (i === 1 ? ' active' : '');
 
+            slot.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (this.playerSystem) {
+                    if (this.playerSystem.activeTool === 'block') {
+                        this.playerSystem.selectedHotbarSlot = i - 1;
+                        this.playerSystem.selectedBlockId = i;
+                        this.updateHotbarSelection(i - 1);
+                    }
+                }
+            }, { passive: false });
+            
+            slot.addEventListener('mousedown', (e) => {
+                if (this.playerSystem && this.playerSystem.activeTool === 'block') {
+                    this.playerSystem.selectedHotbarSlot = i - 1;
+                    this.playerSystem.selectedBlockId = i;
+                    this.updateHotbarSelection(i - 1);
+                }
+            });
+
             const inner = document.createElement('div');
             inner.className = 'hotbar-slot-inner';
 

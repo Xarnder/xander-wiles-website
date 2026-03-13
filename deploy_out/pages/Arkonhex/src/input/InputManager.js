@@ -10,6 +10,11 @@ export class InputManager {
         this.isLocked = false;
         this.movementIntent = false;
 
+        this.isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        if (this.isTouchDevice) {
+            document.body.classList.add('touch-device');
+        }
+
         this.initEventListeners();
     }
 
@@ -29,7 +34,7 @@ export class InputManager {
 
             if (e.code === 'KeyE' || e.code === 'Escape') {
                 if (this.isLocked) {
-                    document.exitPointerLock();
+                    this.unlockPointer();
 
                     // Default to settings tab if E is pressed
                     if (e.code === 'KeyE') {
@@ -46,7 +51,7 @@ export class InputManager {
                 } else {
                     // We are unlocked, meaning game is paused. Let's unpause if engine is running
                     if (this.engine.isRunning) {
-                        this.engine.container.requestPointerLock();
+                        this.lockPointer();
                     }
                 }
             }
@@ -80,31 +85,65 @@ export class InputManager {
 
         // Pointer Lock
         document.addEventListener('pointerlockchange', () => {
-            this.isLocked = !!document.pointerLockElement;
-
-            const startScreen = document.getElementById('start-screen');
-            const pauseScreen = document.getElementById('pause-screen');
-
-            if (this.isLocked) {
-                if (startScreen) startScreen.classList.add('hidden');
-                if (pauseScreen) pauseScreen.classList.add('hidden');
-                document.getElementById('ui-layer').classList.remove('ui-hidden');
-            } else {
-                // If engine is running, we are pausing. Otherwise we are on start screen.
-                if (this.engine.isRunning) {
-                    if (pauseScreen) pauseScreen.classList.remove('hidden');
-                } else {
-                    if (startScreen) startScreen.classList.remove('hidden');
-                }
-                document.getElementById('ui-layer').classList.add('ui-hidden');
+            if (!this.isTouchDevice) {
+                this.setLocked(!!document.pointerLockElement);
             }
         });
 
         this.engine.container.addEventListener('click', () => {
             if (!this.isLocked) {
-                this.engine.container.requestPointerLock();
+                this.lockPointer();
             }
         });
+
+        // Add pause screen interactor
+        const pauseScreen = document.getElementById('pause-screen');
+        if (pauseScreen) {
+            pauseScreen.addEventListener('click', () => {
+                if (!this.isLocked) this.lockPointer();
+            });
+        }
+    }
+
+    lockPointer() {
+        if (this.isTouchDevice) {
+            this.setLocked(true);
+        } else {
+            this.engine.container.requestPointerLock();
+        }
+    }
+
+    unlockPointer() {
+        if (this.isTouchDevice) {
+            this.setLocked(false);
+        } else {
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+        }
+    }
+
+    setLocked(locked) {
+        this.isLocked = locked;
+
+        const startScreen = document.getElementById('start-screen');
+        const pauseScreen = document.getElementById('pause-screen');
+
+        if (this.isLocked) {
+            if (startScreen) startScreen.classList.add('hidden');
+            if (pauseScreen) pauseScreen.classList.add('hidden');
+            document.getElementById('ui-layer').classList.remove('ui-hidden');
+            if (this.isTouchDevice) document.body.classList.add('touch-playing');
+        } else {
+            // If engine is running, we are pausing. Otherwise we are on start screen.
+            if (this.engine.isRunning) {
+                if (pauseScreen) pauseScreen.classList.remove('hidden');
+            } else {
+                if (startScreen) startScreen.classList.remove('hidden');
+            }
+            document.getElementById('ui-layer').classList.add('ui-hidden');
+            if (this.isTouchDevice) document.body.classList.remove('touch-playing');
+        }
     }
 
     isKeyDown(code) {

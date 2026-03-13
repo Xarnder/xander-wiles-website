@@ -5,6 +5,7 @@ import { WorldGen } from '../world/WorldGen.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { LightingManager } from '../rendering/LightingManager.js';
 import { InputManager } from '../input/InputManager.js';
+import { TouchManager } from '../input/TouchManager.js';
 import { PhysicsSystem } from '../physics/PhysicsSystem.js';
 import { PlayerSystem } from '../systems/PlayerSystem.js';
 import { UIManager } from '../ui/UIManager.js';
@@ -49,6 +50,7 @@ export class Engine {
 
         // 3. Input
         this.inputManager = new InputManager(this);
+        this.touchManager = new TouchManager(this, this.inputManager);
 
         // 4. Audio
         this.audioManager = new AudioManager(this);
