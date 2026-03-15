@@ -75,3 +75,20 @@ export function parseTodoistCSV(csvText) {
 
     return rows;
 }
+/**
+ * Formats a timestamp into a readable date and time string.
+ * @param {number} timestamp 
+ * @returns {string} Formatted date string
+ */
+export function formatDateTime(timestamp) {
+    if (!timestamp) return 'Never';
+    const date = new Date(timestamp);
+    return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+}

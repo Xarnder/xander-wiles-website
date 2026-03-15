@@ -1,5 +1,5 @@
 import { state } from './store.js';
-import { escapeHtml, showToast, generateId } from './utils.js';
+import { escapeHtml, showToast, generateId, formatDateTime } from './utils.js';
 import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, handleSyncError, updateDoc } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -147,6 +147,37 @@ export function renderBoard() {
     });
 
     updateTotalTaskCount();
+    observeTasks();
+}
+
+const taskTextObserver = new ResizeObserver(entries => {
+    for (let entry of entries) {
+        const textEl = entry.target;
+        const card = textEl.closest('.task-card');
+        if (!card) continue;
+
+        const currentHeight = textEl.scrollHeight;
+        const isVertical = card.classList.contains('vertical-actions');
+
+        // FAVOUR HORIZONTAL (Adjusted Hysteresis)
+        requestAnimationFrame(() => {
+            if (isVertical) {
+                // Return to horizontal if height is less than 48px (~2.5 lines)
+                if (currentHeight < 48) {
+                    card.classList.remove('vertical-actions');
+                }
+            } else {
+                // Switch to vertical only if height exceeds 62px (~3+ lines)
+                if (currentHeight > 62) {
+                    card.classList.add('vertical-actions');
+                }
+            }
+        });
+    }
+});
+
+function observeTasks() {
+    document.querySelectorAll('.task-text').forEach(el => taskTextObserver.observe(el));
 }
 
 function renderListColumn(list, isOrphan, isCustomSort) {
@@ -491,6 +522,10 @@ export function openEditModal(taskId, listId) {
     if (!task) return;
     document.getElementById('modal-task-input').value = task.text;
     modalOverlay.dataset.taskId = taskId;
+
+    // Populate Timestamps
+    document.getElementById('task-created-at').textContent = formatDateTime(task.createdAt);
+    document.getElementById('task-updated-at').textContent = formatDateTime(task.updatedAt || task.createdAt);
 
     const select = document.getElementById('manual-move-select');
     select.innerHTML = '<option value="" disabled selected>Select Destination...</option>';

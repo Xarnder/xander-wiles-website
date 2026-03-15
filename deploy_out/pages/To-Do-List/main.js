@@ -11,8 +11,13 @@ console.log("[DEBUG] Main Module Initialized - v1.3 PWA Fixes");
 
 // GLOBAL ERROR HANDLER FOR DEBUGGING
 window.onerror = function (msg, url, line, col, error) {
-    // alert(`Script Error: ${msg}\nLine: ${line}`); // Create noise
-    console.error("Global Error:", error);
+    console.error("Global Error (details):", {
+        message: msg,
+        url: url,
+        line: line,
+        column: col,
+        error: error || "No error object provided"
+    });
 };
 
 // --- SERVICE WORKER REGISTRATION ---
@@ -510,7 +515,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalOverlay = document.getElementById('modal-overlay');
         const taskId = modalOverlay.dataset.taskId;
         const text = document.getElementById('modal-task-input').value;
-        updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), { text: text }).catch(e => API.handleSyncError(e));
+        updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), { 
+            text: text,
+            updatedAt: Date.now()
+        }).catch(e => API.handleSyncError(e));
         modalOverlay.classList.add('hidden');
     };
     document.getElementById('modal-close-btn').onclick = () => document.getElementById('modal-overlay').classList.add('hidden');

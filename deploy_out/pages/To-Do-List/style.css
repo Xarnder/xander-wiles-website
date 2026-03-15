@@ -431,7 +431,7 @@ body {
 /* TASK CARDS */
 .task-card {
     background: var(--card-bg);
-    padding: 6px 10px;
+    padding: 4px 8px;
     margin-bottom: 8px;
     border-radius: 8px;
     display: flex;
@@ -621,11 +621,17 @@ body {
 .task-actions {
     display: flex;
     flex-direction: row;
-    gap: 6px;
+    gap: 8px;
     margin-left: 2px;
     opacity: 0;
     transition: opacity 0.2s;
     align-self: flex-start;
+    flex-shrink: 0;
+}
+
+.task-card.vertical-actions .task-actions {
+    flex-direction: column;
+    gap: 4px;
 }
 
 .task-card:hover .task-actions {
@@ -633,13 +639,13 @@ body {
 }
 
 .icon-btn {
-    font-size: 1rem;
-    padding: 2px;
+    font-size: 1.2rem;
+    padding: 4px;
     color: var(--text-secondary);
     background: none;
     border: none;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 6px;
 }
 
 .icon-btn:hover {
@@ -782,6 +788,37 @@ input:checked+.slider-small:before {
 
 .slider-small.round:before {
     border-radius: 50%;
+}
+
+.task-metadata {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+}
+
+[data-theme="light"] .task-metadata {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.timestamp-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.timestamp-label {
+    font-weight: 600;
+}
+
+.timestamp-value {
+    color: var(--text-primary);
+    opacity: 0.9;
 }
 
 .modal-overlay {

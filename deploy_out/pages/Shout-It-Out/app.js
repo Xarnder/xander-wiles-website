@@ -100,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reactionVideoPlayer = document.getElementById('reaction-video-player');
     const liveReactionPreview = document.getElementById('live-reaction-preview');
     const hideListToggle = document.getElementById('hide-list-toggle');
+    const swapTiltToggle = document.getElementById('swap-tilt-toggle');
 
     // --- Game State Variables ---
     let words = [];
@@ -150,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let settingPhrasesPerPlayer = 3;
     let settingPassTime = 5;
     let isListHidden = localStorage.getItem('SHOUT_IT_OUT_HIDE_LIST') === 'true';
+    let settingSwapTilt = localStorage.getItem('SHOUT_IT_OUT_SWAP_TILT') === 'true';
 
     // --- Original Word Storage (for when hidden) ---
     let originalNormalWords = localStorage.getItem('SHOUT_IT_OUT_NORMAL_WORDS') || '';
@@ -326,46 +328,84 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function refreshMaskedState() {
         if (isListHidden) {
-            wordListInput.value = maskText(originalNormalWords);
-            wordListInput.readOnly = true;
-            wordListInput.style.opacity = '0.6';
-            wordListInput.style.cursor = 'not-allowed';
-
-            if (priorityWordListInput) {
-                priorityWordListInput.value = maskText(originalPriorityWords);
-                priorityWordListInput.readOnly = true;
-                priorityWordListInput.style.opacity = '0.6';
-                priorityWordListInput.style.cursor = 'not-allowed';
-            }
-
-            if (genResultsTextarea) {
-                genResultsTextarea.value = maskText(originalGenWords);
-                genResultsTextarea.readOnly = true;
-                genResultsTextarea.style.opacity = '0.6';
-                genResultsTextarea.style.cursor = 'not-allowed';
-            }
-        } else {
             wordListInput.value = originalNormalWords;
-            wordListInput.readOnly = false;
-            wordListInput.style.opacity = '1';
-            wordListInput.style.cursor = 'auto';
+            wordListInput.classList.add('blurred-input');
+            wordListInput.setAttribute('tabindex', '-1');
 
             if (priorityWordListInput) {
                 priorityWordListInput.value = originalPriorityWords;
-                priorityWordListInput.readOnly = false;
-                priorityWordListInput.style.opacity = '1';
-                priorityWordListInput.style.cursor = 'auto';
+                priorityWordListInput.classList.add('blurred-input');
+                priorityWordListInput.setAttribute('tabindex', '-1');
             }
 
             if (genResultsTextarea) {
                 genResultsTextarea.value = originalGenWords;
-                genResultsTextarea.readOnly = false;
-                genResultsTextarea.style.opacity = '1';
-                genResultsTextarea.style.cursor = 'auto';
+                genResultsTextarea.classList.add('blurred-input');
+                genResultsTextarea.setAttribute('tabindex', '-1');
+            }
+        } else {
+            wordListInput.value = originalNormalWords;
+            wordListInput.classList.remove('blurred-input');
+            wordListInput.removeAttribute('tabindex');
+
+            if (priorityWordListInput) {
+                priorityWordListInput.value = originalPriorityWords;
+                priorityWordListInput.classList.remove('blurred-input');
+                priorityWordListInput.removeAttribute('tabindex');
+            }
+
+            if (genResultsTextarea) {
+                genResultsTextarea.value = originalGenWords;
+                genResultsTextarea.classList.remove('blurred-input');
+                genResultsTextarea.removeAttribute('tabindex');
             }
         }
         updateWordCount();
     }
+
+    function launchCategoryGame(categoryName) {
+        if (!categoriesData[categoryName]) return;
+
+        // Set the original words
+        originalNormalWords = categoriesData[categoryName].join('\n');
+        originalPriorityWords = ''; // Clear priority for category starts
+        
+        // Persist
+        localStorage.setItem('SHOUT_IT_OUT_NORMAL_WORDS', originalNormalWords);
+        localStorage.setItem('SHOUT_IT_OUT_PRIORITY_WORDS', '');
+        
+        // Refresh UI
+        refreshMaskedState();
+
+        // Update selected categories visually (clear others, select this one)
+        selectedCategories.clear();
+        selectedCategories.add(categoryName);
+        document.querySelectorAll('.category-btn').forEach(btn => {
+            if (btn.innerText.includes(categoryName)) {
+                btn.classList.add('category-selected');
+            } else {
+                btn.classList.remove('category-selected');
+            }
+        });
+
+        // Trigger Start
+        const startBtn = document.getElementById('start-btn');
+        if (startBtn) startBtn.click();
+    }
+
+    // Add listeners for the 3x3 grid buttons
+    document.querySelectorAll('.grid-cat-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const category = btn.getAttribute('data-category');
+            if (category === 'Custom') {
+                if (genCustomListBtn) genCustomListBtn.click();
+                return;
+            }
+            if (category) {
+                launchCategoryGame(category);
+            }
+        });
+    });
 
     if (hideListToggle) {
         hideListToggle.checked = isListHidden;
@@ -697,6 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (showPastWordSelect) showPastWordSelect.value = settingShowPastWord;
             if (showPastWordLabelToggle) showPastWordLabelToggle.checked = settingShowPastWordLabel;
             if (priorityToggle) priorityToggle.checked = settingPriorityEnabled;
+            if (swapTiltToggle) swapTiltToggle.checked = settingSwapTilt;
             if (recordReactionsToggle) recordReactionsToggle.checked = settingRecordReactionsEnabled;
             if (multiPersonToggle) {
                 multiPersonToggle.checked = settingMultiPersonEnabled;
@@ -966,6 +1007,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 settingRecordReactionsEnabled = recordReactionsToggle.checked;
             }
 
+            if (swapTiltToggle) {
+                settingSwapTilt = swapTiltToggle.checked;
+                localStorage.setItem('SHOUT_IT_OUT_SWAP_TILT', settingSwapTilt);
+                updateInstructionText();
+            }
+
             if (multiPersonToggle) settingMultiPersonEnabled = multiPersonToggle.checked;
             if (phrasesPerPlayerInput) settingPhrasesPerPlayer = parseInt(phrasesPerPlayerInput.value) || 3;
             if (passTimeInput) settingPassTime = parseInt(passTimeInput.value) || 5;
@@ -1133,6 +1180,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function updateInstructionText() {
+        const correctDir = settingSwapTilt ? "DOWN" : "UP";
+        const skipDir = settingSwapTilt ? "UP" : "DOWN";
+
+        if (instructionTextEl) {
+            instructionTextEl.innerHTML = `Tilt ${correctDir} = Correct | Tilt ${skipDir} = Skip`;
+        }
+
+        const instrCorrectEl = document.getElementById('instr-correct');
+        const instrSkipEl = document.getElementById('instr-skip');
+
+        if (instrCorrectEl) {
+            instrCorrectEl.innerHTML = `<strong>4.</strong> Tilt your phone <strong>${correctDir}</strong> to mark it <strong>Correct</strong>.`;
+        }
+        if (instrSkipEl) {
+            instrSkipEl.innerHTML = `<strong>5.</strong> Tilt your phone <strong>${skipDir}</strong> to <strong>Skip</strong>.`;
+        }
+    }
+
     if (downloadReactionBtn) {
         downloadReactionBtn.addEventListener('click', async () => {
             if (reactionVideoBlob) {
@@ -1205,10 +1271,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Initialize Timer Display
         updateTimerDisplay();
+        updateInstructionText();
 
         // Switch UI Screens
         setupScreen.classList.add('hidden');
         endScreen.classList.add('hidden');
+        if (categoriesModal) categoriesModal.classList.add('hidden');
+        if (genListModal) genListModal.classList.add('hidden');
         if (mainNavPlaceholder) mainNavPlaceholder.classList.add('hidden');
         playScreenWrapper.classList.remove('hidden');
         isPaused = false;
@@ -1516,17 +1585,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (isTiltedUp) {
-            console.log("📡 [DEBUG] Sensor Threshold Met: TILTED UP - Correct");
+            console.log(`📡 [DEBUG] Sensor Threshold Met: TILTED UP - ${settingSwapTilt ? 'Skip' : 'Correct'}`);
             hasTiltedUp = true;
             waitingForNeutral = true;
             updateInstructions();
-            markCorrect();
+            if (settingSwapTilt) markSkip();
+            else markCorrect();
         } else if (isTiltedDown) {
-            console.log("📡 [DEBUG] Sensor Threshold Met: TILTED DOWN - Skip");
+            console.log(`📡 [DEBUG] Sensor Threshold Met: TILTED DOWN - ${settingSwapTilt ? 'Correct' : 'Skip'}`);
             hasTiltedDown = true;
             waitingForNeutral = true;
             updateInstructions();
-            markSkip();
+            if (settingSwapTilt) markCorrect();
+            else markSkip();
         }
     }
 

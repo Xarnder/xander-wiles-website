@@ -104,7 +104,7 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.2);
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     border-radius: 24px;
-    padding: 40px;
+    padding: 10px; /* START MENU PADDING - Change this to adjust internal spacing */
     width: 100%;
     max-width: 600px;
     text-align: center;
@@ -113,6 +113,11 @@ body {
 
 .glass-card:hover {
     box-shadow: 0 12px 40px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Specific overrides for the setup screen */
+#setup-screen {
+    max-width: 900px; /* START MENU WIDTH - Change this to make it wider or narrower */
 }
 
 .hidden {
@@ -124,6 +129,7 @@ h1 {
     font-size: 2.5rem;
     margin-bottom: 10px;
     font-weight: 800;
+    padding-top: 30px; /* TITLE TOP PADDING - Change this to push the title down */
 }
 
 p {
@@ -148,6 +154,15 @@ textarea {
 
 textarea:focus {
     border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Modern Blur for Hidden Lists */
+.blurred-input {
+    filter: blur(12px) grayscale(0.5);
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.7 !important;
+    transition: filter 0.4s ease, opacity 0.4s ease;
 }
 
 /* Neon Buttons */
@@ -302,6 +317,94 @@ textarea:focus {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* Category Image Grid (Responsive) */
+.category-image-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 15px;
+    margin: 20px 0 35px 0;
+    width: 100%;
+}
+
+.grid-cat-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 18px;
+    padding: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: white;
+    text-transform: capitalize;
+    overflow: hidden;
+    position: relative;
+    aspect-ratio: 0.85 / 1;
+}
+
+.grid-cat-btn img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 12px;
+    transition: transform 0.3s ease;
+}
+
+.grid-cat-btn span {
+    font-size: 1.2rem;
+    font-weight: 600;
+    opacity: 0.95;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+.grid-cat-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-4px);
+    box-shadow: 0 6px 20px rgba(0, 210, 255, 0.3);
+    border-color: rgba(0, 210, 255, 0.5);
+}
+
+.grid-cat-btn:hover img {
+    transform: scale(1.08);
+}
+
+.grid-cat-btn:active {
+    transform: scale(0.96);
+}
+
+@media (max-width: 768px) {
+    .category-image-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    .grid-cat-btn {
+        aspect-ratio: 0.8 / 1;
+        padding: 4px;
+        gap: 6px;
+    }
+    .grid-cat-btn span {
+        font-size: 1.3rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .category-image-grid {
+        gap: 10px;
+    }
+    .grid-cat-btn {
+        padding: 3px;
+        gap: 4px;
+    }
+    .grid-cat-btn span {
+        font-size: 1.2rem;
+    }
 }
 
 /* Custom Alert, Instructions, & Review Modal */
@@ -743,6 +846,24 @@ textarea:focus {
         /* Override back for portrait */
     }
 
+    #timer {
+        font-size: 1.2rem !important;
+        white-space: nowrap;
+    }
+
+    #timer-wrapper {
+        min-width: auto !important;
+        padding-right: 10px;
+    }
+
+    .go-back-btn {
+        padding: 8px 16px;
+        font-size: 1rem;
+        width: auto;
+        height: auto;
+        margin-bottom: 10px;
+    }
+
     .side-btn {
         width: 100%;
         max-width: none;
@@ -754,6 +875,17 @@ textarea:focus {
 
     .side-btn br {
         display: none;
+    }
+
+    #pause-slider-area p {
+        font-size: 0.8rem !important;
+        margin-bottom: 4px;
+        opacity: 0.7;
+    }
+
+    .custom-slider {
+        max-width: 95% !important;
+        flex: 1;
     }
 }
 

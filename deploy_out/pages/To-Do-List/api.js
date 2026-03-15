@@ -31,6 +31,7 @@ export function handleAddTask(e, listId) {
         completed: false,
         archived: false,
         createdAt: Date.now(),
+        updatedAt: Date.now(),
         images: [],
         glowColor: 'none'
     };
