@@ -627,15 +627,40 @@ body {
     transition: opacity 0.2s;
     align-self: flex-start;
     flex-shrink: 0;
+    pointer-events: none; /* Prevent accidental clicks when hidden */
+}
+
+/* DESKTOP HOVER */
+@media (hover: hover) {
+    .task-card:hover .task-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+
+/* MOBILE TOUCH REVEAL */
+@media (hover: none) {
+    .task-actions {
+        display: none; /* Completely remove from layout by default on mobile */
+    }
+
+    .task-card.show-actions .task-actions {
+        display: flex;
+        opacity: 1;
+        pointer-events: auto;
+    }
+    
+    /* Make actions vertical on mobile if shown to save width */
+    .task-card.show-actions .task-actions {
+        flex-direction: column;
+        gap: 4px;
+        margin-left: 10px;
+    }
 }
 
 .task-card.vertical-actions .task-actions {
     flex-direction: column;
     gap: 4px;
-}
-
-.task-card:hover .task-actions {
-    opacity: 1;
 }
 
 .icon-btn {

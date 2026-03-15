@@ -353,6 +353,22 @@ export function createTaskElement(task, sourceListId, number) {
         </div>
         <div class="task-actions">${actionsHtml}</div>
     `;
+
+    // Touch reveal logic
+    el.addEventListener('click', () => {
+        if (!window.matchMedia("(hover: none)").matches) return;
+        if (task.archived) return;
+
+        const wasShowing = el.classList.contains('show-actions');
+
+        // Close all other open actions
+        document.querySelectorAll('.task-card.show-actions').forEach(card => {
+            if (card !== el) card.classList.remove('show-actions');
+        });
+
+        el.classList.toggle('show-actions', !wasShowing);
+    });
+
     return el;
 }
 

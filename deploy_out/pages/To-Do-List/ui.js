@@ -147,37 +147,28 @@ export function renderBoard() {
     });
 
     updateTotalTaskCount();
-    observeTasks();
+    applyStaticLayouts();
 }
 
-const taskTextObserver = new ResizeObserver(entries => {
-    for (let entry of entries) {
-        const textEl = entry.target;
-        const card = textEl.closest('.task-card');
-        if (!card) continue;
+/**
+ * Deterministically decides which layout (horizontal vs vertical) each task card should use.
+ * This is called once after rendering to avoid flickering caused by continuous observation.
+ */
+function applyStaticLayouts() {
+    document.querySelectorAll('.task-card').forEach(card => {
+        const textEl = card.querySelector('.task-text');
+        if (!textEl) return;
 
-        const currentHeight = textEl.scrollHeight;
-        const isVertical = card.classList.contains('vertical-actions');
-
-        // FAVOUR HORIZONTAL (Adjusted Hysteresis)
-        requestAnimationFrame(() => {
-            if (isVertical) {
-                // Return to horizontal if height is less than 48px (~2.5 lines)
-                if (currentHeight < 48) {
-                    card.classList.remove('vertical-actions');
-                }
-            } else {
-                // Switch to vertical only if height exceeds 62px (~3+ lines)
-                if (currentHeight > 62) {
-                    card.classList.add('vertical-actions');
-                }
-            }
-        });
-    }
-});
-
-function observeTasks() {
-    document.querySelectorAll('.task-text').forEach(el => taskTextObserver.observe(el));
+        // Reset to horizontal to measure natural height in that layout
+        card.classList.remove('vertical-actions');
+        
+        // Measure scrollHeight. 
+        // 1.35 line-height * 0.9rem ~= 19.4px per line.
+        // 3 lines ~= 58px. We use 60px as a safe threshold for "too long for horizontal".
+        if (textEl.scrollHeight > 60) {
+            card.classList.add('vertical-actions');
+        }
+    });
 }
 
 function renderListColumn(list, isOrphan, isCustomSort) {
@@ -362,6 +353,22 @@ export function createTaskElement(task, sourceListId, number) {
         </div>
         <div class="task-actions">${actionsHtml}</div>
     `;
+
+    // Touch reveal logic
+    el.addEventListener('click', () => {
+        if (!window.matchMedia("(hover: none)").matches) return;
+        if (task.archived) return;
+
+        const wasShowing = el.classList.contains('show-actions');
+
+        // Close all other open actions
+        document.querySelectorAll('.task-card.show-actions').forEach(card => {
+            if (card !== el) card.classList.remove('show-actions');
+        });
+
+        el.classList.toggle('show-actions', !wasShowing);
+    });
+
     return el;
 }
 
