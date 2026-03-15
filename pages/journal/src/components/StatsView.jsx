@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, documentId, onSnapshot } from 'firebase/firestore';
+import { BarChart as BarChartIcon, TrendingUp, Type, MessageSquare, Tag, Image as ImageIcon, Download, X, Calendar, FileText, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
-import { BarChart as BarChartIcon, TrendingUp, Type, MessageSquare, Tag, Image as ImageIcon } from 'lucide-react';
+import { collection, query, where, documentId, onSnapshot, getDocs, orderBy } from 'firebase/firestore';
+import { saveAs } from 'file-saver';
+import ReactDOM from 'react-dom';
 import {
     ComposedChart,
     Bar,
@@ -49,6 +51,7 @@ export default function StatsView() {
     const [entries, setEntries] = useState([]);
     const [tags, setTags] = useState({});
     const [loading, setLoading] = useState(true);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
     // Time Range definitions
     const ranges = {
@@ -135,8 +138,121 @@ export default function StatsView() {
             return match[1].trim();
         }
 
-        // Fallback to stored title if no pattern found
+    // Fallback to stored title if no pattern found
         return storedTitle || '';
+    };
+
+    // Format bytes to readable string (Helper)
+    const formatBytes = (bytes, decimals = 2) => {
+        if (!bytes) return '0 B';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    };
+
+    // Calculate size for a single entry (Helper)
+    const calculateEntrySize = (data) => {
+        let size = 0;
+        if (data.textSize) {
+            size += data.textSize;
+        } else if (data.contentSizeInBytes) {
+            size += data.contentSizeInBytes;
+        } else if (data.content) {
+            size += new Blob([data.content]).size;
+        }
+        if (data.imageSize) {
+            size += data.imageSize;
+        } else if (data.imageMetadata && data.imageMetadata.sizeInBytes) {
+            size += data.imageMetadata.sizeInBytes;
+        }
+        return size;
+    };
+
+    const handleExportCSV = async (selectedRange) => {
+        if (!currentUser) return;
+        setLoading(true);
+
+        try {
+            const entriesRef = collection(db, 'users', currentUser.uid, 'entries');
+            let q = query(entriesRef);
+
+            if (selectedRange !== 'all') {
+                const endDate = new Date();
+                let startDate = new Date();
+                switch (selectedRange) {
+                    case 'week': startDate = subDays(endDate, 7); break;
+                    case 'month': startDate = subMonths(endDate, 1); break;
+                    case '6months': startDate = subMonths(endDate, 6); break;
+                    case 'year': startDate = subYears(endDate, 1); break;
+                }
+                const startId = format(startDate, 'yyyy-MM-dd');
+                q = query(entriesRef, where(documentId(), '>=', startId));
+            }
+
+            const querySnapshot = await getDocs(q);
+            
+            const exportEntries = [];
+            querySnapshot.forEach((doc) => {
+                exportEntries.push({ id: doc.id, ...doc.data() });
+            });
+
+            // Sort by date
+            exportEntries.sort((a, b) => a.id.localeCompare(b.id));
+
+            // Calculate Aggregate Stats
+            let totalWords = 0;
+            let totalImages = 0;
+            let totalSizeBytes = 0;
+
+            const processedRows = exportEntries.map(entry => {
+                const date = entry.id;
+                const text = entry.content || entry.text || '';
+                const cleanTextForWords = text.replace(/[#*`_~]/g, ' ');
+                const words = cleanTextForWords.toLowerCase().match(/\b\w+\b/g) || [];
+                const wordCount = words.length;
+                
+                const imageCount = entry.images ? entry.images.length : (entry.imageUrl || entry.imageMetadata ? 1 : 0);
+                const entryTitle = extractTitle(text, entry.title).replace(/"/g, '""'); // Escape quotes
+                
+                const entryTags = (entry.tags || [])
+                    .map(tagId => tags[tagId]?.name || tagId)
+                    .join('; ');
+
+                totalWords += wordCount;
+                totalImages += imageCount;
+                totalSizeBytes += calculateEntrySize(entry);
+
+                return `"${date}","${entryTitle}",${wordCount},${imageCount},"${entryTags}"`;
+            });
+
+            const avgWords = exportEntries.length > 0 ? (totalWords / exportEntries.length).toFixed(1) : 0;
+            const storageFormatted = formatBytes(totalSizeBytes);
+
+            // CSV Content with Summary Header
+            let csvContent = `SUMMARY\n`;
+            csvContent += `Range,${selectedRange === 'all' ? 'All Time' : selectedRange}\n`;
+            csvContent += `Total Entries,${exportEntries.length}\n`;
+            csvContent += `Total Words,${totalWords}\n`;
+            csvContent += `Avg Words / Entry,${avgWords}\n`;
+            csvContent += `Total Images,${totalImages}\n`;
+            csvContent += `Total Storage Usage,${storageFormatted}\n\n`;
+            
+            csvContent += "DATA\n";
+            csvContent += "Date,Title,Word Count,Image Count,Tags\n";
+            csvContent += processedRows.join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            saveAs(blob, `journal-stats-${selectedRange}-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+            setIsExportModalOpen(false);
+
+        } catch (error) {
+            console.error("CSV Export failed:", error);
+            alert("Export failed. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Compute Statistics
@@ -284,19 +400,30 @@ export default function StatsView() {
                     </h2>
                 </div>
 
-                <div className="flex bg-black/20 rounded-lg p-1">
-                    {Object.entries(ranges).map(([key, { label }]) => (
-                        <button
-                            key={key}
-                            onClick={() => setTimeRange(key)}
-                            className={`px-3 py-1.5 text-sm rounded-md transition-all ${timeRange === key
-                                ? 'bg-primary text-white shadow-lg'
-                                : 'text-text-muted hover:text-white hover:bg-white/5'
-                                }`}
-                        >
-                            {label}
-                        </button>
-                    ))}
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setIsExportModalOpen(true)}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-white/5 hover:bg-white/10 text-text-muted hover:text-white rounded-md transition-all border border-white/10"
+                        title="Export stats to CSV"
+                    >
+                        <Download className="w-4 h-4" />
+                        <span>Export CSV</span>
+                    </button>
+
+                    <div className="flex bg-black/20 rounded-lg p-1">
+                        {Object.entries(ranges).map(([key, { label }]) => (
+                            <button
+                                key={key}
+                                onClick={() => setTimeRange(key)}
+                                className={`px-3 py-1.5 text-sm rounded-md transition-all ${timeRange === key
+                                    ? 'bg-primary text-white shadow-lg'
+                                    : 'text-text-muted hover:text-white hover:bg-white/5'
+                                    }`}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
@@ -467,6 +594,63 @@ export default function StatsView() {
                     <FirestoreUsage className="flex flex-col justify-center text-center" />
                 </div>
             </div>
+
+            {/* Export Modal */}
+            {isExportModalOpen && ReactDOM.createPortal(
+                <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-md animation-fade-in">
+                    <div className="glass-card w-full max-w-md p-6 relative overflow-hidden bg-[#1a1b1e]/95 shadow-2xl border border-white/10">
+                        {/* Header */}
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-serif font-bold text-white flex items-center gap-2">
+                                <FileText className="w-5 h-5 text-primary" />
+                                Export CSV
+                            </h2>
+                            <button
+                                onClick={() => setIsExportModalOpen(false)}
+                                className="p-2 rounded-full hover:bg-white/10 text-text-muted hover:text-white transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <p className="text-sm text-text-muted mb-6">
+                            Choose a time range to export your journal statistics. The export includes a summary of your writing metrics and detailed data for each entry.
+                        </p>
+
+                        <div className="space-y-4">
+                            <label className="text-sm font-medium text-text-muted flex items-center gap-2 mb-2">
+                                <Calendar className="w-4 h-4" /> Select Range
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {[
+                                    { id: 'week', label: 'Past Week' },
+                                    { id: 'month', label: 'Past Month' },
+                                    { id: '6months', label: '6 Months' },
+                                    { id: 'year', label: 'Past Year' },
+                                    { id: 'all', label: 'All Time' }
+                                ].map(opt => (
+                                    <button
+                                        key={opt.id}
+                                        onClick={() => handleExportCSV(opt.id)}
+                                        disabled={loading}
+                                        className="px-4 py-3 rounded-lg text-sm bg-white/5 border border-white/5 text-white hover:bg-primary/20 hover:border-primary transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {loading && (
+                            <div className="mt-6 flex justify-center items-center gap-2 text-primary animate-pulse">
+                                <Loader className="w-5 h-5 animate-spin" />
+                                <span className="font-medium">Generating Export...</span>
+                            </div>
+                        )}
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 }
