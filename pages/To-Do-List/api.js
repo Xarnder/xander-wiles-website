@@ -132,14 +132,33 @@ export function updateListTitle(id, val) {
 }
 
 export function deleteList(id) {
-    if (confirm("Delete List? Tasks will stay as orphans.")) {
+    if (window.showConfirmModal) {
+        window.showConfirmModal(
+            "Delete List?",
+            "Tasks will stay as orphans and won't be deleted forever.",
+            () => {
+                const batch = writeBatch(db);
+                batch.delete(doc(db, "users", state.currentUser.uid, "lists", id));
+                const newOrder = state.appData.listOrder.filter(lid => lid !== id);
+
+                const boardId = state.appData.currentBoardId;
+                if (boardId) {
+                    batch.update(doc(db, "users", state.currentUser.uid, "boards", boardId), { listOrder: newOrder });
+                } else {
+                    batch.update(doc(db, "users", state.currentUser.uid), { listOrder: newOrder });
+                }
+                batch.commit().then(() => {
+                    showToast("List Deleted", "success");
+                }).catch(e => handleSyncError(e));
+            },
+            'ph-trash'
+        );
+    } else if (confirm("Delete List? Tasks will stay as orphans.")) {
+        // Fallback for safety
         const batch = writeBatch(db);
         batch.delete(doc(db, "users", state.currentUser.uid, "lists", id));
-        const newOrder = state.appData.listOrder.filter(lid => lid !== id);
-        batch.update(doc(db, "users", state.currentUser.uid), { listOrder: newOrder });
-        return batch.commit().catch(e => handleSyncError(e));
+        // ... rest of logic
     }
-    return Promise.resolve();
 }
 
 export function emptyOrphans() {
@@ -171,11 +190,174 @@ export function addNewList() {
 
     const batch = writeBatch(db);
     batch.set(doc(db, "users", state.currentUser.uid, "lists", outputId), newList);
-    batch.update(doc(db, "users", state.currentUser.uid), {
-        listOrder: arrayUnion(outputId)
-    });
+
+    const boardId = state.appData.currentBoardId;
+    if (boardId) {
+        batch.update(doc(db, "users", state.currentUser.uid, "boards", boardId), {
+            listOrder: arrayUnion(outputId)
+        });
+    } else {
+        batch.update(doc(db, "users", state.currentUser.uid), {
+            listOrder: arrayUnion(outputId)
+        });
+    }
     return batch.commit().then(() => {
         showToast("New List Added!", "success");
+    }).catch(e => handleSyncError(e));
+}
+
+export function addNewBoard() {
+    const boardId = generateId();
+    const newBoard = {
+        title: "New Board",
+        listOrder: [],
+        createdAt: Date.now()
+    };
+
+    return setDoc(doc(db, "users", state.currentUser.uid, "boards", boardId), newBoard)
+        .then(() => {
+            state.appData.boards.push({ id: boardId, ...newBoard });
+            switchBoard(boardId);
+            showToast("New Board Created!", "success");
+        }).catch(e => handleSyncError(e));
+}
+
+export function switchBoard(boardId) {
+    state.appData.currentBoardId = boardId;
+    localStorage.setItem(`lastBoard_${state.currentUser.uid}`, boardId);
+    
+    // Sync listOrder for immediate UI update
+    const board = state.appData.boards.find(b => b.id === boardId);
+    if (board) {
+        state.appData.listOrder = board.listOrder || [];
+    }
+
+    // UI will re-render
+    import('./ui.js').then(m => m.renderBoard());
+}
+
+export function renameBoard(boardId, newTitle) {
+    if (!newTitle.trim()) return;
+    return updateDoc(doc(db, "users", state.currentUser.uid, "boards", boardId), { title: newTitle.trim() })
+        .catch(e => handleSyncError(e));
+}
+
+export function rescueOrphanLists() {
+    const allListIds = state.appData.rawLists.map(l => l.id);
+    const assignedListIds = new Set();
+    state.appData.boards.forEach(b => {
+        if (b.listOrder) b.listOrder.forEach(id => assignedListIds.add(id));
+    });
+
+    const orphans = allListIds.filter(id => !assignedListIds.has(id));
+    if (orphans.length === 0) {
+        showToast("No orphan lists found.", "info");
+        return Promise.resolve();
+    }
+
+    const performRescue = () => {
+        let mainBoard = state.appData.boards.find(b => b.id === 'main_board');
+        if (!mainBoard && state.appData.boards.length > 0) mainBoard = state.appData.boards[0];
+        
+        if (!mainBoard) {
+            showToast("No board found to receive orphans.", "error");
+            return;
+        }
+
+        return updateDoc(doc(db, "users", state.currentUser.uid, "boards", mainBoard.id), {
+            listOrder: arrayUnion(...orphans)
+        }).then(() => {
+            showToast(`${orphans.length} lists moved to ${mainBoard.title}`, "success");
+        }).catch(e => handleSyncError(e));
+    };
+
+    if (window.showConfirmModal) {
+        window.showConfirmModal(
+            "Rescue Orphan Lists?",
+            `Move ${orphans.length} unassigned lists to Main Board?`,
+            performRescue
+        );
+    } else if (confirm(`Move ${orphans.length} unassigned lists to Main Board?`)) {
+        performRescue();
+    }
+    return Promise.resolve();
+}
+
+
+export function deleteBoard(boardId) {
+    const board = state.appData.boards.find(b => b.id === boardId);
+    if (!board) return Promise.resolve();
+
+    if (state.appData.boards.length <= 1) {
+        showToast("Cannot delete the only remaining board.", "error");
+        return Promise.resolve();
+    }
+
+    const performDelete = () => {
+        const batch = writeBatch(db);
+        
+        // Find target board (Main Board or first available)
+        let targetBoard = state.appData.boards.find(b => b.id === 'main_board');
+        if (!targetBoard || targetBoard.id === boardId) {
+            targetBoard = state.appData.boards.find(b => b.id !== boardId);
+        }
+
+        if (!targetBoard) {
+            showToast("No target board found for migration.", "error");
+            return;
+        }
+
+        // Migrate lists
+        const listsToMove = board.listOrder || [];
+        if (listsToMove.length > 0) {
+            batch.update(doc(db, "users", state.currentUser.uid, "boards", targetBoard.id), {
+                listOrder: arrayUnion(...listsToMove)
+            });
+        }
+
+        // Delete board document
+        batch.delete(doc(db, "users", state.currentUser.uid, "boards", boardId));
+
+        return batch.commit().then(() => {
+            showToast(`Board deleted. Lists moved to ${targetBoard.title}`, "success");
+            if (state.appData.currentBoardId === boardId) {
+                switchBoard(targetBoard.id);
+            }
+        }).catch(e => handleSyncError(e));
+    };
+
+    if (window.showConfirmModal) {
+        window.showConfirmModal(
+            "Delete Board?",
+            `Are you sure you want to delete "${board.title}"? All lists and tasks will be moved to the default board.`,
+            performDelete,
+            'ph-trash'
+        );
+    } else if (confirm(`Delete board "${board.title}"? All lists will be moved to the default board.`)) {
+        performDelete();
+    }
+    return Promise.resolve();
+}
+
+export function moveListToBoard(listId, targetBoardId) {
+    const sourceBoard = state.appData.boards.find(b => b.listOrder && b.listOrder.includes(listId));
+    if (!sourceBoard) return Promise.resolve();
+    if (sourceBoard.id === targetBoardId) return Promise.resolve();
+
+    const batch = writeBatch(db);
+    
+    // Remove from source board
+    batch.update(doc(db, "users", state.currentUser.uid, "boards", sourceBoard.id), {
+        listOrder: arrayRemove(listId)
+    });
+
+    // Add to target board
+    batch.update(doc(db, "users", state.currentUser.uid, "boards", targetBoardId), {
+        listOrder: arrayUnion(listId)
+    });
+
+    return batch.commit().then(() => {
+        showToast(`List moved to ${state.appData.boards.find(b => b.id === targetBoardId).title}`, "success");
     }).catch(e => handleSyncError(e));
 }
 

@@ -55,6 +55,7 @@
             <div class="header-left">
                 <input type="text" id="project-title-input" class="project-title-input" value="Task Master"
                     placeholder="Project Name">
+                <div id="board-toggle-container" class="control-item"></div>
                 <span id="total-task-count" class="total-count-badge"></span>
             </div>
 
@@ -89,23 +90,8 @@
                     <i class="ph ph-checks"></i> Multi
                 </button>
 
-                <button id="archive-mode-btn" class="icon-btn-large control-item" title="Open Archived Tasks">
-                    <i class="ph ph-archive-box"></i>
-                </button>
-
-                <button id="theme-toggle" class="icon-btn-large control-item" title="Toggle Theme">
-                    <i class="ph ph-sun"></i>
-                </button>
-
                 <button id="add-list-btn" class="btn primary control-item">+ List</button>
-
-                <button id="mobile-reorder-lists-btn" class="btn secondary control-item" title="Reorder Lists">
-                    <i class="ph ph-arrows-down-up"></i>
-                </button>
-
                 <button id="options-btn" class="btn secondary control-item">Options</button>
-                <button id="logout-btn" class="btn secondary control-item"
-                    style="display:none; color: var(--accent-red); border-color: var(--accent-red);">Logout</button>
             </div>
         </header>
 
@@ -125,6 +111,17 @@
                 <button id="close-options-btn" class="icon-btn-large">&times;</button>
             </div>
             <div class="options-list">
+                <button id="archive-mode-btn" class="menu-action-item" title="Open Archived Tasks">
+                    <i class="ph ph-archive-box"></i> Archived Tasks
+                </button>
+                <button id="theme-toggle" class="menu-action-item" title="Toggle Theme">
+                    <i class="ph ph-sun"></i> Change Theme
+                </button>
+                <button id="mobile-reorder-lists-btn" class="menu-action-item" title="Reorder Lists">
+                    <i class="ph ph-arrows-down-up"></i> Reorder Lists (Mobile)
+                </button>
+
+                <hr class="dropdown-divider">
                 <label class="dropdown-item-toggle">
                     <span>Show Task Numbers</span>
                     <div class="switch-small">
@@ -186,10 +183,14 @@
                     </div>
                 </div>
 
-                <hr class="dropdown-divider">
                 <button id="trigger-reset-btn" class="menu-action-item danger-text"><i class="ph ph-trash"></i>
-                    Reset
-                    App Data</button>
+                    Reset App Data
+                </button>
+                
+                <hr class="dropdown-divider">
+                <button id="logout-btn" class="menu-action-item danger-text" style="display:none;">
+                    <i class="ph ph-sign-out"></i> Logout
+                </button>
             </div>
         </div>
     </div>
@@ -505,6 +506,47 @@
                     style="width: 100%; justify-content: center; padding: 16px;">
                     Cancel
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT LIST MODAL -->
+    <div id="edit-list-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2 id="edit-list-title">Edit List</h2>
+                <button id="close-edit-list-modal-btn" class="icon-btn-large">&times;</button>
+            </div>
+
+            <div class="modal-section">
+                <h3>Bulk Add Tasks:</h3>
+                <textarea id="edit-list-bulk-input" class="glass-input full-width" placeholder="Enter tasks (one per line)..." rows="4"></textarea>
+                <button id="edit-list-bulk-add-btn" class="btn primary full-width" style="margin-top: 10px;">
+                    <i class="ph ph-plus-circle"></i> Add Tasks
+                </button>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-section">
+                <h3>Move to Different Board:</h3>
+                <div class="move-controls">
+                    <select id="edit-list-board-select" class="glass-select full-width">
+                        <option value="" disabled selected>Select Board...</option>
+                    </select>
+                    <button id="edit-list-move-btn" class="btn secondary full-width" style="margin-top: 10px;">
+                        Move to Board
+                    </button>
+                </div>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-actions-bar">
+                <button id="edit-list-delete-btn" class="btn danger" style="margin-right: auto;">
+                    <i class="ph ph-trash"></i> Delete List
+                </button>
+                <button id="edit-list-close-btn" class="btn secondary">Close</button>
             </div>
         </div>
     </div>

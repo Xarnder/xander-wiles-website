@@ -83,6 +83,8 @@ window.selectAllInList = UI.selectAllInList;
 window.removeTaskFromList = UI.removeTaskFromList;
 // window.handleDragEnd is not called by HTML mostly, but by Sortable configs which are inside UI.js
 window.openArchivedTaskModal = UI.openArchivedTaskModal;
+window.openEditListModal = UI.openEditListModal;
+window.showConfirmModal = showConfirmModal;
 
 // --- DOM ELEMENTS ---
 const loginOverlay = document.getElementById('login-overlay');
@@ -144,9 +146,12 @@ getRedirectResult(auth)
 
 
 logoutBtn.onclick = () => {
-    if (confirm("Are you sure you want to logout?")) {
-        signOut(auth);
-    }
+    showConfirmModal(
+        "Logout?",
+        "Are you sure you want to sign out?",
+        () => signOut(auth),
+        'ph-sign-out'
+    );
 };
 
 onAuthStateChanged(auth, (user) => {
@@ -154,7 +159,7 @@ onAuthStateChanged(auth, (user) => {
     if (user) {
         console.log("Logged in:", user.uid);
         loginOverlay.classList.add('hidden');
-        logoutBtn.style.display = 'block';
+        logoutBtn.style.display = 'flex';
         syncConsoleEl.classList.remove('hidden');
         state.lastSyncTime = Date.now();
         startSyncTimer();
@@ -206,9 +211,21 @@ function setupFirestoreListeners(uid) {
             const data = docSnap.data();
             state.appData.settings = { ...state.appData.settings, ...data.settings };
             state.appData.projectTitle = data.projectTitle || "Task Master";
-            state.appData.listOrder = data.listOrder || [];
+            if (!state.appData.currentBoardId) {
+                state.appData.listOrder = data.listOrder || [];
+            }
 
-            // Apply Settings
+            // If we have a listOrder but no boards, we need to migrate
+            // or if we have boards but listOrder is still on the user doc, we prioritize boards later.
+            // But we keep this for backwards compatibility if needed.
+            if (!state.appData.currentBoardId && state.appData.boards.length > 0) {
+                const lastBoard = localStorage.getItem(`lastBoard_${uid}`);
+                if (lastBoard && state.appData.boards.find(b => b.id === lastBoard)) {
+                    state.appData.currentBoardId = lastBoard;
+                } else {
+                    state.appData.currentBoardId = state.appData.boards[0].id;
+                }
+            }
             if (state.appData.settings.theme) {
                 localStorage.setItem('theme', state.appData.settings.theme);
             }
@@ -242,6 +259,48 @@ function setupFirestoreListeners(uid) {
 
         // Splash logic removed
 
+    }, (error) => API.handleSyncError(error)));
+
+    // 1.5 Boards
+    const boardsColRef = collection(db, "users", uid, "boards");
+    state.listeners.push(onSnapshot(boardsColRef, { includeMetadataChanges: true }, (snapshot) => {
+        state.hasPendingWrites = snapshot.metadata.hasPendingWrites;
+        if (!snapshot.metadata.fromCache) updateLastSync();
+        
+        const boards = [];
+        snapshot.forEach(doc => boards.push({ id: doc.id, ...doc.data() }));
+        state.appData.boards = boards;
+
+        // Migration logic: If user doc has listOrder but boards collection is empty
+        if (boards.length === 0 && state.appData.listOrder.length > 0) {
+            console.log("Migrating listOrder to default board...");
+            const boardId = 'main_board';
+            setDoc(doc(db, "users", uid, "boards", boardId), {
+                title: "Main Board",
+                listOrder: state.appData.listOrder,
+                createdAt: Date.now()
+            }).then(() => {
+                API.switchBoard(boardId);
+            });
+        }
+
+        // Initialize currentBoardId if not set
+        if (!state.appData.currentBoardId && boards.length > 0) {
+            const lastBoard = localStorage.getItem(`lastBoard_${uid}`);
+            if (lastBoard && boards.find(b => b.id === lastBoard)) {
+                state.appData.currentBoardId = lastBoard;
+            } else {
+                state.appData.currentBoardId = boards[0].id;
+            }
+        }
+
+        // Update active listOrder from current board
+        const currentBoard = boards.find(b => b.id === state.appData.currentBoardId);
+        if (currentBoard) {
+            state.appData.listOrder = currentBoard.listOrder || [];
+        }
+
+        UI.renderBoard();
     }, (error) => API.handleSyncError(error)));
 
     // 2. Lists
@@ -283,7 +342,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('add-list-btn').onclick = API.addNewList;
 
     // Mobile Reorder
-    document.getElementById('mobile-reorder-lists-btn').onclick = UI.openMobileReorderModal;
+    document.getElementById('mobile-reorder-lists-btn').onclick = () => {
+        UI.openMobileReorderModal();
+        document.getElementById('options-modal-overlay').classList.add('hidden');
+    };
     document.getElementById('close-mobile-reorder-btn').onclick = () => document.getElementById('mobile-reorder-modal-overlay').classList.add('hidden');
     document.getElementById('save-mobile-reorder-btn').onclick = UI.saveMobileReorder;
 
@@ -806,19 +868,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Edit List Modal Close
+    const editListModal = document.getElementById('edit-list-modal-overlay');
+    if (editListModal) {
+        document.getElementById('close-edit-list-modal-btn').onclick = () => editListModal.classList.add('hidden');
+        document.getElementById('edit-list-close-btn').onclick = () => editListModal.classList.add('hidden');
+        editListModal.onclick = (e) => {
+            if (e.target === editListModal) editListModal.classList.add('hidden');
+        };
+    }
+
 });
 
-function showConfirmModal(title, desc, onConfirm) {
+function showConfirmModal(title, desc, onConfirm, iconClass = 'ph-warning-circle') {
     const modal = document.getElementById('confirm-modal-overlay');
     const titleEl = document.getElementById('confirm-title');
     const descEl = document.getElementById('confirm-desc');
     const yesBtn = document.getElementById('confirm-yes-btn');
     const cancelBtn = document.getElementById('confirm-cancel-btn');
+    const iconEl = modal.querySelector('.confirm-icon-area i');
+
+    if (iconEl) {
+        iconEl.className = `ph ${iconClass}`;
+    }
 
     titleEl.textContent = title;
     descEl.textContent = desc;
     modal.classList.remove('hidden');
-
+    
     // Remove old listeners to prevent stacking
     const newYes = yesBtn.cloneNode(true);
     yesBtn.parentNode.replaceChild(newYes, yesBtn);
@@ -916,16 +993,25 @@ async function restoreBackup(data) {
         }, { merge: true });
 
         // 2. Restore Lists
+        const restoredListIds = [];
         if (data.lists && Array.isArray(data.lists)) {
             data.lists.forEach(l => {
                 const listRef = doc(db, "users", state.currentUser.uid, "lists", l.id);
-                // Basic validation for list structure
                 if (!l.id) console.warn("Skipping list without ID in restore:", l);
-                else batch.set(listRef, l);
+                else {
+                    batch.set(listRef, l);
+                    restoredListIds.push(l.id);
+                }
             });
-        } else {
-            console.warn("Restore: No 'lists' array found in backup.");
         }
+        
+        // 2.5 Assign to Main Board (New Boards Architecture)
+        const mainBoardId = 'main_board';
+        batch.set(doc(db, "users", state.currentUser.uid, "boards", mainBoardId), {
+            title: "Main Board",
+            listOrder: arrayUnion(...restoredListIds),
+            createdAt: Date.now()
+        }, { merge: true });
 
         // 3. Restore Tasks
         // Handle both Object (legacy) and Array (new robust) formats
@@ -970,11 +1056,57 @@ async function restoreBackup(data) {
 }
 
 async function importTodoistData(rows) {
-    // Simplified for now: recreate lists
+    if (!rows || rows.length === 0) return;
+    Utils.showToast("Importing Todoist Data...");
+    
     const batch = writeBatch(db);
-    // Logic similar to original file...
-    // For now just toast
-    Utils.showToast("Todoist Import Logic would run here (Refactored)");
+    const importedListIds = [];
+    
+    // Group tasks by project (list)
+    const listsMap = {};
+    rows.forEach(row => {
+        const projectName = row.Project || "Todoist Import";
+        if (!listsMap[projectName]) listsMap[projectName] = [];
+        listsMap[projectName].push(row);
+    });
+
+    for (const [title, tasks] of Object.entries(listsMap)) {
+        const listId = Utils.generateId();
+        importedListIds.push(listId);
+        
+        const taskIds = [];
+        tasks.forEach(t => {
+            const taskId = Utils.generateId();
+            taskIds.push(taskId);
+            batch.set(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+                text: t.Content || "Untitled Task",
+                completed: false,
+                archived: false,
+                createdAt: Date.now(),
+                images: [],
+                glowColor: 'none'
+            });
+        });
+
+        batch.set(doc(db, "users", state.currentUser.uid, "lists", listId), {
+            title: title,
+            taskIds: taskIds
+        });
+    }
+
+    // Assign to Main Board
+    const mainBoardId = 'main_board';
+    batch.set(doc(db, "users", state.currentUser.uid, "boards", mainBoardId), {
+        title: "Main Board",
+        listOrder: arrayUnion(...importedListIds),
+        createdAt: Date.now()
+    }, { merge: true });
+
+    await batch.commit();
+    Utils.showToast(`Imported ${importedListIds.length} lists from Todoist!`);
+    if (state.appData.currentBoardId !== mainBoardId) {
+        API.switchBoard(mainBoardId);
+    }
 }
 
 // Re-implement Reset Slider Logic if crucial, else basic button

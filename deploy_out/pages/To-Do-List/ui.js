@@ -25,9 +25,7 @@ export function getSortedListObjects() {
         }
     });
 
-    // Append any new/unknown ID lists
-    listMap.forEach(l => ordered.push(l));
-
+    // Only return lists that are explicitly in the order (assigned to this board)
     return ordered;
 }
 
@@ -141,13 +139,97 @@ export function renderBoard() {
                 state.appData.lists.splice(evt.newIndex, 0, movedList);
                 // Update Order in DB
                 const newOrder = state.appData.lists.map(l => l.id).filter(id => id !== 'orphan-archive');
-                updateDoc(doc(db, "users", state.currentUser.uid), { listOrder: newOrder });
+                const boardId = state.appData.currentBoardId;
+                if (boardId) {
+                    updateDoc(doc(db, "users", state.currentUser.uid, "boards", boardId), { listOrder: newOrder });
+                } else {
+                    updateDoc(doc(db, "users", state.currentUser.uid), { listOrder: newOrder });
+                }
             }
         }
     });
 
+    updateBoardUI();
     updateTotalTaskCount();
     applyStaticLayouts();
+}
+
+export function updateBoardUI() {
+    const currentBoard = state.appData.boards.find(b => b.id === state.appData.currentBoardId);
+    const titleInput = document.getElementById('project-title-input');
+    if (currentBoard && titleInput) {
+        titleInput.value = currentBoard.title;
+        // Update onchange specifically for board title if we are in a board
+        titleInput.onchange = () => {
+            import('./api.js').then(m => m.renameBoard(currentBoard.id, titleInput.value));
+        };
+    }
+
+    renderBoardToggle();
+}
+
+export function renderBoardToggle() {
+    const container = document.getElementById('board-toggle-container');
+    if (!container) return;
+
+    const boards = state.appData.boards;
+    const currentBoard = boards.find(b => b.id === state.appData.currentBoardId);
+    
+    container.innerHTML = `
+        <div class="board-dropdown" id="board-dropdown">
+            <button class="btn primary board-dropdown-btn" id="board-dropdown-btn">
+                <i class="ph ph-layout"></i> 
+                <span>${currentBoard ? escapeHtml(currentBoard.title) : 'Select Board'}</span> 
+                <i class="ph ph-caret-down"></i>
+            </button>
+            <div class="board-dropdown-menu glass-panel hidden" id="board-dropdown-menu">
+                <!-- Boards list -->
+                ${boards.map(b => `
+                    <div class="board-item ${b.id === state.appData.currentBoardId ? 'active' : ''}" 
+                         onclick="import('./api.js').then(m => m.switchBoard('${b.id}'))">
+                        <i class="ph ph-sidebar"></i>
+                        <span style="flex-grow:1;">${escapeHtml(b.title)}</span>
+                        ${boards.length > 1 ? `
+                            <button class="icon-btn danger mini-delete" 
+                                onclick="event.stopPropagation(); import('./api.js').then(m => m.deleteBoard('${b.id}'))"
+                                title="Delete Board">
+                                <i class="ph ph-trash"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                `).join('')}
+                
+                <div class="board-dropdown-divider"></div>
+                
+                <div class="board-item board-action-item" onclick="import('./api.js').then(m => m.addNewBoard())">
+                    <i class="ph ph-plus-circle"></i>
+                    <span>New Board</span>
+                </div>
+                
+                <div class="board-item board-action-item" onclick="import('./api.js').then(m => m.rescueOrphanLists())">
+                    <i class="ph ph-lifebuoy"></i>
+                    <span>Rescue Orphan Lists</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Dropdown Toggle Logic
+    const btn = document.getElementById('board-dropdown-btn');
+    const menu = document.getElementById('board-dropdown-menu');
+    
+    btn.onclick = (e) => {
+        e.stopPropagation();
+        const isHidden = menu.classList.contains('hidden');
+        // Close other dropdowns if any
+        document.querySelectorAll('.board-dropdown-menu').forEach(m => m.classList.add('hidden'));
+        if (isHidden) menu.classList.remove('hidden');
+    };
+
+    // Global Close
+    document.addEventListener('click', () => {
+        if (menu) menu.classList.add('hidden');
+    }, { once: true });
 }
 
 /**
@@ -187,8 +269,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         ? `<button class="icon-btn danger" onclick="window.emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
              <button class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
-             <button class="icon-btn list-action-btn" onclick="window.openBulkAddModal('${list.id}')" title="Bulk Add Tasks"><i class="ph ph-list-plus"></i></button>
-             <button class="icon-btn list-action-btn" onclick="window.deleteList('${list.id}')" title="Delete List"><i class="ph ph-trash"></i></button>
+             <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
            </div>`;
 
     const isBottom = state.appData.settings.addTaskLocation === 'bottom';
@@ -373,19 +454,41 @@ export function createTaskElement(task, sourceListId, number) {
 }
 
 export function updateTotalTaskCount() {
-    let total = 0;
+    let totalAll = 0;
+    let totalBoard = 0;
     const isArchivedView = state.showArchived;
 
+    // Total All logic
     Object.values(state.appData.tasks).forEach(task => {
         if (isArchivedView) {
-            if (task.archived) total++;
+            if (task.archived) totalAll++;
         } else {
-            if (!task.archived) total++;
+            if (!task.archived) totalAll++;
         }
     });
 
-    if (total > 0) {
-        totalTaskCountEl.textContent = isArchivedView ? `Total Archived: ${total}` : `Total: ${total}`;
+    // Total in Board logic
+    const currentBoard = state.appData.boards.find(b => b.id === state.appData.currentBoardId);
+    if (currentBoard && currentBoard.listOrder) {
+        const boardTaskIds = new Set();
+        currentBoard.listOrder.forEach(listId => {
+            const list = state.appData.rawLists.find(l => l.id === listId);
+            if (list && list.taskIds) {
+                list.taskIds.forEach(tid => {
+                    const task = state.appData.tasks[tid];
+                    if (task) {
+                        const match = isArchivedView ? task.archived : !task.archived;
+                        if (match) boardTaskIds.add(tid);
+                    }
+                });
+            }
+        });
+        totalBoard = boardTaskIds.size;
+    }
+
+    if (totalAll > 0) {
+        const prefix = isArchivedView ? "Archived " : "";
+        totalTaskCountEl.textContent = `${prefix}Total All: ${totalAll} | In Board: ${totalBoard}`;
         totalTaskCountEl.classList.remove('hidden');
     } else {
         totalTaskCountEl.classList.add('hidden');
@@ -829,4 +932,98 @@ export function saveMobileReorder() {
             showToast("Lists reordered");
         })
         .catch(e => handleSyncError(e));
+}
+
+/**
+ * Opens the new Edit List Modal
+ */
+export function openEditListModal(listId) {
+    const list = state.appData.rawLists.find(l => l.id === listId);
+    if (!list) return;
+
+    const modal = document.getElementById('edit-list-modal-overlay');
+    const titleEl = document.getElementById('edit-list-title');
+    const bulkInput = document.getElementById('edit-list-bulk-input');
+    const boardSelect = document.getElementById('edit-list-board-select');
+    const deleteBtn = document.getElementById('edit-list-delete-btn');
+    const moveBtn = document.getElementById('edit-list-move-btn');
+    const bulkAddBtn = document.getElementById('edit-list-bulk-add-btn');
+
+    modal.dataset.listId = listId;
+    titleEl.textContent = `Manage: ${list.title}`;
+    bulkInput.value = '';
+
+    // Populate Boards Select
+    boardSelect.innerHTML = '<option value="" disabled selected>Select Board...</option>';
+    state.appData.boards.forEach(board => {
+        const option = document.createElement('option');
+        option.value = board.id;
+        option.textContent = board.title;
+        // Mark current board
+        const currentBoard = state.appData.boards.find(b => b.listOrder && b.listOrder.includes(listId));
+        if (currentBoard && board.id === currentBoard.id) {
+            option.textContent += ' (Current)';
+        }
+        boardSelect.appendChild(option);
+    });
+
+    modal.classList.remove('hidden');
+
+    // Remove old listeners
+    const newBulk = bulkAddBtn.cloneNode(true);
+    bulkAddBtn.parentNode.replaceChild(newBulk, bulkAddBtn);
+
+    const newMove = moveBtn.cloneNode(true);
+    moveBtn.parentNode.replaceChild(newMove, moveBtn);
+
+    const newDelete = deleteBtn.cloneNode(true);
+    deleteBtn.parentNode.replaceChild(newDelete, deleteBtn);
+
+    // Handlers
+    newBulk.onclick = () => {
+        const text = bulkInput.value;
+        const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+        if (lines.length === 0) return;
+
+        const { writeBatch, doc, db, arrayUnion } = API; // Assume imported or accessible
+        import('./api.js').then(api => {
+            const batch = api.writeBatch(api.db);
+            const listRef = api.doc(api.db, "users", state.currentUser.uid, "lists", listId);
+
+            lines.forEach(line => {
+                const newId = Utils.generateId();
+                batch.set(api.doc(api.db, "users", state.currentUser.uid, "tasks", newId), {
+                    text: line.trim(),
+                    completed: false,
+                    archived: false,
+                    createdAt: Date.now(),
+                    images: [],
+                    glowColor: 'none'
+                });
+                batch.update(listRef, { taskIds: api.arrayUnion(newId) });
+            });
+            batch.commit().then(() => {
+                Utils.showToast(`Added ${lines.length} tasks!`);
+                bulkInput.value = '';
+            }).catch(e => api.handleSyncError(e));
+        });
+    };
+
+    newMove.onclick = () => {
+        const targetBoardId = boardSelect.value;
+        if (!targetBoardId) return;
+        import('./api.js').then(api => {
+            api.moveListToBoard(listId, targetBoardId).then(() => {
+                modal.classList.add('hidden');
+            });
+        });
+    };
+
+    newDelete.onclick = () => {
+        import('./api.js').then(api => {
+            api.deleteList(listId).then((success) => {
+                if (success !== false) modal.classList.add('hidden');
+            });
+        });
+    };
 }

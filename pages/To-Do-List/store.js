@@ -20,7 +20,9 @@ export const state = {
             tasksSinceBackup: 0,
             addTaskLocation: 'top'
         },
-        listOrder: []
+        listOrder: [],
+        boards: [],
+        currentBoardId: null
     },
 
     listeners: [],
@@ -60,7 +62,9 @@ export function resetState() {
         rawLists: [],
         tasks: {},
         settings: { autoArchive: false, showNumbers: false, theme: 'dark', sortMode: 'custom' },
-        listOrder: []
+        listOrder: [],
+        boards: [],
+        currentBoardId: null
     };
     state.selectedTaskIds.clear();
 }
