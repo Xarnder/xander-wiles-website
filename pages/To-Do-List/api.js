@@ -223,17 +223,27 @@ export function addNewBoard(title = "New Board") {
 }
 
 export function switchBoard(boardId) {
+    console.log("[DEBUG] switchBoard triggered for boardId:", boardId);
     state.appData.currentBoardId = boardId;
     localStorage.setItem(`lastBoard_${state.currentUser.uid}`, boardId);
     
     // Sync listOrder for immediate UI update
     const board = state.appData.boards.find(b => b.id === boardId);
     if (board) {
+        console.log("[DEBUG] Found board, title:", board.title, "listOrder count:", (board.listOrder || []).length);
         state.appData.listOrder = board.listOrder || [];
+    } else {
+        console.warn("[DEBUG] Board not found in state.appData.boards for ID:", boardId);
     }
 
     // UI will re-render
-    import('./ui.js').then(m => m.renderBoard());
+    console.log("[DEBUG] Triggering UI re-render...");
+    import('./ui.js').then(m => {
+        console.log("[DEBUG] UI module loaded, calling renderBoard()");
+        m.renderBoard();
+    }).catch(err => {
+        console.error("[DEBUG] Error loading UI module in switchBoard:", err);
+    });
 }
 
 export function renameBoard(boardId, newTitle) {

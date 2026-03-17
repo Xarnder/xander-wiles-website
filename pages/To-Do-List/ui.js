@@ -202,12 +202,12 @@ export function renderBoardManager() {
     
     container.innerHTML = boards.map(b => `
         <div class="board-item ${b.id === state.appData.currentBoardId ? 'active' : ''}" 
-             onclick="import('./api.js').then(m => { m.switchBoard('${b.id}'); document.getElementById('board-modal-overlay').classList.add('hidden'); })">
+             onclick="window.switchBoard('${b.id}'); document.getElementById('board-modal-overlay').classList.add('hidden');">
             <i class="ph ph-sidebar"></i>
             <span style="flex-grow:1;">${escapeHtml(b.title)}</span>
             ${boards.length > 1 ? `
                 <button class="icon-btn danger mini-delete" 
-                    onclick="event.stopPropagation(); import('./api.js').then(m => m.deleteBoard('${b.id}'))"
+                    onclick="event.stopPropagation(); window.deleteBoard('${b.id}')"
                     title="Delete Board">
                     <i class="ph ph-trash"></i>
                 </button>
@@ -1024,7 +1024,7 @@ document.getElementById('modal-add-board-btn').onclick = () => {
 };
 
 document.getElementById('modal-rescue-boards-btn').onclick = () => {
-    import('./api.js').then(m => m.rescueOrphanLists());
+    window.rescueOrphanLists();
 };
 
 // Add Board Modal
@@ -1036,11 +1036,10 @@ document.getElementById('confirm-add-board-btn').onclick = () => {
     const title = document.getElementById('new-board-title-input').value.trim();
     if (!title) return;
     
-    import('./api.js').then(m => {
-        m.addNewBoard(title).then(() => {
-            document.getElementById('add-board-modal-overlay').classList.add('hidden');
-            document.getElementById('board-modal-overlay').classList.add('hidden');
-        });
+    window.addNewBoard(title).then(() => {
+        document.getElementById('add-board-modal-overlay').classList.add('hidden');
+        document.getElementById('board-modal-overlay').classList.add('hidden');
+        renderBoard(); // Re-render to show new board in layout if needed
     });
 };
 

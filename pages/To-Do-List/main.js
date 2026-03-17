@@ -87,6 +87,13 @@ window.openEditListModal = UI.openEditListModal;
 window.openBoardManager = UI.openBoardManager;
 window.showConfirmModal = showConfirmModal;
 
+// --- BOARD MANAGEMENT EXPOSURE ---
+window.switchBoard = API.switchBoard;
+window.deleteBoard = API.deleteBoard;
+window.addNewBoard = API.addNewBoard;
+window.rescueOrphanLists = API.rescueOrphanLists;
+window.renderBoard = UI.renderBoard;
+
 // --- DOM ELEMENTS ---
 const loginOverlay = document.getElementById('login-overlay');
 const logoutBtn = document.getElementById('logout-btn');
