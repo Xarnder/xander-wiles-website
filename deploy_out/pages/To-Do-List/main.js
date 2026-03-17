@@ -58,7 +58,14 @@ window.handleAddTask = function (e, listId) {
 };
 window.archiveTask = API.archiveTask;
 window.unarchiveTask = API.unarchiveTask;
-window.deleteTaskForever = API.deleteTaskForever;
+window.deleteTaskForever = (taskId) => {
+    showConfirmModal(
+        "Delete Forever?",
+        "This task will be permanently removed. This action cannot be undone.",
+        () => API.deleteTaskForever(taskId),
+        "ph-trash"
+    );
+};
 window.toggleTaskComplete = function (taskId, isChecked) {
     API.toggleTaskComplete(taskId, isChecked).then(() => {
         // Auto archive logic
@@ -72,7 +79,14 @@ window.toggleTaskComplete = function (taskId, isChecked) {
     });
 };
 window.updateListTitle = API.updateListTitle;
-window.deleteList = API.deleteList;
+window.deleteList = (id) => {
+    showConfirmModal(
+        "Delete List?",
+        "Tasks will stay as orphans and won't be deleted forever.",
+        () => API.deleteList(id),
+        "ph-trash"
+    );
+};
 window.emptyOrphans = API.emptyOrphans;
 
 window.openEditModal = UI.openEditModal;
@@ -86,6 +100,20 @@ window.openArchivedTaskModal = UI.openArchivedTaskModal;
 window.openEditListModal = UI.openEditListModal;
 window.openBoardManager = UI.openBoardManager;
 window.showConfirmModal = showConfirmModal;
+
+// --- BOARD MANAGEMENT EXPOSURE ---
+window.switchBoard = API.switchBoard;
+window.deleteBoard = (id) => {
+    showConfirmModal(
+        "Delete Board?",
+        "This will permanently delete the board. All lists in this board will become orphans.",
+        () => API.deleteBoard(id),
+        "ph-trash"
+    );
+};
+window.addNewBoard = API.addNewBoard;
+window.rescueOrphanLists = API.rescueOrphanLists;
+window.renderBoard = UI.renderBoard;
 
 // --- DOM ELEMENTS ---
 const loginOverlay = document.getElementById('login-overlay');
@@ -287,8 +315,13 @@ function setupFirestoreListeners(uid) {
 
         // Initialize currentBoardId if not set
         if (!state.appData.currentBoardId && boards.length > 0) {
+            const defaultBoardId = state.appData.settings.defaultBoardId;
             const lastBoard = localStorage.getItem(`lastBoard_${uid}`);
-            if (lastBoard && boards.find(b => b.id === lastBoard)) {
+            
+            // Priority: 1. Default Board Setting, 2. Last Used (LocalStorage), 3. First Board
+            if (defaultBoardId && boards.find(b => b.id === defaultBoardId)) {
+                state.appData.currentBoardId = defaultBoardId;
+            } else if (lastBoard && boards.find(b => b.id === lastBoard)) {
                 state.appData.currentBoardId = lastBoard;
             } else {
                 state.appData.currentBoardId = boards[0].id;
@@ -433,8 +466,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Options Modal
     const optionsModal = document.getElementById('options-modal-overlay');
-    document.getElementById('options-btn').onclick = () => optionsModal.classList.remove('hidden');
+    document.getElementById('options-btn').onclick = () => {
+        UI.renderDefaultBoardSelect();
+        optionsModal.classList.remove('hidden');
+    };
     document.getElementById('close-options-btn').onclick = () => optionsModal.classList.add('hidden');
+
+    // Default Board Select
+    const defaultBoardSelect = document.getElementById('default-board-select');
+    if (defaultBoardSelect) {
+        defaultBoardSelect.onchange = (e) => {
+            const val = e.target.value;
+            API.updateSetting('defaultBoardId', val);
+            Utils.showToast(val ? "Default board updated" : "Default board cleared (using last-used)");
+        };
+    }
 
     // Multi Edit
     const multiEditBtn = document.getElementById('multi-edit-btn');
@@ -468,21 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const multiMoveSelect = document.getElementById('multi-move-select');
     document.getElementById('multi-edit-action-btn').onclick = () => {
         // Open Modal
-        multiMoveSelect.innerHTML = '<option value="" disabled selected>Select Destination...</option>';
-        const newListOpt = document.createElement('option');
-        newListOpt.value = 'NEW_LIST_CREATION';
-        newListOpt.textContent = '➕ Create New List...';
-        newListOpt.style.fontWeight = 'bold';
-        multiMoveSelect.appendChild(newListOpt);
-
-        state.appData.lists.forEach(list => {
-            if (list.id !== 'orphan-archive') {
-                const opt = document.createElement('option');
-                opt.value = list.id;
-                opt.textContent = list.title;
-                multiMoveSelect.appendChild(opt);
-            }
-        });
+        renderGroupedListSelect(multiMoveSelect, true);
         multiEditModal.classList.remove('hidden');
     };
     document.getElementById('multi-edit-close-modal-btn').onclick = () => multiEditModal.classList.add('hidden');
@@ -505,20 +537,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Multi Delete
     document.getElementById('multi-delete-btn').onclick = () => {
-        if (confirm(`Archive ${state.selectedTaskIds.size} tasks?`)) {
-            const batch = writeBatch(db);
-            state.selectedTaskIds.forEach(id => {
-                batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), { archived: true });
-            });
-            batch.commit().then(() => {
-                Utils.showToast("Tasks archived.");
-                multiEditModal.classList.add('hidden');
-                state.selectedTaskIds.clear();
-                UI.updateMultiFloatingBar();
-                state.multiEditMode = false;
-                UI.toggleMultiEditUI();
-            }).catch(e => API.handleSyncError(e));
-        }
+        showConfirmModal(
+            "Archive Selected?",
+            `Are you sure you want to archive ${state.selectedTaskIds.size} tasks?`,
+            () => {
+                const batch = writeBatch(db);
+                state.selectedTaskIds.forEach(id => {
+                    batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), { archived: true });
+                });
+                batch.commit().then(() => {
+                    Utils.showToast("Tasks archived.");
+                    multiEditModal.classList.add('hidden');
+                    state.selectedTaskIds.clear();
+                    UI.updateMultiFloatingBar();
+                    state.multiEditMode = false;
+                    UI.toggleMultiEditUI();
+                }).catch(e => API.handleSyncError(e));
+            },
+            "ph-archive-box"
+        );
     };
 
     // Multi Move/Link
@@ -851,16 +888,15 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('archived-delete-btn').onclick = () => {
             const taskId = archivedModal.dataset.taskId;
             if (taskId) {
-                // Confirm delete logic is inside deleteTaskForever usually, but here we can just call it.
-                // However, API.deleteTaskForever usually asks for confirmation? 
-                // Let's check API.js ... Wait, I don't want double confirmation if the modal itself acts as one.
-                // But the modal is a selection menu.
-                // Let's call API.deleteTaskForever.
-                // Actually, API.deleteTaskForever likely has a confirm().
-                // To have a smooth flow, maybe we close this modal first.
-                archivedModal.classList.add('hidden');
-                // Small delay to allow modal close animation? No need.
-                API.deleteTaskForever(taskId);
+                showConfirmModal(
+                    "Delete Forever?",
+                    "This task will be permanently removed. This action cannot be undone.",
+                    () => {
+                        API.deleteTaskForever(taskId);
+                        archivedModal.classList.add('hidden');
+                    },
+                    "ph-trash"
+                );
             }
         };
         // Close on clicking outside content

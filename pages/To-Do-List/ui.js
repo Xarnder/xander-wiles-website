@@ -198,22 +198,122 @@ export function renderBoardManager() {
     const container = document.getElementById('board-list-container');
     if (!container) return;
 
+    const allLists = state.appData.rawLists || [];
+    const listMap = new Map(allLists.map(l => [l.id, l]));
+
+    const allAppBoards = state.appData.boards || [];
+    console.log("Rendering Board Manager with boards:", allAppBoards);
+
+    container.innerHTML = allAppBoards.map(b => {
+        const listCount = b.listOrder ? b.listOrder.length : 0;
+        let taskCount = 0;
+        if (b.listOrder) {
+            b.listOrder.forEach(lid => {
+                const list = listMap.get(lid);
+                if (list && list.taskIds) {
+                    taskCount += list.taskIds.length;
+                }
+            });
+        }
+
+        return `
+            <div class="board-item ${b.id === state.appData.currentBoardId ? 'active' : ''}" 
+                 onclick="window.switchBoard('${b.id}'); document.getElementById('board-modal-overlay').classList.add('hidden');">
+                <i class="ph ph-sidebar"></i>
+                <div class="board-item-details" style="flex-grow: 1; min-width: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                        <span class="board-title" style="flex-grow:1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(b.title)}</span>
+                    </div>
+                    <div class="board-stats" style="display: flex; gap: 12px; margin-top: 4px; font-size: 0.75rem; color: var(--text-secondary); opacity: 0.8;">
+                        <span style="display: flex; align-items: center; gap: 3px;">
+                            <i class="ph ph-list-numbers" style="font-size: 0.85rem;"></i> ${listCount} ${listCount === 1 ? 'List' : 'Lists'}
+                        </span>
+                        <span style="display: flex; align-items: center; gap: 3px;">
+                            <i class="ph ph-check-square" style="font-size: 0.85rem;"></i> ${taskCount} ${taskCount === 1 ? 'Task' : 'Tasks'}
+                        </span>
+                    </div>
+                </div>
+                ${allAppBoards.length > 1 ? `
+                    <button class="icon-btn danger mini-delete" 
+                        onclick="event.stopPropagation(); window.deleteBoard('${b.id}')"
+                        title="Delete Board"
+                        style="flex-shrink: 0;">
+                        <i class="ph ph-trash"></i>
+                    </button>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+export function renderDefaultBoardSelect() {
+    const select = document.getElementById('default-board-select');
+    if (!select) return;
+
     const boards = state.appData.boards;
+    const defaultBoardId = state.appData.settings.defaultBoardId || '';
+
+    let html = `<option value="">None (Last Used)</option>`;
+    boards.forEach(b => {
+        html += `<option value="${b.id}" ${b.id === defaultBoardId ? 'selected' : ''}>${escapeHtml(b.title)}</option>`;
+    });
+
+    select.innerHTML = html;
+}
+
+export function renderGroupedListSelect(select, includeNewListOption = false) {
+    if (!select) return;
+
+    select.innerHTML = '<option value="" disabled selected>Select Destination...</option>';
     
-    container.innerHTML = boards.map(b => `
-        <div class="board-item ${b.id === state.appData.currentBoardId ? 'active' : ''}" 
-             onclick="window.switchBoard('${b.id}'); document.getElementById('board-modal-overlay').classList.add('hidden');">
-            <i class="ph ph-sidebar"></i>
-            <span style="flex-grow:1;">${escapeHtml(b.title)}</span>
-            ${boards.length > 1 ? `
-                <button class="icon-btn danger mini-delete" 
-                    onclick="event.stopPropagation(); window.deleteBoard('${b.id}')"
-                    title="Delete Board">
-                    <i class="ph ph-trash"></i>
-                </button>
-            ` : ''}
-        </div>
-    `).join('');
+    if (includeNewListOption) {
+        const newListOpt = document.createElement('option');
+        newListOpt.value = 'NEW_LIST_CREATION';
+        newListOpt.textContent = '➕ Create New List...';
+        newListOpt.style.fontWeight = 'bold';
+        select.appendChild(newListOpt);
+    }
+
+    const boards = state.appData.boards;
+    const rawLists = state.appData.rawLists || [];
+    const listMap = new Map(rawLists.map(l => [l.id, l]));
+    const assignedListIds = new Set();
+
+    // Group lists by board
+    boards.forEach(board => {
+        const group = document.createElement('optgroup');
+        group.label = `Board: ${board.title}`;
+        
+        if (board.listOrder) {
+            board.listOrder.forEach(lid => {
+                const list = listMap.get(lid);
+                if (list) {
+                    const option = document.createElement('option');
+                    option.value = list.id;
+                    option.textContent = list.title;
+                    group.appendChild(option);
+                    assignedListIds.add(lid);
+                }
+            });
+        }
+        if (group.children.length > 0) {
+            select.appendChild(group);
+        }
+    });
+
+    // Unassigned / Orphans group
+    const orphans = rawLists.filter(l => !assignedListIds.has(l.id));
+    if (orphans.length > 0) {
+        const group = document.createElement('optgroup');
+        group.label = "Unassigned Lists";
+        orphans.forEach(list => {
+            const option = document.createElement('option');
+            option.value = list.id;
+            option.textContent = list.title;
+            group.appendChild(option);
+        });
+        select.appendChild(group);
+    }
 }
 
 /**
@@ -622,16 +722,7 @@ export function openEditModal(taskId, listId) {
     document.getElementById('task-updated-at').textContent = formatDateTime(task.updatedAt || task.createdAt);
 
     const select = document.getElementById('manual-move-select');
-    select.innerHTML = '<option value="" disabled selected>Select Destination...</option>';
-
-    const sortedLists = getSortedListObjects();
-    sortedLists.forEach(list => {
-        if (list.id === 'orphan-archive') return;
-        const option = document.createElement('option');
-        option.value = list.id;
-        option.textContent = list.title;
-        select.appendChild(option);
-    });
+    renderGroupedListSelect(select);
 
     renderCurrentLocations(taskId);
 
@@ -661,10 +752,17 @@ export function renderCurrentLocations(taskId) {
     }
 
     currentLists.forEach(list => {
+        // Find board for this list
+        const board = state.appData.boards.find(b => b.listOrder && b.listOrder.includes(list.id));
+        const boardName = board ? board.title : 'Unassigned';
+
         const div = document.createElement('div');
         div.className = 'location-item';
         div.innerHTML = `
-            <span class="location-name">${escapeHtml(list.title)}</span>
+            <div style="display: flex; flex-direction: column;">
+                <span class="location-name">${escapeHtml(list.title)}</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary); opacity: 0.8;">Board: ${escapeHtml(boardName)}</span>
+            </div>
             <button class="location-remove-btn" onclick="window.removeTaskFromList('${taskId}', '${list.id}')" title="Remove from this list">
                 <i class="ph ph-x"></i>
             </button>
@@ -789,9 +887,9 @@ export function performSearch(query) {
             if (context.length > 0) {
                 matches.push({ task, context });
             } else if (state.showArchived && task.archived) {
-                matches.push({ task, context: [{ listName: 'Archived / Orphan', index: '-' }] });
+                matches.push({ task, context: [{ boardName: 'System', listName: 'Archived / Orphan', index: '-' }] });
             } else if (getOrphanedTaskIds().includes(task.id)) {
-                matches.push({ task, context: [{ listName: 'Orphan', index: '-' }] });
+                matches.push({ task, context: [{ boardName: 'System', listName: 'Orphan', index: '-' }] });
             }
         }
     });
@@ -809,10 +907,15 @@ export function performSearch(query) {
 
 function getTaskContext(taskId) {
     const contexts = [];
-    state.appData.lists.forEach(list => {
+    const allLists = state.appData.rawLists || [];
+    
+    allLists.forEach(list => {
         if (list.taskIds && list.taskIds.includes(taskId)) {
             const index = list.taskIds.indexOf(taskId) + 1;
+            // Find board for this list
+            const board = state.appData.boards.find(b => b.listOrder && b.listOrder.includes(list.id));
             contexts.push({
+                boardName: board ? board.title : 'Unassigned',
                 listName: list.title,
                 listId: list.id,
                 index: index
@@ -836,7 +939,15 @@ function renderSearchResultItem(task, contexts) {
     contexts.forEach(ctx => {
         const badge = document.createElement('span');
         badge.className = 'search-context-badge';
-        badge.innerHTML = `<i class="ph ph-list-dashes"></i> ${ctx.listName} <span style="opacity:0.6; margin-left:3px;">#${ctx.index}</span>`;
+        badge.style.display = 'flex';
+        badge.style.alignItems = 'center';
+        badge.style.gap = '5px';
+        badge.innerHTML = `
+            <i class="ph ph-layout" title="Board"></i> ${ctx.boardName} 
+            <i class="ph ph-caret-right" style="opacity:0.5; font-size:0.8rem;"></i>
+            <i class="ph ph-list-dashes" title="List"></i> ${ctx.listName} 
+            <span style="opacity:0.6; margin-left:3px;">#${ctx.index}</span>
+        `;
         contextContainer.appendChild(badge);
     });
 

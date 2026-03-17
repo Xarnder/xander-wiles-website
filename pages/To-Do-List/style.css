@@ -440,6 +440,39 @@ body {
     opacity: 1;
 }
 
+/* Board Statistics Layout */
+.board-item-details {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.board-title {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.board-stats {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 4px;
+    column-gap: 12px;
+}
+
+@media (max-width: 450px) {
+    #board-list-container .board-item {
+        padding: 12px 15px;
+    }
+    
+    .board-stats {
+        gap: 8px;
+    }
+    
+    .board-stats span {
+        font-size: 0.7rem;
+    }
+}
+
 /* Add Board Input Styling */
 #new-board-title-input {
     width: 100%;
@@ -565,34 +598,55 @@ body {
 
 .confirm-box {
     text-align: center;
-    padding: 30px;
-    max-width: 350px;
+    padding: 35px 30px;
+    max-width: 380px;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 20px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), 0 0 30px rgba(59, 130, 246, 0.15);
+    background: rgba(15, 15, 15, 0.5);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+}
+
+[data-theme="light"] .confirm-box {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.12);
 }
 
 .confirm-icon-area {
-    font-size: 3.5rem;
-    margin-bottom: 20px;
+    font-size: 4rem;
+    margin-bottom: 24px;
     color: var(--accent-blue);
     display: flex;
     justify-content: center;
-    filter: drop-shadow(0 0 10px currentColor);
+    filter: drop-shadow(0 0 15px currentColor);
+    opacity: 0.9;
 }
 
 .confirm-box h2 {
-    margin-bottom: 15px;
-    font-size: 1.5rem;
-    background: linear-gradient(135deg, #fff, #bbb);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    margin-bottom: 12px;
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--text-primary);
 }
 
 .confirm-box p {
     color: var(--text-secondary);
-    line-height: 1.5;
-    margin-bottom: 25px;
+    line-height: 1.6;
+    margin-bottom: 30px;
+    font-size: 1rem;
+    opacity: 0.85;
+}
+
+.centered-actions {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+.centered-actions .btn {
+    min-width: 120px;
+    padding: 12px 20px;
 }
 .task-list {
     padding: 10px;
@@ -1053,6 +1107,12 @@ input:checked+.slider-small:before {
     justify-content: center;
     align-items: center;
     backdrop-filter: blur(5px);
+}
+
+#confirm-modal-overlay,
+#reset-modal-overlay,
+#backup-reminder-modal-overlay {
+    z-index: 4000; /* Higher than regular modal overlays */
 }
 
 /* No Blur for Search List Modal so we can see reordered lists */

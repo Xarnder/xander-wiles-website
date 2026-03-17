@@ -144,6 +144,17 @@
                     </div>
                 </label>
                 <hr class="dropdown-divider">
+                
+                <div class="menu-action-item" style="cursor: default; flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <span><i class="ph ph-house"></i> Default Board</span>
+                    </div>
+                    <select id="default-board-select" class="glass-select full-width">
+                        <option value="" disabled selected>Loading Boards...</option>
+                    </select>
+                </div>
+
+                <hr class="dropdown-divider">
 
                 <!-- IMPORT / EXPORT -->
                 <button id="download-json-btn" class="menu-action-item"><i class="ph ph-download-simple"></i>
@@ -553,7 +564,7 @@
 
     <!-- VERSION INDICATOR -->
     <div id="app-version" class="app-version">
-        v1.10 <!-- UPDATE THIS ON EVERY CHANGE -->
+        v1.16 <!-- UPDATE THIS ON EVERY CHANGE -->
     </div>
 
     <!-- BOARD MANAGER MODAL -->
