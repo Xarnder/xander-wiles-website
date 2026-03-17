@@ -556,6 +556,47 @@
         v1.10 <!-- UPDATE THIS ON EVERY CHANGE -->
     </div>
 
+    <!-- BOARD MANAGER MODAL -->
+    <div id="board-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2>Manage Boards</h2>
+                <button id="close-board-modal-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">
+                Switch between different project boards.
+            </p>
+            <div id="board-list-container" class="task-list" style="max-height: 50vh; overflow-y: auto; padding: 0; margin-bottom: 15px;">
+                <!-- Boards injected here -->
+            </div>
+            
+            <div class="modal-divider"></div>
+
+            <div class="modal-actions-bar" style="flex-direction: column; gap: 10px;">
+                <button id="modal-add-board-btn" class="btn primary full-width" style="width: 100%;">
+                    <i class="ph ph-plus-circle"></i> Create New Board
+                </button>
+                <button id="modal-rescue-boards-btn" class="btn secondary full-width" style="width: 100%;">
+                    <i class="ph ph-lifebuoy"></i> Rescue Orphan Lists
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD BOARD MODAL -->
+    <div id="add-board-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box" style="max-width: 400px;">
+            <div class="confirm-icon-area" style="color: var(--accent-blue);"><i class="ph ph-plus-circle"></i></div>
+            <h2>Create New Board</h2>
+            <p>Enter a title for your new board.</p>
+            <input type="text" id="new-board-title-input" class="add-task-input" placeholder="Board Title..." style="margin-bottom: 20px; font-size: 1.1rem; padding: 12px; text-align: center;">
+            <div class="modal-actions centered-actions">
+                <button id="cancel-add-board-btn" class="btn secondary">Cancel</button>
+                <button id="confirm-add-board-btn" class="btn primary">Create Board</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="main.js"></script>
 </body>
 

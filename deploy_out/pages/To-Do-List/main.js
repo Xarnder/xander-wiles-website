@@ -84,6 +84,7 @@ window.removeTaskFromList = UI.removeTaskFromList;
 // window.handleDragEnd is not called by HTML mostly, but by Sortable configs which are inside UI.js
 window.openArchivedTaskModal = UI.openArchivedTaskModal;
 window.openEditListModal = UI.openEditListModal;
+window.openBoardManager = UI.openBoardManager;
 window.showConfirmModal = showConfirmModal;
 
 // --- DOM ELEMENTS ---

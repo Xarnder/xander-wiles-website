@@ -6,6 +6,7 @@ import DirectoryImporter from './DirectoryImporter';
 import DataRepair from './DataRepair';
 import BackupOptions from './BackupOptions';
 import SearchModal from './SearchModal';
+import MobileMenuModal from './MobileMenuModal';
 
 export default function Layout() {
     const { currentUser, logout } = useAuth();
@@ -165,57 +166,28 @@ export default function Layout() {
                         </button>
                     </div>
 
-                    {/* Mobile Menu Dropdown */}
-                    {isMobileMenuOpen && (
-                        <div className="absolute top-full left-0 right-0 mt-2 mx-4 p-4 glass-card md:hidden flex flex-col space-y-4 animate-fade-in z-50 shadow-2xl bg-[#0a0a0b]/95 border border-white/10 backdrop-blur-xl">
-                            <div className="space-y-1">
-                                <NavItem path="/" icon={CalendarIcon} label="Calendar" onClick={() => setIsMobileMenuOpen(false)} />
-                                <NavItem path="/month" icon={List} label="Month View" onClick={() => setIsMobileMenuOpen(false)} />
-                                <NavItem path="/images" icon={ImageIcon} label="Photos" onClick={() => setIsMobileMenuOpen(false)} />
-                                <NavItem path="/stats" icon={BarChart} label="Stats" onClick={() => setIsMobileMenuOpen(false)} />
-                                <NavItem path="/tags" icon={Tag} label="Tags" onClick={() => setIsMobileMenuOpen(false)} />
-                                <NavItem path="/memories" icon={History} label="Memories" onClick={() => setIsMobileMenuOpen(false)} />
-                                <NavItem path="/pdf-export" icon={FileDown} label="PDF Export" onClick={() => setIsMobileMenuOpen(false)} />
-                            </div>
 
-                            <div className="h-px bg-white/10 my-2" />
-
-                            <div className="grid grid-cols-3 gap-2 p-2">
-                                <div className="flex flex-col items-center justify-center gap-1">
-                                    <div className="bg-white/5 p-2 rounded-lg">
-                                        <DirectoryImporter />
-                                    </div>
-                                    <span className="text-[10px] text-text-muted uppercase tracking-wider">Import</span>
-                                </div>
-                                <div className="flex flex-col items-center justify-center gap-1">
-                                    <div className="bg-white/5 p-2 rounded-lg">
-                                        <DataRepair />
-                                    </div>
-                                    <span className="text-[10px] text-text-muted uppercase tracking-wider">Repair</span>
-                                </div>
-                                <div className="flex flex-col items-center justify-center gap-1">
-                                    <div className="bg-white/5 p-2 rounded-lg">
-                                        <BackupOptions />
-                                    </div>
-                                    <span className="text-[10px] text-text-muted uppercase tracking-wider">Backup</span>
-                                </div>
-                            </div>
-
-                            <div className="h-px bg-white/10 my-2" />
-
-                            <button
-                                onClick={handleLogout}
-                                className="flex items-center w-full px-4 py-3 rounded-lg text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            >
-                                <LogOut className="h-5 w-5 mr-3" />
-                                <span className="font-medium">Logout</span>
-                            </button>
-
-                            <div className="px-4 py-2 text-xs text-text-muted text-center opacity-50">
-                                {currentUser?.email}
-                            </div>
-                        </div>
-                    )}
+                    {/* Mobile Navigation Modal */}
+                    <MobileMenuModal
+                        isOpen={isMobileMenuOpen}
+                        onClose={() => setIsMobileMenuOpen(false)}
+                        currentUser={currentUser}
+                        handleLogout={handleLogout}
+                        navItems={
+                            <>
+                                <NavItem path="/" icon={CalendarIcon} label="Calendar" />
+                                <NavItem path="/month" icon={List} label="Month View" />
+                                <NavItem path="/images" icon={ImageIcon} label="Photos" />
+                                <NavItem path="/stats" icon={BarChart} label="Stats" />
+                                <NavItem path="/tags" icon={Tag} label="Tags" />
+                                <NavItem path="/memories" icon={History} label="Memories" />
+                                <NavItem path="/pdf-export" icon={FileDown} label="PDF Export" />
+                            </>
+                        }
+                        importer={<DirectoryImporter />}
+                        repair={<DataRepair />}
+                        backup={<BackupOptions />}
+                    />
                 </div>
             </header>
 

@@ -177,59 +177,43 @@ export function renderBoardToggle() {
     
     container.innerHTML = `
         <div class="board-dropdown" id="board-dropdown">
-            <button class="btn primary board-dropdown-btn" id="board-dropdown-btn">
+            <button class="btn primary board-dropdown-btn" id="board-dropdown-btn" onclick="window.openBoardManager()">
                 <i class="ph ph-layout"></i> 
                 <span>${currentBoard ? escapeHtml(currentBoard.title) : 'Select Board'}</span> 
                 <i class="ph ph-caret-down"></i>
             </button>
-            <div class="board-dropdown-menu glass-panel hidden" id="board-dropdown-menu">
-                <!-- Boards list -->
-                ${boards.map(b => `
-                    <div class="board-item ${b.id === state.appData.currentBoardId ? 'active' : ''}" 
-                         onclick="import('./api.js').then(m => m.switchBoard('${b.id}'))">
-                        <i class="ph ph-sidebar"></i>
-                        <span style="flex-grow:1;">${escapeHtml(b.title)}</span>
-                        ${boards.length > 1 ? `
-                            <button class="icon-btn danger mini-delete" 
-                                onclick="event.stopPropagation(); import('./api.js').then(m => m.deleteBoard('${b.id}'))"
-                                title="Delete Board">
-                                <i class="ph ph-trash"></i>
-                            </button>
-                        ` : ''}
-                    </div>
-                `).join('')}
-                
-                <div class="board-dropdown-divider"></div>
-                
-                <div class="board-item board-action-item" onclick="import('./api.js').then(m => m.addNewBoard())">
-                    <i class="ph ph-plus-circle"></i>
-                    <span>New Board</span>
-                </div>
-                
-                <div class="board-item board-action-item" onclick="import('./api.js').then(m => m.rescueOrphanLists())">
-                    <i class="ph ph-lifebuoy"></i>
-                    <span>Rescue Orphan Lists</span>
-                </div>
-            </div>
         </div>
     `;
+}
 
-    // Dropdown Toggle Logic
-    const btn = document.getElementById('board-dropdown-btn');
-    const menu = document.getElementById('board-dropdown-menu');
+export function openBoardManager() {
+    const modal = document.getElementById('board-modal-overlay');
+    if (!modal) return;
     
-    btn.onclick = (e) => {
-        e.stopPropagation();
-        const isHidden = menu.classList.contains('hidden');
-        // Close other dropdowns if any
-        document.querySelectorAll('.board-dropdown-menu').forEach(m => m.classList.add('hidden'));
-        if (isHidden) menu.classList.remove('hidden');
-    };
+    renderBoardManager();
+    modal.classList.remove('hidden');
+}
 
-    // Global Close
-    document.addEventListener('click', () => {
-        if (menu) menu.classList.add('hidden');
-    }, { once: true });
+export function renderBoardManager() {
+    const container = document.getElementById('board-list-container');
+    if (!container) return;
+
+    const boards = state.appData.boards;
+    
+    container.innerHTML = boards.map(b => `
+        <div class="board-item ${b.id === state.appData.currentBoardId ? 'active' : ''}" 
+             onclick="import('./api.js').then(m => { m.switchBoard('${b.id}'); document.getElementById('board-modal-overlay').classList.add('hidden'); })">
+            <i class="ph ph-sidebar"></i>
+            <span style="flex-grow:1;">${escapeHtml(b.title)}</span>
+            ${boards.length > 1 ? `
+                <button class="icon-btn danger mini-delete" 
+                    onclick="event.stopPropagation(); import('./api.js').then(m => m.deleteBoard('${b.id}'))"
+                    title="Delete Board">
+                    <i class="ph ph-trash"></i>
+                </button>
+            ` : ''}
+        </div>
+    `).join('');
 }
 
 /**
@@ -1027,3 +1011,42 @@ export function openEditListModal(listId) {
         });
     };
 }
+// --- BOARD MODAL LISTENERS ---
+document.getElementById('close-board-modal-btn').onclick = () => {
+    document.getElementById('board-modal-overlay').classList.add('hidden');
+};
+
+document.getElementById('modal-add-board-btn').onclick = () => {
+    document.getElementById('add-board-modal-overlay').classList.remove('hidden');
+    const input = document.getElementById('new-board-title-input');
+    input.value = '';
+    input.focus();
+};
+
+document.getElementById('modal-rescue-boards-btn').onclick = () => {
+    import('./api.js').then(m => m.rescueOrphanLists());
+};
+
+// Add Board Modal
+document.getElementById('cancel-add-board-btn').onclick = () => {
+    document.getElementById('add-board-modal-overlay').classList.add('hidden');
+};
+
+document.getElementById('confirm-add-board-btn').onclick = () => {
+    const title = document.getElementById('new-board-title-input').value.trim();
+    if (!title) return;
+    
+    import('./api.js').then(m => {
+        m.addNewBoard(title).then(() => {
+            document.getElementById('add-board-modal-overlay').classList.add('hidden');
+            document.getElementById('board-modal-overlay').classList.add('hidden');
+        });
+    });
+};
+
+// Also handle Enter key in new board input
+document.getElementById('new-board-title-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        document.getElementById('confirm-add-board-btn').click();
+    }
+});

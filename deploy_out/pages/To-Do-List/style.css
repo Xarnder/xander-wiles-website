@@ -378,30 +378,83 @@ body {
     font-weight: 600;
 }
 
-.modal-section {
-    margin-bottom: 20px;
+/* Board Manager Modal Styling */
+#board-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px;
 }
 
-.modal-section h3 {
+#board-list-container .board-item {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    padding: 14px 18px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s;
+    cursor: pointer;
     font-size: 1rem;
-    margin-bottom: 10px;
 }
 
-.mini-delete {
-    opacity: 0;
-    transition: opacity 0.2s;
-    padding: 2px !important;
+#board-list-container .board-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent-blue);
+    transform: translateY(-2px);
 }
 
-.board-item:hover .mini-delete {
+#board-list-container .board-item.active {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+}
+
+#board-list-container .board-item.active span {
+    color: var(--accent-blue);
+    font-weight: 700;
+}
+
+#board-list-container .board-item i {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+}
+
+#board-list-container .board-item.active i {
+    color: var(--accent-blue);
+}
+
+#board-list-container .mini-delete {
+    opacity: 0.6;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: var(--accent-red);
+    padding: 8px !important;
+    border-radius: 8px;
+}
+
+#board-list-container .mini-delete:hover {
+    background: var(--accent-red);
+    color: white;
     opacity: 1;
 }
 
-/* Touch device visibility for mini-delete */
-@media (hover: none) {
-    .mini-delete {
-        opacity: 1;
-    }
+/* Add Board Input Styling */
+#new-board-title-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--input-bg);
+    border: 2px solid var(--input-border);
+    color: var(--text-primary);
+    border-radius: 12px;
+    transition: all 0.3s;
+}
+
+#new-board-title-input:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+    outline: none;
 }
 
 [data-theme="light"] .glass-select {

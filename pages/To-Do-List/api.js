@@ -206,10 +206,10 @@ export function addNewList() {
     }).catch(e => handleSyncError(e));
 }
 
-export function addNewBoard() {
+export function addNewBoard(title = "New Board") {
     const boardId = generateId();
     const newBoard = {
-        title: "New Board",
+        title: title.trim() || "New Board",
         listOrder: [],
         createdAt: Date.now()
     };
