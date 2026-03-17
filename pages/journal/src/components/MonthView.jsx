@@ -160,17 +160,17 @@ export default function MonthView() {
                             const isToday = format(new Date(), 'yyyy-MM-dd') === dateKey;
 
                             return (
-                                <div
+                                <button
                                     key={dateKey}
                                     onClick={() => handleEntryClick(dateKey)}
                                     className={`
-                                        p-4 flex items-center gap-4 cursor-pointer transition-colors duration-200
+                                        w-full text-left p-4 flex items-center gap-4 cursor-pointer transition-colors duration-200 border-none appearance-none
                                         ${isToday ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-white/5'}
                                     `}
                                 >
                                     {/* Date Column */}
                                     <div className={`
-                                        flex flex-col items-center justify-center w-12 h-12 rounded-lg border 
+                                        flex flex-col items-center justify-center w-12 h-12 rounded-lg border shrink-0
                                         ${isToday
                                             ? 'border-primary/50 bg-primary/20 text-primary'
                                             : 'border-white/10 bg-white/5 text-text-muted'
@@ -204,8 +204,8 @@ export default function MonthView() {
                                     )}
 
                                     {/* Arrow hint */}
-                                    <ChevronRight className="w-4 h-4 text-text-muted/30" />
-                                </div>
+                                    <ChevronRight className="w-4 h-4 text-text-muted/30 shrink-0" />
+                                </button>
                             );
                         })}
                     </div>

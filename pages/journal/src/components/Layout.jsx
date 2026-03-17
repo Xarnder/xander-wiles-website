@@ -23,6 +23,11 @@ export default function Layout() {
         }
     }
 
+    // Close mobile menu on navigation
+    React.useEffect(() => {
+        setIsMobileMenuOpen(false);
+    }, [location.pathname]);
+
     const NavItem = ({ path, icon: Icon, label, onClick }) => {
         const isActive = location.pathname === path;
         return (
