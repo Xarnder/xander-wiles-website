@@ -108,9 +108,10 @@ a:hover {
 /* --- Header & Desktop Navigation --- */
 .site-header {
     width: 100%;
-    max-width: 1200px;
+    max-width: 1600px; /* Further increased to ensure no squashing */
     margin: 0 auto;
     padding: 1rem 2rem;
+    box-sizing: border-box; /* Ensure padding doesn't cause overflow */
 }
 
 .site-header .header-content {
@@ -128,7 +129,8 @@ a:hover {
 .nav-links {
     list-style: none;
     display: flex;
-    gap: 2rem;
+    align-items: center;
+    gap: 1.5rem; /* Reduced from 2rem to fit more items */
 }
 
 .nav-links a {
@@ -156,6 +158,42 @@ a:hover {
     transform: scaleX(1);
     transform-origin: left;
 }
+
+/* --- Special Glowing Nav Button --- */
+.nav-links a.nav-button-glow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50px;
+    background: rgba(255, 255, 255, 0.05);
+    transition: all 0.3s ease;
+    color: #fff;
+}
+
+.nav-links a.nav-button-glow:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+    transform: translateY(-2px);
+}
+
+.nav-links a.nav-button-glow .nav-icon {
+    width: 18px;
+    height: 18px;
+    transition: transform 0.3s ease;
+}
+
+.nav-links a.nav-button-glow:hover .nav-icon {
+    transform: scale(1.1);
+}
+
+/* Hide the default underline animation for the button-style link */
+.nav-links a.nav-button-glow::after {
+    display: none;
+}
+
 
 .nav-toggle {
     display: none;
@@ -650,7 +688,7 @@ a:hover {
         position: absolute;
         z-index: 9999;
         left: 0;
-        transition: transform 300ms, opacity: 300ms;
+        transition: transform 300ms, opacity 300ms;
     }
 
     .hamburger:nth-child(1) {
