@@ -119,6 +119,12 @@ body.antigravity-theme {
     overflow: hidden;
 }
 
+/* Fix for sitewide header drop-downs/mobile menu being cut off */
+.site-header.glass-card {
+    overflow: visible !important;
+}
+
+
 .glass-card::before {
     content: '';
     position: absolute;
