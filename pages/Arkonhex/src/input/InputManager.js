@@ -10,6 +10,20 @@ export class InputManager {
         this.isLocked = false;
         this.movementIntent = false;
 
+        this.actionBindings = {
+            break: ['Button0', 'ArrowLeft'],
+            place: ['Button2', 'ArrowRight']
+        };
+        try {
+            const saved = localStorage.getItem('arkonhex_keybindings');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                this.actionBindings = { ...this.actionBindings, ...parsed };
+            }
+        } catch(e) {
+            console.warn("Failed to load keybindings");
+        }
+
         this.isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         if (this.isTouchDevice) {
             document.body.classList.add('touch-device');
@@ -160,6 +174,20 @@ export class InputManager {
 
     isButtonDown(button) {
         return this.buttons.has(button);
+    }
+
+    isActionDown(action) {
+        const bindings = this.actionBindings[action];
+        if (!bindings) return false;
+        for (const b of bindings) {
+            if (b.startsWith('Button')) {
+                const btn = parseInt(b.replace('Button', ''));
+                if (this.isButtonDown(btn)) return true;
+            } else {
+                if (this.isKeyDown(b)) return true;
+            }
+        }
+        return false;
     }
 
     consumeButton(button) {

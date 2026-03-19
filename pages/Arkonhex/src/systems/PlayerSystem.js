@@ -474,8 +474,8 @@ export class PlayerSystem {
             // Phase 2+: wait blockRepeatDelay for every subsequent action
             // -----------------------------------------------------------------
 
-            const breakHeld = this.input.isButtonDown(0);
-            const placeHeld = this.input.isButtonDown(2);
+            const breakHeld = this.input.isActionDown('break');
+            const placeHeld = this.input.isActionDown('place');
 
             // BREAK / LEFT CLICK
             if (breakHeld) {
