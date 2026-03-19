@@ -13,7 +13,12 @@
     --accent-glow: 0 0 20px rgba(180, 100, 255, 0.4);
 }
 
+html {
+    background-color: var(--bg-color-1);
+}
+
 body {
+    background-color: var(--bg-color-1);
     background: radial-gradient(circle at top left, var(--bg-color-2), var(--bg-color-1), var(--bg-color-3));
     background-size: 200% 200%;
     animation: bgShift 20s ease-in-out infinite alternate;
