@@ -6,6 +6,10 @@ let loadedFiles = []; // Store files for deferred processing
 let firstImageCache = null; // Cache for the first image
 let firstFaceBox = null; // Cache for the detected face box
 
+// Manual Crop Globals
+let cropperInstance = null;
+let editingBlobIndex = -1;
+
 // Elements
 const imageInput = document.getElementById('imageInput');
 const paddingInput = document.getElementById('paddingInput');
@@ -22,6 +26,12 @@ const imageCounter = document.getElementById('imageCounter');
 const previewCard = document.getElementById('previewCard');
 const previewCanvas = document.getElementById('previewCanvas');
 const previewLoader = document.getElementById('previewLoader');
+
+// Edit Crop Elements
+const editCropModal = document.getElementById('editCropModal');
+const editCropImage = document.getElementById('editCropImage');
+const cancelCropBtn = document.getElementById('cancelCropBtn');
+const saveCropBtn = document.getElementById('saveCropBtn');
 
 // Debug Logger
 function log(message, type = 'info') {
@@ -331,12 +341,18 @@ async function processImage(file, uniqueName) {
                 processedBlobs.push({
                     name: `cropped_${uniqueName}`,
                     blob: blob,
-                    isError: isError
+                    isError: isError,
+                    originalFile: file,
+                    cropWidth: width,
+                    cropHeight: height,
+                    cropX: x,
+                    cropY: y,
+                    targetRatio: useOriginalRatioInput.checked ? NaN : ((parseFloat(ratioWidthInput.value)||1)/(parseFloat(ratioHeightInput.value)||1))
                 });
                 displayResult(canvas.toDataURL(), isError);
             }
             resolve();
-        }, 'image/jpeg');
+        }, 'image/jpeg', 0.95);
     });
 }
 
@@ -561,14 +577,27 @@ function displayResult(dataUrl, isError = false) {
     const img = document.createElement('img');
     img.src = dataUrl;
 
-    // Add Click to Open Lightbox
-    // We need to know the index. Since we append sequentially, index is processedBlobs.length - 1
-    // (Ensure this is called AFTER pushing to processedBlobs)
     const index = processedBlobs.length - 1;
-    div.onclick = () => openLightbox(index);
-    div.style.cursor = "pointer";
-
+    
+    // Add Click to Open Lightbox
+    img.onclick = (e) => {
+        e.stopPropagation();
+        openLightbox(index);
+    };
+    img.style.cursor = "pointer";
     div.appendChild(img);
+
+    // Edit Button
+    const editBtn = document.createElement('button');
+    editBtn.className = 'edit-overlay-btn';
+    editBtn.title = "Edit Crop";
+    editBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
+    editBtn.onclick = (e) => {
+        e.stopPropagation();
+        openEditModal(index);
+    };
+    div.appendChild(editBtn);
+
     gallery.appendChild(div);
 }
 
@@ -609,6 +638,100 @@ downloadBtn.addEventListener('click', () => {
             log("Download started.");
         });
 });
+
+// 8. Manual Crop Editing Logic
+function openEditModal(index) {
+    const data = processedBlobs[index];
+    if (!data || !data.originalFile) return;
+
+    editingBlobIndex = index;
+    const objectUrl = URL.createObjectURL(data.originalFile);
+    
+    editCropImage.src = objectUrl;
+    editCropModal.style.display = 'flex';
+
+    editCropImage.onload = () => {
+        if (cropperInstance) {
+            cropperInstance.destroy();
+        }
+
+        cropperInstance = new Cropper(editCropImage, {
+            viewMode: 1, // Restrict crop box to not exceed canvas
+            dragMode: 'move', // Allow moving image
+            aspectRatio: data.targetRatio, // Preserve selected ratio (or NaN if free)
+            autoCropArea: 1,
+            ready() {
+                // If it was already cropped successfully (or even if it was error, we default to full image crop box)
+                if (data.cropWidth && data.cropHeight) {
+                     cropperInstance.setData({
+                         x: data.cropX,
+                         y: data.cropY,
+                         width: data.cropWidth,
+                         height: data.cropHeight
+                     });
+                }
+            }
+        });
+    };
+}
+
+function closeEditModal() {
+    editCropModal.style.display = 'none';
+    if (cropperInstance) {
+        cropperInstance.destroy();
+        cropperInstance = null;
+    }
+    editCropImage.src = '';
+    editingBlobIndex = -1;
+}
+
+if (cancelCropBtn) cancelCropBtn.addEventListener('click', closeEditModal);
+
+if (saveCropBtn) {
+    saveCropBtn.addEventListener('click', () => {
+        if (!cropperInstance || editingBlobIndex < 0) return;
+
+        const canvas = cropperInstance.getCroppedCanvas({
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high'
+        });
+
+        if (!canvas) return;
+
+        saveCropBtn.disabled = true;
+        saveCropBtn.innerText = "Saving...";
+
+        canvas.toBlob((blob) => {
+            if (blob) {
+                // Update internal state
+                const data = processedBlobs[editingBlobIndex];
+                data.blob = blob;
+                data.isError = false; 
+                
+                // Update new crop rect info so if they edit AGAIN, it starts from the new box!
+                const cropData = cropperInstance.getData();
+                data.cropX = cropData.x;
+                data.cropY = cropData.y;
+                data.cropWidth = cropData.width;
+                data.cropHeight = cropData.height;
+
+                // Visually update the corresponding card
+                const newUrl = canvas.toDataURL('image/jpeg', 0.95);
+                const cards = gallery.querySelectorAll('.image-card');
+                if (cards[editingBlobIndex]) {
+                    const img = cards[editingBlobIndex].querySelector('img');
+                    if (img) img.src = newUrl;
+                    cards[editingBlobIndex].classList.remove('error-border');
+                }
+            }
+            
+            saveCropBtn.disabled = false;
+            saveCropBtn.innerText = "Save Crop";
+            closeEditModal();
+        }, 'image/jpeg', 0.95);
+    });
+}
+
 
 // Start initialization
 loadModels();

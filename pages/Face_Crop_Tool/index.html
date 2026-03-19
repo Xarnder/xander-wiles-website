@@ -32,6 +32,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <!-- Library: Face-API.js -->
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <!-- Library: Cropper.js for manual cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 </head>
 
 <body>
@@ -155,6 +158,20 @@
         <button class="nav-btn prev-btn" id="prevSlide">&#10094;</button>
         <img class="lightbox-content" id="lightboxImage">
         <button class="nav-btn next-btn" id="nextSlide">&#10095;</button>
+    </div>
+
+    <!-- Edit Crop Modal -->
+    <div id="editCropModal" class="lightbox edit-modal" style="display: none;">
+        <div class="edit-modal-header">
+            <h3>Manual Crop</h3>
+            <div class="edit-actions">
+                <button id="cancelCropBtn" class="btn-secondary">Cancel</button>
+                <button id="saveCropBtn" class="btn-primary">Save Crop</button>
+            </div>
+        </div>
+        <div class="edit-modal-content">
+            <img id="editCropImage" src="" alt="Image to Edit">
+        </div>
     </div>
 
     <script src="script.js"></script>

@@ -49,6 +49,7 @@ body {
     margin-bottom: 10px;
     background: linear-gradient(90deg, #fff, #a1a1aa);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
@@ -303,8 +304,36 @@ input[type="range"] {
     transform: scale(1.05);
 }
 
+.edit-overlay-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+    z-index: 5;
+    padding: 0;
+}
+
+.image-card:hover .edit-overlay-btn {
+    opacity: 1;
+}
+
+.edit-overlay-btn:hover {
+    background: var(--accent);
+}
+
 .error-card {
-    border: 1px solid #ff4a4a;
+    border: 10px solid #7a0000; /* Start with dark red */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -312,10 +341,18 @@ input[type="range"] {
     font-size: 0.8rem;
     text-align: center;
     padding: 10px;
+    animation: flashError 1.5s infinite;
 }
 
 .error-border {
-    border: 3px solid #ff4a4a;
+    border: 10px solid #7a0000;
+    animation: flashError 1.5s infinite;
+}
+
+@keyframes flashError {
+    0% { border-color: #7a0000; box-shadow: 0 0 5px rgba(122, 0, 0, 0.5); }
+    50% { border-color: #ffffff; box-shadow: 0 0 20px rgba(255, 255, 255, 0.8); }
+    100% { border-color: #7a0000; box-shadow: 0 0 5px rgba(122, 0, 0, 0.5); }
 }
 
 /* Lightbox Modal */
@@ -529,4 +566,66 @@ input[type="range"] {
     color: var(--text-muted);
     font-size: 0.9rem;
     margin-top: 15px;
+}
+
+/* Edit Modal Extras */
+.btn-secondary {
+    background-color: transparent;
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-weight: 600;
+}
+
+.btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.edit-modal {
+    flex-direction: column;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.edit-modal-header {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    z-index: 1001; /* Above backgrop */
+}
+
+.edit-modal-header h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: white;
+}
+
+.edit-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.edit-modal-content {
+    width: 100%;
+    max-width: 900px;
+    height: calc(100vh - 120px);
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#editCropImage {
+    max-width: 100%;
+    max-height: 100%;
+    display: block; /* Required by Cropper.js */
 }
