@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Portfolio | Xander Wiles</title>
+
+    <!-- Google Fonts: Outfit for premium wide sans-serif feel -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="../../assets/css/style.css">
+    <link rel="stylesheet" href="portfolio-style.css">
+</head>
+
+<body class="antigravity-theme">
+    <!-- Animated Atmospheric Background -->
+    <div class="atmosphere">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <!-- Navigation Placeholder -->
+    <div id="main-nav-placeholder"></div>
+
+    <main class="portfolio-container">
+        <header class="portfolio-header">
+            <h1 class="antigravity-text">Video Portfolio</h1>
+            <p class="subtitle">A collection of cinematic work, 3D projects, and technical demos.</p>
+        </header>
+
+        <!-- Category Filter (Optional/Future) -->
+        <div class="category-filter glass-card">
+            <button class="filter-btn active" data-category="all">All Videos</button>
+            <button class="filter-btn" data-category="cinematography">Cinematography</button>
+            <button class="filter-btn" data-category="3D">3D</button>
+            <button class="filter-btn" data-category="tech">Technical</button>
+            <button class="filter-btn" data-category="game-creation">Game Creation</button>
+        </div>
+
+        <!-- Video Grid -->
+        <div class="video-grid" id="video-grid">
+            <!-- Videos will be injected here or manually added -->
+
+            <!-- Example Video Card (Cinematography) -->
+            <div class="video-card glass-card floating" data-category="cinematography">
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/sfzo8e9C8jk?si=pi7_FMiVrckuSGjS" title="YouTube video player" frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+                </div>
+                <div class="video-info">
+                    <h3>Strawberry Picking</h3>
+                    <p>Strawberry Picking</p>
+                    <span class="category-tag">Cinematography</span>
+                </div>
+            </div>
+
+            <!-- Example Video Card (3D) -->
+            <div class="video-card glass-card floating" data-category="3D">
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/L3QWK-yUDeI?si=Fz74x_L6mDaCepXx"
+                        title="YouTube video player" frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+                </div>
+                <div class="video-info">
+                    <h3>Houdini Project</h3>
+                    <p>Houdini Project</p>
+                    <span class="category-tag">3D</span>
+                </div>
+            </div>
+
+
+
+            <div class="video-card glass-card floating" data-category="3D">
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/zQfHiCKHqKA?si=_bOsLVLPCPZ-t1jC"
+                        title="YouTube video player" frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+                </div>
+                <div class="video-info">
+                    <h3>3D portfolio</h3>
+                    <p>3D portfolio</p>
+                    <span class="category-tag">3D</span>
+                </div>
+            </div>
+
+            <div class="video-card glass-card floating" data-category="3D">
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/PNUsmpludpo" title="YouTube video player" frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+                </div>
+                <div class="video-info">
+                    <h3>3D modelling showcase</h3>
+                    <p>Showcase of a 3D models created using Blender.</p>
+                    <span class="category-tag">3D</span>
+                </div>
+            </div>
+
+            <div class="video-card glass-card floating" data-category="3D">
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/WHoXIanRPak" title="YouTube video player" frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+                </div>
+                <div class="video-info">
+                    <h3>3D Printing Showcase</h3>
+                    <p>Showcase of a 3D Printing Project</p>
+                    <span class="category-tag">3D</span>
+                </div>
+            </div>
+
+            <!-- Example Video Card (Game Creation) -->
+            <div class="video-card glass-card floating" data-category="game-creation">
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/q4fxz59MIhA" title="YouTube video player" frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+                </div>
+                <div class="video-info">
+                    <h3>VR Game</h3>
+                    <p>Unity VR Game</p>
+                    <span class="category-tag">Game Creation</span>
+                </div>
+            </div>
+
+            <!-- Example Video Card (Tech) -->
+            <div class="video-card glass-card floating" data-category="tech">
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/JlEbX-SxWHk" title="YouTube video player" frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+                </div>
+                <div class="video-info">
+                    <h3>Gaussian Splatting</h3>
+                    <p>Gaussian Splatting Project</p>
+                    <span class="category-tag">Technical</span>
+                </div>
+            </div>
+        </div>
+
+        <section class="add-video-prompt glass-card">
+            <!-- <h3>Add More Content</h3> -->
+            <!-- <p>To add more videos, simply edit this HTML file and duplicate a <code>video-card</code> div with your
+                YouTube link and category.</p> -->
+            <a href="https://github.com/Xarnder" class="neon-btn">View on GitHub</a>
+        </section>
+    </main>
+
+    <script src="../../assets/js/nav-loader.js"></script>
+    <script>
+        // Simple category filtering logic
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Update active button
+                document.querySelector('.filter-btn.active').classList.remove('active');
+                btn.classList.add('active');
+
+                const category = btn.getAttribute('data-category');
+                const cards = document.querySelectorAll('.video-card');
+
+                cards.forEach(card => {
+                    if (category === 'all' || card.getAttribute('data-category') === category) {
+                        card.style.display = 'block';
+                        setTimeout(() => card.style.opacity = '1', 10);
+                    } else {
+                        card.style.opacity = '0';
+                        setTimeout(() => card.style.display = 'none', 300);
+                    }
+                });
+            });
+        });
+
+        // Add slight parallax effect to floating cards
+        document.addEventListener('mousemove', (e) => {
+            const amount = 20;
+            const x = (e.clientX / window.innerWidth - 0.5) * amount;
+            const y = (e.clientY / window.innerHeight - 0.5) * amount;
+
+            document.querySelectorAll('.floating').forEach((el, index) => {
+                const depth = (index % 3 + 1) * 0.5;
+                el.style.transform = `translate(${x * depth}px, ${y * depth}px) translateY(-10px)`;
+            });
+        });
+    </script>
+</body>
+
+</html>

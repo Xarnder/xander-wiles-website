@@ -1,0 +1,295 @@
+/* Deep Space Background Variables */
+:root {
+    --bg-color-1: #06020c;
+    --bg-color-2: #160029;
+    --bg-color-3: #080315;
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-hover-bg: rgba(255, 255, 255, 0.08);
+    --glass-hover-border: rgba(255, 255, 255, 0.3);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.75);
+    --theme-font: 'Inter', sans-serif;
+    --accent-glow: 0 0 20px rgba(180, 100, 255, 0.4);
+}
+
+html {
+    background-color: var(--bg-color-1);
+}
+
+body {
+    background-color: var(--bg-color-1);
+    background: radial-gradient(circle at top left, var(--bg-color-2), var(--bg-color-1), var(--bg-color-3));
+    background-size: 200% 200%;
+    animation: bgShift 20s ease-in-out infinite alternate;
+    color: var(--text-primary);
+    font-family: var(--theme-font);
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    min-height: 100vh;
+}
+
+@keyframes bgShift {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+}
+
+/* Glowing Orbs */
+.orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    z-index: -1;
+    opacity: 0.6;
+    animation: floatOrb 25s ease-in-out infinite alternate;
+}
+
+.orb-1 {
+    width: 400px;
+    height: 400px;
+    background: rgba(110, 40, 255, 0.5);
+    top: 10%;
+    left: -10%;
+}
+
+.orb-2 {
+    width: 500px;
+    height: 500px;
+    background: rgba(40, 160, 255, 0.3);
+    bottom: -20%;
+    right: -10%;
+    animation-delay: -5s;
+}
+
+.orb-3 {
+    width: 300px;
+    height: 300px;
+    background: rgba(255, 60, 150, 0.3);
+    top: 40%;
+    left: 50%;
+    animation-delay: -12s;
+}
+
+@keyframes floatOrb {
+    0% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(5vw, 5vh) scale(1.1); }
+    100% { transform: translate(-5vw, 10vh) scale(0.9); }
+}
+
+/* Layout & Grid */
+.about-container {
+    max-width: 1100px;
+    margin: 2rem auto 4rem auto;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 1.5rem;
+    padding: 0 1.5rem;
+}
+
+.card-profile {
+    grid-column: span 12;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+}
+
+.card-about {
+    grid-column: span 12;
+    padding: 2.5rem;
+}
+
+.card-education, .card-hobbies {
+    grid-column: span 6;
+    padding: 2rem;
+}
+
+.card-foods, .card-places, .card-enjoy, .card-happy {
+    grid-column: span 6;
+    padding: 2rem;
+}
+
+.card-links {
+    grid-column: span 12;
+    padding: 2.5rem;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .card-education, .card-hobbies, .card-foods, .card-places, .card-enjoy, .card-happy {
+        grid-column: span 12;
+    }
+}
+
+/* Glassmorphism & Antigravity */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+    transform-style: preserve-3d;
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.5s ease, border-color 0.5s ease, background 0.5s ease;
+}
+
+.glass-panel:hover {
+    transform: translateY(-8px);
+    background: var(--glass-hover-bg);
+    border-color: var(--glass-hover-border);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.05);
+}
+
+/* Typography */
+h1, h2, h3 {
+    font-family: 'Outfit', var(--theme-font);
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+h1 {
+    font-size: 3rem;
+    background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
+
+h2 {
+    font-size: 1.8rem;
+    color: #fff;
+    position: relative;
+    display: inline-block;
+}
+
+h2::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -5px;
+    width: 40px;
+    height: 3px;
+    background: linear-gradient(90deg, #bb77ff, transparent);
+    border-radius: 2px;
+}
+
+p {
+    color: var(--text-secondary);
+    line-height: 1.7;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.list-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.list-items li {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    margin-bottom: 0.8rem;
+    display: flex;
+    align-items: center;
+}
+
+.list-items li::before {
+    content: '✨';
+    margin-right: 10px;
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.tags-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    margin-top: 1.5rem;
+}
+
+.tag-pill {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 0.5rem 1rem;
+    border-radius: 30px;
+    font-size: 0.95rem;
+    color: #fff;
+    transition: all 0.3s ease;
+}
+
+.glass-panel:hover .tag-pill {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow: var(--accent-glow);
+}
+
+/* Profile Image Parallax */
+.profile-pic-container {
+    margin-bottom: 1.5rem;
+    perspective: 1000px;
+}
+
+.profile-picture {
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+    transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+    position: relative;
+    z-index: 2;
+}
+
+.glass-panel:hover .profile-picture {
+    transform: scale(1.05) translateZ(20px);
+    box-shadow: 0 0 40px rgba(150, 100, 255, 0.5);
+    border-color: rgba(255, 255, 255, 0.8);
+}
+
+/* Neon Buttons */
+.social-grid {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.neon-btn {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 0.8rem 2rem;
+    border-radius: 50px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1.05rem;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.neon-btn::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(120deg, transparent, rgba(255,255,255,0.2), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.6s ease;
+}
+
+.neon-btn:hover {
+    border-color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: var(--accent-glow), 0 0 10px rgba(255, 255, 255, 0.3);
+    transform: translateY(-3px);
+    color: #fff;
+}
+
+.neon-btn:hover::before {
+    transform: translateX(100%);
+}

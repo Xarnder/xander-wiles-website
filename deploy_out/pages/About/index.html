@@ -14,90 +14,219 @@
     <link rel="shortcut icon" href="../../assets/images/favicon.ico">
     <meta name="msapplication-TileColor" content="#da532c">
     <meta name="msapplication-config" content="../../assets/browserconfig.xml">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#06020c" media="(prefers-color-scheme: dark)">
 
     <!-- Styles -->
     <link rel="stylesheet" href="../../assets/css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Outfit:wght@400;500;700&display=swap"
         rel="stylesheet">
 
-    <style>
-        /* Specific styles for About page */
-        .about-container {
-            max-width: 800px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-        }
-
-        .profile-header {
-            text-align: center;
-        }
-
-        .about-content {
-            line-height: 1.6;
-            font-size: 1.1rem;
-        }
-
-        .social-links {
-            display: flex;
-            justify-content: center;
-            gap: 1rem;
-            margin-top: 2rem;
-            flex-wrap: wrap;
-        }
-    </style>
+    <link rel="stylesheet" href="about.css">
 </head>
 
 <body>
-    <!-- Background elements -->
-    <div class="background-overlay"></div>
-    <div class="floating-shapes">
-        <div class="shape shape-1"></div>
-        <div class="shape shape-2"></div>
-    </div>
+    <!-- Background Orbs -->
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
 
     <!-- Navigation Placeholder -->
     <div id="main-nav-placeholder"></div>
 
     <main class="app-container">
-        <div class="glass-card about-container">
-            <div class="profile-header">
-                <picture>
-                    <source srcset="../../assets/images/xander_Correted_Edited.avif" type="image/avif">
-                    <source srcset="../../assets/images/Xander_Corrected_Edited.webp" type="image/webp">
-                    <img src="../../assets/images/Xander Corrected Edited.png" alt="Xander Wiles"
-                        class="profile-picture" width="200" height="200" loading="lazy"
-                        style="border-radius: 50%; border: 4px solid rgba(255,255,255,0.2);">
-                </picture>
-                <h1>About Me</h1>
+        <div class="about-container">
+
+            <!-- Header Card -->
+            <div class="glass-panel card-profile">
+                <div class="profile-pic-container">
+                    <picture>
+                        <!-- Ensured file names correspond exactly to the directory assets -->
+                        <source srcset="../../assets/images/xander_Correted_Edited.avif" type="image/avif">
+                        <source srcset="../../assets/images/xander_Correted_Edited.webp" type="image/webp">
+                        <img src="../../assets/images/Xander%20Corrected%20Edited.png" alt="Xander Wiles"
+                            class="profile-picture" width="200" height="200" loading="eager">
+                    </picture>
+                </div>
+                <h1>Xander Wiles</h1>
+                <p style="font-size: 1.25rem; font-weight: 500; color: #fff; margin-bottom: 0;">Software Engineer &
+                    Artist</p>
             </div>
 
-            <div class="about-content">
-                <p>Hello! I'm Xander Wiles.</p>
-                <p>I'm a passionate developer who loves building web applications, games, and tools. My projects range
-                    from interactive 3D experiences to productivity utilities. I enjoy exploring new technologies and
-                    creating things that are both functional and visually appealing.</p>
-                <p>Feel free to explore my projects on the home page or connect with me via the links below.</p>
+            <!-- About Text -->
+            <div class="glass-panel card-about">
+                <h2>Behind the Code</h2>
+                <p>Hello! I'm Xander, a 23-year-old passionate developer and artist from the UK. I thrive at the
+                    fascinating intersection of technology and creativity. Whether I'm building interactive 3D web
+                    experiences, designing compelling games, or engineering AI tools, my goal remains the same:
+                    transforming complex ideas into stunning, user-centric realities.</p>
+                <p>When I’m out of the digital realm, you'll often find me with my Lumix S5 exploring the world through
+                    a lens, playing music, or chronicling my daily adventures in my journal, which recently celebrated
+                    its 1,000th entry milestone.</p>
             </div>
 
-            <div class="social-links">
-                <a href="https://github.com/Xarnder" target="_blank" rel="noopener noreferrer" class="btn">GitHub</a>
-                <a href="https://www.linkedin.com/in/xander-wiles-245999169/" target="_blank" rel="noopener noreferrer"
-                    class="btn">LinkedIn</a>
-                <a href="https://www.youtube.com/@XanderWiles" target="_blank" rel="noopener noreferrer"
-                    class="btn">YouTube</a>
-                <a href="https://www.instagram.com/xander.and.the.lens/" target="_blank" rel="noopener noreferrer"
-                    class="btn">Instagram</a>
+            <!-- Education -->
+            <div class="glass-panel card-education">
+                <h2>Education</h2>
+                <p>My academic background bridges the gap between structured algorithms and boundless imagination.</p>
+                <ul class="list-items">
+                    <li><strong>MSc Artificial Intelligence</strong> <span
+                            style="opacity: 0.6; margin-left: 8px;">(Current/Recent)</span></li>
+                    <li><strong>BA Computer Animation</strong> <span
+                            style="opacity: 0.6; margin-left: 8px;">(Graduated)</span></li>
+                </ul>
             </div>
+
+            <!-- Hobbies -->
+            <div class="glass-panel card-hobbies">
+                <h2>Hobbies & Interests</h2>
+                <p>Curiosity drives everything I do. Here's what keeps me busy when I'm not writing JavaScript.</p>
+                <div class="tags-wrapper">
+                    <span class="tag-pill">🎻 Cello Playing</span>
+                    <span class="tag-pill">📸 Photography (Lumix S5)</span>
+                    <span class="tag-pill">🎨 3D & Digital Art</span>
+                    <span class="tag-pill">☕ Daily Journaling</span>
+                    <span class="tag-pill">🕹️ Game Design</span>
+                </div>
+            </div>
+
+            <!-- Favourite Foods -->
+            <div class="glass-panel card-foods">
+                <h2>Favourite Foods</h2>
+
+                <h3 style="font-size: 1.1rem; color: #fff; margin-bottom: 0.5rem; margin-top: 1rem;">Meals</h3>
+                <ul class="list-items">
+                    <li>Tortellini</li>
+                    <li>Tomato Candy Pasta</li>
+                    <li>Butter Chicken Curry</li>
+                    <li>Thai Green and Red Curry</li>
+                    <li>Cheesy Carbonara</li>
+                    <li>Stroganoff</li>
+                    <li>Chicken Katsu Curry (Korean)</li>
+                    <li>Steak medium rare with cheesy rich macaroni cheese with mushroom, garlic, and herb goats cheese
+                        on top</li>
+                    <li>Prawn Pad Thai</li>
+                    <li>Chinese takeaway - Sweet and Sour Pork, Bok Choy, Chicken with cashew nuts</li>
+                    <li>Pesto Pasta</li>
+                    <li>Halloumi burgers</li>
+                    <li>Spaghetti Bolognese (vegan mince)</li>
+                </ul>
+
+                <h3 style="font-size: 1.1rem; color: #fff; margin-bottom: 0.5rem; margin-top: 1.5rem;">Snacks & Drinks
+                </h3>
+                <ul class="list-items">
+                    <li>Mint chocolate</li>
+                    <li>Orange Chocolate</li>
+                    <li>Lemon Cheesecake</li>
+                    <li>Chile Pistachios</li>
+                    <li>Brown Sugar Milk</li>
+                    <li>Soft Double Chocolate Chip Cookies</li>
+                    <li>Brown Sugar Milky Bubble Tea</li>
+                    <li>BBQ Pringles</li>
+                    <li>Chai Latte with Brown Sugar, Butterscotch and caramel</li>
+                    <li>Premium Dried Mango</li>
+                    <li>Avocado Prawn Cocktails - Avocado with cooked mini prawns and seafood sauce or thousand island
+                        dressing</li>
+                    <li>Millionaire’s Shortbread</li>
+                    <li>Jaffa Cakes</li>
+                    <li>Classic Chocolate Magnum</li>
+                    <li>Rich Chocolate Coffee Cake with lots of Thick Cream</li>
+                    <li>Buttery Shortbread</li>
+                    <li>Milk</li>
+                    <li>Salami, Chorizo and Pepperoni</li>
+                    <li>Lindt Chocolate</li>
+                </ul>
+            </div>
+
+            <!-- Places Visited -->
+            <div class="glass-panel card-places">
+                <h2>Places Explored</h2>
+                <div class="tags-wrapper">
+                    <span class="tag-pill">🇬🇧 United Kingdom</span>
+                    <span class="tag-pill">🇫🇷 France</span>
+                    <span class="tag-pill">🇮🇹 Italy</span>
+                    <span class="tag-pill">🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland</span>
+                    <span class="tag-pill">🇪🇸 Spain</span>
+                    <span class="tag-pill">🇨🇭 Switzerland</span>
+                    <span class="tag-pill">🇰🇭 Cambodia</span>
+                    <span class="tag-pill">🇯🇵 Japan</span>
+                    <span class="tag-pill">🇲🇾 Malaysia</span>
+                    <span class="tag-pill">🇹🇭 Thailand</span>
+                    <span class="tag-pill">🇨🇦 Canada</span>
+                    <span class="tag-pill">🇺🇸 United States</span>
+                    <span class="tag-pill">🇲🇦 Morocco</span>
+                </div>
+                <p style="margin-top: 1rem; margin-bottom: 0; font-size: 0.95rem; opacity: 0.8;">Always looking forward
+                    to the next adventure!</p>
+            </div>
+
+            <!-- What I enjoy -->
+            <div class="glass-panel card-enjoy">
+                <h2>What I Enjoy</h2>
+                <ul class="list-items">
+                    <li>Cinematic Experiences</li>
+                    <li>Good Food</li>
+                    <li>Talking to people</li>
+                    <li>Solving Problems</li>
+                    <li>Walking</li>
+                    <li>Listening to good music</li>
+                    <li>Designing and Creating Digital Art</li>
+                    <li>Helping people</li>
+                    <li>Writing about life and how I feel</li>
+                    <li>Telling stories</li>
+                    <li>Traveling</li>
+                    <li>Massages</li>
+                    <li>Playing Minecraft</li>
+
+                </ul>
+            </div>
+
+            <!-- Things that make me happy
+            <div class="glass-panel card-happy">
+                <h2>Things That Make Me Happy</h2>
+                <ul class="list-items">
+                    <li>Body Massage</li>
+                    <li>Exploring new places and things</li>
+                    <li>Moana</li>
+                    <li>Apple Products</li>
+                    <li>Tesla</li>
+                </ul>
+            </div> -->
+
+            <!-- Links -->
+            <div class="glass-panel card-links">
+                <h2 style="margin-bottom: 2rem;">Let's Connect</h2>
+                <div class="social-grid">
+                    <a href="https://github.com/Xarnder" target="_blank" rel="noopener noreferrer"
+                        class="neon-btn">GitHub</a>
+                    <a href="https://www.linkedin.com/in/xander-wiles-245999169/" target="_blank"
+                        rel="noopener noreferrer" class="neon-btn">LinkedIn</a>
+                    <a href="https://www.youtube.com/@XanderWiles" target="_blank" rel="noopener noreferrer"
+                        class="neon-btn">YouTube</a>
+                    <a href="https://www.instagram.com/xander.and.the.lens/" target="_blank" rel="noopener noreferrer"
+                        class="neon-btn">Instagram</a>
+                </div>
+            </div>
+
         </div>
     </main>
 
     <script src="../../assets/js/nav-loader.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const profilePic = document.querySelector('.profile-picture');
+            if (profilePic) {
+                if (profilePic.complete) {
+                    profilePic.classList.add('loaded');
+                } else {
+                    profilePic.addEventListener('load', () => profilePic.classList.add('loaded'));
+                }
+            }
+        });
+    </script>
 </body>
 
 </html>

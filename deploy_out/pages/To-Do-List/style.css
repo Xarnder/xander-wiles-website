@@ -1922,34 +1922,51 @@ input:checked+.slider-small:before {
 /* --- MOBILE SCROLLBAR OVERRIDES --- */
 @media (max-width: 600px) {
 
+    .task-list {
+        overflow-y: scroll !important; /* Force scrollbar visibility */
+    }
+
     /* Force permanent and thick scrollbar on mobile lists */
     .task-list::-webkit-scrollbar {
         -webkit-appearance: none;
-        width: 20px;
-        /* Extra thick for easy touch */
+        width: 14px; /* Extra thick for easy touch */
+        background: rgba(0, 0, 0, 0.05); /* Slight track color to force persistence */
+        border-radius: 8px;
         display: block;
-        background: transparent;
     }
 
     .task-list::-webkit-scrollbar-thumb {
-        background-color: rgba(255, 255, 255, 0.4);
-        border-radius: 10px;
-        border: 5px solid transparent;
-        background-clip: content-box;
+        background-color: rgba(255, 255, 255, 0.6);
+        border-radius: 8px;
     }
 
     .task-list::-webkit-scrollbar-track {
-        background: transparent;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
     }
 
     /* Light mode mobile scrollbar */
     [data-theme="light"] .task-list::-webkit-scrollbar-thumb {
-        background-color: rgba(0, 0, 0, 0.3);
+        background-color: rgba(0, 0, 0, 0.4);
+    }
+    
+    [data-theme="light"] .task-list::-webkit-scrollbar-track,
+    [data-theme="light"] .task-list::-webkit-scrollbar {
+        background: rgba(0, 0, 0, 0.05);
     }
 
     /* OLED mode mobile scrollbar */
     [data-theme="oled"] .task-list::-webkit-scrollbar-thumb {
-        background-color: rgba(255, 255, 255, 0.5);
+        background-color: rgba(255, 255, 255, 0.7);
+    }
+    
+    [data-theme="oled"] .task-list::-webkit-scrollbar-track,
+    [data-theme="oled"] .task-list::-webkit-scrollbar {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .board-container {
+        overflow-x: scroll !important; /* Force scrollbar visibility */
     }
 
     /* Board Horizontal Scrollbar (Mobile) */
@@ -1957,22 +1974,29 @@ input:checked+.slider-small:before {
         -webkit-appearance: none;
         height: 12px;
         display: block;
-        background: transparent;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 6px;
     }
 
     .board-container::-webkit-scrollbar-thumb {
-        background-color: rgba(255, 255, 255, 0.4);
+        background-color: rgba(255, 255, 255, 0.6);
         border-radius: 6px;
-        border: 3px solid transparent;
-        background-clip: content-box;
+    }
+
+    [data-theme="light"] .board-container::-webkit-scrollbar {
+        background: rgba(0, 0, 0, 0.05);
     }
 
     [data-theme="light"] .board-container::-webkit-scrollbar-thumb {
-        background-color: rgba(0, 0, 0, 0.3);
+        background-color: rgba(0, 0, 0, 0.4);
+    }
+    
+    [data-theme="oled"] .board-container::-webkit-scrollbar {
+        background: rgba(255, 255, 255, 0.05);
     }
 
     [data-theme="oled"] .board-container::-webkit-scrollbar-thumb {
-        background-color: rgba(255, 255, 255, 0.5);
+        background-color: rgba(255, 255, 255, 0.7);
     }
 
     /* --- ARCHIVED TASK MOBILE FIXES --- */
