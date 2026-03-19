@@ -124,8 +124,8 @@ export function renderBoard() {
     });
 
     // List Sorting (Reorder List Columns)
-    // Assuming Sortable is global
     state.listSortable = new Sortable(boardContainer, {
+        disabled: !state.appData.settings.dragEnabled,
         animation: 150,
         handle: '.list-drag-handle',
         direction: 'horizontal',
@@ -425,7 +425,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
                 put: true
             },
             animation: 150,
-            disabled: !isCustomSort,
+            disabled: (!isCustomSort || !state.appData.settings.dragEnabled),
             filter: '.archived-task',
             preventOnFilter: false, // CRITICAL: Allow touch events on filtered (archived) elements so buttons work
             forceFallback: true,
@@ -437,6 +437,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         state.sortableInstances.push(sortable);
     } else {
         const sortable = new Sortable(taskListContainer, {
+            disabled: !state.appData.settings.dragEnabled,
             group: { name: 'shared', pull: true, put: false },
             animation: 150,
             sort: false,
@@ -858,8 +859,18 @@ export function selectAllInList(listId) {
 }
 
 export function enableSortables(enable) {
-    if (state.listSortable) state.listSortable.option("disabled", !enable);
-    state.sortableInstances.forEach(s => s.option("disabled", !enable));
+    const isCustomSort = state.appData.settings.sortMode === 'custom';
+    const isDragEnabled = state.appData.settings.dragEnabled;
+    const shouldDisableList = !enable || !isDragEnabled;
+
+    if (state.listSortable) state.listSortable.option("disabled", shouldDisableList);
+    state.sortableInstances.forEach(s => {
+        const isOrphan = s.el.closest('.orphan-list') !== null;
+        const shouldDisableTasks = isOrphan 
+            ? (!enable || !isDragEnabled) 
+            : (!enable || !isDragEnabled || !isCustomSort);
+        s.option("disabled", shouldDisableTasks);
+    });
 }
 
 // --- IMAGE UPLOAD TRADITIONAL ---
@@ -1013,6 +1024,7 @@ export function openMobileReorderModal() {
     if (mobileSortableInstance) mobileSortableInstance.destroy();
 
     mobileSortableInstance = new Sortable(container, {
+        disabled: !state.appData.settings.dragEnabled,
         animation: 150,
         handle: '.mobile-reorder-list-item', // They drag the whole card
         forceFallback: true,
