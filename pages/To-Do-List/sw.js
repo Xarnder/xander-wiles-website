@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-v18';
+const CACHE_NAME = 'taskmaster-v19';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -102,7 +102,9 @@ self.addEventListener('fetch', (event) => {
                     }
                     // Cache the latest version
                     const responseToCache = finalResponse.clone();
-                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+                    if (event.request.url.startsWith('http')) {
+                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+                    }
                     return finalResponse;
                 })
                 .catch(() => {
@@ -150,10 +152,12 @@ self.addEventListener('fetch', (event) => {
                             // Clone the response
                             const responseToCache = finalResponse.clone();
 
-                            caches.open(CACHE_NAME)
-                                .then((cache) => {
-                                    cache.put(event.request, responseToCache);
-                                });
+                            if (event.request.url.startsWith('http')) {
+                                caches.open(CACHE_NAME)
+                                    .then((cache) => {
+                                        cache.put(event.request, responseToCache);
+                                    });
+                            }
 
                             return finalResponse;
                         }
