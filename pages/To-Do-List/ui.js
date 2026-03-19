@@ -132,6 +132,8 @@ export function renderBoard() {
         filter: '.orphan-list',
         forceFallback: true,
         fallbackOnBody: true,
+        delay: 200,
+        delayOnTouchOnly: true,
         onEnd: (evt) => {
             if (evt.newIndex !== evt.oldIndex) {
                 // Reorder Logic
@@ -428,6 +430,8 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             preventOnFilter: false, // CRITICAL: Allow touch events on filtered (archived) elements so buttons work
             forceFallback: true,
             fallbackOnBody: true,
+            delay: 200,
+            delayOnTouchOnly: true,
             onEnd: handleDragEnd
         });
         state.sortableInstances.push(sortable);
@@ -435,7 +439,9 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         const sortable = new Sortable(taskListContainer, {
             group: { name: 'shared', pull: true, put: false },
             animation: 150,
-            sort: false
+            sort: false,
+            delay: 200,
+            delayOnTouchOnly: true
         });
         state.sortableInstances.push(sortable);
     }
@@ -1010,7 +1016,9 @@ export function openMobileReorderModal() {
         animation: 150,
         handle: '.mobile-reorder-list-item', // They drag the whole card
         forceFallback: true,
-        fallbackOnBody: true
+        fallbackOnBody: true,
+        delay: 200,
+        delayOnTouchOnly: true
     });
 
     modal.classList.remove('hidden');
