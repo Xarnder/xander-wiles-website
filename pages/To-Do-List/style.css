@@ -692,7 +692,7 @@ body {
     border: 1px solid transparent;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
-    touch-action: none;
+    touch-action: manipulation;
     user-select: none;
     -webkit-user-select: none;
 }
@@ -2081,7 +2081,7 @@ input:checked+.slider-small:before {
     font-weight: bold;
     color: var(--text-primary);
     cursor: grab;
-    touch-action: none;
+    touch-action: manipulation;
     user-select: none;
     -webkit-user-select: none;
 }
