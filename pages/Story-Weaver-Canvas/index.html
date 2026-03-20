@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crew Generator</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Google Fonts for Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <!-- Global Website CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    
+    <!-- Page Specific CSS -->
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+    <!-- Global Nav Placeholder -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Deep Space Animated Orbs Background -->
+    <div class="background-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <!-- Main App Container -->
+    <main class="glass-container">
+        <header class="app-header">
+            <h1>Fictional Crew Generator</h1>
+            <p>Generate, lock, and customize your ultimate team.</p>
+        </header>
+
+        <section class="controls glass-panel">
+            <div class="control-group">
+                <label for="crew-size">Crew Size:</label>
+                <input type="number" id="crew-size" value="6" min="1" max="20" class="glass-input">
+                
+                <label for="crew-name">Crew Name:</label>
+                <input type="text" id="crew-name" placeholder="Enter crew name..." class="glass-input">
+
+                <button id="generate-btn" class="glass-btn primary-btn">✨ Generate Crew</button>
+                <button id="export-btn" class="glass-btn secondary-btn">📤 Export CSV</button>
+                <div class="toggle-group">
+                    <label class="switch">
+                        <input type="checkbox" id="compact-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Compact Mode</span>
+                </div>
+                <div class="toggle-group">
+                    <label class="switch">
+                        <input type="checkbox" id="reorder-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Reorder Mode</span>
+                </div>
+            </div>
+            <div class="divider"></div>
+            <div class="control-group custom-trait-group">
+                <label for="trait-category">Add Custom Trait:</label>
+                <select id="trait-category" class="glass-input">
+                    <option value="Name">Name</option>
+                    <option value="Role">Role</option>
+                    <option value="Weakness">Weakness</option>
+                    <option value="HairColor">Hair Colour</option>
+                    <option value="SkinTone">Skin Tone</option>
+                    <option value="BodyType">Body Type</option>
+                    <option value="DistinguishingMark">Distinguishing Mark</option>
+                    <option value="Age">Age</option>
+                    <option value="ClothingStyle">Clothing Style</option>
+                    <option value="Height">Height</option>
+                    <option value="CombatMove">Combat Move</option>
+                    <option value="Origin">Origin</option>
+                    <option value="Weapon">Weapon</option>
+                    <option value="Personality">Personality</option>
+                    <option value="Motivation">Motivation</option>
+                    <option value="SignatureItem">Signature Item</option>
+                    <option value="EyeColor">Eye Colour</option>
+                    <option value="Hobby">Hobby</option>
+                    <option value="Fear">Fear</option>
+                    <option value="Catchphrase">Catchphrase</option>
+                    <option value="SocialClass">Social Class</option>
+                </select>
+                <input type="text" id="trait-value" placeholder="Enter new trait..." class="glass-input">
+                <button id="add-trait-btn" class="glass-btn">➕ Add</button>
+            </div>
+        </section>
+
+        <!-- Responsive Table Wrapper -->
+        <section class="table-responsive glass-panel">
+            <table id="crew-table">
+                <thead>
+                    <tr id="table-head-row">
+                        <!-- Table headers generated via JS -->
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Table content generated via JS -->
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <!-- Page Specific JavaScript -->
+    <script src="app.js"></script>
+</body>
+</html>
