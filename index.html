@@ -198,41 +198,6 @@
         </div>
 
 
-        <!-- === MUSIC PLAYLISTS === -->
-        <h2 class="section-title">Music Playlists</h2>
-        <div id="homepage-playlist-grid" class="page-grid">
-            <!-- Dynamically populated from playlists.json -->
-            <div class="loading-spinner"></div>
-        </div>
-
-        <script>
-            document.addEventListener('DOMContentLoaded', async () => {
-                const grid = document.getElementById('homepage-playlist-grid');
-                try {
-                    const response = await fetch('/assets/Music_CSV/playlists.json');
-                    const playlists = await response.json();
-                    
-                    grid.innerHTML = ''; // Clear spinner
-                    
-                    // Only show first 5 or 6 on home page to keep it clean
-                    playlists.slice(0, 6).forEach(p => {
-                        const card = document.createElement('a');
-                        card.href = `/pages/Music_Playlists/index.html?id=${p.id}`;
-                        card.className = 'page-card glass-card';
-                        card.innerHTML = `
-                            <span class="page-icon" style="font-size: 3rem; display: block; margin-bottom: 1rem;">${p.icon || '🎵'}</span>
-                            <h3>${p.title}</h3>
-                            <p>${p.description}</p>
-                        `;
-                        grid.appendChild(card);
-                    });
-                } catch (e) {
-                    console.error('Error loading playlists for homepage:', e);
-                    grid.innerHTML = '<p>Error loading playlists.</p>';
-                }
-            });
-        </script>
-
 
         <!-- === UTILITIES & PRODUCTIVITY === -->
         <h2 class="section-title">Utilities & Productivity</h2>
@@ -544,6 +509,68 @@
 
 
 
+
+        <!-- === MUSIC PLAYLISTS === -->
+        <h2 class="section-title">Music Playlists</h2>
+        <div id="homepage-playlist-grid" class="page-grid">
+            <!-- Dynamically populated from playlists.json -->
+            <div class="loading-spinner"></div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', async () => {
+                const grid = document.getElementById('homepage-playlist-grid');
+                
+                // Helper to strip emojis from text (same as in playlist-viewer.js)
+                function stripEmojis(text) {
+                    return text.replace(/\p{Extended_Pictographic}/gu, '').trim();
+                }
+
+                try {
+                    const response = await fetch('/assets/Music_CSV/playlists.json');
+                    const playlists = await response.json();
+                    
+                    grid.innerHTML = ''; // Clear spinner
+                    
+                    // Only show first 12 on home page to keep it clean
+                    playlists.slice(0, 12).forEach(p => {
+                        const card = document.createElement('a');
+                        card.href = `/pages/Music_Playlists/?id=${p.id}`;
+                        card.className = 'page-card glass-card';
+                        card.innerHTML = `
+                            <span class="page-icon" style="font-size: 3rem; display: block; margin-bottom: 1rem;">${p.icon || '🎵'}</span>
+                            <h3 class="playlist-card-title">Loading...</h3>
+                            <p>${p.description}</p>
+                        `;
+                        grid.appendChild(card);
+
+                        // Fetch real title from CSV asynchronously
+                        fetch(p.csvPath)
+                            .then(resp => resp.text())
+                            .then(text => {
+                                const firstLine = text.split('\n')[0];
+                                // Handle basic comma parsing for the first line
+                                let title = firstLine.split(',')[1] || firstLine;
+                                if (title.startsWith('"') && title.endsWith('"')) {
+                                    title = title.substring(1, title.length - 1);
+                                }
+                                card.querySelector('.playlist-card-title').textContent = stripEmojis(title);
+                            })
+                            .catch(err => {
+                                console.warn(`Could not load title for ${p.id}:`, err);
+                                card.querySelector('.playlist-card-title').textContent = 'Untitled Playlist';
+                            });
+                    });
+                } catch (e) {
+                    console.error('Error loading playlists for homepage:', e);
+                    grid.innerHTML = '<p>Error loading playlists.</p>';
+                }
+            });
+        </script>
+
+
+
+
         <!-- Contact Card -->
         <div class="contact-card glass-card">
             <div class="contact-icon">✉️</div>
@@ -579,6 +606,15 @@
                 <span>Only Fans</span>
             </a>
         </div>
+
+
+
+
+
+
+
+
+
         <!-- Hidden Test Pages Section -->
         <div id="hidden-test-pages" class="hidden-pages-container" style="display: none;">
             <h2 class="section-title">Test Pages</h2>

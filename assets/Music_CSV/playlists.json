@@ -1,52 +1,37 @@
 [
     {
-        "id": "complete1",
-        "csvPath": "/assets/Music_CSV/playlist_metadata_complete1.csv",
-        "title": "Musicals",
-        "description": "A collection of Broadway's finest moments, from Wicked to Les Misérables.",
-        "theme": "#6b46c1",
-        "accent": "#d6bcfa",
-        "background": "#0f0c1d",
-        "text": "#ffffff",
-        "icon": "🎭"
+        "id": "energetic-music",
+        "csvPath": "/assets/Music_CSV/Energetic Music_playlist_metadata.csv",
+        "description": "The hits that defined a generation.",
+        "theme": "#b83280",
+        "accent": "#fbb6ce",
+        "background": "#1a0a14",
+        "text": "#fff5f7",
+        "icon": "⚡️"
     },
     {
-        "id": "complete2",
-        "csvPath": "/assets/Music_CSV/playlist_metadata_complete2.csv",
-        "title": "Akensile Inspiration",
-        "description": "A collection of songs that inspired the creation of Akensile.",
-        "theme": "#2d3748",
+        "id": "royal-shadows",
+        "csvPath": "/assets/Music_CSV/Royal Shadows_playlist_metadata.csv",
+        "description": "Majestic and atmospheric sounds.",
+        "theme": "#4a5568",
         "accent": "#a0aec0",
-        "background": "#1a1c20",
-        "text": "#f7fafc",
-        "icon": "🎸"
+        "background": "#1a1c1e",
+        "text": "#edf2f7",
+        "icon": "👑"
     },
     {
-        "id": "complete3",
-        "csvPath": "/assets/Music_CSV/playlist_metadata_complete3.csv",
-        "title": "Chill Vibes",
+        "id": "chill-vibes-music",
+        "csvPath": "/assets/Music_CSV/Chill Vibes Music_playlist_metadata.csv",
         "description": "A collection of chill vibes.",
         "theme": "#c53030",
         "accent": "#feb2b2",
         "background": "#1a0606",
         "text": "#fff5f5",
-        "icon": "🎬"
+        "icon": "😎"
     },
     {
-        "id": "complete4",
-        "csvPath": "/assets/Music_CSV/playlist_metadata_complete4.csv",
-        "title": "Christmas Songs",
-        "description": "A collection of Christmas songs.",
-        "theme": "#2c7a7b",
-        "accent": "#81e6d9",
-        "background": "#041515",
-        "text": "#e6fffa",
-        "icon": "🌿"
-    },
-    {
-        "id": "complete5",
-        "csvPath": "/assets/Music_CSV/playlist_metadata_complete5.csv",
-        "title": "Jazz & Soul",
+        "id": "feel-good-songs",
+        "csvPath": "/assets/Music_CSV/Feel Good Songs_playlist_metadata.csv",
         "description": "Smooth rhythms and soulful melodies for the perfect evening.",
         "theme": "#744210",
         "accent": "#f6ad55",
@@ -55,36 +40,113 @@
         "icon": "🎷"
     },
     {
-        "id": "complete6",
-        "csvPath": "/assets/Music_CSV/playlist_metadata_complete6.csv",
-        "title": "High Energy",
-        "description": "The hits that defined a generation.",
-        "theme": "#b83280",
-        "accent": "#fbb6ce",
-        "background": "#1a0a14",
-        "text": "#fff5f7",
-        "icon": "🎤"
+        "id": "sad-songs",
+        "csvPath": "/assets/Music_CSV/playlist_metadata_complete.csv",
+        "description": "For those introspective moments.",
+        "theme": "#3182ce",
+        "accent": "#90cdf4",
+        "background": "#0a131a",
+        "text": "#f0f9ff",
+        "icon": "😔"
     },
     {
-        "id": "complete7",
-        "csvPath": "/assets/Music_CSV/playlist_metadata_complete7.csv",
-        "title": "Akshata Favourites",
+        "id": "best-musical-songs",
+        "csvPath": "/assets/Music_CSV/Best Musical Songs_playlist_metadata.csv",
+        "description": "A collection of Broadway's finest moments, from Wicked to Les Misérables.",
+        "theme": "#6b46c1",
+        "accent": "#d6bcfa",
+        "background": "#0f0c1d",
+        "text": "#ffffff",
+        "icon": "🎭"
+    },
+    {
+        "id": "christmas-music",
+        "csvPath": "/assets/Music_CSV/Christmas Music_playlist_metadata.csv",
+        "description": "A collection of Christmas songs.",
+        "theme": "#2c7a7b",
+        "accent": "#81e6d9",
+        "background": "#041515",
+        "text": "#e6fffa",
+        "icon": "🎅"
+    },
+    {
+        "id": "classic-for-friends",
+        "csvPath": "/assets/Music_CSV/Classic for friends_playlist_metadata.csv",
         "description": "A collection of songs that Akshata likes.",
         "theme": "#2b6cb0",
         "accent": "#90cdf4",
         "background": "#0a121a",
         "text": "#ebf8ff",
-        "icon": "💻"
+        "icon": "🎶"
     },
     {
-        "id": "complete8",
-        "csvPath": "/assets/Music_CSV/playlist_metadata_complete8.csv",
-        "title": "Piano Tunes",
+        "id": "great-piano-tunes",
+        "csvPath": "/assets/Music_CSV/Great Piano Tunes_playlist_metadata.csv",
         "description": "Timeless compositions from the greats.",
         "theme": "#2f855a",
         "accent": "#9ae6b4",
         "background": "#0a1a12",
         "text": "#f0fff4",
-        "icon": "🎻"
+        "icon": "🎹"
+    },
+    {
+        "id": "halloween",
+        "csvPath": "/assets/Music_CSV/Halloween_playlist_metadata.csv",
+        "description": "Spooky tracks for a haunted night.",
+        "theme": "#ed8936",
+        "accent": "#fbd38d",
+        "background": "#1a0b00",
+        "text": "#fffaf0",
+        "icon": "🎃"
+    },
+    {
+        "id": "play-this-to-fall-in-love",
+        "csvPath": "/assets/Music_CSV/Play this to fall in love_playlist_metadata.csv",
+        "description": "Romantic melodies to set the mood.",
+        "theme": "#e53e3e",
+        "accent": "#feb2b2",
+        "background": "#1a0505",
+        "text": "#fff5f5",
+        "icon": "❤️"
+    },
+    {
+        "id": "pop-best-of-the-best",
+        "csvPath": "/assets/Music_CSV/Pop Best of The Best_playlist_metadata.csv",
+        "description": "The ultimate collection of pop favourites.",
+        "theme": "#4299e1",
+        "accent": "#90cdf4",
+        "background": "#0a151f",
+        "text": "#f0f9ff",
+        "icon": "🎤"
+    },
+    {
+        "id": "reprise",
+        "csvPath": "/assets/Music_CSV/Reprise_playlist_metadata.csv",
+        "description": "Revisiting the best tracks from past years.",
+        "theme": "#805ad5",
+        "accent": "#b794f4",
+        "background": "#110b1a",
+        "text": "#f9f5ff",
+        "icon": "🔄"
+    },
+    {
+        "id": "virgin-artist",
+        "csvPath": "/assets/Music_CSV/Virgin Artist_playlist_metadata.csv",
+        "description": "New sounds and fresh discoveries.",
+        "theme": "#38a169",
+        "accent": "#9ae6b4",
+        "background": "#0a1a0f",
+        "text": "#f0fff4",
+        "icon": "💃"
+    },
+    {
+        "id": "akensile-soundtrack-inspiration",
+        "csvPath": "/assets/Music_CSV/Akensile Soundtrack Inspiration_playlist_metadata.csv",
+        "description": "A collection of songs that inspired the creation of Akensile.",
+        "theme": "#2d3748",
+        "accent": "#a0aec0",
+        "background": "#1a1c20",
+        "text": "#f7fafc",
+        "icon": "🧙‍♂️"
     }
 ]

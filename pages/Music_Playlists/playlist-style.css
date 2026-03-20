@@ -410,7 +410,30 @@ select {
     .search-wrapper, .filter-wrapper, select {
         width: 100%;
     }
+
+    /* Prevent UI squashing by hiding content when sidebar is open on mobile */
+    body.sidebar-open .playlist-container,
+    body.sidebar-open .playlist-footer {
+        display: none;
+    }
+
+    body.sidebar-open .playlist-sidebar {
+        width: calc(100% - 40px);
+        left: 0;
+        margin: 20px;
+        top: 20px;
+        height: calc(100vh - 40px);
+    }
+
+    .close-btn {
+        display: block;
+    }
+
+    body.sidebar-open .toggle-sidebar-btn {
+        display: none;
+    }
 }
+
 
 .error-container {
     text-align: center;

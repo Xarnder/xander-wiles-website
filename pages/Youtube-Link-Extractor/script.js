@@ -185,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         do {
             const params = new URLSearchParams({
-                part: 'snippet',
+                part: 'snippet,contentDetails',
                 maxResults: '50',
                 playlistId: playlistId,
                 key: apiKey,
@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const title = item.snippet.title;
                 const videoId = item.snippet.resourceId.videoId;
                 const channel = item.snippet.videoOwnerChannelTitle || item.snippet.channelTitle || 'Unknown';
-                const publishedAt = item.snippet.publishedAt;
+                const publishedAt = (item.contentDetails && item.contentDetails.videoPublishedAt) ? item.contentDetails.videoPublishedAt : item.snippet.publishedAt;
                 // Exclude "Private video" or "Deleted video" entries usually lacking IDs
                 if (videoId) {
                     videos.push({
@@ -639,26 +639,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 progressBarContainer.classList.add('hidden');
                 progressBar.style.width = '0%';
             }, 2000);
-        }
-    }
-
-    // UI Helpers
-    function showStatus(msg, type) {
-        statusDiv.textContent = msg;
-        statusDiv.className = `status-box ${type}`; // Removes 'hidden'
-    }
-
-    function setLoading(isLoading) {
-        if (isLoading) {
-            extractBtn.disabled = true;
-            extractBtn.textContent = "Extracting...";
-            showStatus("Fetching data from YouTube... This might take a moment.", "loading");
-            // Hide previous results while loading new ones
-            resultsContainer.classList.add('hidden');
-            extractedVideos = []; // Clear previous data
-        } else {
-            extractBtn.disabled = false;
-            extractBtn.textContent = "Extract Videos"; // Changed text to reflect action
         }
     }
 

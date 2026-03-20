@@ -69,19 +69,58 @@ async function loadCSV(path) {
         const response = await fetch(path);
         const text = await response.text();
         
-        // Simple CSV parser (assuming first row is header)
         const rows = text.split('\n').filter(row => row.trim() !== '');
-        const headers = rows[0].split(',').map(h => h.trim());
         
-        allSongs = rows.slice(1).map(row => {
-            // Handle quoted fields if necessary (basic implementation)
+        // Extract Playlist Metadata (Lines 1 and 2)
+        let extractedTitle = "";
+        let masterLink = "";
+
+        if (rows.length >= 2) {
+            const titleRow = parseCSVRow(rows[0]);
+            const urlRow = parseCSVRow(rows[1]);
+            
+            if (titleRow[0] === "Playlist Title") extractedTitle = titleRow[1];
+            if (urlRow[0] === "Playlist URL") masterLink = urlRow[1];
+        }
+
+        // Update UI with extracted metadata
+        if (extractedTitle) {
+            const cleanTitle = stripEmojis(extractedTitle);
+            playlistTitle.textContent = cleanTitle;
+            document.title = `${cleanTitle} | Xander Wiles`;
+        }
+
+        if (masterLink && playFullBtn) {
+            playFullBtn.href = masterLink;
+            playFullBtn.style.display = 'flex';
+        } else if (playFullBtn) {
+            playFullBtn.style.display = 'none';
+        }
+
+        // Identify Headers (Line 4, index 3)
+        // Note: index 2 is usually empty based on the CSV format
+        const headerRowIndex = rows.findIndex(row => row.startsWith('Title,Channel'));
+        if (headerRowIndex === -1) {
+            throw new Error("Could not find CSV header row");
+        }
+
+        const headers = parseCSVRow(rows[headerRowIndex]).map(h => h.trim());
+        
+        allSongs = rows.slice(headerRowIndex + 1).map(row => {
             const values = parseCSVRow(row);
             const song = {};
             headers.forEach((h, i) => {
                 song[h.toLowerCase()] = values[i] ? values[i].trim() : '';
             });
             return song;
-        });
+        }).filter(song => song.title && song.title !== ""); // Filter out empty rows if any
+
+        // Update song count in header
+        if (playlistDescription) {
+            const countText = `${allSongs.length} ${allSongs.length === 1 ? 'song' : 'songs'}`;
+            const currentDesc = currentPlaylist.description || "";
+            playlistDescription.textContent = currentDesc ? `${currentDesc} • ${countText}` : countText;
+        }
 
         renderSongs();
     } catch (error) {
@@ -118,6 +157,12 @@ function parseCSVRow(row) {
     return result;
 }
 
+// Helper to strip emojis from text
+function stripEmojis(text) {
+    // Unicode-aware regex for emojis
+    return text.replace(/\p{Extended_Pictographic}/gu, '').trim();
+}
+
 // 3. Render
 function renderSongs() {
     const filter = searchInput.value.toLowerCase();
@@ -152,7 +197,6 @@ function renderSongs() {
         // const videoId = song.url.split('v=')[1]?.split('&')[0];
         
         card.innerHTML = `
-            <div class="card-icon">🎵</div>
             <h3 class="song-title">${song.title || 'Unknown Title'}</h3>
             <p class="song-artist">${song.channel || 'Unknown Channel'}</p>
             <p class="song-artist" style="font-size: 0.8rem; margin-top: -10px;">Published: ${song.published || 'N/A'}</p>
@@ -166,20 +210,36 @@ function renderSongs() {
 }
 
 // 4. Sidebar Logic
-function populateSidebar(playlists, currentId) {
+async function populateSidebar(playlists, currentId) {
     const sidebarNav = document.getElementById('sidebar-nav');
     if (!sidebarNav) return;
 
     sidebarNav.innerHTML = '';
+    
+    // Create all items first with placeholders or JSON titles
     playlists.forEach(p => {
         const item = document.createElement('a');
-        item.href = `?id=${p.id}`;
+        item.id = `sidebar-item-${p.id}`;
+        item.href = `./?id=${p.id}`;
         item.className = `sidebar-item ${p.id === currentId ? 'active' : ''}`;
         item.innerHTML = `
             <span class="sidebar-icon">${p.icon || '🎵'}</span>
-            <span class="sidebar-name">${p.title}</span>
+            <span class="sidebar-name">${p.title || 'Loading...'}</span>
         `;
         sidebarNav.appendChild(item);
+
+        // Fetch real title from CSV asynchronously
+        fetch(p.csvPath)
+            .then(response => response.text())
+            .then(text => {
+                const firstLine = text.split('\n')[0];
+                const titleRow = parseCSVRow(firstLine);
+                if (titleRow[0] === "Playlist Title" && titleRow[1]) {
+                    const nameSpan = item.querySelector('.sidebar-name');
+                    if (nameSpan) nameSpan.textContent = stripEmojis(titleRow[1]);
+                }
+            })
+            .catch(err => console.warn(`Could not load title for ${p.id}:`, err));
     });
 }
 
