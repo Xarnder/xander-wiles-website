@@ -15,6 +15,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressBar = document.getElementById('progressBar');
 
     const nextPlaylistBtn = document.getElementById('nextPlaylistBtn');
+    const multiPlaylistProgress = document.getElementById('multiPlaylistProgress');
+    const progressCountText = document.getElementById('progressCountText');
+    const progressTitleText = document.getElementById('progressTitleText');
+
     const API_KEY = 'AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk';
 
     let extractedVideos = []; // Store videos for download
@@ -22,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let playlistQueue = [];
     let currentPlaylistUrl = "";
+    let totalPlaylistsInQueue = 0;
+    let playlistsProcessed = 0;
 
     console.log("App Initialized. Waiting for user input.");
 
@@ -36,7 +42,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         playlistQueue = lines;
+        totalPlaylistsInQueue = lines.length;
+        playlistsProcessed = 0;
         extractBtn.disabled = true;
+
+        multiPlaylistProgress.classList.remove('hidden');
+        progressTitleText.textContent = "";
+        progressCountText.textContent = "";
 
         processNextPlaylist();
     });
@@ -50,12 +62,17 @@ document.addEventListener('DOMContentLoaded', () => {
             nextPlaylistBtn.classList.add('hidden');
             extractBtn.disabled = false;
             extractBtn.classList.remove('hidden');
+            multiPlaylistProgress.classList.add('hidden');
             return;
         }
 
         currentPlaylistUrl = playlistQueue.shift();
+        playlistsProcessed++;
         const apiKey = API_KEY;
         const playlistUrl = currentPlaylistUrl;
+
+        progressCountText.textContent = `Processing Playlist ${playlistsProcessed} of ${totalPlaylistsInQueue}`;
+        progressTitleText.textContent = `Loading...`;
 
         // Hide next button during processing
         nextPlaylistBtn.classList.add('hidden');
@@ -89,6 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Fetch playlist metadata (title)
             playlistTitle = await fetchPlaylistMetadata(playlistId, apiKey);
             console.log(`Playlist Title: ${playlistTitle}`);
+
+            progressTitleText.textContent = playlistTitle;
 
             const videos = await fetchAllPlaylistVideos(playlistId, apiKey);
 
@@ -586,7 +605,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const safeDate = `"${new Date(video.publishedAt).toLocaleDateString()}"`;
             csvContent += `${safeTitle},${safeChannel},${safeDate},${video.url}\n`;
         });
-        zip.file("playlist_metadata_complete.csv", csvContent);
+        
+        const safeCsvMetadataName = sanitizeFilename(playlistTitle, 100) || 'metadata';
+        zip.file(`${safeCsvMetadataName}_playlist_metadata.csv`, csvContent);
 
         try {
             // Revert to default compression (STORE) as the issue was likely Unicode filenames
