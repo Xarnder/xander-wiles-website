@@ -198,6 +198,42 @@
         </div>
 
 
+        <!-- === MUSIC PLAYLISTS === -->
+        <h2 class="section-title">Music Playlists</h2>
+        <div id="homepage-playlist-grid" class="page-grid">
+            <!-- Dynamically populated from playlists.json -->
+            <div class="loading-spinner"></div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', async () => {
+                const grid = document.getElementById('homepage-playlist-grid');
+                try {
+                    const response = await fetch('/assets/Music_CSV/playlists.json');
+                    const playlists = await response.json();
+                    
+                    grid.innerHTML = ''; // Clear spinner
+                    
+                    // Only show first 5 or 6 on home page to keep it clean
+                    playlists.slice(0, 6).forEach(p => {
+                        const card = document.createElement('a');
+                        card.href = `/pages/Music_Playlists/index.html?id=${p.id}`;
+                        card.className = 'page-card glass-card';
+                        card.innerHTML = `
+                            <span class="page-icon" style="font-size: 3rem; display: block; margin-bottom: 1rem;">${p.icon || '🎵'}</span>
+                            <h3>${p.title}</h3>
+                            <p>${p.description}</p>
+                        `;
+                        grid.appendChild(card);
+                    });
+                } catch (e) {
+                    console.error('Error loading playlists for homepage:', e);
+                    grid.innerHTML = '<p>Error loading playlists.</p>';
+                }
+            });
+        </script>
+
+
         <!-- === UTILITIES & PRODUCTIVITY === -->
         <h2 class="section-title">Utilities & Productivity</h2>
         <div class="page-grid">

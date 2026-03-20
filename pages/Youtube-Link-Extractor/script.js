@@ -178,8 +178,14 @@ document.addEventListener('DOMContentLoaded', () => {
     async function downloadCSV(videoList) {
         console.log("Generating CSV...");
 
-        // CSV Header
-        let csvContent = "Title,Channel,Published,URL\n";
+        // CSV Metadata & Header
+        const playlistUrl = playlistInput.value.trim();
+        const safePlaylistTitleAttr = `"${playlistTitle.replace(/"/g, '""')}"`;
+        const safePlaylistUrlAttr = `"${playlistUrl.replace(/"/g, '""')}"`;
+        
+        let csvContent = `Playlist Title,${safePlaylistTitleAttr}\n`;
+        csvContent += `Playlist URL,${safePlaylistUrlAttr}\n\n`;
+        csvContent += "Title,Channel,Published,URL\n";
 
         videoList.forEach(video => {
             // Escape quotes in titles by doubling them, wrap title in quotes
@@ -189,7 +195,8 @@ document.addEventListener('DOMContentLoaded', () => {
             csvContent += `${safeTitle},${safeChannel},${safeDate},${video.url}\n`;
         });
 
-        const filename = `playlist_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        const safeFilenameTitle = sanitizeFilename(playlistTitle, 100) || 'playlist';
+        const filename = `${safeFilenameTitle}_export_${new Date().toISOString().slice(0, 10)}.csv`;
         const fileType = 'text/csv;charset=utf-8;';
 
         // Try using navigator.share for iOS/Mobile support
@@ -523,7 +530,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(tempContainer);
 
         // Add CSV metadata to the ZIP
-        let csvContent = "Title,Channel,Published,URL\n";
+        const safePlaylistTitleAttr = `"${playlistTitle.replace(/"/g, '""')}"`;
+        const safePlaylistUrlAttr = `"${playlistUrl.replace(/"/g, '""')}"`;
+        
+        let csvContent = `Playlist Title,${safePlaylistTitleAttr}\n`;
+        csvContent += `Playlist URL,${safePlaylistUrlAttr}\n\n`;
+        csvContent += "Title,Channel,Published,URL\n";
         extractedVideos.forEach(video => {
             const safeTitle = `"${video.title.replace(/"/g, '""')}"`;
             const safeChannel = `"${video.channel.replace(/"/g, '""')}"`;

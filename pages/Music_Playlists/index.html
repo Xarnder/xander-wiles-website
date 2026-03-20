@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Playlists | Xander Wiles</title>
+
+    <!-- Theme-aware SVG icons -->
+    <link rel="icon" href="/favicon.ico" sizes="any">
+    <link rel="icon" href="/favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="playlist-style.css">
+</head>
+<body class="loading">
+    <!-- Navigation -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- Dynamic Background -->
+    <div class="ambient-background">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <!-- Sidebar Navigation -->
+    <aside id="playlist-sidebar" class="playlist-sidebar glass-card">
+        <div class="sidebar-header">
+            <h3>Playlists</h3>
+            <button id="close-sidebar" class="close-btn">×</button>
+        </div>
+        <nav id="sidebar-nav" class="sidebar-nav">
+            <!-- Dynamic playlist links go here -->
+            <div class="loading-spinner"></div>
+        </nav>
+    </aside>
+
+    <!-- Sidebar Toggle (Mobile) -->
+    <button id="toggle-sidebar" class="toggle-sidebar-btn glass-card">
+        <span>☰</span>
+    </button>
+
+    <!-- Main Content -->
+    <main class="playlist-container">
+        <header class="playlist-header glass-card">
+            <div class="header-content">
+                <div id="playlist-icon" class="playlist-icon">🎵</div>
+                <div class="header-text">
+                    <h1 id="playlist-title">Loading Playlist...</h1>
+                    <p id="playlist-description" class="subtitle">Please wait while we fetch the music data.</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <a href="#" id="play-full-playlist" target="_blank" class="btn btn-primary" style="display: none;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    Play on YouTube
+                </a>
+            </div>
+        </header>
+
+        <section class="controls-section glass-card">
+            <div class="search-wrapper">
+                <input type="text" id="searchInput" placeholder="Search for songs, artists, or channels...">
+            </div>
+            <div class="filter-wrapper">
+                <select id="sortSelect">
+                    <option value="default">Default Order</option>
+                    <option value="title-asc">Title (A-Z)</option>
+                    <option value="artist-asc">Channel (A-Z)</option>
+                    <option value="date-desc">Newest First</option>
+                </select>
+                <div class="select-arrow">▼</div>
+            </div>
+        </section>
+
+        <div id="song-grid" class="song-grid">
+            <!-- Dynamic items go here -->
+            <div class="loading-spinner"></div>
+        </div>
+
+        <div id="error-message" class="error-container" style="display: none;">
+            <h2>Oops! Playlist not found.</h2>
+            <p>We couldn't find the playlist you're looking for. Please check the URL or return to the <a href="/">homepage</a>.</p>
+        </div>
+    </main>
+
+    <footer class="playlist-footer">
+        <p>© 2026 Xander Wiles • Built with Passion</p>
+    </footer>
+
+    <!-- Logic -->
+    <script src="playlist-viewer.js"></script>
+</body>
+</html>

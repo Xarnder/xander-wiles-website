@@ -1,0 +1,90 @@
+[
+    {
+        "id": "complete1",
+        "csvPath": "/assets/Music_CSV/playlist_metadata_complete1.csv",
+        "title": "Musicals",
+        "description": "A collection of Broadway's finest moments, from Wicked to Les Misérables.",
+        "theme": "#6b46c1",
+        "accent": "#d6bcfa",
+        "background": "#0f0c1d",
+        "text": "#ffffff",
+        "icon": "🎭"
+    },
+    {
+        "id": "complete2",
+        "csvPath": "/assets/Music_CSV/playlist_metadata_complete2.csv",
+        "title": "Akensile Inspiration",
+        "description": "A collection of songs that inspired the creation of Akensile.",
+        "theme": "#2d3748",
+        "accent": "#a0aec0",
+        "background": "#1a1c20",
+        "text": "#f7fafc",
+        "icon": "🎸"
+    },
+    {
+        "id": "complete3",
+        "csvPath": "/assets/Music_CSV/playlist_metadata_complete3.csv",
+        "title": "Chill Vibes",
+        "description": "A collection of chill vibes.",
+        "theme": "#c53030",
+        "accent": "#feb2b2",
+        "background": "#1a0606",
+        "text": "#fff5f5",
+        "icon": "🎬"
+    },
+    {
+        "id": "complete4",
+        "csvPath": "/assets/Music_CSV/playlist_metadata_complete4.csv",
+        "title": "Christmas Songs",
+        "description": "A collection of Christmas songs.",
+        "theme": "#2c7a7b",
+        "accent": "#81e6d9",
+        "background": "#041515",
+        "text": "#e6fffa",
+        "icon": "🌿"
+    },
+    {
+        "id": "complete5",
+        "csvPath": "/assets/Music_CSV/playlist_metadata_complete5.csv",
+        "title": "Jazz & Soul",
+        "description": "Smooth rhythms and soulful melodies for the perfect evening.",
+        "theme": "#744210",
+        "accent": "#f6ad55",
+        "background": "#17120a",
+        "text": "#fffff0",
+        "icon": "🎷"
+    },
+    {
+        "id": "complete6",
+        "csvPath": "/assets/Music_CSV/playlist_metadata_complete6.csv",
+        "title": "High Energy",
+        "description": "The hits that defined a generation.",
+        "theme": "#b83280",
+        "accent": "#fbb6ce",
+        "background": "#1a0a14",
+        "text": "#fff5f7",
+        "icon": "🎤"
+    },
+    {
+        "id": "complete7",
+        "csvPath": "/assets/Music_CSV/playlist_metadata_complete7.csv",
+        "title": "Akshata Favourites",
+        "description": "Synthesized beats and futuristic soundscapes.",
+        "theme": "#2b6cb0",
+        "accent": "#90cdf4",
+        "background": "#0a121a",
+        "text": "#ebf8ff",
+        "icon": "💻"
+    },
+    {
+        "id": "complete8",
+        "csvPath": "/assets/Music_CSV/playlist_metadata_complete8.csv",
+        "title": "Piano Tunes",
+        "description": "Timeless compositions from the greats.",
+        "theme": "#2f855a",
+        "accent": "#9ae6b4",
+        "background": "#0a1a12",
+        "text": "#f0fff4",
+        "icon": "🎻"
+    }
+]
