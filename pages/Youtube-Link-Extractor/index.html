@@ -55,12 +55,15 @@
             <!-- API Key Input Removed: Key is now hardcoded in script.js -->
 
             <div class="input-group">
-                <label for="playlistUrl">Playlist URL</label>
-                <input type="text" id="playlistUrl" placeholder="https://www.youtube.com/playlist?list=..."
-                    autocomplete="off">
+                <label for="playlistUrl">Playlist URLs (one per line)</label>
+                <textarea id="playlistUrl" placeholder="https://www.youtube.com/playlist?list=..." rows="4"
+                    autocomplete="off"></textarea>
             </div>
 
-            <button id="extractBtn" class="action-btn">Extract & Download CSV</button>
+            <div style="display: flex; gap: 10px;">
+                <button id="extractBtn" class="action-btn">Extract & Download CSV</button>
+                <button id="nextPlaylistBtn" class="action-btn secondary hidden">Next Playlist</button>
+            </div>
 
             <div id="statusMessage" class="status-box hidden"></div>
 

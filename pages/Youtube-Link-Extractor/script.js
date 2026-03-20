@@ -14,34 +14,69 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressBarContainer = document.getElementById('progressBarContainer');
     const progressBar = document.getElementById('progressBar');
 
-    // TODO: Replace with your actual API Key and restrict it in Google Cloud Console
+    const nextPlaylistBtn = document.getElementById('nextPlaylistBtn');
     const API_KEY = 'AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk';
 
     let extractedVideos = []; // Store videos for download
     let playlistTitle = 'youtube_playlist'; // Default title
 
+    let playlistQueue = [];
+    let currentPlaylistUrl = "";
+
     console.log("App Initialized. Waiting for user input.");
 
-    extractBtn.addEventListener('click', async () => {
-        const apiKey = API_KEY;
-        const playlistUrl = playlistInput.value.trim();
+    extractBtn.addEventListener('click', () => {
+        // Parse textarea for multiple URLs
+        const lines = playlistInput.value.trim().split(/\r?\n/).map(l => l.trim()).filter(l => l);
 
-        // Basic Validation
-        if (!playlistUrl) {
-            showStatus("Please enter a Playlist URL.", "error");
+        if (lines.length === 0) {
+            showStatus("Please enter at least one Playlist URL.", "error");
             console.warn("Validation Error: Missing URL");
             return;
         }
+
+        playlistQueue = lines;
+        extractBtn.disabled = true;
+
+        processNextPlaylist();
+    });
+
+    nextPlaylistBtn.addEventListener('click', () => {
+        processNextPlaylist();
+    });
+
+    async function processNextPlaylist() {
+        if (playlistQueue.length === 0) {
+            nextPlaylistBtn.classList.add('hidden');
+            extractBtn.disabled = false;
+            extractBtn.classList.remove('hidden');
+            return;
+        }
+
+        currentPlaylistUrl = playlistQueue.shift();
+        const apiKey = API_KEY;
+        const playlistUrl = currentPlaylistUrl;
+
+        // Hide next button during processing
+        nextPlaylistBtn.classList.add('hidden');
 
         const playlistId = extractPlaylistId(playlistUrl);
         if (!playlistId) {
             // Specific check for video URLs to give better feedback
             if (playlistUrl.includes('youtu.be') || playlistUrl.includes('watch?v=')) {
                 showStatus("It looks like you pasted a video link. Please use a Playlist URL (must contain 'list=').", "error");
-                console.warn("Validation Error: User pasted a video link URL.");
             } else {
                 showStatus("Invalid YouTube Playlist URL.", "error");
-                console.error("Validation Error: Could not parse Playlist ID from", playlistUrl);
+            }
+
+            // Allow skipping invalid URL and continuing if there are items left
+            if (playlistQueue.length > 0) {
+                nextPlaylistBtn.textContent = `Next Playlist (${playlistQueue.length} left)`;
+                nextPlaylistBtn.classList.remove('hidden');
+                extractBtn.classList.add('hidden');
+            } else {
+                extractBtn.disabled = false;
+                extractBtn.classList.remove('hidden');
             }
             return;
         }
@@ -59,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (videos.length === 0) {
                 showStatus("No videos found or playlist is private.", "error");
-                console.warn("API returned 0 videos.");
             } else {
                 console.log(`Successfully fetched ${videos.length} videos.`);
 
@@ -71,14 +105,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 showStatus(`Success! Found ${videos.length} videos. Click 'Download CSV' to save.`, "success");
             }
-
         } catch (error) {
             console.error("Critical Error during execution:", error);
             showStatus(`Error: ${error.message}`, "error");
         } finally {
             setLoading(false);
+
+            // Show next button if there are items left in queue
+            if (playlistQueue.length > 0) {
+                nextPlaylistBtn.textContent = `Next Playlist (${playlistQueue.length} left)`;
+                nextPlaylistBtn.classList.remove('hidden');
+                extractBtn.classList.add('hidden');
+            } else {
+                nextPlaylistBtn.classList.add('hidden');
+                extractBtn.disabled = false;
+                extractBtn.classList.remove('hidden');
+            }
         }
-    });
+    }
 
     downloadBtn.addEventListener('click', () => {
         if (!extractedVideos || extractedVideos.length === 0) {
@@ -179,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("Generating CSV...");
 
         // CSV Metadata & Header
-        const playlistUrl = playlistInput.value.trim();
+        const playlistUrl = currentPlaylistUrl || playlistInput.value.trim();
         const safePlaylistTitleAttr = `"${playlistTitle.replace(/"/g, '""')}"`;
         const safePlaylistUrlAttr = `"${playlistUrl.replace(/"/g, '""')}"`;
         
@@ -339,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateBigQRCode() {
         bigQRContainer.innerHTML = ''; // Clear previous
 
-        const playlistUrl = playlistInput.value.trim();
+        const playlistUrl = currentPlaylistUrl || playlistInput.value.trim();
 
         if (!playlistUrl) {
             bigQRContainer.innerHTML = '<p class="error-text">No Playlist URL found.</p>';
@@ -412,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(tempContainer);
 
         // Include the Playlist (Big) QR Code as JPG
-        const playlistUrl = playlistInput.value.trim();
+        const playlistUrl = currentPlaylistUrl || playlistInput.value.trim();
         if (playlistUrl) {
             const bigQrDiv = document.createElement('div');
             tempContainer.appendChild(bigQrDiv);
