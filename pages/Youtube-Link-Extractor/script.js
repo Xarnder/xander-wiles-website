@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const multiPlaylistProgress = document.getElementById('multiPlaylistProgress');
     const progressCountText = document.getElementById('progressCountText');
     const progressTitleText = document.getElementById('progressTitleText');
+    const processedPlaylistsList = document.getElementById('processedPlaylistsList');
 
     const API_KEY = 'AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk';
 
@@ -49,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
         multiPlaylistProgress.classList.remove('hidden');
         progressTitleText.textContent = "";
         progressCountText.textContent = "";
+        processedPlaylistsList.innerHTML = "";
 
         processNextPlaylist();
     });
@@ -87,6 +89,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Allow skipping invalid URL and continuing if there are items left
+            addProcessedItem(`❌ Invalid URL: ${playlistUrl}`);
+
             if (playlistQueue.length > 0) {
                 nextPlaylistBtn.textContent = `Next Playlist (${playlistQueue.length} left)`;
                 nextPlaylistBtn.classList.remove('hidden');
@@ -113,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (videos.length === 0) {
                 showStatus("No videos found or playlist is private.", "error");
+                addProcessedItem(`❌ ${playlistTitle || playlistUrl} (Private or Empty)`);
             } else {
                 console.log(`Successfully fetched ${videos.length} videos.`);
 
@@ -123,10 +128,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 displayResults(videos);
 
                 showStatus(`Success! Found ${videos.length} videos. Click 'Download CSV' to save.`, "success");
+                addProcessedItem(`✅ ${playlistTitle} (${videos.length} videos)`);
             }
         } catch (error) {
             console.error("Critical Error during execution:", error);
             showStatus(`Error: ${error.message}`, "error");
+            addProcessedItem(`❌ ${playlistId || playlistUrl} (Error)`);
         } finally {
             setLoading(false);
 
@@ -653,5 +660,18 @@ document.addEventListener('DOMContentLoaded', () => {
             extractBtn.disabled = false;
             extractBtn.textContent = "Extract Videos"; // Changed text to reflect action
         }
+    }
+
+    function addProcessedItem(text) {
+        if (!processedPlaylistsList) return;
+        const li = document.createElement("li");
+        li.textContent = text;
+        li.style.padding = "5px 0";
+        li.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+        li.style.color = text.startsWith("❌") ? "#fca5a5" : "rgba(255, 255, 255, 0.8)";
+        processedPlaylistsList.appendChild(li);
+        
+        // Scroll to bottom
+        processedPlaylistsList.scrollTop = processedPlaylistsList.scrollHeight;
     }
 });
