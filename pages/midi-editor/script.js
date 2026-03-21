@@ -1,43 +1,60 @@
 /* 
-    MIDI Editor & Custom Sampler Script 
-    Uses Tone.js for Audio and @tonejs/midi for parsing
+    Tune Creator & Custom Sampler Script 
+    Features: Tone.js Sampler, Mathematical Diatonic Music Generation, and Intelligent Note-Synced Chords
 */
 
 // --- DOM Elements ---
 const statusLog = document.getElementById('status-log');
 const audioInput = document.getElementById('audioFile');
-const midiInput = document.getElementById('midiFile');
 const rootNoteSelect = document.getElementById('rootNote');
 const testAudioBtn = document.getElementById('testAudioBtn');
-const playBtn = document.getElementById('playBtn'); // Control Panel Button
-// New Persistent Controls
+
+const generateBtn = document.getElementById('generateBtn');
+const genKey = document.getElementById('genKey');
+const genScale = document.getElementById('genScale');
+const midiInput = document.getElementById('midiFile');
+
+const playBtn = document.getElementById('playBtn');
+const stopBtn = document.getElementById('stopBtn');
 const permRewindBtn = document.getElementById('permRewindBtn');
 const permPlayBtn = document.getElementById('permPlayBtn');
 const permStopBtn = document.getElementById('permStopBtn');
 
-const stopBtn = document.getElementById('stopBtn'); // Control Panel Stop
 const canvasWrapper = document.getElementById('canvasWrapper');
 const canvas = document.getElementById('midiCanvas');
 const keysCanvas = document.getElementById('keysCanvas');
 const ctx = canvas.getContext('2d');
 const keysCtx = keysCanvas.getContext('2d');
 const fileInfo = document.getElementById('file-info');
-
 const playHead = document.getElementById('playHead');
 const overlayPlayBtn = document.getElementById('overlayPlayBtn');
 const downloadBtn = document.getElementById('downloadBtn');
+
 const shiftUpBtn = document.getElementById('shiftUp');
 const shiftDownBtn = document.getElementById('shiftDown');
 const shiftDisplay = document.getElementById('shiftDisplay');
 
-// Tuning Assistant Elements
 const tuningInterface = document.getElementById('tuning-interface');
 const playRawBtn = document.getElementById('playRawBtn');
 const autoDetectBtn = document.getElementById('autoDetectBtn');
 const pianoContainer = document.getElementById('pianoContainer');
-const octaveDownBtn = document.getElementById('octaveDown'); // Tuning assistant octave
-const octaveUpBtn = document.getElementById('octaveUp'); // Tuning assistant octave
+const octaveDownBtn = document.getElementById('octaveDown');
+const octaveUpBtn = document.getElementById('octaveUp');
 const currentOctaveDisplay = document.getElementById('currentOctaveDisplay');
+
+// Chord UI Elements
+const chordBarSelect = document.getElementById('chordBarSelect'); // Now used for Notes
+const suggestedChordsContainer = document.getElementById('suggestedChordsContainer');
+const customChordSelect = document.getElementById('customChordSelect');
+const addChordBtn = document.getElementById('addChordBtn');
+const clearAllChordsBtn = document.getElementById('clearAllChordsBtn');
+
+// Dynamically Add Auto-Harmonize Button
+const autoHarmBtn = document.createElement('button');
+autoHarmBtn.className = "btn accent small-btn";
+autoHarmBtn.innerText = "Auto-Harmonize All Notes";
+autoHarmBtn.style.marginTop = "10px";
+clearAllChordsBtn.parentNode.appendChild(autoHarmBtn);
 
 // --- Global Variables ---
 let sampler;
@@ -49,22 +66,51 @@ let userAudioBuffer = null;
 let isPlaying = false;
 let animationId = null;
 
-// Tuning State
 let currentOctave = 4;
-
-// Playback & Transposition State
-let transposeOffset = 0; // In semitones
-let minNote = 48; // Global state for rendering sync
+let transposeOffset = 0;
+let minNote = 48;
 let maxNote = 72;
 
-// --- Initialization ---
+// --- Global Project State (for Music Theory & Chords) ---
+let currentProject = {
+    rootMidi: 60,
+    scaleType: 'major',
+    tempo: 110,
+    beatsPerBar: 4,
+    bars: 8,
+    progressionRoots: [0, 4, 5, 3],
+    addedChords: {} // Format: { noteIndex: scaleDegree }
+};
 
+// Math logic mappings
+const DIATONIC_SCALES = {
+    major: [0, 2, 4, 5, 7, 9, 11],
+    minor: [0, 2, 3, 5, 7, 8, 10]
+};
+
+const PENTATONIC_SUBSETS = {
+    major: [0, 1, 2, 4, 5],
+    minor: [0, 2, 3, 4, 6]
+};
+
+const PROGRESSION_ROOTS = {
+    major: [0, 4, 5, 3], // I - V - vi - IV
+    minor: [0, 3, 4, 0]  // i - iv - v - i
+};
+
+const ROMAN_NUMERALS = {
+    major: ["I", "ii", "iii", "IV", "V", "vi", "vii°"],
+    minor: ["i", "ii°", "III", "iv", "v", "VI", "VII"]
+};
+
+
+// --- Initialization ---
 function init() {
     populateNoteSelect();
     renderPiano();
     setupEventListeners();
     resizeCanvas();
-    log("System initialized. Upload a sample to start.");
+    log("System initialized. Upload a sample or generate a tune.");
 
     sampler = new Tone.Sampler({
         urls: {},
@@ -78,11 +124,8 @@ function init() {
     }).toDestination();
     referenceSynth.volume.value = -5;
 
-    // Initial draw to clear
     drawEmptyGrid();
 }
-
-// --- Helper Functions ---
 
 function log(msg, type = 'info') {
     const timestamp = new Date().toLocaleTimeString();
@@ -104,22 +147,15 @@ function populateNoteSelect() {
 }
 
 // --- Tuning Assistant UI (Piano) ---
-// (Kept mostly same, just ensuring variables play nice)
 function renderPiano() {
     pianoContainer.innerHTML = '';
     const notes = [
-        { name: 'C', type: 'white' },
-        { name: 'C#', type: 'black' },
-        { name: 'D', type: 'white' },
-        { name: 'D#', type: 'black' },
-        { name: 'E', type: 'white' },
-        { name: 'F', type: 'white' },
-        { name: 'F#', type: 'black' },
-        { name: 'G', type: 'white' },
-        { name: 'G#', type: 'black' },
-        { name: 'A', type: 'white' },
-        { name: 'A#', type: 'black' },
-        { name: 'B', type: 'white' }
+        { name: 'C', type: 'white' }, { name: 'C#', type: 'black' },
+        { name: 'D', type: 'white' }, { name: 'D#', type: 'black' },
+        { name: 'E', type: 'white' }, { name: 'F', type: 'white' },
+        { name: 'F#', type: 'black' }, { name: 'G', type: 'white' },
+        { name: 'G#', type: 'black' }, { name: 'A', type: 'white' },
+        { name: 'A#', type: 'black' }, { name: 'B', type: 'white' }
     ];
 
     notes.forEach(n => {
@@ -154,7 +190,6 @@ octaveUpBtn.addEventListener('click', () => {
         currentOctaveDisplay.innerText = currentOctave;
     }
 });
-
 octaveDownBtn.addEventListener('click', () => {
     if (currentOctave > 1) {
         currentOctave--;
@@ -163,11 +198,8 @@ octaveDownBtn.addEventListener('click', () => {
 });
 
 // --- Audio Upload & Handling ---
-
 async function startAudioContext() {
-    if (Tone.context.state !== 'running') {
-        await Tone.start();
-    }
+    if (Tone.context.state !== 'running') await Tone.start();
 }
 
 audioInput.addEventListener('change', async (e) => {
@@ -196,28 +228,6 @@ playRawBtn.addEventListener('click', async () => {
     if (rawPlayer && rawPlayer.loaded) {
         log("Playing original uploaded file...");
         rawPlayer.start();
-    }
-});
-
-autoDetectBtn.addEventListener('click', () => {
-    if (!userAudioBuffer || !userAudioBuffer.loaded) return;
-    log("Analyzing pitch...", "info");
-    const bufferData = userAudioBuffer.getChannelData(0);
-    const sampleRate = Tone.context.sampleRate;
-    const detectedFreq = autoCorrelate(bufferData, sampleRate);
-
-    if (detectedFreq === -1) {
-        log("Could not detect pitch clearly. Try manual tuning.", "warn");
-    } else {
-        const note = Tone.Frequency(detectedFreq).toNote();
-        log(`Detected Pitch: ${note} (${Math.round(detectedFreq)}Hz)`, "success");
-        rootNoteSelect.value = note;
-        const oct = note.slice(-1);
-        if (!isNaN(oct)) {
-            currentOctave = parseInt(oct);
-            currentOctaveDisplay.innerText = currentOctave;
-        }
-        updateSampler();
     }
 });
 
@@ -257,7 +267,27 @@ function autoCorrelate(buf, sampleRate) {
     return sampleRate / T0;
 }
 
-// --- Sampler Logic ---
+autoDetectBtn.addEventListener('click', () => {
+    if (!userAudioBuffer || !userAudioBuffer.loaded) return;
+    log("Analyzing pitch...", "info");
+    const bufferData = userAudioBuffer.getChannelData(0);
+    const sampleRate = Tone.context.sampleRate;
+    const detectedFreq = autoCorrelate(bufferData, sampleRate);
+
+    if (detectedFreq === -1) {
+        log("Could not detect pitch clearly. Try manual tuning.", "warn");
+    } else {
+        const note = Tone.Frequency(detectedFreq).toNote();
+        log(`Detected Pitch: ${note} (${Math.round(detectedFreq)}Hz)`, "success");
+        rootNoteSelect.value = note;
+        const oct = note.slice(-1);
+        if (!isNaN(oct)) {
+            currentOctave = parseInt(oct);
+            currentOctaveDisplay.innerText = currentOctave;
+        }
+        updateSampler();
+    }
+});
 
 function updateSampler() {
     if (!userAudioUrl) return;
@@ -274,13 +304,137 @@ function updateSampler() {
 rootNoteSelect.addEventListener('change', () => { if (userAudioUrl) updateSampler(); });
 testAudioBtn.addEventListener('click', async () => {
     await startAudioContext();
-    if (sampler && sampler.loaded) {
-        log("Auditioning Middle C (C4)...");
-        sampler.triggerAttackRelease(["C4"], 1);
-    } else {
-        log("No audio loaded.", "warn");
-    }
+    if (sampler && sampler.loaded) sampler.triggerAttackRelease(["C4"], 1);
+    else log("No audio loaded.", "warn");
 });
+
+
+// --- MATHEMATICAL MUSIC GENERATOR (MELODY & BASS) ---
+
+const RHYTHMS = [
+    [1, 1, 1, 1], [0.5, 0.5, 1, 2], [1.5, 0.5, 1, 1],
+    [1, 0.5, 0.5, 2], [0.5, 1.5, 1, 1], [2, 0.5, 0.5, 1]
+];
+
+const END_RHYTHMS = [[1, 1, 2], [2, 2], [1, 3], [0.5, 0.5, 3]];
+
+generateBtn.addEventListener('click', async () => {
+    await startAudioContext();
+    log("Running Advanced Mathematical Algorithm...", "info");
+
+    const rootMidi = parseInt(genKey.value);
+    let userScale = genScale.value;
+    let isPentatonic = false;
+
+    let diatonicHarmony = userScale;
+    if (userScale === 'pentatonic') {
+        isPentatonic = true;
+        diatonicHarmony = 'major';
+    }
+
+    currentProject = {
+        rootMidi: rootMidi,
+        scaleType: diatonicHarmony,
+        tempo: 110,
+        beatsPerBar: 4,
+        bars: 8,
+        progressionRoots: PROGRESSION_ROOTS[diatonicHarmony],
+        addedChords: {}
+    };
+
+    const diatonicIntervals = DIATONIC_SCALES[diatonicHarmony];
+    const scaleLength = diatonicIntervals.length;
+
+    const newMidi = new Midi();
+    newMidi.header.setTempo(currentProject.tempo);
+    const melodyTrack = newMidi.addTrack();
+    const bassTrack = newMidi.addTrack();
+
+    melodyTrack.name = "Melody";
+    bassTrack.name = "Bass";
+
+    const beatDuration = 60 / currentProject.tempo;
+
+    const rhythmA = RHYTHMS[Math.floor(Math.random() * RHYTHMS.length)];
+    const rhythmB = RHYTHMS[Math.floor(Math.random() * RHYTHMS.length)];
+    const rhythmEnd = END_RHYTHMS[Math.floor(Math.random() * END_RHYTHMS.length)];
+    const getRhythmForBar = (bar) => [rhythmA, rhythmB, rhythmA, rhythmEnd, rhythmB, rhythmA, rhythmA, rhythmEnd][bar];
+
+    let currentTime = 0;
+    let currentScaleIndex = Math.floor(scaleLength * 1.0);
+    const maxScaleIndex = scaleLength * 2 - 1;
+
+    let allowedIndices = [0, 1, 2, 3, 4, 5, 6];
+    if (isPentatonic) allowedIndices = PENTATONIC_SUBSETS[diatonicHarmony];
+
+    for (let bar = 0; bar < currentProject.bars; bar++) {
+        const chordRootDegree = currentProject.progressionRoots[bar % 4];
+        const chordDegrees = [chordRootDegree, (chordRootDegree + 2) % 7, (chordRootDegree + 4) % 7];
+
+        // --- BASSLINE ---
+        const bassMidi = rootMidi - 24 + diatonicIntervals[chordRootDegree];
+        bassTrack.addNote({
+            midi: bassMidi,
+            time: currentTime,
+            duration: currentProject.beatsPerBar * beatDuration - 0.1,
+            velocity: 0.7
+        });
+
+        // --- MELODY ---
+        const chosenRhythm = getRhythmForBar(bar);
+        let beatInBar = 0;
+
+        let validChordTones = [];
+        for (let i = 0; i <= maxScaleIndex; i++) {
+            if (chordDegrees.includes(i % scaleLength)) validChordTones.push(i);
+        }
+
+        for (let dur of chosenRhythm) {
+            let isStrongBeat = Number.isInteger(beatInBar);
+
+            if (isStrongBeat) {
+                let options = validChordTones.filter(ct => Math.abs(ct - currentScaleIndex) <= 3);
+                if (options.length > 0) {
+                    let diffOptions = options.filter(o => o !== currentScaleIndex);
+                    currentScaleIndex = (diffOptions.length > 0 && Math.random() < 0.9)
+                        ? diffOptions[Math.floor(Math.random() * diffOptions.length)]
+                        : options[Math.floor(Math.random() * options.length)];
+                } else {
+                    currentScaleIndex = validChordTones.reduce((prev, curr) =>
+                        Math.abs(curr - currentScaleIndex) < Math.abs(prev - currentScaleIndex) ? curr : prev
+                    );
+                }
+            } else {
+                let direction = Math.random() < 0.5 ? 1 : -1;
+                let next = currentScaleIndex + direction;
+                while (!allowedIndices.includes(next % scaleLength) && next > 0 && next < maxScaleIndex) {
+                    next += direction;
+                }
+                currentScaleIndex = next;
+            }
+
+            currentScaleIndex = Math.max(0, Math.min(maxScaleIndex, currentScaleIndex));
+
+            let octaveOffset = Math.floor(currentScaleIndex / scaleLength);
+            let degree = currentScaleIndex % scaleLength;
+            let midiNote = rootMidi + (octaveOffset * 12) + diatonicIntervals[degree];
+
+            melodyTrack.addNote({
+                midi: midiNote,
+                time: currentTime + beatInBar * beatDuration,
+                duration: (dur * beatDuration) - 0.05,
+                velocity: isStrongBeat ? 0.9 : 0.7
+            });
+
+            beatInBar += dur;
+        }
+        currentTime += currentProject.beatsPerBar * beatDuration;
+    }
+
+    newMidi.duration = currentProject.bars * currentProject.beatsPerBar * beatDuration;
+    loadMidiData(newMidi, `AI Song (${genKey.options[genKey.selectedIndex].text} ${userScale})`);
+});
+
 
 // --- MIDI Handling ---
 
@@ -291,27 +445,260 @@ midiInput.addEventListener('change', async (e) => {
     try {
         log(`Parsing MIDI: ${file.name}...`);
         const arrayBuffer = await file.arrayBuffer();
-        currentMidi = new Midi(arrayBuffer);
-
-        if (!currentMidi || !currentMidi.duration) throw new Error("Invalid MIDI file.");
-
-        const duration = currentMidi.duration.toFixed(2);
-        log(`MIDI Loaded: ${duration}s`);
-        fileInfo.innerText = `${file.name} | ${duration}s`;
-
-        enablePlaybackControls(true);
-        resetTransport();
-
-        // Calculate bounds for rendering
-        calculateMidiBounds(currentMidi);
-        drawMidi(currentMidi);
-        drawKeys();
-
+        const parsedMidi = new Midi(arrayBuffer);
+        loadMidiData(parsedMidi, file.name);
     } catch (err) {
         console.error(err);
         log(`Error: ${err.message}`, "error");
     }
 });
+
+function loadMidiData(midiObj, name) {
+    currentMidi = midiObj;
+    if (!currentMidi || !currentMidi.duration) {
+        log("Invalid Tune Data.", "error");
+        return;
+    }
+
+    if (!name.includes("AI Song")) {
+        const bpm = midiObj.header.tempos[0] ? midiObj.header.tempos[0].bpm : 110;
+        const totalBars = Math.ceil((midiObj.duration * bpm) / 60 / 4) || 8;
+        currentProject = {
+            rootMidi: 60,
+            scaleType: 'major',
+            tempo: bpm,
+            beatsPerBar: 4,
+            bars: totalBars,
+            progressionRoots: [0, 3, 4, 0],
+            addedChords: {}
+        };
+    }
+
+    const duration = currentMidi.duration.toFixed(2);
+    log(`Tune Ready: ${duration}s`);
+    fileInfo.innerText = `${name} | ${duration}s`;
+
+    enablePlaybackControls(true);
+    resetTransport();
+
+    updateChordUI();
+    calculateMidiBounds(currentMidi);
+    drawMidi(currentMidi);
+    drawKeys();
+}
+
+
+// --- NOTE-SYNCED CHORD ACCOMPANIMENT EDITOR ---
+
+function updateChordUI() {
+    chordBarSelect.innerHTML = '';
+
+    // Change UI label dynamically to reflect the new functionality
+    const targetLabel = document.querySelector('label[for="chordBarSelect"]') || chordBarSelect.previousElementSibling;
+    if (targetLabel) targetLabel.innerText = "Target Melody Note:";
+
+    const melodyTrack = currentMidi ? currentMidi.tracks[0] : null;
+
+    if (!melodyTrack || melodyTrack.notes.length === 0) {
+        chordBarSelect.innerHTML = '<option value="">No notes found in melody</option>';
+        return;
+    }
+
+    melodyTrack.notes.forEach((note, index) => {
+        const noteName = Tone.Frequency(note.midi, "midi").toNote();
+        const timeForm = note.time.toFixed(2);
+        chordBarSelect.innerHTML += `<option value="${index}">Note ${index + 1} (${noteName} at ${timeForm}s)</option>`;
+    });
+
+    const romans = ROMAN_NUMERALS[currentProject.scaleType];
+    customChordSelect.innerHTML = romans.map((r, i) => `<option value="${i}">${r} Chord</option>`).join('');
+
+    chordBarSelect.removeEventListener('change', updateChordSuggestions);
+    chordBarSelect.addEventListener('change', updateChordSuggestions);
+
+    updateChordSuggestions();
+}
+
+function updateChordSuggestions() {
+    const noteIndex = parseInt(chordBarSelect.value);
+    if (isNaN(noteIndex)) return;
+
+    suggestedChordsContainer.innerHTML = '';
+
+    const melodyTrack = currentMidi.tracks[0];
+    const targetNote = melodyTrack.notes[noteIndex];
+    const notePitchClass = targetNote.midi % 12;
+
+    const beatDuration = 60 / currentProject.tempo;
+    const barIndex = Math.floor(targetNote.time / (currentProject.beatsPerBar * beatDuration));
+    const expectedDegree = currentProject.progressionRoots[barIndex % currentProject.progressionRoots.length] || 0;
+
+    const scale = DIATONIC_SCALES[currentProject.scaleType];
+    const rootPitchClass = currentProject.rootMidi % 12;
+    const romans = ROMAN_NUMERALS[currentProject.scaleType];
+
+    let suggested = [];
+
+    // Intelligent Music Theory analysis: Find Triads that CONTAIN this exact melody note
+    for (let degree = 0; degree < 7; degree++) {
+        const triadPitches = [
+            (rootPitchClass + scale[degree]) % 12,
+            (rootPitchClass + scale[(degree + 2) % 7]) % 12,
+            (rootPitchClass + scale[(degree + 4) % 7]) % 12
+        ];
+
+        if (triadPitches.includes(notePitchClass)) {
+            if (degree === expectedDegree) {
+                suggested.unshift({ degree, label: romans[degree] + " (Perfect Match)", type: "accent" });
+            } else {
+                suggested.push({ degree, label: romans[degree] + " (Harmonizes Note)", type: "secondary" });
+            }
+        }
+    }
+
+    // Fallback if the note is a passing tone not belonging to a main diatonic chord
+    if (suggested.length === 0) {
+        suggested.push({ degree: expectedDegree, label: romans[expectedDegree] + " (Bar Root)", type: "secondary" });
+    }
+
+    // Render suggestion buttons
+    suggested.forEach(s => addChordSuggestionButton(s.degree, s.label, s.type));
+
+    const clearBtn = document.createElement('button');
+    clearBtn.className = "btn danger small-btn";
+    clearBtn.innerText = "Clear Note";
+    clearBtn.onclick = () => {
+        delete currentProject.addedChords[noteIndex];
+        renderChordTrack();
+    };
+    suggestedChordsContainer.appendChild(clearBtn);
+}
+
+function addChordSuggestionButton(degree, label, colorClass) {
+    const btn = document.createElement('button');
+    btn.className = `btn ${colorClass} small-btn`;
+    btn.innerText = label;
+    btn.onclick = () => {
+        const noteIndex = parseInt(chordBarSelect.value);
+        currentProject.addedChords[noteIndex] = degree;
+        renderChordTrack();
+    };
+    suggestedChordsContainer.appendChild(btn);
+}
+
+addChordBtn.addEventListener('click', () => {
+    const noteIndex = parseInt(chordBarSelect.value);
+    const degree = parseInt(customChordSelect.value);
+    if (!isNaN(noteIndex) && !isNaN(degree)) {
+        currentProject.addedChords[noteIndex] = degree;
+        renderChordTrack();
+    }
+});
+
+// Auto-Harmonize every note intelligently
+autoHarmBtn.addEventListener('click', () => {
+    if (!currentMidi || !currentMidi.tracks[0]) return;
+
+    const melodyTrack = currentMidi.tracks[0];
+    const beatDuration = 60 / currentProject.tempo;
+    const scale = DIATONIC_SCALES[currentProject.scaleType];
+    const rootPitchClass = currentProject.rootMidi % 12;
+
+    melodyTrack.notes.forEach((note, index) => {
+        const barIndex = Math.floor(note.time / (currentProject.beatsPerBar * beatDuration));
+        const expectedDegree = currentProject.progressionRoots[barIndex % currentProject.progressionRoots.length] || 0;
+        const notePitchClass = note.midi % 12;
+
+        let bestDegree = expectedDegree;
+
+        // Does the expected harmony already contain this note?
+        const expectedPitches = [
+            (rootPitchClass + scale[expectedDegree]) % 12,
+            (rootPitchClass + scale[(expectedDegree + 2) % 7]) % 12,
+            (rootPitchClass + scale[(expectedDegree + 4) % 7]) % 12
+        ];
+
+        if (!expectedPitches.includes(notePitchClass)) {
+            // Find a theoretical chord that DOES contain the melody note
+            for (let degree = 0; degree < 7; degree++) {
+                const triadPitches = [
+                    (rootPitchClass + scale[degree]) % 12,
+                    (rootPitchClass + scale[(degree + 2) % 7]) % 12,
+                    (rootPitchClass + scale[(degree + 4) % 7]) % 12
+                ];
+                if (triadPitches.includes(notePitchClass)) {
+                    bestDegree = degree;
+                    break;
+                }
+            }
+        }
+
+        currentProject.addedChords[index] = bestDegree;
+    });
+
+    renderChordTrack();
+    updateChordUI();
+    log("Auto-harmonized all notes successfully.", "success");
+});
+
+clearAllChordsBtn.addEventListener('click', () => {
+    currentProject.addedChords = {};
+    renderChordTrack();
+});
+
+function renderChordTrack() {
+    if (!currentMidi || !currentMidi.tracks[0]) return;
+
+    let trackIndex = currentMidi.tracks.findIndex(t => t.name === "Chords");
+    if (trackIndex !== -1) {
+        currentMidi.tracks[trackIndex].notes.length = 0;
+    } else {
+        const t = currentMidi.addTrack();
+        t.name = "Chords";
+        trackIndex = currentMidi.tracks.length - 1;
+    }
+
+    const chordTrack = currentMidi.tracks[trackIndex];
+    const melodyTrack = currentMidi.tracks[0];
+
+    // Build chords synced exactly to the attached melody note's rhythm
+    for (let nIdx in currentProject.addedChords) {
+        const noteIndex = parseInt(nIdx);
+        const degree = currentProject.addedChords[noteIndex];
+
+        const melodyNote = melodyTrack.notes[noteIndex];
+        if (!melodyNote) continue;
+
+        const triad = getDiatonicTriad(currentProject.rootMidi - 12, degree, currentProject.scaleType);
+
+        triad.forEach(midiNote => {
+            chordTrack.addNote({
+                midi: midiNote,
+                time: melodyNote.time,
+                duration: melodyNote.duration,
+                velocity: 0.5
+            });
+        });
+    }
+
+    if (Tone.Transport.state === "started") scheduleMidiEvents();
+    calculateMidiBounds(currentMidi);
+    drawMidi(currentMidi, Tone.Transport.seconds);
+    drawKeys();
+}
+
+function getDiatonicTriad(baseMidi, degree, scaleType) {
+    const scale = DIATONIC_SCALES[scaleType];
+    const getPitch = (step) => {
+        const oct = Math.floor(step / 7);
+        const idx = step % 7;
+        return baseMidi + (oct * 12) + scale[idx];
+    };
+    return [getPitch(degree), getPitch(degree + 2), getPitch(degree + 4)];
+}
+
+
+// --- Playback & Animation Loop ---
 
 function enablePlaybackControls(enabled) {
     const btns = [playBtn, stopBtn, permPlayBtn, permStopBtn, permRewindBtn];
@@ -319,29 +706,21 @@ function enablePlaybackControls(enabled) {
     if (enabled) overlayPlayBtn.classList.remove('hidden');
 }
 
-// --- Playback & Animation Loop ---
-
-// Shared toggle Logic
 function togglePlayback() {
-    if (Tone.Transport.state === "started") {
-        pausePlayback();
-    } else {
-        startPlayback();
-    }
+    if (Tone.Transport.state === "started") pausePlayback();
+    else startPlayback();
 }
 
 playBtn.addEventListener('click', togglePlayback);
 overlayPlayBtn.addEventListener('click', togglePlayback);
 permPlayBtn.addEventListener('click', togglePlayback);
 
-// Rewind (Stop and Reset)
 permRewindBtn.addEventListener('click', () => {
     stopPlayback();
     Tone.Transport.position = 0;
     updatePlayHead(0);
 });
 
-// Stop
 stopBtn.addEventListener('click', stopPlayback);
 permStopBtn.addEventListener('click', stopPlayback);
 
@@ -350,10 +729,7 @@ async function startPlayback() {
     await startAudioContext();
 
     if (Tone.Transport.state !== "started") {
-        // If starting from 0, or resumed
-        if (Tone.Transport.seconds === 0) {
-            scheduleMidiEvents();
-        }
+        if (Tone.Transport.seconds === 0) scheduleMidiEvents();
         Tone.Transport.start();
     }
 
@@ -363,7 +739,6 @@ async function startPlayback() {
 
 function pausePlayback() {
     Tone.Transport.pause();
-    // Release active notes so they don't hang
     if (sampler) sampler.releaseAll();
     updatePlaybackUI(false);
     cancelAnimationFrame(animationId);
@@ -371,16 +746,11 @@ function pausePlayback() {
 
 function stopPlayback() {
     Tone.Transport.stop();
-    Tone.Transport.cancel(); // Clear scheduled events?
-    // Actually, if we cancel, we must reschedule on next play.
-    // Simpler to just pause and seek 0 for "stop behavior", but cancel is cleaner.
-
+    Tone.Transport.cancel();
     if (sampler) sampler.releaseAll();
 
     updatePlaybackUI(false);
     cancelAnimationFrame(animationId);
-
-    // Reset visually
     updatePlayHead(0);
     if (currentMidi) drawMidi(currentMidi);
 }
@@ -393,31 +763,23 @@ function resetTransport() {
 }
 
 function scheduleMidiEvents() {
-    // We clear previous because we might be rescheduling from 0
     Tone.Transport.cancel();
 
     currentMidi.tracks.forEach(track => {
         track.notes.forEach(note => {
             if (sampler) {
-                // Schedule each note on the transport timeline
-                // Use Transport.schedule
                 Tone.Transport.schedule((time) => {
                     const transposedMidi = note.midi + transposeOffset;
                     const freq = Tone.Frequency(transposedMidi, "midi");
-
-                    // We use a small lookahead or just 'time' provided by Transport
-                    sampler.triggerAttackRelease(
-                        freq, note.duration, time, note.velocity
-                    );
+                    sampler.triggerAttackRelease(freq, note.duration, time, note.velocity);
                 }, note.time);
             }
         });
     });
 
-    // Auto-pause at end
     Tone.Transport.scheduleOnce(() => {
         pausePlayback();
-        Tone.Transport.position = 0; // Or just stop
+        Tone.Transport.position = 0;
         updatePlayHead(0);
         log("Playback finished.");
     }, currentMidi.duration + 0.5);
@@ -425,11 +787,8 @@ function scheduleMidiEvents() {
 
 function updatePlaybackUI(playing) {
     isPlaying = playing;
-    const text = playing ? "Pause" : "Play";
-    const symbol = playing ? "⏸" : "▶";
-
-    playBtn.innerText = text;
-    permPlayBtn.innerText = symbol;
+    playBtn.innerText = playing ? "Pause" : "Play Tune";
+    permPlayBtn.innerText = playing ? "⏸" : "▶";
 
     if (playing) {
         playBtn.classList.add("danger");
@@ -438,22 +797,16 @@ function updatePlaybackUI(playing) {
     } else {
         playBtn.classList.remove("danger");
         overlayPlayBtn.classList.remove("hidden");
-        // Don't hide playHead on pause, only stop
-        if (Tone.Transport.position === 0 && Tone.Transport.seconds === 0) {
-            playHead.style.display = 'none';
-        } else {
-            playHead.style.display = 'block';
-        }
+        if (Tone.Transport.position === 0 && Tone.Transport.seconds === 0) playHead.style.display = 'none';
+        else playHead.style.display = 'block';
     }
 }
 
 function animate() {
     if (Tone.Transport.state !== "started") return;
-
     const time = Tone.Transport.seconds;
     updatePlayHead(time);
     drawMidi(currentMidi, time);
-
     animationId = requestAnimationFrame(animate);
 }
 
@@ -466,30 +819,22 @@ function updatePlayHead(time) {
 
 
 // --- Seek Implementation ---
-
 canvasWrapper.addEventListener('click', (e) => {
     if (!currentMidi) return;
-
     const rect = canvasWrapper.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, x / rect.width));
     const seekTime = ratio * currentMidi.duration;
 
-    // Move Transport
     Tone.Transport.seconds = seekTime;
-
-    // Release any hanging notes from jump
     if (sampler) sampler.releaseAll();
 
-    // Update visuals immediately
     updatePlayHead(seekTime);
     drawMidi(currentMidi, seekTime);
-
     log(`Seek to: ${seekTime.toFixed(2)}s`);
 });
 
 // --- Visualizer Logic ---
-
 function resizeCanvas() {
     const wrapper = document.querySelector('.canvas-container');
     if (wrapper) {
@@ -499,7 +844,7 @@ function resizeCanvas() {
         keysCanvas.height = wrapper.clientHeight;
 
         if (currentMidi) {
-            drawMidi(currentMidi, Tone.Transport.seconds); // Redraw with current time
+            drawMidi(currentMidi, Tone.Transport.seconds);
             drawKeys();
         } else {
             drawEmptyGrid();
@@ -533,11 +878,9 @@ function drawMidi(midi, currentTime = -1) {
     const h = height / range;
 
     midi.tracks.forEach((track, i) => {
-        const baseHue = (i * 137) % 360;
+        const baseHue = (i * 137 + 200) % 360;
         track.notes.forEach(n => {
             const visiblePitch = n.midi + transposeOffset;
-
-            // Check if active
             const isActive = currentTime >= n.time && currentTime < (n.time + n.duration);
 
             if (isActive) {
@@ -586,24 +929,14 @@ function drawEmptyGrid() {
     ctx.fillStyle = "#333";
     ctx.textAlign = "center";
     ctx.font = "14px sans-serif";
-    ctx.fillText("Load MIDI to visualize", canvas.width / 2, canvas.height / 2);
+    ctx.fillText("Load or Generate a Tune to visualize", canvas.width / 2, canvas.height / 2);
 }
 
 // --- Transposition Controls ---
-
 function handleTranspose(delta) {
     transposeOffset += delta;
     updateShiftDisplay();
-    // Re-schedule if playing to apply pitch shift immediately?
-    // Tone.js scheduling is locked in. We need to cancel and reschedule if we want live shift?
-    // Or just simple check mechanism inside dynamic scheduler?
-    // We used fixed schedule events. Let's just reschedule.
-    if (Tone.Transport.state === "started") {
-        scheduleMidiEvents(); // This might double schedule if not careful?
-        // scheduleMidiEvents calls cancel first, so it's safe.
-    }
-
-    // Redraw static for visual update
+    if (Tone.Transport.state === "started") scheduleMidiEvents();
     calculateMidiBounds(currentMidi);
     drawMidi(currentMidi, Tone.Transport.seconds);
     drawKeys();
@@ -617,27 +950,26 @@ function updateShiftDisplay() {
     shiftDisplay.innerText = octaves > 0 ? `+${octaves}` : octaves;
 }
 
-// --- Download MP3/WAV ---
 
+// --- Download MP3/WAV ---
 const exportFormat = document.getElementById('exportFormat');
 
 downloadBtn.addEventListener('click', async () => {
     if (!currentMidi || !userAudioBuffer) {
-        alert("Please load a MIDI file and an Audio Sample first.");
+        alert("Please load an Audio Sample and a Tune first.");
         return;
     }
 
-    const format = exportFormat.value; // 'wav' or 'mp3'
+    const format = exportFormat.value;
     const originalText = downloadBtn.innerText;
     downloadBtn.innerText = "Rendering...";
     downloadBtn.disabled = true;
 
     try {
-        const duration = currentMidi.duration + 2; // buffer time
+        const duration = currentMidi.duration + 2;
         const sampleMap = {};
         sampleMap[rootNoteSelect.value] = userAudioUrl;
 
-        // Render Offline
         const buffer = await Tone.Offline(async ({ transport }) => {
             const offlineSampler = new Tone.Sampler({
                 urls: sampleMap,
@@ -660,14 +992,12 @@ downloadBtn.addEventListener('click', async () => {
         }, duration);
 
         let blob;
-        let filename = 'remix';
+        let filename = 'custom_tune';
 
         if (format === 'mp3') {
-            log("Encoding MP3...", "info");
             blob = bufferToMp3(buffer);
             filename += '.mp3';
         } else {
-            log("Encoding WAV...", "info");
             blob = bufferToWave(buffer);
             filename += '.wav';
         }
@@ -703,26 +1033,19 @@ function bufferToMp3(buffer) {
     const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 128);
     const mp3Data = [];
 
-    // Process left/right channels
-    // LameJS expects 16-bit integers
     const left = buffer.getChannelData(0);
     const right = channels > 1 ? buffer.getChannelData(1) : left;
-
-    const sampleBlockSize = 1152; // multiple of 576
+    const sampleBlockSize = 1152;
 
     for (let i = 0; i < left.length; i += sampleBlockSize) {
         const leftChunk = left.subarray(i, i + sampleBlockSize);
         const rightChunk = right.subarray(i, i + sampleBlockSize);
-
-        // Convert to Int16
         const leftInt = new Int16Array(leftChunk.length);
         const rightInt = new Int16Array(rightChunk.length);
 
         for (let j = 0; j < leftChunk.length; j++) {
-            // Clamp and scale
             const l = Math.max(-1, Math.min(1, leftChunk[j]));
             leftInt[j] = l < 0 ? l * 32768 : l * 32767;
-
             const r = Math.max(-1, Math.min(1, rightChunk[j]));
             rightInt[j] = r < 0 ? r * 32768 : r * 32767;
         }
@@ -734,14 +1057,12 @@ function bufferToMp3(buffer) {
         if (mp3buf.length > 0) mp3Data.push(mp3buf);
     }
 
-    // Flush
     const endBuf = mp3encoder.flush();
     if (endBuf.length > 0) mp3Data.push(endBuf);
 
     return new Blob(mp3Data, { type: 'audio/mp3' });
 }
 
-// Simple WAV encoder (Integer 16-bit)
 function bufferToWave(abuffer) {
     const numOfChan = abuffer.numberOfChannels;
     const len = abuffer.length;
@@ -753,39 +1074,32 @@ function bufferToWave(abuffer) {
     let offset = 0;
     let pos = 0;
 
-    // write WAVE header
-    setUint32(0x46464952);                         // "RIFF"
-    setUint32(length - 8);                         // file length - 8
-    setUint32(0x45564157);                         // "WAVE"
-
-    setUint32(0x20746d66);                         // "fmt " chunk
-    setUint32(16);                                 // length = 16
-    setUint16(1);                                  // PCM (uncompressed)
+    setUint32(0x46464952);
+    setUint32(length - 8);
+    setUint32(0x45564157);
+    setUint32(0x20746d66);
+    setUint32(16);
+    setUint16(1);
     setUint16(numOfChan);
     setUint32(abuffer.sampleRate);
-    setUint32(abuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
-    setUint16(numOfChan * 2);                      // block-align
-    setUint16(16);                                 // 16-bit
+    setUint32(abuffer.sampleRate * 2 * numOfChan);
+    setUint16(numOfChan * 2);
+    setUint16(16);
+    setUint32(0x61746164);
+    setUint32(length - pos - 4);
 
-    setUint32(0x61746164);                         // "data" - chunk
-    setUint32(length - pos - 4);                   // chunk length
-
-    // write interleaved data
     for (i = 0; i < abuffer.numberOfChannels; i++)
         channels.push(abuffer.getChannelData(i));
 
     while (pos < length) {
-        for (i = 0; i < numOfChan; i++) {             // interleave channels
-            // Check if offset is within bounds
-            if (offset >= len) {
-                break;
-            }
-            sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
-            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // scale to 16-bit signed int
-            view.setInt16(pos, sample, true);          // write 16-bit sample
+        for (i = 0; i < numOfChan; i++) {
+            if (offset >= len) break;
+            sample = Math.max(-1, Math.min(1, channels[i][offset]));
+            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
+            view.setInt16(pos, sample, true);
             pos += 2;
         }
-        offset++;                                     // next source sample
+        offset++;
     }
 
     return new Blob([buffer], { type: "audio/wav" });
