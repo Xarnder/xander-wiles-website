@@ -306,7 +306,35 @@ select {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    text-decoration: none;
+    color: inherit;
+}
+
+.song-thumbnail {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.song-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s ease;
+}
+
+.song-card:hover .song-thumbnail img {
+    transform: scale(1.05);
+}
+
+.song-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
 }
 
 .song-card:hover {
@@ -338,22 +366,6 @@ select {
     font-size: 0.9rem;
     color: #94a3b8;
     margin: 0 0 20px 0;
-}
-
-.play-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--playlist-accent);
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 0.9rem;
-    margin-top: auto;
-    transition: gap 0.3s ease;
-}
-
-.play-link:hover {
-    gap: 15px;
 }
 
 /* Glass Card */
@@ -392,6 +404,17 @@ select {
 }
 
 /* Responsive */
+.unavailable-notice {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 25px;
+    color: #94a3b8;
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+}
+
 @media (max-width: 768px) {
     .playlist-header {
         padding: 30px;

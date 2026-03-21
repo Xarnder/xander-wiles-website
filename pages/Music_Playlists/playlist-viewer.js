@@ -16,6 +16,7 @@ const errorMessage = document.getElementById('error-message');
 
 let currentPlaylist = null;
 let allSongs = [];
+let unavailableCount = 0;
 
 // 1. Initialize
 async function init() {
@@ -106,7 +107,7 @@ async function loadCSV(path) {
 
         const headers = parseCSVRow(rows[headerRowIndex]).map(h => h.trim());
         
-        allSongs = rows.slice(headerRowIndex + 1).map(row => {
+        const rawSongs = rows.slice(headerRowIndex + 1).map(row => {
             const values = parseCSVRow(row);
             const song = {};
             headers.forEach((h, i) => {
@@ -114,6 +115,15 @@ async function loadCSV(path) {
             });
             return song;
         }).filter(song => song.title && song.title !== ""); // Filter out empty rows if any
+
+        // Filter out Deleted and Private videos
+        const availableSongs = rawSongs.filter(song => {
+            const lowTitle = song.title.toLowerCase();
+            return !lowTitle.includes('deleted video') && !lowTitle.includes('private video');
+        });
+        
+        unavailableCount = rawSongs.length - availableSongs.length;
+        allSongs = availableSongs;
 
         // Update song count in header
         if (playlistDescription) {
@@ -189,21 +199,46 @@ function renderSongs() {
         return;
     }
 
+    // Add unavailable notice if applicable
+    if (unavailableCount > 0 && !filter) {
+        const notice = document.createElement('div');
+        notice.className = 'unavailable-notice glass-card';
+        notice.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="opacity: 0.6;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            <span>${unavailableCount} video${unavailableCount === 1 ? ' is' : 's are'} currently unavailable (deleted or private)</span>
+        `;
+        songGrid.appendChild(notice);
+    }
+
     filtered.forEach(song => {
-        const card = document.createElement('div');
+        const card = document.createElement('a');
         card.className = 'song-card glass-card';
+        card.href = song.url;
+        card.target = '_blank';
         
-        // Extract video ID for thumbnail if possible (optional)
-        // const videoId = song.url.split('v=')[1]?.split('&')[0];
+        // Extract video ID for thumbnail
+        let videoId = '';
+        if (song.url) {
+            if (song.url.includes('v=')) {
+                videoId = song.url.split('v=')[1]?.split('&')[0];
+            } else if (song.url.includes('youtu.be/')) {
+                videoId = song.url.split('youtu.be/')[1]?.split('?')[0];
+            }
+        }
+        
+        const thumbnailHtml = videoId 
+            ? `<div class="song-thumbnail">
+                 <img src="https://img.youtube.com/vi/${videoId}/mqdefault.jpg" alt="${song.title}" loading="lazy">
+               </div>`
+            : '';
         
         card.innerHTML = `
-            <h3 class="song-title">${song.title || 'Unknown Title'}</h3>
-            <p class="song-artist">${song.channel || 'Unknown Channel'}</p>
-            <p class="song-artist" style="font-size: 0.8rem; margin-top: -10px;">Published: ${song.published || 'N/A'}</p>
-            <a href="${song.url}" target="_blank" class="play-link">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                Listen on YouTube
-            </a>
+            ${thumbnailHtml}
+            <div class="song-info">
+                <h3 class="song-title">${song.title || 'Unknown Title'}</h3>
+                <p class="song-artist">${song.channel || 'Unknown Channel'}</p>
+                <p class="song-artist" style="font-size: 0.8rem; margin-top: -10px;">Published: ${song.published || 'N/A'}</p>
+            </div>
         `;
         songGrid.appendChild(card);
     });
