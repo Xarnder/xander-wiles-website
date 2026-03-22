@@ -410,6 +410,21 @@ document.addEventListener('DOMContentLoaded', () => {
         UI.renderBoard();
     };
 
+    // Toggle Recent Completed Filter
+    document.getElementById('recent-completed-btn').onclick = function () {
+        state.showRecentCompleted = !state.showRecentCompleted;
+        const btn = this;
+
+        if (state.showRecentCompleted) {
+            btn.classList.add('active');
+            Utils.showToast("Viewing Recent Completed Tasks");
+        } else {
+            btn.classList.remove('active');
+            Utils.showToast("Viewing All Tasks");
+        }
+        UI.renderBoard();
+    };
+
     // Theme Toggle
     document.getElementById('theme-toggle').onclick = () => {
         let newTheme;

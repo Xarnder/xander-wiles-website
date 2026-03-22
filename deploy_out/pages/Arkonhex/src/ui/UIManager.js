@@ -260,6 +260,53 @@ export class UIManager {
             }, { signal: this.abortController.signal });
         }
 
+        const setupRebindButton = (btnId, actionName) => {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+
+            const formatBinding = (b) => b.startsWith('Button0') ? 'Left Click' : b.startsWith('Button2') ? 'Right Click' : b;
+            
+            const updateText = () => {
+                const bindings = this.engine.inputManager.actionBindings[actionName];
+                btn.innerText = bindings.map(formatBinding).join(', ');
+            };
+            updateText();
+
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                btn.innerText = "Press a key...";
+                btn.style.borderColor = "#00cec9";
+
+                const onKey = (ev) => {
+                    ev.preventDefault();
+                    document.removeEventListener('keydown', onKey);
+                    
+                    if (ev.code !== 'Escape') {
+                        const bindings = this.engine.inputManager.actionBindings[actionName];
+                        // Preserve the mouse button if it exists
+                        let newBindings = bindings.filter(b => b.startsWith('Button'));
+                        if (newBindings.length === 0) {
+                            newBindings.push(actionName === 'break' ? 'Button0' : 'Button2');
+                        }
+                        newBindings.push(ev.code);
+                        this.engine.inputManager.actionBindings[actionName] = newBindings;
+                        
+                        try {
+                            localStorage.setItem('arkonhex_keybindings', JSON.stringify(this.engine.inputManager.actionBindings));
+                        } catch(err) {}
+                    }
+                    
+                    btn.style.borderColor = "#555";
+                    updateText();
+                };
+
+                document.addEventListener('keydown', onKey);
+            });
+        };
+
+        setupRebindButton('rebind-break-btn', 'break');
+        setupRebindButton('rebind-place-btn', 'place');
+
         // Initial hold delay slider (how long before 2nd action fires)
         const initDelaySlider = document.getElementById('init-delay-slider');
         const initDelayVal = document.getElementById('init-delay-val');

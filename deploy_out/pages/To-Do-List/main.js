@@ -239,6 +239,13 @@ function setupFirestoreListeners(uid) {
         if (docSnap.exists()) {
             const data = docSnap.data();
             state.appData.settings = { ...state.appData.settings, ...data.settings };
+            
+            // Auto-detect drag capability if not set
+            if (state.appData.settings.dragEnabled === undefined || state.appData.settings.dragEnabled === null) {
+                const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+                state.appData.settings.dragEnabled = !isTouchDevice;
+            }
+            
             state.appData.projectTitle = data.projectTitle || "Task Master";
             if (!state.appData.currentBoardId) {
                 state.appData.listOrder = data.listOrder || [];
@@ -262,6 +269,7 @@ function setupFirestoreListeners(uid) {
             if (projectTitleInput) projectTitleInput.value = state.appData.projectTitle;
             if (document.getElementById('auto-archive-toggle')) document.getElementById('auto-archive-toggle').checked = state.appData.settings.autoArchive;
             if (document.getElementById('show-numbers-toggle')) document.getElementById('show-numbers-toggle').checked = state.appData.settings.showNumbers;
+            if (document.getElementById('drag-tasks-toggle')) document.getElementById('drag-tasks-toggle').checked = state.appData.settings.dragEnabled;
             if (document.getElementById('sort-select')) document.getElementById('sort-select').value = state.appData.settings.sortMode;
             if (document.getElementById('backup-frequency-input')) document.getElementById('backup-frequency-input').value = state.appData.settings.backupFreq || 10;
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
@@ -402,6 +410,21 @@ document.addEventListener('DOMContentLoaded', () => {
         UI.renderBoard();
     };
 
+    // Toggle Recent Completed Filter
+    document.getElementById('recent-completed-btn').onclick = function () {
+        state.showRecentCompleted = !state.showRecentCompleted;
+        const btn = this;
+
+        if (state.showRecentCompleted) {
+            btn.classList.add('active');
+            Utils.showToast("Viewing Recent Completed Tasks");
+        } else {
+            btn.classList.remove('active');
+            Utils.showToast("Viewing All Tasks");
+        }
+        UI.renderBoard();
+    };
+
     // Theme Toggle
     document.getElementById('theme-toggle').onclick = () => {
         let newTheme;
@@ -419,6 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Settings Inputs
     setupSettingListener('auto-archive-toggle', 'autoArchive', true);
     setupSettingListener('show-numbers-toggle', 'showNumbers', true);
+    setupSettingListener('drag-tasks-toggle', 'dragEnabled', true);
     setupSettingListener('sort-select', 'sortMode', false);
 
     const backupFreq = document.getElementById('backup-frequency-input');

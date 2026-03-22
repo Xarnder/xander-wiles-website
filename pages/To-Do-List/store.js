@@ -28,6 +28,7 @@ export const state = {
     listeners: [],
     dragMode: 'move',
     showArchived: false,
+    showRecentCompleted: false,
     sortableInstances: [],
     listSortable: null,
 

@@ -4,29 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Online Custom MIDI Editor</title>
+    <title>Tune Creator & Custom Sampler</title>
 
-    <!-- Theme-aware SVG icons -->
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
 
-    <!-- Fallback PNG icons -->
-    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-
-    <link rel="manifest" href="site.webmanifest">
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
-
-    <!-- Global Website Header -->
-    <link rel="stylesheet" href="/assets/css/style.css">
-
-    <!-- Local Page Styles -->
     <link rel="stylesheet" href="style.css">
 
-    <!-- External Libraries (CDN) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://unpkg.com/@tonejs/midi"></script>
     <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
@@ -34,15 +20,11 @@
 
 <body>
 
-    <!-- Global Header Placeholder -->
-    <div id="main-nav-placeholder"></div>
-    <script src="/assets/js/nav-loader.js"></script>
-
     <div class="app-container">
 
         <header class="app-header">
-            <h1>MIDI Studio & Sampler</h1>
-            <p>Upload a sound, tune it, and play your MIDI files.</p>
+            <h1>Tune Creator & Sampler</h1>
+            <p>Upload a sound, map it, generate a tune, and layer intelligent chords.</p>
         </header>
 
         <!-- Status Log -->
@@ -50,12 +32,107 @@
             Status: Ready.
         </div>
 
+        <!-- Card 4: Visualizer (Now Top) -->
+        <div class="card visualizer-card">
+            <div class="visualizer-header">
+                <h2>Track Visualization</h2>
+                <div class="playback-controls-permanent">
+                    <button id="permRewindBtn" class="btn-round" title="Rewind to Start">⏮</button>
+                    <button id="permPlayBtn" class="btn-round large" title="Play/Pause">▶</button>
+                    <button id="permStopBtn" class="btn-round" title="Stop">⏹</button>
+                </div>
+
+                <div class="editor-toolbar">
+                    <div class="tool-group">
+                        <input type="radio" id="toolSelect" name="editorTool" value="select" checked>
+                        <label for="toolSelect" class="tool-btn" title="Select / Move / Resize">Pointer</label>
+                        
+                        <input type="radio" id="toolPen" name="editorTool" value="pen">
+                        <label for="toolPen" class="tool-btn" title="Draw Notes">Pen</label>
+                        
+                        <input type="radio" id="toolErase" name="editorTool" value="erase">
+                        <label for="toolErase" class="tool-btn" title="Erase Notes">Eraser</label>
+                    </div>
+                    <div class="tool-group" style="margin-left: 10px;">
+                        <input type="checkbox" id="snapToggle" checked>
+                        <label for="snapToggle" class="tool-btn" title="Snap to Grid">🧲 Grid</label>
+                        
+                        <input type="checkbox" id="snapScaleToggle">
+                        <label for="snapScaleToggle" class="tool-btn" title="Snap to Scale">🎹 Scale</label>
+                    </div>
+                </div>
+
+                <div class="track-controls">
+                    <div class="octave-adjust">
+                        <span>Pitch:</span>
+                        <button id="shiftDown" class="btn-round small">-</button>
+                        <span id="shiftDisplay">0</span>
+                        <button id="shiftUp" class="btn-round small">+</button>
+                    </div>
+                    <select id="exportFormat" class="small-select">
+                        <option value="midi" selected>MIDI (.mid)</option>
+                        <option value="wav">WAV (.wav)</option>
+                        <option value="mp3">MP3 (.mp3)</option>
+                    </select>
+                    <button id="downloadBtn" class="btn secondary small-btn">Export / Download</button>
+                </div>
+            </div>
+
+            <div class="canvas-container">
+                <canvas id="keysCanvas"></canvas>
+                <div class="canvas-wrapper" id="canvasWrapper">
+                    <canvas id="midiCanvas"></canvas>
+                    <div id="overlayPlayBtn" class="overlay-play-btn hidden">
+                        <svg viewBox="0 0 24 24" width="48" height="48">
+                            <path fill="currentColor" d="M8 5v14l11-7z" />
+                        </svg>
+                    </div>
+                    <div id="playHead" class="play-head"></div>
+                </div>
+            </div>
+            <div id="file-info">No Tune Loaded</div>
+        </div>
+
         <div class="grid-layout">
+
+            <!-- Card 0: Composition Settings -->
+            <div class="card control-panel highlight-card">
+                <h2>🎹 Composition Settings</h2>
+                <div class="input-group">
+                    <label>Global Key & Scale:</label>
+                    <div class="compare-row">
+                        <select id="genKey" class="small-select">
+                            <option value="60" selected>C</option>
+                            <option value="61">C#</option>
+                            <option value="62">D</option>
+                            <option value="63">D#</option>
+                            <option value="64">E</option>
+                            <option value="65">F</option>
+                            <option value="66">F#</option>
+                            <option value="67">G</option>
+                            <option value="68">G#</option>
+                            <option value="69">A</option>
+                            <option value="70">A#</option>
+                            <option value="71">B</option>
+                        </select>
+                        <select id="genScale" class="small-select">
+                            <option value="major" selected>Major</option>
+                            <option value="minor">Minor</option>
+                            <option value="pentatonic">Pentatonic</option>
+                            <option value="dorian">Dorian</option>
+                            <option value="phrygian">Phrygian</option>
+                            <option value="lydian">Lydian</option>
+                            <option value="mixolydian">Mixolydian</option>
+                            <option value="harmonic_minor">Harmonic Minor</option>
+                        </select>
+                    </div>
+                    <p class="small-text">Adjusting these will update the "Snap to Scale" guides in the editor below.</p>
+                </div>
+            </div>
 
             <!-- Card 1: Instrument Setup -->
             <div class="card control-panel">
                 <h2>1. Instrument Setup</h2>
-
                 <div class="input-group">
                     <label for="audioFile">Upload Sample (MP3/WAV)</label>
                     <input type="file" id="audioFile" accept="audio/mp3, audio/wav, audio/mpeg">
@@ -75,84 +152,72 @@
                         <button id="octaveUp" class="btn-round">+</button>
                     </div>
 
-                    <div class="piano-keys" id="pianoContainer">
-                        <!-- Keys generated by JS -->
-                    </div>
+                    <div class="piano-keys" id="pianoContainer"></div>
                     <p class="small-text">Click a key to play a reference tone and set it as the Root Note.</p>
                 </div>
 
                 <div class="tuning-controls">
                     <label for="rootNote">Selected Root Note:</label>
-                    <select id="rootNote">
-                        <!-- Filled by JS -->
-                    </select>
+                    <select id="rootNote"></select>
                 </div>
-
-                <button id="testAudioBtn" class="btn secondary">Test Sampler (Plays Middle C)</button>
+                <button id="testAudioBtn" class="btn secondary">Test Sampler</button>
             </div>
 
-            <!-- Card 2: MIDI Setup -->
+            <!-- Card 3: Tune Generator -->
             <div class="card control-panel">
-                <h2>2. MIDI Loader</h2>
+                <h2>3. Tune Generator</h2>
+                <div class="generator-controls">
+                    <button id="generateBtn" class="btn accent">Generate Mathematical Tune</button>
+                    <p class="small-text">Uses the Global Key & Scale from Card 0.</p>
+                </div>
+
+                <div class="divider"><span>OR</span></div>
 
                 <div class="input-group">
-                    <label for="midiFile">Upload .MID File</label>
+                    <label for="midiFile">Upload a .MID File</label>
                     <input type="file" id="midiFile" accept=".mid, .midi">
                 </div>
 
                 <div class="playback-controls">
-                    <button id="playBtn" class="btn primary" disabled>Play MIDI</button>
+                    <button id="playBtn" class="btn primary" disabled>Play Tune</button>
                     <button id="stopBtn" class="btn danger" disabled>Stop</button>
                 </div>
             </div>
 
-        </div>
+            <!-- Card 3: Chord Accompaniment -->
+            <div class="card control-panel" id="chordPanel">
+                <h2>3. Chord Editor</h2>
+                <p class="small-text">Layer chords over your tune. Suggestions are based on the generated progression.
+                </p>
 
-        <!-- Card 3: Visualizer -->
-        <div class="card visualizer-card">
-            <div class="visualizer-header">
-                <h2>Track Visualization</h2>
-
-                <div class="playback-controls-permanent">
-                    <button id="permRewindBtn" class="btn-round" title="Rewind to Start">⏮</button>
-                    <button id="permPlayBtn" class="btn-round large" title="Play/Pause">▶</button>
-                    <button id="permStopBtn" class="btn-round" title="Stop">⏹</button>
+                <div class="input-group">
+                    <label>Target Bar:</label>
+                    <select id="chordBarSelect" class="small-select"></select>
                 </div>
 
-                <div class="track-controls">
-                    <div class="octave-adjust">
-                        <span>Pitch:</span>
-                        <button id="shiftDown" class="btn-round small">-</button>
-                        <span id="shiftDisplay">0</span>
-                        <button id="shiftUp" class="btn-round small">+</button>
+                <div class="input-group">
+                    <label>Suggested Theory Chords:</label>
+                    <div id="suggestedChordsContainer" class="chord-suggestions">
+                        <span class="small-text">Generate a tune first to see suggestions.</span>
                     </div>
-                    <select id="exportFormat" class="small-select">
-                        <option value="wav">WAV</option>
-                        <option value="mp3">MP3</option>
-                    </select>
-                    <button id="downloadBtn" class="btn secondary small-btn">Download</button>
                 </div>
+
+                <div class="input-group">
+                    <label>Or Select Manually:</label>
+                    <div class="compare-row">
+                        <select id="customChordSelect" class="small-select"></select>
+                        <button id="addChordBtn" class="btn secondary small-btn">Add Chord</button>
+                    </div>
+                </div>
+
+                <button id="clearAllChordsBtn" class="btn danger small-btn">Clear All Chords</button>
             </div>
 
-            <div class="canvas-container">
-                <canvas id="keysCanvas"></canvas>
-                <div class="canvas-wrapper" id="canvasWrapper">
-                    <canvas id="midiCanvas"></canvas>
-                    <!-- Overlay button kept as initial starter -->
-                    <div id="overlayPlayBtn" class="overlay-play-btn hidden">
-                        <svg viewBox="0 0 24 24" width="48" height="48">
-                            <path fill="currentColor" d="M8 5v14l11-7z" />
-                        </svg>
-                    </div>
-                    <div id="playHead" class="play-head"></div>
-                </div>
-            </div>
-            <div id="file-info">No MIDI loaded</div>
         </div>
 
     </div>
 
-    <script src="script.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 
 </html>

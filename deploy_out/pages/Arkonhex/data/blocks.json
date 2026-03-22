@@ -49,7 +49,7 @@
         "id": 6,
         "name": "wood",
         "topColor": "black",
-        "baseColor": "dark_green",
+        "baseColor": "black",
         "hardness": 1.5,
         "placeSound": "wood_place",
         "destroySound": "break"

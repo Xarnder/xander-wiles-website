@@ -399,7 +399,12 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         const task = state.appData.tasks[taskId];
         if (task) {
             // Exclusive Mode Logic
-            const show = state.showArchived ? task.archived === true : !task.archived;
+            let show = false;
+            if (state.showRecentCompleted) {
+                show = task.completed && task.completedAt && (Date.now() - task.completedAt <= 24 * 60 * 60 * 1000);
+            } else {
+                show = state.showArchived ? task.archived === true : !task.archived;
+            }
 
             if (show) {
                 taskListContainer.appendChild(createTaskElement(task, list.id, visibleIndex));
@@ -512,6 +517,26 @@ export function createTaskElement(task, sourceListId, number) {
     let numberHtml = state.appData.settings.showNumbers ? `<span class="task-number">${number}.</span>` : '';
     let linkedIconHtml = isLinked ? `<i class="ph ph-link" style="font-size: 0.8em; margin-left: 5px; color: var(--accent-blue);" title="Linked to multiple lists"></i>` : '';
 
+    let recentCompletedHtml = '';
+    if (state.showRecentCompleted && task.completed && task.completedAt) {
+        const diffMs = Date.now() - task.completedAt;
+        const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+        const diffMins = Math.floor(diffSecs / 60);
+        const diffHrs = Math.floor(diffMins / 60);
+        
+        let relativeStr = '';
+        if (diffHrs > 0) {
+            relativeStr = `${diffHrs} hour${diffHrs > 1 ? 's' : ''} ago`;
+        } else if (diffMins > 0) {
+            relativeStr = `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+        } else {
+            relativeStr = `${diffSecs} second${diffSecs !== 1 ? 's' : ''} ago`;
+        }
+
+        const timeStr = new Date(task.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        recentCompletedHtml = `<div style="font-size: 0.75rem; color: var(--accent-green); margin-top: 4px;"><i class="ph ph-check-circle"></i> Completed at ${timeStr} (${relativeStr})</div>`;
+    }
+
     el.innerHTML = `
         <input type="checkbox" class="task-checkbox" 
             ${task.completed ? 'checked' : ''} 
@@ -521,6 +546,7 @@ export function createTaskElement(task, sourceListId, number) {
         ${numberHtml}
         <div class="task-content-wrapper">
             <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml}</div>
+            ${recentCompletedHtml}
             ${imagesHtml}
         </div>
         <div class="task-actions">${actionsHtml}</div>

@@ -103,7 +103,11 @@ self.addEventListener('fetch', (event) => {
                     // Cache the latest version
                     const responseToCache = finalResponse.clone();
                     if (event.request.url.startsWith('http')) {
-                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+                        caches.open(CACHE_NAME).then((cache) => {
+                            try {
+                                cache.put(event.request, responseToCache);
+                            } catch(e) { /* ignore */ }
+                        });
                     }
                     return finalResponse;
                 })
@@ -118,7 +122,10 @@ self.addEventListener('fetch', (event) => {
     }
 
     // Cache-First for everything else
-    const isStaticAsset = ASSETS_TO_CACHE.some(asset => event.request.url.includes(asset.replace('./', '')));
+    const isStaticAsset = ASSETS_TO_CACHE.some(asset => {
+        const clean = asset.replace('./', '');
+        return clean.length > 0 && event.request.url.includes(clean);
+    });
     const isSelf = event.request.url.startsWith(self.location.origin);
     const isFirebase = event.request.url.includes('gstatic.com/firebasejs');
 
@@ -155,7 +162,9 @@ self.addEventListener('fetch', (event) => {
                             if (event.request.url.startsWith('http')) {
                                 caches.open(CACHE_NAME)
                                     .then((cache) => {
-                                        cache.put(event.request, responseToCache);
+                                        try {
+                                            cache.put(event.request, responseToCache);
+                                        } catch(e) { /* ignore scheme errors */ }
                                     });
                             }
 

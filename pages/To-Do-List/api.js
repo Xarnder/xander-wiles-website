@@ -117,7 +117,13 @@ export function deleteTaskForever(taskId) {
 }
 
 export function toggleTaskComplete(taskId, isChecked) {
-    const p = updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), { completed: isChecked })
+    const updateData = { completed: isChecked };
+    if (isChecked) {
+        updateData.completedAt = Date.now();
+    } else {
+        updateData.completedAt = null;
+    }
+    const p = updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), updateData)
         .catch(e => handleSyncError(e));
 
     // Auto archive logic check is usually done in UI/Main after update, or pure state reaction.

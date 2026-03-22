@@ -28,6 +28,7 @@ export const state = {
     listeners: [],
     dragMode: 'move',
     showArchived: false,
+    showRecentCompleted: false,
     sortableInstances: [],
     listSortable: null,
 
@@ -61,7 +62,7 @@ export function resetState() {
         lists: [],
         rawLists: [],
         tasks: {},
-        settings: { autoArchive: false, showNumbers: false, theme: 'dark', sortMode: 'custom' },
+        settings: { autoArchive: false, showNumbers: false, theme: 'dark', sortMode: 'custom', dragEnabled: null },
         listOrder: [],
         boards: [],
         currentBoardId: null

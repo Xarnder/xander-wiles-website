@@ -14,34 +14,90 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressBarContainer = document.getElementById('progressBarContainer');
     const progressBar = document.getElementById('progressBar');
 
-    // TODO: Replace with your actual API Key and restrict it in Google Cloud Console
+    const nextPlaylistBtn = document.getElementById('nextPlaylistBtn');
+    const multiPlaylistProgress = document.getElementById('multiPlaylistProgress');
+    const progressCountText = document.getElementById('progressCountText');
+    const progressTitleText = document.getElementById('progressTitleText');
+    const processedPlaylistsList = document.getElementById('processedPlaylistsList');
+
     const API_KEY = 'AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk';
 
     let extractedVideos = []; // Store videos for download
     let playlistTitle = 'youtube_playlist'; // Default title
 
+    let playlistQueue = [];
+    let currentPlaylistUrl = "";
+    let totalPlaylistsInQueue = 0;
+    let playlistsProcessed = 0;
+
     console.log("App Initialized. Waiting for user input.");
 
-    extractBtn.addEventListener('click', async () => {
-        const apiKey = API_KEY;
-        const playlistUrl = playlistInput.value.trim();
+    extractBtn.addEventListener('click', () => {
+        // Parse textarea for multiple URLs
+        const lines = playlistInput.value.trim().split(/\r?\n/).map(l => l.trim()).filter(l => l);
 
-        // Basic Validation
-        if (!playlistUrl) {
-            showStatus("Please enter a Playlist URL.", "error");
+        if (lines.length === 0) {
+            showStatus("Please enter at least one Playlist URL.", "error");
             console.warn("Validation Error: Missing URL");
             return;
         }
+
+        playlistQueue = lines;
+        totalPlaylistsInQueue = lines.length;
+        playlistsProcessed = 0;
+        extractBtn.disabled = true;
+
+        multiPlaylistProgress.classList.remove('hidden');
+        progressTitleText.textContent = "";
+        progressCountText.textContent = "";
+        processedPlaylistsList.innerHTML = "";
+
+        processNextPlaylist();
+    });
+
+    nextPlaylistBtn.addEventListener('click', () => {
+        processNextPlaylist();
+    });
+
+    async function processNextPlaylist() {
+        if (playlistQueue.length === 0) {
+            nextPlaylistBtn.classList.add('hidden');
+            extractBtn.disabled = false;
+            extractBtn.classList.remove('hidden');
+            multiPlaylistProgress.classList.add('hidden');
+            return;
+        }
+
+        currentPlaylistUrl = playlistQueue.shift();
+        playlistsProcessed++;
+        const apiKey = API_KEY;
+        const playlistUrl = currentPlaylistUrl;
+
+        progressCountText.textContent = `Processing Playlist ${playlistsProcessed} of ${totalPlaylistsInQueue}`;
+        progressTitleText.textContent = `Loading...`;
+
+        // Hide next button during processing
+        nextPlaylistBtn.classList.add('hidden');
 
         const playlistId = extractPlaylistId(playlistUrl);
         if (!playlistId) {
             // Specific check for video URLs to give better feedback
             if (playlistUrl.includes('youtu.be') || playlistUrl.includes('watch?v=')) {
                 showStatus("It looks like you pasted a video link. Please use a Playlist URL (must contain 'list=').", "error");
-                console.warn("Validation Error: User pasted a video link URL.");
             } else {
                 showStatus("Invalid YouTube Playlist URL.", "error");
-                console.error("Validation Error: Could not parse Playlist ID from", playlistUrl);
+            }
+
+            // Allow skipping invalid URL and continuing if there are items left
+            addProcessedItem(`❌ Invalid URL: ${playlistUrl}`);
+
+            if (playlistQueue.length > 0) {
+                nextPlaylistBtn.textContent = `Next Playlist (${playlistQueue.length} left)`;
+                nextPlaylistBtn.classList.remove('hidden');
+                extractBtn.classList.add('hidden');
+            } else {
+                extractBtn.disabled = false;
+                extractBtn.classList.remove('hidden');
             }
             return;
         }
@@ -55,11 +111,13 @@ document.addEventListener('DOMContentLoaded', () => {
             playlistTitle = await fetchPlaylistMetadata(playlistId, apiKey);
             console.log(`Playlist Title: ${playlistTitle}`);
 
+            progressTitleText.textContent = playlistTitle;
+
             const videos = await fetchAllPlaylistVideos(playlistId, apiKey);
 
             if (videos.length === 0) {
                 showStatus("No videos found or playlist is private.", "error");
-                console.warn("API returned 0 videos.");
+                addProcessedItem(`❌ ${playlistTitle || playlistUrl} (Private or Empty)`);
             } else {
                 console.log(`Successfully fetched ${videos.length} videos.`);
 
@@ -70,15 +128,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 displayResults(videos);
 
                 showStatus(`Success! Found ${videos.length} videos. Click 'Download CSV' to save.`, "success");
+                addProcessedItem(`✅ ${playlistTitle} (${videos.length} videos)`);
             }
-
         } catch (error) {
             console.error("Critical Error during execution:", error);
             showStatus(`Error: ${error.message}`, "error");
+            addProcessedItem(`❌ ${playlistId || playlistUrl} (Error)`);
         } finally {
             setLoading(false);
+
+            // Show next button if there are items left in queue
+            if (playlistQueue.length > 0) {
+                nextPlaylistBtn.textContent = `Next Playlist (${playlistQueue.length} left)`;
+                nextPlaylistBtn.classList.remove('hidden');
+                extractBtn.classList.add('hidden');
+            } else {
+                nextPlaylistBtn.classList.add('hidden');
+                extractBtn.disabled = false;
+                extractBtn.classList.remove('hidden');
+            }
         }
-    });
+    }
 
     downloadBtn.addEventListener('click', () => {
         if (!extractedVideos || extractedVideos.length === 0) {
@@ -115,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         do {
             const params = new URLSearchParams({
-                part: 'snippet',
+                part: 'snippet,contentDetails',
                 maxResults: '50',
                 playlistId: playlistId,
                 key: apiKey,
@@ -137,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const title = item.snippet.title;
                 const videoId = item.snippet.resourceId.videoId;
                 const channel = item.snippet.videoOwnerChannelTitle || item.snippet.channelTitle || 'Unknown';
-                const publishedAt = item.snippet.publishedAt;
+                const publishedAt = (item.contentDetails && item.contentDetails.videoPublishedAt) ? item.contentDetails.videoPublishedAt : item.snippet.publishedAt;
                 // Exclude "Private video" or "Deleted video" entries usually lacking IDs
                 if (videoId) {
                     videos.push({
@@ -178,8 +248,14 @@ document.addEventListener('DOMContentLoaded', () => {
     async function downloadCSV(videoList) {
         console.log("Generating CSV...");
 
-        // CSV Header
-        let csvContent = "Title,Channel,Published,URL\n";
+        // CSV Metadata & Header
+        const playlistUrl = currentPlaylistUrl || playlistInput.value.trim();
+        const safePlaylistTitleAttr = `"${playlistTitle.replace(/"/g, '""')}"`;
+        const safePlaylistUrlAttr = `"${playlistUrl.replace(/"/g, '""')}"`;
+        
+        let csvContent = `Playlist Title,${safePlaylistTitleAttr}\n`;
+        csvContent += `Playlist URL,${safePlaylistUrlAttr}\n\n`;
+        csvContent += "Title,Channel,Published,URL\n";
 
         videoList.forEach(video => {
             // Escape quotes in titles by doubling them, wrap title in quotes
@@ -189,7 +265,8 @@ document.addEventListener('DOMContentLoaded', () => {
             csvContent += `${safeTitle},${safeChannel},${safeDate},${video.url}\n`;
         });
 
-        const filename = `playlist_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        const safeFilenameTitle = sanitizeFilename(playlistTitle, 100) || 'playlist';
+        const filename = `${safeFilenameTitle}_export_${new Date().toISOString().slice(0, 10)}.csv`;
         const fileType = 'text/csv;charset=utf-8;';
 
         // Try using navigator.share for iOS/Mobile support
@@ -332,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function generateBigQRCode() {
         bigQRContainer.innerHTML = ''; // Clear previous
 
-        const playlistUrl = playlistInput.value.trim();
+        const playlistUrl = currentPlaylistUrl || playlistInput.value.trim();
 
         if (!playlistUrl) {
             bigQRContainer.innerHTML = '<p class="error-text">No Playlist URL found.</p>';
@@ -405,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(tempContainer);
 
         // Include the Playlist (Big) QR Code as JPG
-        const playlistUrl = playlistInput.value.trim();
+        const playlistUrl = currentPlaylistUrl || playlistInput.value.trim();
         if (playlistUrl) {
             const bigQrDiv = document.createElement('div');
             tempContainer.appendChild(bigQrDiv);
@@ -523,14 +600,21 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(tempContainer);
 
         // Add CSV metadata to the ZIP
-        let csvContent = "Title,Channel,Published,URL\n";
+        const safePlaylistTitleAttr = `"${playlistTitle.replace(/"/g, '""')}"`;
+        const safePlaylistUrlAttr = `"${playlistUrl.replace(/"/g, '""')}"`;
+        
+        let csvContent = `Playlist Title,${safePlaylistTitleAttr}\n`;
+        csvContent += `Playlist URL,${safePlaylistUrlAttr}\n\n`;
+        csvContent += "Title,Channel,Published,URL\n";
         extractedVideos.forEach(video => {
             const safeTitle = `"${video.title.replace(/"/g, '""')}"`;
             const safeChannel = `"${video.channel.replace(/"/g, '""')}"`;
             const safeDate = `"${new Date(video.publishedAt).toLocaleDateString()}"`;
             csvContent += `${safeTitle},${safeChannel},${safeDate},${video.url}\n`;
         });
-        zip.file("playlist_metadata_complete.csv", csvContent);
+        
+        const safeCsvMetadataName = sanitizeFilename(playlistTitle, 100) || 'metadata';
+        zip.file(`${safeCsvMetadataName}_playlist_metadata.csv`, csvContent);
 
         try {
             // Revert to default compression (STORE) as the issue was likely Unicode filenames
@@ -558,23 +642,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // UI Helpers
-    function showStatus(msg, type) {
-        statusDiv.textContent = msg;
-        statusDiv.className = `status-box ${type}`; // Removes 'hidden'
-    }
-
-    function setLoading(isLoading) {
-        if (isLoading) {
-            extractBtn.disabled = true;
-            extractBtn.textContent = "Extracting...";
-            showStatus("Fetching data from YouTube... This might take a moment.", "loading");
-            // Hide previous results while loading new ones
-            resultsContainer.classList.add('hidden');
-            extractedVideos = []; // Clear previous data
-        } else {
-            extractBtn.disabled = false;
-            extractBtn.textContent = "Extract Videos"; // Changed text to reflect action
-        }
+    function addProcessedItem(text) {
+        if (!processedPlaylistsList) return;
+        const li = document.createElement("li");
+        li.textContent = text;
+        li.style.padding = "5px 0";
+        li.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+        li.style.color = text.startsWith("❌") ? "#fca5a5" : "rgba(255, 255, 255, 0.8)";
+        processedPlaylistsList.appendChild(li);
+        
+        // Scroll to bottom
+        processedPlaylistsList.scrollTop = processedPlaylistsList.scrollHeight;
     }
 });

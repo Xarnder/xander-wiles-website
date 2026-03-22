@@ -45,7 +45,7 @@
     <div id="main-nav-placeholder"></div>
 
     <!-- Main Application Container -->
-    <main class="container antigravity-floating">
+    <main class="container">
         <div class="glass-card">
             <header class="card-header">
                 <h1>Playlist to CSV</h1>
@@ -55,14 +55,24 @@
             <!-- API Key Input Removed: Key is now hardcoded in script.js -->
 
             <div class="input-group">
-                <label for="playlistUrl">Playlist URL</label>
-                <input type="text" id="playlistUrl" placeholder="https://www.youtube.com/playlist?list=..."
-                    autocomplete="off">
+                <label for="playlistUrl">Playlist URLs (one per line)</label>
+                <textarea id="playlistUrl" placeholder="https://www.youtube.com/playlist?list=..." rows="4"
+                    autocomplete="off"></textarea>
             </div>
 
-            <button id="extractBtn" class="action-btn">Extract & Download CSV</button>
+            <div style="display: flex; gap: 10px;">
+                <button id="extractBtn" class="action-btn">Extract & Download CSV</button>
+                <button id="nextPlaylistBtn" class="action-btn secondary hidden">Next Playlist</button>
+            </div>
 
             <div id="statusMessage" class="status-box hidden"></div>
+
+            <div id="multiPlaylistProgress" class="hidden" style="margin: 15px 0; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; text-align: center;">
+                <p id="progressCountText" style="margin: 0; font-size: 0.9em; opacity: 0.8;"></p>
+                <h2 id="progressTitleText" style="margin: 5px 0 0 0; color: var(--accent-light); font-size: 1.5em;"></h2>
+                <ul id="processedPlaylistsList" style="list-style: none; padding: 0; margin: 15px 0 0 0; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; text-align: left; font-size: 0.9em; max-height: 150px; overflow-y: auto;">
+                </ul>
+            </div>
 
             <div id="progressBarContainer" class="progress-bar-container hidden">
                 <div id="progressBar" class="progress-bar"></div>

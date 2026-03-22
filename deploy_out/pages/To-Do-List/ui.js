@@ -124,14 +124,16 @@ export function renderBoard() {
     });
 
     // List Sorting (Reorder List Columns)
-    // Assuming Sortable is global
     state.listSortable = new Sortable(boardContainer, {
+        disabled: !state.appData.settings.dragEnabled,
         animation: 150,
         handle: '.list-drag-handle',
         direction: 'horizontal',
         filter: '.orphan-list',
         forceFallback: true,
         fallbackOnBody: true,
+        delay: 200,
+        delayOnTouchOnly: true,
         onEnd: (evt) => {
             if (evt.newIndex !== evt.oldIndex) {
                 // Reorder Logic
@@ -397,7 +399,12 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         const task = state.appData.tasks[taskId];
         if (task) {
             // Exclusive Mode Logic
-            const show = state.showArchived ? task.archived === true : !task.archived;
+            let show = false;
+            if (state.showRecentCompleted) {
+                show = task.completed && task.completedAt && (Date.now() - task.completedAt <= 24 * 60 * 60 * 1000);
+            } else {
+                show = state.showArchived ? task.archived === true : !task.archived;
+            }
 
             if (show) {
                 taskListContainer.appendChild(createTaskElement(task, list.id, visibleIndex));
@@ -423,19 +430,24 @@ function renderListColumn(list, isOrphan, isCustomSort) {
                 put: true
             },
             animation: 150,
-            disabled: !isCustomSort,
+            disabled: (!isCustomSort || !state.appData.settings.dragEnabled),
             filter: '.archived-task',
             preventOnFilter: false, // CRITICAL: Allow touch events on filtered (archived) elements so buttons work
             forceFallback: true,
             fallbackOnBody: true,
+            delay: 200,
+            delayOnTouchOnly: true,
             onEnd: handleDragEnd
         });
         state.sortableInstances.push(sortable);
     } else {
         const sortable = new Sortable(taskListContainer, {
+            disabled: !state.appData.settings.dragEnabled,
             group: { name: 'shared', pull: true, put: false },
             animation: 150,
-            sort: false
+            sort: false,
+            delay: 200,
+            delayOnTouchOnly: true
         });
         state.sortableInstances.push(sortable);
     }
@@ -505,6 +517,26 @@ export function createTaskElement(task, sourceListId, number) {
     let numberHtml = state.appData.settings.showNumbers ? `<span class="task-number">${number}.</span>` : '';
     let linkedIconHtml = isLinked ? `<i class="ph ph-link" style="font-size: 0.8em; margin-left: 5px; color: var(--accent-blue);" title="Linked to multiple lists"></i>` : '';
 
+    let recentCompletedHtml = '';
+    if (state.showRecentCompleted && task.completed && task.completedAt) {
+        const diffMs = Date.now() - task.completedAt;
+        const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+        const diffMins = Math.floor(diffSecs / 60);
+        const diffHrs = Math.floor(diffMins / 60);
+        
+        let relativeStr = '';
+        if (diffHrs > 0) {
+            relativeStr = `${diffHrs} hour${diffHrs > 1 ? 's' : ''} ago`;
+        } else if (diffMins > 0) {
+            relativeStr = `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+        } else {
+            relativeStr = `${diffSecs} second${diffSecs !== 1 ? 's' : ''} ago`;
+        }
+
+        const timeStr = new Date(task.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        recentCompletedHtml = `<div style="font-size: 0.75rem; color: var(--accent-green); margin-top: 4px;"><i class="ph ph-check-circle"></i> Completed at ${timeStr} (${relativeStr})</div>`;
+    }
+
     el.innerHTML = `
         <input type="checkbox" class="task-checkbox" 
             ${task.completed ? 'checked' : ''} 
@@ -514,6 +546,7 @@ export function createTaskElement(task, sourceListId, number) {
         ${numberHtml}
         <div class="task-content-wrapper">
             <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml}</div>
+            ${recentCompletedHtml}
             ${imagesHtml}
         </div>
         <div class="task-actions">${actionsHtml}</div>
@@ -852,8 +885,18 @@ export function selectAllInList(listId) {
 }
 
 export function enableSortables(enable) {
-    if (state.listSortable) state.listSortable.option("disabled", !enable);
-    state.sortableInstances.forEach(s => s.option("disabled", !enable));
+    const isCustomSort = state.appData.settings.sortMode === 'custom';
+    const isDragEnabled = state.appData.settings.dragEnabled;
+    const shouldDisableList = !enable || !isDragEnabled;
+
+    if (state.listSortable) state.listSortable.option("disabled", shouldDisableList);
+    state.sortableInstances.forEach(s => {
+        const isOrphan = s.el.closest('.orphan-list') !== null;
+        const shouldDisableTasks = isOrphan 
+            ? (!enable || !isDragEnabled) 
+            : (!enable || !isDragEnabled || !isCustomSort);
+        s.option("disabled", shouldDisableTasks);
+    });
 }
 
 // --- IMAGE UPLOAD TRADITIONAL ---
@@ -1007,10 +1050,13 @@ export function openMobileReorderModal() {
     if (mobileSortableInstance) mobileSortableInstance.destroy();
 
     mobileSortableInstance = new Sortable(container, {
+        disabled: !state.appData.settings.dragEnabled,
         animation: 150,
         handle: '.mobile-reorder-list-item', // They drag the whole card
         forceFallback: true,
-        fallbackOnBody: true
+        fallbackOnBody: true,
+        delay: 200,
+        delayOnTouchOnly: true
     });
 
     modal.classList.remove('hidden');
