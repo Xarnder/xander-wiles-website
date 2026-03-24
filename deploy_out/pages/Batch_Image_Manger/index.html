@@ -153,11 +153,12 @@
                             </div>
                         </div>
                         <div class="control-group">
-                            <label for="underscore-toggle" class="checkbox-label toggle-switch">
-                                <input type="checkbox" id="underscore-toggle" />
-                                <span class="toggle-knob"></span>
-                                Use_Underscores
-                            </label>
+                            <label for="filename-spacing-select">Filename Spacing</label>
+                            <select id="filename-spacing-select">
+                                <option value="spaces" selected>Spaces (Default)</option>
+                                <option value="underscores">Underscores</option>
+                                <option value="hyphens">Hyphens</option>
+                            </select>
                         </div>
                         <div class="control-group">
                             <label for="export-format-select">Export Format</label>
@@ -425,6 +426,14 @@
                             <span class="toggle-knob"></span>
                             Apply Titles
                         </label>
+                    </div>
+                    <div class="control-group">
+                        <label for="downscale-spacing-select">Filename Spacing</label>
+                        <select id="downscale-spacing-select">
+                            <option value="spaces" selected>Spaces (Default)</option>
+                            <option value="underscores">Underscores</option>
+                            <option value="hyphens">Hyphens</option>
+                        </select>
                     </div>
                     <div class="control-group">
                         <label for="downscale-use-subfolders-toggle" class="checkbox-label toggle-switch">

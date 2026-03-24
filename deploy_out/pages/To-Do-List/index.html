@@ -125,6 +125,9 @@
                 <button id="mobile-reorder-lists-btn" class="menu-action-item" title="Reorder Lists">
                     <i class="ph ph-arrows-down-up"></i> Reorder Lists (Mobile)
                 </button>
+                <button id="time-automation-help-btn" class="menu-action-item" title="Time Automation Help">
+                    <i class="ph ph-question"></i> Time Automation Help
+                </button>
 
                 <hr class="dropdown-divider">
                 <label class="dropdown-item-toggle">
@@ -552,6 +555,62 @@
             <div class="modal-divider"></div>
 
             <div class="modal-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="margin: 0;">Time Automation</h3>
+                    <label class="dropdown-item-toggle" style="margin: 0; padding: 0; background: none;">
+                        <div class="switch-small">
+                            <input type="checkbox" id="automation-enable-toggle">
+                            <span class="slider-small round"></span>
+                        </div>
+                    </label>
+                </div>
+                
+                <div id="automation-settings-container" class="hidden" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <label style="font-size: 0.9em; display: block; margin-bottom: 5px;">Trigger Type:</label>
+                    <select id="automation-trigger-select" class="glass-select full-width" style="margin-bottom: 10px;">
+                        <option value="duration">After Time in List</option>
+                        <option value="schedule">On a specific Schedule</option>
+                    </select>
+
+                    <div id="automation-duration-group" style="margin-bottom: 10px;">
+                        <label style="font-size: 0.9em; display: block; margin-bottom: 5px;" id="automation-duration-label">Rules apply to tasks older than:</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="number" id="automation-duration-val" class="add-task-input" value="0" min="0" style="width: 50%;">
+                            <select id="automation-duration-unit" class="glass-select full-width">
+                                <option value="minutes">Minutes</option>
+                                <option value="hours">Hours</option>
+                                <option value="days">Days</option>
+                                <option value="weeks">Weeks</option>
+                                <option value="months">Months</option>
+                                <option value="years">Years</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="automation-schedule-group" class="hidden" style="margin-bottom: 10px;">
+                        <label style="font-size: 0.9em; display: block; margin-bottom: 5px;">Run Schedule:</label>
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <select id="automation-schedule-type" class="glass-select full-width">
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                            </select>
+                            <input type="time" id="automation-schedule-time" class="add-task-input" value="00:00" style="width: 50%;">
+                        </div>
+                    </div>
+
+                    <label style="font-size: 0.9em; display: block; margin-bottom: 5px;">Move to Destination List:</label>
+                    <select id="automation-dest-list" class="glass-select full-width" style="margin-bottom: 15px;">
+                        <option value="" disabled selected>Select List...</option>
+                    </select>
+
+                    <button id="automation-save-btn" class="btn primary full-width">Save Automation Settings</button>
+                </div>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-section">
                 <h3>Move to Different Board:</h3>
                 <div class="move-controls">
                     <select id="edit-list-board-select" class="glass-select full-width">
@@ -574,9 +633,32 @@
         </div>
     </div>
 
+    <!-- TIME AUTOMATION HELP MODAL -->
+    <div id="time-automation-help-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel" style="max-width: 500px;">
+            <div class="modal-header-row">
+                <h2 style="display: flex; align-items: center; gap: 8px;"><i class="ph ph-clock"></i> Time Automations</h2>
+                <button id="close-time-help-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <div style="text-align: left; font-size: 0.95rem; color: var(--text-secondary); line-height: 1.5;">
+                <p style="margin-bottom: 15px;">Time Automations allow lists to automatically forward tasks to another list.</p>
+                <h3 style="color: var(--text-primary); margin: 0 0 5px 0; font-size: 1rem;">After Time in List:</h3>
+                <p style="margin-bottom: 15px;">Moves a task <strong>as soon as</strong> it reaches the specified age within the list. <em>(e.g. Move after 2 hours)</em></p>
+                <h3 style="color: var(--text-primary); margin: 0 0 5px 0; font-size: 1rem;">On a specific Schedule:</h3>
+                <p style="margin-bottom: 10px;">Checks the list at the <strong>Time of Day</strong> you set, moving any tasks that meet your age requirements.</p>
+                <p style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; font-style: italic;">
+                    <strong>Pro Tip:</strong> Set Schedule to 'Daily' at '00:00', and Age to '0', to migrate all tasks in a 'Tomorrow' list to a 'Today' list every Midnight!
+                </p>
+            </div>
+            <div class="modal-actions-bar" style="margin-top: 20px;">
+                <button id="close-time-help-btn-bottom" class="btn primary full-width">Got it</button>
+            </div>
+        </div>
+    </div>
+
     <!-- VERSION INDICATOR -->
     <div id="app-version" class="app-version">
-        v1.16 <!-- UPDATE THIS ON EVERY CHANGE -->
+        v1.17 <!-- UPDATE THIS ON EVERY CHANGE -->
     </div>
 
     <!-- BOARD MANAGER MODAL -->

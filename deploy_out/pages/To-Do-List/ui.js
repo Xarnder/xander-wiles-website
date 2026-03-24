@@ -713,8 +713,15 @@ export function handleDragEnd(evt) {
 
         batch.update(doc(db, "users", state.currentUser.uid, "lists", toIdRaw), { taskIds: finalToIds });
 
+        let taskUpdates = {};
+        if (fromIdRaw !== toIdRaw) {
+            taskUpdates[`listAddedAt.${toIdRaw}`] = Date.now();
+        }
         if (fromIdRaw === 'orphan-archive') {
-            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { archived: false });
+            taskUpdates.archived = false;
+        }
+        if (Object.keys(taskUpdates).length > 0) {
+            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), taskUpdates);
         }
     }
 
@@ -1107,6 +1114,85 @@ export function openEditListModal(listId) {
         }
         boardSelect.appendChild(option);
     });
+
+    // --- TIME AUTOMATION UI ---
+    const oldAutoToggle = document.getElementById('automation-enable-toggle');
+    const pAutoToggle = oldAutoToggle.cloneNode(true);
+    oldAutoToggle.parentNode.replaceChild(pAutoToggle, oldAutoToggle);
+
+    const oldAutoTrigger = document.getElementById('automation-trigger-select');
+    const pAutoTrigger = oldAutoTrigger.cloneNode(true);
+    oldAutoTrigger.parentNode.replaceChild(pAutoTrigger, oldAutoTrigger);
+
+    const pAutoContainer = document.getElementById('automation-settings-container');
+    const pAutoDurationVal = document.getElementById('automation-duration-val');
+    const pAutoDurationUnit = document.getElementById('automation-duration-unit');
+    const pAutoScheduleGroup = document.getElementById('automation-schedule-group');
+    const pAutoScheduleType = document.getElementById('automation-schedule-type');
+    const pAutoScheduleTime = document.getElementById('automation-schedule-time');
+    const pAutoDestList = document.getElementById('automation-dest-list');
+    const pAutoSaveBtn = document.getElementById('automation-save-btn');
+    const pAutoDurationLabel = document.getElementById('automation-duration-label');
+
+    pAutoToggle.checked = !!list.timeAutomated;
+    if (list.timeAutomated) {
+        pAutoContainer.classList.remove('hidden');
+    } else {
+        pAutoContainer.classList.add('hidden');
+    }
+
+    pAutoToggle.addEventListener('change', (e) => {
+        if (e.target.checked) pAutoContainer.classList.remove('hidden');
+        else pAutoContainer.classList.add('hidden');
+    });
+
+    pAutoTrigger.value = list.timeMoveType || 'duration';
+    pAutoDurationVal.value = list.timeDurationValue || 0;
+    pAutoDurationUnit.value = list.timeDurationUnit || 'days';
+    pAutoScheduleType.value = list.scheduleType || 'daily';
+    pAutoScheduleTime.value = list.scheduleTime || '00:00';
+
+    const updateTriggerUI = () => {
+        if (pAutoTrigger.value === 'schedule') {
+            pAutoScheduleGroup.classList.remove('hidden');
+            pAutoDurationLabel.textContent = "Rules apply to tasks older than (0 for all):";
+        } else {
+            pAutoScheduleGroup.classList.add('hidden');
+            pAutoDurationLabel.textContent = "Move tasks after:";
+        }
+    };
+    pAutoTrigger.addEventListener('change', updateTriggerUI);
+    updateTriggerUI();
+
+    pAutoDestList.innerHTML = '<option value="" disabled selected>Select List...</option>';
+    state.appData.rawLists.forEach(l => {
+        if (l.id !== list.id && l.id !== 'orphan-archive') {
+            const opt = document.createElement('option');
+            opt.value = l.id;
+            opt.textContent = l.title;
+            if (list.timeDestinationId === l.id) opt.selected = true;
+            pAutoDestList.appendChild(opt);
+        }
+    });
+
+    const newSaveBtn = pAutoSaveBtn.cloneNode(true);
+    pAutoSaveBtn.parentNode.replaceChild(newSaveBtn, pAutoSaveBtn);
+    newSaveBtn.onclick = () => {
+        import('./api.js').then(api => {
+            api.updateDoc(api.doc(api.db, "users", state.currentUser.uid, "lists", listId), {
+                timeAutomated: pAutoToggle.checked,
+                timeMoveType: pAutoTrigger.value,
+                timeDurationValue: parseInt(pAutoDurationVal.value) || 0,
+                timeDurationUnit: pAutoDurationUnit.value,
+                scheduleType: pAutoScheduleType.value,
+                scheduleTime: pAutoScheduleTime.value,
+                timeDestinationId: pAutoDestList.value || null
+            }).then(() => {
+                import('./utils.js').then(utils => utils.showToast("Automation Settings Saved!", "success"));
+            }).catch(e => api.handleSyncError(e));
+        });
+    };
+    // --- END TIME AUTOMATION UI ---
 
     modal.classList.remove('hidden');
 

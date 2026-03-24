@@ -192,6 +192,7 @@ onAuthStateChanged(auth, (user) => {
         syncConsoleEl.classList.remove('hidden');
         state.lastSyncTime = Date.now();
         startSyncTimer();
+        startAutomationTimer();
         setupFirestoreListeners(user.uid);
     } else {
         console.log("Logged out");
@@ -199,6 +200,7 @@ onAuthStateChanged(auth, (user) => {
         logoutBtn.style.display = 'none';
         syncConsoleEl.classList.add('hidden');
         stopSyncTimer();
+        stopAutomationTimer();
         cleanupListeners();
         dateReset();
         // Splash logic removed
@@ -226,6 +228,18 @@ function startSyncTimer() {
 
 function stopSyncTimer() {
     if (state.syncInterval) clearInterval(state.syncInterval);
+}
+
+let automationInterval = null;
+function startAutomationTimer() {
+    if (automationInterval) clearInterval(automationInterval);
+    automationInterval = setInterval(() => {
+        API.processAutomatedLists();
+    }, 60000); // every 60 seconds
+}
+
+function stopAutomationTimer() {
+    if (automationInterval) clearInterval(automationInterval);
 }
 
 // --- FIRESTORE LISTENERS ---
@@ -496,6 +510,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     document.getElementById('close-options-btn').onclick = () => optionsModal.classList.add('hidden');
 
+    // Time Automation Help Modal
+    const timeHelpModal = document.getElementById('time-automation-help-modal-overlay');
+    if (timeHelpModal) {
+        document.getElementById('time-automation-help-btn').onclick = () => {
+            optionsModal.classList.add('hidden');
+            timeHelpModal.classList.remove('hidden');
+        };
+        document.getElementById('close-time-help-btn').onclick = () => timeHelpModal.classList.add('hidden');
+        document.getElementById('close-time-help-btn-bottom').onclick = () => timeHelpModal.classList.add('hidden');
+    }
+
     // Default Board Select
     const defaultBoardSelect = document.getElementById('default-board-select');
     if (defaultBoardSelect) {
@@ -612,6 +637,12 @@ document.addEventListener('DOMContentLoaded', () => {
             taskIds: arrayUnion(...idsArr)
         });
 
+        idsArr.forEach(taskId => {
+            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+                [`listAddedAt.${finalTargetId}`]: Date.now()
+            });
+        });
+
         if (mode === 'move') {
             state.appData.rawLists.forEach(list => {
                 if (list.id === finalTargetId) return;
@@ -668,7 +699,10 @@ document.addEventListener('DOMContentLoaded', () => {
         batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
             taskIds: arrayUnion(taskId)
         });
-        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { archived: false });
+        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { 
+            archived: false,
+            [`listAddedAt.${targetListId}`]: Date.now()
+        });
 
         batch.commit().then(() => {
             Utils.showToast("Task moved successfully.");
@@ -693,7 +727,10 @@ document.addEventListener('DOMContentLoaded', () => {
         batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
             taskIds: arrayUnion(taskId)
         });
-        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { archived: false });
+        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { 
+            archived: false,
+            [`listAddedAt.${targetListId}`]: Date.now()
+        });
 
         batch.commit().then(() => {
             Utils.showToast("Task linked successfully.");
@@ -720,7 +757,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 archived: false,
                 createdAt: Date.now(),
                 images: [],
-                glowColor: 'none'
+                glowColor: 'none',
+                listAddedAt: { [listId]: Date.now() }
             };
             batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), newTask);
             batch.update(listRef, { taskIds: arrayUnion(newId) });

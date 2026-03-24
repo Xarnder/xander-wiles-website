@@ -33,7 +33,8 @@ export function handleAddTask(e, listId) {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         images: [],
-        glowColor: 'none'
+        glowColor: 'none',
+        listAddedAt: { [listId]: Date.now() }
     };
 
     const batch = writeBatch(db);
@@ -355,6 +356,97 @@ export function updateSetting(settingKey, value) {
 
     return updateDoc(doc(db, "users", state.currentUser.uid), updateObj)
         .catch(e => handleSyncError(e));
+}
+
+export function processAutomatedLists() {
+    if (!state.currentUser) return;
+    const now = Date.now();
+    const batch = writeBatch(db);
+    let modifications = 0;
+
+    state.appData.rawLists.forEach(list => {
+        if (!list.timeAutomated || !list.timeDestinationId) return;
+        if (!list.taskIds || list.taskIds.length === 0) return;
+
+        const destListId = list.timeDestinationId;
+        const destList = state.appData.rawLists.find(l => l.id === destListId);
+        if (!destList) return; // Destination list was deleted
+
+        const type = list.timeMoveType || 'duration';
+        const val = list.timeDurationValue || 0;
+        const unit = list.timeDurationUnit || 'days';
+        
+        let multiplier = 1000 * 60; // minutes
+        if (unit === 'hours') multiplier *= 60;
+        if (unit === 'days') multiplier *= 60 * 24;
+        if (unit === 'weeks') multiplier *= 60 * 24 * 7;
+        if (unit === 'months') multiplier *= 60 * 24 * 30; // approx
+        if (unit === 'years') multiplier *= 60 * 24 * 365; // approx
+        
+        const durationMs = val * multiplier;
+        let shouldRunNow = false;
+        
+        if (type === 'duration') {
+            shouldRunNow = true;
+        } else if (type === 'schedule') {
+            const lastRun = list.lastScheduleRun || 0;
+            const timeStr = list.scheduleTime || '00:00';
+            const [hours, mins] = timeStr.split(':').map(Number);
+            const today = new Date();
+            today.setHours(hours, mins, 0, 0);
+            const scheduleTimeMs = today.getTime();
+            
+            if (now >= scheduleTimeMs && lastRun < scheduleTimeMs) {
+                shouldRunNow = true;
+                const schedType = list.scheduleType || 'daily';
+                if (schedType === 'weekly' && today.getDay() !== 1) shouldRunNow = false; // Run on Mondays
+                if (schedType === 'monthly' && today.getDate() !== 1) shouldRunNow = false; // Run on 1st
+                
+                if (shouldRunNow) {
+                    batch.update(doc(db, "users", state.currentUser.uid, "lists", list.id), {
+                        lastScheduleRun: now
+                    });
+                }
+            }
+        }
+
+        if (!shouldRunNow) return;
+
+        const tasksToMove = [];
+        list.taskIds.forEach(taskId => {
+            const task = state.appData.tasks[taskId];
+            if (!task) return;
+            
+            const addedAt = task.listAddedAt?.[list.id] || task.createdAt;
+            const ageMs = now - addedAt;
+            
+            if (ageMs >= durationMs) {
+                tasksToMove.push(taskId);
+            }
+        });
+
+        if (tasksToMove.length > 0) {
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", list.id), {
+                taskIds: arrayRemove(...tasksToMove)
+            });
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", destListId), {
+                taskIds: arrayUnion(...tasksToMove)
+            });
+            tasksToMove.forEach(taskId => {
+                batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+                    [`listAddedAt.${destListId}`]: now,
+                    archived: false
+                });
+            });
+            modifications++;
+        }
+    });
+
+    if (modifications > 0) {
+        batch.commit().then(() => {
+            console.log(`[Automation] Successfully processed ${modifications} lists.`);
+        }).catch(e => handleSyncError(e));
+    }
 }
 
 // Export raw updateDoc for UI helpers that need direct access (e.g. glow color)

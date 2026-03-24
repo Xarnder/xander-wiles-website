@@ -14,7 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Main Customization Controls
     const addTitleToggle = document.getElementById('add-title-toggle');
-    const underscoreToggle = document.getElementById('underscore-toggle');
+    const filenameSpacingSelect = document.getElementById('filename-spacing-select');
+    const downscaleSpacingSelect = document.getElementById('downscale-spacing-select');
     const titleOptionsWrapper = document.getElementById('title-options-wrapper');
     const titleModeSelect = document.getElementById('title-mode-select');
     const fontSizeSlider = document.getElementById('font-size-slider');
@@ -158,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Main Control Listeners
     const allControls = [
         titleModeSelect, fontSizeSlider, headerHeightSlider, textColorPicker,
-        bgColorPicker, positionToggle, addTitleToggle, underscoreToggle,
+        bgColorPicker, positionToggle, addTitleToggle, filenameSpacingSelect,
         textPositionSlider, textOffsetSlider, autoScaleToggle
     ];
     allControls.forEach(el => el.addEventListener('input', handleControlsChange));
@@ -602,7 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!blob) throw new Error(`Failed to create blob for image ${i}`);
 
                     let baseName = imageTitles[i];
-                    if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
+                    baseName = applySpacing(baseName, filenameSpacingSelect.value);
                     const finalName = `${prefix}${baseName}${suffix}${ext}`;
 
                     if (imageFolders[i] !== "(Root)") {
@@ -1300,7 +1301,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
 
                 let baseName = imageTitles[i];
-                if (underscoreToggle.checked) baseName = baseName.replace(/ /g, '_');
+                baseName = applySpacing(baseName, downscaleSpacingSelect.value);
                 const finalName = `${prefix}${baseName}${suffix}${ext}`;
 
                 if (useSubfolders && imageFolders[i] !== "(Root)") {
@@ -1365,5 +1366,19 @@ document.addEventListener('DOMContentLoaded', () => {
             img.onerror = () => reject(new Error(`Could not load image ${file.name}`));
             img.src = URL.createObjectURL(file);
         });
+    }
+
+    function applySpacing(text, mode) {
+        if (!text) return "";
+        switch (mode) {
+            case 'underscores':
+                return text.replace(/\s+/g, '_').replace(/-+/g, '_');
+            case 'hyphens':
+                return text.replace(/\s+/g, '-').replace(/_+/g, '-');
+            case 'spaces':
+                return text.replace(/_+/g, ' ').replace(/-+/g, ' ');
+            default:
+                return text;
+        }
     }
 });
