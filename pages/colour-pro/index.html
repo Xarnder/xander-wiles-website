@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChromaMath | Advanced OKLCH Engine</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app" v-cloak>
+        <header class="app-header">
+            <div class="header-content">
+                <h1>ChromaMath</h1>
+                <p>Advanced OKLCH Algorithm Engine</p>
+            </div>
+            <button class="theme-toggle" @click="toggleTheme" :title="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+                <svg v-if="isDarkMode" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </button>
+        </header>
+
+        <main class="dashboard">
+            <!-- Left Column: Controls & Stats -->
+            <section class="controls-panel glass-panel">
+                <h2>Base Color Space (OKLCH)</h2>
+                
+                <div class="color-preview" :style="{ backgroundColor: baseCssColor }">
+                    <div class="color-data">
+                        <span class="hex-value">{{ baseHex }}</span>
+                        <span class="oklch-value">{{ baseCssColor }}</span>
+                    </div>
+                </div>
+
+                <div class="text-input-group">
+                    <label>Manual Input (Hex, RGB, CSS Color)</label>
+                    <input id="hexInput" type="text" v-model="textInputColor" @change="parseTextInput" @keyup.enter="parseTextInput" placeholder="e.g. #ff0055, rgb(255, 0, 0)">
+                </div>
+
+                <div class="slider-group">
+                    <label>
+                        <span class="label-text">Lightness (L)</span>
+                        <span class="value">{{ lightness.toFixed(2) }}</span>
+                    </label>
+                    <input type="range" min="0" max="1" step="0.01" v-model.number="lightness">
+                </div>
+                
+                <div class="slider-group">
+                    <label>
+                        <span class="label-text">Chroma (C)</span>
+                        <span class="value">{{ chroma.toFixed(3) }}</span>
+                    </label>
+                    <input type="range" min="0" max="0.4" step="0.001" v-model.number="chroma">
+                </div>
+
+                <div class="slider-group">
+                    <label>
+                        <span class="label-text">Hue (H)</span>
+                        <span class="value">{{ hue.toFixed(1) }}&deg;</span>
+                    </label>
+                    <input class="hue-slider" type="range" min="0" max="360" step="1" v-model.number="hue">
+                </div>
+
+                <div class="dropdown-group">
+                    <label>Harmony Calculation</label>
+                    <select v-model="harmonyType">
+                        <option value="complementary">Complementary (180&deg;)</option>
+                        <option value="split-complementary">Split-Complementary (150&deg;, 210&deg;)</option>
+                        <option value="triadic">Triadic (120&deg;)</option>
+                        <option value="analogous">Analogous (&plusmn;30&deg;)</option>
+                    </select>
+                </div>
+
+                <div class="dropdown-group">
+                    <label>Proportion Rule</label>
+                    <select v-model="proportionRule">
+                        <option value="60-30-10">60-30-10 Rule</option>
+                        <option value="70-20-10">70-20-10 Rule</option>
+                        <option value="golden">Golden Ratio (Phi)</option>
+                    </select>
+                </div>
+                
+            </section>
+
+            <!-- Right Column: Visualizations -->
+            <section class="visualization-panel">
+                
+                <!-- Swatch List with APCA -->
+                <div class="swatches-container glass-panel">
+                    <h3>Generated Palette Matrix</h3>
+                    <div class="swatches-grid">
+                        <div v-for="(item, index) in palette" :key="index" class="swatch-card" :class="{ 'focal-point': item.isFocal }">
+                            <div class="swatch-color" :style="{ backgroundColor: item.css }">
+                                <span v-if="item.isFocal" class="focal-badge">Focal</span>
+                            </div>
+                            <div class="swatch-details">
+                                <div class="swatch-proportion">{{ item.proportion.toFixed(1) }}%</div>
+                                <div class="swatch-apca" :class="apcaClass(item.contrastRatio)">
+                                    Lc {{ item.contrastRatio.toFixed(1) }} <span class="apca-label">APCA (vs W)</span>
+                                </div>
+                                <div class="swatch-hex-row">
+                                    <span class="swatch-hex">{{ item.hex }}</span>
+                                    <button class="copy-btn" @click="copyHex(item.hex, index)" :class="{ 'copied': copiedIndex === index }">
+                                        <svg v-if="copiedIndex !== index" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Graphs -->
+                <div class="charts-container">
+                    <div class="chart-box glass-panel">
+                        <h3>Proportional Area Distribution</h3>
+                        <p class="chart-desc">Mathematical representation of compositional weight.</p>
+                        <div id="treemap-chart" class="d3-container"></div>
+                    </div>
+                    
+                    <div class="chart-box glass-panel">
+                        <h3>Tonal Range Analysis (L)</h3>
+                        <p class="chart-desc">Spread of perceived lightness across the palette.</p>
+                        <div id="tonal-chart" class="d3-container"></div>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+    </div>
+
+    <!-- Load ColorJS and D3 via ESM before our main script -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
