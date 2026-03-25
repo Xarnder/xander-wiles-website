@@ -1,5 +1,7 @@
 import { createApp, ref, computed, watch, onMounted, nextTick } from 'https://unpkg.com/vue@3.3.4/dist/vue.esm-browser.js';
 import * as d3 from 'https://cdn.jsdelivr.net/npm/d3@7.8.5/+esm';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import Color from "https://colorjs.io/dist/color.js";
 import { generateHarmonies, arrangePalette } from './colorMath.js';
 
@@ -44,6 +46,9 @@ const App = {
             } else {
                 document.body.classList.add('light-theme');
             }
+            nextTick(() => {
+                if(typeof drawThreeGraph !== 'undefined') drawThreeGraph();
+            });
         }, { immediate: true });
 
         watch(baseHex, (newHex) => {
@@ -160,6 +165,7 @@ const App = {
             nextTick(() => {
                 drawTreemap();
                 drawTonalGraph();
+                drawThreeGraph();
             });
         }
 
@@ -321,11 +327,235 @@ const App = {
                 .attr("stroke", "rgba(255,255,255,0.2)");
         }
 
+        // Graphing Context (Three.js)
+        let scene, camera, renderer, controls, pointsGroup, wheelMesh, wheelTex, wheelCtx;
+        let animationFrameId;
+
+        const createTextSprite = (message, colorHex) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 36px Inter, sans-serif';
+            ctx.fillStyle = colorHex;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(message, 256, 64);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.8 });
+            const sprite = new THREE.Sprite(material);
+            sprite.scale.set(1.5, 0.375, 1);
+            return sprite;
+        };
+
+        const createHueWheelTexture = () => {
+            const size = 512;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            wheelCtx = canvas.getContext('2d');
+            wheelTex = new THREE.CanvasTexture(canvas);
+            return wheelTex;
+        };
+
+        const updateHueWheelTexture = (lVal, cVal) => {
+            if (!wheelCtx) return;
+            const size = 512;
+            const cx = size/2;
+            const cy = size/2;
+            
+            wheelCtx.clearRect(0, 0, size, size);
+            
+            // 0 start angle
+            const gradient = wheelCtx.createConicGradient(0, cx, cy); 
+            for(let deg = 0; deg <= 360; deg += 10) {
+                // Use the user's current L and a reasonable reference C if current C is 0
+                const displayC = Math.max(cVal, 0.1); 
+                let cObj = new Color("oklch", [lVal, displayC, deg]);
+                gradient.addColorStop(deg / 360, cObj.toString({format: "hex"}));
+            }
+            
+            wheelCtx.fillStyle = gradient;
+            wheelCtx.beginPath();
+            wheelCtx.arc(cx, cy, size/2, 0, Math.PI * 2);
+            wheelCtx.arc(cx, cy, size/2 * 0.8, 0, Math.PI * 2, true);
+            wheelCtx.fill();
+            
+            wheelTex.needsUpdate = true;
+        };
+
+        const initThreeJS = () => {
+            const container = document.getElementById('three-chart');
+            if (!container || scene) return;
+
+            scene = new THREE.Scene();
+            
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            
+            camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+            camera.position.set(3, 2, 3);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(w, h);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Lighting
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const dl = new THREE.DirectionalLight(0xffffff, 0.5);
+            dl.position.set(2, 5, 2);
+            scene.add(dl);
+
+            // Base Grid (Lightness = 0)
+            const gridHelper = new THREE.GridHelper(2, 20, 0x888888, 0x444444);
+            gridHelper.material.transparent = true;
+            gridHelper.material.opacity = 0.2;
+            scene.add(gridHelper);
+
+            // Central Vertical L Axis (0 to 1 mapped to 0 to 2 for better viz)
+            const axisMat = new THREE.LineBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.5 });
+            const axisGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(0, 2, 0)
+            ]);
+            scene.add(new THREE.Line(axisGeo, axisMat));
+
+            // Axis Labels
+            const labelColor = '#888888';
+            const lblL = createTextSprite("Lightness (Y)", labelColor);
+            lblL.position.set(0, 2.2, 0);
+            scene.add(lblL);
+
+            const lblC = createTextSprite("Chroma (Radius)", labelColor);
+            lblC.position.set(1.5, 0, 0);
+            scene.add(lblC);
+
+            const lblH = createTextSprite("Hue (Angle)", labelColor);
+            lblH.position.set(0, 0.1, 1.5);
+            scene.add(lblH);
+
+            // Hue Reference Wheel on Ground Plane
+            const wTex = createHueWheelTexture();
+            const wheelGeo = new THREE.PlaneGeometry(1, 1);
+            const wheelMat = new THREE.MeshBasicMaterial({ 
+                map: wTex, 
+                transparent: true, 
+                opacity: 0.6, 
+                side: THREE.DoubleSide, 
+                depthWrite: false 
+            });
+            wheelMesh = new THREE.Mesh(wheelGeo, wheelMat);
+            wheelMesh.rotation.x = -Math.PI / 2;
+            wheelMesh.rotation.z = Math.PI / 2; // Aligns Red (Hue 0) roughly with +X axis.
+            scene.add(wheelMesh);
+
+            pointsGroup = new THREE.Group();
+            scene.add(pointsGroup);
+
+            const animate = () => {
+                animationFrameId = requestAnimationFrame(animate);
+                controls.update();
+                pointsGroup.children.forEach(child => {
+                    if (child.userData.isRing) {
+                        child.lookAt(camera.position);
+                    }
+                });
+                renderer.render(scene, camera);
+            };
+            animate();
+        };
+
+        const drawThreeGraph = () => {
+            if (!scene) initThreeJS();
+            if (!pointsGroup) return;
+
+            // Update Dynamic Wheel
+            if (wheelMesh) {
+                const l = lightness.value;
+                const c = chroma.value;
+                const y = isNaN(l) ? 0 : l * 2;
+                const radius = isNaN(c) ? 0 : c * 8; // Scale factor for visual clarity
+                
+                wheelMesh.position.y = y;
+                // Base size + chroma expansion
+                const s = 1 + radius; 
+                wheelMesh.scale.set(s, s, 1);
+                
+                updateHueWheelTexture(l, c);
+            }
+
+            while(pointsGroup.children.length > 0) {
+                const child = pointsGroup.children.pop();
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+                pointsGroup.remove(child);
+            }
+
+            palette.value.forEach(p => {
+                const l = p.colorObj.coords[0];
+                const c = p.colorObj.coords[1];
+                const h = p.colorObj.coords[2] || 0;
+                
+                const hRad = h * (Math.PI / 180);
+                
+                const y = isNaN(l) ? 0 : l * 2;
+                const radius = isNaN(c) ? 0 : c * 4;
+                const x = radius * Math.cos(hRad);
+                const z = radius * Math.sin(hRad);
+                
+                const geo = new THREE.SphereGeometry(0.08, 32, 32);
+                const mat = new THREE.MeshPhysicalMaterial({
+                    color: new THREE.Color(p.hex),
+                    emissive: new THREE.Color(p.hex),
+                    emissiveIntensity: 0.2,
+                    roughness: 0.1,
+                    metalness: 0.1
+                });
+                const sphere = new THREE.Mesh(geo, mat);
+                sphere.position.set(x, y, z);
+                pointsGroup.add(sphere);
+
+                const lineGeo = new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(0, y, 0),
+                    new THREE.Vector3(x, y, z)
+                ]);
+                const lineMat = new THREE.LineBasicMaterial({ color: new THREE.Color(p.hex), transparent: true, opacity: 0.4 });
+                pointsGroup.add(new THREE.Line(lineGeo, lineMat));
+
+                if (p.isFocal) {
+                    const ringGeo = new THREE.RingGeometry(0.12, 0.15, 32);
+                    const ringMat = new THREE.MeshBasicMaterial({ color: isDarkMode.value ? 0xffffff : 0x000000, side: THREE.DoubleSide });
+                    const ring = new THREE.Mesh(ringGeo, ringMat);
+                    ring.position.set(x, y, z);
+                    ring.userData.isRing = true;
+                    pointsGroup.add(ring);
+                }
+            });
+        };
+
         // Handle window resize dynamically to re-render charts
         onMounted(() => {
             window.addEventListener('resize', () => {
                 drawTreemap();
                 drawTonalGraph();
+                if (camera && renderer) {
+                    const container = document.getElementById('three-chart');
+                    if (container) {
+                        camera.aspect = container.clientWidth / container.clientHeight;
+                        camera.updateProjectionMatrix();
+                        renderer.setSize(container.clientWidth, container.clientHeight);
+                    }
+                }
+            });
+            nextTick(() => {
+                initThreeJS();
             });
         });
 

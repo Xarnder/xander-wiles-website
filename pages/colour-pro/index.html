@@ -29,6 +29,15 @@
     <link rel="manifest" href="site.webmanifest">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
 </head>
 
 <body>
@@ -199,6 +208,12 @@
                         <h3>Tonal Range Analysis (L)</h3>
                         <p class="chart-desc">Spread of perceived lightness across the palette.</p>
                         <div id="tonal-chart" class="d3-container"></div>
+                    </div>
+
+                    <div class="chart-box glass-panel three-d-box">
+                        <h3>OKLCH Spatial Distribution (3D)</h3>
+                        <p class="chart-desc">Geometry of Lightness (Y-axis), Chroma (Radius), and Hue (Angle).</p>
+                        <div id="three-chart" class="d3-container"></div>
                     </div>
                 </div>
 
