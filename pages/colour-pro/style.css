@@ -895,6 +895,60 @@ select:focus {
     box-shadow: 0 4px 14px rgba(0, 255, 204, 0.2);
 }
 
+.workspace-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.grayscale-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+}
+
+.grayscale-toggle-btn:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: rgba(255,255,255,0.35);
+    color: #fff;
+}
+
+.grayscale-toggle-btn.grayscale-active {
+    background: rgba(200, 200, 200, 0.2);
+    border-color: rgba(255,255,255,0.5);
+    color: #fff;
+    box-shadow: 0 0 10px rgba(255,255,255,0.15);
+}
+
+.grayscale-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 0;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 6px;
+    animation: badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
 .light-theme .prompt-text {
     background: rgba(0, 0, 0, 0.05);
     color: #1a1a2e;

@@ -92,7 +92,7 @@
                 <div class="slider-group">
                     <label>
                         <span class="label-text">Lightness (L)</span>
-                        <span class="value">{{ lightness.toFixed(2) }}</span>
+                        <span class="value">{{ (lightness ?? 0).toFixed(2) }}</span>
                     </label>
                     <input type="range" min="0" max="1" step="0.01" v-model.number="lightness">
                 </div>
@@ -100,7 +100,7 @@
                 <div class="slider-group">
                     <label>
                         <span class="label-text">Chroma (C)</span>
-                        <span class="value">{{ chroma.toFixed(3) }}</span>
+                        <span class="value">{{ (chroma ?? 0).toFixed(3) }}</span>
                     </label>
                     <input type="range" min="0" max="0.4" step="0.001" v-model.number="chroma">
                 </div>
@@ -108,7 +108,7 @@
                 <div class="slider-group">
                     <label>
                         <span class="label-text">Hue (H)</span>
-                        <span class="value">{{ (hue % 360).toFixed(1) }}&deg;</span>
+                        <span class="value">{{ ((hue ?? 0) % 360).toFixed(1) }}&deg;</span>
                     </label>
                     <input class="hue-slider" type="range" min="0" max="360" step="1" v-model.number="hue">
                 </div>
@@ -131,14 +131,21 @@
                     <div v-if="isImageLoaded && !isImageExpanded" class="image-workspace-sidebar">
                         <div class="workspace-header">
                             <p class="instruction-text">Tap/Drag for color</p>
-                            <button class="expand-view-btn" @click="isImageExpanded = true">Expand</button>
+                            <div class="workspace-actions">
+                                <button class="grayscale-toggle-btn" @click="toggleGrayscale" :class="{ 'grayscale-active': isGrayscaleMode }">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+                                    {{ isGrayscaleMode ? 'Original' : 'OKLCH Greyscale' }}
+                                </button>
+                                <button class="expand-view-btn" @click="isImageExpanded = true">Expand</button>
+                            </div>
                         </div>
+                        <div v-if="isGrayscaleMode" class="grayscale-badge">Perceived Lightness (OKLCH L)</div>
                         <div id="image-container-sidebar" class="img-container" 
                              @mousedown="onDragStart" 
                              @mousemove="onDragMove" 
                              @touchstart.prevent="onDragStart" 
                              @touchmove.prevent="onDragMove">
-                            <img id="source-image-sidebar" :src="imageSrc" alt="Sidebar source" draggable="false">
+                            <img id="source-image-sidebar" :src="displayImageSrc" alt="Sidebar source" draggable="false">
                             <div id="selection-box-sidebar" class="selection-box" :style="selectionBoxStyle"></div>
                         </div>
                     </div>
@@ -211,15 +218,15 @@
                         </div>
 
                         <div class="slider-group">
-                            <label>Lightness (L) <span class="value">{{ fineTuneL.toFixed(2) }}</span></label>
+                            <label>Lightness (L) <span class="value">{{ (fineTuneL ?? 0).toFixed(2) }}</span></label>
                             <input type="range" min="0" max="1" step="0.01" v-model.number="fineTuneL">
                         </div>
                         <div class="slider-group">
-                            <label>Chroma (C) <span class="value">{{ fineTuneC.toFixed(3) }}</span></label>
+                            <label>Chroma (C) <span class="value">{{ (fineTuneC ?? 0).toFixed(3) }}</span></label>
                             <input type="range" min="0" max="0.4" step="0.001" v-model.number="fineTuneC">
                         </div>
                         <div class="slider-group">
-                            <label>Hue (H) <span class="value">{{ fineTuneH.toFixed(1) }}&deg;</span></label>
+                            <label>Hue (H) <span class="value">{{ (fineTuneH ?? 0).toFixed(1) }}&deg;</span></label>
                             <input class="hue-slider" type="range" min="0" max="360" step="1" v-model.number="fineTuneH">
                         </div>
                     </div>
@@ -232,9 +239,9 @@
                                 <span v-if="item.isFocal" class="focal-badge">Focal</span>
                             </div>
                             <div class="swatch-details">
-                                <div class="swatch-proportion">{{ item.proportion.toFixed(1) }}%</div>
+                                <div class="swatch-proportion">{{ (item.proportion ?? 0).toFixed(1) }}%</div>
                                 <div class="swatch-apca" :class="apcaClass(item.contrastRatio)">
-                                    Lc {{ item.contrastRatio.toFixed(1) }} <span class="apca-label">APCA (vs W)</span>
+                                    Lc {{ (item.contrastRatio ?? 0).toFixed(1) }} <span class="apca-label">APCA (vs W)</span>
                                 </div>
                                 <div class="swatch-hex-row">
                                     <span class="swatch-hex">{{ item.hex }}</span>

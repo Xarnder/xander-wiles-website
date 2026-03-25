@@ -28,6 +28,8 @@ const App = {
         const isDragging = ref(false);
         const isGraphDragging = ref(false);
         const isHarmonyConnected = ref(true);
+        const isGrayscaleMode = ref(false);
+        const grayscaleImageSrc = ref('');
         const startX = ref(0);
         const startY = ref(0);
         const currentX = ref(0);
@@ -63,7 +65,7 @@ const App = {
  
         const aiPrompt = computed(() => {
             if (!palette.value || palette.value.length === 0) return "";
-            let prompt = "Create a cinematic shot that uses these colours ";
+            let prompt = "Create a cinematic close up shot that uses these colours ";
             const parts = palette.value.map(item => `${item.hex} ${Math.round(item.proportion)}% of the composition`);
             
             if (parts.length > 1) {
@@ -138,9 +140,10 @@ const App = {
                 // Parse using Color.js
                 const parsed = new Color(textInputColor.value).to("oklch");
                 // Update L, C, H
-                lightness.value = isNaN(parsed.coords[0]) ? 0 : parsed.coords[0];
-                chroma.value = isNaN(parsed.coords[1]) ? 0 : parsed.coords[1];
-                hue.value = isNaN(parsed.coords[2]) ? 0 : parsed.coords[2]; 
+                const l = parsed.coords[0], c = parsed.coords[1], h = parsed.coords[2];
+                lightness.value = (typeof l !== 'number' || isNaN(l)) ? 0 : l;
+                chroma.value = (typeof c !== 'number' || isNaN(c)) ? 0 : c;
+                hue.value = (typeof h !== 'number' || isNaN(h)) ? 0 : h; 
             } catch (e) {
                 // Invalid color format, just revert to current baseHex
                 textInputColor.value = baseHex.value;
@@ -214,7 +217,7 @@ const App = {
                 if (selectedSwatchIndex.value === null) return 0;
                 let c = colorOverrides.value[selectedSwatchIndex.value] || palette.value[selectedSwatchIndex.value].colorObj;
                 let l = c.coords[0];
-                return isNaN(l) ? 0 : l;
+                return (typeof l !== 'number' || isNaN(l)) ? 0 : l;
             },
             set(val) { applyOverride(0, val); }
         });
@@ -224,7 +227,7 @@ const App = {
                 if (selectedSwatchIndex.value === null) return 0;
                 let c = colorOverrides.value[selectedSwatchIndex.value] || palette.value[selectedSwatchIndex.value].colorObj;
                 let ch = c.coords[1];
-                return isNaN(ch) ? 0 : ch;
+                return (typeof ch !== 'number' || isNaN(ch)) ? 0 : ch;
             },
             set(val) { applyOverride(1, val); }
         });
@@ -234,7 +237,7 @@ const App = {
                 if (selectedSwatchIndex.value === null) return 0;
                 let c = colorOverrides.value[selectedSwatchIndex.value] || palette.value[selectedSwatchIndex.value].colorObj;
                 let h = c.coords[2];
-                return isNaN(h) ? 0 : h;
+                return (typeof h !== 'number' || isNaN(h)) ? 0 : h;
             },
             set(val) { applyOverride(2, val); }
         });
@@ -276,11 +279,102 @@ const App = {
             reader.onload = (e) => {
                 imageSrc.value = e.target.result;
                 isImageLoaded.value = true;
-                // Reset selection
+                isGrayscaleMode.value = false;
+                grayscaleImageSrc.value = ''; // reset, will be generated lazily
                 startX.value = currentX.value = startY.value = currentY.value = 0;
+                // Pre-generate the greyscale image after the img element renders
+                nextTick(() => generateOklchGrayscale());
             };
             reader.readAsDataURL(file);
         }
+
+        /**
+         * Converts the loaded image to perceptual greyscale using the OKLab L channel.
+         * Each pixel's sRGB values are gamma-decoded → converted to LMS cone space → 
+         * cube-rooted → projected to OKLab L, which equals OKLCH Lightness.
+         * This is the gold standard for luminance-preserving greyscale conversion.
+         */
+        function generateOklchGrayscale() {
+            const img = document.getElementById('source-image-sidebar') ||
+                        document.getElementById('source-image-expanded');
+            if (!img || !img.naturalWidth) return;
+
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const data = imageData.data;
+
+            // OKLab M1: linear sRGB → LMS
+            const M1 = [
+                [0.4122214708, 0.5363325363, 0.0514459929],
+                [0.2119034982, 0.6806995451, 0.1073969566],
+                [0.0883024619, 0.2817188376, 0.6299787005]
+            ];
+            // OKLab M2 row 0 only (we just need L)
+            const M2L = [0.2104542553, 0.7936177850, -0.0040720468];
+
+            // sRGB gamma decode (IEC 61966-2-1)
+            function toLinear(v) {
+                const c = v / 255;
+                return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            }
+
+            // sRGB gamma encode (linear → sRGB byte)
+            function toSrgb(linear) {
+                const c = Math.max(0, Math.min(1, linear));
+                const s = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1.0 / 2.4) - 0.055;
+                return Math.round(s * 255);
+            }
+
+            for (let i = 0; i < data.length; i += 4) {
+                const rL = toLinear(data[i]);
+                const gL = toLinear(data[i + 1]);
+                const bL = toLinear(data[i + 2]);
+
+                // Linear RGB → LMS
+                const l = M1[0][0]*rL + M1[0][1]*gL + M1[0][2]*bL;
+                const m = M1[1][0]*rL + M1[1][1]*gL + M1[1][2]*bL;
+                const s = M1[2][0]*rL + M1[2][1]*gL + M1[2][2]*bL;
+
+                // Cube root (non-linear compression)
+                const lR = Math.cbrt(l);
+                const mR = Math.cbrt(m);
+                const sR = Math.cbrt(s);
+
+                // OKLab L (= OKLCH Lightness, range 0–1)
+                const L = M2L[0]*lR + M2L[1]*mR + M2L[2]*sR;
+
+                // For a neutral grey, M1 row sums ≈ 1.0 and M2L sum ≈ 1.0,
+                // so L ≈ cbrt(linearGrey), therefore linearGrey = L³
+                const linearGrey = L * L * L;
+
+                // Gamma-encode back to sRGB so the displayed pixel
+                // has the SAME perceived lightness as the original color
+                const grey = toSrgb(linearGrey);
+                data[i] = grey;
+                data[i + 1] = grey;
+                data[i + 2] = grey;
+                // alpha unchanged
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+            grayscaleImageSrc.value = canvas.toDataURL('image/png');
+        }
+
+        function toggleGrayscale() {
+            if (!grayscaleImageSrc.value) generateOklchGrayscale();
+            isGrayscaleMode.value = !isGrayscaleMode.value;
+        }
+
+        // Computed src to display in the image workspace
+        const displayImageSrc = computed(() =>
+            isGrayscaleMode.value ? grayscaleImageSrc.value : imageSrc.value
+        );
 
         function getCoords(e) {
             const container = e.currentTarget;
@@ -387,9 +481,10 @@ const App = {
                         h = ((h - offset) % 360 + 360) % 360;
                     }
 
-                    lightness.value = isNaN(l) ? lightness.value : l;
-                    chroma.value    = isNaN(c) ? chroma.value    : c;
-                    hue.value       = isNaN(h) ? hue.value       : h;
+                    const isNum = v => typeof v === 'number' && !isNaN(v);
+                    lightness.value = isNum(l) ? l : lightness.value;
+                    chroma.value    = isNum(c) ? c : chroma.value;
+                    hue.value       = isNum(h) ? h : hue.value;
                     textInputColor.value = rgbStr;
                 } catch(e) {
                     console.error("Could not parse extracted color:", e);
@@ -924,17 +1019,18 @@ const App = {
 
             // Update Dynamic Wheel
             if (wheelMesh) {
-                const l = lightness.value;
-                const c = chroma.value;
-                const y = isNaN(l) ? 0 : l * 2;
-                const radius = isNaN(c) ? 0 : c * 8; // Scale factor for visual clarity
+                const isNum = v => typeof v === 'number' && !isNaN(v);
+                const lVal = lightness.value;
+                const cVal = chroma.value;
+                const y = isNum(lVal) ? lVal * 2 : 0;
+                const radius = isNum(cVal) ? cVal * 8 : 0; 
                 
                 wheelMesh.position.y = 0; // Pin to ground plane
                 // Base size + chroma expansion
                 const s = 1 + radius; 
                 wheelMesh.scale.set(s, s, 1);
                 
-                updateHueWheelTexture(l, c);
+                updateHueWheelTexture(lVal, cVal);
             }
 
             while(pointsGroup.children.length > 0) {
@@ -951,8 +1047,9 @@ const App = {
                 
                 const hRad = h * (Math.PI / 180);
                 
-                const y = isNaN(l) ? 0 : l * 2;
-                const radius = isNaN(c) ? 0 : c * 4;
+                const isNum = v => typeof v === 'number' && !isNaN(v);
+                const y = isNum(l) ? l * 2 : 0;
+                const radius = isNum(c) ? c * 4 : 0;
                 const x = radius * Math.cos(hRad);
                 const z = radius * Math.sin(hRad);
                 
@@ -1045,6 +1142,10 @@ const App = {
             aiPrompt,
             isPromptCopied,
             isHarmonyConnected,
+            isGrayscaleMode,
+            grayscaleImageSrc,
+            displayImageSrc,
+            toggleGrayscale,
             copyPrompt,
             exportPalette
         };
