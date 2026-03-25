@@ -15,6 +15,8 @@ const App = {
         const textInputColor = ref('');
         const copiedIndex = ref(null);
         const isDarkMode = ref(true);
+        const selectedSwatchIndex = ref(null);
+        const colorOverrides = ref({});
 
         // Computed
         const baseColorBase = computed(() => {
@@ -30,7 +32,9 @@ const App = {
         });
 
         // Watchers
+        // Clear overrides when the underlying mathematical rules change
         watch([lightness, chroma, hue, harmonyType, proportionRule], () => {
+            colorOverrides.value = {}; 
             updatePalette();
         }, { immediate: true });
 
@@ -77,9 +81,78 @@ const App = {
             isDarkMode.value = !isDarkMode.value;
         }
 
+        function selectSwatch(index) {
+            if (selectedSwatchIndex.value === index) {
+                selectedSwatchIndex.value = null;
+            } else {
+                selectedSwatchIndex.value = index;
+            }
+        }
+
+        function resetSelectedColor() {
+            if (selectedSwatchIndex.value !== null) {
+                delete colorOverrides.value[selectedSwatchIndex.value];
+                updatePalette();
+            }
+        }
+
+        const hasOverride = computed(() => {
+            if (selectedSwatchIndex.value === null) return false;
+            return !!colorOverrides.value[selectedSwatchIndex.value];
+        });
+
+        const fineTuneL = computed({
+            get() {
+                if (selectedSwatchIndex.value === null) return 0;
+                let c = colorOverrides.value[selectedSwatchIndex.value] || palette.value[selectedSwatchIndex.value].colorObj;
+                let l = c.coords[0];
+                return isNaN(l) ? 0 : l;
+            },
+            set(val) { applyOverride(0, val); }
+        });
+
+        const fineTuneC = computed({
+            get() {
+                if (selectedSwatchIndex.value === null) return 0;
+                let c = colorOverrides.value[selectedSwatchIndex.value] || palette.value[selectedSwatchIndex.value].colorObj;
+                let ch = c.coords[1];
+                return isNaN(ch) ? 0 : ch;
+            },
+            set(val) { applyOverride(1, val); }
+        });
+
+        const fineTuneH = computed({
+            get() {
+                if (selectedSwatchIndex.value === null) return 0;
+                let c = colorOverrides.value[selectedSwatchIndex.value] || palette.value[selectedSwatchIndex.value].colorObj;
+                let h = c.coords[2];
+                return isNaN(h) ? 0 : h;
+            },
+            set(val) { applyOverride(2, val); }
+        });
+
+        function applyOverride(coordIndex, val) {
+            let idx = selectedSwatchIndex.value;
+            if (idx === null) return;
+            if (!colorOverrides.value[idx]) {
+                // Clone the underlying mathematically correct color
+                colorOverrides.value[idx] = new Color(palette.value[idx].colorObj.toString({format: "oklch"}));
+            }
+            colorOverrides.value[idx].coords[coordIndex] = val;
+            updatePalette();
+        }
+
         function updatePalette() {
-            // 1. Generate core mathematical colors
-            const colors = generateHarmonies(lightness.value, chroma.value, hue.value, harmonyType.value);
+            let colors = generateHarmonies(lightness.value, chroma.value, hue.value, harmonyType.value);
+            
+            // Apply Manual Overrides
+            colors = colors.map((col, i) => {
+                if (colorOverrides.value[i]) {
+                    return colorOverrides.value[i]; 
+                }
+                return col;
+            });
+
             // 2. Map metrics, APCA, proportions, focal focus
             palette.value = arrangePalette(colors, proportionRule.value);
             
@@ -271,7 +344,14 @@ const App = {
             copyHex,
             copiedIndex,
             isDarkMode,
-            toggleTheme
+            toggleTheme,
+            selectedSwatchIndex,
+            selectSwatch,
+            fineTuneL,
+            fineTuneC,
+            fineTuneH,
+            resetSelectedColor,
+            hasOverride
         };
     }
 };

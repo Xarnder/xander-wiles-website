@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,19 +8,55 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="style.css">
+
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 </head>
+
 <body>
+    <div id="main-nav-placeholder"></div>
     <div id="app" v-cloak>
-        <header class="app-header">
-            <div class="header-content">
+        <header class="app-header-local">
+            <div class="header-content-local">
                 <h1>ChromaMath</h1>
                 <p>Advanced OKLCH Algorithm Engine</p>
             </div>
-            <button class="theme-toggle" @click="toggleTheme" :title="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
-                <svg v-if="isDarkMode" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            <button class="theme-toggle" @click="toggleTheme"
+                :title="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+                <svg v-if="isDarkMode" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
             </button>
         </header>
 
@@ -27,7 +64,7 @@
             <!-- Left Column: Controls & Stats -->
             <section class="controls-panel glass-panel">
                 <h2>Base Color Space (OKLCH)</h2>
-                
+
                 <div class="color-preview" :style="{ backgroundColor: baseCssColor }">
                     <div class="color-data">
                         <span class="hex-value">{{ baseHex }}</span>
@@ -37,7 +74,8 @@
 
                 <div class="text-input-group">
                     <label>Manual Input (Hex, RGB, CSS Color)</label>
-                    <input id="hexInput" type="text" v-model="textInputColor" @change="parseTextInput" @keyup.enter="parseTextInput" placeholder="e.g. #ff0055, rgb(255, 0, 0)">
+                    <input id="hexInput" type="text" v-model="textInputColor" @change="parseTextInput"
+                        @keyup.enter="parseTextInput" placeholder="e.g. #ff0055, rgb(255, 0, 0)">
                 </div>
 
                 <div class="slider-group">
@@ -47,7 +85,7 @@
                     </label>
                     <input type="range" min="0" max="1" step="0.01" v-model.number="lightness">
                 </div>
-                
+
                 <div class="slider-group">
                     <label>
                         <span class="label-text">Chroma (C)</span>
@@ -82,17 +120,43 @@
                         <option value="golden">Golden Ratio (Phi)</option>
                     </select>
                 </div>
-                
+
             </section>
 
             <!-- Right Column: Visualizations -->
             <section class="visualization-panel">
-                
+
                 <!-- Swatch List with APCA -->
                 <div class="swatches-container glass-panel">
                     <h3>Generated Palette Matrix</h3>
+                    <p class="chart-desc" style="margin-bottom: 1rem;">Click any color swatch to manually fine-tune it.</p>
+
+                    <div v-if="selectedSwatchIndex !== null" class="fine-tune-panel">
+                        <div class="fine-tune-header">
+                            <h4>Fine-Tuning Color {{ selectedSwatchIndex + 1 }}</h4>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="reset-btn" @click="resetSelectedColor" v-if="hasOverride">Reset to Harmony</button>
+                                <button class="reset-btn" @click="selectSwatch(selectedSwatchIndex)">Close</button>
+                            </div>
+                        </div>
+                        <div class="slider-group">
+                            <label>Lightness (L) <span class="value">{{ fineTuneL.toFixed(2) }}</span></label>
+                            <input type="range" min="0" max="1" step="0.01" v-model.number="fineTuneL">
+                        </div>
+                        <div class="slider-group">
+                            <label>Chroma (C) <span class="value">{{ fineTuneC.toFixed(3) }}</span></label>
+                            <input type="range" min="0" max="0.4" step="0.001" v-model.number="fineTuneC">
+                        </div>
+                        <div class="slider-group">
+                            <label>Hue (H) <span class="value">{{ fineTuneH.toFixed(1) }}&deg;</span></label>
+                            <input class="hue-slider" type="range" min="0" max="360" step="1" v-model.number="fineTuneH">
+                        </div>
+                    </div>
+
                     <div class="swatches-grid">
-                        <div v-for="(item, index) in palette" :key="index" class="swatch-card" :class="{ 'focal-point': item.isFocal }">
+                        <div v-for="(item, index) in palette" :key="index" class="swatch-card"
+                            :class="{ 'focal-point': item.isFocal, 'selected-swatch': selectedSwatchIndex === index }"
+                            @click="selectSwatch(index)">
                             <div class="swatch-color" :style="{ backgroundColor: item.css }">
                                 <span v-if="item.isFocal" class="focal-badge">Focal</span>
                             </div>
@@ -103,9 +167,19 @@
                                 </div>
                                 <div class="swatch-hex-row">
                                     <span class="swatch-hex">{{ item.hex }}</span>
-                                    <button class="copy-btn" @click="copyHex(item.hex, index)" :class="{ 'copied': copiedIndex === index }">
-                                        <svg v-if="copiedIndex !== index" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <button class="copy-btn" @click.stop="copyHex(item.hex, index)"
+                                        :class="{ 'copied': copiedIndex === index }">
+                                        <svg v-if="copiedIndex !== index" width="14" height="14" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                        </svg>
+                                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
                                     </button>
                                 </div>
                             </div>
@@ -120,7 +194,7 @@
                         <p class="chart-desc">Mathematical representation of compositional weight.</p>
                         <div id="treemap-chart" class="d3-container"></div>
                     </div>
-                    
+
                     <div class="chart-box glass-panel">
                         <h3>Tonal Range Analysis (L)</h3>
                         <p class="chart-desc">Spread of perceived lightness across the palette.</p>
@@ -134,5 +208,7 @@
 
     <!-- Load ColorJS and D3 via ESM before our main script -->
     <script type="module" src="app.js"></script>
+    <script src="/assets/js/nav-loader.js"></script>
 </body>
+
 </html>

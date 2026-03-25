@@ -47,7 +47,7 @@ h1, h2, h3, h4 {
     font-weight: 500;
 }
 
-.app-header {
+.app-header-local {
     padding: 2.5rem 2rem;
     display: flex;
     flex-direction: column;
@@ -86,7 +86,7 @@ h1, h2, h3, h4 {
     border-color: var(--text-secondary);
 }
 
-.header-content h1 {
+.header-content-local h1 {
     font-size: 2.5rem;
     font-weight: 700;
     letter-spacing: -0.05em;
@@ -96,13 +96,13 @@ h1, h2, h3, h4 {
     -webkit-text-fill-color: transparent;
 }
 
-.light-theme .header-content h1 {
+.light-theme .header-content-local h1 {
     background: linear-gradient(90deg, #1a1a2e, #4a5568);
     -webkit-background-clip: text;
     background-clip: text;
 }
 
-.header-content p {
+.header-content-local p {
     color: var(--text-secondary);
     font-size: 0.95rem;
     margin-top: 0.5rem;
@@ -325,13 +325,68 @@ select:focus {
     background: rgba(0,0,0,0.2);
     border-radius: 12px;
     overflow: hidden;
-    border: 1px solid transparent;
-    transition: transform 0.3s ease, border-color 0.3s ease;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .swatch-card:hover {
     transform: translateY(-4px);
     border-color: rgba(255,255,255,0.1);
+}
+
+.swatch-card.selected-swatch {
+    border-color: #fff;
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(255,255,255,0.15);
+}
+
+.light-theme .swatch-card.selected-swatch {
+    border-color: var(--text-primary);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.fine-tune-panel {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px;
+    border: 1px dashed var(--glass-border);
+}
+
+.light-theme .fine-tune-panel {
+    background: rgba(255,255,255,0.5);
+}
+
+.fine-tune-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.fine-tune-header h4 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.reset-btn {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    padding: 0.3rem 0.8rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: 'Inter';
+    transition: background 0.2s;
+}
+
+.reset-btn:hover {
+    background: rgba(255,255,255,0.1);
 }
 
 .swatch-card.focal-point {
