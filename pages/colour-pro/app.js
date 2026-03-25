@@ -371,6 +371,14 @@ const App = {
             isGrayscaleMode.value = !isGrayscaleMode.value;
         }
 
+        function downloadGrayscaleImage() {
+            if (!grayscaleImageSrc.value) return;
+            const link = document.createElement('a');
+            link.download = `chromamath-oklch-grayscale-${Date.now()}.png`;
+            link.href = grayscaleImageSrc.value;
+            link.click();
+        }
+
         // Computed src to display in the image workspace
         const displayImageSrc = computed(() =>
             isGrayscaleMode.value ? grayscaleImageSrc.value : imageSrc.value
@@ -1146,6 +1154,7 @@ const App = {
             grayscaleImageSrc,
             displayImageSrc,
             toggleGrayscale,
+            downloadGrayscaleImage,
             copyPrompt,
             exportPalette
         };

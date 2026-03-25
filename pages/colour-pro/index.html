@@ -136,6 +136,10 @@
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
                                     {{ isGrayscaleMode ? 'Original' : 'OKLCH Greyscale' }}
                                 </button>
+                                <button v-if="isGrayscaleMode" class="download-bw-btn" @click="downloadGrayscaleImage">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    Download BW
+                                </button>
                                 <button class="expand-view-btn" @click="isImageExpanded = true">Expand</button>
                             </div>
                         </div>
@@ -292,7 +296,17 @@
                                 <h3>High-Precision Extractor</h3>
                                 <p class="chart-desc">Perform detailed color extraction on the enlarged view.</p>
                             </div>
-                            <button class="expand-toggle-btn" @click="isImageExpanded = false">Close Precision Mode</button>
+                            <div class="workspace-actions">
+                                <button class="grayscale-toggle-btn" @click="toggleGrayscale" :class="{ 'grayscale-active': isGrayscaleMode }">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+                                    {{ isGrayscaleMode ? 'Original' : 'OKLCH Greyscale' }}
+                                </button>
+                                <button v-if="isGrayscaleMode" class="download-bw-btn" @click="downloadGrayscaleImage">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    Download BW
+                                </button>
+                                <button class="expand-toggle-btn" @click="isImageExpanded = false">Close Precision Mode</button>
+                            </div>
                         </div>
                         <div class="extraction-workspace">
                             <div id="image-container-expanded" class="img-container expanded-container" 
@@ -300,7 +314,7 @@
                                  @mousemove="onDragMove" 
                                  @touchstart.prevent="onDragStart" 
                                  @touchmove.prevent="onDragMove">
-                                <img id="source-image-expanded" :src="imageSrc" alt="Expanded source" draggable="false">
+                                <img id="source-image-expanded" :src="displayImageSrc" alt="Expanded source" draggable="false">
                                 <div id="selection-box-expanded" class="selection-box" :style="selectionBoxStyle"></div>
                             </div>
                         </div>
