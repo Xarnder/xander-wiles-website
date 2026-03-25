@@ -27,6 +27,7 @@ const App = {
         const isImageExpanded = ref(false);
         const isDragging = ref(false);
         const isGraphDragging = ref(false);
+        const isHarmonyConnected = ref(true);
         const startX = ref(0);
         const startY = ref(0);
         const currentX = ref(0);
@@ -363,10 +364,42 @@ const App = {
 
             const rgbStr = `rgb(${avgR}, ${avgG}, ${avgB})`;
 
-            if (selectedSwatchIndex.value !== null) {
+            // In connected mode, set the base color (all harmony colors will re-derive from it)
+            if (isHarmonyConnected.value) {
+                try {
+                    const extracted = new Color(rgbStr).to("oklch");
+                    let l = extracted.coords[0];
+                    let c = extracted.coords[1];
+                    let h = extracted.coords[2];
+
+                    // If a specific swatch is selected, back-calculate base hue
+                    // so the extracted color lands on that harmony position
+                    if (selectedSwatchIndex.value !== null && selectedSwatchIndex.value > 0) {
+                        const harmonyOffsets = {
+                            'complementary':      [0, 180],
+                            'split-complementary':[0, 150, 210],
+                            'triadic':            [0, 120, 240],
+                            'analogous':          [0, 30, -30],
+                        };
+                        const offsets = harmonyOffsets[harmonyType.value] || [0];
+                        const offset = offsets[selectedSwatchIndex.value] || 0;
+                        // Back-calculate: base_hue = extracted_hue - offset
+                        h = ((h - offset) % 360 + 360) % 360;
+                    }
+
+                    lightness.value = isNaN(l) ? lightness.value : l;
+                    chroma.value    = isNaN(c) ? chroma.value    : c;
+                    hue.value       = isNaN(h) ? hue.value       : h;
+                    textInputColor.value = rgbStr;
+                } catch(e) {
+                    console.error("Could not parse extracted color:", e);
+                }
+            } else if (selectedSwatchIndex.value !== null) {
+                // Detached mode, swatch selected: override just that swatch
                 textInputFineTune.value = rgbStr;
                 parseFineTuneInput();
             } else {
+                // Detached mode, no swatch: update base
                 textInputColor.value = rgbStr;
                 parseTextInput();
             }
@@ -400,6 +433,118 @@ const App = {
             if (value >= 45) return 'apca-mid';
             return 'apca-low';
         };
+
+        function exportPalette() {
+            const pal = palette.value;
+            if (!pal || pal.length === 0) return;
+
+            const W = 1440, H = 560;
+            const HEADER = 80, SWATCH_H = 280, INFO_H = 200;
+            const PAD = 24;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = W;
+            canvas.height = H;
+            const ctx = canvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = '#0d0d1a';
+            ctx.fillRect(0, 0, W, H);
+
+            // Subtle grid lines
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+            for (let y = 0; y < H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+            // Title
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.font = 'bold 26px Inter, -apple-system, sans-serif';
+            ctx.fillText('ChromaMath  ·  Generated Palette', PAD, 52);
+
+            const HarmonyLabel = harmonyType.value.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const now = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            ctx.font = '16px Inter, -apple-system, sans-serif';
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.textAlign = 'right';
+            ctx.fillText(`${HarmonyLabel}  ·  ${proportionRule.value}  ·  ${now}`, W - PAD, 52);
+            ctx.textAlign = 'left';
+
+            // Compute total proportion for swatch widths
+            const totalProp = pal.reduce((s, p) => s + p.proportion, 0);
+            let curX = 0;
+            const INNER_W = W;
+
+            pal.forEach((item, idx) => {
+                const colW = Math.round((item.proportion / totalProp) * INNER_W);
+
+                // Color swatch
+                ctx.fillStyle = item.css;
+                ctx.fillRect(curX, HEADER, colW, SWATCH_H);
+
+                // Proportion label centered in bar
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(curX + colW * 0.3, HEADER + SWATCH_H - 52, colW * 0.4, 36);
+
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 20px Inter, -apple-system, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${Math.round(item.proportion)}%`, curX + colW / 2, HEADER + SWATCH_H - 26);
+                ctx.textAlign = 'left';
+
+                // Info panel per color
+                const infoTop = HEADER + SWATCH_H + 24;
+                const infoCX = curX + PAD;
+
+                // Color label
+                ctx.fillStyle = item.css;
+                ctx.fillRect(infoCX, infoTop, 14, 14);
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(infoCX, infoTop, 14, 14);
+
+                ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                ctx.font = 'bold 18px Inter, -apple-system, sans-serif';
+                ctx.fillText(idx === 0 ? 'Base' : `Color ${idx + 1}`, infoCX + 22, infoTop + 12);
+
+                // Hex
+                ctx.fillStyle = 'rgba(0,255,204,0.9)';
+                ctx.font = 'bold 16px "Courier New", monospace';
+                ctx.fillText(item.hex.toUpperCase(), infoCX, infoTop + 44);
+
+                // RGB
+                const rgbCol = new Color(item.css).to('srgb');
+                const rVal = Math.round(rgbCol.coords[0] * 255);
+                const gVal = Math.round(rgbCol.coords[1] * 255);
+                const bVal = Math.round(rgbCol.coords[2] * 255);
+                ctx.fillStyle = 'rgba(255,255,255,0.55)';
+                ctx.font = '14px "Courier New", monospace';
+                ctx.fillText(`rgb(${rVal}, ${gVal}, ${bVal})`, infoCX, infoTop + 68);
+
+                // L·C·H
+                const l = item.colorObj.coords[0].toFixed(2);
+                const c = item.colorObj.coords[1].toFixed(3);
+                const h = (item.colorObj.coords[2] || 0).toFixed(1);
+                ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                ctx.fillText(`oklch(${l}  ${c}  ${h}°)`, infoCX, infoTop + 90);
+
+                curX += colW;
+            });
+
+            // Divider between swatch and info
+            ctx.fillStyle = 'rgba(255,255,255,0.06)';
+            ctx.fillRect(0, HEADER + SWATCH_H, W, 1);
+
+            // Bottom border
+            ctx.fillStyle = 'rgba(0,255,204,0.25)';
+            ctx.fillRect(0, H - 3, W, 3);
+
+            // Download
+            const link = document.createElement('a');
+            link.download = `chromamath-palette-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
 
         // Graphing Context (D3)
         const initSvg = (selector, clear = true) => {
@@ -504,19 +649,16 @@ const App = {
                 .domain([0, 1]) // Lightness bounds 0 to 1
                 .range([h, 0]);
 
-            // Mutable working copy of lightness values for smooth drag
-            const workingL = graphData.map(d => d.l);
-            
-            // Area and Line generators (reference workingL for real-time updates)
+            // Area and Line generators
             const area = d3.area()
                 .x((d, i) => x(i === 0 ? "Base" : `C${i}`))
                 .y0(h)
-                .y1((d, i) => y(workingL[i]))
+                .y1(d => y(d.l))
                 .curve(d3.curveMonotoneX);
 
             const line = d3.line()
                 .x((d, i) => x(i === 0 ? "Base" : `C${i}`))
-                .y((d, i) => y(workingL[i]))
+                .y(d => y(d.l))
                 .curve(d3.curveMonotoneX);
 
             // Ensure gradient def exists
@@ -535,26 +677,48 @@ const App = {
             // Draw Line path
             g.select(".tonal-line").datum(graphData).attr("d", line);
 
-            // Define Drag Behavior — never touches Vue state during drag
+            // Define Drag Behavior — optimistic visual update during drag, commit on end
+            let dragCurrentL = 0; // track current drag lightness in closure
             const drag = d3.drag()
-                .on("start", function() {
+                .on("start", function(event, d) {
                     isGraphDragging.value = true;
+                    dragCurrentL = d.l;
                     d3.select(this).raise().attr("stroke", "#00ffcc");
                 })
                 .on("drag", function(event, d) {
                     const newL = Math.max(0, Math.min(1, y.invert(event.y)));
+                    dragCurrentL = newL;
                     const i = graphData.indexOf(d);
                     if (i < 0) return;
 
-                    // Update working copy
-                    workingL[i] = newL;
-
-                    // Move this circle directly
-                    d3.select(this).attr("cy", y(newL));
-
-                    // Redraw line and area using updated workingL
-                    g.select(".tonal-area").datum(graphData).attr("d", area);
-                    g.select(".tonal-line").datum(graphData).attr("d", line);
+                    if (isHarmonyConnected.value) {
+                        // Move ALL points to the same lightness in the graph
+                        g.selectAll(".tonal-point").attr("cy", y(newL));
+                        // Flatten line/area to show all connected
+                        g.select(".tonal-area").attr("d", () => {
+                            const pts = graphData.map((_, idx) => [x(idx === 0 ? "Base" : `C${idx}`), y(newL)]);
+                            return `M${pts.map(p => p.join(',')).join('L')} L${pts[pts.length-1][0]},${h} L${pts[0][0]},${h} Z`;
+                        });
+                        g.select(".tonal-line").attr("d", () => {
+                            const pts = graphData.map((_, idx) => [x(idx === 0 ? "Base" : `C${idx}`), y(newL)]);
+                            return `M${pts.map(p => p.join(',')).join('L')}`;
+                        });
+                    } else {
+                        // Detached: only move this point
+                        d3.select(this).attr("cy", y(newL));
+                        // Update curve using current data but override this point's y
+                        const tempArea = d3.area()
+                            .x((d2, i2) => x(i2 === 0 ? "Base" : `C${i2}`))
+                            .y0(h)
+                            .y1((d2, i2) => i2 === i ? y(newL) : y(d2.l))
+                            .curve(d3.curveMonotoneX);
+                        const tempLine = d3.line()
+                            .x((d2, i2) => x(i2 === 0 ? "Base" : `C${i2}`))
+                            .y((d2, i2) => i2 === i ? y(newL) : y(d2.l))
+                            .curve(d3.curveMonotoneX);
+                        g.select(".tonal-area").datum(graphData).attr("d", tempArea);
+                        g.select(".tonal-line").datum(graphData).attr("d", tempLine);
+                    }
                 })
                 .on("end", function(event, d) {
                     const i = graphData.indexOf(d);
@@ -562,16 +726,21 @@ const App = {
                     isGraphDragging.value = false;
 
                     if (i < 0) return;
-                    const finalL = workingL[i];
 
-                    // NOW commit to Vue state
-                    if (i === 0) {
-                        lightness.value = finalL;
+                    if (isHarmonyConnected.value) {
+                        // Setting lightness.value fires the watcher, which clears overrides
+                        // and re-generates ALL harmony colors with the new base lightness
+                        lightness.value = dragCurrentL;
                     } else {
-                        const override = palette.value[i].colorObj.clone();
-                        override.coords[0] = finalL;
-                        colorOverrides.value[i] = override;
-                        updatePalette();
+                        // Detached: surgical override for just this color
+                        if (i === 0) {
+                            lightness.value = dragCurrentL;
+                        } else {
+                            const override = palette.value[i].colorObj.clone();
+                            override.coords[0] = dragCurrentL;
+                            colorOverrides.value[i] = override;
+                            updatePalette();
+                        }
                     }
                 });
 
@@ -584,7 +753,7 @@ const App = {
                 .attr("stroke", "#fff")
                 .merge(circles)
                 .attr("cx", (d, i) => x(i === 0 ? "Base" : `C${i}`))
-                .attr("cy", (d, i) => y(workingL[i]))
+                .attr("cy", d => y(d.l))
                 .attr("fill", d => d.css)
                 .call(drag);
 
@@ -875,7 +1044,9 @@ const App = {
             onDragEnd,
             aiPrompt,
             isPromptCopied,
-            copyPrompt
+            isHarmonyConnected,
+            copyPrompt,
+            exportPalette
         };
     }
 };
