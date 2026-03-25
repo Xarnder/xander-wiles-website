@@ -238,7 +238,7 @@
                         </div>
                     </div>
                 </div>
-
+ 
                 <!-- Graphs -->
                 <div class="charts-container">
                     <div class="chart-box glass-panel">
@@ -279,6 +279,19 @@
                             </div>
                         </div>
                     </div>
+                </div>
+ 
+                <!-- AI Prompt Generator -->
+                <div class="prompt-generator-card glass-panel" v-if="palette.length > 0">
+                    <div class="prompt-header">
+                        <h3>AI Creative Prompt</h3>
+                        <button class="copy-prompt-btn" @click="copyPrompt" :class="{ 'copied': isPromptCopied }">
+                            <span v-if="!isPromptCopied">Copy Prompt</span>
+                            <span v-else>Copied!</span>
+                        </button>
+                    </div>
+                    <p class="prompt-text">"{{ aiPrompt }}"</p>
+                    <p class="chart-desc">Optimized for Midjourney, DALL-E, and cinematic AI generation.</p>
                 </div>
 
             </section>

@@ -747,10 +747,15 @@ select:focus {
 }
 .tonal-point {
     stroke-width: 2;
-    transition: r 0.2s ease;
+    transition: all 0.2s ease;
+    cursor: ns-resize;
 }
 .tonal-point:hover {
     r: 25;
+    stroke-width: 4;
+}
+.tonal-point:active {
+    stroke: #00ffcc;
 }
 
 .light-theme .tick text {
@@ -809,5 +814,71 @@ select:focus {
 
     .expanded-container img {
         min-width: 0;
+    }
+}
+
+/* AI Prompt Generator Styles */
+.prompt-generator-card {
+    margin-top: 2rem;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.prompt-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.prompt-text {
+    font-size: 1.1rem;
+    font-style: italic;
+    color: var(--text-primary);
+    line-height: 1.6;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px dashed var(--glass-border);
+    margin: 0.5rem 0;
+}
+
+.copy-prompt-btn {
+    background: var(--accent-primary);
+    color: #fff;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.copy-prompt-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 255, 204, 0.3);
+}
+
+.copy-prompt-btn.copied {
+    background: #81C784;
+}
+
+.light-theme .prompt-text {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a2e;
+}
+
+@media (max-width: 600px) {
+    .prompt-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .copy-prompt-btn {
+        width: 100%;
     }
 }

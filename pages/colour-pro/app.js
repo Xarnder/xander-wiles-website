@@ -26,6 +26,7 @@ const App = {
         const imageSrc = ref('');
         const isImageExpanded = ref(false);
         const isDragging = ref(false);
+        const isGraphDragging = ref(false);
         const startX = ref(0);
         const startY = ref(0);
         const currentX = ref(0);
@@ -58,6 +59,35 @@ const App = {
                 display: 'block'
             };
         });
+ 
+        const aiPrompt = computed(() => {
+            if (!palette.value || palette.value.length === 0) return "";
+            let prompt = "Create a cinematic shot that uses these colours ";
+            const parts = palette.value.map(item => `${item.hex} ${Math.round(item.proportion)}% of the composition`);
+            
+            if (parts.length > 1) {
+                const last = parts.pop();
+                prompt += parts.join(", ") + " and " + last;
+            } else {
+                prompt += parts[0];
+            }
+            return prompt;
+        });
+ 
+        const isPromptCopied = ref(false);
+ 
+        function copyPrompt() {
+            const success = () => {
+                isPromptCopied.value = true;
+                setTimeout(() => { isPromptCopied.value = false; }, 2000);
+            };
+ 
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(aiPrompt.value).then(success).catch(() => fallbackCopy(aiPrompt.value, success));
+            } else {
+                fallbackCopy(aiPrompt.value, success);
+            }
+        }
 
         // Watchers
         // Clear overrides when the underlying mathematical rules change
@@ -117,14 +147,41 @@ const App = {
         }
 
         function copyHex(hex, index) {
-            navigator.clipboard.writeText(hex).then(() => {
+            const success = () => {
                 copiedIndex.value = index;
                 setTimeout(() => {
                     if (copiedIndex.value === index) {
                         copiedIndex.value = null;
                     }
                 }, 2000);
-            });
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(hex).then(success).catch(err => {
+                    console.error('Modern clipboard copy failed:', err);
+                    fallbackCopy(hex, success);
+                });
+            } else {
+                fallbackCopy(hex, success);
+            }
+        }
+
+        function fallbackCopy(text, callback) {
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                if (successful) callback();
+            } catch (err) {
+                console.error('Fallback copy failed:', err);
+            }
         }
 
         function toggleTheme() {
@@ -345,19 +402,24 @@ const App = {
         };
 
         // Graphing Context (D3)
-        const initSvg = (selector) => {
+        const initSvg = (selector, clear = true) => {
             const container = document.querySelector(selector);
             if (!container) return null;
-            container.innerHTML = ''; // clear
+            
             const width = container.clientWidth;
             const height = container.clientHeight;
             
-            const svg = d3.select(selector)
-                .append('svg')
-                .attr('width', '100%')
-                .attr('height', '100%')
-                .attr('viewBox', `0 0 ${width} ${height}`)
-                .attr('preserveAspectRatio', 'xMidYMid meet');
+            let svg = d3.select(selector).select('svg');
+            if (svg.empty()) {
+                svg = d3.select(selector).append('svg')
+                    .attr('width', '100%')
+                    .attr('height', '100%');
+            } else if (clear) {
+                svg.selectAll('*').remove();
+            }
+            
+            svg.attr('viewBox', `0 0 ${width} ${height}`)
+               .attr('preserveAspectRatio', 'xMidYMid meet');
                 
             return { svg, width, height };
         };
@@ -412,7 +474,7 @@ const App = {
         }
 
         function drawTonalGraph() {
-            const ctx = initSvg('#tonal-chart');
+            const ctx = initSvg('#tonal-chart', false); // Don't clear!
             if(!ctx) return;
             const { svg, width, height } = ctx;
             
@@ -420,7 +482,15 @@ const App = {
             const w = width - margin.left - margin.right;
             const h = height - margin.top - margin.bottom;
 
-            const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+            // Ensure main group exists
+            let g = svg.select(".main-g");
+            if (g.empty()) {
+                g = svg.append("g").attr("class", "main-g").attr("transform", `translate(${margin.left},${margin.top})`);
+                g.append("path").attr("class", "tonal-area");
+                g.append("path").attr("class", "tonal-line");
+                g.append("g").attr("class", "y-axis");
+                g.append("g").attr("class", "x-axis-line").attr("transform", `translate(0,${h})`).append("line");
+            }
 
             // Use the palette in original order (Base color first)
             const graphData = [...palette.value];
@@ -434,63 +504,102 @@ const App = {
                 .domain([0, 1]) // Lightness bounds 0 to 1
                 .range([h, 0]);
 
-            // Add gradient def
-            const defs = svg.append('defs');
-            const gradient = defs.append('linearGradient')
-                .attr('id', 'tonal-gradient')
-                .attr('x1', '0%').attr('y1', '0%')
-                .attr('x2', '0%').attr('y2', '100%');
-            gradient.append('stop').attr('offset', '0%').style('stop-color', 'rgba(255,255,255,0.2)');
-            gradient.append('stop').attr('offset', '100%').style('stop-color', 'rgba(255,255,255,0)');
-
-            // Area
+            // Mutable working copy of lightness values for smooth drag
+            const workingL = graphData.map(d => d.l);
+            
+            // Area and Line generators (reference workingL for real-time updates)
             const area = d3.area()
                 .x((d, i) => x(i === 0 ? "Base" : `C${i}`))
                 .y0(h)
-                .y1(d => y(d.l))
+                .y1((d, i) => y(workingL[i]))
                 .curve(d3.curveMonotoneX);
 
-            g.append("path")
-                .datum(graphData)
-                .attr("class", "tonal-area")
-                .attr("d", area);
-
-            // Line
             const line = d3.line()
                 .x((d, i) => x(i === 0 ? "Base" : `C${i}`))
-                .y(d => y(d.l))
+                .y((d, i) => y(workingL[i]))
                 .curve(d3.curveMonotoneX);
 
-            g.append("path")
-                .datum(graphData)
-                .attr("class", "tonal-line")
-                .attr("d", line);
+            // Ensure gradient def exists
+            if (svg.select('#tonal-gradient').empty()) {
+                const defs = svg.append('defs');
+                const gradient = defs.append('linearGradient')
+                    .attr('id', 'tonal-gradient')
+                    .attr('x1', '0%').attr('y1', '0%')
+                    .attr('x2', '0%').attr('y2', '100%');
+                gradient.append('stop').attr('offset', '0%').style('stop-color', 'rgba(255,255,255,0.2)');
+                gradient.append('stop').attr('offset', '100%').style('stop-color', 'rgba(255,255,255,0)');
+            }
 
-            // Points
-            g.selectAll("circle")
-                .data(graphData)
-                .enter().append("circle")
+            // Draw Area path
+            g.select(".tonal-area").datum(graphData).attr("d", area);
+            // Draw Line path
+            g.select(".tonal-line").datum(graphData).attr("d", line);
+
+            // Define Drag Behavior — never touches Vue state during drag
+            const drag = d3.drag()
+                .on("start", function() {
+                    isGraphDragging.value = true;
+                    d3.select(this).raise().attr("stroke", "#00ffcc");
+                })
+                .on("drag", function(event, d) {
+                    const newL = Math.max(0, Math.min(1, y.invert(event.y)));
+                    const i = graphData.indexOf(d);
+                    if (i < 0) return;
+
+                    // Update working copy
+                    workingL[i] = newL;
+
+                    // Move this circle directly
+                    d3.select(this).attr("cy", y(newL));
+
+                    // Redraw line and area using updated workingL
+                    g.select(".tonal-area").datum(graphData).attr("d", area);
+                    g.select(".tonal-line").datum(graphData).attr("d", line);
+                })
+                .on("end", function(event, d) {
+                    const i = graphData.indexOf(d);
+                    d3.select(this).attr("stroke", "#fff");
+                    isGraphDragging.value = false;
+
+                    if (i < 0) return;
+                    const finalL = workingL[i];
+
+                    // NOW commit to Vue state
+                    if (i === 0) {
+                        lightness.value = finalL;
+                    } else {
+                        const override = palette.value[i].colorObj.clone();
+                        override.coords[0] = finalL;
+                        colorOverrides.value[i] = override;
+                        updatePalette();
+                    }
+                });
+
+            // Bind Points with enter/update/exit pattern
+            const circles = g.selectAll(".tonal-point").data(graphData);
+
+            circles.enter().append("circle")
                 .attr("class", "tonal-point")
-                .attr("cx", (d, i) => x(i === 0 ? "Base" : `C${i}`))
-                .attr("cy", d => y(d.l))
                 .attr("r", 20)
+                .attr("stroke", "#fff")
+                .merge(circles)
+                .attr("cx", (d, i) => x(i === 0 ? "Base" : `C${i}`))
+                .attr("cy", (d, i) => y(workingL[i]))
                 .attr("fill", d => d.css)
-                .attr("stroke", "#fff");
+                .call(drag);
 
-            // Axes
+            circles.exit().remove();
+
+            // Update Axes
             const yAxis = d3.axisLeft(y).ticks(5).tickFormat(d => d.toFixed(1));
-            g.append("g")
-                .attr("transform", `translate(0,0)`)
+            g.select(".y-axis")
                 .call(yAxis)
                 .select(".domain").attr("stroke", "rgba(255,255,255,0.2)");
                 
             g.selectAll(".tick line").attr("stroke", "rgba(255,255,255,0.1)");
             g.selectAll(".tick text").attr("fill", "rgba(255,255,255,0.5)");
 
-            // X-axis label
-            g.append("g")
-                .attr("transform", `translate(0,${h})`)
-                .append("line")
+            g.select(".x-axis-line line")
                 .attr("x1", 0).attr("x2", w)
                 .attr("stroke", "rgba(255,255,255,0.2)");
         }
@@ -762,7 +871,11 @@ const App = {
             triggerFileUpload,
             handleImageUpload,
             onDragStart,
-            onDragMove
+            onDragMove,
+            onDragEnd,
+            aiPrompt,
+            isPromptCopied,
+            copyPrompt
         };
     }
 };
