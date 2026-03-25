@@ -15,10 +15,21 @@ const App = {
         const proportionRule = ref('60-30-10');
         const palette = ref([]);
         const textInputColor = ref('');
+        const textInputFineTune = ref('');
         const copiedIndex = ref(null);
         const isDarkMode = ref(true);
         const selectedSwatchIndex = ref(null);
         const colorOverrides = ref({});
+
+        // Image extraction state
+        const isImageLoaded = ref(false);
+        const imageSrc = ref('');
+        const isImageExpanded = ref(false);
+        const isDragging = ref(false);
+        const startX = ref(0);
+        const startY = ref(0);
+        const currentX = ref(0);
+        const currentY = ref(0);
 
         // Computed
         const baseColorBase = computed(() => {
@@ -30,7 +41,22 @@ const App = {
         });
 
         const baseHex = computed(() => {
-            return baseColorBase.value.to("srgb").toString({ format: "hex" });
+            return baseColorBase.value.to("srgb").toString({ format: "hex" }).toUpperCase();
+        });
+
+        const selectionBoxStyle = computed(() => {
+            if (!isDragging.value && startX.value === currentX.value) return { display: 'none' };
+            const left = Math.min(startX.value, currentX.value);
+            const top = Math.min(startY.value, currentY.value);
+            const width = Math.abs(currentX.value - startX.value);
+            const height = Math.abs(currentY.value - startY.value);
+            return {
+                left: left + 'px',
+                top: top + 'px',
+                width: width + 'px',
+                height: height + 'px',
+                display: 'block'
+            };
         });
 
         // Watchers
@@ -56,6 +82,25 @@ const App = {
                 textInputColor.value = newHex;
             }
         }, { immediate: true });
+
+        // Sync fine-tune text input when selection changes or color updates
+        watch([selectedSwatchIndex, palette], () => {
+            if (selectedSwatchIndex.value !== null && palette.value[selectedSwatchIndex.value]) {
+                if (document.activeElement?.id !== 'fineTuneInput') {
+                    textInputFineTune.value = palette.value[selectedSwatchIndex.value].hex;
+                }
+            }
+        }, { deep: true });
+
+        // Scroll to analyzer when loaded or expanded
+        watch([isImageLoaded, isImageExpanded], ([loaded, expanded]) => {
+            if (loaded) {
+                nextTick(() => {
+                    const el = document.getElementById('extraction-card');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+            }
+        });
 
         function parseTextInput() {
             try {
@@ -145,6 +190,129 @@ const App = {
             }
             colorOverrides.value[idx].coords[coordIndex] = val;
             updatePalette();
+        }
+
+        function parseFineTuneInput() {
+            if (selectedSwatchIndex.value === null) return;
+            try {
+                const newCol = new Color(textInputFineTune.value);
+                const oklchCol = newCol.to("oklch");
+                colorOverrides.value[selectedSwatchIndex.value] = oklchCol;
+                updatePalette();
+            } catch (e) {
+                console.error("Invalid fine-tune color format:", e);
+                // Reset to current hex on error
+                textInputFineTune.value = palette.value[selectedSwatchIndex.value].hex;
+            }
+        }
+
+        // --- Image Extraction Methods ---
+        function triggerFileUpload() {
+            document.getElementById('camera-input').click();
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imageSrc.value = e.target.result;
+                isImageLoaded.value = true;
+                // Reset selection
+                startX.value = currentX.value = startY.value = currentY.value = 0;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function getCoords(e) {
+            const container = e.currentTarget;
+            const rect = container.getBoundingClientRect();
+            let clientX = e.clientX;
+            let clientY = e.clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            }
+            let x = clientX - rect.left;
+            let y = clientY - rect.top;
+            return {
+                x: Math.max(0, Math.min(x, rect.width)),
+                y: Math.max(0, Math.min(y, rect.height))
+            };
+        }
+
+        const activeImgId = computed(() => isImageExpanded.value ? 'source-image-expanded' : 'source-image-sidebar');
+
+        function onDragStart(e) {
+            isDragging.value = true;
+            const coords = getCoords(e);
+            startX.value = currentX.value = coords.x;
+            startY.value = currentY.value = coords.y;
+        }
+
+        function onDragMove(e) {
+            if (!isDragging.value) return;
+            const coords = getCoords(e);
+            currentX.value = coords.x;
+            currentY.value = coords.y;
+        }
+
+        function onDragEnd() {
+            if (!isDragging.value) return;
+            isDragging.value = false;
+
+            const left = Math.min(startX.value, currentX.value);
+            const top = Math.min(startY.value, currentY.value);
+            let width = Math.abs(currentX.value - startX.value);
+            let height = Math.abs(currentY.value - startY.value);
+
+            if (width < 2 && height < 2) {
+                width = 10; height = 10;
+            }
+            processArea(left, top, width, height);
+        }
+
+        function processArea(left, top, width, height) {
+            const img = document.getElementById(activeImgId.value);
+            if (!img) return;
+
+            // Robust guards for tiny or zero selections
+            if (width < 1) width = 1;
+            if (height < 1) height = 1;
+
+            const rect = img.getBoundingClientRect();
+            const scaleX = img.naturalWidth / rect.width;
+            const scaleY = img.naturalHeight / rect.height;
+
+            const finalWidth = Math.max(1, Math.round(width * scaleX));
+            const finalHeight = Math.max(1, Math.round(height * scaleY));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = finalWidth;
+            canvas.height = finalHeight;
+            const ctx = canvas.getContext('2d');
+
+            ctx.drawImage(img, left * scaleX, top * scaleY, width * scaleX, height * scaleY, 0, 0, canvas.width, canvas.height);
+            const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+            let r = 0, g = 0, b = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                r += data[i]; g += data[i+1]; b += data[i+2];
+            }
+            const count = data.length / 4;
+            const avgR = Math.round(r / count);
+            const avgG = Math.round(g / count);
+            const avgB = Math.round(b / count);
+
+            const rgbStr = `rgb(${avgR}, ${avgG}, ${avgB})`;
+
+            if (selectedSwatchIndex.value !== null) {
+                textInputFineTune.value = rgbStr;
+                parseFineTuneInput();
+            } else {
+                textInputColor.value = rgbStr;
+                parseTextInput();
+            }
         }
 
         function updatePalette() {
@@ -254,11 +422,11 @@ const App = {
 
             const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-            // Sort palette by original order or lightness (sorted makes graph nicer)
-            const sorted = [...palette.value].sort((a,b) => a.l - b.l);
+            // Use the palette in original order (Base color first)
+            const graphData = [...palette.value];
 
             const x = d3.scalePoint()
-                .domain(sorted.map((_, i) => `C${i}`))
+                .domain(graphData.map((_, i) => i === 0 ? "Base" : `C${i}`))
                 .range([0, w])
                 .padding(0.5);
 
@@ -277,35 +445,35 @@ const App = {
 
             // Area
             const area = d3.area()
-                .x((d, i) => x(`C${i}`))
+                .x((d, i) => x(i === 0 ? "Base" : `C${i}`))
                 .y0(h)
                 .y1(d => y(d.l))
                 .curve(d3.curveMonotoneX);
 
             g.append("path")
-                .datum(sorted)
+                .datum(graphData)
                 .attr("class", "tonal-area")
                 .attr("d", area);
 
             // Line
             const line = d3.line()
-                .x((d, i) => x(`C${i}`))
+                .x((d, i) => x(i === 0 ? "Base" : `C${i}`))
                 .y(d => y(d.l))
                 .curve(d3.curveMonotoneX);
 
             g.append("path")
-                .datum(sorted)
+                .datum(graphData)
                 .attr("class", "tonal-line")
                 .attr("d", line);
 
             // Points
             g.selectAll("circle")
-                .data(sorted)
+                .data(graphData)
                 .enter().append("circle")
                 .attr("class", "tonal-point")
-                .attr("cx", (d, i) => x(`C${i}`))
+                .attr("cx", (d, i) => x(i === 0 ? "Base" : `C${i}`))
                 .attr("cy", d => y(d.l))
-                .attr("r", 5)
+                .attr("r", 20)
                 .attr("fill", d => d.css)
                 .attr("stroke", "#fff");
 
@@ -483,7 +651,7 @@ const App = {
                 const y = isNaN(l) ? 0 : l * 2;
                 const radius = isNaN(c) ? 0 : c * 8; // Scale factor for visual clarity
                 
-                wheelMesh.position.y = y;
+                wheelMesh.position.y = 0; // Pin to ground plane
                 // Base size + chroma expansion
                 const s = 1 + radius; 
                 wheelMesh.scale.set(s, s, 1);
@@ -557,6 +725,9 @@ const App = {
             nextTick(() => {
                 initThreeJS();
             });
+
+            window.addEventListener('mouseup', onDragEnd);
+            window.addEventListener('touchend', onDragEnd);
         });
 
         return {
@@ -581,7 +752,17 @@ const App = {
             fineTuneC,
             fineTuneH,
             resetSelectedColor,
-            hasOverride
+            hasOverride,
+            textInputFineTune,
+            parseFineTuneInput,
+            isImageLoaded,
+            imageSrc,
+            isImageExpanded,
+            selectionBoxStyle,
+            triggerFileUpload,
+            handleImageUpload,
+            onDragStart,
+            onDragMove
         };
     }
 };

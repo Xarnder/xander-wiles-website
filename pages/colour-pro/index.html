@@ -13,6 +13,8 @@
         rel="stylesheet">
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#1a1a2e">
 
 
     <!-- Theme-aware SVG icons (modern browsers) -->
@@ -106,10 +108,43 @@
                 <div class="slider-group">
                     <label>
                         <span class="label-text">Hue (H)</span>
-                        <span class="value">{{ hue.toFixed(1) }}&deg;</span>
+                        <span class="value">{{ (hue % 360).toFixed(1) }}&deg;</span>
                     </label>
                     <input class="hue-slider" type="range" min="0" max="360" step="1" v-model.number="hue">
                 </div>
+
+                <hr class="section-divider">
+
+                <!-- Image Extraction Tool -->
+                <div class="image-extraction-section">
+                    <h3>Extract from Image</h3>
+                    <p class="section-desc">Upload or capture an area to set the base color.</p>
+                    
+                    <input type="file" id="camera-input" accept="image/*" hidden @change="handleImageUpload">
+                    
+                    <button class="modern-upload-btn" @click="triggerFileUpload">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        Choose Image / Camera
+                    </button>
+
+                    <!-- Compact Sidebar View (visible when not expanded) -->
+                    <div v-if="isImageLoaded && !isImageExpanded" class="image-workspace-sidebar">
+                        <div class="workspace-header">
+                            <p class="instruction-text">Tap/Drag for color</p>
+                            <button class="expand-view-btn" @click="isImageExpanded = true">Expand</button>
+                        </div>
+                        <div id="image-container-sidebar" class="img-container" 
+                             @mousedown="onDragStart" 
+                             @mousemove="onDragMove" 
+                             @touchstart.prevent="onDragStart" 
+                             @touchmove.prevent="onDragMove">
+                            <img id="source-image-sidebar" :src="imageSrc" alt="Sidebar source" draggable="false">
+                            <div id="selection-box-sidebar" class="selection-box" :style="selectionBoxStyle"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="section-divider">
 
                 <div class="dropdown-group">
                     <label>Harmony Calculation</label>
@@ -148,6 +183,14 @@
                                 <button class="reset-btn" @click="selectSwatch(selectedSwatchIndex)">Close</button>
                             </div>
                         </div>
+
+                        <div class="text-input-group" style="margin-bottom: 1.5rem;">
+                            <label>Manual Swatch Override (Hex, RGB, CSS)</label>
+                            <input id="fineTuneInput" type="text" v-model="textInputFineTune"
+                                @change="parseFineTuneInput" @keyup.enter="parseFineTuneInput"
+                                placeholder="e.g. #00ffaa">
+                        </div>
+
                         <div class="slider-group">
                             <label>Lightness (L) <span class="value">{{ fineTuneL.toFixed(2) }}</span></label>
                             <input type="range" min="0" max="1" step="0.01" v-model.number="fineTuneL">
@@ -214,6 +257,27 @@
                         <h3>OKLCH Spatial Distribution (3D)</h3>
                         <p class="chart-desc">Geometry of Lightness (Y-axis), Chroma (Radius), and Hue (Angle).</p>
                         <div id="three-chart" class="d3-container"></div>
+                    </div>
+
+                    <!-- Expanded Dashboard View (only visible when expanded) -->
+                    <div v-if="isImageLoaded && isImageExpanded" id="extraction-card" class="chart-box glass-panel main-extraction-card is-expanded">
+                        <div class="chart-header workspace-header">
+                            <div>
+                                <h3>High-Precision Extractor</h3>
+                                <p class="chart-desc">Perform detailed color extraction on the enlarged view.</p>
+                            </div>
+                            <button class="expand-toggle-btn" @click="isImageExpanded = false">Close Precision Mode</button>
+                        </div>
+                        <div class="extraction-workspace">
+                            <div id="image-container-expanded" class="img-container expanded-container" 
+                                 @mousedown="onDragStart" 
+                                 @mousemove="onDragMove" 
+                                 @touchstart.prevent="onDragStart" 
+                                 @touchmove.prevent="onDragMove">
+                                <img id="source-image-expanded" :src="imageSrc" alt="Expanded source" draggable="false">
+                                <div id="selection-box-expanded" class="selection-box" :style="selectionBoxStyle"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

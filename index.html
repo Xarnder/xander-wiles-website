@@ -91,7 +91,9 @@
                         <span class="tag">🎻 Cello</span>
                         <a href="/pages/journal/" class="tag">☕ Daily Journal</a>
                     </div>
-                    <a href="/pages/About/" class="button" style="display: block; text-align: center; margin-top: 1.5rem; padding: 0.75rem 1.5rem; text-decoration: none; font-weight: 600; border-radius: 50px; background: rgba(255, 255, 255, 0.1); color: inherit; border: 1px solid rgba(255,255,255,0.2); transition: background 0.3s ease;">Learn More About Me</a>
+                    <a href="/pages/About/" class="button"
+                        style="display: block; text-align: center; margin-top: 1.5rem; padding: 0.75rem 1.5rem; text-decoration: none; font-weight: 600; border-radius: 50px; background: rgba(255, 255, 255, 0.1); color: inherit; border: 1px solid rgba(255,255,255,0.2); transition: background 0.3s ease;">Learn
+                        More About Me</a>
                 </div>
             </div>
         </div>
@@ -116,6 +118,11 @@
                 <img src="/pages/Arkonhex/favicon-dark.svg" class="page-icon" alt="Arkonhex Icon" loading="lazy">
                 <h3>Arkonhex</h3>
                 <p>A voxel game</p>
+            </a>
+            <a href="/pages/colour-pro/" class="page-card glass-card special-social-network-card">
+                <img src="/pages/colour-pro/favicon-dark.svg" class="page-icon" alt="Colour Pro Icon" loading="lazy">
+                <h3>Colour Pro</h3>
+                <p>A advanced colour picker tool</p>
             </a>
             <a href="/games/rocket-lander/" class="page-card glass-card">
                 <img src="/games/rocket-lander/favicon.png" class="page-icon" alt="Rocket Lander Icon" loading="lazy">
@@ -306,9 +313,9 @@
                 <h3>Lossless Image To PDF Converter</h3>
                 <p>A tool for converting images to PDFs without loss of quality.</p>
             </a>
-             <a href="/pages/Story-Weaver-Canvas/" class="page-card glass-card">
-                <img src="/pages/Story-Weaver-Canvas/favicon-dark.svg" class="page-icon"
-                    alt="Story Weaver Canvas Icon" loading="lazy">
+            <a href="/pages/Story-Weaver-Canvas/" class="page-card glass-card">
+                <img src="/pages/Story-Weaver-Canvas/favicon-dark.svg" class="page-icon" alt="Story Weaver Canvas Icon"
+                    loading="lazy">
                 <h3>Story Weaver Canvas</h3>
                 <p>A tool for generating and managing crew members for a story.</p>
             </a>
@@ -371,15 +378,9 @@
                 <h3>Face Crop Tool</h3>
                 <p>A tool for cropping faces from images.</p>
             </a>
-            <a href="/pages/colour-picker/" class="page-card glass-card special-house-design-card">
-                <img src="/pages/colour-picker/favicon-dark.svg" class="page-icon" alt="Colour Picker Icon"
-                    loading="lazy">
-                <h3>Colour Picker</h3>
-                <p>A tool for picking colours.</p>
-            </a>
+
             <a href="/pages/colour-pro/" class="page-card glass-card special-house-design-card">
-                <img src="/pages/colour-pro/favicon-dark.svg" class="page-icon" alt="Colour Pro Icon"
-                    loading="lazy">
+                <img src="/pages/colour-pro/favicon-dark.svg" class="page-icon" alt="Colour Pro Icon" loading="lazy">
                 <h3>Colour Pro</h3>
                 <p>A tool for advanced colour theory.</p>
             </a>
@@ -532,7 +533,7 @@
         <script>
             document.addEventListener('DOMContentLoaded', async () => {
                 const grid = document.getElementById('homepage-playlist-grid');
-                
+
                 // Helper to strip emojis from text (same as in playlist-viewer.js)
                 function stripEmojis(text) {
                     return text.replace(/\p{Extended_Pictographic}/gu, '').trim();
@@ -541,9 +542,9 @@
                 try {
                     const response = await fetch('/assets/Music_CSV/playlists.json');
                     const playlists = await response.json();
-                    
+
                     grid.innerHTML = ''; // Clear spinner
-                    
+
                     // Only show first 12 on home page to keep it clean
                     playlists.slice(0, 12).forEach(p => {
                         const card = document.createElement('a');

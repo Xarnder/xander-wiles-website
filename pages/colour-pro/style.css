@@ -58,6 +58,207 @@ h1, h2, h3, h4 {
     margin-bottom: 2rem;
 }
 
+.section-desc {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+    line-height: 1.4;
+}
+
+.section-divider {
+    border: 0;
+    border-top: 1px solid var(--glass-border);
+    margin: 1.5rem 0;
+}
+
+.modern-upload-btn {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    padding: 1.25rem;
+    border-radius: 14px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.modern-upload-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    transition: 0.5s;
+}
+
+.modern-upload-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2), 0 0 15px var(--accent-glow);
+}
+
+.modern-upload-btn:hover::before {
+    left: 100%;
+}
+
+.modern-upload-btn svg {
+    color: #78a0ff; /* Soft blue icon */
+    transition: transform 0.3s ease;
+}
+
+.modern-upload-btn:hover svg {
+    transform: scale(1.1) rotate(-5deg);
+}
+
+.light-theme .modern-upload-btn {
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    color: #1a1a2e;
+}
+
+.light-theme .modern-upload-btn:hover {
+    background: #fbfbfc;
+    border-color: rgba(0, 0, 0, 0.15);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.06);
+}
+
+.workspace-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.expand-toggle-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.expand-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.05);
+}
+
+.image-workspace-sidebar {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.expand-view-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+.main-extraction-card {
+    grid-column: 1 / -1;
+    background: rgba(0,0,0,0.3);
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-top: 2rem;
+    max-width: 100%; /* Force constraint within viewport */
+    overflow: hidden; /* Ensure content doesn't bleed out */
+    box-sizing: border-box;
+}
+
+.extraction-workspace {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0,0,0,0.2);
+    border-radius: 12px;
+    padding: 2rem;
+    min-height: 400px;
+    width: 100%;
+    overflow: auto; /* Correctly capture child overflow */
+    box-sizing: border-box;
+}
+
+.img-container {
+    position: relative;
+    display: inline-block;
+    touch-action: none;
+    border-radius: 8px;
+    overflow: hidden;
+    user-select: none;
+    background: #000;
+}
+
+.expanded-container {
+    width: 100%;
+    max-width: 100%;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.expanded-container img {
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    min-width: 0;
+}
+
+.selection-box {
+    position: absolute;
+    border: 2px dashed #00ffcc;
+    background-color: rgba(0, 255, 204, 0.2);
+    pointer-events: none;
+    z-index: 10;
+}
+
+.img-container img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    pointer-events: none;
+}
+
+#selection-box-local {
+    position: absolute;
+    border: 2px dashed #00ffcc;
+    background-color: rgba(0, 255, 204, 0.2);
+    pointer-events: none;
+    z-index: 10;
+}
+
+.instruction-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.controls-group {
+    margin-bottom: 2rem;
+}
+
 .theme-toggle {
     position: absolute;
     top: 1.5rem;
@@ -549,7 +750,7 @@ select:focus {
     transition: r 0.2s ease;
 }
 .tonal-point:hover {
-    r: 8;
+    r: 25;
 }
 
 .light-theme .tick text {
@@ -568,5 +769,45 @@ select:focus {
     }
     .charts-container {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 600px) {
+    .main-extraction-card {
+        padding: 1.25rem;
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+    
+    .extraction-workspace {
+        min-height: 350px;
+        padding: 0.8rem;
+    }
+
+    .workspace-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .expand-toggle-btn {
+        width: 100%;
+        text-align: center;
+        padding: 0.8rem;
+    }
+}
+
+/* Optimization for slim mobile phones */
+@media (max-width: 360px) {
+    .main-extraction-card {
+        padding: 0.8rem;
+    }
+    
+    .extraction-workspace {
+        min-height: 300px;
+    }
+
+    .expanded-container img {
+        min-width: 0;
     }
 }
