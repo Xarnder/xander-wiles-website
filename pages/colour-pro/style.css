@@ -1379,8 +1379,9 @@ input:checked + .slider:before { transform: translateX(24px); }
     width: 100%;
     height: 22px;
     border-radius: 8px;
-    overflow: hidden;
     background: var(--glass-border);
+    position: relative;
+    overflow: visible;
 }
 
 .pixel-stats-segment {
@@ -1388,6 +1389,102 @@ input:checked + .slider:before { transform: translateX(24px); }
     transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     min-width: 0;
 }
+
+.pixel-stats-segment:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+.pixel-stats-segment:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+
+/* Target Markers */
+.pixel-stats-marker {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    width: 2px;
+    background: #ffffff;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+    z-index: 10;
+    pointer-events: auto;
+    cursor: help;
+    transform: translateX(-50%);
+    transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pixel-stats-marker::after {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #ffffff;
+}
+
+.marker-label {
+    position: absolute;
+    top: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.pixel-stats-marker:hover .marker-label {
+    opacity: 1;
+}
+
+/* Composition Guides */
+.canvas-wrapper {
+    position: relative;
+}
+
+.canvas-guides-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.guide-v, .guide-h {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.25);
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+.guide-v { width: 1px; top: 0; bottom: 0; border-left: 1px dashed rgba(255, 255, 255, 0.4); background: none; }
+.guide-h { height: 1px; left: 0; right: 0; border-top: 1px dashed rgba(255, 255, 255, 0.4); background: none; }
+
+/* Rule of Thirds */
+.guides-thirds .guide-v-1 { left: 33.333%; }
+.guides-thirds .guide-v-2 { left: 66.666%; }
+.guides-thirds .guide-h-1 { top: 33.333%; }
+.guides-thirds .guide-h-2 { top: 66.666%; }
+
+/* Golden Ratio (~38.2 / 61.8) */
+.guides-golden .guide-v-1 { left: 38.2%; }
+.guides-golden .guide-v-2 { left: 61.8%; }
+.guides-golden .guide-h-1 { top: 38.2%; }
+.guides-golden .guide-h-2 { top: 61.8%; }
+
+/* Quadrants */
+.guides-quadrants .guide-v-1 { left: 50%; }
+.guides-quadrants .guide-v-2 { display: none; }
+.guides-quadrants .guide-h-1 { top: 50%; }
+.guides-quadrants .guide-h-2 { display: none; }
+
 
 .pixel-stats-labels {
     display: flex;

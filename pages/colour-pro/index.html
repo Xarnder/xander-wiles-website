@@ -366,6 +366,16 @@
                             </select>
                         </div>
 
+                        <div class="canvas-control-group">
+                            <label>Guides</label>
+                            <select v-model="canvasGuides">
+                                <option value="none">None</option>
+                                <option value="thirds">Rule of Thirds</option>
+                                <option value="golden">Golden Ratio</option>
+                                <option value="quadrants">Quadrants</option>
+                            </select>
+                        </div>
+
                         <div class="canvas-control-group canvas-tool-group">
                             <label>Tool</label>
                             <div class="tool-btn-pair">
@@ -461,6 +471,14 @@
                             @touchend.prevent="onCanvasPointerUp"
                             style="touch-action: none; cursor: crosshair; display: block; width: 100%; height: 100%;">
                         </canvas>
+
+                        <!-- Composition Guides Overlay -->
+                        <div class="canvas-guides-overlay" :class="'guides-' + canvasGuides" v-if="canvasGuides !== 'none'">
+                            <div class="guide-v guide-v-1"></div>
+                            <div class="guide-v guide-v-2"></div>
+                            <div class="guide-h guide-h-1"></div>
+                            <div class="guide-h guide-h-2"></div>
+                        </div>
                     </div>
 
                     <!-- Live pixel distribution stats -->
@@ -472,6 +490,17 @@
                                 class="pixel-stats-segment"
                                 :style="{ width: canvasPixelStats[i] + '%', background: col.css }"
                                 :title="col.hex + ': ' + canvasPixelStats[i].toFixed(1) + '%'">
+                            </div>
+
+                            <!-- Target Proportion Markers -->
+                            <div 
+                                v-for="(pos, idx) in canvasTargetMarkers" 
+                                :key="'marker-' + idx"
+                                class="pixel-stats-marker"
+                                :style="{ left: pos + '%' }"
+                                :title="'Target Split: ' + pos.toFixed(0) + '%'">
+                                <div class="marker-line"></div>
+                                <div class="marker-label">Target</div>
                             </div>
                         </div>
                         <div class="pixel-stats-labels">

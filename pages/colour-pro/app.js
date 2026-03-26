@@ -47,6 +47,7 @@ const App = {
         const selectedStencil = ref('');
         const stencilScale = ref(1.0);
         const isCanvasPromptCopied = ref(false);
+        const canvasGuides = ref('none'); // none, thirds, golden, quadrants
         const canvasHistory = ref([]);
         const maxHistory = 20;
         let lastAppliedPaletteHexes = [];
@@ -125,7 +126,7 @@ const App = {
             const colors = canvasPalette.value.map(p => p.hex).join(', ');
             return `Use the exact colors [${colors}] and follow the same composition and spatial arrangement as this blocking layout to create a cinematic live action shot. The layout provides the structural foundation; interpret the forms with high fidelity. Always show the figure as a realistic human in the shot. The background should look like a reaslstic scene too from a movie. The final shot should look like it came from a cinamtic film.`;
         });
- 
+  
         const isPromptCopied = ref(false);
  
         function copyPrompt() {
@@ -141,8 +142,23 @@ const App = {
             }
         }
 
-        // Canvas palette: first 3 swatches (hex + css)
-        const canvasPalette = computed(() => palette.value.slice(0, 3).map(p => ({ hex: p.hex, css: p.css })));
+        // Canvas palette: first 3 swatches (hex + css + proportion)
+        const canvasPalette = computed(() => palette.value.slice(0, 3).map(p => ({ 
+            hex: p.hex, 
+            css: p.css, 
+            proportion: p.proportion 
+        })));
+
+        const canvasTargetMarkers = computed(() => {
+            if (canvasPalette.value.length < 2) return [];
+            let cumulative = 0;
+            const markers = [];
+            for (let i = 0; i < canvasPalette.value.length - 1; i++) {
+                cumulative += canvasPalette.value[i].proportion;
+                markers.push(cumulative);
+            }
+            return markers;
+        });
 
         // ─── Canvas Studio Functions ──────────────────────────────────────────────
 
@@ -1804,6 +1820,8 @@ const App = {
             canvasAiPrompt,
             isCanvasPromptCopied,
             copyCanvasPrompt,
+            canvasTargetMarkers,
+            canvasGuides,
             // Stencils
             stencils,
             selectedStencil,
