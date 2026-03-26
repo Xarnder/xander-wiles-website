@@ -133,7 +133,8 @@ export function arrangePalette(colors, ruleType) {
             proportion: mappedProps[i],
             isFocal: i === focalIdx,
             contrastRatio: apca,
-            l: col.coords[0]
+            l: col.coords[0],
+            c: col.coords[1]
         };
     });
 }

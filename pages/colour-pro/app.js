@@ -526,6 +526,7 @@ const App = {
             nextTick(() => {
                 drawTreemap();
                 drawTonalGraph();
+                drawChromaGraph();
                 drawThreeGraph();
             });
         }
@@ -876,6 +877,145 @@ const App = {
                 .attr("stroke", "rgba(255,255,255,0.2)");
         }
 
+        function drawChromaGraph() {
+            const ctx = initSvg('#chroma-chart', false);
+            if(!ctx) return;
+            const { svg, width, height } = ctx;
+            
+            const margin = {top: 20, right: 30, bottom: 30, left: 40};
+            const w = width - margin.left - margin.right;
+            const h = height - margin.top - margin.bottom;
+
+            let g = svg.select(".main-g");
+            if (g.empty()) {
+                g = svg.append("g").attr("class", "main-g").attr("transform", `translate(${margin.left},${margin.top})`);
+                g.append("path").attr("class", "chroma-area");
+                g.append("path").attr("class", "chroma-line");
+                g.append("g").attr("class", "y-axis");
+                g.append("g").attr("class", "x-axis-line").attr("transform", `translate(0,${h})`).append("line");
+            }
+
+            const graphData = [...palette.value];
+
+            const x = d3.scalePoint()
+                .domain(graphData.map((_, i) => i === 0 ? "Base" : `C${i}`))
+                .range([0, w])
+                .padding(0.5);
+
+            const y = d3.scaleLinear()
+                .domain([0, 0.4]) // Chroma typically 0 to 0.4
+                .range([h, 0]);
+
+            const area = d3.area()
+                .x((d, i) => x(i === 0 ? "Base" : `C${i}`))
+                .y0(h)
+                .y1(d => y(d.c))
+                .curve(d3.curveMonotoneX);
+
+            const line = d3.line()
+                .x((d, i) => x(i === 0 ? "Base" : `C${i}`))
+                .y(d => y(d.c))
+                .curve(d3.curveMonotoneX);
+
+            if (svg.select('#chroma-gradient').empty()) {
+                const defs = svg.append('defs');
+                const gradient = defs.append('linearGradient')
+                    .attr('id', 'chroma-gradient')
+                    .attr('x1', '0%').attr('y1', '0%')
+                    .attr('x2', '0%').attr('y2', '100%');
+                gradient.append('stop').attr('offset', '0%').style('stop-color', 'rgba(0,255,204,0.2)');
+                gradient.append('stop').attr('offset', '100%').style('stop-color', 'rgba(0,255,204,0)');
+            }
+
+            g.select(".chroma-area").datum(graphData).attr("d", area);
+            g.select(".chroma-line").datum(graphData).attr("d", line);
+
+            let dragCurrentC = 0;
+            const drag = d3.drag()
+                .on("start", function(event, d) {
+                    isGraphDragging.value = true;
+                    dragCurrentC = d.c;
+                    d3.select(this).raise().attr("stroke", "#00ffcc");
+                })
+                .on("drag", function(event, d) {
+                    const newC = Math.max(0, Math.min(0.4, y.invert(event.y)));
+                    dragCurrentC = newC;
+                    const i = graphData.indexOf(d);
+                    if (i < 0) return;
+
+                    if (isHarmonyConnected.value) {
+                        g.selectAll(".chroma-point").attr("cy", y(newC));
+                        g.select(".chroma-area").attr("d", () => {
+                            const pts = graphData.map((_, idx) => [x(idx === 0 ? "Base" : `C${idx}`), y(newC)]);
+                            return `M${pts.map(p => p.join(',')).join('L')} L${pts[pts.length-1][0]},${h} L${pts[0][0]},${h} Z`;
+                        });
+                        g.select(".chroma-line").attr("d", () => {
+                            const pts = graphData.map((_, idx) => [x(idx === 0 ? "Base" : `C${idx}`), y(newC)]);
+                            return `M${pts.map(p => p.join(',')).join('L')}`;
+                        });
+                    } else {
+                        d3.select(this).attr("cy", y(newC));
+                        const tempArea = d3.area()
+                            .x((d2, i2) => x(i2 === 0 ? "Base" : `C${i2}`))
+                            .y0(h)
+                            .y1((d2, i2) => i2 === i ? y(newC) : y(d2.c))
+                            .curve(d3.curveMonotoneX);
+                        const tempLine = d3.line()
+                            .x((d2, i2) => x(i2 === 0 ? "Base" : `C${i2}`))
+                            .y((d2, i2) => i2 === i ? y(newC) : y(d2.c))
+                            .curve(d3.curveMonotoneX);
+                        g.select(".chroma-area").datum(graphData).attr("d", tempArea);
+                        g.select(".chroma-line").datum(graphData).attr("d", tempLine);
+                    }
+                })
+                .on("end", function(event, d) {
+                    const i = graphData.indexOf(d);
+                    d3.select(this).attr("stroke", "#fff");
+                    isGraphDragging.value = false;
+
+                    if (i < 0) return;
+
+                    if (isHarmonyConnected.value) {
+                        chroma.value = dragCurrentC;
+                    } else {
+                        if (i === 0) {
+                            chroma.value = dragCurrentC;
+                        } else {
+                            const override = palette.value[i].colorObj.clone();
+                            override.coords[1] = dragCurrentC;
+                            colorOverrides.value[i] = override;
+                            updatePalette();
+                        }
+                    }
+                });
+
+            const circles = g.selectAll(".chroma-point").data(graphData);
+
+            circles.enter().append("circle")
+                .attr("class", "chroma-point")
+                .attr("r", 20)
+                .attr("stroke", "#fff")
+                .merge(circles)
+                .attr("cx", (d, i) => x(i === 0 ? "Base" : `C${i}`))
+                .attr("cy", d => y(d.c))
+                .attr("fill", d => d.css)
+                .call(drag);
+
+            circles.exit().remove();
+
+            const yAxis = d3.axisLeft(y).ticks(5).tickFormat(d => d.toFixed(2));
+            g.select(".y-axis")
+                .call(yAxis)
+                .select(".domain").attr("stroke", "rgba(255,255,255,0.2)");
+                
+            g.selectAll(".tick line").attr("stroke", "rgba(255,255,255,0.1)");
+            g.selectAll(".tick text").attr("fill", "rgba(255,255,255,0.5)");
+
+            g.select(".x-axis-line line")
+                .attr("x1", 0).attr("x2", w)
+                .attr("stroke", "rgba(255,255,255,0.2)");
+        }
+
         // Graphing Context (Three.js)
         let scene, camera, renderer, controls, pointsGroup, wheelMesh, wheelTex, wheelCtx;
         let animationFrameId;
@@ -1096,6 +1236,7 @@ const App = {
             window.addEventListener('resize', () => {
                 drawTreemap();
                 drawTonalGraph();
+                drawChromaGraph();
                 if (camera && renderer) {
                     const container = document.getElementById('three-chart');
                     if (container) {

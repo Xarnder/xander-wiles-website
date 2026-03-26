@@ -757,8 +757,27 @@ select:focus {
     r: 25;
     stroke-width: 4;
 }
-.tonal-point:active {
+.tonal-point:active, .chroma-point:active {
     stroke: #00ffcc;
+}
+ 
+.chroma-line {
+    fill: none;
+    stroke: var(--text-secondary);
+    stroke-width: 2;
+    opacity: 0.6;
+}
+.chroma-area {
+    fill: url(#chroma-gradient);
+}
+.chroma-point {
+    stroke-width: 2;
+    transition: all 0.2s ease;
+    cursor: ns-resize;
+}
+.chroma-point:hover {
+    r: 25;
+    stroke-width: 4;
 }
 
 .light-theme .tick text {
