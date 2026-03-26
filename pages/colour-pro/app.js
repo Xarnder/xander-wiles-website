@@ -19,6 +19,18 @@ function dataURLToBlob(dataurl) {
 
 // Robust download helper for iOS, iPadOS and other mobile browsers
 function downloadFile(dataUrl, filename) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isChromeIOS = /CriOS/.test(navigator.userAgent);
+
+    // If it's iOS Chrome, it often fails to trigger the download prompt for Blobs.
+    // Opening the dataURL directly in a new tab is the most reliable way to let the user save it.
+    if (isChromeIOS) {
+        // For Chrome on iOS, just opening it is often the only move.
+        // Users can then long-press and "Save Image".
+        window.location.href = dataUrl;
+        return;
+    }
+
     try {
         const blob = dataURLToBlob(dataUrl);
         const url = URL.createObjectURL(blob);
@@ -26,7 +38,11 @@ function downloadFile(dataUrl, filename) {
         link.href = url;
         link.download = filename;
         
-        // Required for some mobile browsers to trigger the download
+        // Key for iOS Safari to trigger the download prompt
+        if (isIOS) {
+            link.target = '_blank';
+        }
+        
         document.body.appendChild(link);
         link.click();
         
@@ -34,14 +50,11 @@ function downloadFile(dataUrl, filename) {
         setTimeout(() => {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-        }, 150);
+        }, 350);
     } catch (error) {
         console.error("Download failed:", error);
         // Fallback for extremely old browsers or security-restricted environments
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = filename;
-        link.click();
+        window.open(dataUrl, '_blank');
     }
 }
 
