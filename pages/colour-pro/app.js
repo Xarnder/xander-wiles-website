@@ -49,6 +49,7 @@ const App = {
         const isCanvasPromptCopied = ref(false);
         const canvasGuides = ref('none'); // none, thirds, golden, quadrants
         const canvasHistory = ref([]);
+        const blurRadius = ref(0);
         const maxHistory = 20;
         let lastAppliedPaletteHexes = [];
         let lastCanvasX = null;
@@ -1022,6 +1023,40 @@ const App = {
             }
         }
 
+        function applyBlur() {
+            if (blurRadius.value <= 0) return;
+            
+            saveCanvasHistory();
+            const canvas = document.getElementById('palette-canvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            
+            // Create offscreen copy
+            const off = document.createElement('canvas');
+            off.width = canvas.width;
+            off.height = canvas.height;
+            const offCtx = off.getContext('2d');
+            offCtx.drawImage(canvas, 0, 0);
+            
+            // Apply blur on main canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.filter = `blur(${blurRadius.value}px)`;
+            ctx.drawImage(off, 0, 0);
+            ctx.filter = 'none';
+            
+            blurRadius.value = 0;
+            activeTool.value = 'draw';
+            updatePixelStats();
+        }
+
+        function cancelBlur() {
+            blurRadius.value = 0;
+            activeTool.value = 'draw';
+        }
+
+        function resetAll() {
+            window.location.reload();
+        }
+
         function exportPalette() {
             const pal = palette.value;
             if (!pal || pal.length === 0) return;
@@ -1822,6 +1857,10 @@ const App = {
             copyCanvasPrompt,
             canvasTargetMarkers,
             canvasGuides,
+            blurRadius,
+            applyBlur,
+            cancelBlur,
+            resetAll,
             // Stencils
             stencils,
             selectedStencil,
