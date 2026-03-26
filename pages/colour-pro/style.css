@@ -1218,6 +1218,56 @@ input:checked + .slider:before { transform: translateX(24px); }
     transform: translateY(-1px);
 }
 
+/* Download group */
+.canvas-download-group {
+    display: flex;
+    align-items: stretch;
+    align-self: flex-end;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(0, 255, 204, 0.3);
+}
+
+.canvas-format-select {
+    width: auto;
+    padding: 0.55rem 0.6rem;
+    background: rgba(0, 255, 204, 0.05);
+    border: none;
+    border-right: 1px solid rgba(0, 255, 204, 0.2);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.8rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 0;
+    outline: none;
+}
+
+.canvas-format-select:focus {
+    background: rgba(0, 255, 204, 0.1);
+}
+
+.canvas-download-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.55rem 1rem;
+    background: rgba(0, 255, 204, 0.08);
+    border: none;
+    color: #00ffcc;
+    font-size: 0.82rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+
+.canvas-download-btn:hover {
+    background: rgba(0, 255, 204, 0.2);
+}
+
+
 /* Colour picker row */
 .canvas-color-picker-row {
     display: flex;

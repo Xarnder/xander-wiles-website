@@ -42,6 +42,7 @@ const App = {
         const activeCanvasColor = ref(0);
         const canvasPixelStats = ref([100, 0, 0]);
         const isCanvasDrawing = ref(false);
+        const canvasDownloadFormat = ref('png');
         let lastCanvasX = null;
         let lastCanvasY = null;
 
@@ -258,6 +259,19 @@ const App = {
             updatePixelStats();
         }
 
+        function downloadCanvas() {
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas) return;
+            const fmt = canvasDownloadFormat.value === 'jpeg' ? 'image/jpeg' : 'image/png';
+            const ext = canvasDownloadFormat.value === 'jpeg' ? 'jpg' : 'png';
+            const quality = fmt === 'image/jpeg' ? 0.92 : undefined;
+            const dataUrl = canvas.toDataURL(fmt, quality);
+            const link = document.createElement('a');
+            link.download = `chromamath-canvas-${Date.now()}.${ext}`;
+            link.href = dataUrl;
+            link.click();
+        }
+
         function floodFill(startFx, startFy) {
             const canvas = document.getElementById('palette-canvas');
             if (!canvas) return;
@@ -391,9 +405,58 @@ const App = {
             }
         }, { deep: true });
 
-        // Reset canvas whenever the first 3 palette colours change
-        watch(canvasPalette, () => {
-            nextTick(() => initCanvas());
+        // Remap existing canvas pixels when palette colours change
+        // Preserves the drawing — each pixel moves from old colour → new colour at the same index
+        function remapCanvasColors(oldPalette, newPalette) {
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas || canvas.width === 0 || canvas.height === 0) {
+                initCanvas();
+                return;
+            }
+            if (!oldPalette || oldPalette.length < 3 || !newPalette || newPalette.length < 3) return;
+
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width;
+            const H = canvas.height;
+            const imgData = ctx.getImageData(0, 0, W, H);
+            const data = imgData.data;
+
+            const oldRgb = oldPalette.map(c => parseHexToRgb(c.hex));
+            const newRgb = newPalette.map(c => parseHexToRgb(c.hex));
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                // Find which old palette colour this pixel was closest to
+                let bestIdx = 0, bestDist = Infinity;
+                for (let j = 0; j < oldRgb.length; j++) {
+                    const dr = r - oldRgb[j].r;
+                    const dg = g - oldRgb[j].g;
+                    const db = b - oldRgb[j].b;
+                    const dist = dr * dr + dg * dg + db * db;
+                    if (dist < bestDist) { bestDist = dist; bestIdx = j; }
+                }
+                // Replace with the equivalent new palette colour
+                data[i]     = newRgb[bestIdx].r;
+                data[i + 1] = newRgb[bestIdx].g;
+                data[i + 2] = newRgb[bestIdx].b;
+                data[i + 3] = 255;
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+            updatePixelStats();
+        }
+
+        // Re-colour canvas pixels when palette changes — do NOT reset the canvas
+        watch(canvasPalette, (newPal, oldPal) => {
+            nextTick(() => {
+                const canvas = document.getElementById('palette-canvas');
+                // If canvas hasn't been initialised yet, do a fresh init instead
+                if (!canvas || canvas.width === 0) {
+                    initCanvas();
+                    return;
+                }
+                remapCanvasColors(oldPal, newPal);
+            });
         }, { deep: true });
 
         // Scroll to analyzer when loaded or expanded
@@ -1599,7 +1662,9 @@ const App = {
             initCanvas,
             onCanvasPointerDown,
             onCanvasPointerMove,
-            onCanvasPointerUp
+            onCanvasPointerUp,
+            canvasDownloadFormat,
+            downloadCanvas
         };
     }
 };
