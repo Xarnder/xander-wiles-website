@@ -346,6 +346,104 @@
                     <p class="chart-desc">Optimized for Midjourney, DALL-E, and cinematic AI generation.</p>
                 </div>
 
+                <!-- Palette Canvas Studio -->
+                <div class="canvas-studio-card glass-panel" v-if="canvasPalette.length >= 3">
+                    <h3>Palette Canvas Studio</h3>
+                    <p class="chart-desc">Paint with your three palette colours and watch the pixel distribution update live.</p>
+
+                    <!-- Controls row -->
+                    <div class="canvas-controls-row">
+                        <div class="canvas-control-group">
+                            <label>Aspect Ratio</label>
+                            <select v-model="canvasAspectRatio" @change="initCanvas">
+                                <option value="1:1">1:1 — Square</option>
+                                <option value="4:3">4:3 — Classic</option>
+                                <option value="16:9">16:9 — Widescreen</option>
+                                <option value="3:2">3:2 — Photo</option>
+                                <option value="2:3">2:3 — Portrait</option>
+                                <option value="9:16">9:16 — Mobile</option>
+                                <option value="21:9">21:9 — Ultrawide</option>
+                            </select>
+                        </div>
+
+                        <div class="canvas-control-group canvas-tool-group">
+                            <label>Tool</label>
+                            <div class="tool-btn-pair">
+                                <button class="tool-btn" :class="{ active: activeTool === 'draw' }" @click="activeTool = 'draw'">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                    Draw
+                                </button>
+                                <button class="tool-btn" :class="{ active: activeTool === 'fill' }" @click="activeTool = 'fill'">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11h-4.36l-.63-3.15A2 2 0 0 0 12.05 6H12a2 2 0 0 0-2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2"/><path d="M19 11c1.1 0 2 .9 2 2v2a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h5z"/></svg>
+                                    Fill
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="canvas-control-group canvas-brush-group" v-show="activeTool === 'draw'">
+                            <label>Brush <span class="value">{{ brushSize }}px</span></label>
+                            <input type="range" min="2" max="60" step="1" v-model.number="brushSize">
+                        </div>
+
+                        <button class="canvas-clear-btn" @click="initCanvas">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                            Clear
+                        </button>
+                    </div>
+
+                    <!-- Colour picker: 3 palette swatches -->
+                    <div class="canvas-color-picker-row">
+                        <button
+                            v-for="(col, i) in canvasPalette"
+                            :key="i"
+                            class="canvas-color-btn"
+                            :class="{ active: activeCanvasColor === i }"
+                            :style="{ background: col.css }"
+                            @click="activeCanvasColor = i"
+                            :title="col.hex">
+                            <span class="canvas-color-label">{{ col.hex }}</span>
+                            <span class="canvas-color-check" v-if="activeCanvasColor === i">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            </span>
+                        </button>
+                    </div>
+
+                    <!-- The canvas itself -->
+                    <div class="canvas-wrapper" id="canvas-wrapper">
+                        <canvas
+                            id="palette-canvas"
+                            @mousedown="onCanvasPointerDown"
+                            @mousemove="onCanvasPointerMove"
+                            @mouseup="onCanvasPointerUp"
+                            @mouseleave="onCanvasPointerUp"
+                            @touchstart.prevent="onCanvasPointerDown"
+                            @touchmove.prevent="onCanvasPointerMove"
+                            @touchend.prevent="onCanvasPointerUp"
+                            style="touch-action: none; cursor: crosshair; display: block; width: 100%; height: 100%;">
+                        </canvas>
+                    </div>
+
+                    <!-- Live pixel distribution stats -->
+                    <div class="pixel-stats-section">
+                        <div class="pixel-stats-bar">
+                            <div
+                                v-for="(col, i) in canvasPalette"
+                                :key="i"
+                                class="pixel-stats-segment"
+                                :style="{ width: canvasPixelStats[i] + '%', background: col.css }"
+                                :title="col.hex + ': ' + canvasPixelStats[i].toFixed(1) + '%'">
+                            </div>
+                        </div>
+                        <div class="pixel-stats-labels">
+                            <div v-for="(col, i) in canvasPalette" :key="i" class="pixel-stat-label">
+                                <span class="pixel-stat-dot" :style="{ background: col.css }"></span>
+                                <span class="pixel-stat-hex">{{ col.hex }}</span>
+                                <strong class="pixel-stat-pct">{{ canvasPixelStats[i].toFixed(1) }}%</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </section>
         </main>
     </div>

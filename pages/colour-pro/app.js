@@ -35,6 +35,16 @@ const App = {
         const currentX = ref(0);
         const currentY = ref(0);
 
+        // Canvas Studio state
+        const canvasAspectRatio = ref('16:9');
+        const brushSize = ref(12);
+        const activeTool = ref('draw');
+        const activeCanvasColor = ref(0);
+        const canvasPixelStats = ref([100, 0, 0]);
+        const isCanvasDrawing = ref(false);
+        let lastCanvasX = null;
+        let lastCanvasY = null;
+
         // Computed
         const baseColorBase = computed(() => {
             return new Color(`oklch(${lightness.value} ${chroma.value} ${hue.value})`);
@@ -117,6 +127,237 @@ const App = {
             }
         }
 
+        // Canvas palette: first 3 swatches (hex + css)
+        const canvasPalette = computed(() => palette.value.slice(0, 3).map(p => ({ hex: p.hex, css: p.css })));
+
+        // ─── Canvas Studio Functions ──────────────────────────────────────────────
+
+        function parseHexToRgb(hex) {
+            // Accepts '#rrggbb' — returns {r, g, b}
+            const h = hex.replace('#', '');
+            return {
+                r: parseInt(h.substring(0,2), 16),
+                g: parseInt(h.substring(2,4), 16),
+                b: parseInt(h.substring(4,6), 16)
+            };
+        }
+
+        function initCanvas() {
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas || canvasPalette.value.length < 3) return;
+
+            const wrapper = document.getElementById('canvas-wrapper');
+            if (!wrapper) return;
+
+            // Parse aspect ratio string
+            const [wRatio, hRatio] = canvasAspectRatio.value.split(':').map(Number);
+            const aspectMultiplier = hRatio / wRatio;
+
+            // Logical pixel dimensions — cap width at 1200 for reasonable performance
+            const maxW = Math.min(wrapper.clientWidth || 600, 1200);
+            const logicalW = maxW;
+            const logicalH = Math.round(logicalW * aspectMultiplier);
+
+            canvas.width = logicalW;
+            canvas.height = logicalH;
+
+            // Force CSS aspect ratio so it scales correctly
+            wrapper.style.aspectRatio = `${wRatio} / ${hRatio}`;
+
+            const ctx = canvas.getContext('2d');
+            const baseCol = parseHexToRgb(canvasPalette.value[0].hex);
+            ctx.fillStyle = `rgb(${baseCol.r},${baseCol.g},${baseCol.b})`;
+            ctx.fillRect(0, 0, logicalW, logicalH);
+
+            // Reset stats: 100% of pixels are the base colour
+            canvasPixelStats.value = [100, 0, 0];
+        }
+
+        function getCanvasCoords(e) {
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas) return { x: 0, y: 0 };
+            const rect = canvas.getBoundingClientRect();
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else if (e.changedTouches && e.changedTouches.length > 0) {
+                clientX = e.changedTouches[0].clientX;
+                clientY = e.changedTouches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            // Scale from CSS pixels to canvas logical pixels
+            const scaleX = canvas.width  / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: Math.round((clientX - rect.left) * scaleX),
+                y: Math.round((clientY - rect.top)  * scaleY)
+            };
+        }
+
+        function drawCircle(ctx, x, y, radius, color) {
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function drawStrokeLine(ctx, x0, y0, x1, y1, radius, color) {
+            // Interpolate circle stamps between two points for smooth lines
+            const dx = x1 - x0;
+            const dy = y1 - y0;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const steps = Math.max(1, Math.floor(dist / (radius * 0.5)));
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
+                drawCircle(ctx, Math.round(x0 + dx * t), Math.round(y0 + dy * t), radius, color);
+            }
+        }
+
+        function onCanvasPointerDown(e) {
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas) return;
+
+            const { x, y } = getCanvasCoords(e);
+
+            if (activeTool.value === 'fill') {
+                floodFill(x, y);
+                updatePixelStats();
+                return;
+            }
+
+            // Draw tool
+            isCanvasDrawing.value = true;
+            lastCanvasX = x;
+            lastCanvasY = y;
+            const ctx = canvas.getContext('2d');
+            const col = canvasPalette.value[activeCanvasColor.value];
+            drawCircle(ctx, x, y, brushSize.value / 2, col.css);
+        }
+
+        function onCanvasPointerMove(e) {
+            if (!isCanvasDrawing.value || activeTool.value !== 'draw') return;
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas) return;
+
+            const { x, y } = getCanvasCoords(e);
+            const ctx = canvas.getContext('2d');
+            const col = canvasPalette.value[activeCanvasColor.value];
+            drawStrokeLine(ctx, lastCanvasX, lastCanvasY, x, y, brushSize.value / 2, col.css);
+            lastCanvasX = x;
+            lastCanvasY = y;
+        }
+
+        function onCanvasPointerUp() {
+            if (!isCanvasDrawing.value) return;
+            isCanvasDrawing.value = false;
+            lastCanvasX = null;
+            lastCanvasY = null;
+            updatePixelStats();
+        }
+
+        function floodFill(startFx, startFy) {
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width;
+            const H = canvas.height;
+            const imgData = ctx.getImageData(0, 0, W, H);
+            const data = imgData.data;
+
+            const targetCol = canvasPalette.value[activeCanvasColor.value];
+            const fillRgb = parseHexToRgb(targetCol.hex);
+
+            const idx = (startFy * W + startFx) * 4;
+            const origR = data[idx];
+            const origG = data[idx + 1];
+            const origB = data[idx + 2];
+
+            // If already the fill colour, do nothing
+            if (Math.abs(origR - fillRgb.r) < 10 &&
+                Math.abs(origG - fillRgb.g) < 10 &&
+                Math.abs(origB - fillRgb.b) < 10) return;
+
+            const TOL = 32; // per-channel tolerance
+            function matches(i) {
+                return Math.abs(data[i]   - origR) <= TOL &&
+                       Math.abs(data[i+1] - origG) <= TOL &&
+                       Math.abs(data[i+2] - origB) <= TOL;
+            }
+
+            // BFS scanline flood fill
+            const visited = new Uint8Array(W * H);
+            const queue = [startFx + startFy * W];
+            visited[startFx + startFy * W] = 1;
+
+            while (queue.length > 0) {
+                const pos = queue.pop();
+                const px = pos % W;
+                const py = (pos - px) / W;
+                const i4 = pos * 4;
+
+                // Paint
+                data[i4]   = fillRgb.r;
+                data[i4+1] = fillRgb.g;
+                data[i4+2] = fillRgb.b;
+                data[i4+3] = 255;
+
+                // Check 4-connected neighbours
+                const neighbours = [
+                    px > 0     ? pos - 1 : -1,
+                    px < W - 1 ? pos + 1 : -1,
+                    py > 0     ? pos - W : -1,
+                    py < H - 1 ? pos + W : -1
+                ];
+                for (const n of neighbours) {
+                    if (n >= 0 && !visited[n] && matches(n * 4)) {
+                        visited[n] = 1;
+                        queue.push(n);
+                    }
+                }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function updatePixelStats() {
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas || canvasPalette.value.length < 3) return;
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width;
+            const H = canvas.height;
+            const imgData = ctx.getImageData(0, 0, W, H);
+            const data = imgData.data;
+
+            // Pre-parse palette colours
+            const palRgb = canvasPalette.value.map(c => parseHexToRgb(c.hex));
+            const counts = [0, 0, 0];
+            let total = 0;
+
+            // Sample every 4th pixel for performance
+            for (let i = 0; i < data.length; i += 16) {
+                const r = data[i], g = data[i+1], b = data[i+2];
+                let bestIdx = 0;
+                let bestDist = Infinity;
+                for (let j = 0; j < palRgb.length; j++) {
+                    const dr = r - palRgb[j].r;
+                    const dg = g - palRgb[j].g;
+                    const db = b - palRgb[j].b;
+                    const dist = dr*dr + dg*dg + db*db;
+                    if (dist < bestDist) { bestDist = dist; bestIdx = j; }
+                }
+                counts[bestIdx]++;
+                total++;
+            }
+
+            if (total === 0) return;
+            canvasPixelStats.value = counts.map(c => (c / total) * 100);
+        }
+
+        // ─── End Canvas Studio Functions ──────────────────────────────────────────
+
         // Watchers
         // Clear overrides when the underlying mathematical rules change
         watch([lightness, chroma, hue, harmonyType, proportionRule], () => {
@@ -148,6 +389,11 @@ const App = {
                     textInputFineTune.value = palette.value[selectedSwatchIndex.value].hex;
                 }
             }
+        }, { deep: true });
+
+        // Reset canvas whenever the first 3 palette colours change
+        watch(canvasPalette, () => {
+            nextTick(() => initCanvas());
         }, { deep: true });
 
         // Scroll to analyzer when loaded or expanded
@@ -1270,9 +1516,29 @@ const App = {
                         renderer.setSize(container.clientWidth, container.clientHeight);
                     }
                 }
+                // Re-size canvas to fit new wrapper width, preserving drawn content via temp offscreen
+                const canvas = document.getElementById('palette-canvas');
+                if (canvas && canvas.width > 0) {
+                    const wrapper = document.getElementById('canvas-wrapper');
+                    if (wrapper) {
+                        const [wRatio, hRatio] = canvasAspectRatio.value.split(':').map(Number);
+                        const maxW = Math.min(wrapper.clientWidth || 600, 1200);
+                        if (Math.abs(canvas.width - maxW) > 2) {
+                            // Save current drawing, resize, re-draw
+                            const offscreen = document.createElement('canvas');
+                            offscreen.width = canvas.width;
+                            offscreen.height = canvas.height;
+                            offscreen.getContext('2d').drawImage(canvas, 0, 0);
+                            canvas.width = maxW;
+                            canvas.height = Math.round(maxW * hRatio / wRatio);
+                            canvas.getContext('2d').drawImage(offscreen, 0, 0, canvas.width, canvas.height);
+                        }
+                    }
+                }
             });
             nextTick(() => {
                 initThreeJS();
+                initCanvas();
             });
 
             window.addEventListener('mouseup', onDragEnd);
@@ -1322,7 +1588,18 @@ const App = {
             toggleGrayscale,
             downloadGrayscaleImage,
             copyPrompt,
-            exportPalette
+            exportPalette,
+            // Canvas Studio
+            canvasPalette,
+            canvasAspectRatio,
+            brushSize,
+            activeTool,
+            activeCanvasColor,
+            canvasPixelStats,
+            initCanvas,
+            onCanvasPointerDown,
+            onCanvasPointerMove,
+            onCanvasPointerUp
         };
     }
 };
