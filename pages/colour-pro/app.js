@@ -48,6 +48,7 @@ const App = {
         const stencilScale = ref(1.0);
         const canvasHistory = ref([]);
         const maxHistory = 20;
+        let lastAppliedPaletteHexes = [];
         let lastCanvasX = null;
         let lastCanvasY = null;
 
@@ -205,6 +206,9 @@ const App = {
 
             // Reset stats: 100% of pixels are the base colour
             canvasPixelStats.value = [100, 0, 0];
+            
+            // Track the palette we just initialized with
+            lastAppliedPaletteHexes = canvasPalette.value.map(c => c.hex);
         }
 
         function getCanvasCoords(e) {
@@ -545,16 +549,21 @@ const App = {
         }
 
         // Re-colour canvas pixels when palette changes — do NOT reset the canvas
-        watch(canvasPalette, (newPal, oldPal) => {
-            nextTick(() => {
-                const canvas = document.getElementById('palette-canvas');
-                // If canvas hasn't been initialised yet, do a fresh init instead
-                if (!canvas || canvas.width === 0) {
-                    initCanvas();
-                    return;
-                }
-                remapCanvasColors(oldPal, newPal);
-            });
+        watch(canvasPalette, (newPal) => {
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas || canvas.width === 0) {
+                initCanvas();
+                return;
+            }
+
+            const newHexes = newPal.map(c => c.hex);
+            // Only remap if hexes actually changed
+            if (JSON.stringify(newHexes) !== JSON.stringify(lastAppliedPaletteHexes)) {
+                // We need the objects with hex for remapCanvasColors
+                const oldObjects = lastAppliedPaletteHexes.map(h => ({ hex: h }));
+                remapCanvasColors(oldObjects, newPal);
+                lastAppliedPaletteHexes = newHexes;
+            }
         }, { deep: true });
 
         // Scroll to analyzer when loaded or expanded
