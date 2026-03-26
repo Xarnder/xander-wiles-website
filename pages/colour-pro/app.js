@@ -65,15 +65,40 @@ const App = {
  
         const aiPrompt = computed(() => {
             if (!palette.value || palette.value.length === 0) return "";
-            let prompt = "Create a cinematic close up shot that uses these colours ";
-            const parts = palette.value.map(item => `${item.hex} ${Math.round(item.proportion)}% of the composition`);
             
-            if (parts.length > 1) {
-                const last = parts.pop();
-                prompt += parts.join(", ") + " and " + last;
-            } else {
+            // Sort by proportion descending to ensure we assign roles correctly
+            const sortedPalette = [...palette.value].sort((a, b) => b.proportion - a.proportion);
+            
+            let prompt = "Create a cinematic close up shot that uses these exact colours. ";
+            
+            const parts = sortedPalette.map((item, index) => {
+                const hex = item.hex;
+                const prop = Math.round(item.proportion);
+                
+                if (index === 0) {
+                    return `Use ${hex} for ${prop}% of the composition and the background`;
+                } else if (index === 1) {
+                    return `use ${hex} for ${prop}% of the composition as if it where the hero colour`;
+                } else if (index === 2) {
+                    return `use ${hex} for ${prop}% of the composition as the accent colour`;
+                } else {
+                    return `and use ${hex} for ${prop}% of the composition`;
+                }
+            });
+
+            if (parts.length > 0) {
                 prompt += parts[0];
+                if (parts.length > 1) {
+                    for (let i = 1; i < parts.length; i++) {
+                        if (i === parts.length - 1 && parts.length > 2) {
+                            prompt += ", and then " + parts[i];
+                        } else {
+                            prompt += ", and " + parts[i];
+                        }
+                    }
+                }
             }
+            
             return prompt;
         });
  
