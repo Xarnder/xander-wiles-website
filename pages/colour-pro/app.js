@@ -44,6 +44,7 @@ const App = {
         const isCanvasDrawing = ref(false);
         const canvasDownloadFormat = ref('png');
         const stencils = ref([]);
+        const userStencils = ref([]);
         const selectedStencil = ref('');
         const stencilScale = ref(1.0);
         const isCanvasPromptCopied = ref(false);
@@ -476,30 +477,108 @@ const App = {
             const ctx = canvas.getContext('2d');
             
             const color = canvasPalette.value[activeCanvasColor.value].hex;
-            const url = `Figure-Outlines/${selectedStencil.value}`;
             
+            let svgText = '';
+            const userStencil = userStencils.value.find(s => s.id === selectedStencil.value);
+            
+            if (userStencil) {
+                svgText = userStencil.content;
+            } else {
+                const url = `Figure-Outlines/${selectedStencil.value}`;
+                try {
+                    const response = await fetch(url);
+                    svgText = await response.text();
+                } catch (error) {
+                    console.error("Error fetching stencil:", error);
+                    return;
+                }
+            }
+
+            // Convert to single color
+            svgText = processSvgForColor(svgText, color);
+            
+            const img = new Image();
+            const blob = new Blob([svgText], {type: 'image/svg+xml;charset=utf-8'});
+            const blobUrl = URL.createObjectURL(blob);
+            
+            img.onload = () => {
+                const w = img.width * stencilScale.value;
+                const h = img.height * stencilScale.value;
+                ctx.drawImage(img, x - w/2, y - h/2, w, h);
+                URL.revokeObjectURL(blobUrl);
+                updatePixelStats();
+            };
+            img.src = blobUrl;
+        }
+
+        function triggerStencilUpload() {
+            document.getElementById('stencil-upload-input').click();
+        }
+
+        function handleStencilUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const svgContent = e.target.result;
+                const id = 'user-stencil-' + Date.now();
+                
+                // Create a preview by making it single color
+                const previewColor = '#888'; 
+                const previewSvg = processSvgForColor(svgContent, previewColor);
+                const blob = new Blob([previewSvg], {type: 'image/svg+xml;charset=utf-8'});
+                const previewUrl = URL.createObjectURL(blob);
+
+                userStencils.value.push({
+                    id: id,
+                    content: svgContent,
+                    preview: previewUrl
+                });
+                
+                selectedStencil.value = id;
+            };
+            reader.readAsText(file);
+        }
+
+        function processSvgForColor(svgText, color) {
             try {
-                const response = await fetch(url);
-                let svgText = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(svgText, 'image/svg+xml');
+                const svgEl = doc.querySelector('svg');
+                if (!svgEl) return svgText;
+
+                // Remove all inline color-related attributes and styles
+                const elements = doc.querySelectorAll('*');
+                elements.forEach(el => {
+                    el.removeAttribute('fill');
+                    el.removeAttribute('stroke');
+                    el.removeAttribute('stop-color');
+                    
+                    if (el.hasAttribute('style')) {
+                        let style = el.getAttribute('style');
+                        // Use regex to strip common color properties from style attribute
+                        style = style.replace(/(fill|stroke|stop-color)\s*:\s*[^;]+;?/gi, '');
+                        el.setAttribute('style', style);
+                    }
+                    
+                    // Remove <style> tags entirely to ensure no CSS overrides
+                    if (el.tagName.toLowerCase() === 'style') {
+                        el.remove();
+                    }
+                });
+
+                // Set base color on root and ensure children inherit it where possible
+                // We set fill and stroke to ensure everything gets the color
+                svgEl.setAttribute('fill', color);
+                svgEl.setAttribute('stroke', color);
+                // Also handle potential use of currentColor
+                svgEl.style.color = color;
                 
-                // Override color: inject fill into the SVG root. 
-                // We also ensure it has width/height or viewBox so we can draw it.
-                svgText = svgText.replace('<svg', `<svg fill="${color}" stroke="${color}"`);
-                
-                const img = new Image();
-                const blob = new Blob([svgText], {type: 'image/svg+xml;charset=utf-8'});
-                const blobUrl = URL.createObjectURL(blob);
-                
-                img.onload = () => {
-                    const w = img.width * stencilScale.value;
-                    const h = img.height * stencilScale.value;
-                    ctx.drawImage(img, x - w/2, y - h/2, w, h);
-                    URL.revokeObjectURL(blobUrl);
-                    updatePixelStats();
-                };
-                img.src = blobUrl;
-            } catch (error) {
-                console.error("Error placing stencil:", error);
+                return new XMLSerializer().serializeToString(doc);
+            } catch (e) {
+                console.error("SVG Processing Error:", e);
+                return svgText;
             }
         }
 
@@ -1863,8 +1942,11 @@ const App = {
             resetAll,
             // Stencils
             stencils,
+            userStencils,
             selectedStencil,
-            stencilScale
+            stencilScale,
+            triggerStencilUpload,
+            handleStencilUpload
         };
     }
 };

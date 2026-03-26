@@ -1673,8 +1673,60 @@ input:checked + .slider:before { transform: translateX(24px); }
 .stencil-selector-section {
     padding: 1rem 0;
     border-top: 1px solid var(--glass-border);
-    border-bottom: 1px solid var(--glass-border);
     margin-bottom: 1rem;
+}
+
+.stencil-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.stencil-upload-btn {
+    background: rgba(120, 160, 255, 0.1);
+    border: 1px solid rgba(120, 160, 255, 0.3);
+    color: #78a0ff;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.stencil-upload-btn:hover {
+    background: rgba(120, 160, 255, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(120, 160, 255, 0.2);
+}
+
+.stencil-hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.user-stencil {
+    position: relative;
+    border: 2px dashed rgba(120, 160, 255, 0.4) !important;
+}
+
+.user-stencil-badge {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: #78a0ff;
+    color: #fff;
+    font-size: 0.6rem;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
 .stencil-grid {
