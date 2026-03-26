@@ -46,6 +46,7 @@ const App = {
         const stencils = ref([]);
         const selectedStencil = ref('');
         const stencilScale = ref(1.0);
+        const isCanvasPromptCopied = ref(false);
         const canvasHistory = ref([]);
         const maxHistory = 20;
         let lastAppliedPaletteHexes = [];
@@ -117,6 +118,12 @@ const App = {
             }
             
             return prompt;
+        });
+
+        const canvasAiPrompt = computed(() => {
+            if (canvasPalette.value.length < 3) return '';
+            const colors = canvasPalette.value.map(p => p.hex).join(', ');
+            return `Use the exact colors [${colors}] and follow the same composition and spatial arrangement as this blocking layout. The layout provides the structural foundation; interpret the forms with high fidelity.`;
         });
  
         const isPromptCopied = ref(false);
@@ -979,6 +986,12 @@ const App = {
             return 'apca-low';
         };
 
+        function copyCanvasPrompt() {
+            navigator.clipboard.writeText(canvasAiPrompt.value);
+            isCanvasPromptCopied.value = true;
+            setTimeout(() => isCanvasPromptCopied.value = false, 2000);
+        }
+
         function exportPalette() {
             const pal = palette.value;
             if (!pal || pal.length === 0) return;
@@ -1774,6 +1787,9 @@ const App = {
             canvasDownloadFormat,
             downloadCanvas,
             undoCanvas,
+            canvasAiPrompt,
+            isCanvasPromptCopied,
+            copyCanvasPrompt,
             // Stencils
             stencils,
             selectedStencil,
