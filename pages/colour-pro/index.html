@@ -386,7 +386,7 @@
 
                         <div class="canvas-control-group canvas-brush-group" v-show="activeTool === 'draw'">
                             <label>Brush <span class="value">{{ brushSize }}px</span></label>
-                            <input type="range" min="2" max="60" step="1" v-model.number="brushSize">
+                            <input type="range" min="2" max="400" step="1" v-model.number="brushSize">
                         </div>
 
                         <div class="canvas-control-group canvas-brush-group" v-show="activeTool === 'stencil'">

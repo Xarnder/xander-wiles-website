@@ -123,7 +123,7 @@ const App = {
         const canvasAiPrompt = computed(() => {
             if (canvasPalette.value.length < 3) return '';
             const colors = canvasPalette.value.map(p => p.hex).join(', ');
-            return `Use the exact colors [${colors}] and follow the same composition and spatial arrangement as this blocking layout. The layout provides the structural foundation; interpret the forms with high fidelity.`;
+            return `Use the exact colors [${colors}] and follow the same composition and spatial arrangement as this blocking layout to create a cinematic live action shot. The layout provides the structural foundation; interpret the forms with high fidelity.`;
         });
  
         const isPromptCopied = ref(false);
@@ -428,12 +428,17 @@ const App = {
             // Since I have the list from the tool, I will hardcode it for simplicity in this demo.
             const list = [
                 "Asset 1 Figure Set 2.svg", "Asset 1 Figure.svg", "Asset 10 Figure Set 2.svg", "Asset 10 Figure.svg",
-                "Asset 11 Figure.svg", "Asset 12 Figure.svg", "Asset 13 Figure.svg", "Asset 14 Figure.svg",
-                "Asset 15 Figure.svg", "Asset 16 Figure.svg", "Asset 17 Figure.svg", "Asset 18 Figure.svg",
-                "Asset 19 Figure.svg", "Asset 2 Figure Set 2.svg", "Asset 2 Figure.svg", "Asset 20 Figure.svg",
-                "Asset 21 Figure.svg", "Asset 22 Figure.svg", "Asset 23 Figure.svg", "Asset 24 Figure.svg",
-                "Asset 25 Figure.svg", "Asset 26 Figure.svg", "Asset 27 Figure.svg", "Asset 28 Figure.svg",
-                "Asset 29 Figure.svg", "Asset 3 Figure Set 2.svg", "Asset 3 Figure.svg", "Asset 30 Figure.svg",
+                "Asset 11 Figure Set Heads.svg", "Asset 11 Figure.svg", "Asset 12 Figure Set Heads.svg", "Asset 12 Figure.svg",
+                "Asset 13 Figure Set Heads.svg", "Asset 13 Figure.svg", "Asset 14 Figure Set Heads.svg", "Asset 14 Figure.svg",
+                "Asset 15 Figure Set Heads.svg", "Asset 15 Figure.svg", "Asset 16 Figure Set Heads.svg", "Asset 16 Figure.svg",
+                "Asset 17 Figure Set Heads.svg", "Asset 17 Figure.svg", "Asset 18 Figure Set Heads.svg", "Asset 18 Figure.svg",
+                "Asset 19 Figure Set Heads.svg", "Asset 19 Figure.svg", "Asset 2 Figure Set 2.svg", "Asset 2 Figure.svg",
+                "Asset 20 Figure Set Heads.svg", "Asset 20 Figure.svg", "Asset 21 Figure Set Heads.svg", "Asset 21 Figure.svg",
+                "Asset 22 Figure Set Heads.svg", "Asset 22 Figure.svg", "Asset 23 Figure Set Heads.svg", "Asset 23 Figure.svg",
+                "Asset 24 Figure Set Heads.svg", "Asset 24 Figure.svg", "Asset 25 Figure Set Heads.svg", "Asset 25 Figure.svg",
+                "Asset 26 Figure Set Heads.svg", "Asset 26 Figure.svg", "Asset 27 Figure Set Heads.svg", "Asset 27 Figure.svg",
+                "Asset 28 Figure Set Heads.svg", "Asset 28 Figure.svg", "Asset 29 Figure Set Heads.svg", "Asset 29 Figure.svg",
+                "Asset 3 Figure Set 2.svg", "Asset 3 Figure.svg", "Asset 30 Figure Set Heads.svg", "Asset 30 Figure.svg",
                 "Asset 31 Figure.svg", "Asset 32 Figure.svg", "Asset 33 Figure.svg", "Asset 34 Figure.svg",
                 "Asset 35 Figure.svg", "Asset 36 Figure.svg", "Asset 37 Figure.svg", "Asset 38 Figure.svg",
                 "Asset 39 Figure.svg", "Asset 4 Figure Set 2.svg", "Asset 4 Figure.svg", "Asset 40 Figure.svg",
