@@ -123,7 +123,7 @@ const App = {
         const canvasAiPrompt = computed(() => {
             if (canvasPalette.value.length < 3) return '';
             const colors = canvasPalette.value.map(p => p.hex).join(', ');
-            return `Use the exact colors [${colors}] and follow the same composition and spatial arrangement as this blocking layout to create a cinematic live action shot. The layout provides the structural foundation; interpret the forms with high fidelity.`;
+            return `Use the exact colors [${colors}] and follow the same composition and spatial arrangement as this blocking layout to create a cinematic live action shot. The layout provides the structural foundation; interpret the forms with high fidelity. Always show the figure as a realistic human in the shot. The background should look like a reaslstic scene too from a movie. The final shot should look like it came from a cinamtic film.`;
         });
  
         const isPromptCopied = ref(false);
@@ -147,12 +147,14 @@ const App = {
         // ─── Canvas Studio Functions ──────────────────────────────────────────────
 
         function parseHexToRgb(hex) {
-            // Accepts '#rrggbb' — returns {r, g, b}
-            const h = hex.replace('#', '');
+            let h = hex.replace('#', '');
+            if (h.length === 3) {
+                h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+            }
             return {
-                r: parseInt(h.substring(0,2), 16),
-                g: parseInt(h.substring(2,4), 16),
-                b: parseInt(h.substring(4,6), 16)
+                r: parseInt(h.substring(0, 2), 16),
+                g: parseInt(h.substring(2, 4), 16),
+                b: parseInt(h.substring(4, 6), 16)
             };
         }
 
@@ -992,9 +994,16 @@ const App = {
         };
 
         function copyCanvasPrompt() {
-            navigator.clipboard.writeText(canvasAiPrompt.value);
-            isCanvasPromptCopied.value = true;
-            setTimeout(() => isCanvasPromptCopied.value = false, 2000);
+            const success = () => {
+                isCanvasPromptCopied.value = true;
+                setTimeout(() => { isCanvasPromptCopied.value = false; }, 2000);
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(canvasAiPrompt.value).then(success).catch(() => fallbackCopy(canvasAiPrompt.value, success));
+            } else {
+                fallbackCopy(canvasAiPrompt.value, success);
+            }
         }
 
         function exportPalette() {

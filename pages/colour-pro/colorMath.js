@@ -129,7 +129,10 @@ export function arrangePalette(colors, ruleType) {
         return {
             colorObj: col,
             css: col.toString({ format: "oklch" }),
-            hex: col.to("srgb").toString({ format: "hex" }),
+            hex: (() => {
+                const h = col.to("srgb").toString({ format: "hex" });
+                return h.length === 4 ? `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}` : h;
+            })(),
             proportion: mappedProps[i],
             isFocal: i === focalIdx,
             contrastRatio: apca,
