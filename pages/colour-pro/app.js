@@ -83,19 +83,19 @@ const App = {
                 display: 'block'
             };
         });
- 
+
         const aiPrompt = computed(() => {
             if (!palette.value || palette.value.length === 0) return "";
-            
+
             // Sort by proportion descending to ensure we assign roles correctly
             const sortedPalette = [...palette.value].sort((a, b) => b.proportion - a.proportion);
-            
+
             let prompt = "Create a cinematic close up shot that uses these exact colours. ";
-            
+
             const parts = sortedPalette.map((item, index) => {
                 const hex = item.hex;
                 const prop = Math.round(item.proportion);
-                
+
                 if (index === 0) {
                     return `Use ${hex} for ${prop}% of the composition and the background`;
                 } else if (index === 1) {
@@ -119,24 +119,24 @@ const App = {
                     }
                 }
             }
-            
+
             return prompt;
         });
 
         const canvasAiPrompt = computed(() => {
             if (canvasPalette.value.length < 3) return '';
             const colors = canvasPalette.value.map(p => p.hex).join(', ');
-            return `Use the exact colors [${colors}] and follow the same composition and spatial arrangement as this blocking layout to create a cinematic live action shot. The layout provides the structural foundation; interpret the forms with high fidelity. Always show the figure as a realistic human in the shot. The background should look like a reaslstic scene too from a movie. The final shot should look like it came from a cinamtic film.`;
+            return `Use the exact colors [${colors}] and follow the same composition and spatial arrangement as this blocking layout to create a cinematic live action shot. The layout provides the structural foundation; interpret the forms with high fidelity. Always show the figure as a realistic human in the shot. The background should look like a realistic scene from a movie. The final shot should look like it came from a cinematic film.`;
         });
-  
+
         const isPromptCopied = ref(false);
- 
+
         function copyPrompt() {
             const success = () => {
                 isPromptCopied.value = true;
                 setTimeout(() => { isPromptCopied.value = false; }, 2000);
             };
- 
+
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(aiPrompt.value).then(success).catch(() => fallbackCopy(aiPrompt.value, success));
             } else {
@@ -145,10 +145,10 @@ const App = {
         }
 
         // Canvas palette: first 3 swatches (hex + css + proportion)
-        const canvasPalette = computed(() => palette.value.slice(0, 3).map(p => ({ 
-            hex: p.hex, 
-            css: p.css, 
-            proportion: p.proportion 
+        const canvasPalette = computed(() => palette.value.slice(0, 3).map(p => ({
+            hex: p.hex,
+            css: p.css,
+            proportion: p.proportion
         })));
 
         const canvasTargetMarkers = computed(() => {
@@ -204,7 +204,7 @@ const App = {
         function initCanvas() {
             const canvas = document.getElementById('palette-canvas');
             if (!canvas || canvasPalette.value.length < 3) return;
-            
+
             // Push current state to history before clearing
             if (canvas.width > 0) saveCanvasHistory();
 
@@ -233,7 +233,7 @@ const App = {
 
             // Reset stats: 100% of pixels are the base colour
             canvasPixelStats.value = [100, 0, 0];
-            
+
             // Track the palette we just initialized with
             lastAppliedPaletteHexes = canvasPalette.value.map(c => c.hex);
         }
@@ -254,11 +254,11 @@ const App = {
                 clientY = e.clientY;
             }
             // Scale from CSS pixels to canvas logical pixels
-            const scaleX = canvas.width  / rect.width;
+            const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
             return {
                 x: Math.round((clientX - rect.left) * scaleX),
-                y: Math.round((clientY - rect.top)  * scaleY)
+                y: Math.round((clientY - rect.top) * scaleY)
             };
         }
 
@@ -293,7 +293,7 @@ const App = {
                 updatePixelStats();
                 return;
             }
-            
+
             if (activeTool.value === 'stencil') {
                 saveCanvasHistory();
                 placeStencil(x, y);
@@ -368,9 +368,9 @@ const App = {
 
             const TOL = 32; // per-channel tolerance
             function matches(i) {
-                return Math.abs(data[i]   - origR) <= TOL &&
-                       Math.abs(data[i+1] - origG) <= TOL &&
-                       Math.abs(data[i+2] - origB) <= TOL;
+                return Math.abs(data[i] - origR) <= TOL &&
+                    Math.abs(data[i + 1] - origG) <= TOL &&
+                    Math.abs(data[i + 2] - origB) <= TOL;
             }
 
             // BFS scanline flood fill
@@ -385,16 +385,16 @@ const App = {
                 const i4 = pos * 4;
 
                 // Paint
-                data[i4]   = fillRgb.r;
-                data[i4+1] = fillRgb.g;
-                data[i4+2] = fillRgb.b;
-                data[i4+3] = 255;
+                data[i4] = fillRgb.r;
+                data[i4 + 1] = fillRgb.g;
+                data[i4 + 2] = fillRgb.b;
+                data[i4 + 3] = 255;
 
                 // Check 4-connected neighbours
                 const neighbours = [
-                    px > 0     ? pos - 1 : -1,
+                    px > 0 ? pos - 1 : -1,
                     px < W - 1 ? pos + 1 : -1,
-                    py > 0     ? pos - W : -1,
+                    py > 0 ? pos - W : -1,
                     py < H - 1 ? pos + W : -1
                 ];
                 for (const n of neighbours) {
@@ -424,14 +424,14 @@ const App = {
 
             // Sample every 4th pixel for performance
             for (let i = 0; i < data.length; i += 16) {
-                const r = data[i], g = data[i+1], b = data[i+2];
+                const r = data[i], g = data[i + 1], b = data[i + 2];
                 let bestIdx = 0;
                 let bestDist = Infinity;
                 for (let j = 0; j < palRgb.length; j++) {
                     const dr = r - palRgb[j].r;
                     const dg = g - palRgb[j].g;
                     const db = b - palRgb[j].b;
-                    const dist = dr*dr + dg*dg + db*db;
+                    const dist = dr * dr + dg * dg + db * db;
                     if (dist < bestDist) { bestDist = dist; bestIdx = j; }
                 }
                 counts[bestIdx]++;
@@ -475,12 +475,12 @@ const App = {
             const canvas = document.getElementById('palette-canvas');
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
-            
+
             const color = canvasPalette.value[activeCanvasColor.value].hex;
-            
+
             let svgText = '';
             const userStencil = userStencils.value.find(s => s.id === selectedStencil.value);
-            
+
             if (userStencil) {
                 svgText = userStencil.content;
             } else {
@@ -496,15 +496,15 @@ const App = {
 
             // Convert to single color
             svgText = processSvgForColor(svgText, color);
-            
+
             const img = new Image();
-            const blob = new Blob([svgText], {type: 'image/svg+xml;charset=utf-8'});
+            const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
             const blobUrl = URL.createObjectURL(blob);
-            
+
             img.onload = () => {
                 const w = img.width * stencilScale.value;
                 const h = img.height * stencilScale.value;
-                ctx.drawImage(img, x - w/2, y - h/2, w, h);
+                ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
                 URL.revokeObjectURL(blobUrl);
                 updatePixelStats();
             };
@@ -523,11 +523,11 @@ const App = {
             reader.onload = (e) => {
                 const svgContent = e.target.result;
                 const id = 'user-stencil-' + Date.now();
-                
+
                 // Create a preview by making it single color
-                const previewColor = '#888'; 
+                const previewColor = '#888';
                 const previewSvg = processSvgForColor(svgContent, previewColor);
-                const blob = new Blob([previewSvg], {type: 'image/svg+xml;charset=utf-8'});
+                const blob = new Blob([previewSvg], { type: 'image/svg+xml;charset=utf-8' });
                 const previewUrl = URL.createObjectURL(blob);
 
                 userStencils.value.push({
@@ -535,7 +535,7 @@ const App = {
                     content: svgContent,
                     preview: previewUrl
                 });
-                
+
                 selectedStencil.value = id;
             };
             reader.readAsText(file);
@@ -554,14 +554,14 @@ const App = {
                     el.removeAttribute('fill');
                     el.removeAttribute('stroke');
                     el.removeAttribute('stop-color');
-                    
+
                     if (el.hasAttribute('style')) {
                         let style = el.getAttribute('style');
                         // Use regex to strip common color properties from style attribute
                         style = style.replace(/(fill|stroke|stop-color)\s*:\s*[^;]+;?/gi, '');
                         el.setAttribute('style', style);
                     }
-                    
+
                     // Remove <style> tags entirely to ensure no CSS overrides
                     if (el.tagName.toLowerCase() === 'style') {
                         el.remove();
@@ -574,7 +574,7 @@ const App = {
                 svgEl.setAttribute('stroke', color);
                 // Also handle potential use of currentColor
                 svgEl.style.color = color;
-                
+
                 return new XMLSerializer().serializeToString(doc);
             } catch (e) {
                 console.error("SVG Processing Error:", e);
@@ -587,7 +587,7 @@ const App = {
         // Watchers
         // Clear overrides when the underlying mathematical rules change
         watch([lightness, chroma, hue, harmonyType, proportionRule], () => {
-            colorOverrides.value = {}; 
+            colorOverrides.value = {};
             updatePalette();
         }, { immediate: true });
 
@@ -598,7 +598,7 @@ const App = {
                 document.body.classList.add('light-theme');
             }
             nextTick(() => {
-                if(typeof drawThreeGraph !== 'undefined') drawThreeGraph();
+                if (typeof drawThreeGraph !== 'undefined') drawThreeGraph();
             });
         }, { immediate: true });
 
@@ -648,7 +648,7 @@ const App = {
                     if (dist < bestDist) { bestDist = dist; bestIdx = j; }
                 }
                 // Replace with the equivalent new palette colour
-                data[i]     = newRgb[bestIdx].r;
+                data[i] = newRgb[bestIdx].r;
                 data[i + 1] = newRgb[bestIdx].g;
                 data[i + 2] = newRgb[bestIdx].b;
                 data[i + 3] = 255;
@@ -694,7 +694,7 @@ const App = {
                 const l = parsed.coords[0], c = parsed.coords[1], h = parsed.coords[2];
                 lightness.value = (typeof l !== 'number' || isNaN(l)) ? 0 : l;
                 chroma.value = (typeof c !== 'number' || isNaN(c)) ? 0 : c;
-                hue.value = (typeof h !== 'number' || isNaN(h)) ? 0 : h; 
+                hue.value = (typeof h !== 'number' || isNaN(h)) ? 0 : h;
             } catch (e) {
                 // Invalid color format, just revert to current baseHex
                 textInputColor.value = baseHex.value;
@@ -798,7 +798,7 @@ const App = {
             if (idx === null) return;
             if (!colorOverrides.value[idx]) {
                 // Clone the underlying mathematically correct color
-                colorOverrides.value[idx] = new Color(palette.value[idx].colorObj.toString({format: "oklch"}));
+                colorOverrides.value[idx] = new Color(palette.value[idx].colorObj.toString({ format: "oklch" }));
             }
             colorOverrides.value[idx].coords[coordIndex] = val;
             updatePalette();
@@ -847,7 +847,7 @@ const App = {
          */
         function generateOklchGrayscale() {
             const img = document.getElementById('source-image-sidebar') ||
-                        document.getElementById('source-image-expanded');
+                document.getElementById('source-image-expanded');
             if (!img || !img.naturalWidth) return;
 
             const w = img.naturalWidth;
@@ -888,9 +888,9 @@ const App = {
                 const bL = toLinear(data[i + 2]);
 
                 // Linear RGB → LMS
-                const l = M1[0][0]*rL + M1[0][1]*gL + M1[0][2]*bL;
-                const m = M1[1][0]*rL + M1[1][1]*gL + M1[1][2]*bL;
-                const s = M1[2][0]*rL + M1[2][1]*gL + M1[2][2]*bL;
+                const l = M1[0][0] * rL + M1[0][1] * gL + M1[0][2] * bL;
+                const m = M1[1][0] * rL + M1[1][1] * gL + M1[1][2] * bL;
+                const s = M1[2][0] * rL + M1[2][1] * gL + M1[2][2] * bL;
 
                 // Cube root (non-linear compression)
                 const lR = Math.cbrt(l);
@@ -898,7 +898,7 @@ const App = {
                 const sR = Math.cbrt(s);
 
                 // OKLab L (= OKLCH Lightness, range 0–1)
-                const L = M2L[0]*lR + M2L[1]*mR + M2L[2]*sR;
+                const L = M2L[0] * lR + M2L[1] * mR + M2L[2] * sR;
 
                 // For a neutral grey, M1 row sums ≈ 1.0 and M2L sum ≈ 1.0,
                 // so L ≈ cbrt(linearGrey), therefore linearGrey = L³
@@ -1008,7 +1008,7 @@ const App = {
 
             let r = 0, g = 0, b = 0;
             for (let i = 0; i < data.length; i += 4) {
-                r += data[i]; g += data[i+1]; b += data[i+2];
+                r += data[i]; g += data[i + 1]; b += data[i + 2];
             }
             const count = data.length / 4;
             const avgR = Math.round(r / count);
@@ -1029,10 +1029,10 @@ const App = {
                     // so the extracted color lands on that harmony position
                     if (selectedSwatchIndex.value !== null && selectedSwatchIndex.value > 0) {
                         const harmonyOffsets = {
-                            'complementary':      [0, 180],
-                            'split-complementary':[0, 150, 210],
-                            'triadic':            [0, 120, 240],
-                            'analogous':          [0, 30, -30],
+                            'complementary': [0, 180],
+                            'split-complementary': [0, 150, 210],
+                            'triadic': [0, 120, 240],
+                            'analogous': [0, 30, -30],
                         };
                         const offsets = harmonyOffsets[harmonyType.value] || [0];
                         const offset = offsets[selectedSwatchIndex.value] || 0;
@@ -1042,10 +1042,10 @@ const App = {
 
                     const isNum = v => typeof v === 'number' && !isNaN(v);
                     lightness.value = isNum(l) ? l : lightness.value;
-                    chroma.value    = isNum(c) ? c : chroma.value;
-                    hue.value       = isNum(h) ? h : hue.value;
+                    chroma.value = isNum(c) ? c : chroma.value;
+                    hue.value = isNum(h) ? h : hue.value;
                     textInputColor.value = rgbStr;
-                } catch(e) {
+                } catch (e) {
                     console.error("Could not parse extracted color:", e);
                 }
             } else if (selectedSwatchIndex.value !== null) {
@@ -1061,18 +1061,18 @@ const App = {
 
         function updatePalette() {
             let colors = generateHarmonies(lightness.value, chroma.value, hue.value, harmonyType.value);
-            
+
             // Apply Manual Overrides
             colors = colors.map((col, i) => {
                 if (colorOverrides.value[i]) {
-                    return colorOverrides.value[i]; 
+                    return colorOverrides.value[i];
                 }
                 return col;
             });
 
             // 2. Map metrics, APCA, proportions, focal focus
             palette.value = arrangePalette(colors, proportionRule.value);
-            
+
             // 3. Update Graphics
             nextTick(() => {
                 drawTreemap();
@@ -1104,24 +1104,24 @@ const App = {
 
         function applyBlur() {
             if (blurRadius.value <= 0) return;
-            
+
             saveCanvasHistory();
             const canvas = document.getElementById('palette-canvas');
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
-            
+
             // Create offscreen copy
             const off = document.createElement('canvas');
             off.width = canvas.width;
             off.height = canvas.height;
             const offCtx = off.getContext('2d');
             offCtx.drawImage(canvas, 0, 0);
-            
+
             // Apply blur on main canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.filter = `blur(${blurRadius.value}px)`;
             ctx.drawImage(off, 0, 0);
             ctx.filter = 'none';
-            
+
             blurRadius.value = 0;
             activeTool.value = 'draw';
             updatePixelStats();
@@ -1252,10 +1252,10 @@ const App = {
         const initSvg = (selector, clear = true) => {
             const container = document.querySelector(selector);
             if (!container) return null;
-            
+
             const width = container.clientWidth;
             const height = container.clientHeight;
-            
+
             let svg = d3.select(selector).select('svg');
             if (svg.empty()) {
                 svg = d3.select(selector).append('svg')
@@ -1264,23 +1264,23 @@ const App = {
             } else if (clear) {
                 svg.selectAll('*').remove();
             }
-            
+
             svg.attr('viewBox', `0 0 ${width} ${height}`)
-               .attr('preserveAspectRatio', 'xMidYMid meet');
-                
+                .attr('preserveAspectRatio', 'xMidYMid meet');
+
             return { svg, width, height };
         };
 
         function drawTreemap() {
             const ctx = initSvg('#treemap-chart');
-            if(!ctx) return;
+            if (!ctx) return;
             const { svg, width, height } = ctx;
 
             // Prepare hierarchy data for D3 Treemap
             const data = {
                 name: "palette",
                 children: palette.value.map((p, i) => ({
-                    name: `Color ${i+1}`,
+                    name: `Color ${i + 1}`,
                     value: p.proportion,
                     css: p.css,
                     isFocal: p.isFocal,
@@ -1289,7 +1289,7 @@ const App = {
             };
 
             const root = d3.hierarchy(data).sum(d => d.value);
-            
+
             d3.treemap()
                 .size([width, height])
                 .padding(2)(root);
@@ -1313,7 +1313,7 @@ const App = {
                 .attr("x", 8)
                 .attr("y", 20)
                 .text(d => `${d.data.value.toFixed(1)}%`);
-                
+
             nodes.append("text")
                 .attr("x", 8)
                 .attr("y", 38)
@@ -1322,10 +1322,10 @@ const App = {
 
         function drawTonalGraph() {
             const ctx = initSvg('#tonal-chart', false); // Don't clear!
-            if(!ctx) return;
+            if (!ctx) return;
             const { svg, width, height } = ctx;
-            
-            const margin = {top: 20, right: 30, bottom: 30, left: 40};
+
+            const margin = { top: 20, right: 30, bottom: 30, left: 40 };
             const w = width - margin.left - margin.right;
             const h = height - margin.top - margin.bottom;
 
@@ -1382,12 +1382,12 @@ const App = {
             // Define Drag Behavior — optimistic visual update during drag, commit on end
             let dragCurrentL = 0; // track current drag lightness in closure
             const drag = d3.drag()
-                .on("start", function(event, d) {
+                .on("start", function (event, d) {
                     isGraphDragging.value = true;
                     dragCurrentL = d.l;
                     d3.select(this).raise().attr("stroke", "#00ffcc");
                 })
-                .on("drag", function(event, d) {
+                .on("drag", function (event, d) {
                     const newL = Math.max(0, Math.min(1, y.invert(event.y)));
                     dragCurrentL = newL;
                     const i = graphData.indexOf(d);
@@ -1399,7 +1399,7 @@ const App = {
                         // Flatten line/area to show all connected
                         g.select(".tonal-area").attr("d", () => {
                             const pts = graphData.map((_, idx) => [x(idx === 0 ? "Base" : `C${idx}`), y(newL)]);
-                            return `M${pts.map(p => p.join(',')).join('L')} L${pts[pts.length-1][0]},${h} L${pts[0][0]},${h} Z`;
+                            return `M${pts.map(p => p.join(',')).join('L')} L${pts[pts.length - 1][0]},${h} L${pts[0][0]},${h} Z`;
                         });
                         g.select(".tonal-line").attr("d", () => {
                             const pts = graphData.map((_, idx) => [x(idx === 0 ? "Base" : `C${idx}`), y(newL)]);
@@ -1422,7 +1422,7 @@ const App = {
                         g.select(".tonal-line").datum(graphData).attr("d", tempLine);
                     }
                 })
-                .on("end", function(event, d) {
+                .on("end", function (event, d) {
                     const i = graphData.indexOf(d);
                     d3.select(this).attr("stroke", "#fff");
                     isGraphDragging.value = false;
@@ -1466,7 +1466,7 @@ const App = {
             g.select(".y-axis")
                 .call(yAxis)
                 .select(".domain").attr("stroke", "rgba(255,255,255,0.2)");
-                
+
             g.selectAll(".tick line").attr("stroke", "rgba(255,255,255,0.1)");
             g.selectAll(".tick text").attr("fill", "rgba(255,255,255,0.5)");
 
@@ -1477,10 +1477,10 @@ const App = {
 
         function drawChromaGraph() {
             const ctx = initSvg('#chroma-chart', false);
-            if(!ctx) return;
+            if (!ctx) return;
             const { svg, width, height } = ctx;
-            
-            const margin = {top: 20, right: 30, bottom: 30, left: 40};
+
+            const margin = { top: 20, right: 30, bottom: 30, left: 40 };
             const w = width - margin.left - margin.right;
             const h = height - margin.top - margin.bottom;
 
@@ -1530,12 +1530,12 @@ const App = {
 
             let dragCurrentC = 0;
             const drag = d3.drag()
-                .on("start", function(event, d) {
+                .on("start", function (event, d) {
                     isGraphDragging.value = true;
                     dragCurrentC = d.c;
                     d3.select(this).raise().attr("stroke", "#00ffcc");
                 })
-                .on("drag", function(event, d) {
+                .on("drag", function (event, d) {
                     const newC = Math.max(0, Math.min(0.4, y.invert(event.y)));
                     dragCurrentC = newC;
                     const i = graphData.indexOf(d);
@@ -1545,7 +1545,7 @@ const App = {
                         g.selectAll(".chroma-point").attr("cy", y(newC));
                         g.select(".chroma-area").attr("d", () => {
                             const pts = graphData.map((_, idx) => [x(idx === 0 ? "Base" : `C${idx}`), y(newC)]);
-                            return `M${pts.map(p => p.join(',')).join('L')} L${pts[pts.length-1][0]},${h} L${pts[0][0]},${h} Z`;
+                            return `M${pts.map(p => p.join(',')).join('L')} L${pts[pts.length - 1][0]},${h} L${pts[0][0]},${h} Z`;
                         });
                         g.select(".chroma-line").attr("d", () => {
                             const pts = graphData.map((_, idx) => [x(idx === 0 ? "Base" : `C${idx}`), y(newC)]);
@@ -1566,7 +1566,7 @@ const App = {
                         g.select(".chroma-line").datum(graphData).attr("d", tempLine);
                     }
                 })
-                .on("end", function(event, d) {
+                .on("end", function (event, d) {
                     const i = graphData.indexOf(d);
                     d3.select(this).attr("stroke", "#fff");
                     isGraphDragging.value = false;
@@ -1605,7 +1605,7 @@ const App = {
             g.select(".y-axis")
                 .call(yAxis)
                 .select(".domain").attr("stroke", "rgba(255,255,255,0.2)");
-                
+
             g.selectAll(".tick line").attr("stroke", "rgba(255,255,255,0.1)");
             g.selectAll(".tick text").attr("fill", "rgba(255,255,255,0.5)");
 
@@ -1628,7 +1628,7 @@ const App = {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(message, 256, 64);
-            
+
             const texture = new THREE.CanvasTexture(canvas);
             texture.minFilter = THREE.LinearFilter;
             const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.8 });
@@ -1650,26 +1650,26 @@ const App = {
         const updateHueWheelTexture = (lVal, cVal) => {
             if (!wheelCtx) return;
             const size = 512;
-            const cx = size/2;
-            const cy = size/2;
-            
+            const cx = size / 2;
+            const cy = size / 2;
+
             wheelCtx.clearRect(0, 0, size, size);
-            
+
             // 0 start angle
-            const gradient = wheelCtx.createConicGradient(0, cx, cy); 
-            for(let deg = 0; deg <= 360; deg += 10) {
+            const gradient = wheelCtx.createConicGradient(0, cx, cy);
+            for (let deg = 0; deg <= 360; deg += 10) {
                 // Use the user's current L and a reasonable reference C if current C is 0
-                const displayC = Math.max(cVal, 0.1); 
+                const displayC = Math.max(cVal, 0.1);
                 let cObj = new Color("oklch", [lVal, displayC, deg]);
-                gradient.addColorStop(deg / 360, cObj.toString({format: "hex"}));
+                gradient.addColorStop(deg / 360, cObj.toString({ format: "hex" }));
             }
-            
+
             wheelCtx.fillStyle = gradient;
             wheelCtx.beginPath();
-            wheelCtx.arc(cx, cy, size/2, 0, Math.PI * 2);
-            wheelCtx.arc(cx, cy, size/2 * 0.8, 0, Math.PI * 2, true);
+            wheelCtx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+            wheelCtx.arc(cx, cy, size / 2 * 0.8, 0, Math.PI * 2, true);
             wheelCtx.fill();
-            
+
             wheelTex.needsUpdate = true;
         };
 
@@ -1678,10 +1678,10 @@ const App = {
             if (!container || scene) return;
 
             scene = new THREE.Scene();
-            
+
             const w = container.clientWidth;
             const h = container.clientHeight;
-            
+
             camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
             camera.position.set(3, 2, 3);
 
@@ -1693,7 +1693,7 @@ const App = {
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
-            
+
             // Lighting
             scene.add(new THREE.AmbientLight(0xffffff, 0.8));
             const dl = new THREE.DirectionalLight(0xffffff, 0.5);
@@ -1731,12 +1731,12 @@ const App = {
             // Hue Reference Wheel on Ground Plane
             const wTex = createHueWheelTexture();
             const wheelGeo = new THREE.PlaneGeometry(1, 1);
-            const wheelMat = new THREE.MeshBasicMaterial({ 
-                map: wTex, 
-                transparent: true, 
-                opacity: 0.6, 
-                side: THREE.DoubleSide, 
-                depthWrite: false 
+            const wheelMat = new THREE.MeshBasicMaterial({
+                map: wTex,
+                transparent: true,
+                opacity: 0.6,
+                side: THREE.DoubleSide,
+                depthWrite: false
             });
             wheelMesh = new THREE.Mesh(wheelGeo, wheelMat);
             wheelMesh.rotation.x = -Math.PI / 2;
@@ -1769,17 +1769,17 @@ const App = {
                 const lVal = lightness.value;
                 const cVal = chroma.value;
                 const y = isNum(lVal) ? lVal * 2 : 0;
-                const radius = isNum(cVal) ? cVal * 8 : 0; 
-                
+                const radius = isNum(cVal) ? cVal * 8 : 0;
+
                 wheelMesh.position.y = 0; // Pin to ground plane
                 // Base size + chroma expansion
-                const s = 1 + radius; 
+                const s = 1 + radius;
                 wheelMesh.scale.set(s, s, 1);
-                
+
                 updateHueWheelTexture(lVal, cVal);
             }
 
-            while(pointsGroup.children.length > 0) {
+            while (pointsGroup.children.length > 0) {
                 const child = pointsGroup.children.pop();
                 if (child.geometry) child.geometry.dispose();
                 if (child.material) child.material.dispose();
@@ -1790,15 +1790,15 @@ const App = {
                 const l = p.colorObj.coords[0];
                 const c = p.colorObj.coords[1];
                 const h = p.colorObj.coords[2] || 0;
-                
+
                 const hRad = h * (Math.PI / 180);
-                
+
                 const isNum = v => typeof v === 'number' && !isNaN(v);
                 const y = isNum(l) ? l * 2 : 0;
                 const radius = isNum(c) ? c * 4 : 0;
                 const x = radius * Math.cos(hRad);
                 const z = radius * Math.sin(hRad);
-                
+
                 const geo = new THREE.SphereGeometry(0.08, 32, 32);
                 const mat = new THREE.MeshPhysicalMaterial({
                     color: new THREE.Color(p.hex),
@@ -1830,7 +1830,7 @@ const App = {
         };
 
         // Handle window resize dynamically to re-render charts
-            onMounted(() => {
+        onMounted(() => {
             window.addEventListener('resize', () => {
                 drawTreemap();
                 drawTonalGraph();
