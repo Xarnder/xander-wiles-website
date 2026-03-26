@@ -43,6 +43,11 @@ const App = {
         const canvasPixelStats = ref([100, 0, 0]);
         const isCanvasDrawing = ref(false);
         const canvasDownloadFormat = ref('png');
+        const stencils = ref([]);
+        const selectedStencil = ref('');
+        const stencilScale = ref(1.0);
+        const canvasHistory = ref([]);
+        const maxHistory = 20;
         let lastCanvasX = null;
         let lastCanvasY = null;
 
@@ -143,9 +148,37 @@ const App = {
             };
         }
 
+        function saveCanvasHistory() {
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas) return;
+            // Limit history
+            if (canvasHistory.value.length >= maxHistory) {
+                canvasHistory.value.shift();
+            }
+            canvasHistory.value.push(canvas.toDataURL());
+        }
+
+        function undoCanvas() {
+            if (canvasHistory.value.length === 0) return;
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dataUrl = canvasHistory.value.pop();
+            const img = new Image();
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+                updatePixelStats();
+            };
+            img.src = dataUrl;
+        }
+
         function initCanvas() {
             const canvas = document.getElementById('palette-canvas');
             if (!canvas || canvasPalette.value.length < 3) return;
+            
+            // Push current state to history before clearing
+            if (canvas.width > 0) saveCanvasHistory();
 
             const wrapper = document.getElementById('canvas-wrapper');
             if (!wrapper) return;
@@ -224,12 +257,20 @@ const App = {
             const { x, y } = getCanvasCoords(e);
 
             if (activeTool.value === 'fill') {
+                saveCanvasHistory();
                 floodFill(x, y);
                 updatePixelStats();
                 return;
             }
+            
+            if (activeTool.value === 'stencil') {
+                saveCanvasHistory();
+                placeStencil(x, y);
+                return;
+            }
 
             // Draw tool
+            saveCanvasHistory();
             isCanvasDrawing.value = true;
             lastCanvasX = x;
             lastCanvasY = y;
@@ -368,6 +409,63 @@ const App = {
 
             if (total === 0) return;
             canvasPixelStats.value = counts.map(c => (c / total) * 100);
+        }
+
+        async function fetchStencils() {
+            // In a real environment, we'd fetch a list from the server.
+            // Here I'll hardcode the list based on the list_dir output or try to fetch a known directory.
+            // Since I have the list from the tool, I will hardcode it for simplicity in this demo.
+            const list = [
+                "Asset 1 Figure Set 2.svg", "Asset 1 Figure.svg", "Asset 10 Figure Set 2.svg", "Asset 10 Figure.svg",
+                "Asset 11 Figure.svg", "Asset 12 Figure.svg", "Asset 13 Figure.svg", "Asset 14 Figure.svg",
+                "Asset 15 Figure.svg", "Asset 16 Figure.svg", "Asset 17 Figure.svg", "Asset 18 Figure.svg",
+                "Asset 19 Figure.svg", "Asset 2 Figure Set 2.svg", "Asset 2 Figure.svg", "Asset 20 Figure.svg",
+                "Asset 21 Figure.svg", "Asset 22 Figure.svg", "Asset 23 Figure.svg", "Asset 24 Figure.svg",
+                "Asset 25 Figure.svg", "Asset 26 Figure.svg", "Asset 27 Figure.svg", "Asset 28 Figure.svg",
+                "Asset 29 Figure.svg", "Asset 3 Figure Set 2.svg", "Asset 3 Figure.svg", "Asset 30 Figure.svg",
+                "Asset 31 Figure.svg", "Asset 32 Figure.svg", "Asset 33 Figure.svg", "Asset 34 Figure.svg",
+                "Asset 35 Figure.svg", "Asset 36 Figure.svg", "Asset 37 Figure.svg", "Asset 38 Figure.svg",
+                "Asset 39 Figure.svg", "Asset 4 Figure Set 2.svg", "Asset 4 Figure.svg", "Asset 40 Figure.svg",
+                "Asset 5 Figure Set 2.svg", "Asset 5 Figure.svg", "Asset 6 Figure Set 2.svg", "Asset 6 Figure.svg",
+                "Asset 7 Figure Set 2.svg", "Asset 7 Figure.svg", "Asset 8 Figure Set 2.svg", "Asset 8 Figure.svg",
+                "Asset 9 Figure Set 2.svg", "Asset 9 Figure.svg"
+            ];
+            stencils.value = list;
+            selectedStencil.value = list[0];
+        }
+
+        async function placeStencil(x, y) {
+            if (!selectedStencil.value) return;
+            const canvas = document.getElementById('palette-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            const color = canvasPalette.value[activeCanvasColor.value].hex;
+            const url = `Figure-Outlines/${selectedStencil.value}`;
+            
+            try {
+                const response = await fetch(url);
+                let svgText = await response.text();
+                
+                // Override color: inject fill into the SVG root. 
+                // We also ensure it has width/height or viewBox so we can draw it.
+                svgText = svgText.replace('<svg', `<svg fill="${color}" stroke="${color}"`);
+                
+                const img = new Image();
+                const blob = new Blob([svgText], {type: 'image/svg+xml;charset=utf-8'});
+                const blobUrl = URL.createObjectURL(blob);
+                
+                img.onload = () => {
+                    const w = img.width * stencilScale.value;
+                    const h = img.height * stencilScale.value;
+                    ctx.drawImage(img, x - w/2, y - h/2, w, h);
+                    URL.revokeObjectURL(blobUrl);
+                    updatePixelStats();
+                };
+                img.src = blobUrl;
+            } catch (error) {
+                console.error("Error placing stencil:", error);
+            }
         }
 
         // ─── End Canvas Studio Functions ──────────────────────────────────────────
@@ -1566,7 +1664,7 @@ const App = {
         };
 
         // Handle window resize dynamically to re-render charts
-        onMounted(() => {
+            onMounted(() => {
             window.addEventListener('resize', () => {
                 drawTreemap();
                 drawTonalGraph();
@@ -1602,6 +1700,7 @@ const App = {
             nextTick(() => {
                 initThreeJS();
                 initCanvas();
+                fetchStencils();
             });
 
             window.addEventListener('mouseup', onDragEnd);
@@ -1664,7 +1763,12 @@ const App = {
             onCanvasPointerMove,
             onCanvasPointerUp,
             canvasDownloadFormat,
-            downloadCanvas
+            downloadCanvas,
+            undoCanvas,
+            // Stencils
+            stencils,
+            selectedStencil,
+            stencilScale
         };
     }
 };
