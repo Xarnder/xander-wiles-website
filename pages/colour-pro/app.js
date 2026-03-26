@@ -18,15 +18,19 @@ function dataURLToBlob(dataurl) {
 }
 
 // Robust download helper for iOS, iPadOS and other mobile browsers
-function downloadFile(dataUrl, filename) {
+function downloadFile(dataUrl, filename, openPreviewCallback) {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const isChromeIOS = /CriOS/.test(navigator.userAgent);
 
     // If it's iOS Chrome, it often fails to trigger the download prompt for Blobs.
     // Opening the dataURL directly in a new tab is the most reliable way to let the user save it.
     if (isChromeIOS) {
-        // For Chrome on iOS, just opening it is often the only move.
-        // Users can then long-press and "Save Image".
+        // As an additional backup requested by the user: 
+        // We will call the preview callback if available to render it in the UI
+        if (openPreviewCallback) {
+            openPreviewCallback(dataUrl);
+            return;
+        }
         window.location.href = dataUrl;
         return;
     }
@@ -53,8 +57,11 @@ function downloadFile(dataUrl, filename) {
         }, 350);
     } catch (error) {
         console.error("Download failed:", error);
-        // Fallback for extremely old browsers or security-restricted environments
-        window.open(dataUrl, '_blank');
+        if (openPreviewCallback) {
+            openPreviewCallback(dataUrl);
+        } else {
+            window.open(dataUrl, '_blank');
+        }
     }
 }
 
@@ -104,6 +111,7 @@ const App = {
         const canvasGuides = ref('none'); // none, thirds, golden, quadrants
         const canvasHistory = ref([]);
         const blurRadius = ref(0);
+        const canvasDownloadPreview = ref(null); // Fallback for iOS Chrome
         const maxHistory = 20;
         let lastAppliedPaletteHexes = [];
         let lastCanvasX = null;
@@ -391,7 +399,9 @@ const App = {
             const ext = canvasDownloadFormat.value === 'jpeg' ? 'jpg' : 'png';
             const quality = fmt === 'image/jpeg' ? 0.92 : undefined;
             const dataUrl = canvas.toDataURL(fmt, quality);
-            downloadFile(dataUrl, `chromamath-canvas-${Date.now()}.${ext}`);
+            downloadFile(dataUrl, `chromamath-canvas-${Date.now()}.${ext}`, (url) => {
+                canvasDownloadPreview.value = url;
+            });
         }
 
         function floodFill(startFx, startFy) {
@@ -974,7 +984,9 @@ const App = {
 
         function downloadGrayscaleImage() {
             if (!grayscaleImageSrc.value) return;
-            downloadFile(grayscaleImageSrc.value, `chromamath-oklch-grayscale-${Date.now()}.png`);
+            downloadFile(grayscaleImageSrc.value, `chromamath-oklch-grayscale-${Date.now()}.png`, (url) => {
+                canvasDownloadPreview.value = url;
+            });
         }
 
         // Computed src to display in the image workspace
@@ -1289,7 +1301,9 @@ const App = {
             ctx.fillRect(0, H - 3, W, 3);
 
             // Download
-            downloadFile(canvas.toDataURL('image/png'), `chromamath-palette-${Date.now()}.png`);
+            downloadFile(canvas.toDataURL('image/png'), `chromamath-palette-${Date.now()}.png`, (url) => {
+                canvasDownloadPreview.value = url;
+            });
         }
 
         // Graphing Context (D3)
@@ -1973,6 +1987,7 @@ const App = {
             onCanvasPointerMove,
             onCanvasPointerUp,
             canvasDownloadFormat,
+            canvasDownloadPreview,
             downloadCanvas,
             undoCanvas,
             canvasAiPrompt,

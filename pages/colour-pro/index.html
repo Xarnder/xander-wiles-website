@@ -576,6 +576,23 @@
 
             </section>
         </main>
+        <!-- Mobile Download Fallback Overlay -->
+        <div v-if="canvasDownloadPreview" class="download-preview-overlay" @click.self="canvasDownloadPreview = null">
+            <div class="download-preview-content glass-panel">
+                <div class="preview-header">
+                    <h3>Save Image</h3>
+                    <button class="close-preview-btn" @click="canvasDownloadPreview = null">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <p class="preview-hint"><strong>iPhone/iPad User:</strong> Long-press the image below and select <strong>"Save to Photos"</strong>.</p>
+                <div class="preview-image-container">
+                    <img :src="canvasDownloadPreview" alt="Download Preview">
+                </div>
+                <button class="preview-done-btn" @click="canvasDownloadPreview = null">Done</button>
+            </div>
+        </div>
+
     </div>
 
     <!-- Load ColorJS and D3 via ESM before our main script -->
