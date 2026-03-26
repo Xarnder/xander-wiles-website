@@ -5,6 +5,46 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import Color from "https://colorjs.io/dist/color.js";
 import { generateHarmonies, arrangePalette } from './colorMath.js';
 
+// ─── Utility Functions ──────────────────────────────────────────────────────
+
+// Helper for blob conversion to support larger files and better mobile compatibility
+function dataURLToBlob(dataurl) {
+    var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+    bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+    while(n--){
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], {type:mime});
+}
+
+// Robust download helper for iOS, iPadOS and other mobile browsers
+function downloadFile(dataUrl, filename) {
+    try {
+        const blob = dataURLToBlob(dataUrl);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        
+        // Required for some mobile browsers to trigger the download
+        document.body.appendChild(link);
+        link.click();
+        
+        // Clean up to prevent memory leaks
+        setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }, 150);
+    } catch (error) {
+        console.error("Download failed:", error);
+        // Fallback for extremely old browsers or security-restricted environments
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = filename;
+        link.click();
+    }
+}
+
 const App = {
     setup() {
         // State
@@ -338,10 +378,7 @@ const App = {
             const ext = canvasDownloadFormat.value === 'jpeg' ? 'jpg' : 'png';
             const quality = fmt === 'image/jpeg' ? 0.92 : undefined;
             const dataUrl = canvas.toDataURL(fmt, quality);
-            const link = document.createElement('a');
-            link.download = `chromamath-canvas-${Date.now()}.${ext}`;
-            link.href = dataUrl;
-            link.click();
+            downloadFile(dataUrl, `chromamath-canvas-${Date.now()}.${ext}`);
         }
 
         function floodFill(startFx, startFy) {
@@ -924,10 +961,7 @@ const App = {
 
         function downloadGrayscaleImage() {
             if (!grayscaleImageSrc.value) return;
-            const link = document.createElement('a');
-            link.download = `chromamath-oklch-grayscale-${Date.now()}.png`;
-            link.href = grayscaleImageSrc.value;
-            link.click();
+            downloadFile(grayscaleImageSrc.value, `chromamath-oklch-grayscale-${Date.now()}.png`);
         }
 
         // Computed src to display in the image workspace
@@ -1242,10 +1276,7 @@ const App = {
             ctx.fillRect(0, H - 3, W, 3);
 
             // Download
-            const link = document.createElement('a');
-            link.download = `chromamath-palette-${Date.now()}.png`;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
+            downloadFile(canvas.toDataURL('image/png'), `chromamath-palette-${Date.now()}.png`);
         }
 
         // Graphing Context (D3)
