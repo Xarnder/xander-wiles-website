@@ -113,7 +113,7 @@ const App = {
         const blurRadius = ref(0);
         const canvasDownloadPreview = ref(null); // Fallback for iOS Chrome
         const maxHistory = 20;
-        let lastAppliedPaletteHexes = [];
+        let lastAppliedPaletteCss = [];
         let lastCanvasX = null;
         let lastCanvasY = null;
 
@@ -225,6 +225,21 @@ const App = {
 
         // ─── Canvas Studio Functions ──────────────────────────────────────────────
 
+        // Helper to resolve any CSS color to its exact sRGB byte components via the browser's own engine
+        // This ensures oklch(...) strings match exactly between draw (fillStyle) and fill (putImageData)
+        const canvasResolver = document.createElement('canvas');
+        canvasResolver.width = 1;
+        canvasResolver.height = 1;
+        const resolverCtx = canvasResolver.getContext('2d', { willReadFrequently: true });
+
+        function getRgbFromBrowser(cssColor) {
+            resolverCtx.clearRect(0, 0, 1, 1);
+            resolverCtx.fillStyle = cssColor;
+            resolverCtx.fillRect(0, 0, 1, 1);
+            const data = resolverCtx.getImageData(0, 0, 1, 1).data;
+            return { r: data[0], g: data[1], b: data[2] };
+        }
+
         function parseHexToRgb(hex) {
             let h = hex.replace('#', '');
             if (h.length === 3) {
@@ -288,7 +303,7 @@ const App = {
             wrapper.style.aspectRatio = `${wRatio} / ${hRatio}`;
 
             const ctx = canvas.getContext('2d');
-            const baseCol = parseHexToRgb(canvasPalette.value[0].hex);
+            const baseCol = getRgbFromBrowser(canvasPalette.value[0].css);
             ctx.fillStyle = `rgb(${baseCol.r},${baseCol.g},${baseCol.b})`;
             ctx.fillRect(0, 0, logicalW, logicalH);
 
@@ -296,7 +311,7 @@ const App = {
             canvasPixelStats.value = [100, 0, 0];
 
             // Track the palette we just initialized with
-            lastAppliedPaletteHexes = canvasPalette.value.map(c => c.hex);
+            lastAppliedPaletteCss = canvasPalette.value.map(c => c.css);
         }
 
         function getCanvasCoords(e) {
@@ -414,7 +429,7 @@ const App = {
             const data = imgData.data;
 
             const targetCol = canvasPalette.value[activeCanvasColor.value];
-            const fillRgb = parseHexToRgb(targetCol.hex);
+            const fillRgb = getRgbFromBrowser(targetCol.css);
 
             const idx = (startFy * W + startFx) * 4;
             const origR = data[idx];
@@ -693,8 +708,8 @@ const App = {
             const imgData = ctx.getImageData(0, 0, W, H);
             const data = imgData.data;
 
-            const oldRgb = oldPalette.map(c => parseHexToRgb(c.hex));
-            const newRgb = newPalette.map(c => parseHexToRgb(c.hex));
+            const oldRgb = oldPalette.map(c => getRgbFromBrowser(c.css));
+            const newRgb = newPalette.map(c => getRgbFromBrowser(c.css));
 
             for (let i = 0; i < data.length; i += 4) {
                 const r = data[i], g = data[i + 1], b = data[i + 2];
@@ -726,13 +741,13 @@ const App = {
                 return;
             }
 
-            const newHexes = newPal.map(c => c.hex);
-            // Only remap if hexes actually changed
-            if (JSON.stringify(newHexes) !== JSON.stringify(lastAppliedPaletteHexes)) {
-                // We need the objects with hex for remapCanvasColors
-                const oldObjects = lastAppliedPaletteHexes.map(h => ({ hex: h }));
+            const newCss = newPal.map(c => c.css);
+            // Only remap if colors actually changed
+            if (JSON.stringify(newCss) !== JSON.stringify(lastAppliedPaletteCss)) {
+                // We need the objects with css for remapCanvasColors
+                const oldObjects = lastAppliedPaletteCss.map(css => ({ css: css }));
                 remapCanvasColors(oldObjects, newPal);
-                lastAppliedPaletteHexes = newHexes;
+                lastAppliedPaletteCss = newCss;
             }
         }, { deep: true });
 
@@ -1189,6 +1204,39 @@ const App = {
         function cancelBlur() {
             blurRadius.value = 0;
             activeTool.value = 'draw';
+        }
+
+        function applyLightSpread() {
+            // 1. Detach harmony
+            isHarmonyConnected.value = false;
+
+            // 2. Clear all fine-tuning explicitly to ensure we "override everything"
+            colorOverrides.value = {};
+            selectedSwatchIndex.value = null;
+
+            // 3. Set base lightness to 0.1.
+            // This might trigger the watch which also clears colorOverrides.
+            lightness.value = 0.1;
+
+            // 4. Set other lightness overrides in nextTick to ensure they persist
+            nextTick(() => {
+                // Second color (Index 1) -> 0.45
+                if (palette.value.length > 1) {
+                    const col1 = palette.value[1].colorObj.clone();
+                    col1.coords[0] = 0.45;
+                    colorOverrides.value[1] = col1;
+                }
+
+                // Third color (Index 2) -> 0.97
+                if (palette.value.length > 2) {
+                    const col2 = palette.value[2].colorObj.clone();
+                    col2.coords[0] = 0.97;
+                    colorOverrides.value[2] = col2;
+                }
+
+                // Final refresh
+                updatePalette();
+            });
         }
 
         function resetAll() {
@@ -1999,6 +2047,7 @@ const App = {
             applyBlur,
             cancelBlur,
             resetAll,
+            applyLightSpread,
             // Stencils
             stencils,
             userStencils,
