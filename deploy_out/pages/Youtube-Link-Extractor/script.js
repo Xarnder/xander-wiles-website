@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const extractBtn = document.getElementById('extractBtn');
     const downloadBtn = document.getElementById('downloadBtn');
+    const downloadTxtBtn = document.getElementById('downloadTxtBtn');
     const statusDiv = document.getElementById('statusMessage');
     const playlistInput = document.getElementById('playlistUrl');
     const resultsContainer = document.getElementById('resultsContainer');
@@ -158,6 +159,14 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadCSV(extractedVideos);
     });
 
+    downloadTxtBtn.addEventListener('click', () => {
+        if (!extractedVideos || extractedVideos.length === 0) {
+            showStatus("No videos to download. Please extract first.", "error");
+            return;
+        }
+        downloadTXT(extractedVideos);
+    });
+
     exportAllQRsBtn.addEventListener('click', () => {
         if (!extractedVideos || extractedVideos.length === 0) {
             showStatus("No videos to export. Please extract first.", "error");
@@ -303,6 +312,45 @@ document.addEventListener('DOMContentLoaded', () => {
         link.click();
         document.body.removeChild(link);
         console.log("Legacy CSV Download triggered.");
+    }
+
+    // Helper: Generate and Download TXT (List of Links)
+    async function downloadTXT(videoList) {
+        console.log("Generating TXT...");
+
+        const linksContent = videoList.map(v => v.url).join('\n');
+        const filename = 'videos.txt';
+        const fileType = 'text/plain;charset=utf-8;';
+
+        try {
+            if (navigator.canShare && navigator.share) {
+                const file = new File([linksContent], filename, { type: 'text/plain' });
+                const shareData = {
+                    files: [file],
+                    title: 'YouTube Video Links',
+                    text: 'Here is the list of exported YouTube video links.'
+                };
+
+                if (navigator.canShare(shareData)) {
+                    await navigator.share(shareData);
+                    console.log("Shared successfully via Web Share API");
+                    return;
+                }
+            }
+        } catch (err) {
+            console.warn("Web Share API failed or closed, falling back to legacy download:", err);
+        }
+
+        const blob = new Blob([linksContent], { type: fileType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        console.log("Legacy TXT Download triggered.");
     }
 
     // Helper: Display Results Table

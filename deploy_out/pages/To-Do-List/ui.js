@@ -63,6 +63,8 @@ export function getOrphanedTaskIds() {
 export function renderBoard() {
     if (!state.currentUser) return;
 
+    document.body.classList.toggle('is-archived-view', state.showArchived);
+
     // Capture Scroll Positions
     const scrollMap = new Map();
     document.querySelectorAll('.list-column').forEach(col => {
@@ -79,6 +81,21 @@ export function renderBoard() {
     if (state.listSortable) state.listSortable.destroy();
 
     boardContainer.innerHTML = '';
+
+    // ARCHIVE BADGE
+    const header = document.querySelector('.app-header');
+    let archiveBadge = document.getElementById('archive-view-badge');
+    if (state.showArchived) {
+        if (!archiveBadge) {
+            archiveBadge = document.createElement('div');
+            archiveBadge.id = 'archive-view-badge';
+            archiveBadge.className = 'archive-view-badge';
+            archiveBadge.innerHTML = '<i class="ph ph-archive-box"></i> VIEWING ARCHIVED TASKS';
+            header.appendChild(archiveBadge);
+        }
+    } else if (archiveBadge) {
+        archiveBadge.remove();
+    }
 
     state.appData.lists = getSortedListObjects();
 
@@ -503,14 +520,14 @@ export function createTaskElement(task, sourceListId, number) {
         // We will keep actionsHtml but ensuring they stop propagation.
 
         actionsHtml = `
-            <button class="icon-btn" title="Restore" onclick="event.stopPropagation(); window.unarchiveTask('${task.id}')" ontouchstart="event.stopPropagation(); window.unarchiveTask('${task.id}')"><i class="ph ph-arrow-u-up-left"></i></button>
-            <button class="icon-btn danger" title="Delete Forever" onclick="event.stopPropagation(); window.deleteTaskForever('${task.id}')" ontouchstart="event.stopPropagation(); window.deleteTaskForever('${task.id}')"><i class="ph ph-trash"></i></button>
+            <button class="icon-btn unarchive-task-btn" title="Restore" onclick="event.stopPropagation(); window.unarchiveTask('${task.id}')" ontouchstart="event.stopPropagation(); window.unarchiveTask('${task.id}')"><i class="ph ph-arrow-u-up-left"></i></button>
+            <button class="icon-btn danger delete-task-btn" title="Delete Forever" onclick="event.stopPropagation(); window.deleteTaskForever('${task.id}')" ontouchstart="event.stopPropagation(); window.deleteTaskForever('${task.id}')"><i class="ph ph-trash"></i></button>
         `;
     } else {
         actionsHtml = `
-            <button class="icon-btn" title="Edit" onclick="window.openEditModal('${task.id}', '${sourceListId}')"><i class="ph ph-pencil-simple"></i></button>
-            <button class="icon-btn" title="Add Image" onclick="window.triggerImageUpload('${task.id}')"><i class="ph ph-image"></i></button>
-            <button class="icon-btn" title="Archive" onclick="window.archiveTask('${task.id}')"><i class="ph ph-archive"></i></button>
+            <button class="icon-btn edit-task-btn" title="Edit" onclick="window.openEditModal('${task.id}', '${sourceListId}')"><i class="ph ph-pencil-simple"></i></button>
+            <button class="icon-btn add-image-btn" title="Add Image" onclick="window.triggerImageUpload('${task.id}')"><i class="ph ph-image"></i></button>
+            <button class="icon-btn archive-task-btn" title="Archive" onclick="window.archiveTask('${task.id}')"><i class="ph ph-archive"></i></button>
         `;
     }
 

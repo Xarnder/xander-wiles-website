@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChromaMath | Advanced OKLCH Engine</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#1a1a2e">
+
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div id="main-nav-placeholder"></div>
+    <div id="app" v-cloak>
+        <header class="app-header-local">
+            <div class="header-content-local">
+                <h1>ChromaMath</h1>
+                <p>Advanced OKLCH Algorithm Engine</p>
+            </div>
+            <button class="theme-toggle" @click="toggleTheme"
+                :title="isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+                <svg v-if="isDarkMode" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+        </header>
+
+        <main class="dashboard">
+            <!-- Left Column: Controls & Stats -->
+            <section class="controls-panel glass-panel">
+                <h2>Base Color Space (OKLCH)</h2>
+                <!-- Global Reset Button -->
+                <button class="global-reset-btn" @click="resetAll" title="Reset All (Page Refresh)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+                    Reset All
+                </button>
+
+                <div class="color-preview" :style="{ backgroundColor: baseCssColor }">
+                    <div class="color-data">
+                        <span class="hex-value">{{ baseHex }}</span>
+                        <span class="oklch-value">{{ baseCssColor }}</span>
+                    </div>
+                </div>
+
+                <div class="text-input-group">
+                    <label>Manual Input (Hex, RGB, CSS Color)</label>
+                    <input id="hexInput" type="text" v-model="textInputColor" @change="parseTextInput"
+                        @keyup.enter="parseTextInput" placeholder="e.g. #ff0055, rgb(255, 0, 0)">
+                </div>
+
+                <div class="slider-group">
+                    <label>
+                        <span class="label-text">Lightness (L)</span>
+                        <span class="value">{{ (lightness ?? 0).toFixed(2) }}</span>
+                    </label>
+                    <input type="range" min="0" max="1" step="0.01" v-model.number="lightness">
+                </div>
+
+                <div class="slider-group">
+                    <label>
+                        <span class="label-text">Chroma (C)</span>
+                        <span class="value">{{ (chroma ?? 0).toFixed(3) }}</span>
+                    </label>
+                    <input type="range" min="0" max="0.4" step="0.001" v-model.number="chroma">
+                </div>
+
+                <div class="slider-group">
+                    <label>
+                        <span class="label-text">Hue (H)</span>
+                        <span class="value">{{ ((hue ?? 0) % 360).toFixed(1) }}&deg;</span>
+                    </label>
+                    <input class="hue-slider" type="range" min="0" max="360" step="1" v-model.number="hue">
+                </div>
+
+                <hr class="section-divider">
+
+                <!-- Image Extraction Tool -->
+                <div class="image-extraction-section">
+                    <h3>Extract from Image</h3>
+                    <p class="section-desc">Upload or capture an area to set the base color.</p>
+                    
+                    <input type="file" id="camera-input" accept="image/*" hidden @change="handleImageUpload">
+                    
+                    <button class="modern-upload-btn" @click="triggerFileUpload">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                        Choose Image / Camera
+                    </button>
+
+                    <!-- Compact Sidebar View (visible when not expanded) -->
+                    <div v-if="isImageLoaded && !isImageExpanded" class="image-workspace-sidebar">
+                        <div class="workspace-header">
+                            <p class="instruction-text">Tap/Drag for color</p>
+                            <div class="workspace-actions">
+                                <button class="grayscale-toggle-btn" @click="toggleGrayscale" :class="{ 'grayscale-active': isGrayscaleMode }">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+                                    {{ isGrayscaleMode ? 'Original' : 'OKLCH Greyscale' }}
+                                </button>
+                                <button v-if="isGrayscaleMode" class="download-bw-btn" @click="downloadGrayscaleImage">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    Download BW
+                                </button>
+                                <button class="expand-view-btn" @click="isImageExpanded = true">Expand</button>
+                            </div>
+                        </div>
+                        <div v-if="isGrayscaleMode" class="grayscale-badge">Perceived Lightness (OKLCH L)</div>
+                        <div id="image-container-sidebar" class="img-container" 
+                             @mousedown="onDragStart" 
+                             @mousemove="onDragMove" 
+                             @touchstart.prevent="onDragStart" 
+                             @touchmove.prevent="onDragMove">
+                            <img id="source-image-sidebar" :src="displayImageSrc" alt="Sidebar source" draggable="false">
+                            <div id="selection-box-sidebar" class="selection-box" :style="selectionBoxStyle"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="section-divider">
+
+                <div class="dropdown-group">
+                    <label>Harmony Calculation</label>
+                    <select v-model="harmonyType">
+                        <option value="complementary">Complementary (180&deg;)</option>
+                        <option value="split-complementary">Split-Complementary (150&deg;, 210&deg;)</option>
+                        <option value="triadic">Triadic (120&deg;)</option>
+                        <option value="analogous">Analogous (&plusmn;30&deg;)</option>
+                    </select>
+                </div>
+
+                <div class="dropdown-group">
+                    <label>Proportion Rule</label>
+                    <select v-model="proportionRule">
+                        <option value="60-30-10">60-30-10 Rule</option>
+                        <option value="70-20-10">70-20-10 Rule</option>
+                        <option value="golden">Golden Ratio (Phi)</option>
+                    </select>
+                </div>
+
+                <div class="toggle-control-group glass-panel">
+                    <div class="toggle-header">
+                        <span class="label-text">Link Harmony</span>
+                        <div class="mode-badge" :class="isHarmonyConnected ? 'mode-connected' : 'mode-detached'">
+                            {{ isHarmonyConnected ? 'Connected' : 'Detached' }}
+                        </div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" v-model="isHarmonyConnected">
+                        <span class="slider round"></span>
+                    </label>
+                    <p class="toggle-desc">
+                        {{ isHarmonyConnected 
+                            ? 'Moving any color shifts the entire harmony.' 
+                            : 'Adjust individual colors without affecting others.' 
+                        }}
+                    </p>
+                    <button class="auto-spread-btn" @click="applyLightSpread" title="Optimize tonal range across palette">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h20"/><path d="M12 2v20"/><path d="m19 9-7 7-7-7"/></svg>
+                        Auto Light Spread
+                    </button>
+                </div>
+
+            </section>
+
+            <!-- Right Column: Visualizations -->
+            <section class="visualization-panel">
+
+                <!-- Swatch List with APCA -->
+                <div class="swatches-container glass-panel">
+                    <h3>Generated Palette Matrix</h3>
+                    <p class="chart-desc" style="margin-bottom: 1rem;">Click any color swatch to manually fine-tune it.</p>
+
+                    <div v-if="selectedSwatchIndex !== null" class="fine-tune-panel">
+                        <div class="fine-tune-header">
+                            <h4>Fine-Tuning Color {{ selectedSwatchIndex + 1 }}</h4>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="reset-btn" @click="resetSelectedColor" v-if="hasOverride">Reset to Harmony</button>
+                                <button class="reset-btn" @click="selectSwatch(selectedSwatchIndex)">Close</button>
+                            </div>
+                        </div>
+
+                        <div class="text-input-group" style="margin-bottom: 1.5rem;">
+                            <label>Manual Swatch Override (Hex, RGB, CSS)</label>
+                            <input id="fineTuneInput" type="text" v-model="textInputFineTune"
+                                @change="parseFineTuneInput" @keyup.enter="parseFineTuneInput"
+                                placeholder="e.g. #00ffaa">
+                        </div>
+
+                        <div class="slider-group">
+                            <label>Lightness (L) <span class="value">{{ (fineTuneL ?? 0).toFixed(2) }}</span></label>
+                            <input type="range" min="0" max="1" step="0.01" v-model.number="fineTuneL">
+                        </div>
+                        <div class="slider-group">
+                            <label>Chroma (C) <span class="value">{{ (fineTuneC ?? 0).toFixed(3) }}</span></label>
+                            <input type="range" min="0" max="0.4" step="0.001" v-model.number="fineTuneC">
+                        </div>
+                        <div class="slider-group">
+                            <label>Hue (H) <span class="value">{{ (fineTuneH ?? 0).toFixed(1) }}&deg;</span></label>
+                            <input class="hue-slider" type="range" min="0" max="360" step="1" v-model.number="fineTuneH">
+                        </div>
+                    </div>
+
+                    <div class="swatches-grid">
+                        <div v-for="(item, index) in palette" :key="index" class="swatch-card"
+                            :class="{ 'focal-point': item.isFocal, 'selected-swatch': selectedSwatchIndex === index }"
+                            @click="selectSwatch(index)">
+                            <div class="swatch-color" :style="{ backgroundColor: item.css }">
+                                <span v-if="item.isFocal" class="focal-badge">Focal</span>
+                            </div>
+                            <div class="swatch-details">
+                                <div class="swatch-proportion">{{ (item.proportion ?? 0).toFixed(1) }}%</div>
+                                <div class="swatch-apca" :class="apcaClass(item.contrastRatio)">
+                                    Lc {{ (item.contrastRatio ?? 0).toFixed(1) }} <span class="apca-label">APCA (vs W)</span>
+                                </div>
+                                <div class="swatch-hex-row">
+                                    <span class="swatch-hex">{{ item.hex }}</span>
+                                    <button class="copy-btn" @click.stop="copyHex(item.hex, index)"
+                                        :class="{ 'copied': copiedIndex === index }">
+                                        <svg v-if="copiedIndex !== index" width="14" height="14" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                        </svg>
+                                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+ 
+                <!-- Graphs -->
+                <div class="charts-container">
+                    <div class="chart-box glass-panel">
+                        <h3>Proportional Area Distribution</h3>
+                        <p class="chart-desc">Mathematical representation of compositional weight.</p>
+                        <div id="treemap-chart" class="d3-container"></div>
+                    </div>
+
+                    <div class="chart-box glass-panel">
+                        <h3>Tonal Range Analysis (L)</h3>
+                        <p class="chart-desc">Spread of perceived lightness across the palette.</p>
+                        <div id="tonal-chart" class="d3-container"></div>
+                    </div>
+ 
+                    <div class="chart-box glass-panel">
+                        <h3>Chroma Range Analysis (C)</h3>
+                        <p class="chart-desc">Spread of color intensity (saturation) across the palette.</p>
+                        <div id="chroma-chart" class="d3-container"></div>
+                    </div>
+
+                    <div class="chart-box glass-panel three-d-box">
+                        <h3>OKLCH Spatial Distribution (3D)</h3>
+                        <p class="chart-desc">Geometry of Lightness (Y-axis), Chroma (Radius), and Hue (Angle).</p>
+                        <div id="three-chart" class="d3-container"></div>
+                    </div>
+
+                    <!-- Expanded Dashboard View (only visible when expanded) -->
+                    <div v-if="isImageLoaded && isImageExpanded" id="extraction-card" class="chart-box glass-panel main-extraction-card is-expanded">
+                        <div class="chart-header workspace-header">
+                            <div>
+                                <h3>High-Precision Extractor</h3>
+                                <p class="chart-desc">Perform detailed color extraction on the enlarged view.</p>
+                            </div>
+                            <div class="workspace-actions">
+                                <button class="grayscale-toggle-btn" @click="toggleGrayscale" :class="{ 'grayscale-active': isGrayscaleMode }">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+                                    {{ isGrayscaleMode ? 'Original' : 'OKLCH Greyscale' }}
+                                </button>
+                                <button v-if="isGrayscaleMode" class="download-bw-btn" @click="downloadGrayscaleImage">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                    Download BW
+                                </button>
+                                <button class="expand-toggle-btn" @click="isImageExpanded = false">Close Precision Mode</button>
+                            </div>
+                        </div>
+                        <div class="extraction-workspace">
+                            <div id="image-container-expanded" class="img-container expanded-container" 
+                                 @mousedown="onDragStart" 
+                                 @mousemove="onDragMove" 
+                                 @touchstart.prevent="onDragStart" 
+                                 @touchmove.prevent="onDragMove">
+                                <img id="source-image-expanded" :src="displayImageSrc" alt="Expanded source" draggable="false">
+                                <div id="selection-box-expanded" class="selection-box" :style="selectionBoxStyle"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+ 
+                <!-- AI Prompt Generator -->
+                <div class="prompt-generator-card glass-panel" v-if="palette.length > 0">
+                    <div class="prompt-header">
+                        <h3>Export &amp; Share</h3>
+                        <div class="prompt-actions">
+                            <button class="export-png-btn" @click="exportPalette">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Export PNG
+                            </button>
+                            <button class="copy-prompt-btn" @click="copyPrompt" :class="{ 'copied': isPromptCopied }">
+                                <span v-if="!isPromptCopied">Copy AI Prompt</span>
+                                <span v-else>Copied!</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="prompt-text">"{{ aiPrompt }}"</p>
+                    <p class="chart-desc">Optimized for Midjourney, DALL-E, and cinematic AI generation.</p>
+                </div>
+
+                <!-- Palette Canvas Studio -->
+                <div class="canvas-studio-card glass-panel" v-if="canvasPalette.length >= 3">
+                    <h3>Palette Canvas Studio</h3>
+                    <p class="chart-desc">Paint with your three palette colours and watch the pixel distribution update live.</p>
+
+                    <!-- Controls row -->
+                    <div class="canvas-controls-row">
+                        <div class="canvas-control-group">
+                            <label>Aspect Ratio</label>
+                            <select v-model="canvasAspectRatio" @change="initCanvas">
+                                <option value="1:1">1:1 — Square</option>
+                                <option value="4:3">4:3 — Classic</option>
+                                <option value="16:9">16:9 — Widescreen</option>
+                                <option value="3:2">3:2 — Photo</option>
+                                <option value="2:3">2:3 — Portrait</option>
+                                <option value="9:16">9:16 — Mobile</option>
+                                <option value="21:9">21:9 — Ultrawide</option>
+                            </select>
+                        </div>
+
+                        <div class="canvas-control-group">
+                            <label>Guides</label>
+                            <select v-model="canvasGuides">
+                                <option value="none">None</option>
+                                <option value="thirds">Rule of Thirds</option>
+                                <option value="golden">Golden Ratio</option>
+                                <option value="quadrants">Quadrants</option>
+                            </select>
+                        </div>
+
+                        <div class="canvas-control-group canvas-tool-group">
+                            <label>Tool</label>
+                            <div class="tool-btn-pair">
+                                <button class="tool-btn" :class="{ active: activeTool === 'draw' }" @click="activeTool = 'draw'">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                    Draw
+                                </button>
+                                <button class="tool-btn" :class="{ active: activeTool === 'fill' }" @click="activeTool = 'fill'">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11h-4.36l-.63-3.15A2 2 0 0 0 12.05 6H12a2 2 0 0 0-2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2"/><path d="M19 11c1.1 0 2 .9 2 2v2a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h5z"/></svg>
+                                    Fill
+                                </button>
+                                <button class="tool-btn" :class="{ active: activeTool === 'stencil' }" @click="activeTool = 'stencil'">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                    Stencil
+                                </button>
+                                <button class="tool-btn" :class="{ active: activeTool === 'blur' }" @click="activeTool = 'blur'">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                                    Blur
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="canvas-control-group canvas-brush-group" v-show="activeTool === 'draw'">
+                            <label>Brush <span class="value">{{ brushSize }}px</span></label>
+                            <input type="range" min="2" max="400" step="1" v-model.number="brushSize">
+                        </div>
+
+                        <div class="canvas-control-group canvas-brush-group" v-show="activeTool === 'stencil'">
+                            <label>Scale <span class="value">{{ stencilScale.toFixed(1) }}x</span></label>
+                            <input type="range" min="0.5" max="4.0" step="0.1" v-model.number="stencilScale">
+                        </div>
+
+                        <!-- Blur Preview Controls -->
+                        <div class="canvas-control-group canvas-blur-group" v-show="activeTool === 'blur'">
+                            <label>Blur Radius <span class="value">{{ blurRadius }}px</span></label>
+                            <input type="range" min="0" max="20" step="1" v-model.number="blurRadius">
+                            <div class="blur-actions">
+                                <button class="blur-apply-btn" @click="applyBlur" :disabled="blurRadius <= 0">Apply</button>
+                                <button class="blur-cancel-btn" @click="cancelBlur">Cancel</button>
+                            </div>
+                        </div>
+
+                        <button class="canvas-undo-btn" @click="undoCanvas">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                            Undo
+                        </button>
+
+                        <button class="canvas-clear-btn" @click="initCanvas">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                            Clear
+                        </button>
+
+                        <div class="canvas-download-group">
+                            <select v-model="canvasDownloadFormat" class="canvas-format-select">
+                                <option value="png">PNG</option>
+                                <option value="jpeg">JPEG</option>
+                            </select>
+                            <button class="canvas-download-btn" @click="downloadCanvas">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                Download
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Stencil Selector -->
+                    <div class="stencil-selector-section" v-show="activeTool === 'stencil'">
+                        <div class="stencil-actions-row">
+                            <input type="file" id="stencil-upload-input" accept=".svg" hidden @change="handleStencilUpload">
+                            <button class="stencil-upload-btn" @click="triggerStencilUpload">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                Upload Own SVG
+                            </button>
+                            <p class="stencil-hint">SVGs will be converted to the active color.</p>
+                        </div>
+                        <div class="stencil-grid">
+                            <!-- User Uploaded Stencils -->
+                            <button 
+                                v-for="(s, index) in userStencils" 
+                                :key="'user-' + index" 
+                                class="stencil-item user-stencil" 
+                                :class="{ active: selectedStencil === s.id }"
+                                @click="selectedStencil = s.id"
+                            >
+                                <img :src="s.preview" alt="User Stencil">
+                                <span class="user-stencil-badge">User</span>
+                            </button>
+                            <!-- Default Stencils -->
+                            <button 
+                                v-for="s in stencils" 
+                                :key="s" 
+                                class="stencil-item" 
+                                :class="{ active: selectedStencil === s }"
+                                @click="selectedStencil = s"
+                            >
+                                <img :src="'Figure-Outlines/' + encodeURIComponent(s)" alt="Stencil" loading="lazy">
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Colour picker: 3 palette swatches -->
+                    <div class="canvas-color-picker-row">
+                        <button
+                            v-for="(col, i) in canvasPalette"
+                            :key="i"
+                            class="canvas-color-btn"
+                            :class="{ active: activeCanvasColor === i }"
+                            :style="{ background: col.css }"
+                            @click="activeCanvasColor = i"
+                            :title="col.hex">
+                            <span class="canvas-color-label">{{ col.hex }}</span>
+                            <span class="canvas-color-check" v-if="activeCanvasColor === i">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            </span>
+                        </button>
+                    </div>
+
+                    <!-- The canvas itself -->
+                    <div class="canvas-wrapper" id="canvas-wrapper">
+                        <canvas
+                            id="palette-canvas"
+                            @mousedown="onCanvasPointerDown"
+                            @mousemove="onCanvasPointerMove"
+                            @mouseup="onCanvasPointerUp"
+                            @mouseleave="onCanvasPointerUp"
+                            @touchstart.prevent="onCanvasPointerDown"
+                            @touchmove.prevent="onCanvasPointerMove"
+                            @touchend.prevent="onCanvasPointerUp"
+                            :style="{ 
+                                touchAction: 'none', 
+                                cursor: activeTool === 'draw' ? 'crosshair' : 'default', 
+                                display: 'block', 
+                                width: '100%', 
+                                height: '100%',
+                                filter: blurRadius > 0 ? 'blur(' + blurRadius + 'px)' : 'none'
+                             }">
+                        </canvas>
+
+                        <!-- Composition Guides Overlay -->
+                        <div class="canvas-guides-overlay" :class="'guides-' + canvasGuides" v-if="canvasGuides !== 'none'">
+                            <div class="guide-v guide-v-1"></div>
+                            <div class="guide-v guide-v-2"></div>
+                            <div class="guide-h guide-h-1"></div>
+                            <div class="guide-h guide-h-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Live pixel distribution stats -->
+                    <div class="pixel-stats-section">
+                        <div class="pixel-stats-bar">
+                            <div
+                                v-for="(col, i) in canvasPalette"
+                                :key="i"
+                                class="pixel-stats-segment"
+                                :style="{ width: canvasPixelStats[i] + '%', background: col.css }"
+                                :title="col.hex + ': ' + canvasPixelStats[i].toFixed(1) + '%'">
+                            </div>
+
+                            <!-- Target Proportion Markers -->
+                            <div 
+                                v-for="(pos, idx) in canvasTargetMarkers" 
+                                :key="'marker-' + idx"
+                                class="pixel-stats-marker"
+                                :style="{ left: pos + '%' }"
+                                :title="'Target Split: ' + pos.toFixed(0) + '%'">
+                                <div class="marker-line"></div>
+                                <div class="marker-label">Target</div>
+                            </div>
+                        </div>
+                        <div class="pixel-stats-labels">
+                            <div v-for="(col, i) in canvasPalette" :key="i" class="pixel-stat-label">
+                                <span class="pixel-stat-dot" :style="{ background: col.css }"></span>
+                                <span class="pixel-stat-hex">{{ col.hex }}</span>
+                                <strong class="pixel-stat-pct">{{ canvasPixelStats[i].toFixed(1) }}%</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Composition AI Prompt -->
+                    <div class="canvas-prompt-section">
+                        <div class="canvas-prompt-header">
+                            <div class="canvas-prompt-title">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-10.6 8.38 8.38 0 0 1 3.8.9"/><path d="M16 5V3a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M7 21h10"/><path d="M12 17v4"/></svg>
+                                <span>Composition AI Prompt</span>
+                            </div>
+                            <button class="copy-canvas-prompt-btn" @click="copyCanvasPrompt" :class="{ 'copied': isCanvasPromptCopied }">
+                                <span v-if="!isCanvasPromptCopied">Copy Blocking Prompt</span>
+                                <span v-else>Copied!</span>
+                            </button>
+                        </div>
+                        <p class="canvas-prompt-text">"{{ canvasAiPrompt }}"</p>
+                    </div>
+                </div>
+
+            </section>
+        </main>
+        <!-- Mobile Download Fallback Overlay -->
+        <div v-if="canvasDownloadPreview" class="download-preview-overlay" @click.self="canvasDownloadPreview = null">
+            <div class="download-preview-content glass-panel">
+                <div class="preview-header">
+                    <h3>Save Image</h3>
+                    <button class="close-preview-btn" @click="canvasDownloadPreview = null">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <p class="preview-hint"><strong>iPhone/iPad User:</strong> Long-press the image below and select <strong>"Save to Photos"</strong>.</p>
+                <div class="preview-image-container">
+                    <img :src="canvasDownloadPreview" alt="Download Preview">
+                </div>
+                <button class="preview-done-btn" @click="canvasDownloadPreview = null">Done</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Load ColorJS and D3 via ESM before our main script -->
+    <script type="module" src="app.js"></script>
+    <script src="/assets/js/nav-loader.js"></script>
+</body>
+
+</html>

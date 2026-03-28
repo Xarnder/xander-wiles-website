@@ -414,6 +414,10 @@ document.addEventListener('DOMContentLoaded', () => {
         state.showArchived = !state.showArchived;
         const btn = this;
 
+        // Close options modal if open
+        const optionsModal = document.getElementById('options-modal-overlay');
+        if (optionsModal) optionsModal.classList.add('hidden');
+
         if (state.showArchived) {
             btn.classList.add('active');
             Utils.showToast("Viewing Archived Tasks");
