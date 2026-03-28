@@ -526,7 +526,6 @@ export function createTaskElement(task, sourceListId, number) {
     } else {
         actionsHtml = `
             <button class="icon-btn edit-task-btn" title="Edit" onclick="window.openEditModal('${task.id}', '${sourceListId}')"><i class="ph ph-pencil-simple"></i></button>
-            <button class="icon-btn add-image-btn" title="Add Image" onclick="window.triggerImageUpload('${task.id}')"><i class="ph ph-image"></i></button>
             <button class="icon-btn archive-task-btn" title="Archive" onclick="window.archiveTask('${task.id}')"><i class="ph ph-archive"></i></button>
         `;
     }
@@ -793,6 +792,14 @@ export function openEditModal(taskId, listId) {
             btn.classList.add('selected');
         }
     });
+
+    // Add Image Button in Modal
+    const modalAddImageBtn = document.getElementById('modal-add-image-btn');
+    if (modalAddImageBtn) {
+        modalAddImageBtn.onclick = () => {
+            window.triggerImageUpload(taskId);
+        };
+    }
 
     modalOverlay.classList.remove('hidden');
 }
