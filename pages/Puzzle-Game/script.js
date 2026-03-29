@@ -226,29 +226,30 @@ img.onerror = () => {
 function initPreviewCanvas() {
     if (!img.complete || img.naturalWidth === 0) return;
 
-    const aspectRatio = img.height / img.width;
-    // Limit max width to container width (800px) or screen width
-    // Actually, we want it to be responsive. 
-    // Let's set the internal resolution to match the image (capped) or a fixed high res?
-    // Let's stick to a max width of 800 for internal res.
-    const maxWidth = 800;
+    const imgAR = img.height / img.width;
+    
+    // Target a higher internal resolution for better quality on large previews
+    let w = 1200;
+    let h = 1200 * imgAR;
 
-    let w = maxWidth;
-    let h = maxWidth * aspectRatio;
-
-    // If height exceeds max (e.g. portrait), scale by height instead?
-    // Maybe max height 600?
-    if (h > 600) {
-        h = 600;
-        w = h / aspectRatio;
+    // Cap height for extreme portraits to keep them within view
+    if (h > 900) {
+        h = 900;
+        w = h / imgAR;
     }
 
-    // Only set dimensions if they differ to avoid partial clears/resets
+    // Don't up-res smaller images
+    if (w > img.width) {
+        w = img.width;
+        h = img.height;
+    }
+
     if (previewCanvas.width !== w || previewCanvas.height !== h) {
         previewCanvas.width = w;
         previewCanvas.height = h;
     }
 }
+
 
 // --- Initialization ---
 let isPreviewUpdating = false;
@@ -350,9 +351,11 @@ function startGame() {
     }
 
     // UI Update
+    // Hide the Setup Controls and Preview during gameplay
     document.querySelector('.controls-col').classList.add('hidden');
-    // Hide the 'Hide Image' toggle during gameplay as it is only relevant for preview/setup
     document.getElementById('hide-image-container').classList.add('hidden');
+    document.getElementById('preview-container').classList.add('hidden');
+
 
     // document.getElementById('title-text').classList.add('hidden'); // Keep title visible? Or hide? 
     // User said "make it just say puzzle game always".
@@ -1315,15 +1318,20 @@ window.addEventListener('touchmove', (e) => moveSlide(e.touches[0]));
 function moveSlide(e) {
     if (!isSliding || !sliderTrack) return;
     const rect = sliderTrack.getBoundingClientRect();
-    let x = (e.clientX || e.pageX) - rect.left - 25; // 25 is half handle width
+    const handleWidth = 42;
+    const padding = 10;
+    
+    let x = (e.clientX || e.pageX) - rect.left - (handleWidth / 2);
 
-    const max = rect.width - 50;
-    if (x < 0) x = 0;
-    if (x > max) x = max;
+    const minX = padding;
+    const maxX = rect.width - handleWidth - padding;
+    
+    if (x < minX) x = minX;
+    if (x > maxX) x = maxX;
 
     sliderHandle.style.left = x + 'px';
 
-    if (x >= max - 5) {
+    if (x >= maxX - 5) {
         // Trigger Reset
         isSliding = false;
         resetGame();
@@ -1336,16 +1344,20 @@ window.addEventListener('touchend', endSlide);
 function endSlide() {
     if (!isSliding) return;
     isSliding = false;
-    // Snap back
+    // Snap back to padding
     sliderHandle.style.transition = 'left 0.3s';
-    sliderHandle.style.left = '0px';
+    sliderHandle.style.left = '10px';
     setTimeout(() => sliderHandle.style.transition = 'none', 300);
 }
 
 function resetGame() {
     state.isWon = false; // Reset win flag
     modal.classList.add('hidden');
-    sliderHandle.style.left = '0px';
+    sliderHandle.style.left = '10px';
+    
+    // Show Preview Container again
+    document.getElementById('preview-container').classList.remove('hidden');
+
     document.body.classList.remove('in-love');
     overlay.style.opacity = 0;
     audio.pause();
