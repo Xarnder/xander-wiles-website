@@ -82,14 +82,18 @@ const App = {
         const colorOverrides = ref({});
 
         // Image extraction state
+        const imageSrc = ref(null);
         const isImageLoaded = ref(false);
-        const imageSrc = ref('');
         const isImageExpanded = ref(false);
         const isDragging = ref(false);
         const isGraphDragging = ref(false);
         const isHarmonyConnected = ref(true);
         const isGrayscaleMode = ref(false);
         const grayscaleImageSrc = ref('');
+        const isThresholdMode = ref(false);
+        const thresholdLow = ref(0.33);
+        const thresholdHigh = ref(0.66);
+        const thresholdImageSrc = ref('');
         const startX = ref(0);
         const startY = ref(0);
         const currentX = ref(0);
@@ -906,10 +910,12 @@ const App = {
                 imageSrc.value = e.target.result;
                 isImageLoaded.value = true;
                 isGrayscaleMode.value = false;
+                isThresholdMode.value = false;
                 grayscaleImageSrc.value = ''; // reset, will be generated lazily
+                thresholdImageSrc.value = '';
                 startX.value = currentX.value = startY.value = currentY.value = 0;
                 // Pre-generate the greyscale image after the img element renders
-                nextTick(() => generateOklchGrayscale());
+                nextTick(() => { generateOklchGrayscale(); generateThresholdImage(); });
             };
             reader.readAsDataURL(file);
         }
@@ -995,6 +1001,123 @@ const App = {
         function toggleGrayscale() {
             if (!grayscaleImageSrc.value) generateOklchGrayscale();
             isGrayscaleMode.value = !isGrayscaleMode.value;
+            if (isGrayscaleMode.value) isThresholdMode.value = false;
+        }
+
+        function toggleThresholdMode() {
+            if (!thresholdImageSrc.value) generateThresholdImage();
+            isThresholdMode.value = !isThresholdMode.value;
+            if (isThresholdMode.value) isGrayscaleMode.value = false;
+        }
+
+        watch([thresholdLow, thresholdHigh, canvasPalette], () => {
+             if (isImageLoaded.value && isThresholdMode.value) {
+                 generateThresholdImage();
+             }
+        }, { deep: true });
+
+        function generateThresholdImage() {
+            const img = document.getElementById('raw-uploaded-image');
+            if (!img || !img.naturalWidth) return;
+            
+            let palCss = canvasPalette.value.map(c => c.css);
+            if (palCss.length < 3) palCss = ["#222222", "#888888", "#eeeeee"];
+            
+            const parsedPal = canvasPalette.value.length >= 3 ? canvasPalette.value.map(c => {
+                 let L = c.colorObj ? c.colorObj.coords[0] : 0.5;
+                 const rgb = getRgbFromBrowser(c.css);
+                 return { rgb: [rgb.r, rgb.g, rgb.b], L: L };
+            }) : [
+                 { rgb: [34,34,34], L: 0.1 }, 
+                 { rgb: [136,136,136], L: 0.5 }, 
+                 { rgb: [238,238,238], L: 0.9 }
+            ];
+
+            // Sort by Lightness
+            parsedPal.sort((a,b) => a.L - b.L);
+            const cDark = parsedPal[0].rgb;
+            const cMid = parsedPal[1].rgb;
+            const cLight = parsedPal[2].rgb;
+
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const data = imageData.data;
+
+            const M1 = [
+                [0.4122214708, 0.5363325363, 0.0514459929],
+                [0.2119034982, 0.6806995451, 0.1073969566],
+                [0.0883024619, 0.2817188376, 0.6299787005]
+            ];
+            const M2L = [0.2104542553, 0.7936177850, -0.0040720468];
+
+            function toLinear(v) {
+                const c = v / 255;
+                return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+            }
+
+            for (let i = 0; i < data.length; i += 4) {
+                const rL = toLinear(data[i]);
+                const gL = toLinear(data[i + 1]);
+                const bL = toLinear(data[i + 2]);
+                const l = M1[0][0] * rL + M1[0][1] * gL + M1[0][2] * bL;
+                const m = M1[1][0] * rL + M1[1][1] * gL + M1[1][2] * bL;
+                const s = M1[2][0] * rL + M1[2][1] * gL + M1[2][2] * bL;
+
+                const lR = Math.cbrt(l);
+                const mR = Math.cbrt(m);
+                const sR = Math.cbrt(s);
+
+                const L = M2L[0] * lR + M2L[1] * mR + M2L[2] * sR;
+
+                let colorOut = cDark;
+                if (L >= thresholdHigh.value) colorOut = cLight;
+                else if (L >= thresholdLow.value) colorOut = cMid;
+
+                data[i] = colorOut[0];
+                data[i + 1] = colorOut[1];
+                data[i + 2] = colorOut[2];
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+            thresholdImageSrc.value = canvas.toDataURL('image/png');
+        }
+
+        function sendThresholdToCanvas() {
+            if (!thresholdImageSrc.value) return;
+            const canvas = document.getElementById('palette-canvas');
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            
+            const img = new Image();
+            img.onload = () => {
+                ctx.fillStyle = canvasPalette.value.length > 0 ? canvasPalette.value[0].css : '#ffffff';
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+
+                const imgRatio = img.width / img.height;
+                const canvasRatio = canvas.width / canvas.height;
+                let drawW = canvas.width, drawH = canvas.height, drawX = 0, drawY = 0;
+
+                if (imgRatio > canvasRatio) {
+                    drawH = canvas.width / imgRatio;
+                    drawY = (canvas.height - drawH) / 2;
+                } else {
+                    drawW = canvas.height * imgRatio;
+                    drawX = (canvas.width - drawW) / 2;
+                }
+
+                if (typeof saveCanvasHistory === 'function') saveCanvasHistory();
+                ctx.drawImage(img, drawX, drawY, drawW, drawH);
+                if (typeof updatePixelStats === 'function') updatePixelStats();
+                
+                canvas.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            };
+            img.src = thresholdImageSrc.value;
         }
 
         function downloadGrayscaleImage() {
@@ -1005,9 +1128,10 @@ const App = {
         }
 
         // Computed src to display in the image workspace
-        const displayImageSrc = computed(() =>
-            isGrayscaleMode.value ? grayscaleImageSrc.value : imageSrc.value
-        );
+        const displayImageSrc = computed(() => {
+            if (isThresholdMode.value && thresholdImageSrc.value) return thresholdImageSrc.value;
+            return isGrayscaleMode.value ? grayscaleImageSrc.value : imageSrc.value;
+        });
 
         function getCoords(e) {
             const container = e.currentTarget;
@@ -2020,6 +2144,11 @@ const App = {
             grayscaleImageSrc,
             displayImageSrc,
             toggleGrayscale,
+            isThresholdMode,
+            thresholdLow,
+            thresholdHigh,
+            toggleThresholdMode,
+            sendThresholdToCanvas,
             downloadGrayscaleImage,
             copyPrompt,
             exportPalette,
