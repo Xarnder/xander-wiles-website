@@ -93,6 +93,7 @@ const App = {
         const isThresholdMode = ref(false);
         const thresholdLow = ref(0.33);
         const thresholdHigh = ref(0.66);
+        const thresholdBlur = ref(0);
         const thresholdImageSrc = ref('');
         const startX = ref(0);
         const startY = ref(0);
@@ -1010,7 +1011,7 @@ const App = {
             if (isThresholdMode.value) isGrayscaleMode.value = false;
         }
 
-        watch([thresholdLow, thresholdHigh, canvasPalette], () => {
+        watch([thresholdLow, thresholdHigh, thresholdBlur, canvasPalette], () => {
              if (isImageLoaded.value && isThresholdMode.value) {
                  generateThresholdImage();
              }
@@ -1045,7 +1046,11 @@ const App = {
             canvas.width = w;
             canvas.height = h;
             const ctx = canvas.getContext('2d');
+            if (thresholdBlur.value > 0) {
+                ctx.filter = `blur(${thresholdBlur.value}px)`;
+            }
             ctx.drawImage(img, 0, 0, w, h);
+            ctx.filter = 'none';
             const imageData = ctx.getImageData(0, 0, w, h);
             const data = imageData.data;
 
@@ -2147,6 +2152,7 @@ const App = {
             isThresholdMode,
             thresholdLow,
             thresholdHigh,
+            thresholdBlur,
             toggleThresholdMode,
             sendThresholdToCanvas,
             downloadGrayscaleImage,

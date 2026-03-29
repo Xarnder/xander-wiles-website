@@ -160,11 +160,13 @@
                         <div v-if="isGrayscaleMode && !isThresholdMode" class="grayscale-badge">Perceived Lightness (OKLCH L)</div>
                         <div v-if="isThresholdMode" class="grayscale-badge" style="display:flex; flex-direction:column; gap:8px;">
                             <span>Threshold Controls</span>
-                            <div style="display:flex; justify-content:space-between; font-size:10px; opacity:0.8;">
+                            <div style="display:flex; justify-content:space-between; font-size:10px; opacity:0.8; flex-wrap: wrap; gap: 4px;">
                                 <label>Low T: {{ thresholdLow.toFixed(2) }}</label>
-                                <input type="range" min="0" max="1" step="0.01" v-model.number="thresholdLow" style="width:60px;">
+                                <input type="range" min="0" max="1" step="0.01" v-model.number="thresholdLow" style="width:50px;">
                                 <label>High T: {{ thresholdHigh.toFixed(2) }}</label>
-                                <input type="range" min="0" max="1" step="0.01" v-model.number="thresholdHigh" style="width:60px;">
+                                <input type="range" min="0" max="1" step="0.01" v-model.number="thresholdHigh" style="width:50px;">
+                                <label style="width: 100%;">Blur: {{ thresholdBlur }}px</label>
+                                <input type="range" min="0" max="20" step="1" v-model.number="thresholdBlur" style="width:100%;">
                             </div>
                         </div>
                         <div id="image-container-sidebar" class="img-container" 
@@ -351,11 +353,13 @@
                         </div>
                         <div v-if="isThresholdMode" class="grayscale-badge" style="display:flex; gap:16px; margin: 10px 20px; align-items:center;">
                             <span>Threshold Controls</span>
-                            <div style="display:flex; gap:8px; font-size:12px; opacity:0.8; align-items:center;">
+                            <div style="display:flex; gap:16px; font-size:12px; opacity:0.8; align-items:center;">
                                 <label>Dark T: {{ thresholdLow.toFixed(2) }}</label>
                                 <input type="range" min="0" max="1" step="0.01" v-model.number="thresholdLow" style="width:100px;">
                                 <label>Light T: {{ thresholdHigh.toFixed(2) }}</label>
                                 <input type="range" min="0" max="1" step="0.01" v-model.number="thresholdHigh" style="width:100px;">
+                                <label>Blur: {{ thresholdBlur }}px</label>
+                                <input type="range" min="0" max="50" step="1" v-model.number="thresholdBlur" style="width:100px;">
                             </div>
                         </div>
                         <div class="extraction-workspace">
