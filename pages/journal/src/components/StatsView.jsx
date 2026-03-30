@@ -7,16 +7,8 @@ import { collection, query, where, documentId, onSnapshot, getDocs, orderBy } fr
 import { saveAs } from 'file-saver';
 import ReactDOM from 'react-dom';
 import {
-    ComposedChart,
-    Bar,
-    Cell,
-    Line,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    Legend,
-    ResponsiveContainer
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    Line, ComposedChart, Area, Cell, Legend, LabelList
 } from 'recharts';
 import StorageStats from './StorageStats';
 import FirestoreUsage from './FirestoreUsage';
@@ -282,7 +274,12 @@ export default function StatsView() {
 
             // Extract title or use stored title
             const displayTitle = extractTitle(text, entry.title);
-            entryMap.set(entry.id, { count, title: displayTitle, isSpecial: entry.isSpecial || false });
+            entryMap.set(entry.id, { 
+                count, 
+                title: displayTitle, 
+                isSpecial: entry.isSpecial || false,
+                tags: entry.tags || []
+            });
 
             // Word frequency analysis
             words.forEach(word => {
@@ -337,6 +334,20 @@ export default function StatsView() {
 
             const currentAvg = entryCount > 0 ? Math.round(cumulativeWords / entryCount) : 0;
 
+            // Determine bar color
+            let barColor = '#8b5cf6'; // Default purple
+            if (entryData.isSpecial) {
+                barColor = '#facc15'; // Special yellow
+            } else if (entryData.tags && entryData.tags.length > 0) {
+                // Find first tag that has a defined color
+                for (const tagId of entryData.tags) {
+                    if (tags[tagId] && tags[tagId].color) {
+                        barColor = tags[tagId].color;
+                        break;
+                    }
+                }
+            }
+
             data.push({
                 date: dateKey,
                 displayDate: format(iterDate, timeRange === 'year' ? 'MMM d' : 'd MMM'),
@@ -344,6 +355,7 @@ export default function StatsView() {
                 average: currentAvg,
                 title: entryData.title,
                 isSpecial: entryData.isSpecial,
+                color: barColor,
                 fullDate: iterDate.getTime()
             });
 
@@ -466,7 +478,8 @@ export default function StatsView() {
                     <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart
                             data={stats.chartData}
-                            margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                            margin={{ top: 30, right: 10, left: -20, bottom: 0 }}
+                            barCategoryGap={timeRange === 'week' ? "10%" : "20%"}
                         >
                             <defs>
                                 <linearGradient id="colorWords" x1="0" y1="0" x2="0" y2="1">
@@ -494,9 +507,8 @@ export default function StatsView() {
                                 <Bar
                                     dataKey="words"
                                     name="Word Count"
-                                    fill="url(#colorWords)"
                                     radius={[4, 4, 0, 0]}
-                                    maxBarSize={50}
+                                    maxBarSize={timeRange === 'week' ? 100 : 50}
                                     onClick={(data) => {
                                         if (data && data.date) {
                                             navigate(`/entry/${data.date}`, { state: { from: '/stats' } });
@@ -507,10 +519,31 @@ export default function StatsView() {
                                     {stats.chartData.map((entry, index) => (
                                         <Cell
                                             key={`cell-${index}`}
-                                            fill={entry.isSpecial ? '#facc15' : 'url(#colorWords)'}
-                                            fillOpacity={entry.isSpecial ? 0.9 : 1}
+                                            fill={entry.color}
+                                            fillOpacity={entry.isSpecial ? 1 : 0.8}
                                         />
                                     ))}
+                                    <LabelList
+                                        dataKey="words"
+                                        content={(props) => {
+                                            const { x, y, width, index } = props;
+                                            const entry = stats.chartData[index];
+                                            if (entry && entry.isSpecial && entry.words > 0) {
+                                                return (
+                                                    <text
+                                                        x={x + width / 2}
+                                                        y={y - 12}
+                                                        fill="#facc15"
+                                                        textAnchor="middle"
+                                                        className="text-[16px] font-bold drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]"
+                                                    >
+                                                        ★
+                                                    </text>
+                                                );
+                                            }
+                                            return null;
+                                        }}
+                                    />
                                 </Bar>
                             <Line
                                 type="monotone"
