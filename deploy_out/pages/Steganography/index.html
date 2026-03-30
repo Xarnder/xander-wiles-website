@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Steganography Tool | Hide Messages</title>
+    
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Google Fonts for modern typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Global Header CSS & Page CSS -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+    <!-- Global Header Placeholder -->
+    <div id="main-nav-placeholder"></div> 
+    
+    <main class="container">
+        <header class="app-header">
+            <h1>Steganography</h1>
+            <p>Hide and reveal secret messages using Image LSB or Text Zero-Width Characters.</p>
+        </header>
+
+        <!-- Mode Selector -->
+        <div class="mode-selector">
+            <button class="mode-btn active" data-mode="mode-image">Image Mode</button>
+            <button class="mode-btn" data-mode="mode-text">Text Mode</button>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="encode">Hide Message</button>
+            <button class="tab-btn" data-tab="decode">Reveal Message</button>
+        </div>
+
+        <section id="encode" class="tab-content active glass-card">
+            
+            <!-- IMAGE ENCODE -->
+            <div id="encode-image-ui" class="mode-section active">
+                <div class="input-group">
+                    <label for="encode-image">Select Cover Image:</label>
+                    <div class="file-upload">
+                        <input type="file" id="encode-image" accept="image/png, image/jpeg, image/webp">
+                        <span class="file-custom">Choose an image...</span>
+                    </div>
+                    <img id="encode-preview" class="image-preview" src="" alt="Image Preview" style="display: none;">
+                </div>
+            </div>
+
+            <!-- TEXT ENCODE -->
+            <div id="encode-text-ui" class="mode-section" style="display: none;">
+                <div class="input-group">
+                    <label for="encode-cover-text">Visible Cover Text:</label>
+                    <textarea id="encode-cover-text" placeholder="Type the innocent text..." rows="4"></textarea>
+                </div>
+            </div>
+
+            <!-- SHARED SECRET MESSAGE INPUT -->
+            <div class="input-group">
+                <label for="encode-text">Secret Message:</label>
+                <textarea id="encode-text" placeholder="Type the message you want to hide..." rows="4"></textarea>
+            </div>
+
+            <button id="btn-encode" class="primary-btn">Encode Message</button>
+            <div id="encode-error" class="error-msg"></div>
+            <div id="encode-success" class="success-msg"></div>
+            
+            <div id="text-result-group" class="input-group" style="display: none; margin-top: 1.5rem;">
+                <label for="encoded-text-result">Copied to clipboard. Resulting Text:</label>
+                <textarea id="encoded-text-result" readonly rows="4"></textarea>
+            </div>
+        </section>
+
+        <section id="decode" class="tab-content glass-card">
+            
+            <!-- IMAGE DECODE -->
+            <div id="decode-image-ui" class="mode-section active">
+                <div class="input-group">
+                    <label for="decode-image">Select Encoded Image:</label>
+                    <div class="file-upload">
+                        <input type="file" id="decode-image" accept="image/png">
+                        <span class="file-custom">Choose an image...</span>
+                    </div>
+                    <img id="decode-preview" class="image-preview" src="" alt="Image Preview" style="display: none;">
+                </div>
+            </div>
+
+            <!-- TEXT DECODE -->
+            <div id="decode-text-ui" class="mode-section" style="display: none;">
+                <div class="input-group">
+                    <label for="decode-pasted-text">Paste Encoded Text:</label>
+                    <textarea id="decode-pasted-text" placeholder="Paste the text containing hidden characters..." rows="4"></textarea>
+                </div>
+            </div>
+
+            <button id="btn-decode" class="primary-btn">Decode Message</button>
+            <div id="decode-error" class="error-msg"></div>
+            
+            <div class="input-group" id="decoded-result-group" style="display: none;">
+                <label for="decoded-text">Revealed Message:</label>
+                <textarea id="decoded-text" readonly rows="4"></textarea>
+            </div>
+        </section>
+        
+        <canvas id="hidden-canvas" style="display: none;"></canvas>
+    </main>
+
+    <!-- Global Header Script & Page Script -->
+    <script src="/assets/js/nav-loader.js"></script> 
+    <script src="script.js"></script>
+</body>
+</html>

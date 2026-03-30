@@ -449,5 +449,5 @@ export function processAutomatedLists() {
     }
 }
 
-// Export raw updateDoc for UI helpers that need direct access (e.g. glow color)
-export { updateDoc };
+// Export raw firestore functions and db for UI helpers that need direct access (e.g. glow color, automated lists)
+export { updateDoc, doc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc, db };

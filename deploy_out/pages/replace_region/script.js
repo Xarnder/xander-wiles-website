@@ -123,6 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
             img.onload = () => {
                 state.originalImage = img;
                 state.maskCanvas = null;
+                state.userPaintLayer = null; // Reset mask for new original image
                 initialUploadContainer.classList.add('hidden');
                 step1Actions.classList.remove('hidden');
             };
@@ -790,13 +791,15 @@ document.addEventListener('DOMContentLoaded', () => {
         requestAnimationFrame(updateCursorSize);
 
         // User Paint Layer (Mask)
-        if (!state.userPaintLayer) {
+        if (!state.userPaintLayer ||
+            state.userPaintLayer.width !== state.originalImage.width ||
+            state.userPaintLayer.height !== state.originalImage.height) {
+
             state.userPaintLayer = document.createElement('canvas');
+            state.userPaintLayer.width = state.originalImage.width;
+            state.userPaintLayer.height = state.originalImage.height;
+            // Note: Setting canvas dimensions automatically clears it.
         }
-        state.userPaintLayer.width = state.originalImage.width;
-        state.userPaintLayer.height = state.originalImage.height;
-        // Reset mask layer if new edit
-        state.userPaintLayer.getContext('2d').clearRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
 
         // Temp Stroke Layer
         if (!state.tempStrokeLayer) {

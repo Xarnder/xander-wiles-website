@@ -1202,19 +1202,17 @@ export function openEditListModal(listId) {
     const newSaveBtn = pAutoSaveBtn.cloneNode(true);
     pAutoSaveBtn.parentNode.replaceChild(newSaveBtn, pAutoSaveBtn);
     newSaveBtn.onclick = () => {
-        import('./api.js').then(api => {
-            api.updateDoc(api.doc(api.db, "users", state.currentUser.uid, "lists", listId), {
-                timeAutomated: pAutoToggle.checked,
-                timeMoveType: pAutoTrigger.value,
-                timeDurationValue: parseInt(pAutoDurationVal.value) || 0,
-                timeDurationUnit: pAutoDurationUnit.value,
-                scheduleType: pAutoScheduleType.value,
-                scheduleTime: pAutoScheduleTime.value,
-                timeDestinationId: pAutoDestList.value || null
-            }).then(() => {
-                import('./utils.js').then(utils => utils.showToast("Automation Settings Saved!", "success"));
-            }).catch(e => api.handleSyncError(e));
-        });
+        updateDoc(doc(db, "users", state.currentUser.uid, "lists", listId), {
+            timeAutomated: pAutoToggle.checked,
+            timeMoveType: pAutoTrigger.value,
+            timeDurationValue: parseInt(pAutoDurationVal.value) || 0,
+            timeDurationUnit: pAutoDurationUnit.value,
+            scheduleType: pAutoScheduleType.value,
+            scheduleTime: pAutoScheduleTime.value,
+            timeDestinationId: pAutoDestList.value || null
+        }).then(() => {
+            showToast("Automation Settings Saved!", "success");
+        }).catch(e => handleSyncError(e));
     };
     // --- END TIME AUTOMATION UI ---
 
@@ -1236,28 +1234,25 @@ export function openEditListModal(listId) {
         const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
         if (lines.length === 0) return;
 
-        const { writeBatch, doc, db, arrayUnion } = API; // Assume imported or accessible
-        import('./api.js').then(api => {
-            const batch = api.writeBatch(api.db);
-            const listRef = api.doc(api.db, "users", state.currentUser.uid, "lists", listId);
+        const batch = writeBatch(db);
+        const listRef = doc(db, "users", state.currentUser.uid, "lists", listId);
 
-            lines.forEach(line => {
-                const newId = Utils.generateId();
-                batch.set(api.doc(api.db, "users", state.currentUser.uid, "tasks", newId), {
-                    text: line.trim(),
-                    completed: false,
-                    archived: false,
-                    createdAt: Date.now(),
-                    images: [],
-                    glowColor: 'none'
-                });
-                batch.update(listRef, { taskIds: api.arrayUnion(newId) });
+        lines.forEach(line => {
+            const newId = generateId();
+            batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), {
+                text: line.trim(),
+                completed: false,
+                archived: false,
+                createdAt: Date.now(),
+                images: [],
+                glowColor: 'none'
             });
-            batch.commit().then(() => {
-                Utils.showToast(`Added ${lines.length} tasks!`);
-                bulkInput.value = '';
-            }).catch(e => api.handleSyncError(e));
+            batch.update(listRef, { taskIds: arrayUnion(newId) });
         });
+        batch.commit().then(() => {
+            showToast(`Added ${lines.length} tasks!`, "success");
+            bulkInput.value = '';
+        }).catch(e => handleSyncError(e));
     };
 
     newMove.onclick = () => {

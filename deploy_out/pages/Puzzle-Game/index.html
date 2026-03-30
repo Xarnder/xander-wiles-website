@@ -97,16 +97,11 @@
 
                     <label for="difficulty">Puzzple Piece Size: <span id="difficulty-val">4</span></label>
                     <input type="range" id="difficulty" min="3" max="15" value="4">
-                    <!-- Preview Canvas -->
-                    <div class="preview-container">
-                        <canvas id="preview-canvas" width="800" height="600"
-                            style="border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 800px; height: auto;"></canvas>
-                    </div>
                 </div>
                 <button id="btn-start" class="glass-btn">Initialize</button>
             </div>
 
-            <div id="game-controls">
+            <div id="game-controls" class="hidden">
                 <div id="timer-display" class="timer-display">00:00</div>
                 <button id="btn-pause" class="glass-btn small">
                     <span>⏸️</span> Pause
@@ -119,6 +114,14 @@
                 </button>
             </div>
         </div>
+
+        <!-- Preview Canvas -->
+        <div id="preview-container" class="preview-container">
+            <canvas id="preview-canvas" width="800" height="600"
+                style="max-width: 95vw; max-height: 65vh; width: auto; height: auto; border-radius: 12px; box-shadow: var(--shadow); background-color: rgba(255, 255, 255, 0.05); display: block;"></canvas>
+
+        </div>
+
         <!-- The Puzzle Canvas -->
         <canvas id="puzzle-canvas" class="hidden"></canvas>
 
