@@ -166,7 +166,7 @@ export default function MemoriesView() {
 
     const MemoryCard = ({ entry, label, icon: Icon, iconColor }) => (
         <div
-            onClick={() => navigate(`/entry/${entry.id}`)}
+            onClick={() => navigate(`/entry/${entry.id}`, { state: { from: '/memories' } })}
             className="glass-card overflow-hidden hover:bg-white/5 cursor-pointer transition-all duration-300 group flex flex-col h-full ring-1 ring-white/5 hover:ring-primary/30"
         >
             {/* Header */}

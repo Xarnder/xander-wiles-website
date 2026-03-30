@@ -105,7 +105,7 @@ export default function MonthView() {
     const nextMonth = () => setCurrentDate(d => addMonths(d, 1));
 
     const handleEntryClick = (dateKey) => {
-        navigate(`/entry/${dateKey}`);
+        navigate(`/entry/${dateKey}`, { state: { from: '/month' } });
     };
 
 

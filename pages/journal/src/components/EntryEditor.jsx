@@ -50,6 +50,20 @@ export default function EntryEditor() {
     const [draggedImageIndex, setDraggedImageIndex] = useState(null);
     const [dragOverImageIndex, setDragOverImageIndex] = useState(null);
 
+    const fromPath = location.state?.from;
+    const isFromGallery = location.state?.fromGallery;
+
+    const getBackLabel = () => {
+        if (isFromGallery) return "To Gallery";
+        if (fromPath === '/stats') return "To Stats";
+        if (fromPath === '/tags') return "To Tags";
+        if (fromPath === '/month') return "To Month";
+        if (fromPath === '/memories') return "To Memories";
+        if (fromPath === '/') return "To Calendar";
+        if (fromPath?.startsWith('/entry/')) return "Prev View";
+        return "Back";
+    };
+
     const handleDragStart = (e, index) => {
         setDraggedImageIndex(index);
         // Required for Firefox
@@ -532,26 +546,32 @@ export default function EntryEditor() {
 
                 <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="flex items-center w-full sm:w-auto overflow-hidden">
-                        {/* Base Navigation (Calendar) - Only show if NOT from gallery */}
-                        {!location.state?.fromGallery && (
+                        {/* Generic Dynamic Back Button */}
+                        {fromPath && (
+                            <button
+                                onClick={() => {
+                                    if (isFromGallery) {
+                                        navigate('/images', { state: { scrollToId: location.state.scrollToId } });
+                                    } else {
+                                        navigate(fromPath);
+                                    }
+                                }}
+                                className="glass-button px-3 py-2 text-primary hover:text-white hover:bg-primary/20 flex items-center justify-center mr-3 shrink-0"
+                                title={`Back to ${getBackLabel()}`}
+                            >
+                                <ArrowLeft className="w-4 h-4 sm:mr-2" />
+                                <span className="hidden sm:inline font-medium">{getBackLabel()}</span>
+                            </button>
+                        )}
+
+                        {/* Fallback Mobile Back to Calendar (only if no fromPath) */}
+                        {!fromPath && !isFromGallery && (
                             <button
                                 onClick={() => navigate('/')}
                                 className="glass-button p-2 text-text-muted hover:text-white md:hidden mr-2 shrink-0"
                                 title="Back to Calendar"
                             >
                                 <ArrowLeft className="w-5 h-5" />
-                            </button>
-                        )}
-
-                        {/* Back to Gallery Navigation - Visible on ALL breakpoints if coming from gallery */}
-                        {location.state?.fromGallery && (
-                            <button
-                                onClick={() => navigate('/images', { state: { scrollToId: location.state.scrollToId } })}
-                                className="glass-button px-3 py-2 text-primary hover:text-white hover:bg-primary/20 flex items-center justify-center mr-3 shrink-0"
-                                title="Back to Gallery"
-                            >
-                                <ArrowLeft className="w-4 h-4 sm:mr-2" />
-                                <span className="hidden sm:inline font-medium">To Gallery</span>
                             </button>
                         )}
 

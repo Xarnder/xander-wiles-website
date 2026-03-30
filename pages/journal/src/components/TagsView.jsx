@@ -404,7 +404,7 @@ export default function TagsView() {
                                 return (
                                     <div
                                         key={entry.id}
-                                        onClick={() => navigate(`/entry/${entry.id}`)}
+                                        onClick={() => navigate(`/entry/${entry.id}`, { state: { from: '/tags' } })}
                                         className="bg-white/5 border border-white/10 p-4 rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all cursor-pointer group flex flex-col justify-between min-h-[100px]"
                                     >
                                         <div>

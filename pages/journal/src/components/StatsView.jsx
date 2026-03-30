@@ -470,7 +470,7 @@ export default function StatsView() {
                                 maxBarSize={50}
                                 onClick={(data) => {
                                     if (data && data.date) {
-                                        navigate(`/entry/${data.date}`);
+                                        navigate(`/entry/${data.date}`, { state: { from: '/stats' } });
                                     }
                                 }}
                                 style={{ cursor: 'pointer' }}

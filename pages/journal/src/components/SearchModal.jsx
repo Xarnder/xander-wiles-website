@@ -281,7 +281,7 @@ export default function SearchModal({ isOpen, onClose }) {
                                 <button
                                     key={entry.id}
                                     onClick={() => {
-                                        navigate(`/entry/${entry.id}`);
+                                        navigate(`/entry/${entry.id}`, { state: { from: window.location.pathname } });
                                         onClose();
                                     }}
                                     className="w-full text-left p-2 rounded-lg hover:bg-white/5 transition-colors group border border-transparent hover:border-white/5"

@@ -267,7 +267,7 @@ export default function CalendarView() {
                                                 return (
                                                     <button
                                                         key={day}
-                                                        onClick={() => navigate(`entry/${dateKey}`)}
+                                                        onClick={() => navigate(`entry/${dateKey}`, { state: { from: location.pathname } })}
                                                         style={style}
                                                         className={className}
                                                         title={entry ? `${entry.wordCount} words${entry.hasTitle ? ' + Title' : ''}` : ''}
