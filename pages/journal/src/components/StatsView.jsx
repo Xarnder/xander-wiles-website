@@ -261,7 +261,7 @@ export default function StatsView() {
         let totalWords = 0;
         let totalImages = 0;
         const wordCounts = {};
-        const tagCounts = {};
+        const tagCounts = {}; // { tagId: { count: 0, totalWords: 0 } }
         const chartData = [];
 
         // Map entries to chart data
@@ -294,8 +294,18 @@ export default function StatsView() {
             // Tag frequency analysis
             if (entry.tags && Array.isArray(entry.tags)) {
                 entry.tags.forEach(tagId => {
-                    tagCounts[tagId] = (tagCounts[tagId] || 0) + 1;
+                    if (!tagCounts[tagId]) tagCounts[tagId] = { count: 0, totalWords: 0 };
+                    tagCounts[tagId].count += 1;
+                    tagCounts[tagId].totalWords += count;
                 });
+            }
+
+            // Special Day virtual tag analysis
+            if (entry.isSpecial) {
+                const specialId = 'special-day-virtual-tag';
+                if (!tagCounts[specialId]) tagCounts[specialId] = { count: 0, totalWords: 0 };
+                tagCounts[specialId].count += 1;
+                tagCounts[specialId].totalWords += count;
             }
         });
 
@@ -348,10 +358,22 @@ export default function StatsView() {
 
         // Top Tags
         const sortedTags = Object.entries(tagCounts)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 10)
-            .map(([tagId, count]) => ({ tagId, count, data: tags[tagId] }))
-            .filter(item => item.data);
+            .map(([tagId, stats]) => {
+                let tagData = tags[tagId];
+                if (tagId === 'special-day-virtual-tag') {
+                    tagData = { name: 'Special Day', color: '#facc15', isSpecial: true };
+                }
+                
+                return {
+                    tagId,
+                    count: stats.count,
+                    avgWords: Math.round(stats.totalWords / stats.count),
+                    data: tagData
+                };
+            })
+            .filter(item => item.data)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10);
 
         return {
             totalWords,
@@ -546,11 +568,17 @@ export default function StatsView() {
                             <div key={item.tagId} className="flex justify-between items-center group">
                                 <div className="flex items-center gap-2 flex-1">
                                     <span className="w-6 text-xs text-text-muted">{index + 1}.</span>
-                                    <span
-                                        className="w-3 h-3 rounded-full shadow-sm shrink-0"
-                                        style={{ backgroundColor: item.data.color }}
-                                    />
-                                    <span className="text-white group-hover:text-primary transition-colors truncate max-w-[120px]">{item.data.name}</span>
+                                    {item.data.isSpecial ? (
+                                        <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 shrink-0" />
+                                    ) : (
+                                        <span
+                                            className="w-3 h-3 rounded-full shadow-sm shrink-0"
+                                            style={{ backgroundColor: item.data.color }}
+                                        />
+                                    )}
+                                    <span className={`text-white group-hover:text-primary transition-colors truncate max-w-[120px] ${item.data.isSpecial ? 'text-yellow-400 font-bold' : ''}`}>
+                                        {item.data.name}
+                                    </span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -559,7 +587,10 @@ export default function StatsView() {
                                             style={{ width: `${(item.count / stats.topTags[0].count) * 100}%` }}
                                         />
                                     </div>
-                                    <span className="text-sm text-text-muted w-8 text-right font-bold">{item.count}</span>
+                                    <div className="flex flex-col items-end min-w-[40px]">
+                                        <span className="text-sm text-text-muted font-bold">{item.count}</span>
+                                        <span className="text-[10px] text-text-muted/60 whitespace-nowrap">~{item.avgWords} w</span>
+                                    </div>
                                 </div>
                             </div>
                         ))}

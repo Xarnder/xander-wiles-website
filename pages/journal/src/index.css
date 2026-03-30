@@ -151,6 +151,21 @@
   }
 }
 
+.animate-pulse-slow {
+  animation: pulseSlow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulseSlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
+}
+
 /* --- EasyMDE Dark Theme Overrides --- */
 .EasyMDEContainer .editor-toolbar {
   @apply bg-white/5 border-white/10 rounded-t-lg;

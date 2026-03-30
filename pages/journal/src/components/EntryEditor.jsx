@@ -592,14 +592,24 @@ export default function EntryEditor() {
                         <div className="flex-1 min-w-0 overflow-hidden">
                             <div className="flex items-center text-primary text-sm font-bold mb-1 uppercase tracking-wider">
                                 <Calendar className="w-3 h-3 mr-1 shrink-0" />
-                                <span className={isSpecial ? 'text-yellow-400' : ''}>{date}</span>
-                                <button
-                                    onClick={() => setIsSpecial(!isSpecial)}
-                                    className={`ml-3 p-1.5 rounded-full hover:bg-white/10 transition-colors ${isSpecial ? 'text-yellow-400' : 'text-text-muted hover:text-white'}`}
-                                    title={isSpecial ? "Marked as Special Day" : "Mark as Special Day"}
-                                >
-                                    <Star className={`w-5 h-5 ${isSpecial ? 'fill-yellow-400 shadow-yellow-400' : ''}`} />
-                                </button>
+                                <span className={isSpecial ? 'text-yellow-400 transition-colors' : ''}>{date}</span>
+                                
+                                {isEditing ? (
+                                    <button
+                                        onClick={() => setIsSpecial(!isSpecial)}
+                                        className={`ml-4 flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${
+                                            isSpecial 
+                                            ? 'bg-yellow-400 text-black border-yellow-400 font-bold shadow-lg shadow-yellow-400/20 scale-105' 
+                                            : 'bg-white/5 text-text-muted border-white/10 hover:border-white/30 hover:bg-white/10'
+                                        }`}
+                                        title={isSpecial ? "Marked as Special Day" : "Mark as Special Day"}
+                                    >
+                                        <Star className={`w-4 h-4 ${isSpecial ? 'fill-black' : ''}`} />
+                                        <span className="text-[10px] sm:text-xs uppercase tracking-widest leading-none">Special Day</span>
+                                    </button>
+                                ) : isSpecial && (
+                                    <Star className="w-6 h-6 ml-4 fill-yellow-400 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)] animate-pulse-slow" />
+                                )}
                             </div>
                             <h2 className="text-xl sm:text-2xl font-serif font-bold text-white break-words">{displayDate}</h2>
                             {title && !isEditing && <p className="text-secondary font-medium opacity-90 break-words">{title}</p>}

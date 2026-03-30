@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { format, parseISO, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval } from 'date-fns';
-import { FileDown, Calendar, Type, ChevronLeft, ChevronRight, Printer, Image as ImageIcon } from 'lucide-react';
+import { FileDown, Calendar, Type, ChevronLeft, ChevronRight, Printer, Image as ImageIcon, Star } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 import html2pdf from 'html2pdf.js';
@@ -35,6 +35,7 @@ export default function PdfExportView() {
     const [loading, setLoading] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [tocItems, setTocItems] = useState([]);
+    const [tagDefinitions, setTagDefinitions] = useState({});
 
     // Preview Pagination Logic
     const previewContainerRef = useRef(null);
@@ -49,6 +50,21 @@ export default function PdfExportView() {
         if (filterMode === 'range' && !startDate && !endDate) return;
         // Trigger fetch (logic below)
     }, []);
+
+    // Fetch tag definitions
+    useEffect(() => {
+        if (!currentUser) return;
+        const fetchTags = async () => {
+            const tagsRef = collection(db, 'users', currentUser.uid, 'tags');
+            const snapshot = await getDocs(tagsRef);
+            const tagsMap = {};
+            snapshot.forEach(doc => {
+                tagsMap[doc.id] = doc.data();
+            });
+            setTagDefinitions(tagsMap);
+        };
+        fetchTags();
+    }, [currentUser]);
 
     // Check if range is long enough to default to showing contents page
     useEffect(() => {
@@ -833,11 +849,40 @@ export default function PdfExportView() {
                                                             {entry.title}
                                                         </div>
                                                         <div
-                                                            className="text-gray-500 font-medium mb-4"
+                                                            className="text-gray-500 font-medium mb-2"
                                                             style={{ fontSize: `${fontSettings.dateSize}px` }}
                                                         >
                                                             {format(parseISO(entry.date), 'EEEE, d MMMM yyyy')}
                                                         </div>
+
+                                                        {/* Tags Section */}
+                                                        {((entry.tags && entry.tags.length > 0) || entry.isSpecial) && (
+                                                            <div className="flex flex-wrap gap-2 mb-4">
+                                                                {entry.isSpecial && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-200">
+                                                                        ★ Special Day
+                                                                    </span>
+                                                                )}
+                                                                {entry.tags && entry.tags.map(tagId => {
+                                                                    const tag = tagDefinitions[tagId];
+                                                                    if (!tag) return null;
+                                                                    return (
+                                                                        <span
+                                                                            key={tagId}
+                                                                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border"
+                                                                            style={{
+                                                                                backgroundColor: `${tag.color}15`, // 15 is hex for ~8% opacity
+                                                                                color: tag.color,
+                                                                                borderColor: `${tag.color}30`
+                                                                            }}
+                                                                        >
+                                                                            {tag.name}
+                                                                        </span>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+
                                                         <div
                                                             className={`prose max-w-none text-gray-800 ${imageLayout === 'wrap' ? 'clearfix' : ''}`}
                                                             style={{ fontSize: `${fontSettings.bodySize}px` }}
