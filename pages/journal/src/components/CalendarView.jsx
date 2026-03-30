@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, getDocs, query, where, documentId, getCountFromServer, onSnapshot } from 'firebase/firestore';
 import { format, startOfYear, endOfYear, eachMonthOfInterval, startOfMonth, getDay, getDaysInMonth } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
 
 export default function CalendarView() {
     const { currentUser } = useAuth();
@@ -63,7 +63,8 @@ export default function CalendarView() {
                             wordCount: countWords(data.content || ''),
                             imageCount: (data.images ? data.images.length : (data.imageUrl || data.imageMetadata ? 1 : 0)),
                             hasTitle: !!data.title && data.title.trim().length > 0,
-                            tags: data.tags || []
+                            tags: data.tags || [],
+                            isSpecial: data.isSpecial || false
                         });
                     });
                     setEntries(entryData);
@@ -222,6 +223,12 @@ export default function CalendarView() {
                                                 if (isSelected) {
                                                     // Blue selection instead of secondary/primary
                                                     className += 'ring-2 ring-blue-400 ring-offset-2 ring-offset-[#0a0a0b] z-10 scale-110 bg-blue-600 text-white ';
+                                                } else if (entry && entry.isSpecial) {
+                                                    // Special Day: Yellow ring and slight glow
+                                                    className += 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-[#0a0a0b] z-10 font-bold bg-yellow-500 text-[#1a1b1e] ';
+                                                    style = {
+                                                        boxShadow: '0 0 15px rgba(234, 179, 8, 0.4)'
+                                                    };
                                                 } else if (entry && !isTitleOnly) {
                                                     // Normalize word count 0..1 relative to month
                                                     let intensity = 0;
@@ -273,6 +280,13 @@ export default function CalendarView() {
                                                         title={entry ? `${entry.wordCount} words${entry.hasTitle ? ' + Title' : ''}` : ''}
                                                     >
                                                         {day}
+                                                        {/* Special Day Star Icon */}
+                                                        {entry && entry.isSpecial && (
+                                                            <div className="absolute -top-1 -left-1 text-yellow-400 drop-shadow-sm z-20">
+                                                                <Star className="w-3 h-3 fill-yellow-400" />
+                                                            </div>
+                                                        )}
+
                                                         {/* Image Indicator - Blue Badge with Count */}
                                                         {entry && entry.imageCount > 0 && (
                                                             <div className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-0.5 bg-blue-500 rounded-full border-2 border-[#0a0a0b] text-[10px] font-bold text-white z-20 shadow-sm">

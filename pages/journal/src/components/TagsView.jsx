@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, getDocs, where, updateDoc } from 'firebase/firestore';
 import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
-import { Tag, Plus, Trash2, TrendingUp, Calendar, ArrowRight, Edit2, Check, X as XIcon } from 'lucide-react';
+import { Tag, Plus, Trash2, TrendingUp, Calendar, ArrowRight, Edit2, Check, X as XIcon, Star } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
 
 export default function TagsView() {
@@ -12,6 +12,7 @@ export default function TagsView() {
     const navigate = useNavigate();
     const [tags, setTags] = useState([]);
     const [entries, setEntries] = useState([]);
+    const SPECIAL_DAY_TAG_ID = 'special-day-virtual-tag';
     const [loading, setLoading] = useState(true);
     const [newTagName, setNewTagName] = useState('');
     const [newTagColor, setNewTagColor] = useState('#8b5cf6'); // Default primary purple
@@ -173,6 +174,18 @@ export default function TagsView() {
                 if (entryDate >= sixMonthsAgo) stats[tagId].sixMonths++;
                 if (entryDate >= oneYearAgo) stats[tagId].year++;
             });
+
+            // Track Special Day stats
+            if (entry.isSpecial) {
+                if (!stats[SPECIAL_DAY_TAG_ID]) {
+                    stats[SPECIAL_DAY_TAG_ID] = { week: 0, month: 0, sixMonths: 0, year: 0 };
+                }
+                const entryDate = parseISO(entry.id);
+                if (entryDate >= oneWeekAgo) stats[SPECIAL_DAY_TAG_ID].week++;
+                if (entryDate >= oneMonthAgo) stats[SPECIAL_DAY_TAG_ID].month++;
+                if (entryDate >= sixMonthsAgo) stats[SPECIAL_DAY_TAG_ID].sixMonths++;
+                if (entryDate >= oneYearAgo) stats[SPECIAL_DAY_TAG_ID].year++;
+            }
         });
 
         return stats;
@@ -191,6 +204,11 @@ export default function TagsView() {
 
     const selectedTagEntries = useMemo(() => {
         if (!selectedTagId) return [];
+        if (selectedTagId === SPECIAL_DAY_TAG_ID) {
+            return entries
+                .filter(e => e.isSpecial)
+                .sort((a, b) => b.id.localeCompare(a.id));
+        }
         return entries
             .filter(e => e.tags && e.tags.includes(selectedTagId))
             .sort((a, b) => b.id.localeCompare(a.id)); // Newest first
@@ -277,6 +295,35 @@ export default function TagsView() {
                                     </tr>
                                 </thead>
                                 <tbody>
+                                    {/* Virtual Special Day Tag Row */}
+                                    {tagStats[SPECIAL_DAY_TAG_ID] && (
+                                        <tr
+                                            onClick={() => setSelectedTagId(selectedTagId === SPECIAL_DAY_TAG_ID ? null : SPECIAL_DAY_TAG_ID)}
+                                            className={`border-b border-white/5 transition-colors cursor-pointer ${selectedTagId === SPECIAL_DAY_TAG_ID ? 'bg-yellow-400/20' : 'hover:bg-white/5'}`}
+                                        >
+                                            <td className="py-3 px-2">
+                                                <div className="flex items-center gap-1 sm:gap-2 break-all">
+                                                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 shrink-0" />
+                                                    <span className="font-bold text-yellow-400 text-xs sm:text-sm">Special Day</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-2 sm:py-3 px-1 sm:px-2 text-center text-text-muted text-xs sm:text-sm">
+                                                {tagStats[SPECIAL_DAY_TAG_ID].week > 0 ? <span className="text-blue-400 font-bold">{tagStats[SPECIAL_DAY_TAG_ID].week}</span> : '0'}
+                                            </td>
+                                            <td className="py-2 sm:py-3 px-1 sm:px-2 text-center text-text-muted text-xs sm:text-sm">
+                                                {tagStats[SPECIAL_DAY_TAG_ID].month > 0 ? <span className="text-green-400 font-bold">{tagStats[SPECIAL_DAY_TAG_ID].month}</span> : '0'}
+                                            </td>
+                                            <td className="py-2 sm:py-3 px-1 sm:px-2 text-center text-text-muted text-xs sm:text-sm">
+                                                {tagStats[SPECIAL_DAY_TAG_ID].sixMonths > 0 ? <span className="text-yellow-400 font-bold">{tagStats[SPECIAL_DAY_TAG_ID].sixMonths}</span> : '0'}
+                                            </td>
+                                            <td className="py-2 sm:py-3 px-1 sm:px-2 text-center text-text-muted text-xs sm:text-sm">
+                                                {tagStats[SPECIAL_DAY_TAG_ID].year > 0 ? <span className="text-purple-400 font-bold">{tagStats[SPECIAL_DAY_TAG_ID].year}</span> : '0'}
+                                            </td>
+                                            <td className="py-2 sm:py-3 px-1 sm:px-2 text-right opacity-30 italic text-[10px]">
+                                                System
+                                            </td>
+                                        </tr>
+                                    )}
                                     {tags.map(tag => {
                                         const stat = tagStats[tag.id] || { week: 0, month: 0, sixMonths: 0, year: 0 };
                                         return (
@@ -383,7 +430,10 @@ export default function TagsView() {
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-serif font-bold text-white flex items-center gap-2">
                             <Calendar className="w-5 h-5 text-primary" />
-                            Entries for "{tags.find(t => t.id === selectedTagId)?.name}"
+                            {selectedTagId === SPECIAL_DAY_TAG_ID 
+                                ? "Entries for Special Days" 
+                                : `Entries for "${tags.find(t => t.id === selectedTagId)?.name}"`
+                            }
                         </h3>
                         <span className="text-sm font-medium text-text-muted bg-white/5 px-3 py-1 rounded-full">
                             {selectedTagEntries.length} {selectedTagEntries.length === 1 ? 'Entry' : 'Entries'}

@@ -10,7 +10,7 @@ import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
 import { format, parseISO, getDay, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
@@ -29,6 +29,7 @@ export default function EntryEditor() {
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [isSpecial, setIsSpecial] = useState(false);
     const [showRawHeader, setShowRawHeader] = useState(false);
 
     // Image State
@@ -182,6 +183,7 @@ export default function EntryEditor() {
                     setContent(data.content || '');
                     setTitle(data.title || '');
                     setSelectedTags(data.tags || []);
+                    setIsSpecial(data.isSpecial || false);
 
                     // Handle new schema vs legacy schema
                     if (data.images && Array.isArray(data.images)) {
@@ -210,6 +212,7 @@ export default function EntryEditor() {
                     setTitle('');
                     setImages([]);
                     setSelectedTags([]);
+                    setIsSpecial(false);
                 }
             } catch (error) {
                 console.error("Error fetching entry:", error);
@@ -406,6 +409,7 @@ export default function EntryEditor() {
                     updatedAt: serverTimestamp(),
                     images: images, // Array of {url, path, size}
                     tags: selectedTags, // Array of tag IDs
+                    isSpecial: isSpecial,
                     // Backward compatibility fields
                     imageUrl: mainImage ? mainImage.url : null,
                     imageSize: mainImage ? mainImage.size : 0,
@@ -525,8 +529,7 @@ export default function EntryEditor() {
     );
 
     return (
-        <div className="h-full flex flex-col relative">
-            {/* Header / Actions */}
+        <div className="h-full flex flex-col relative text-white">
             <div className="mb-6 sticky top-24 z-40 relative transition-all duration-300 isolate">
                 {/* Background Layer */}
                 <div
@@ -589,7 +592,14 @@ export default function EntryEditor() {
                         <div className="flex-1 min-w-0 overflow-hidden">
                             <div className="flex items-center text-primary text-sm font-bold mb-1 uppercase tracking-wider">
                                 <Calendar className="w-3 h-3 mr-1 shrink-0" />
-                                {date}
+                                <span className={isSpecial ? 'text-yellow-400' : ''}>{date}</span>
+                                <button
+                                    onClick={() => setIsSpecial(!isSpecial)}
+                                    className={`ml-3 p-1.5 rounded-full hover:bg-white/10 transition-colors ${isSpecial ? 'text-yellow-400' : 'text-text-muted hover:text-white'}`}
+                                    title={isSpecial ? "Marked as Special Day" : "Mark as Special Day"}
+                                >
+                                    <Star className={`w-5 h-5 ${isSpecial ? 'fill-yellow-400 shadow-yellow-400' : ''}`} />
+                                </button>
                             </div>
                             <h2 className="text-xl sm:text-2xl font-serif font-bold text-white break-words">{displayDate}</h2>
                             {title && !isEditing && <p className="text-secondary font-medium opacity-90 break-words">{title}</p>}

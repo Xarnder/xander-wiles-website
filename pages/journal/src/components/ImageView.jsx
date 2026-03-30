@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { format, parseISO } from 'date-fns';
-import { Image as ImageIcon, Calendar } from 'lucide-react';
+import { Image as ImageIcon, Calendar, Star } from 'lucide-react';
 
 export default function ImageView() {
     const { currentUser } = useAuth();
@@ -45,7 +45,8 @@ export default function ImageView() {
                             id: doc.id,
                             date: data.date.toDate ? data.date.toDate() : parseISO(data.date), // Handle generic timestamp or string
                             title: data.title || 'Untitled',
-                            images: entryImages // Array of { url }
+                            images: entryImages, // Array of { url }
+                            isSpecial: data.isSpecial || false
                         });
                     }
                 });
@@ -163,7 +164,7 @@ export default function ImageView() {
                                         key={entry.id}
                                         id={`gallery-item-${entry.id}`}
                                         onClick={() => navigate(`/entry/${format(entry.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: entry.id, from: '/images' } })}
-                                        className="group relative aspect-square rounded-xl overflow-hidden cursor-pointer bg-white/5 border border-white/10 hover:border-primary/50 transition-all duration-300"
+                                        className={`group relative aspect-square rounded-xl overflow-hidden cursor-pointer bg-white/5 border transition-all duration-300 ${entry.isSpecial ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-white/10 hover:border-primary/50'}`}
                                     >
                                         <div className={`w-full h-full relative ${entry.images.length > 1 ? 'grid grid-cols-2 grid-rows-2 gap-[1px]' : ''}`}>
                                             {entry.images.length === 1 ? (
@@ -189,6 +190,12 @@ export default function ImageView() {
                                                 <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm z-10 flex items-center">
                                                     <ImageIcon className="w-3 h-3 mr-1" />
                                                     {entry.images.length}
+                                                </div>
+                                            )}
+
+                                            {entry.isSpecial && (
+                                                <div className="absolute top-2 left-2 bg-yellow-400 text-[#1a1b1e] p-1 rounded-full shadow-lg z-10">
+                                                    <Star className="w-3.5 h-3.5 fill-[#1a1b1e]" />
                                                 </div>
                                             )}
                                         </div>

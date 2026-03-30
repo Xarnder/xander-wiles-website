@@ -78,6 +78,7 @@ export default function MemoriesView() {
                     title: title || 'Untitled Entry',
                     wordCount,
                     imageUrl: img,
+                    isSpecial: data.isSpecial || false,
                     contentPreview: (data.content || data.text || '').substring(0, 100) + '...'
                 });
             });
@@ -167,13 +168,14 @@ export default function MemoriesView() {
     const MemoryCard = ({ entry, label, icon: Icon, iconColor }) => (
         <div
             onClick={() => navigate(`/entry/${entry.id}`, { state: { from: '/memories' } })}
-            className="glass-card overflow-hidden hover:bg-white/5 cursor-pointer transition-all duration-300 group flex flex-col h-full ring-1 ring-white/5 hover:ring-primary/30"
+            className={`glass-card overflow-hidden hover:bg-white/5 cursor-pointer transition-all duration-300 group flex flex-col h-full ring-1 hover:ring-primary/30 ${entry.isSpecial ? 'ring-yellow-400/60 border-2 border-yellow-400/20 bg-yellow-400/5' : 'ring-white/5'}`}
         >
             {/* Header */}
             <div className="bg-black/20 p-3 border-b border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Icon className={`w-4 h-4 ${iconColor}`} />
+                    <Icon className={`w-4 h-4 ${entry.isSpecial ? 'text-yellow-400' : iconColor}`} />
                     <span className="text-sm font-medium text-white/90">{label}</span>
+                    {entry.isSpecial && <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />}
                 </div>
                 <span className="text-xs text-text-muted">{format(entry.date, 'MMM d, yyyy')}</span>
             </div>
@@ -252,6 +254,27 @@ export default function MemoriesView() {
                                 label={m.memoryLabel}
                                 icon={Calendar}
                                 iconColor="text-blue-400"
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Special Days Section */}
+            {entries.filter(e => e.isSpecial).length > 0 && (
+                <div className="space-y-4">
+                    <h3 className="text-xl font-serif font-bold text-white flex items-center gap-2 px-2 pt-4 border-t border-white/10">
+                        <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" /> Special Days
+                    </h3>
+                    <p className="text-xs text-text-muted px-2 mb-4">Your most cherished moments and milestone days.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {entries.filter(e => e.isSpecial).slice(0, 6).map(s => (
+                            <MemoryCard
+                                key={`special-${s.id}`}
+                                entry={s}
+                                label="Special Day"
+                                icon={Star}
+                                iconColor="text-yellow-400"
                             />
                         ))}
                     </div>

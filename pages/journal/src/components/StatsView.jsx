@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { BarChart as BarChartIcon, TrendingUp, Type, MessageSquare, Tag, Image as ImageIcon, Download, X, Calendar, FileText, CheckCircle, AlertCircle, Loader } from 'lucide-react';
+import { BarChart as BarChartIcon, TrendingUp, Type, MessageSquare, Tag, Image as ImageIcon, Download, X, Calendar, FileText, CheckCircle, AlertCircle, Loader, Star } from 'lucide-react';
 import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
 import { collection, query, where, documentId, onSnapshot, getDocs, orderBy } from 'firebase/firestore';
 import { saveAs } from 'file-saver';
@@ -9,6 +9,7 @@ import ReactDOM from 'react-dom';
 import {
     ComposedChart,
     Bar,
+    Cell,
     Line,
     XAxis,
     YAxis,
@@ -281,7 +282,7 @@ export default function StatsView() {
 
             // Extract title or use stored title
             const displayTitle = extractTitle(text, entry.title);
-            entryMap.set(entry.id, { count, title: displayTitle });
+            entryMap.set(entry.id, { count, title: displayTitle, isSpecial: entry.isSpecial || false });
 
             // Word frequency analysis
             words.forEach(word => {
@@ -332,6 +333,7 @@ export default function StatsView() {
                 words: count,
                 average: currentAvg,
                 title: entryData.title,
+                isSpecial: entryData.isSpecial,
                 fullDate: iterDate.getTime()
             });
 
@@ -378,6 +380,11 @@ export default function StatsView() {
                     <p className="text-sm">
                         Word Count: <span className="font-mono text-purple-400">{data.words}</span>
                     </p>
+                    {data.isSpecial && (
+                        <p className="text-sm text-yellow-400 flex items-center gap-1 mt-1 font-bold">
+                            <Star className="w-3 h-3 fill-yellow-400" /> Special Day
+                        </p>
+                    )}
                     {data.average > 0 && (
                         <p className="text-xs text-text-muted mt-1">
                             Average: <span className="text-pink-400">{data.average}</span>
@@ -462,19 +469,27 @@ export default function StatsView() {
                             />
                             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
                             <Legend />
-                            <Bar
-                                dataKey="words"
-                                name="Word Count"
-                                fill="url(#colorWords)"
-                                radius={[4, 4, 0, 0]}
-                                maxBarSize={50}
-                                onClick={(data) => {
-                                    if (data && data.date) {
-                                        navigate(`/entry/${data.date}`, { state: { from: '/stats' } });
-                                    }
-                                }}
-                                style={{ cursor: 'pointer' }}
-                            />
+                                <Bar
+                                    dataKey="words"
+                                    name="Word Count"
+                                    fill="url(#colorWords)"
+                                    radius={[4, 4, 0, 0]}
+                                    maxBarSize={50}
+                                    onClick={(data) => {
+                                        if (data && data.date) {
+                                            navigate(`/entry/${data.date}`, { state: { from: '/stats' } });
+                                        }
+                                    }}
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                    {stats.chartData.map((entry, index) => (
+                                        <Cell
+                                            key={`cell-${index}`}
+                                            fill={entry.isSpecial ? '#facc15' : 'url(#colorWords)'}
+                                            fillOpacity={entry.isSpecial ? 0.9 : 1}
+                                        />
+                                    ))}
+                                </Bar>
                             <Line
                                 type="monotone"
                                 dataKey="average"

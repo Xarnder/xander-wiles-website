@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, documentId } from 'firebase/firestore';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths, parseISO, getDate } from 'date-fns';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Star } from 'lucide-react';
 
 export default function MonthView() {
     const { currentUser } = useAuth();
@@ -66,7 +66,8 @@ export default function MonthView() {
 
                         newEntries[doc.id] = {
                             title: title || 'Untitled Entry',
-                            imageUrl: imageUrl
+                            imageUrl: imageUrl,
+                            isSpecial: data.isSpecial || false
                         };
                     });
                     setEntries(newEntries);
@@ -165,19 +166,26 @@ export default function MonthView() {
                                     onClick={() => handleEntryClick(dateKey)}
                                     className={`
                                         w-full text-left p-4 flex items-center gap-4 cursor-pointer transition-colors duration-200 border-none appearance-none
-                                        ${isToday ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-white/5'}
+                                        ${entryData && entryData.isSpecial ? 'ring-2 ring-inset ring-yellow-400/60 bg-yellow-400/5' : isToday ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-white/5'}
                                     `}
                                 >
                                     {/* Date Column */}
                                     <div className={`
-                                        flex flex-col items-center justify-center w-12 h-12 rounded-lg border shrink-0
-                                        ${isToday
-                                            ? 'border-primary/50 bg-primary/20 text-primary'
-                                            : 'border-white/10 bg-white/5 text-text-muted'
+                                        flex flex-col items-center justify-center w-12 h-12 rounded-lg border shrink-0 relative
+                                        ${entryData && entryData.isSpecial
+                                            ? 'border-yellow-400 bg-yellow-400/20 text-yellow-500'
+                                            : isToday
+                                                ? 'border-primary/50 bg-primary/20 text-primary'
+                                                : 'border-white/10 bg-white/5 text-text-muted'
                                         }
                                     `}>
-                                        <span className="text-xs uppercase font-bold">{format(dateObj, 'EEE')}</span>
-                                        <span className="text-lg font-bold">{format(dateObj, 'd')}</span>
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-xs uppercase font-bold">{format(dateObj, 'EEE')}</span>
+                                            <span className="text-lg font-bold">{format(dateObj, 'd')}</span>
+                                        </div>
+                                        {entryData && entryData.isSpecial && (
+                                            <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400 absolute -top-1 -right-1" />
+                                        )}
                                     </div>
 
                                     {/* Content Column */}
