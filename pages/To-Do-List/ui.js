@@ -490,6 +490,7 @@ export function createTaskElement(task, sourceListId, number) {
     if (isLocked) classes += ' locked-sort';
     if (isLinked) classes += ' linked-task';
     if (state.selectedTaskIds.has(task.id)) classes += ' selected';
+    if (task.lastAutoMovedAt && (Date.now() - task.lastAutoMovedAt) <= 24 * 60 * 60 * 1000) classes += ' auto-moved-recently';
 
     el.className = classes;
     el.dataset.taskId = task.id;
@@ -732,6 +733,7 @@ export function handleDragEnd(evt) {
         let taskUpdates = {};
         if (fromIdRaw !== toIdRaw) {
             taskUpdates[`listAddedAt.${toIdRaw}`] = Date.now();
+            taskUpdates.lastAutoMovedAt = null;
         }
         if (fromIdRaw === 'orphan-archive') {
             taskUpdates.archived = false;
@@ -1159,13 +1161,18 @@ export function openEditListModal(listId) {
     const pAutoScheduleType = document.getElementById('automation-schedule-type');
     const pAutoScheduleTime = document.getElementById('automation-schedule-time');
     const pAutoDestList = document.getElementById('automation-dest-list');
+    
+    // Clone save btn early so it can be managed by lock state
     const pAutoSaveBtn = document.getElementById('automation-save-btn');
+    const newSaveBtn = pAutoSaveBtn.cloneNode(true);
+    pAutoSaveBtn.parentNode.replaceChild(newSaveBtn, pAutoSaveBtn);
+
     const pAutoDurationLabel = document.getElementById('automation-duration-label');
 
     let isAutomationUnlocked = false;
     const setAutomationLockState = (unlocked) => {
         isAutomationUnlocked = unlocked;
-        const inputs = [pAutoToggle, pAutoTrigger, pAutoDurationVal, pAutoDurationUnit, pAutoScheduleType, pAutoScheduleTime, pAutoDestList, pAutoSaveBtn];
+        const inputs = [pAutoToggle, pAutoTrigger, pAutoDurationVal, pAutoDurationUnit, pAutoScheduleType, pAutoScheduleTime, pAutoDestList, newSaveBtn];
         inputs.forEach(el => el.disabled = !unlocked);
         pAutoContainer.style.opacity = unlocked ? '1' : '0.5';
         pAutoContainer.style.pointerEvents = unlocked ? 'auto' : 'none';
@@ -1215,8 +1222,6 @@ export function openEditListModal(listId) {
         }
     });
 
-    const newSaveBtn = pAutoSaveBtn.cloneNode(true);
-    pAutoSaveBtn.parentNode.replaceChild(newSaveBtn, pAutoSaveBtn);
     newSaveBtn.onclick = () => {
         updateDoc(doc(db, "users", state.currentUser.uid, "lists", listId), {
             timeAutomated: pAutoToggle.checked,

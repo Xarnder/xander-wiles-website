@@ -662,7 +662,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         idsArr.forEach(taskId => {
             batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
-                [`listAddedAt.${finalTargetId}`]: Date.now()
+                [`listAddedAt.${finalTargetId}`]: Date.now(),
+                lastAutoMovedAt: null
             });
         });
 
@@ -695,7 +696,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = document.getElementById('modal-task-input').value;
         updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), { 
             text: text,
-            updatedAt: Date.now()
+            updatedAt: Date.now(),
+            lastAutoMovedAt: null
         }).catch(e => API.handleSyncError(e));
         modalOverlay.classList.add('hidden');
     };
@@ -724,7 +726,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { 
             archived: false,
-            [`listAddedAt.${targetListId}`]: Date.now()
+            [`listAddedAt.${targetListId}`]: Date.now(),
+            lastAutoMovedAt: null
         });
 
         batch.commit().then(() => {
@@ -752,7 +755,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { 
             archived: false,
-            [`listAddedAt.${targetListId}`]: Date.now()
+            [`listAddedAt.${targetListId}`]: Date.now(),
+            lastAutoMovedAt: null
         });
 
         batch.commit().then(() => {
