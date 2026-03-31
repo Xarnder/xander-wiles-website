@@ -233,9 +233,12 @@ function stopSyncTimer() {
 let automationInterval = null;
 function startAutomationTimer() {
     if (automationInterval) clearInterval(automationInterval);
-    automationInterval = setInterval(() => {
+    setTimeout(() => {
         API.processAutomatedLists();
-    }, 60000); // every 60 seconds
+        automationInterval = setInterval(() => {
+            API.processAutomatedLists();
+        }, 60000); // every 60 seconds
+    }, 5000);
 }
 
 function stopAutomationTimer() {
@@ -523,6 +526,22 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         document.getElementById('close-time-help-btn').onclick = () => timeHelpModal.classList.add('hidden');
         document.getElementById('close-time-help-btn-bottom').onclick = () => timeHelpModal.classList.add('hidden');
+    }
+
+    // Automation Report Modal
+    const automationReportModal = document.getElementById('automation-report-modal-overlay');
+    if (automationReportModal) {
+        document.getElementById('close-automation-report-btn').onclick = () => automationReportModal.classList.add('hidden');
+        document.getElementById('automation-report-ok-btn').onclick = () => automationReportModal.classList.add('hidden');
+    }
+
+    // Recent Auto-Moved Modal Trigger
+    const recentAutoMovedBtn = document.getElementById('recent-auto-moved-btn');
+    if (recentAutoMovedBtn) {
+        recentAutoMovedBtn.onclick = () => {
+            optionsModal.classList.add('hidden');
+            UI.showRecentAutoMovedTasks();
+        };
     }
 
     // Default Board Select

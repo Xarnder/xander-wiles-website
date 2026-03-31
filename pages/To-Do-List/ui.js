@@ -1148,6 +1148,10 @@ export function openEditListModal(listId) {
     const pAutoTrigger = oldAutoTrigger.cloneNode(true);
     oldAutoTrigger.parentNode.replaceChild(pAutoTrigger, oldAutoTrigger);
 
+    const unlockBtn = document.getElementById('automation-unlock-btn');
+    const newUnlockBtn = unlockBtn.cloneNode(true);
+    unlockBtn.parentNode.replaceChild(newUnlockBtn, unlockBtn);
+
     const pAutoContainer = document.getElementById('automation-settings-container');
     const pAutoDurationVal = document.getElementById('automation-duration-val');
     const pAutoDurationUnit = document.getElementById('automation-duration-unit');
@@ -1157,6 +1161,18 @@ export function openEditListModal(listId) {
     const pAutoDestList = document.getElementById('automation-dest-list');
     const pAutoSaveBtn = document.getElementById('automation-save-btn');
     const pAutoDurationLabel = document.getElementById('automation-duration-label');
+
+    let isAutomationUnlocked = false;
+    const setAutomationLockState = (unlocked) => {
+        isAutomationUnlocked = unlocked;
+        const inputs = [pAutoToggle, pAutoTrigger, pAutoDurationVal, pAutoDurationUnit, pAutoScheduleType, pAutoScheduleTime, pAutoDestList, pAutoSaveBtn];
+        inputs.forEach(el => el.disabled = !unlocked);
+        pAutoContainer.style.opacity = unlocked ? '1' : '0.5';
+        pAutoContainer.style.pointerEvents = unlocked ? 'auto' : 'none';
+        newUnlockBtn.innerHTML = unlocked ? '<i class="ph ph-lock-key-open"></i> Lock' : '<i class="ph ph-lock-key"></i> Edit Time Automation';
+    };
+    newUnlockBtn.onclick = () => setAutomationLockState(!isAutomationUnlocked);
+    setAutomationLockState(false);
 
     pAutoToggle.checked = !!list.timeAutomated;
     if (list.timeAutomated) {
@@ -1311,3 +1327,62 @@ document.getElementById('new-board-title-input').addEventListener('keypress', (e
         document.getElementById('confirm-add-board-btn').click();
     }
 });
+
+export function showAutomationReport(movedTasksLog, title = "Tasks Auto-Moved", subtitle = "The following tasks were moved automatically:") {
+    if (!movedTasksLog || movedTasksLog.length === 0) return;
+    const modal = document.getElementById('automation-report-modal-overlay');
+    const listContainer = document.getElementById('automation-report-list');
+    if (!modal || !listContainer) return;
+    
+    const h2 = modal.querySelector('h2');
+    if(h2) h2.textContent = title;
+    
+    const p = modal.querySelector('p');
+    if(p) p.textContent = subtitle;
+
+    listContainer.innerHTML = '';
+    movedTasksLog.forEach(log => {
+        const item = document.createElement('div');
+        item.style.padding = '10px';
+        item.style.marginBottom = '10px';
+        item.style.background = 'rgba(255, 255, 255, 0.05)';
+        item.style.borderRadius = '8px';
+        item.style.fontSize = '0.9rem';
+        item.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 4px;">${log.text}</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">
+                <i class="ph ph-arrow-circle-right" style="color: var(--accent-blue);"></i> Moved from <strong>${log.from}</strong> to <strong>${log.to}</strong>
+            </div>
+        `;
+        listContainer.appendChild(item);
+    });
+    
+    modal.classList.remove('hidden');
+}
+
+export function showRecentAutoMovedTasks() {
+    const now = Date.now();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    const recentTasks = [];
+
+    Object.values(state.appData.tasks).forEach(task => {
+        if (task.lastAutoMovedAt && (now - task.lastAutoMovedAt) <= twentyFourHours) {
+            const fromList = state.appData.rawLists.find(l => l.id === task.lastAutoMovedFromListId)?.title || "Unknown List";
+            const toList = state.appData.rawLists.find(l => l.id === task.lastAutoMovedToListId)?.title || "Unknown List";
+            recentTasks.push({
+                text: escapeHtml(task.text),
+                from: escapeHtml(fromList),
+                to: escapeHtml(toList),
+                timeMs: task.lastAutoMovedAt
+            });
+        }
+    });
+
+    if (recentTasks.length === 0) {
+        import('./utils.js').then(utils => utils.showToast("No tasks moved by automation in the last 24 hours.", "info"));
+        return;
+    }
+
+    recentTasks.sort((a, b) => b.timeMs - a.timeMs);
+    showAutomationReport(recentTasks, "Recent Automations", "Tasks moved by Time Automation in the last 24 hours:");
+}

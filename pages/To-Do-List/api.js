@@ -363,6 +363,7 @@ export function processAutomatedLists() {
     const now = Date.now();
     const batch = writeBatch(db);
     let modifications = 0;
+    const movedTasksLog = [];
 
     state.appData.rawLists.forEach(list => {
         if (!list.timeAutomated || !list.timeDestinationId) return;
@@ -426,6 +427,10 @@ export function processAutomatedLists() {
         });
 
         if (tasksToMove.length > 0) {
+            tasksToMove.forEach(taskId => {
+                const text = state.appData.tasks[taskId]?.text || 'Unknown Task';
+                movedTasksLog.push({ text: text, from: list.title, to: destList.title });
+            });
             batch.update(doc(db, "users", state.currentUser.uid, "lists", list.id), {
                 taskIds: arrayRemove(...tasksToMove)
             });
@@ -435,7 +440,10 @@ export function processAutomatedLists() {
             tasksToMove.forEach(taskId => {
                 batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
                     [`listAddedAt.${destListId}`]: now,
-                    archived: false
+                    archived: false,
+                    lastAutoMovedAt: now,
+                    lastAutoMovedFromListId: list.id,
+                    lastAutoMovedToListId: destListId
                 });
             });
             modifications++;
@@ -445,6 +453,9 @@ export function processAutomatedLists() {
     if (modifications > 0) {
         batch.commit().then(() => {
             console.log(`[Automation] Successfully processed ${modifications} lists.`);
+            if (movedTasksLog.length > 0) {
+                import('./ui.js').then(UI => UI.showAutomationReport(movedTasksLog));
+            }
         }).catch(e => handleSyncError(e));
     }
 }
