@@ -779,6 +779,92 @@ export function openEditModal(taskId, listId) {
     document.getElementById('task-created-at').textContent = formatDateTime(task.createdAt);
     document.getElementById('task-updated-at').textContent = formatDateTime(task.updatedAt || task.createdAt);
 
+    const autoItem = document.getElementById('task-automation-item');
+    const autoValue = document.getElementById('task-automation-value');
+    if (autoItem) autoItem.classList.add('hidden'); 
+
+    const list = state.appData.rawLists.find(l => l.id === listId);
+    
+    const formatDiff = (diffMs) => {
+        const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+        const diffMins = Math.floor(diffSecs / 60);
+        const diffHrs = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHrs / 24);
+        if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+        if (diffHrs > 0) return `${diffHrs} hour${diffHrs > 1 ? 's' : ''}`;
+        if (diffMins > 0) return `${diffMins} minute${diffMins > 1 ? 's' : ''}`;
+        return `${diffSecs} second${diffSecs !== 1 ? 's' : ''}`;
+    };
+
+    const autoLabel = document.getElementById('task-automation-label');
+    if (autoValue) autoValue.style.color = ''; // reset color
+
+    if (list && list.timeAutomated && list.timeDestinationId) {
+        const type = list.timeMoveType || 'duration';
+        const val = list.timeDurationValue || 0;
+        const unit = list.timeDurationUnit || 'days';
+        
+        let multiplier = 1000 * 60; // minutes
+        if (unit === 'hours') multiplier *= 60;
+        if (unit === 'days') multiplier *= 60 * 24;
+        if (unit === 'weeks') multiplier *= 60 * 24 * 7;
+        if (unit === 'months') multiplier *= 60 * 24 * 30; // approx
+        if (unit === 'years') multiplier *= 60 * 24 * 365; // approx
+        
+        const durationMs = val * multiplier;
+        const addedAt = task.listAddedAt?.[list.id] || task.createdAt;
+        const targetMs = addedAt + durationMs;
+
+        if (type === 'duration') {
+            if (Date.now() >= targetMs) {
+                if (autoLabel) autoLabel.textContent = "Auto-Move Status:";
+                if (autoValue) autoValue.innerHTML = `<span style="color:var(--accent-red)">Overdue (Pending Move)</span>`;
+            } else {
+                if (autoLabel) autoLabel.textContent = "Auto-Moves in:";
+                if (autoValue) autoValue.textContent = `${formatDiff(targetMs - Date.now())} at ${formatDateTime(targetMs)}`;
+            }
+            if (autoItem) autoItem.classList.remove('hidden');
+        } else if (type === 'schedule') {
+            const timeStr = list.scheduleTime || '00:00';
+            const [hours, mins] = timeStr.split(':').map(Number);
+            const minDateMs = Math.max(Date.now(), targetMs);
+            
+            let candidate = new Date(minDateMs);
+            candidate.setHours(hours, mins, 0, 0);
+            
+            // If the calculated time for the starting day is in the past compared to our minimum required date
+            if (candidate.getTime() <= minDateMs) {
+                candidate.setDate(candidate.getDate() + 1);
+            }
+            
+            const sType = list.scheduleType || 'daily';
+            let safeCounter = 0;
+            while (safeCounter < 40) {
+                if (sType === 'weekly' && candidate.getDay() !== 1) {
+                    candidate.setDate(candidate.getDate() + 1);
+                } else if (sType === 'monthly' && candidate.getDate() !== 1) {
+                    candidate.setDate(candidate.getDate() + 1);
+                } else {
+                    break;
+                }
+                safeCounter++;
+            }
+            
+            const nextRunMs = candidate.getTime();
+            
+            if (autoLabel) autoLabel.textContent = "Auto-Moves in:";
+            if (autoValue) autoValue.textContent = `${formatDiff(nextRunMs - Date.now())} at ${formatDateTime(nextRunMs)}`;
+            if (autoItem) autoItem.classList.remove('hidden');
+        }
+    } else if (task.lastAutoMovedAt && (Date.now() - task.lastAutoMovedAt) <= 24 * 60 * 60 * 1000) {
+        if (autoLabel) autoLabel.textContent = "Auto-Moved:";
+        if (autoValue) {
+            autoValue.textContent = `${formatDiff(Date.now() - task.lastAutoMovedAt)} ago at ${formatDateTime(task.lastAutoMovedAt)}`;
+            autoValue.style.color = 'var(--accent-green)';
+        }
+        if (autoItem) autoItem.classList.remove('hidden');
+    }
+
     const select = document.getElementById('manual-move-select');
     renderGroupedListSelect(select);
 
