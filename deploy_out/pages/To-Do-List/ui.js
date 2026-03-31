@@ -361,11 +361,19 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     listEl.className = `list-column ${isOrphan ? 'orphan-list' : ''}`;
     listEl.dataset.listId = list.id;
 
+    const automationIcon = list.timeAutomated 
+        ? `<i class="ph ph-clock" style="color: var(--accent-blue); font-size: 0.9rem; margin-left: 5px;" title="Time Automation Enabled"></i>`
+        : '';
+
     let headerLeft = isOrphan
-        ? `<input type="text" class="list-title" value="${list.title}" disabled>`
+        ? `<div class="list-header-left">
+             <input type="text" class="list-title" value="${list.title}" disabled>
+             ${automationIcon}
+           </div>`
         : `<div class="list-header-left">
              <i class="ph ph-dots-six list-drag-handle" title="Drag to reorder list"></i>
              <input type="text" class="list-title" value="${list.title}" onchange="window.updateListTitle('${list.id}', this.value)">
+             ${automationIcon}
            </div>`;
 
     let headerButtons = isOrphan
@@ -434,8 +442,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     const countBadge = document.createElement('span');
     countBadge.className = 'list-count-badge';
     countBadge.textContent = visibleCount;
-    if (!isOrphan) listEl.querySelector('.list-header-left').appendChild(countBadge);
-    else listEl.querySelector('.list-header').insertBefore(countBadge, listEl.querySelector('.list-header-right'));
+    listEl.querySelector('.list-header-left').appendChild(countBadge);
 
     boardContainer.appendChild(listEl);
 
