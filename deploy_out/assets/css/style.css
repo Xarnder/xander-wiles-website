@@ -108,7 +108,7 @@ a:hover {
 /* --- Header & Desktop Navigation --- */
 .site-header {
     width: 100%;
-    max-width: 1600px; /* Further increased to ensure no squashing */
+    max-width: 2000px; /* Increased from 1600px to allow wider header as requested */
     margin: 0 auto;
     padding: 1rem 2rem;
     box-sizing: border-box; /* Ensure padding doesn't cause overflow */

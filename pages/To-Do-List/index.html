@@ -17,6 +17,11 @@
     <!-- Global Header -->
     <link rel="stylesheet" href="/assets/css/style.css">
 
+    <!-- Google Fonts: Outfit for Fancy Theme -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <!-- App Styles -->
     <link rel="stylesheet" href="style.css">
 
@@ -29,6 +34,16 @@
         (function () {
             const savedTheme = localStorage.getItem('theme') || 'oled';
             document.documentElement.setAttribute('data-theme', savedTheme);
+            if (savedTheme === 'fancy') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    for (let i = 1; i <= 3; i++) {
+                        const orb = document.createElement('div');
+                        orb.className = 'fancy-orb fancy-orb-' + i;
+                        orb.setAttribute('aria-hidden', 'true');
+                        document.body.appendChild(orb);
+                    }
+                });
+            }
         })();
     </script>
 </head>

@@ -245,6 +245,23 @@ function stopAutomationTimer() {
     if (automationInterval) clearInterval(automationInterval);
 }
 
+// --- FANCY THEME ORBS ---
+function manageFancyOrbs(theme) {
+    const existingOrbs = document.querySelectorAll('.fancy-orb');
+    if (theme === 'fancy') {
+        if (existingOrbs.length === 0) {
+            for (let i = 1; i <= 3; i++) {
+                const orb = document.createElement('div');
+                orb.className = `fancy-orb fancy-orb-${i}`;
+                orb.setAttribute('aria-hidden', 'true');
+                document.body.appendChild(orb);
+            }
+        }
+    } else {
+        existingOrbs.forEach(orb => orb.remove());
+    }
+}
+
 // --- FIRESTORE LISTENERS ---
 function setupFirestoreListeners(uid) {
     // 1. User Settings & Project Title
@@ -298,9 +315,14 @@ function setupFirestoreListeners(uid) {
                 icon.className = 'ph ph-sun';
             } else if (state.appData.settings.theme === 'oled') {
                 icon.className = 'ph ph-circle';
+            } else if (state.appData.settings.theme === 'fancy') {
+                icon.className = 'ph ph-sparkle';
             } else {
                 icon.className = 'ph ph-moon';
             }
+
+            // Manage fancy theme orbs
+            manageFancyOrbs(state.appData.settings.theme);
 
         } else {
             setDoc(userDocRef, {
@@ -451,6 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let newTheme;
         if (state.appData.settings.theme === 'dark') newTheme = 'light';
         else if (state.appData.settings.theme === 'light') newTheme = 'oled';
+        else if (state.appData.settings.theme === 'oled') newTheme = 'fancy';
         else newTheme = 'dark';
         API.updateSetting('theme', newTheme);
     };
