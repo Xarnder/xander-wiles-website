@@ -210,6 +210,20 @@
                     </select>
                 </div>
 
+                <!-- Fancy Speed Control (Hidden by default, shown via CSS in fancy mode) -->
+                <div id="fancy-speed-control" class="menu-action-item" style="cursor: default; flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <span><i class="ph ph-windmill"></i> Animation Speed</span>
+                    </div>
+                    <select id="fancy-speed-select" class="glass-select full-width">
+                        <option value="0.2">Super Slow</option>
+                        <option value="0.5">Slow</option>
+                        <option value="1" selected>Normal</option>
+                        <option value="1.5">Fast</option>
+                        <option value="2.5">Turbo</option>
+                    </select>
+                </div>
+
                 <hr class="dropdown-divider">
 
                 <!-- IMPORT / EXPORT -->

@@ -319,6 +319,14 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('backup-frequency-input')) document.getElementById('backup-frequency-input').value = state.appData.settings.backupFreq || 10;
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
+            
+            // Sync Fancy Speed
+            if (state.appData.settings.fancySpeed) {
+                document.documentElement.style.setProperty('--fancy-speed-mult', state.appData.settings.fancySpeed);
+                if (document.getElementById('fancy-speed-select')) {
+                    document.getElementById('fancy-speed-select').value = state.appData.settings.fancySpeed;
+                }
+            }
 
             // Init theme icon
             const icon = document.getElementById('theme-toggle').querySelector('i');
@@ -499,6 +507,10 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSettingListener('show-numbers-toggle', 'showNumbers', true);
     setupSettingListener('drag-tasks-toggle', 'dragEnabled', true);
     setupSettingListener('sort-select', 'sortMode', false);
+    setupSettingListener('fancy-speed-select', 'fancySpeed', false, (val) => {
+        document.documentElement.style.setProperty('--fancy-speed-mult', val);
+        return val;
+    });
 
     const backupFreq = document.getElementById('backup-frequency-input');
     // Confirm Limit Button

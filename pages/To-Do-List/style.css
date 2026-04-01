@@ -88,12 +88,21 @@
     --fancy-glow-1: rgba(129, 140, 248, 0.65);
     --fancy-glow-2: rgba(167, 139, 250, 0.6);
     --fancy-glow-3: rgba(56, 189, 248, 0.55);
+    --fancy-speed-mult: 1;
+}
+
+#fancy-speed-control {
+    display: none;
+}
+
+[data-theme="fancy"] #fancy-speed-control {
+    display: flex !important;
 }
 
 [data-theme="fancy"] body {
     background: var(--bg-gradient);
     background-size: 300% 300%;
-    animation: fancyGradient 20s ease infinite;
+    animation: fancyGradient calc(20s / var(--fancy-speed-mult)) ease infinite;
     font-family: 'Outfit', 'Inter', 'Segoe UI', sans-serif;
     overflow: hidden;
     position: relative;
@@ -137,7 +146,7 @@
     background: radial-gradient(circle, var(--fancy-glow-1) 0%, transparent 80%);
     top: -10%;
     left: -5%;
-    animation: fancyOrbDrift1 8s ease-in-out infinite alternate;
+    animation: fancyOrbDrift1 calc(8s / var(--fancy-speed-mult)) ease-in-out infinite alternate;
 }
 
 [data-theme="fancy"] .fancy-orb-2 {
@@ -146,7 +155,7 @@
     background: radial-gradient(circle, var(--fancy-glow-2) 0%, transparent 80%);
     bottom: -15%;
     right: -8%;
-    animation: fancyOrbDrift2 10s ease-in-out infinite alternate;
+    animation: fancyOrbDrift2 calc(10s / var(--fancy-speed-mult)) ease-in-out infinite alternate;
 }
 
 [data-theme="fancy"] .fancy-orb-3 {
@@ -155,7 +164,7 @@
     background: radial-gradient(circle, var(--fancy-glow-3) 0%, transparent 80%);
     top: 40%;
     left: 50%;
-    animation: fancyOrbDrift3 6s ease-in-out infinite alternate;
+    animation: fancyOrbDrift3 calc(6s / var(--fancy-speed-mult)) ease-in-out infinite alternate;
 }
 
 @keyframes fancyOrbDrift1 {
@@ -204,23 +213,23 @@
 @media (max-width: 600px) {
     [data-theme="fancy"] {
         background-size: 300% 300%;
-        animation: fancyGradient 7s ease infinite;
+        animation: fancyGradient calc(7s / var(--fancy-speed-mult)) ease infinite;
     }
 
     [data-theme="fancy"] .fancy-orb-1 {
-        animation: fancyOrbDrift1Mobile 4s ease-in-out infinite alternate;
+        animation: fancyOrbDrift1Mobile calc(4s / var(--fancy-speed-mult)) ease-in-out infinite alternate;
         width: 200px;
         height: 200px;
     }
 
     [data-theme="fancy"] .fancy-orb-2 {
-        animation: fancyOrbDrift2Mobile 5s ease-in-out infinite alternate;
+        animation: fancyOrbDrift2Mobile calc(5s / var(--fancy-speed-mult)) ease-in-out infinite alternate;
         width: 180px;
         height: 180px;
     }
 
     [data-theme="fancy"] .fancy-orb-3 {
-        animation: fancyOrbDrift3Mobile 3s ease-in-out infinite alternate;
+        animation: fancyOrbDrift3Mobile calc(3s / var(--fancy-speed-mult)) ease-in-out infinite alternate;
         width: 150px;
         height: 150px;
     }
@@ -1687,12 +1696,12 @@ body {
 }
 
 .edit-task-btn {
-    background: rgba(246, 255, 0, 0.777) !important;
+    background: rgba(79, 79, 79, 0.777)!important;
     color: #ffffff !important;
 }
 
 .edit-task-btn:hover {
-    background: rgba(246, 255, 0, 0.777) !important;
+    background: rgba(109, 109, 109, 0.617) !important;
 }
 
 .add-image-btn {
@@ -1705,12 +1714,12 @@ body {
 }
 
 .archive-task-btn {
-    background: rgba(0, 123, 255, 0.617) !important;
+    background: rgba(23, 23, 23, 0.617) !important;
     color: #ffffff !important;
 }
 
 .archive-task-btn:hover {
-    background: rgba(0, 123, 255, 0.617) !important;
+    background: rgba(63, 63, 63, 0.617) !important;
 }
 
 
