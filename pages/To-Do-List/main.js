@@ -245,7 +245,7 @@ function stopAutomationTimer() {
     if (automationInterval) clearInterval(automationInterval);
 }
 
-// --- FANCY THEME ORBS ---
+// --- FANCY THEME ORBS & META ---
 function manageFancyOrbs(theme) {
     const existingOrbs = document.querySelectorAll('.fancy-orb');
     if (theme === 'fancy') {
@@ -259,6 +259,17 @@ function manageFancyOrbs(theme) {
         }
     } else {
         existingOrbs.forEach(orb => orb.remove());
+    }
+
+    // Dynamic Status Bar & Theme Color
+    const themeColorMeta = document.getElementById('theme-color-meta');
+    const appleStatusMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (theme === 'fancy' || theme === 'light') {
+        if (themeColorMeta) themeColorMeta.setAttribute('content', '#ffffff');
+        if (appleStatusMeta) appleStatusMeta.setAttribute('content', 'default');
+    } else {
+        if (themeColorMeta) themeColorMeta.setAttribute('content', '#000000');
+        if (appleStatusMeta) appleStatusMeta.setAttribute('content', 'black-translucent');
     }
 }
 
