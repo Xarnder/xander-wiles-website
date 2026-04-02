@@ -379,6 +379,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     let headerButtons = isOrphan
         ? `<button class="icon-btn danger" onclick="window.emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
+             <button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed Tasks"><i class="ph ph-broom"></i></button>
              <button class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
              <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
            </div>`;
@@ -417,9 +418,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     const taskIds = list.taskIds || [];
     const sortedIds = getSortedTaskIds(taskIds);
 
-    let visibleCount = 0;
-    let visibleIndex = 1;
-
+    let doneCount = 0;
     sortedIds.forEach((taskId) => {
         const task = state.appData.tasks[taskId];
         if (task) {
@@ -433,15 +432,24 @@ function renderListColumn(list, isOrphan, isCustomSort) {
 
             if (show) {
                 taskListContainer.appendChild(createTaskElement(task, list.id, visibleIndex));
+                if (task.completed) doneCount++;
                 visibleIndex++;
                 visibleCount++;
             }
         }
     });
 
+    if (visibleCount === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.className = 'empty-list-msg';
+        emptyMsg.innerHTML = `<i class="ph ph-shooting-star"></i> No tasks here!`;
+        taskListContainer.appendChild(emptyMsg);
+    }
+
     const countBadge = document.createElement('span');
     countBadge.className = 'list-count-badge';
-    countBadge.textContent = visibleCount;
+    countBadge.textContent = visibleCount > 0 ? `${doneCount}/${visibleCount}` : '0';
+    if (visibleCount > 0 && doneCount === visibleCount) countBadge.classList.add('all-done');
     listEl.querySelector('.list-header-left').appendChild(countBadge);
 
     boardContainer.appendChild(listEl);
@@ -897,6 +905,8 @@ export function openEditModal(taskId, listId) {
     }
 
     modalOverlay.classList.remove('hidden');
+    const input = document.getElementById('modal-task-input');
+    if (input) input.focus();
 }
 
 export function renderCurrentLocations(taskId) {
@@ -950,8 +960,11 @@ export function openImageLightbox(src) {
 // Bulk Add
 const bulkModal = document.getElementById('bulk-add-modal-overlay');
 export function openBulkAddModal(listId) {
+    const bulkModal = document.getElementById('bulk-add-modal-overlay');
     bulkModal.dataset.listId = listId;
     bulkModal.classList.remove('hidden');
+    const input = document.getElementById('bulk-add-input');
+    if (input) input.focus();
 }
 
 // Multi Select UI

@@ -99,6 +99,7 @@ window.removeTaskFromList = UI.removeTaskFromList;
 window.openArchivedTaskModal = UI.openArchivedTaskModal;
 window.openEditListModal = UI.openEditListModal;
 window.openBoardManager = UI.openBoardManager;
+window.clearCompletedInList = API.clearCompletedInList;
 window.showConfirmModal = showConfirmModal;
 
 // --- BOARD MANAGEMENT EXPOSURE ---
@@ -1371,3 +1372,19 @@ async function performAppReset() {
     document.getElementById('reset-modal-overlay').classList.add('hidden');
     location.reload();
 }
+
+// --- GLOBAL KEYBOARD SHORTCUTS ---
+window.addEventListener('keydown', (e) => {
+    // 1. Esc to close all modals
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(modal => {
+            modal.classList.add('hidden');
+        });
+    }
+    // 2. Cmd/Ctrl + K for search
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchBtn = document.getElementById('search-btn');
+        if (searchBtn) searchBtn.click();
+    }
+});
