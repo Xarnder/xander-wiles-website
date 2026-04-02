@@ -64,6 +64,38 @@
     animation: none;
 }
 
+/* ===================================================================
+   iOS STATUS BAR BLACK BOX
+   ===================================================================
+   With viewport-fit=cover + black-translucent status bar, iOS expands
+   the app behind the notch. #ios-status-bar-bg is a fixed, full-width
+   div positioned at the very top of the screen. It is always solid
+   black, so iOS's "Website Tinting" samples BLACK pixels and keeps
+   the status bar (clock, battery, wifi) black with white text.
+   env(safe-area-inset-top) gives us the exact pixel height of the
+   status bar on any iPhone (notched or Dynamic Island).
+   =================================================================== */
+#ios-status-bar-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top, 0px);
+    background: #000000;
+    z-index: 99999;
+    pointer-events: none;
+}
+
+/* Push app content down so it doesn't hide under the status bar */
+.app-wrapper {
+    padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Ensure the login overlay also clears the status bar */
+#login-overlay {
+    padding-top: env(safe-area-inset-top, 0px);
+}
+
 /* ===== FANCY THEME: Futuristic Glassmorphism ===== */
 [data-theme="fancy"] {
     --bg-gradient: linear-gradient(135deg, #000000 0%, #0a0015 20%, #0d1b2a 40%, #1b0033 60%, #0d1b2a 80%, #000000 100%);

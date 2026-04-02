@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <base href="/pages/To-Do-List/">
     <title>Task Master</title>
 
@@ -16,9 +16,8 @@
 
     <!-- Mobile App Overrides -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
 
     <!-- Global Header -->
     <link rel="stylesheet" href="/assets/css/style.css">
@@ -59,6 +58,11 @@
 </head>
 
 <body>
+
+    <!-- iOS Status Bar Black Background -->
+    <!-- Physically paints black behind the notch/status bar on iOS Safari -->
+    <!-- iOS samples top pixels of <body> for "Website Tinting", this div ensures those are always black -->
+    <div id="ios-status-bar-bg"></div>
 
     <!-- LOGIN OVERLAY -->
     <div id="login-overlay">
