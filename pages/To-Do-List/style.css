@@ -86,14 +86,11 @@
     pointer-events: none;
 }
 
-/* Push app content down so it doesn't hide under the status bar */
-.app-wrapper {
-    padding-top: env(safe-area-inset-top, 0px);
-}
+/* app content sits below the status bar naturally via body padding-top */
 
-/* Ensure the login overlay also clears the status bar */
+/* Ensure the login overlay fills correctly */
 #login-overlay {
-    padding-top: env(safe-area-inset-top, 0px);
+    box-sizing: border-box;
 }
 
 /* Hide site-wide header by default - Toggled via Settings */
@@ -872,10 +869,14 @@ body {
     margin: 0;
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    /* Use 100dvh so the full body fits on screen including safe areas */
+    height: 100dvh;
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    /* Push ALL body content below the iOS status bar black box */
+    padding-top: env(safe-area-inset-top, 0px);
+    box-sizing: border-box;
 }
 
 #main-nav-placeholder {
@@ -888,7 +889,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    padding-top: 0;
+    /* Removed padding-top: 0 — body now handles the safe-area offset */
 }
 
 @keyframes gradientBG {
