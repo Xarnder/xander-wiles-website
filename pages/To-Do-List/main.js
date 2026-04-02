@@ -319,6 +319,10 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('backup-frequency-input')) document.getElementById('backup-frequency-input').value = state.appData.settings.backupFreq || 10;
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
+            if (document.getElementById('show-site-header-toggle')) document.getElementById('show-site-header-toggle').checked = !!state.appData.settings.showSiteHeader;
+            if (document.getElementById('main-nav-placeholder')) {
+                document.getElementById('main-nav-placeholder').style.display = state.appData.settings.showSiteHeader ? 'block' : 'none';
+            }
 
             // Sync Fancy Speed
             if (state.appData.settings.fancySpeed) {
@@ -540,6 +544,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     setupSettingListener('add-bottom-toggle', 'addTaskLocation', true, (checked) => checked ? 'bottom' : 'top');
+    setupSettingListener('show-site-header-toggle', 'showSiteHeader', true, (checked) => {
+        if (document.getElementById('main-nav-placeholder')) {
+            document.getElementById('main-nav-placeholder').style.display = checked ? 'block' : 'none';
+        }
+        return checked;
+    });
 
     // Drag Modes
     document.getElementById('mode-cut-btn').onclick = function () {

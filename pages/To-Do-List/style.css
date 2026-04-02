@@ -96,6 +96,11 @@
     padding-top: env(safe-area-inset-top, 0px);
 }
 
+/* Hide site-wide header by default - Toggled via Settings */
+#main-nav-placeholder {
+    display: none;
+}
+
 /* ===== FANCY THEME: Futuristic Glassmorphism ===== */
 [data-theme="fancy"] {
     --bg-gradient: linear-gradient(135deg, #000000 0%, #0a0015 20%, #0d1b2a 40%, #1b0033 60%, #0d1b2a 80%, #000000 100%);
