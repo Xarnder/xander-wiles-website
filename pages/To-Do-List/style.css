@@ -99,6 +99,11 @@
     display: flex !important;
 }
 
+/* Black failsafe behind everything in fancy mode — covers Safari overscroll / status bar gaps */
+[data-theme="fancy"] html {
+    background: #000000;
+}
+
 [data-theme="fancy"] body {
     background: var(--bg-gradient);
     background-size: 300% 300%;
