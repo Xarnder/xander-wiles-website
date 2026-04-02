@@ -64,6 +64,40 @@
     animation: none;
 }
 
+/* ===================================================================
+   iOS STATUS BAR BLACK BOX
+   ===================================================================
+   With viewport-fit=cover + black-translucent status bar, iOS expands
+   the app behind the notch. #ios-status-bar-bg is a fixed, full-width
+   div positioned at the very top of the screen. It is always solid
+   black, so iOS's "Website Tinting" samples BLACK pixels and keeps
+   the status bar (clock, battery, wifi) black with white text.
+   env(safe-area-inset-top) gives us the exact pixel height of the
+   status bar on any iPhone (notched or Dynamic Island).
+   =================================================================== */
+#ios-status-bar-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top, 0px);
+    background: #000000;
+    z-index: 99999;
+    pointer-events: none;
+}
+
+/* app content sits below the status bar naturally via body padding-top */
+
+/* Ensure the login overlay fills correctly */
+#login-overlay {
+    box-sizing: border-box;
+}
+
+/* Hide site-wide header by default - Toggled via Settings */
+#main-nav-placeholder {
+    display: none;
+}
+
 /* ===== FANCY THEME: Futuristic Glassmorphism ===== */
 [data-theme="fancy"] {
     --bg-gradient: linear-gradient(135deg, #000000 0%, #0a0015 20%, #0d1b2a 40%, #1b0033 60%, #0d1b2a 80%, #000000 100%);
@@ -97,6 +131,11 @@
 
 [data-theme="fancy"] #fancy-speed-control {
     display: flex !important;
+}
+
+/* Black failsafe behind everything in fancy mode — covers Safari overscroll / status bar gaps */
+[data-theme="fancy"] html {
+    background: #000000;
 }
 
 [data-theme="fancy"] body {
@@ -821,6 +860,11 @@
     animation: fancyGradient 20s ease infinite;
 }
 
+/* Ensure no white gap ever shows behind the app on iOS (top, bottom, sides) */
+html {
+    background: #000000;
+}
+
 body {
     background: var(--bg-gradient);
     background-size: 400% 400%;
@@ -830,10 +874,15 @@ body {
     margin: 0;
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    /* Use 100dvh so the full body fits on screen including safe areas */
+    height: 100dvh;
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    /* Push content below the iOS status bar, clear the home indicator at the bottom */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-sizing: border-box;
 }
 
 #main-nav-placeholder {
@@ -846,7 +895,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    padding-top: 0;
+    /* Removed padding-top: 0 — body now handles the safe-area offset */
 }
 
 @keyframes gradientBG {
@@ -941,7 +990,41 @@ body {
 }
 
 [data-theme="light"] .list-count-badge {
-    background: rgba(0, 0, 0, 0.05);
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.list-count-badge.all-done {
+    background-color: #22c55e !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+}
+
+.empty-list-msg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 10px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    opacity: 0.5;
+    font-style: italic;
+    gap: 10px;
+    text-align: center;
+}
+
+.empty-list-msg i {
+    font-size: 1.8rem;
+    margin-bottom: 5px;
+}
+
+.clean-list-btn {
+    opacity: 0.7;
+}
+
+.clean-list-btn:hover {
+    opacity: 1;
+    color: #22c55e !important;
 }
 
 .header-controls {
@@ -1696,7 +1779,7 @@ body {
 }
 
 .edit-task-btn {
-    background: rgba(79, 79, 79, 0.777)!important;
+    background: rgba(79, 79, 79, 0.777) !important;
     color: #ffffff !important;
 }
 
@@ -1765,21 +1848,22 @@ body.is-archived-view .project-title-input {
 .archive-view-badge {
     background: #4b3621;
     color: #facc15;
-    padding: 4px 12px;
+    padding: 6px 16px;
     border-radius: 20px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 800;
     display: flex;
     align-items: center;
-    gap: 6px;
-    border: 1px solid #facc15;
+    gap: 8px;
+    border: 2px solid #facc15;
     animation: pulse-gold 2s infinite;
-    position: absolute;
-    top: -10px;
+    position: fixed;
+    bottom: calc(20px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
     white-space: nowrap;
-    z-index: 100;
+    z-index: 2000;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
 }
 
 @keyframes pulse-gold {
@@ -2974,4 +3058,21 @@ input:checked+.slider-small:before {
 
 [data-theme="light"] .auto-moved-recently {
     background-color: rgba(34, 197, 94, 0.1) !important;
+}
+
+
+
+/* Trick iOS Safari into tinting the status bar black */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    /* Just 1 pixel is enough to trick the algorithm */
+    background-color: #000000;
+    z-index: 999999;
+    pointer-events: none;
+    /* Ensures it doesn't block any taps */
 }

@@ -643,7 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const multiMoveSelect = document.getElementById('multi-move-select');
     document.getElementById('multi-edit-action-btn').onclick = () => {
         // Open Modal
-        renderGroupedListSelect(multiMoveSelect, true);
+        UI.renderGroupedListSelect(multiMoveSelect, true);
         multiEditModal.classList.remove('hidden');
     };
     document.getElementById('multi-edit-close-modal-btn').onclick = () => multiEditModal.classList.add('hidden');
@@ -1371,6 +1371,111 @@ async function performAppReset() {
     Utils.showToast("Reset Complete");
     document.getElementById('reset-modal-overlay').classList.add('hidden');
     location.reload();
+}
+
+// --- BULK DELETE FOREVER (ARCHIVED) ---
+const bulkDeleteModal = document.getElementById('bulk-delete-modal-overlay');
+const bulkDeleteSliderContainer = document.getElementById('bulk-delete-slider-container');
+const bulkDeleteSliderHandle = document.getElementById('bulk-delete-slider-handle');
+const bulkDeleteSliderTrack = document.getElementById('bulk-delete-slider-track');
+let isBulkDeleteDragging = false;
+let bulkDeleteStartX = 0;
+
+document.getElementById('multi-delete-forever-btn').onclick = () => {
+    if (state.selectedTaskIds.size === 0) return;
+    bulkDeleteModal.classList.remove('hidden');
+};
+
+document.getElementById('bulk-delete-cancel-btn').onclick = () => {
+    bulkDeleteModal.classList.add('hidden');
+    resetBulkDeleteSlider();
+};
+
+function resetBulkDeleteSlider() {
+    bulkDeleteSliderHandle.style.left = '0px';
+    bulkDeleteSliderTrack.style.opacity = '1';
+}
+
+bulkDeleteSliderHandle.addEventListener('mousedown', startBulkDeleteDrag);
+bulkDeleteSliderHandle.addEventListener('touchstart', startBulkDeleteDrag);
+
+function startBulkDeleteDrag(e) {
+    isBulkDeleteDragging = true;
+    bulkDeleteStartX = (e.pageX || e.touches[0].pageX) - bulkDeleteSliderHandle.offsetLeft;
+    document.addEventListener('mousemove', moveBulkDeleteDrag);
+    document.addEventListener('touchmove', moveBulkDeleteDrag);
+    document.addEventListener('mouseup', endBulkDeleteDrag);
+    document.addEventListener('touchend', endBulkDeleteDrag);
+}
+
+function moveBulkDeleteDrag(e) {
+    if (!isBulkDeleteDragging) return;
+    let x = (e.pageX || e.touches[0].pageX) - bulkDeleteStartX;
+    let max = bulkDeleteSliderContainer.offsetWidth - bulkDeleteSliderHandle.offsetWidth;
+
+    if (x < 0) x = 0;
+    if (x > max) x = max;
+
+    bulkDeleteSliderHandle.style.left = x + 'px';
+    bulkDeleteSliderTrack.style.opacity = 1 - (x / max);
+
+    if (x >= max - 5) {
+        isBulkDeleteDragging = false;
+        endBulkDeleteDrag();
+        performBulkDeleteForever();
+    }
+}
+
+function endBulkDeleteDrag() {
+    if (isBulkDeleteDragging) {
+        isBulkDeleteDragging = false;
+        document.removeEventListener('mousemove', moveBulkDeleteDrag);
+        document.removeEventListener('touchmove', moveBulkDeleteDrag);
+        document.removeEventListener('mouseup', endBulkDeleteDrag);
+        document.removeEventListener('touchend', endBulkDeleteDrag);
+
+        // Snap back
+        resetBulkDeleteSlider();
+    } else {
+        document.removeEventListener('mousemove', moveBulkDeleteDrag);
+        document.removeEventListener('touchmove', moveBulkDeleteDrag);
+        document.removeEventListener('mouseup', endBulkDeleteDrag);
+        document.removeEventListener('touchend', endBulkDeleteDrag);
+    }
+}
+
+async function performBulkDeleteForever() {
+    const ids = Array.from(state.selectedTaskIds);
+    if (ids.length === 0) return;
+
+    const batch = writeBatch(db);
+    const uid = state.currentUser.uid;
+
+    ids.forEach(taskId => {
+        // Delete Task Doc
+        batch.delete(doc(db, "users", uid, "tasks", taskId));
+        
+        // Remove from all lists
+        state.appData.rawLists.forEach(list => {
+            if (list.taskIds && list.taskIds.includes(taskId)) {
+                batch.update(doc(db, "users", uid, "lists", list.id), {
+                    taskIds: arrayRemove(taskId)
+                });
+            }
+        });
+    });
+
+    try {
+        await batch.commit();
+        Utils.showToast(`Permanently deleted ${ids.length} tasks.`);
+        state.selectedTaskIds.clear();
+        state.multiEditMode = false;
+        UI.toggleMultiEditUI();
+        bulkDeleteModal.classList.add('hidden');
+        resetBulkDeleteSlider();
+    } catch (e) {
+        API.handleSyncError(e);
+    }
 }
 
 // --- GLOBAL KEYBOARD SHORTCUTS ---

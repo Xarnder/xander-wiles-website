@@ -459,7 +459,28 @@
     <!-- Floating Action Button for Multi Edit -->
     <div id="multi-edit-floating-bar" class="floating-action-bar hidden">
         <span id="multi-selected-count">0 Selected</span>
-        <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
+        <div class="floating-bar-buttons">
+            <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
+            <button id="multi-delete-forever-btn" class="btn danger hidden" style="display: none;"><i class="ph ph-trash"></i> Delete Forever</button>
+        </div>
+    </div>
+
+    <!-- BULK DELETE FOREVER MODAL -->
+    <div id="bulk-delete-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box" style="max-width: 400px;">
+            <div class="confirm-icon-area" style="color: var(--accent-red);"><i class="ph ph-trash"></i></div>
+            <h2>Delete Forever?</h2>
+            <p style="color: var(--accent-red); font-weight: bold; margin-bottom: 20px;">
+                This cannot be undone. Selected tasks will be permanently removed.
+            </p>
+            <div class="slider-container" id="bulk-delete-slider-container">
+                <div class="slider-track" id="bulk-delete-slider-track">
+                    <span class="slider-text">Slide to Delete</span>
+                </div>
+                <div class="slider-handle" id="bulk-delete-slider-handle"><i class="ph ph-trash"></i></div>
+            </div>
+            <button id="bulk-delete-cancel-btn" class="btn secondary full-width" style="margin-top: 20px; width: 100%;">Cancel</button>
+        </div>
     </div>
 
     <!-- Image Lightbox -->

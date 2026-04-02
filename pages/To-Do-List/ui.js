@@ -91,7 +91,7 @@ export function renderBoard() {
             archiveBadge.id = 'archive-view-badge';
             archiveBadge.className = 'archive-view-badge';
             archiveBadge.innerHTML = '<i class="ph ph-archive-box"></i> VIEWING ARCHIVED TASKS';
-            header.appendChild(archiveBadge);
+            document.body.appendChild(archiveBadge);
         }
     } else if (archiveBadge) {
         archiveBadge.remove();
@@ -418,6 +418,8 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     const taskIds = list.taskIds || [];
     const sortedIds = getSortedTaskIds(taskIds);
 
+    let visibleCount = 0;
+    let visibleIndex = 1;
     let doneCount = 0;
     sortedIds.forEach((taskId) => {
         const task = state.appData.tasks[taskId];
@@ -989,10 +991,25 @@ export function toggleMultiEditUI() {
 export function updateMultiFloatingBar() {
     const selectedCountEl = document.getElementById('multi-selected-count');
     const floatingBar = document.getElementById('multi-edit-floating-bar');
+    const deleteBtn = document.getElementById('multi-delete-forever-btn');
+    const editBtn = document.getElementById('multi-edit-action-btn');
+    
     const count = state.selectedTaskIds.size;
     selectedCountEl.textContent = `${count} Selected`;
+    
     if (count > 0) {
         floatingBar.classList.remove('hidden');
+        if (state.showArchived) {
+            deleteBtn.classList.remove('hidden');
+            deleteBtn.style.display = 'flex';
+            editBtn.classList.add('hidden');
+            editBtn.style.display = 'none';
+        } else {
+            deleteBtn.classList.add('hidden');
+            deleteBtn.style.display = 'none';
+            editBtn.classList.remove('hidden');
+            editBtn.style.display = 'flex';
+        }
     } else {
         floatingBar.classList.add('hidden');
     }
@@ -1145,6 +1162,7 @@ function renderSearchResultItem(task, contexts) {
 // --- ARCHIVED TASK INTERACTION ---
 
 export function openArchivedTaskModal(taskId) {
+    if (state.multiEditMode) return;
     const task = state.appData.tasks[taskId];
     if (!task) return;
 

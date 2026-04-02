@@ -236,6 +236,39 @@ input[type="range"] {
     cursor: not-allowed;
 }
 
+.ratio-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.preset-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex: 1;
+    min-width: 50px;
+}
+
+.preset-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.preset-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
 .compact-checkbox {
     margin-top: 5px;
     padding: 5px 0;

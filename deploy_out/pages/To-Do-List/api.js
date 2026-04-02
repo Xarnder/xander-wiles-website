@@ -460,5 +460,27 @@ export function processAutomatedLists() {
     }
 }
 
+export function clearCompletedInList(listId) {
+    const list = state.appData.rawLists.find(l => l.id === listId);
+    if (!list || !list.taskIds) return Promise.resolve();
+
+    const batch = writeBatch(db);
+    let count = 0;
+
+    list.taskIds.forEach(taskId => {
+        const task = state.appData.tasks[taskId];
+        if (task && task.completed && !task.archived) {
+            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { archived: true });
+            count++;
+        }
+    });
+
+    if (count === 0) return Promise.resolve();
+
+    return batch.commit().then(() => {
+        showToast(`Archived ${count} completed tasks`, "success");
+    }).catch(e => handleSyncError(e));
+}
+
 // Export raw firestore functions and db for UI helpers that need direct access (e.g. glow color, automated lists)
 export { updateDoc, doc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc, db };

@@ -99,6 +99,7 @@ window.removeTaskFromList = UI.removeTaskFromList;
 window.openArchivedTaskModal = UI.openArchivedTaskModal;
 window.openEditListModal = UI.openEditListModal;
 window.openBoardManager = UI.openBoardManager;
+window.clearCompletedInList = API.clearCompletedInList;
 window.showConfirmModal = showConfirmModal;
 
 // --- BOARD MANAGEMENT EXPOSURE ---
@@ -264,8 +265,8 @@ function manageFancyOrbs(theme) {
     // Dynamic Status Bar & Theme Color
     const themeColorMeta = document.getElementById('theme-color-meta');
     const appleStatusMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-    if (theme === 'fancy' || theme === 'light') {
-        if (themeColorMeta) themeColorMeta.setAttribute('content', '#ffffff');
+    if (theme === 'light') {
+        if (themeColorMeta) themeColorMeta.setAttribute('content', '#000000');
         if (appleStatusMeta) appleStatusMeta.setAttribute('content', 'default');
     } else {
         if (themeColorMeta) themeColorMeta.setAttribute('content', '#000000');
@@ -284,13 +285,13 @@ function setupFirestoreListeners(uid) {
         if (docSnap.exists()) {
             const data = docSnap.data();
             state.appData.settings = { ...state.appData.settings, ...data.settings };
-            
+
             // Auto-detect drag capability if not set
             if (state.appData.settings.dragEnabled === undefined || state.appData.settings.dragEnabled === null) {
                 const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
                 state.appData.settings.dragEnabled = !isTouchDevice;
             }
-            
+
             state.appData.projectTitle = data.projectTitle || "Task Master";
             if (!state.appData.currentBoardId) {
                 state.appData.listOrder = data.listOrder || [];
@@ -319,7 +320,11 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('backup-frequency-input')) document.getElementById('backup-frequency-input').value = state.appData.settings.backupFreq || 10;
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
-            
+            if (document.getElementById('show-site-header-toggle')) document.getElementById('show-site-header-toggle').checked = !!state.appData.settings.showSiteHeader;
+            if (document.getElementById('main-nav-placeholder')) {
+                document.getElementById('main-nav-placeholder').style.display = state.appData.settings.showSiteHeader ? 'block' : 'none';
+            }
+
             // Sync Fancy Speed
             if (state.appData.settings.fancySpeed) {
                 document.documentElement.style.setProperty('--fancy-speed-mult', state.appData.settings.fancySpeed);
@@ -361,7 +366,7 @@ function setupFirestoreListeners(uid) {
     state.listeners.push(onSnapshot(boardsColRef, { includeMetadataChanges: true }, (snapshot) => {
         state.hasPendingWrites = snapshot.metadata.hasPendingWrites;
         if (!snapshot.metadata.fromCache) updateLastSync();
-        
+
         const boards = [];
         snapshot.forEach(doc => boards.push({ id: doc.id, ...doc.data() }));
         state.appData.boards = boards;
@@ -383,7 +388,7 @@ function setupFirestoreListeners(uid) {
         if (!state.appData.currentBoardId && boards.length > 0) {
             const defaultBoardId = state.appData.settings.defaultBoardId;
             const lastBoard = localStorage.getItem(`lastBoard_${uid}`);
-            
+
             // Priority: 1. Default Board Setting, 2. Last Used (LocalStorage), 3. First Board
             if (defaultBoardId && boards.find(b => b.id === defaultBoardId)) {
                 state.appData.currentBoardId = defaultBoardId;
@@ -540,6 +545,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     setupSettingListener('add-bottom-toggle', 'addTaskLocation', true, (checked) => checked ? 'bottom' : 'top');
+    setupSettingListener('show-site-header-toggle', 'showSiteHeader', true, (checked) => {
+        if (document.getElementById('main-nav-placeholder')) {
+            document.getElementById('main-nav-placeholder').style.display = checked ? 'block' : 'none';
+        }
+        return checked;
+    });
 
     // Drag Modes
     document.getElementById('mode-cut-btn').onclick = function () {
@@ -632,7 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const multiMoveSelect = document.getElementById('multi-move-select');
     document.getElementById('multi-edit-action-btn').onclick = () => {
         // Open Modal
-        renderGroupedListSelect(multiMoveSelect, true);
+        UI.renderGroupedListSelect(multiMoveSelect, true);
         multiEditModal.classList.remove('hidden');
     };
     document.getElementById('multi-edit-close-modal-btn').onclick = () => multiEditModal.classList.add('hidden');
@@ -740,7 +751,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalOverlay = document.getElementById('modal-overlay');
         const taskId = modalOverlay.dataset.taskId;
         const text = document.getElementById('modal-task-input').value;
-        updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), { 
+        updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
             text: text,
             updatedAt: Date.now(),
             lastAutoMovedAt: null
@@ -770,7 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
         batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
             taskIds: arrayUnion(taskId)
         });
-        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { 
+        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
             archived: false,
             [`listAddedAt.${targetListId}`]: Date.now(),
             lastAutoMovedAt: null
@@ -799,7 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
         batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
             taskIds: arrayUnion(taskId)
         });
-        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), { 
+        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
             archived: false,
             [`listAddedAt.${targetListId}`]: Date.now(),
             lastAutoMovedAt: null
@@ -1067,7 +1078,7 @@ function showConfirmModal(title, desc, onConfirm, iconClass = 'ph-warning-circle
     titleEl.textContent = title;
     descEl.textContent = desc;
     modal.classList.remove('hidden');
-    
+
     // Remove old listeners to prevent stacking
     const newYes = yesBtn.cloneNode(true);
     yesBtn.parentNode.replaceChild(newYes, yesBtn);
@@ -1176,7 +1187,7 @@ async function restoreBackup(data) {
                 }
             });
         }
-        
+
         // 2.5 Assign to Main Board (New Boards Architecture)
         const mainBoardId = 'main_board';
         batch.set(doc(db, "users", state.currentUser.uid, "boards", mainBoardId), {
@@ -1230,10 +1241,10 @@ async function restoreBackup(data) {
 async function importTodoistData(rows) {
     if (!rows || rows.length === 0) return;
     Utils.showToast("Importing Todoist Data...");
-    
+
     const batch = writeBatch(db);
     const importedListIds = [];
-    
+
     // Group tasks by project (list)
     const listsMap = {};
     rows.forEach(row => {
@@ -1245,7 +1256,7 @@ async function importTodoistData(rows) {
     for (const [title, tasks] of Object.entries(listsMap)) {
         const listId = Utils.generateId();
         importedListIds.push(listId);
-        
+
         const taskIds = [];
         tasks.forEach(t => {
             const taskId = Utils.generateId();
@@ -1361,3 +1372,124 @@ async function performAppReset() {
     document.getElementById('reset-modal-overlay').classList.add('hidden');
     location.reload();
 }
+
+// --- BULK DELETE FOREVER (ARCHIVED) ---
+const bulkDeleteModal = document.getElementById('bulk-delete-modal-overlay');
+const bulkDeleteSliderContainer = document.getElementById('bulk-delete-slider-container');
+const bulkDeleteSliderHandle = document.getElementById('bulk-delete-slider-handle');
+const bulkDeleteSliderTrack = document.getElementById('bulk-delete-slider-track');
+let isBulkDeleteDragging = false;
+let bulkDeleteStartX = 0;
+
+document.getElementById('multi-delete-forever-btn').onclick = () => {
+    if (state.selectedTaskIds.size === 0) return;
+    bulkDeleteModal.classList.remove('hidden');
+};
+
+document.getElementById('bulk-delete-cancel-btn').onclick = () => {
+    bulkDeleteModal.classList.add('hidden');
+    resetBulkDeleteSlider();
+};
+
+function resetBulkDeleteSlider() {
+    bulkDeleteSliderHandle.style.left = '0px';
+    bulkDeleteSliderTrack.style.opacity = '1';
+}
+
+bulkDeleteSliderHandle.addEventListener('mousedown', startBulkDeleteDrag);
+bulkDeleteSliderHandle.addEventListener('touchstart', startBulkDeleteDrag);
+
+function startBulkDeleteDrag(e) {
+    isBulkDeleteDragging = true;
+    bulkDeleteStartX = (e.pageX || e.touches[0].pageX) - bulkDeleteSliderHandle.offsetLeft;
+    document.addEventListener('mousemove', moveBulkDeleteDrag);
+    document.addEventListener('touchmove', moveBulkDeleteDrag);
+    document.addEventListener('mouseup', endBulkDeleteDrag);
+    document.addEventListener('touchend', endBulkDeleteDrag);
+}
+
+function moveBulkDeleteDrag(e) {
+    if (!isBulkDeleteDragging) return;
+    let x = (e.pageX || e.touches[0].pageX) - bulkDeleteStartX;
+    let max = bulkDeleteSliderContainer.offsetWidth - bulkDeleteSliderHandle.offsetWidth;
+
+    if (x < 0) x = 0;
+    if (x > max) x = max;
+
+    bulkDeleteSliderHandle.style.left = x + 'px';
+    bulkDeleteSliderTrack.style.opacity = 1 - (x / max);
+
+    if (x >= max - 5) {
+        isBulkDeleteDragging = false;
+        endBulkDeleteDrag();
+        performBulkDeleteForever();
+    }
+}
+
+function endBulkDeleteDrag() {
+    if (isBulkDeleteDragging) {
+        isBulkDeleteDragging = false;
+        document.removeEventListener('mousemove', moveBulkDeleteDrag);
+        document.removeEventListener('touchmove', moveBulkDeleteDrag);
+        document.removeEventListener('mouseup', endBulkDeleteDrag);
+        document.removeEventListener('touchend', endBulkDeleteDrag);
+
+        // Snap back
+        resetBulkDeleteSlider();
+    } else {
+        document.removeEventListener('mousemove', moveBulkDeleteDrag);
+        document.removeEventListener('touchmove', moveBulkDeleteDrag);
+        document.removeEventListener('mouseup', endBulkDeleteDrag);
+        document.removeEventListener('touchend', endBulkDeleteDrag);
+    }
+}
+
+async function performBulkDeleteForever() {
+    const ids = Array.from(state.selectedTaskIds);
+    if (ids.length === 0) return;
+
+    const batch = writeBatch(db);
+    const uid = state.currentUser.uid;
+
+    ids.forEach(taskId => {
+        // Delete Task Doc
+        batch.delete(doc(db, "users", uid, "tasks", taskId));
+        
+        // Remove from all lists
+        state.appData.rawLists.forEach(list => {
+            if (list.taskIds && list.taskIds.includes(taskId)) {
+                batch.update(doc(db, "users", uid, "lists", list.id), {
+                    taskIds: arrayRemove(taskId)
+                });
+            }
+        });
+    });
+
+    try {
+        await batch.commit();
+        Utils.showToast(`Permanently deleted ${ids.length} tasks.`);
+        state.selectedTaskIds.clear();
+        state.multiEditMode = false;
+        UI.toggleMultiEditUI();
+        bulkDeleteModal.classList.add('hidden');
+        resetBulkDeleteSlider();
+    } catch (e) {
+        API.handleSyncError(e);
+    }
+}
+
+// --- GLOBAL KEYBOARD SHORTCUTS ---
+window.addEventListener('keydown', (e) => {
+    // 1. Esc to close all modals
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(modal => {
+            modal.classList.add('hidden');
+        });
+    }
+    // 2. Cmd/Ctrl + K for search
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchBtn = document.getElementById('search-btn');
+        if (searchBtn) searchBtn.click();
+    }
+});

@@ -26,6 +26,9 @@ const imageCounter = document.getElementById('imageCounter');
 const previewCard = document.getElementById('previewCard');
 const previewCanvas = document.getElementById('previewCanvas');
 const previewLoader = document.getElementById('previewLoader');
+const verticalPosInput = document.getElementById('verticalPosInput');
+const verticalPosVal = document.getElementById('verticalPosVal');
+const presetBtns = document.querySelectorAll('.preset-btn');
 
 // Edit Crop Elements
 const editCropModal = document.getElementById('editCropModal');
@@ -62,19 +65,48 @@ paddingInput.addEventListener('input', (e) => {
 });
 
 function handleRatioChange() {
+    // Clear active presets if manual input is changed
+    // We check if the event caller was a preset btn to avoid circular logic
     if (firstImageCache && firstFaceBox) {
         updatePreviewCanvas();
     }
 }
 
-ratioWidthInput.addEventListener('input', handleRatioChange);
-ratioHeightInput.addEventListener('input', handleRatioChange);
+ratioWidthInput.addEventListener('input', () => {
+    presetBtns.forEach(b => b.classList.remove('active'));
+    handleRatioChange();
+});
+ratioHeightInput.addEventListener('input', () => {
+    presetBtns.forEach(b => b.classList.remove('active'));
+    handleRatioChange();
+});
 
 useOriginalRatioInput.addEventListener('change', (e) => {
     const disabled = e.target.checked;
     ratioWidthInput.disabled = disabled;
     ratioHeightInput.disabled = disabled;
+    presetBtns.forEach(btn => btn.disabled = disabled);
     handleRatioChange();
+});
+
+verticalPosInput.addEventListener('input', (e) => {
+    verticalPosVal.textContent = e.target.value;
+    if (firstImageCache && firstFaceBox) {
+        updatePreviewCanvas();
+    }
+});
+
+presetBtns.forEach(btn => {
+    if (btn.dataset.w === "1" && btn.dataset.h === "1") {
+        btn.classList.add('active');
+    }
+    btn.addEventListener('click', () => {
+        presetBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        ratioWidthInput.value = btn.dataset.w;
+        ratioHeightInput.value = btn.dataset.h;
+        handleRatioChange();
+    });
 });
 
 imageInput.addEventListener('change', async (e) => {
@@ -319,10 +351,22 @@ async function processImage(file, uniqueName) {
         if (height > img.height) {
             height = img.height;
             width = height * targetRatio;
-            y = (img.height - height) / 2;
+            // If height was forced to shrink, we should re-center or at least keep within image
+            // We'll handle y clamp below anyway.
         }
 
-        // 3. Clamp positions
+        // Apply Vertical Position
+        const verticalPosPercent = (parseInt(document.getElementById('verticalPosInput').value) || 50) / 100;
+        const faceCenterY = box.y + box.height / 2;
+        const faceCenterX = box.x + box.width / 2;
+
+        x = faceCenterX - width / 2;
+        y = faceCenterY - (height * verticalPosPercent);
+
+        // 3. Clamp positions AND Re-adjust if out of bounds (to preserve ratio)
+        // If x is < 0, we shift it right, if x + width > img.width, we shift it left.
+        // Same for y.
+        
         x = Math.max(0, Math.min(x, img.width - width));
         y = Math.max(0, Math.min(y, img.height - height));
     }
@@ -456,13 +500,21 @@ function updatePreviewCanvas() {
     if (width > firstImageCache.width) {
         width = firstImageCache.width;
         height = width / targetRatio;
-        x = (firstImageCache.width - width) / 2;
     }
     if (height > firstImageCache.height) {
         height = firstImageCache.height;
         width = height * targetRatio;
-        y = (firstImageCache.height - height) / 2;
     }
+
+    // Apply Vertical Position
+    const vPos = (parseInt(verticalPosInput.value) || 50) / 100;
+    const faceCenterY = box.y + box.height / 2;
+    const faceCenterX = box.x + box.width / 2;
+
+    x = faceCenterX - width / 2;
+    y = faceCenterY - (height * vPos);
+
+    // Final Clamping
     x = Math.max(0, Math.min(x, firstImageCache.width - width));
     y = Math.max(0, Math.min(y, firstImageCache.height - height));
 
