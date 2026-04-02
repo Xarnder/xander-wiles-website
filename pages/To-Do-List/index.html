@@ -16,8 +16,8 @@
 
     <!-- Mobile App Overrides -->
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="theme-color" id="theme-color-meta" content="#1e293b">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="theme-color" content="#000000">
 
     <!-- Global Header -->
     <link rel="stylesheet" href="/assets/css/style.css">
@@ -40,22 +40,7 @@
             const savedTheme = localStorage.getItem('theme') || 'oled';
             document.documentElement.setAttribute('data-theme', savedTheme);
             
-            // Dynamic Status Bar Style
-            const updateMeta = () => {
-                const meta = document.getElementById('theme-color-meta');
-                const appleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-                if (savedTheme === 'fancy') {
-                    if (meta) meta.setAttribute('content', '#ffffff'); // Light bar for black icons
-                    if (appleMeta) appleMeta.setAttribute('content', 'default');
-                } else if (savedTheme === 'light') {
-                    if (meta) meta.setAttribute('content', '#ffffff');
-                    if (appleMeta) appleMeta.setAttribute('content', 'default');
-                } else {
-                    if (meta) meta.setAttribute('content', '#000000');
-                    if (appleMeta) appleMeta.setAttribute('content', 'black-translucent');
-                }
-            };
-            updateMeta();
+            // Status bar is always black on iOS regardless of theme
 
             if (savedTheme === 'fancy') {
                 document.addEventListener('DOMContentLoaded', function() {
