@@ -860,6 +860,11 @@
     animation: fancyGradient 20s ease infinite;
 }
 
+/* Ensure no white gap ever shows behind the app on iOS (top, bottom, sides) */
+html {
+    background: #000000;
+}
+
 body {
     background: var(--bg-gradient);
     background-size: 400% 400%;
@@ -874,8 +879,9 @@ body {
     overflow: hidden;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
-    /* Push ALL body content below the iOS status bar black box */
+    /* Push content below the iOS status bar, clear the home indicator at the bottom */
     padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     box-sizing: border-box;
 }
 
