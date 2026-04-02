@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag } from 'lucide-react';
 import DirectoryImporter from './DirectoryImporter';
 import DataRepair from './DataRepair';
@@ -12,6 +12,7 @@ export default function Layout() {
     const { currentUser, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const params = useParams();
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -25,8 +26,40 @@ export default function Layout() {
     }
 
     // Close mobile menu on navigation
-    React.useEffect(() => {
+    useEffect(() => {
         setIsMobileMenuOpen(false);
+    }, [location.pathname]);
+
+    // Global Search Shortcut (Cmd+K / Ctrl+K)
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                setIsSearchOpen(prev => !prev);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
+    // Dynamic Tab Title
+    useEffect(() => {
+        const path = location.pathname;
+        let title = "Digital Journal";
+
+        if (path === '/') title = "Journal - Calendar";
+        else if (path === '/month') title = "Journal - Month View";
+        else if (path === '/images') title = "Journal - Photos";
+        else if (path === '/stats') title = "Journal - Statistics";
+        else if (path === '/tags') title = "Journal - Tags";
+        else if (path === '/memories') title = "Journal - Memories";
+        else if (path === '/pdf-export') title = "Journal - Export PDF";
+        else if (path.startsWith('/entry/')) {
+            const dateStr = path.split('/').pop();
+            title = `Journal - ${dateStr}`;
+        }
+
+        document.title = title;
     }, [location.pathname]);
 
     const NavItem = ({ path, icon: Icon, label, onClick }) => {
