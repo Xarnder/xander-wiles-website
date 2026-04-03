@@ -3076,3 +3076,11 @@ body::before {
     pointer-events: none;
     /* Ensures it doesn't block any taps */
 }
+
+
+/* Force the body gradient to cover the bottom safe area in the Home Screen app */
+@media all and (display-mode: standalone) {
+    body {
+        height: 100vh !important;
+    }
+}
