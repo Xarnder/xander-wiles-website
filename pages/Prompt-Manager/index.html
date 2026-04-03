@@ -23,7 +23,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="../../assets/css/style.css">
 
     <link rel="stylesheet" href="style.css">
     
@@ -33,7 +33,7 @@
 
 <body>
     <div id="main-nav-placeholder"></div>
-    <script src="/assets/js/nav-loader.js"></script>
+    <script src="../../assets/js/nav-loader.js"></script>
 
     <div class="bg-orb orb-1"></div>
     <div class="bg-orb orb-2"></div>
@@ -100,6 +100,14 @@
                         </div>
                         <textarea id="prompt-content" rows="4" placeholder="Main Prompt Content..." required></textarea>
                         <textarea id="prompt-code" rows="3" placeholder="Optional Code Snippets..."></textarea>
+                        
+                        <!-- Dynamic Additional Blocks Container -->
+                        <div id="dynamic-blocks-container" class="dynamic-blocks-wrapper"></div>
+                        
+                        <div class="add-block-actions">
+                            <button type="button" id="add-text-block-btn" class="outline-btn small-btn">+ Add Text Block</button>
+                            <button type="button" id="add-code-block-btn" class="outline-btn small-btn">+ Add Code Block</button>
+                        </div>
                         
                         <div id="modal-metadata" class="modal-metadata hidden">
                             <p id="created-at-text"></p>

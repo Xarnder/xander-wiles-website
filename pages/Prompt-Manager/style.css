@@ -133,6 +133,62 @@ textarea:focus {
     margin-bottom: 0px;
 }
 
+/* --- Dynamic Additional Blocks (Modal) --- */
+.add-block-actions {
+    display: flex;
+    gap: 12px;
+    margin: 10px 0 20px;
+}
+
+.dynamic-block-item {
+    position: relative;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    animation: fadeIn 0.3s forwards;
+}
+
+.dynamic-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.dynamic-block-header label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.remove-block-btn {
+    background: transparent;
+    border: none;
+    color: #f72585;
+    font-size: 0.8rem;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.remove-block-btn:hover {
+    opacity: 1;
+}
+
+.dynamic-block-item textarea {
+    margin-bottom: 0;
+    font-size: 0.95rem;
+    padding: 10px;
+}
+
+.dynamic-block-item textarea.code-textarea {
+    font-family: monospace;
+    color: #a8dadc;
+    background: rgba(0, 0, 0, 0.3);
+}
+
 /* --- Responsive Visibility --- */
 .desktop-only {
     display: inline-flex !important;
@@ -868,6 +924,18 @@ select:focus {
     opacity: 1;
     transition: max-height 0.4s cubic-bezier(1, 0, 1, 0), opacity 0.4s ease, margin-top 0.4s ease;
     margin-top: 15px;
+}
+
+/* --- Additional Blocks in Card --- */
+.additional-block {
+    margin-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 15px;
+}
+
+.additional-block:first-of-type {
+    margin-top: 20px;
+    border-top: 1px dashed var(--glass-border);
 }
 
 /* --- Expand Button & Caret --- */

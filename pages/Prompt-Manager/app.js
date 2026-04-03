@@ -58,6 +58,9 @@ const closeModalBtn = document.getElementById('close-modal-btn');
 const modalTitle = document.getElementById('modal-title');
 const submitPromptBtn = document.getElementById('submit-prompt-btn');
 const modalDeleteBtn = document.getElementById('modal-delete-btn');
+const dynamicBlocksContainer = document.getElementById('dynamic-blocks-container');
+const addTextBlockBtn = document.getElementById('add-text-block-btn');
+const addCodeBlockBtn = document.getElementById('add-code-block-btn');
 
 // Filter & Search DOM Elements
 const searchInput = document.getElementById('search-prompts');
@@ -185,6 +188,7 @@ openModalBtn.addEventListener('click', () => {
     modalDeleteBtn.classList.add('hidden');
     
     addPromptForm.reset();
+    dynamicBlocksContainer.innerHTML = ''; // Clear dynamic blocks
     modalMetadata.classList.add('hidden');
     addPromptModal.classList.remove('hidden');
     setTimeout(() => {
@@ -194,6 +198,35 @@ openModalBtn.addEventListener('click', () => {
         autoResizeTextarea(document.getElementById('prompt-category'));
     }, 100);
 });
+
+// Dynamic Blocks Modal Logic
+const addDynamicBlock = (type, content = '') => {
+    const blockId = Date.now() + Math.random().toString(36).substr(2, 9);
+    const blockDiv = document.createElement('div');
+    blockDiv.className = 'dynamic-block-item';
+    blockDiv.dataset.type = type;
+
+    blockDiv.innerHTML = `
+        <div class="dynamic-block-header">
+            <label>${type === 'code' ? 'Additional Code Snippet' : 'Additional Text Block'}</label>
+            <button type="button" class="remove-block-btn" data-id="${blockId}">Remove</button>
+        </div>
+        <textarea class="dynamic-content ${type === 'code' ? 'code-textarea' : ''}" placeholder="${type === 'code' ? 'Enter code...' : 'Enter text...'}" rows="${type === 'code' ? 3 : 2}">${escapeHTML(content)}</textarea>
+    `;
+
+    dynamicBlocksContainer.appendChild(blockDiv);
+    
+    const textarea = blockDiv.querySelector('textarea');
+    textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+    autoResizeTextarea(textarea);
+
+    blockDiv.querySelector('.remove-block-btn').addEventListener('click', () => {
+        blockDiv.remove();
+    });
+};
+
+addTextBlockBtn.addEventListener('click', () => addDynamicBlock('text'));
+addCodeBlockBtn.addEventListener('click', () => addDynamicBlock('code'));
 
 closeModalBtn.addEventListener('click', () => {
     addPromptModal.classList.add('hidden');
@@ -465,6 +498,15 @@ addPromptForm.addEventListener('submit', async (e) => {
     const content = document.getElementById('prompt-content').value;
     const code = document.getElementById('prompt-code').value;
 
+    // Collect Dynamic Blocks
+    const additionalBlocks = [];
+    dynamicBlocksContainer.querySelectorAll('.dynamic-block-item').forEach(block => {
+        additionalBlocks.push({
+            type: block.dataset.type,
+            content: block.querySelector('textarea').value
+        });
+    });
+
     try {
         if (isEditing && currentPromptId) {
             // Update Existing Doc
@@ -475,6 +517,7 @@ addPromptForm.addEventListener('submit', async (e) => {
                 categoryTextColor: categoryTextColor,
                 content: content,
                 codeSnippet: code,
+                additionalBlocks: additionalBlocks,
                 lastEdited: serverTimestamp()
             });
             console.log("✅ Prompt updated successfully!");
@@ -487,6 +530,7 @@ addPromptForm.addEventListener('submit', async (e) => {
                 categoryTextColor: categoryTextColor,
                 content: content,
                 codeSnippet: code,
+                additionalBlocks: additionalBlocks,
                 userId: auth.currentUser.uid,
                 createdAt: serverTimestamp()
             });
@@ -610,6 +654,17 @@ function renderPrompts(prompts) {
 
         let codeHTML = data.codeSnippet ? `<div class="prompt-code-block">${escapeHTML(data.codeSnippet)}</div>` : '';
         
+        let additionalBlocksHTML = '';
+        if (data.additionalBlocks && data.additionalBlocks.length > 0) {
+            data.additionalBlocks.forEach(block => {
+                if (block.type === 'code') {
+                    additionalBlocksHTML += `<div class="prompt-code-block additional-block">${escapeHTML(block.content)}</div>`;
+                } else {
+                    additionalBlocksHTML += `<p class="prompt-text-display additional-block" style="line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(block.content)}</p>`;
+                }
+            });
+        }
+        
         // Handle dual colors with fallbacks for older data
         let bg = data.categoryBgColor || data.categoryColor || '#0a0514';
         let text = data.categoryTextColor || '#ffffff';
@@ -640,6 +695,7 @@ function renderPrompts(prompts) {
             <div class="prompt-body">
                 <p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>
                 ${codeHTML}
+                ${additionalBlocksHTML}
             </div>
         `;
         
@@ -681,7 +737,30 @@ function renderPrompts(prompts) {
                 return val;
             });
 
-            const fullPromptText = data.codeSnippet ? `${reconstructedContent}\n\n${data.codeSnippet}` : reconstructedContent;
+            let fullPromptText = reconstructedContent;
+            if (data.codeSnippet) {
+                fullPromptText += `\n\n${data.codeSnippet}`;
+            }
+
+            // Append Additional Blocks
+            if (data.additionalBlocks && data.additionalBlocks.length > 0) {
+                const additionalPs = card.querySelectorAll('.prompt-text-display.additional-block');
+                let blockTextIndex = 0;
+
+                data.additionalBlocks.forEach(block => {
+                    let blockContent = block.content;
+                    if (block.type === 'text') {
+                        // Reconstruct inputs for each additional text block
+                        const blockInputs = additionalPs[blockTextIndex++].querySelectorAll('.prompt-input');
+                        let inputIdx = 0;
+                        blockContent = block.content.replace(/_{3,}/g, () => {
+                            return blockInputs[inputIdx++]?.value || '___';
+                        });
+                    }
+                    fullPromptText += `\n\n${blockContent}`;
+                });
+            }
+
             copyToClipboard(fullPromptText, copyBtn);
 
             // Update Last Used in Firestore
@@ -708,6 +787,15 @@ function renderPrompts(prompts) {
             document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
             document.getElementById('prompt-content').value = data.content;
             document.getElementById('prompt-code').value = data.codeSnippet || '';
+            
+            // Render Dynamic Blocks in Modal
+            dynamicBlocksContainer.innerHTML = '';
+            if (data.additionalBlocks && data.additionalBlocks.length > 0) {
+                data.additionalBlocks.forEach(block => {
+                    addDynamicBlock(block.type, block.content);
+                });
+            }
+
             updateCounters(); 
             
             // Show Delete button in Edit mode
@@ -726,13 +814,6 @@ function renderPrompts(prompts) {
                 autoResizeTextarea(titleEl);
                 autoResizeTextarea(document.getElementById('prompt-category'));
             }, 100);
-        });
-
-        // Delete Logic
-        const deleteBtn = card.querySelector('.delete-btn');
-        deleteBtn.addEventListener('click', () => {
-            promptIdToDelete = id;
-            deleteConfirmModal.classList.remove('hidden');
         });
 
         promptsFeed.appendChild(card);
