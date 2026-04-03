@@ -498,3 +498,81 @@ select:focus {
     font-style: italic;
     opacity: 0.5;
 }
+
+/* --- QoL Features --- */
+.counters {
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+    margin-top: -10px;
+    margin-bottom: 15px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+#clear-search-btn {
+    position: absolute;
+    right: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: var(--text-muted);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+#clear-search-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* --- Pinning Styles --- */
+.card-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.pin-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    opacity: 0.5;
+}
+
+.pin-btn:hover {
+    opacity: 1;
+    color: var(--glow-color);
+    transform: rotate(-15deg) scale(1.2);
+}
+
+.pin-btn.active {
+    opacity: 1;
+    color: #ffd700; /* Gold for pinned */
+    transform: rotate(-45deg);
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.pinned-card {
+    border-left: 4px solid #ffd700 !important;
+    box-shadow: 0 8px 32px 0 rgba(255, 215, 0, 0.15) !important;
+}
+
+.pinned-card:hover {
+    box-shadow: 0 15px 45px rgba(255, 215, 0, 0.25) !important;
+}

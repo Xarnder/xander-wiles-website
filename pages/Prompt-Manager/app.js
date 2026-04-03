@@ -60,6 +60,13 @@ const submitPromptBtn = document.getElementById('submit-prompt-btn');
 // Filter & Search DOM Elements
 const searchInput = document.getElementById('search-prompts');
 const categoryFilter = document.getElementById('category-filter');
+const clearSearchBtn = document.getElementById('clear-search-btn');
+
+// Counter DOM Elements
+const charCount = document.getElementById('char-count');
+const tokenCount = document.getElementById('token-count');
+const promptContentArea = document.getElementById('prompt-content');
+const promptCodeArea = document.getElementById('prompt-code');
 
 // Delete Modal DOM Elements
 const deleteConfirmModal = document.getElementById('delete-confirm-modal');
@@ -105,7 +112,11 @@ openModalBtn.addEventListener('click', () => {
     modalTitle.textContent = "Add New Prompt";
     submitPromptBtn.textContent = "Save Prompt";
     addPromptForm.reset();
+    updateCounters(); // Reset counters
     addPromptModal.classList.remove('hidden');
+    
+    // Auto-focus Title
+    setTimeout(() => document.getElementById('prompt-title').focus(), 100);
 });
 
 closeModalBtn.addEventListener('click', () => {
@@ -143,8 +154,51 @@ confirmDeleteBtn.addEventListener('click', async () => {
 });
 
 // Search & Filter Events
-searchInput.addEventListener('input', () => applyFilters());
+searchInput.addEventListener('input', () => {
+    applyFilters();
+    clearSearchBtn.classList.toggle('hidden', !searchInput.value);
+});
+
+clearSearchBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    applyFilters();
+    clearSearchBtn.classList.add('hidden');
+    searchInput.focus();
+});
+
 categoryFilter.addEventListener('change', () => applyFilters());
+
+// Real-time Counters
+const updateCounters = () => {
+    const totalChars = promptContentArea.value.length + (promptCodeArea.value?.length || 0);
+    const estTokens = Math.ceil(totalChars / 4);
+    charCount.textContent = `${totalChars} chars`;
+    tokenCount.textContent = `${estTokens} tokens`;
+};
+
+promptContentArea.addEventListener('input', updateCounters);
+promptCodeArea.addEventListener('input', updateCounters);
+
+// Keyboard Shortcuts
+window.addEventListener('keydown', (e) => {
+    // Cmd+K or Ctrl+K to search
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInput.focus();
+    }
+    
+    // Esc to close modals
+    if (e.key === 'Escape') {
+        addPromptModal.classList.add('hidden');
+        deleteConfirmModal.classList.add('hidden');
+    }
+    
+    // Cmd+Enter or Ctrl+Enter to save in modal
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !addPromptModal.classList.contains('hidden')) {
+        e.preventDefault();
+        addPromptForm.requestSubmit();
+    }
+});
 
 // Auth State Observer
 onAuthStateChanged(auth, (user) => {
@@ -216,7 +270,8 @@ function loadPrompts() {
 
     console.log("Fetching prompts from Firestore...");
 
-    const q = query(collection(db, "prompts"), orderBy("createdAt", "desc"));
+    // Order by Pinned first, then newest
+    const q = query(collection(db, "prompts"), orderBy("isPinned", "desc"), orderBy("createdAt", "desc"));
 
     onSnapshot(q, (snapshot) => {
         allPromptsData = [];
@@ -297,7 +352,10 @@ function renderPrompts(prompts) {
         card.innerHTML = `
             <div class="card-header">
                 ${tagHTML}
-                <button class="copy-btn">Copy</button>
+                <div class="card-header-actions">
+                    <button class="pin-btn ${data.isPinned ? 'active' : ''}" title="${data.isPinned ? 'Unpin' : 'Pin to Top'}">📌</button>
+                    <button class="copy-btn">Copy</button>
+                </div>
             </div>
             <h3>${escapeHTML(data.title)}</h3>
             <p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>
@@ -307,6 +365,23 @@ function renderPrompts(prompts) {
                 <button class="action-btn delete-btn">Delete</button>
             </div>
         `;
+        
+        if (data.isPinned) card.classList.add('pinned-card');
+
+        // --- Handlers ---
+        
+        // 0. Pin Logic
+        const pinBtn = card.querySelector('.pin-btn');
+        pinBtn.addEventListener('click', async () => {
+            const newPinnedState = !data.isPinned;
+            try {
+                await updateDoc(doc(db, "prompts", id), {
+                    isPinned: newPinnedState
+                });
+            } catch (err) {
+                console.error("❌ Failed to toggle pin:", err);
+            }
+        });
 
         // Copy Logic
         const copyBtn = card.querySelector('.copy-btn');
@@ -339,8 +414,10 @@ function renderPrompts(prompts) {
             document.getElementById('prompt-category').value = data.category || '';
             document.getElementById('prompt-content').value = data.content;
             document.getElementById('prompt-code').value = data.codeSnippet || '';
+            updateCounters(); // Ensure counters are updated on edit open
 
             addPromptModal.classList.remove('hidden');
+            setTimeout(() => document.getElementById('prompt-title').focus(), 100);
         });
 
         // Delete Logic

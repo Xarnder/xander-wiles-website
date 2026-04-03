@@ -66,6 +66,11 @@
                         </div>
                         <textarea id="prompt-content" rows="4" placeholder="Main Prompt Content..." required></textarea>
                         <textarea id="prompt-code" rows="3" placeholder="Optional Code Snippets..."></textarea>
+                        
+                        <div class="counters">
+                            <span id="char-count">0 chars</span>
+                            <span id="token-count">0 tokens</span>
+                        </div>
 
                         <button type="submit" id="submit-prompt-btn" class="glow-btn full-width" style="margin-top: 10px;">Save Prompt</button>
                     </form>
@@ -90,7 +95,10 @@
             <!-- Search and Filter Section -->
             <section class="filter-bar glass-card">
                 <div class="search-group">
-                    <input type="text" id="search-prompts" placeholder="Search prompts by title...">
+                    <div class="search-wrapper">
+                        <input type="text" id="search-prompts" placeholder="Search prompts (Ctrl+K)...">
+                        <button id="clear-search-btn" class="hidden">&times;</button>
+                    </div>
                 </div>
                 <div class="filter-group">
                     <select id="category-filter">
