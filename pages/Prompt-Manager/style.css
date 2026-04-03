@@ -576,3 +576,28 @@ select:focus {
 .pinned-card:hover {
     box-shadow: 0 15px 45px rgba(255, 215, 0, 0.25) !important;
 }
+
+/* --- Metadata Section --- */
+.modal-metadata {
+    margin: 15px 0;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.modal-metadata p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin: 0;
+    display: flex;
+    justify-content: space-between;
+}
+
+.modal-metadata p span {
+    color: #4cc9f0;
+    font-weight: 600;
+}

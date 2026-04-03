@@ -68,6 +68,12 @@ const tokenCount = document.getElementById('token-count');
 const promptContentArea = document.getElementById('prompt-content');
 const promptCodeArea = document.getElementById('prompt-code');
 
+// Metadata Modal Elements
+const modalMetadata = document.getElementById('modal-metadata');
+const createdAtText = document.getElementById('created-at-text');
+const lastEditedText = document.getElementById('last-edited-text');
+const lastUsedText = document.getElementById('last-used-text');
+
 // Delete Modal DOM Elements
 const deleteConfirmModal = document.getElementById('delete-confirm-modal');
 const closeDeleteModalBtn = document.getElementById('close-delete-modal-btn');
@@ -117,6 +123,7 @@ openModalBtn.addEventListener('click', () => {
     
     // Auto-focus Title
     setTimeout(() => document.getElementById('prompt-title').focus(), 100);
+    modalMetadata.classList.add('hidden');
 });
 
 closeModalBtn.addEventListener('click', () => {
@@ -398,8 +405,17 @@ function renderPrompts(prompts) {
                 return val;
             });
 
-            const fullText = data.codeSnippet ? `${reconstructedContent}\n\n${data.codeSnippet}` : reconstructedContent;
-            copyToClipboard(fullText, copyBtn);
+            const fullPromptText = data.codeSnippet ? `${reconstructedContent}\n\n${data.codeSnippet}` : reconstructedContent;
+            copyToClipboard(fullPromptText, copyBtn);
+
+            // Update Last Used in Firestore
+            try {
+                updateDoc(doc(db, "prompts", id), {
+                    lastUsed: serverTimestamp()
+                });
+            } catch (err) {
+                console.error("❌ Failed to update last used:", err);
+            }
         });
 
         // Edit Logic
@@ -414,7 +430,13 @@ function renderPrompts(prompts) {
             document.getElementById('prompt-category').value = data.category || '';
             document.getElementById('prompt-content').value = data.content;
             document.getElementById('prompt-code').value = data.codeSnippet || '';
-            updateCounters(); // Ensure counters are updated on edit open
+            updateCounters(); 
+
+            // Show Metadata
+            modalMetadata.classList.remove('hidden');
+            createdAtText.innerHTML = `Created: <span>${data.createdAt ? timeAgo(data.createdAt.toDate()) : 'Recently'}</span>`;
+            lastEditedText.innerHTML = `Last Edited: <span>${data.lastEdited ? timeAgo(data.lastEdited.toDate()) : 'Never'}</span>`;
+            lastUsedText.innerHTML = `Last Used: <span>${data.lastUsed ? timeAgo(data.lastUsed.toDate()) : 'Never'}</span>`;
 
             addPromptModal.classList.remove('hidden');
             setTimeout(() => document.getElementById('prompt-title').focus(), 100);
@@ -497,4 +519,22 @@ function renderContentWithInputs(content) {
     });
 
     return html;
+}
+
+// Logic for "Time Ago" formatting
+function timeAgo(date) {
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+
+    if (seconds < 60) return "just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min${minutes > 1 ? 's' : ''} ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} day${days > 1 ? 's' : ''} ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
+    const years = Math.floor(months / 12);
+    return `${years} year${years > 1 ? 's' : ''} ago`;
 }
