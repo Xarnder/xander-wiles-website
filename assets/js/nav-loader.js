@@ -5,9 +5,8 @@ document.addEventListener("DOMContentLoaded", function() {
     const navPlaceholder = document.getElementById('main-nav-placeholder');
 
     if (navPlaceholder) {
-        // 2. Fetch the navigation HTML (using relative path to support subdirectories and PWAs)
-        const isSubpage = window.location.pathname.includes('/pages/');
-        const navPath = isSubpage ? '../../nav.html' : './nav.html';
+        // 2. Fetch the navigation HTML using an absolute root-relative path
+        const navPath = '/nav.html';
         
         fetch(navPath)
             .then(response => {
