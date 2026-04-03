@@ -782,7 +782,7 @@ select:focus {
 }
 
 .pinned-card {
-    border-left: 4px solid #ffd700 !important;
+    border: 2px solid #ffd700 !important;
     box-shadow: 0 8px 32px 0 rgba(255, 215, 0, 0.15) !important;
 }
 
