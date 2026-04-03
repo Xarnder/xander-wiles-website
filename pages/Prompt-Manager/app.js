@@ -930,6 +930,13 @@ function renderPrompts(prompts) {
                 titleEl.focus();
                 autoResizeTextarea(titleEl);
                 autoResizeTextarea(document.getElementById('prompt-category'));
+                autoResizeTextarea(document.getElementById('prompt-content'));
+                autoResizeTextarea(document.getElementById('prompt-code'));
+                
+                // Also resize all dynamically added blocks
+                dynamicBlocksContainer.querySelectorAll('textarea').forEach(tx => {
+                    autoResizeTextarea(tx);
+                });
             }, 100);
         });
 
