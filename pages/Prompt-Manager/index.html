@@ -84,9 +84,16 @@
                         <button id="close-modal-btn" class="close-btn">&times;</button>
                     </div>
                     <form id="add-prompt-form">
-                        <div class="input-group">
-                            <textarea id="prompt-title" placeholder="Prompt Title" rows="1" required></textarea>
-                            <textarea id="prompt-category" placeholder="Category Tag (e.g., Dev, Writing)" rows="1"></textarea>
+                        <textarea id="prompt-title" placeholder="Prompt Title" rows="1" required></textarea>
+                        
+                        <div class="category-row">
+                            <div class="category-with-color">
+                                <textarea id="prompt-category" placeholder="Category Tag (e.g., Dev, Writing)" rows="1"></textarea>
+                                <div class="color-controls">
+                                    <input type="color" id="category-bg-color" value="#0a0514" title="Background Color">
+                                    <input type="color" id="category-text-color" value="#ffffff" title="Text Color">
+                                </div>
+                            </div>
                         </div>
                         <textarea id="prompt-content" rows="4" placeholder="Main Prompt Content..." required></textarea>
                         <textarea id="prompt-code" rows="3" placeholder="Optional Code Snippets..."></textarea>
@@ -102,7 +109,10 @@
                             <span id="token-count">0 tokens</span>
                         </div>
 
-                        <button type="submit" id="submit-prompt-btn" class="glow-btn full-width" style="margin-top: 10px;">Save Prompt</button>
+                        <div class="modal-footer-actions">
+                            <button type="button" id="modal-delete-btn" class="glow-btn danger-btn hidden">Delete Prompt</button>
+                            <button type="submit" id="submit-prompt-btn" class="glow-btn">Save Prompt</button>
+                        </div>
                     </form>
                 </div>
             </div>

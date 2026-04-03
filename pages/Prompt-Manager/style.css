@@ -128,16 +128,9 @@ textarea:focus {
     box-shadow: 0 0 15px rgba(123, 44, 191, 0.4);
 }
 
-.input-group {
-    display: flex;
-    gap: 16px;
-}
-
-@media (max-width: 600px) {
-    .input-group {
-        flex-direction: column;
-        gap: 0;
-    }
+/* Modal Groups */
+.category-row {
+    margin-bottom: 0px;
 }
 
 /* --- Responsive Visibility --- */
@@ -215,14 +208,57 @@ textarea:focus {
 }
 
 /* --- Displayed Prompts --- */
+.category-with-color {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+}
+
+#prompt-category {
+    flex: 1;
+    margin-bottom: 16px;
+}
+
+.color-controls {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.color-controls input[type="color"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 38px;
+    height: 48px;
+    background-color: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    cursor: pointer;
+    padding: 0;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.color-controls input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.color-controls input[type="color"]::-webkit-color-swatch {
+    border: none;
+}
+
 .prompt-tag {
     display: inline-block;
     background: rgba(76, 201, 240, 0.2);
     color: #4cc9f0;
-    padding: 4px 10px;
-    border-radius: 12px;
+    padding: 4px 12px;
+    border-radius: 20px;
     font-size: 0.8rem;
+    font-weight: 600;
     margin-bottom: 12px;
+    border: 1px solid transparent;
 }
 
 .prompt-code-block {
@@ -438,14 +474,19 @@ input[type="range"]::-webkit-slider-thumb {
     }
 }
 
-/* --- Edit & Delete Buttons --- */
+/* --- Card Actions --- */
 .card-footer {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    margin-top: 20px;
-    padding-top: 15px;
-    border-top: 1px solid var(--glass-border);
+}
+
+.edit-btn {
+    display: none !important; /* Managed by .expanded class in JS/CSS */
+}
+
+.expanded .edit-btn {
+    display: flex !important;
 }
 
 .action-btn {
@@ -468,10 +509,26 @@ input[type="range"]::-webkit-slider-thumb {
     border-color: var(--glow-color);
 }
 
-.delete-btn:hover {
-    background: rgba(247, 37, 133, 0.2);
-    color: #f72585;
-    border-color: #f72585;
+.modal-footer-actions {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    margin-top: 20px;
+}
+
+.modal-footer-actions .glow-btn {
+    flex: 1;
+}
+
+.danger-btn {
+    background: linear-gradient(135deg, #f72585, #b5179e) !important;
+    box-shadow: 0 0 15px rgba(247, 37, 133, 0.4) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.danger-btn:hover {
+    box-shadow: 0 0 25px rgba(247, 37, 133, 0.7) !important;
+    transform: translateY(-2px);
 }
 
 /* --- Danger Modal Theme --- */
@@ -794,4 +851,52 @@ select:focus {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     border: 1px solid var(--glow-color);
     border-radius: 12px;
+}
+
+/* --- Collapsible Prompt Body --- */
+.prompt-body {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.4s cubic-bezier(0, 1, 0, 1), opacity 0.3s ease, margin-top 0.3s ease;
+    margin-top: 0;
+}
+
+.expanded .prompt-body {
+    max-height: 5000px; /* Large enough to fit content */
+    opacity: 1;
+    transition: max-height 0.4s cubic-bezier(1, 0, 1, 0), opacity 0.4s ease, margin-top 0.4s ease;
+    margin-top: 15px;
+}
+
+/* --- Expand Button & Caret --- */
+.expand-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.expand-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: white;
+}
+
+.caret-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.expanded .caret-icon {
+    transform: rotate(180deg);
 }

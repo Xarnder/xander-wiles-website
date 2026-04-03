@@ -57,6 +57,7 @@ const openModalBtn = document.getElementById('open-modal-btn');
 const closeModalBtn = document.getElementById('close-modal-btn');
 const modalTitle = document.getElementById('modal-title');
 const submitPromptBtn = document.getElementById('submit-prompt-btn');
+const modalDeleteBtn = document.getElementById('modal-delete-btn');
 
 // Filter & Search DOM Elements
 const searchInput = document.getElementById('search-prompts');
@@ -178,19 +179,20 @@ openModalBtn.addEventListener('click', () => {
     isEditing = false;
     currentPromptId = null;
     modalTitle.textContent = "Add New Prompt";
-    submitPromptBtn.textContent = "Save Prompt";
-    addPromptForm.reset();
-    updateCounters(); // Reset counters
-    addPromptModal.classList.remove('hidden');
+    submitPromptBtn.textContent = "Add Prompt";
     
-    // Auto-focus Title
+    // Hide Delete button in Add mode
+    modalDeleteBtn.classList.add('hidden');
+    
+    addPromptForm.reset();
+    modalMetadata.classList.add('hidden');
+    addPromptModal.classList.remove('hidden');
     setTimeout(() => {
         const titleEl = document.getElementById('prompt-title');
         titleEl.focus();
         autoResizeTextarea(titleEl);
         autoResizeTextarea(document.getElementById('prompt-category'));
     }, 100);
-    modalMetadata.classList.add('hidden');
 });
 
 closeModalBtn.addEventListener('click', () => {
@@ -363,6 +365,8 @@ exportBtn.addEventListener('click', () => {
     const exportData = allPromptsData.map(item => ({
         title: item.data.title,
         category: item.data.category || '',
+        categoryBgColor: item.data.categoryBgColor || item.data.categoryColor || '#0a0514',
+        categoryTextColor: item.data.categoryTextColor || '#ffffff',
         content: item.data.content,
         codeSnippet: item.data.codeSnippet || '',
         isPinned: item.data.isPinned || false
@@ -452,10 +456,12 @@ onAuthStateChanged(auth, (user) => {
 // Add Prompt Logic
 addPromptForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    console.log("Adding new prompt to database...");
+    console.log("Adding/Updating prompt in database...");
 
     const title = document.getElementById('prompt-title').value;
     const category = document.getElementById('prompt-category').value;
+    const categoryBgColor = document.getElementById('category-bg-color').value;
+    const categoryTextColor = document.getElementById('category-text-color').value;
     const content = document.getElementById('prompt-content').value;
     const code = document.getElementById('prompt-code').value;
 
@@ -465,6 +471,8 @@ addPromptForm.addEventListener('submit', async (e) => {
             await updateDoc(doc(db, "prompts", currentPromptId), {
                 title: title,
                 category: category,
+                categoryBgColor: categoryBgColor,
+                categoryTextColor: categoryTextColor,
                 content: content,
                 codeSnippet: code,
                 lastEdited: serverTimestamp()
@@ -475,6 +483,8 @@ addPromptForm.addEventListener('submit', async (e) => {
             await addDoc(collection(db, "prompts"), {
                 title: title,
                 category: category,
+                categoryBgColor: categoryBgColor,
+                categoryTextColor: categoryTextColor,
                 content: content,
                 codeSnippet: code,
                 userId: auth.currentUser.uid,
@@ -485,7 +495,7 @@ addPromptForm.addEventListener('submit', async (e) => {
         addPromptForm.reset(); // Clear the form
         addPromptModal.classList.add('hidden'); // Close the modal
     } catch (error) {
-        console.error("❌ Error adding document: ", error);
+        console.error("❌ Error adding/updating document: ", error);
 
         // Detailed debug warning for Production mode rules
         if (error.message.includes("Missing or insufficient permissions")) {
@@ -599,32 +609,49 @@ function renderPrompts(prompts) {
         card.className = 'glass-card';
 
         let codeHTML = data.codeSnippet ? `<div class="prompt-code-block">${escapeHTML(data.codeSnippet)}</div>` : '';
-        let tagHTML = data.category ? `<span class="prompt-tag">${escapeHTML(data.category)}</span>` : '<span></span>';
-
+        
+        // Handle dual colors with fallbacks for older data
+        let bg = data.categoryBgColor || data.categoryColor || '#0a0514';
+        let text = data.categoryTextColor || '#ffffff';
+        // If it was the old single-color format, we use it as 33% opacity background
+        let finalBg = (data.categoryColor && !data.categoryBgColor) ? `${bg}33` : bg;
+        
+        let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${escapeHTML(data.category)}</span>` : '<span></span>';
+ 
         card.innerHTML = `
             <div class="card-header">
                 ${tagHTML}
                 <div class="card-header-actions">
+                    <button class="expand-btn" title="Toggle Content">
+                        <svg viewBox="0 0 512 336.36" class="caret-icon">
+                            <path d="M42.47.01 469.5 0C492.96 0 512 19.04 512 42.5c0 11.07-4.23 21.15-11.17 28.72L294.18 320.97c-14.93 18.06-41.7 20.58-59.76 5.65-1.8-1.49-3.46-3.12-4.97-4.83L10.43 70.39C-4.97 52.71-3.1 25.86 14.58 10.47 22.63 3.46 32.57.02 42.47.01z"/>
+                        </svg>
+                    </button>
                     <button class="pin-btn ${data.isPinned ? 'active' : ''}" title="${data.isPinned ? 'Unpin' : 'Pin to Top'}">
                         <svg viewBox="0 0 122.879 122.867" class="pin-icon-svg">
                             <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z"/>
                         </svg>
                     </button>
-                    <button class="copy-btn">Copy</button>
+                    <button class="copy-btn" title="Copy Text">Copy</button>
+                    <button class="action-btn edit-btn" title="Edit Prompt">Edit</button>
                 </div>
             </div>
             <h3>${escapeHTML(data.title)}</h3>
-            <p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>
-            ${codeHTML}
-            <div class="card-footer">
-                <button class="action-btn edit-btn">Edit</button>
-                <button class="action-btn delete-btn">Delete</button>
+            <div class="prompt-body">
+                <p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>
+                ${codeHTML}
             </div>
         `;
         
         if (data.isPinned) card.classList.add('pinned-card');
 
         // --- Handlers ---
+        
+        // Expansion Toggle
+        const expandBtn = card.querySelector('.expand-btn');
+        expandBtn.addEventListener('click', () => {
+            card.classList.toggle('expanded');
+        });
         
         // 0. Pin Logic
         const pinBtn = card.querySelector('.pin-btn');
@@ -677,9 +704,14 @@ function renderPrompts(prompts) {
 
             document.getElementById('prompt-title').value = data.title;
             document.getElementById('prompt-category').value = data.category || '';
+            document.getElementById('category-bg-color').value = data.categoryBgColor || data.categoryColor || '#0a0514';
+            document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
             document.getElementById('prompt-content').value = data.content;
             document.getElementById('prompt-code').value = data.codeSnippet || '';
             updateCounters(); 
+            
+            // Show Delete button in Edit mode
+            modalDeleteBtn.classList.remove('hidden');
 
             // Show Metadata
             modalMetadata.classList.remove('hidden');
@@ -706,6 +738,13 @@ function renderPrompts(prompts) {
         promptsFeed.appendChild(card);
     });
 }
+
+// Global modal delete logic
+modalDeleteBtn.addEventListener('click', () => {
+    if (!currentPromptId) return;
+    promptIdToDelete = currentPromptId;
+    deleteConfirmModal.classList.remove('hidden');
+});
 
 // Clipboard Functionality
 async function copyToClipboard(text, button) {
