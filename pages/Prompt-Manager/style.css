@@ -195,6 +195,18 @@ textarea:focus {
     transition: all 0.3s;
 }
 
+.error-msg {
+    color: #f72585; /* Vibrant pink */
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+    margin-top: -8px; 
+    font-weight: 500;
+}
+
+.error-msg.hidden {
+    display: none;
+}
+
 .plus-btn:hover {
     background: var(--glass-bg);
     border-color: var(--glow-color);

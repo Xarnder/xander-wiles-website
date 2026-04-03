@@ -64,6 +64,7 @@ const manualCategoryInputs = document.getElementById('manual-category-inputs');
 const categoryBgColor = document.getElementById('category-bg-color');
 const categoryTextColor = document.getElementById('category-text-color');
 const promptCategory = document.getElementById('prompt-category');
+const categoryError = document.getElementById('category-error');
 const dynamicBlocksContainer = document.getElementById('dynamic-blocks-container');
 const addTextBlockBtn = document.getElementById('add-text-block-btn');
 const addCodeBlockBtn = document.getElementById('add-code-block-btn');
@@ -205,6 +206,8 @@ openModalBtn.addEventListener('click', () => {
     promptCategory.value = "";
     categoryBgColor.value = "#190d33";
     categoryTextColor.value = "#ffffff";
+    categoryError.classList.add('hidden');
+    submitPromptBtn.disabled = false;
     addPromptModal.classList.remove('hidden');
     setTimeout(() => {
         const titleEl = document.getElementById('prompt-title');
@@ -390,6 +393,22 @@ toggleNewCategoryBtn.addEventListener('click', () => {
     manualCategoryInputs.classList.toggle('hidden');
     if (!manualCategoryInputs.classList.contains('hidden')) {
         promptCategory.focus();
+    } else {
+        // If hidden, clear errors and restore button
+        categoryError.classList.add('hidden');
+        submitPromptBtn.disabled = false;
+    }
+});
+
+// Category Duplicate Validation
+promptCategory.addEventListener('input', () => {
+    const val = promptCategory.value.trim();
+    if (val && Object.keys(knownCategories).includes(val)) {
+        categoryError.classList.remove('hidden');
+        submitPromptBtn.disabled = true;
+    } else {
+        categoryError.classList.add('hidden');
+        submitPromptBtn.disabled = false;
     }
 });
 
@@ -599,6 +618,7 @@ function loadPrompts() {
 
     onSnapshot(q, (snapshot) => {
         allPromptsData = [];
+        knownCategories = {}; // Reset known categories to allow cleanup of unused tags
         const categories = new Set();
 
         snapshot.forEach((doc) => {
@@ -853,6 +873,8 @@ function renderPrompts(prompts) {
             // Sync category components
             modalCategorySelect.value = data.category || "";
             manualCategoryInputs.classList.add('hidden');
+            categoryError.classList.add('hidden');
+            submitPromptBtn.disabled = false;
             
             document.getElementById('prompt-category').value = data.category || '';
             document.getElementById('category-bg-color').value = data.categoryBgColor || data.categoryColor || '#0a0514';
