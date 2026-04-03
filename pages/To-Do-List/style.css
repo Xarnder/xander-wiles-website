@@ -134,21 +134,14 @@
 }
 
 /* Black failsafe behind everything in fancy mode — covers Safari overscroll / status bar gaps */
-/* We animate BOTH html and body so the gradient is truly seamless across all iOS safe areas */
-/* Black failsafe behind everything in fancy mode — covers Safari overscroll / status bar gaps */
-/* We animate BOTH html and body so the gradient is truly seamless across all iOS safe areas */
-/* Using background-attachment: fixed ensures the gradient covers the long iPhone screens and overscroll */
-html[data-theme="fancy"],
+[data-theme="fancy"] html {
+    background: #000000;
+}
+
 [data-theme="fancy"] body {
     background: var(--bg-gradient);
     background-size: 300% 300%;
     animation: fancyGradient calc(20s / var(--fancy-speed-mult)) ease infinite;
-    background-attachment: fixed;
-    min-height: 100%;
-    min-height: -webkit-fill-available;
-}
-
-[data-theme="fancy"] body {
     font-family: 'Outfit', 'Inter', 'Segoe UI', sans-serif;
     overflow: hidden;
     position: relative;
