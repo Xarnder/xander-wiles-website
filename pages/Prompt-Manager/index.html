@@ -93,12 +93,20 @@
                         <textarea id="prompt-title" placeholder="Prompt Title" rows="1" required></textarea>
 
                         <div class="category-row">
-                            <div class="category-with-color">
-                                <textarea id="prompt-category" placeholder="Category Tag (e.g., Dev, Writing)"
-                                    rows="1"></textarea>
-                                <div class="color-controls">
-                                    <input type="color" id="category-bg-color" value="#190d33" title="Background Color">
-                                    <input type="color" id="category-text-color" value="#ffffff" title="Text Color">
+                            <div class="modal-category-selection">
+                                <select id="modal-category-select">
+                                    <option value="">No Category</option>
+                                </select>
+                                <button type="button" id="toggle-new-category-btn" class="plus-btn" title="Add New Category">+</button>
+                            </div>
+                            <div id="manual-category-inputs" class="hidden">
+                                <div class="category-with-color">
+                                    <textarea id="prompt-category" placeholder="New Category Name..."
+                                        rows="1"></textarea>
+                                    <div class="color-controls">
+                                        <input type="color" id="category-bg-color" value="#190d33" title="Background Color">
+                                        <input type="color" id="category-text-color" value="#ffffff" title="Text Color">
+                                    </div>
                                 </div>
                             </div>
                         </div>

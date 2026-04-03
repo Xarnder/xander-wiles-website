@@ -106,6 +106,41 @@ body {
     border-color: rgba(255, 255, 255, 0.3);
 }
 
+/* --- Login / Auth Section --- */
+#auth-section {
+    margin-top: 15vh;
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 480px;
+    padding: 60px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+#auth-section h2 {
+    font-size: 2.2rem;
+    background: linear-gradient(to right, #ffffff, #4cc9f0);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
+}
+
+#auth-section p {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    margin-bottom: 25px;
+}
+
+#login-btn {
+    padding: 16px 40px;
+    font-size: 1.1rem;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
 /* --- Forms & Inputs --- */
 input[type="text"],
 textarea {
@@ -130,7 +165,40 @@ textarea:focus {
 
 /* Modal Groups */
 .category-row {
-    margin-bottom: 0px;
+    margin-bottom: 20px;
+}
+
+.modal-category-selection {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+#modal-category-select {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.plus-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: white;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s;
+}
+
+.plus-btn:hover {
+    background: var(--glass-bg);
+    border-color: var(--glow-color);
+    box-shadow: 0 0 15px rgba(123, 44, 191, 0.4);
 }
 
 /* --- Dynamic Additional Blocks (Modal) --- */
@@ -498,11 +566,35 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* --- Copy Button Specifics --- */
-.card-header {
+.card-header-main {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 12px;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.glass-card h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 0;
+    flex: 1;
+    word-break: break-word; /* Ensure titles wrap on mobile */
+    overflow-wrap: break-word;
+}
+
+.card-tag-row {
+    margin-top: 15px;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.card-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    flex-shrink: 0; /* Keep buttons together */
 }
 
 .copy-btn {
@@ -746,11 +838,6 @@ select:focus {
 }
 
 /* --- Pinning Styles --- */
-.card-header-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
 
 .pin-btn {
     background: transparent;

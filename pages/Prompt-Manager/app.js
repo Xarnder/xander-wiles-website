@@ -3,7 +3,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebas
 import {
     getAuth,
     GoogleAuthProvider,
-    signInWithPopup,
+    signInWithRedirect,
     signOut,
     onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
@@ -58,6 +58,12 @@ const closeModalBtn = document.getElementById('close-modal-btn');
 const modalTitle = document.getElementById('modal-title');
 const submitPromptBtn = document.getElementById('submit-prompt-btn');
 const modalDeleteBtn = document.getElementById('modal-delete-btn');
+const modalCategorySelect = document.getElementById('modal-category-select');
+const toggleNewCategoryBtn = document.getElementById('toggle-new-category-btn');
+const manualCategoryInputs = document.getElementById('manual-category-inputs');
+const categoryBgColor = document.getElementById('category-bg-color');
+const categoryTextColor = document.getElementById('category-text-color');
+const promptCategory = document.getElementById('prompt-category');
 const dynamicBlocksContainer = document.getElementById('dynamic-blocks-container');
 const addTextBlockBtn = document.getElementById('add-text-block-btn');
 const addCodeBlockBtn = document.getElementById('add-code-block-btn');
@@ -120,6 +126,7 @@ let currentPromptId = null;
 let promptIdToDelete = null;
 
 let allPromptsData = []; // Store the full list for local filtering
+let knownCategories = {}; // Maps category name to {bg, text}
 
 // Auth Provider
 const provider = new GoogleAuthProvider();
@@ -128,7 +135,8 @@ const provider = new GoogleAuthProvider();
 loginBtn.addEventListener('click', async () => {
     try {
         console.log("Attempting Google Login...");
-        await signInWithPopup(auth, provider);
+        console.log("Attempting Google Login (Redirect)...");
+        await signInWithRedirect(auth, provider);
         console.log("✅ Login successful");
     } catch (error) {
         console.error("❌ Login failed:", error.message);
@@ -190,6 +198,13 @@ openModalBtn.addEventListener('click', () => {
     addPromptForm.reset();
     dynamicBlocksContainer.innerHTML = ''; // Clear dynamic blocks
     modalMetadata.classList.add('hidden');
+    
+    // Reset category selection
+    modalCategorySelect.value = "";
+    manualCategoryInputs.classList.add('hidden');
+    promptCategory.value = "";
+    categoryBgColor.value = "#190d33";
+    categoryTextColor.value = "#ffffff";
     addPromptModal.classList.remove('hidden');
     setTimeout(() => {
         const titleEl = document.getElementById('prompt-title');
@@ -353,6 +368,30 @@ clearSearchBtn.addEventListener('click', () => {
 });
 
 categoryFilter.addEventListener('change', () => applyFilters());
+
+// Category Modal Selection Interactivity
+modalCategorySelect.addEventListener('change', () => {
+    const selected = modalCategorySelect.value;
+    if (selected && knownCategories[selected]) {
+        // Sync the hidden inputs with known values
+        promptCategory.value = selected;
+        categoryBgColor.value = knownCategories[selected].bg;
+        categoryTextColor.value = knownCategories[selected].text;
+        
+        // Hide manual inputs if user just selected an existing one
+        manualCategoryInputs.classList.add('hidden');
+    } else {
+        // Option to clear if "No Category" selected
+        promptCategory.value = "";
+    }
+});
+
+toggleNewCategoryBtn.addEventListener('click', () => {
+    manualCategoryInputs.classList.toggle('hidden');
+    if (!manualCategoryInputs.classList.contains('hidden')) {
+        promptCategory.focus();
+    }
+});
 
 // Real-time Counters
 const updateCounters = () => {
@@ -569,7 +608,14 @@ function loadPrompts() {
                     id: doc.id,
                     data: data
                 });
-                if (data.category) categories.add(data.category);
+                if (data.category) {
+                    categories.add(data.category);
+                    // Remember colors for this category
+                    knownCategories[data.category] = {
+                        bg: data.categoryBgColor || data.categoryColor || '#0a0514',
+                        text: data.categoryTextColor || '#ffffff'
+                    };
+                }
             }
         });
 
@@ -595,6 +641,7 @@ function loadPrompts() {
         });
 
         updateCategoryFilter(categories);
+        updateModalCategoryDropdown();
         applyFilters();
         console.log("✅ Data sync complete.");
     }, (error) => {
@@ -618,6 +665,24 @@ function updateCategoryFilter(categories) {
     // Re-select previously selected category if it still exists
     if (categories.has(currentSelection)) {
         categoryFilter.value = currentSelection;
+    }
+}
+
+// Update the category select within the Add/Edit Modal
+function updateModalCategoryDropdown() {
+    const currentVal = modalCategorySelect.value;
+    modalCategorySelect.innerHTML = '<option value="">No Category</option>';
+
+    const sortedNames = Object.keys(knownCategories).sort();
+    sortedNames.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        modalCategorySelect.appendChild(option);
+    });
+
+    if (knownCategories[currentVal]) {
+        modalCategorySelect.value = currentVal;
     }
 }
 
@@ -674,8 +739,8 @@ function renderPrompts(prompts) {
         let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${escapeHTML(data.category)}</span>` : '<span></span>';
  
         card.innerHTML = `
-            <div class="card-header">
-                ${tagHTML}
+            <div class="card-header-main">
+                <h3>${escapeHTML(data.title)}</h3>
                 <div class="card-header-actions">
                     <button class="expand-btn" title="Toggle Content">
                         <svg viewBox="0 0 512 336.36" class="caret-icon">
@@ -691,11 +756,13 @@ function renderPrompts(prompts) {
                     <button class="action-btn edit-btn" title="Edit Prompt">Edit</button>
                 </div>
             </div>
-            <h3>${escapeHTML(data.title)}</h3>
             <div class="prompt-body">
                 <p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>
                 ${codeHTML}
                 ${additionalBlocksHTML}
+            </div>
+            <div class="card-tag-row">
+                ${tagHTML}
             </div>
         `;
         
@@ -782,6 +849,11 @@ function renderPrompts(prompts) {
             submitPromptBtn.textContent = "Update Prompt";
 
             document.getElementById('prompt-title').value = data.title;
+            
+            // Sync category components
+            modalCategorySelect.value = data.category || "";
+            manualCategoryInputs.classList.add('hidden');
+            
             document.getElementById('prompt-category').value = data.category || '';
             document.getElementById('category-bg-color').value = data.categoryBgColor || data.categoryColor || '#0a0514';
             document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
