@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Prompt Manager</title>
+
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="bg-orb orb-3"></div>
+
+    <main class="container">
+        <div id="auth-section" class="glass-card text-center">
+            <h2>Prompt Manager</h2>
+            <p>Please log in to manage your AI prompts.</p>
+            <button id="login-btn" class="glow-btn">Login with Google</button>
+        </div>
+
+        <div id="app-section" class="hidden">
+            <header class="app-header glass-card">
+                <div class="user-info">
+                    <img id="user-pfp" src="" alt="Profile">
+                    <span id="user-name">User</span>
+                </div>
+                <div class="header-actions">
+                    <button id="open-modal-btn" class="glow-btn small-btn">+ New Prompt</button>
+                    <button id="logout-btn" class="outline-btn">Logout</button>
+                </div>
+            </header>
+
+            <!-- Modal for Adding New Prompt -->
+            <div id="add-prompt-modal" class="modal-overlay hidden">
+                <div class="modal-content glass-card">
+                    <div class="modal-header">
+                        <h3 id="modal-title">Add New Prompt</h3>
+                        <button id="close-modal-btn" class="close-btn">&times;</button>
+                    </div>
+                    <form id="add-prompt-form">
+                        <div class="input-group">
+                            <input type="text" id="prompt-title" placeholder="Prompt Title" required>
+                            <input type="text" id="prompt-category" placeholder="Category Tag (e.g., Dev, Writing)">
+                        </div>
+                        <textarea id="prompt-content" rows="4" placeholder="Main Prompt Content..." required></textarea>
+                        <textarea id="prompt-code" rows="3" placeholder="Optional Code Snippets..."></textarea>
+
+                        <button type="submit" id="submit-prompt-btn" class="glow-btn full-width" style="margin-top: 10px;">Save Prompt</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Modal for Confirming Deletion -->
+            <div id="delete-confirm-modal" class="modal-overlay hidden">
+                <div class="modal-content glass-card danger-border">
+                    <div class="modal-header">
+                        <h3>Confirm Delete</h3>
+                        <button id="close-delete-modal-btn" class="close-btn">&times;</button>
+                    </div>
+                    <p style="margin-bottom: 24px; color: var(--text-muted);">Are you sure you want to delete this prompt? This action cannot be undone.</p>
+                    <div class="header-actions" style="justify-content: flex-end; gap: 12px;">
+                        <button id="cancel-delete-btn" class="outline-btn">Cancel</button>
+                        <button id="confirm-delete-btn" class="glow-btn danger-btn">Delete Prompt</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search and Filter Section -->
+            <section class="filter-bar glass-card">
+                <div class="search-group">
+                    <input type="text" id="search-prompts" placeholder="Search prompts by title...">
+                </div>
+                <div class="filter-group">
+                    <select id="category-filter">
+                        <option value="all">All Categories</option>
+                    </select>
+                </div>
+            </section>
+
+            <section id="prompts-feed">
+            </section>
+        </div>
+    </main>
+
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>
