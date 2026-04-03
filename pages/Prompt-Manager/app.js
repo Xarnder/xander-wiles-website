@@ -102,6 +102,7 @@ const charCount = document.getElementById('char-count');
 const tokenCount = document.getElementById('token-count');
 const promptContentArea = document.getElementById('prompt-content');
 const promptCodeArea = document.getElementById('prompt-code');
+const promptCodeContainer = document.getElementById('prompt-code-container');
 
 // Metadata Modal Elements
 const modalMetadata = document.getElementById('modal-metadata');
@@ -208,6 +209,7 @@ openModalBtn.addEventListener('click', () => {
     categoryBgColor.value = "#190d33";
     categoryTextColor.value = "#ffffff";
     categoryError.classList.add('hidden');
+    promptCodeContainer.classList.add('hidden');
     submitPromptBtn.disabled = false;
     addPromptModal.classList.remove('hidden');
     setTimeout(() => {
@@ -258,7 +260,15 @@ const addDynamicBlock = (type, content = '') => {
 };
 
 addTextBlockBtn.addEventListener('click', () => addDynamicBlock('text'));
-addCodeBlockBtn.addEventListener('click', () => addDynamicBlock('code'));
+addCodeBlockBtn.addEventListener('click', () => {
+    if (promptCodeContainer.classList.contains('hidden')) {
+        promptCodeContainer.classList.remove('hidden');
+        promptCodeArea.focus();
+        autoResizeTextarea(promptCodeArea);
+    } else {
+        addDynamicBlock('code');
+    }
+});
 addRememberBlockBtn.addEventListener('click', () => addDynamicBlock('remember'));
 
 closeModalBtn.addEventListener('click', () => {
@@ -904,6 +914,12 @@ function renderPrompts(prompts) {
             document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
             document.getElementById('prompt-content').value = data.content;
             document.getElementById('prompt-code').value = data.codeSnippet || '';
+            
+            if (data.codeSnippet) {
+                promptCodeContainer.classList.remove('hidden');
+            } else {
+                promptCodeContainer.classList.add('hidden');
+            }
             
             // Render Dynamic Blocks in Modal
             dynamicBlocksContainer.innerHTML = '';
