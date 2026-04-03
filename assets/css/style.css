@@ -787,3 +787,9 @@ a:hover {
 .hidden-pages-container .page-card h3 {
     color: var(--accent-orange) !important;
 }
+/* --- PWA Standalone Mode Adjustments --- */
+@media (display-mode: standalone) {
+    #main-nav-placeholder {
+        display: none !important;
+    }
+}

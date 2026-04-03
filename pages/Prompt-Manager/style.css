@@ -452,9 +452,18 @@ input[type="range"]::-webkit-slider-thumb {
     display: flex;
     justify-content: center;
     align-items: center;
+    top: 70px;
+    height: calc(100% - 70px);
     z-index: 1000;
     opacity: 0;
     animation: fadeIn 0.3s forwards;
+}
+
+@media (display-mode: standalone) {
+    .modal-overlay {
+        top: 0 !important;
+        height: 100% !important;
+    }
 }
 
 .modal-content {
@@ -464,6 +473,7 @@ input[type="range"]::-webkit-slider-thumb {
     /* Reset margin from glass-card */
     transform: scale(0.9);
     animation: scaleUp 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    padding-top: 40px;
     padding-bottom: calc(30px + env(safe-area-inset-bottom));
 }
 
