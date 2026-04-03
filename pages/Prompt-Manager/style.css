@@ -140,6 +140,24 @@ textarea:focus {
     }
 }
 
+/* --- Responsive Visibility --- */
+.desktop-only {
+    display: inline-flex !important;
+}
+
+.mobile-only {
+    display: none !important;
+}
+
+@media (max-width: 600px) {
+    .desktop-only {
+        display: none !important;
+    }
+    .mobile-only {
+        display: inline-flex !important;
+    }
+}
+
 /* --- Buttons --- */
 .glow-btn {
     background: linear-gradient(135deg, #7209b7, #3a0ca3);
@@ -268,6 +286,65 @@ input[type="range"]::-webkit-slider-thumb {
 .small-btn {
     padding: 8px 16px;
     font-size: 0.9rem;
+}
+
+#export-btn:hover, #import-trigger-btn:hover {
+    border-color: #4cc9f0;
+    color: #4cc9f0;
+}
+
+.burger-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s;
+}
+
+.burger-btn:hover {
+    background: var(--glass-bg);
+    border-color: var(--glow-color);
+}
+
+/* --- Mobile Menu Overlay --- */
+.mobile-nav-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 5, 20, 0.95);
+    backdrop-filter: blur(20px);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.mobile-nav-content {
+    width: 85%;
+    max-width: 350px;
+    padding: 30px;
+}
+
+.mobile-nav-links {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.mobile-nav-links .outline-btn {
+    padding: 15px;
+    font-size: 1.1rem;
+    text-align: center;
 }
 
 /* --- Modal Styles --- */
@@ -466,6 +543,10 @@ select:focus {
         gap: 12px;
         padding: 20px;
     }
+    
+    .search-group, .filter-group {
+        width: 100%;
+    }
 }
 
 /* --- Inline Prompt Inputs (Fill-in-the-Blanks) --- */
@@ -482,6 +563,8 @@ select:focus {
     border-radius: 4px 4px 0 0;
     width: 120px;
     /* Default width */
+    max-width: 100%;
+    box-sizing: border-box;
     transition: all 0.3s ease;
     display: inline-block;
 }
@@ -548,24 +631,30 @@ select:focus {
 .pin-btn {
     background: transparent;
     border: none;
-    color: var(--text-muted);
-    font-size: 1.1rem;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    opacity: 0.5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
 }
 
-.pin-btn:hover {
-    opacity: 1;
-    color: var(--glow-color);
-    transform: rotate(-15deg) scale(1.2);
+.pin-icon-svg {
+    width: 20px;
+    height: 20px;
+    fill: #ffffff; /* Black when not pinned per request */
+    transition: all 0.3s ease;
 }
 
-.pin-btn.active {
-    opacity: 1;
-    color: #ffd700; /* Gold for pinned */
+.pin-btn:hover .pin-icon-svg {
+    fill: var(--glow-color);
+    transform: rotate(-15deg) scale(1.1);
+}
+
+.pin-btn.active .pin-icon-svg {
+    fill: #ffd700; /* Yellow when pinned */
+    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8)); /* Yellow glow */
     transform: rotate(-45deg);
-    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
 }
 
 .pinned-card {
@@ -600,4 +689,109 @@ select:focus {
 .modal-metadata p span {
     color: #4cc9f0;
     font-weight: 600;
+}
+
+/* --- Import Stats Modal --- */
+.import-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+}
+
+.stat-line {
+    font-size: 1.05rem;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+}
+
+.stat-icon {
+    width: 20px;
+    height: 20px;
+    fill: #4cc9f0;
+}
+
+.stat-line span {
+    color: #4cc9f0; /* Electric blue for counts */
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+/* --- Slim Modal Utility --- */
+.slim-modal {
+    max-width: 450px !important;
+}
+
+/* --- Reorder List --- */
+.reorder-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 50vh;
+    overflow-y: auto;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--glass-border);
+}
+
+.reorder-item {
+    padding: 14px 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: grab;
+    transition: background 0.2s;
+    user-select: none;
+}
+
+.reorder-item:last-child {
+    border-bottom: none;
+}
+
+.reorder-item:active {
+    cursor: grabbing;
+}
+
+.reorder-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.reorder-item-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 15px;
+}
+
+.drag-handle {
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+/* SortableJS Ghost Classes */
+.sortable-ghost {
+    opacity: 0.3;
+    background: var(--glow-color) !important;
+}
+
+.sortable-chosen {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.sortable-drag {
+    background: var(--glass-bg);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--glow-color);
+    border-radius: 12px;
 }

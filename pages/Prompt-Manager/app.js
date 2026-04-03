@@ -17,7 +17,8 @@ import {
     serverTimestamp,
     doc,
     updateDoc,
-    deleteDoc
+    deleteDoc,
+    writeBatch
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 console.log("🚀 App initializing...");
@@ -61,6 +62,28 @@ const submitPromptBtn = document.getElementById('submit-prompt-btn');
 const searchInput = document.getElementById('search-prompts');
 const categoryFilter = document.getElementById('category-filter');
 const clearSearchBtn = document.getElementById('clear-search-btn');
+const exportBtn = document.getElementById('export-btn');
+const importTriggerBtn = document.getElementById('import-trigger-btn');
+const importFile = document.getElementById('import-file');
+const reorderBtn = document.getElementById('reorder-btn');
+
+// Mobile Menu Elements
+const burgerMenuBtn = document.getElementById('burger-menu-btn');
+const mobileMenu = document.getElementById('mobile-menu');
+const closeMobileMenu = document.getElementById('close-mobile-menu');
+const mobileExportBtn = document.getElementById('mobile-export-btn');
+const mobileImportBtn = document.getElementById('mobile-import-btn');
+const mobileLogoutBtn = document.getElementById('mobile-logout-btn');
+const mobileReorderBtn = document.getElementById('mobile-reorder-btn');
+
+// Reorder Modal Elements
+const reorderModal = document.getElementById('reorder-modal');
+const reorderList = document.getElementById('reorder-list');
+const closeReorderModalBtn = document.getElementById('close-reorder-modal-btn');
+const cancelReorderBtn = document.getElementById('cancel-reorder-btn');
+const saveReorderBtn = document.getElementById('save-reorder-btn');
+
+let sortableInstance = null;
 
 // Counter DOM Elements
 const charCount = document.getElementById('char-count');
@@ -79,6 +102,13 @@ const deleteConfirmModal = document.getElementById('delete-confirm-modal');
 const closeDeleteModalBtn = document.getElementById('close-delete-modal-btn');
 const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
 const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+
+// Import Modal Elements
+const importStatusModal = document.getElementById('import-status-modal');
+const importAddedText = document.getElementById('import-added-text').querySelector('span');
+const importSkippedText = document.getElementById('import-skipped-text').querySelector('span');
+const closeImportModalBtn = document.getElementById('close-import-modal-btn');
+const importDoneBtn = document.getElementById('import-done-btn');
 
 // State for Editing/Deleting
 let isEditing = false;
@@ -101,14 +131,46 @@ loginBtn.addEventListener('click', async () => {
     }
 });
 
-// Logout Logic
-logoutBtn.addEventListener('click', async () => {
-    try {
-        await signOut(auth);
-        console.log("✅ Logged out successfully");
-    } catch (error) {
-        console.error("❌ Logout failed:", error);
-    }
+// Mobile Menu Toggle Logic
+const toggleMobileMenu = (show) => {
+    mobileMenu.classList.toggle('hidden', !show);
+};
+
+burgerMenuBtn.addEventListener('click', () => toggleMobileMenu(true));
+closeMobileMenu.addEventListener('click', () => toggleMobileMenu(false));
+mobileMenu.addEventListener('click', (e) => {
+    if (e.target === mobileMenu) toggleMobileMenu(false);
+});
+
+// Bind Mobile Actions to existing logic
+mobileExportBtn.addEventListener('click', () => {
+    toggleMobileMenu(false);
+    exportBtn.click();
+});
+mobileImportBtn.addEventListener('click', () => {
+    toggleMobileMenu(false);
+    importTriggerBtn.click();
+});
+mobileLogoutBtn.addEventListener('click', () => {
+    toggleMobileMenu(false);
+    logoutBtn.click();
+});
+
+mobileReorderBtn.addEventListener('click', () => {
+    toggleMobileMenu(false);
+    openReorderModal();
+});
+
+reorderBtn.addEventListener('click', () => openReorderModal());
+
+// Textarea Auto-Resize Logic
+const autoResizeTextarea = (el) => {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+};
+
+[document.getElementById('prompt-title'), document.getElementById('prompt-category')].forEach(el => {
+    el.addEventListener('input', () => autoResizeTextarea(el));
 });
 
 // Modal Logic
@@ -122,7 +184,12 @@ openModalBtn.addEventListener('click', () => {
     addPromptModal.classList.remove('hidden');
     
     // Auto-focus Title
-    setTimeout(() => document.getElementById('prompt-title').focus(), 100);
+    setTimeout(() => {
+        const titleEl = document.getElementById('prompt-title');
+        titleEl.focus();
+        autoResizeTextarea(titleEl);
+        autoResizeTextarea(document.getElementById('prompt-category'));
+    }, 100);
     modalMetadata.classList.add('hidden');
 });
 
@@ -157,6 +224,83 @@ confirmDeleteBtn.addEventListener('click', async () => {
         closeDeleteModal();
     } catch (error) {
         console.error("❌ Error deleting prompt:", error);
+    }
+});
+
+// Import Modal Control
+const closeImportModal = () => {
+    importStatusModal.classList.add('hidden');
+};
+
+closeImportModalBtn.addEventListener('click', closeImportModal);
+importDoneBtn.addEventListener('click', closeImportModal);
+importStatusModal.addEventListener('click', (e) => {
+    if (e.target === importStatusModal) closeImportModal();
+});
+
+// Reorder Modal Logic
+const openReorderModal = () => {
+    reorderList.innerHTML = '';
+    
+    // Populate list with current filtered prompts
+    allPromptsData.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'reorder-item';
+        li.dataset.id = item.id;
+        li.innerHTML = `
+            <span class="reorder-item-title">${escapeHTML(item.data.title)}</span>
+            <span class="drag-handle">☰</span>
+        `;
+        reorderList.appendChild(li);
+    });
+
+    // Initialize Sortable
+    if (!sortableInstance) {
+        sortableInstance = new Sortable(reorderList, {
+            animation: 150,
+            handle: '.reorder-item', // Dragging anywhere on the item
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
+            forceFallback: true // Better touch support
+        });
+    }
+
+    reorderModal.classList.remove('hidden');
+};
+
+const closeReorderModal = () => {
+    reorderModal.classList.add('hidden');
+};
+
+closeReorderModalBtn.addEventListener('click', closeReorderModal);
+cancelReorderBtn.addEventListener('click', closeReorderModal);
+reorderModal.addEventListener('click', (e) => {
+    if (e.target === reorderModal) closeReorderModal();
+});
+
+saveReorderBtn.addEventListener('click', async () => {
+    const items = reorderList.querySelectorAll('.reorder-item');
+    const batch = writeBatch(db);
+    
+    items.forEach((li, index) => {
+        const promptId = li.dataset.id;
+        const promptRef = doc(db, "prompts", promptId);
+        batch.update(promptRef, { sortOrder: index });
+    });
+
+    try {
+        saveReorderBtn.disabled = true;
+        saveReorderBtn.textContent = 'Saving...';
+        await batch.commit();
+        console.log("✅ Custom order saved successfully");
+        closeReorderModal();
+    } catch (err) {
+        console.error("❌ Failed to save custom order:", err);
+        alert("Failed to save order. Please try again.");
+    } finally {
+        saveReorderBtn.disabled = false;
+        saveReorderBtn.textContent = 'Save Order';
     }
 });
 
@@ -205,6 +349,85 @@ window.addEventListener('keydown', (e) => {
         e.preventDefault();
         addPromptForm.requestSubmit();
     }
+});
+
+// --- Export & Import Logic ---
+
+exportBtn.addEventListener('click', () => {
+    if (allPromptsData.length === 0) {
+        alert("No prompts to export!");
+        return;
+    }
+
+    // Prepare data (strip Firestore-specific IDs)
+    const exportData = allPromptsData.map(item => ({
+        title: item.data.title,
+        category: item.data.category || '',
+        content: item.data.content,
+        codeSnippet: item.data.codeSnippet || '',
+        isPinned: item.data.isPinned || false
+    }));
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `prompts_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    console.log("✅ Data exported successfully.");
+});
+
+importTriggerBtn.addEventListener('click', () => importFile.click());
+
+importFile.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        try {
+            const importedList = JSON.parse(event.target.result);
+            if (!Array.isArray(importedList)) throw new Error("Invalid format");
+
+            let importedCount = 0;
+            let skippedCount = 0;
+
+            for (const prompt of importedList) {
+                // Check for exact duplicate
+                const isDuplicate = allPromptsData.some(existing => 
+                    existing.data.title === prompt.title &&
+                    (existing.data.category || '') === (prompt.category || '') &&
+                    existing.data.content === prompt.content &&
+                    (existing.data.codeSnippet || '') === (prompt.codeSnippet || '')
+                );
+
+                if (!isDuplicate) {
+                    await addDoc(collection(db, "prompts"), {
+                        ...prompt,
+                        userId: auth.currentUser.uid,
+                        createdAt: serverTimestamp()
+                    });
+                    importedCount++;
+                } else {
+                    skippedCount++;
+                }
+            }
+
+            // Show Modern Import Modal
+            importAddedText.textContent = importedCount;
+            importSkippedText.textContent = skippedCount;
+            importStatusModal.classList.remove('hidden');
+
+            importFile.value = ''; // Reset input
+        } catch (err) {
+            console.error("❌ Import failed:", err);
+            alert("Failed to import. Please ensure the file is a valid JSON backup.");
+        }
+    };
+    reader.readAsText(file);
 });
 
 // Auth State Observer
@@ -277,8 +500,9 @@ function loadPrompts() {
 
     console.log("Fetching prompts from Firestore...");
 
-    // Order by Pinned first, then newest
-    const q = query(collection(db, "prompts"), orderBy("isPinned", "desc"), orderBy("createdAt", "desc"));
+    // Simplified query: Firestore requires a composite index for dual ordering. 
+    // We'll sort by createdAt here and handle 'Pin' sorting in JS to avoid index errors.
+    const q = query(collection(db, "prompts"), orderBy("createdAt", "desc"));
 
     onSnapshot(q, (snapshot) => {
         allPromptsData = [];
@@ -293,6 +517,27 @@ function loadPrompts() {
                 });
                 if (data.category) categories.add(data.category);
             }
+        });
+
+        // Hybrid Sorting Logic:
+        // 1. Pinned items at the top
+        // 2. Custom sortOrder if available
+        // 3. Fallback to newest created (createdAt)
+        allPromptsData.sort((a, b) => {
+            // First: Pinned status
+            if ((b.data.isPinned || false) !== (a.data.isPinned || false)) {
+                return (b.data.isPinned || false) - (a.data.isPinned || false);
+            }
+            
+            // Second: Manual Sort Order
+            const orderA = a.data.sortOrder !== undefined ? a.data.sortOrder : 999999;
+            const orderB = b.data.sortOrder !== undefined ? b.data.sortOrder : 999999;
+            if (orderA !== orderB) return orderA - orderB;
+            
+            // Third: fallback to Date
+            const dateA = a.data.createdAt?.toMillis() || 0;
+            const dateB = b.data.createdAt?.toMillis() || 0;
+            return dateB - dateA;
         });
 
         updateCategoryFilter(categories);
@@ -360,7 +605,11 @@ function renderPrompts(prompts) {
             <div class="card-header">
                 ${tagHTML}
                 <div class="card-header-actions">
-                    <button class="pin-btn ${data.isPinned ? 'active' : ''}" title="${data.isPinned ? 'Unpin' : 'Pin to Top'}">📌</button>
+                    <button class="pin-btn ${data.isPinned ? 'active' : ''}" title="${data.isPinned ? 'Unpin' : 'Pin to Top'}">
+                        <svg viewBox="0 0 122.879 122.867" class="pin-icon-svg">
+                            <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z"/>
+                        </svg>
+                    </button>
                     <button class="copy-btn">Copy</button>
                 </div>
             </div>
@@ -439,7 +688,12 @@ function renderPrompts(prompts) {
             lastUsedText.innerHTML = `Last Used: <span>${data.lastUsed ? timeAgo(data.lastUsed.toDate()) : 'Never'}</span>`;
 
             addPromptModal.classList.remove('hidden');
-            setTimeout(() => document.getElementById('prompt-title').focus(), 100);
+            setTimeout(() => {
+                const titleEl = document.getElementById('prompt-title');
+                titleEl.focus();
+                autoResizeTextarea(titleEl);
+                autoResizeTextarea(document.getElementById('prompt-category'));
+            }, 100);
         });
 
         // Delete Logic
@@ -514,7 +768,7 @@ function renderContentWithInputs(content) {
     parts.forEach((part, index) => {
         html += escapeHTML(part);
         if (index < parts.length - 1) {
-            html += `<input type="text" class="prompt-input" placeholder="..." oninput="this.style.width = ((this.value.length + 2) * 10) + 'px';">`;
+            html += `<input type="text" class="prompt-input" placeholder="..." oninput="this.style.width = this.value.length > 0 ? ((this.value.length + 2) * 10) + 'px' : '120px';">`;
         }
     });
 
