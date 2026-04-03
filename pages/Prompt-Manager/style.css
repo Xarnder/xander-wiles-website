@@ -199,8 +199,9 @@ textarea:focus {
     color: #f72585; /* Vibrant pink */
     font-size: 0.85rem;
     margin-bottom: 12px;
-    margin-top: -8px; 
+    margin-top: 4px; /* Added spacing */
     font-weight: 500;
+    width: 100%; /* Force wrap inside flex-wrap container */
 }
 
 .error-msg.hidden {
@@ -216,6 +217,7 @@ textarea:focus {
 /* --- Dynamic Additional Blocks (Modal) --- */
 .add-block-actions {
     display: flex;
+    flex-wrap: wrap; /* Ensure buttons wrap if needed */
     gap: 12px;
     margin: 10px 0 20px;
 }
@@ -306,6 +308,15 @@ textarea:focus {
     box-shadow: 0 0 20px rgba(114, 9, 183, 0.8), 0 0 40px rgba(76, 201, 240, 0.4);
 }
 
+.glow-btn:disabled {
+    opacity: 0.5 !important;
+    filter: grayscale(1) !important;
+    cursor: not-allowed !important;
+    background: #444 !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
 .outline-btn {
     background: transparent;
     color: var(--text-muted);
@@ -347,6 +358,7 @@ textarea:focus {
 .category-with-color {
     display: flex;
     align-items: flex-start;
+    flex-wrap: wrap; /* Allow wrapping for error messages */
     gap: 10px;
     width: 100%;
 }
@@ -1077,4 +1089,29 @@ select:focus {
 
 .expanded .caret-icon {
     transform: rotate(180deg);
+}
+/* --- Things to Remember (Card View) --- */
+.prompt-remember-note {
+    margin-top: 15px;
+    padding: 15px;
+    border-radius: 12px;
+    background: rgba(255, 215, 0, 0.03); /* Subtle gold glass */
+    border: 1px dashed rgba(255, 215, 0, 0.2);
+}
+
+.remember-label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: rgba(255, 215, 0, 0.82);
+    margin-bottom: 6px;
+    letter-spacing: 1.5px;
+}
+
+.remember-content {
+    font-size: 0.9rem;
+    font-style: italic;
+    color: var(--text-muted);
+    line-height: 1.5;
 }

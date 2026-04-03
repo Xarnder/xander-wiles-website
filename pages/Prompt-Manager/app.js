@@ -68,6 +68,7 @@ const categoryError = document.getElementById('category-error');
 const dynamicBlocksContainer = document.getElementById('dynamic-blocks-container');
 const addTextBlockBtn = document.getElementById('add-text-block-btn');
 const addCodeBlockBtn = document.getElementById('add-code-block-btn');
+const addRememberBlockBtn = document.getElementById('add-remember-block-btn');
 
 // Filter & Search DOM Elements
 const searchInput = document.getElementById('search-prompts');
@@ -223,13 +224,26 @@ const addDynamicBlock = (type, content = '') => {
     const blockDiv = document.createElement('div');
     blockDiv.className = 'dynamic-block-item';
     blockDiv.dataset.type = type;
+ 
+    let blockLabel = '';
+    let placeholder = '';
+    if (type === 'code') {
+        blockLabel = 'Additional Code Snippet';
+        placeholder = 'Enter code...';
+    } else if (type === 'remember') {
+        blockLabel = 'Things to Remember (Internal Note)';
+        placeholder = 'Enter notes...';
+    } else {
+        blockLabel = 'Additional Text Block';
+        placeholder = 'Enter text...';
+    }
 
     blockDiv.innerHTML = `
         <div class="dynamic-block-header">
-            <label>${type === 'code' ? 'Additional Code Snippet' : 'Additional Text Block'}</label>
+            <label>${blockLabel}</label>
             <button type="button" class="remove-block-btn" data-id="${blockId}">Remove</button>
         </div>
-        <textarea class="dynamic-content ${type === 'code' ? 'code-textarea' : ''}" placeholder="${type === 'code' ? 'Enter code...' : 'Enter text...'}" rows="${type === 'code' ? 3 : 2}">${escapeHTML(content)}</textarea>
+        <textarea class="dynamic-content ${type === 'code' ? 'code-textarea' : ''}" placeholder="${placeholder}" rows="${type === 'code' ? 3 : 2}">${escapeHTML(content)}</textarea>
     `;
 
     dynamicBlocksContainer.appendChild(blockDiv);
@@ -245,6 +259,7 @@ const addDynamicBlock = (type, content = '') => {
 
 addTextBlockBtn.addEventListener('click', () => addDynamicBlock('text'));
 addCodeBlockBtn.addEventListener('click', () => addDynamicBlock('code'));
+addRememberBlockBtn.addEventListener('click', () => addDynamicBlock('remember'));
 
 closeModalBtn.addEventListener('click', () => {
     addPromptModal.classList.add('hidden');
@@ -744,6 +759,12 @@ function renderPrompts(prompts) {
             data.additionalBlocks.forEach(block => {
                 if (block.type === 'code') {
                     additionalBlocksHTML += `<div class="prompt-code-block additional-block">${escapeHTML(block.content)}</div>`;
+                } else if (block.type === 'remember') {
+                    additionalBlocksHTML += `
+                        <div class="prompt-remember-note">
+                            <span class="remember-label">Things to Remember</span>
+                            <div class="remember-content">${escapeHTML(block.content)}</div>
+                        </div>`;
                 } else {
                     additionalBlocksHTML += `<p class="prompt-text-display additional-block" style="line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(block.content)}</p>`;
                 }
@@ -829,12 +850,14 @@ function renderPrompts(prompts) {
                 fullPromptText += `\n\n${data.codeSnippet}`;
             }
 
-            // Append Additional Blocks
+            // Append Additional Blocks (Filter out 'remember' blocks)
             if (data.additionalBlocks && data.additionalBlocks.length > 0) {
                 const additionalPs = card.querySelectorAll('.prompt-text-display.additional-block');
                 let blockTextIndex = 0;
 
                 data.additionalBlocks.forEach(block => {
+                    if (block.type === 'remember') return; // Do not copy internal notes
+
                     let blockContent = block.content;
                     if (block.type === 'text') {
                         // Reconstruct inputs for each additional text block
