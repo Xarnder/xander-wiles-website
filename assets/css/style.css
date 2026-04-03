@@ -108,10 +108,12 @@ a:hover {
 /* --- Header & Desktop Navigation --- */
 .site-header {
     width: 100%;
-    max-width: 2000px; /* Increased from 1600px to allow wider header as requested */
+    max-width: 2000px;
+    /* Increased from 1600px to allow wider header as requested */
     margin: 0 auto;
     padding: 1rem 2rem;
-    box-sizing: border-box; /* Ensure padding doesn't cause overflow */
+    box-sizing: border-box;
+    /* Ensure padding doesn't cause overflow */
 }
 
 .site-header .header-content {
@@ -130,7 +132,8 @@ a:hover {
     list-style: none;
     display: flex;
     align-items: center;
-    gap: 1.5rem; /* Reduced from 2rem to fit more items */
+    gap: 1.5rem;
+    /* Reduced from 2rem to fit more items */
 }
 
 .nav-links a {
@@ -540,13 +543,13 @@ a:hover {
     z-index: -2;
     background: linear-gradient(45deg,
             var(--accent-purple),
-            var(--accent-cyan),
-            var(--accent-orange),
+            #000000,
+            #1e40af,
             var(--accent-purple));
     background-size: 300% 300%;
     border-radius: inherit;
-    animation: best-pages-gradient 4s ease infinite;
-    opacity: 0.7;
+    animation: best-pages-gradient 15s ease infinite;
+    opacity: 0.9;
     transition: all 0.3s ease;
 }
 
