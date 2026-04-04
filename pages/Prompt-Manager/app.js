@@ -3,7 +3,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebas
 import {
     getAuth,
     GoogleAuthProvider,
-    signInWithRedirect,
+    signInWithPopup,
     signOut,
     onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
@@ -138,8 +138,7 @@ const provider = new GoogleAuthProvider();
 loginBtn.addEventListener('click', async () => {
     try {
         console.log("Attempting Google Login...");
-        console.log("Attempting Google Login (Redirect)...");
-        await signInWithRedirect(auth, provider);
+        await signInWithPopup(auth, provider);
         console.log("✅ Login successful");
     } catch (error) {
         console.error("❌ Login failed:", error.message);
