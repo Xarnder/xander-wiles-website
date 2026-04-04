@@ -78,6 +78,7 @@ const exportBtn = document.getElementById('export-btn');
 const importTriggerBtn = document.getElementById('import-trigger-btn');
 const importFile = document.getElementById('import-file');
 const reorderBtn = document.getElementById('reorder-btn');
+const promptCountDisplay = document.getElementById('prompt-count-display');
 
 // Mobile Menu Elements
 const burgerMenuBtn = document.getElementById('burger-menu-btn');
@@ -740,6 +741,19 @@ function applyFilters() {
         const matchesCategory = selectedCategory === 'all' || item.data.category === selectedCategory;
         return matchesSearch && matchesCategory;
     });
+
+    // Update prompt count display
+    if (promptCountDisplay) {
+        const total = allPromptsData.length;
+        const filteredCount = filtered.length;
+        if (selectedCategory !== 'all') {
+            promptCountDisplay.textContent = `Showing ${filteredCount} of ${total} prompts in "${selectedCategory}"`;
+        } else if (searchTerm) {
+            promptCountDisplay.textContent = `Found ${filteredCount} of ${total} prompts`;
+        } else {
+            promptCountDisplay.textContent = `Total Prompts: ${total}`;
+        }
+    }
 
     renderPrompts(filtered);
 }

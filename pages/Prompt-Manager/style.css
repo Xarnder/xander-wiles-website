@@ -746,6 +746,23 @@ input[type="range"]::-webkit-slider-thumb {
     padding: 15px 30px;
     margin-bottom: 30px;
     align-items: center;
+    flex-wrap: wrap;
+}
+
+.prompt-count-text {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    letter-spacing: 0.3px;
+    padding: 8px 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    transition: all 0.3s ease;
+    display: inline-block;
+    min-width: 140px;
+    text-align: center;
+    margin: 15px 0;
 }
 
 .search-group {
