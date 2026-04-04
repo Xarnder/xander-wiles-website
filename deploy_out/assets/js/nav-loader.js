@@ -5,8 +5,10 @@ document.addEventListener("DOMContentLoaded", function() {
     const navPlaceholder = document.getElementById('main-nav-placeholder');
 
     if (navPlaceholder) {
-        // 2. Fetch the navigation HTML from the root
-        fetch('/nav.html')
+        // 2. Fetch the navigation HTML using an absolute root-relative path
+        const navPath = '/nav.html';
+        
+        fetch(navPath)
             .then(response => {
                 if (!response.ok) {
                     throw new Error('Network response was not ok ' + response.statusText);

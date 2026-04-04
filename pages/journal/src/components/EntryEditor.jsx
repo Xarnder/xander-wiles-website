@@ -38,6 +38,7 @@ export default function EntryEditor() {
     const [uploading, setUploading] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
     const [isAutoSaving, setIsAutoSaving] = useState(false);
 
     // Tags State
@@ -506,7 +507,27 @@ export default function EntryEditor() {
         }
     };
 
-    async function handleSave() {
+    async function handleSave(skipDuplicateCheck = false) {
+        if (!currentUser) return;
+
+        // Duplicate sentence check
+        if (!skipDuplicateCheck && content) {
+            const sentences = content.split('.')
+                .map(s => s.trim())
+                .filter(s => s.length > 3); // Ignore very short fragments like "..." or "A."
+            
+            const duplicates = sentences.filter((item, index) => sentences.indexOf(item) !== index);
+            
+            if (duplicates.length > 0) {
+                setShowDuplicateConfirm(true);
+                return;
+            }
+        }
+
+        await performSave();
+    }
+
+    async function performSave() {
         if (!currentUser) return;
         setSaving(true);
         try {
@@ -543,6 +564,7 @@ export default function EntryEditor() {
             }
 
             setIsEditing(false);
+            setShowDuplicateConfirm(false);
             success('Entry saved successfully');
 
             // Trigger backup popup on every save with dynamic day name
@@ -676,166 +698,152 @@ export default function EntryEditor() {
                     </>
                 )}
 
-                <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center w-full sm:w-auto overflow-hidden">
-                        {/* Generic Dynamic Back Button */}
-                        {fromPath && (
-                            <button
-                                onClick={() => {
-                                    if (isFromGallery) {
-                                        navigate('/images', { state: { scrollToId: location.state.scrollToId } });
-                                    } else {
-                                        navigate(fromPath);
-                                    }
-                                }}
-                                className="glass-button px-3 py-2 text-primary hover:text-white hover:bg-primary/20 flex items-center justify-center mr-3 shrink-0"
-                                title={`Back to ${getBackLabel()}`}
-                            >
-                                <ArrowLeft className="w-4 h-4 sm:mr-2" />
-                                <span className="hidden sm:inline font-medium">{getBackLabel()}</span>
-                            </button>
-                        )}
+                <div className="p-4 flex flex-col gap-6">
+                    {/* Toolbar Row: All buttons at the top */}
+                    <div className="flex items-center justify-between w-full gap-2 flex-wrap">
+                        {/* Navigation Group (Back, Prev/Next) */}
+                        <div className="flex items-center gap-2">
+                            {/* Generic Dynamic Back Button */}
+                            {fromPath && (
+                                <button
+                                    onClick={() => {
+                                        if (isFromGallery) {
+                                            navigate('/images', { state: { scrollToId: location.state.scrollToId } });
+                                        } else {
+                                            navigate(fromPath);
+                                        }
+                                    }}
+                                    className="glass-button px-3 py-2 text-primary hover:text-white hover:bg-primary/20 flex items-center justify-center shrink-0"
+                                    title={`Back to ${getBackLabel()}`}
+                                >
+                                    <ArrowLeft className="w-4 h-4 sm:mr-2" />
+                                    <span className="hidden sm:inline font-medium">{getBackLabel()}</span>
+                                </button>
+                            )}
 
-                        {/* Fallback Mobile Back to Calendar (only if no fromPath) */}
-                        {!fromPath && !isFromGallery && (
-                            <button
-                                onClick={() => navigate('/')}
-                                className="glass-button p-2 text-text-muted hover:text-white md:hidden mr-2 shrink-0"
-                                title="Back to Calendar"
-                            >
-                                <ArrowLeft className="w-5 h-5" />
-                            </button>
-                        )}
+                            {/* Fallback Mobile Back to Calendar (only if no fromPath) */}
+                            {!fromPath && !isFromGallery && (
+                                <button
+                                    onClick={() => navigate('/')}
+                                    className="glass-button p-2 text-text-muted hover:text-white md:hidden shrink-0"
+                                    title="Back to Calendar"
+                                >
+                                    <ArrowLeft className="w-5 h-5" />
+                                </button>
+                            )}
 
-                        {/* Navigation Arrows (View Mode Only) */}
-                        {!isEditing && (
-                            <button
-                                onClick={handlePrevDay}
-                                className="glass-button p-2 text-text-muted hover:text-white mr-2 shrink-0 hidden sm:flex"
-                                title="Previous Day"
-                            >
-                                <ChevronLeft className="w-5 h-5" />
-                            </button>
-                        )}
-
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                            <div className="flex items-center text-primary text-sm font-bold mb-1 uppercase tracking-wider">
-                                <Calendar className="w-3 h-3 mr-1 shrink-0" />
-                                <span className={isSpecial ? 'text-yellow-400 transition-colors' : ''}>{date}</span>
-                                
-                                {isEditing ? (
+                            {/* Navigation Arrows (View Mode Only) */}
+                            {!isEditing && (
+                                <div className="flex items-center gap-2">
                                     <button
-                                        onClick={() => setIsSpecial(!isSpecial)}
-                                        className={`ml-4 flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${
-                                            isSpecial 
-                                            ? 'bg-yellow-400 text-black border-yellow-400 font-bold shadow-lg shadow-yellow-400/20 scale-105' 
-                                            : 'bg-white/5 text-text-muted border-white/10 hover:border-white/30 hover:bg-white/10'
-                                        }`}
-                                        title={isSpecial ? "Marked as Special Day" : "Mark as Special Day"}
+                                        onClick={handlePrevDay}
+                                        className="glass-button p-2 text-text-muted hover:text-white shrink-0"
+                                        title="Previous Day"
                                     >
-                                        <Star className={`w-4 h-4 ${isSpecial ? 'fill-black' : ''}`} />
-                                        <span className="text-[10px] sm:text-xs uppercase tracking-widest leading-none">Special Day</span>
+                                        <ChevronLeft className="w-5 h-5" />
                                     </button>
-                                ) : isSpecial && (
-                                    <Star className="w-6 h-6 ml-4 fill-yellow-400 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)] animate-pulse-slow" />
-                                )}
-                            </div>
-                            <h2 className="text-xl sm:text-2xl font-serif font-bold text-white break-words">{displayDate}</h2>
-                            {title && !isEditing && <p className="text-secondary font-medium opacity-90 break-words">{title}</p>}
+                                    <button
+                                        onClick={handleNextDay}
+                                        className="glass-button p-2 text-text-muted hover:text-white shrink-0"
+                                        title="Next Day"
+                                    >
+                                        <ChevronRight className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
-                        {/* Navigation Arrows (Right / Next) */}
-                        {!isEditing && (
-                            <button
-                                onClick={handleNextDay}
-                                className="glass-button p-2 text-text-muted hover:text-white ml-2 shrink-0 hidden sm:flex"
-                                title="Next Day"
-                            >
-                                <ChevronRight className="w-5 h-5" />
-                            </button>
-                        )}
+                        {/* Action Group (Edit/Save, Copy, Raw Toggle, Prompt) */}
+                        <div className="flex items-center gap-2 ml-auto">
+                            {isEditing ? (
+                                <>
+                                    <button
+                                        onClick={() => setIsEditing(false)}
+                                        className="glass-button px-4 py-2 text-text hover:bg-white/10 flex items-center justify-center"
+                                        disabled={saving}
+                                    >
+                                        <X className="w-4 h-4 mr-2" />
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={getRandomPrompt}
+                                        className="glass-button p-2 text-secondary hover:text-white hover:bg-secondary/20 shrink-0"
+                                        title="Get a Writing Prompt"
+                                    >
+                                        <Sparkles className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleSave()}
+                                        className="px-6 py-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-bold shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 flex items-center justify-center relative group"
+                                        disabled={saving}
+                                    >
+                                        <Save className="w-4 h-4 mr-2" />
+                                        {saving ? 'Saving...' : 'Save'}
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex items-center mr-2">
+                                        <label className="flex items-center space-x-2 text-xs text-text-muted cursor-pointer hover:text-white transition-colors group">
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={showRawHeader}
+                                                    onChange={(e) => setShowRawHeader(e.target.checked)}
+                                                    className="sr-only peer"
+                                                />
+                                                <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-primary/30 peer-checked:border-primary/50 transition-all duration-300"></div>
+                                                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-text-muted rounded-full transition-all duration-300 peer-checked:translate-x-4 peer-checked:bg-primary peer-checked:shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
+                                            </div>
+                                            <span className="hidden sm:inline group-hover:text-white transition-colors">Raw Header</span>
+                                        </label>
+                                    </div>
+                                    <button
+                                        onClick={handleCopy}
+                                        className="glass-button px-4 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center"
+                                        title="Copy to Clipboard"
+                                    >
+                                        <Copy className="w-4 h-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Copy</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setIsEditing(true)}
+                                        className="glass-button px-4 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center"
+                                    >
+                                        <Edit2 className="w-4 h-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Edit Entry</span>
+                                        <span className="sm:hidden">Edit</span>
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
 
-                    <div className="flex space-x-2 w-full sm:w-auto justify-end shrink-0">
-                        {/* Mobile Navigation Arrows */}
-                        {!isEditing && (
-                            <div className="flex sm:hidden mr-auto">
+                    {/* Entry Details Row: Date, Title, Special Star */}
+                    <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex items-center text-primary text-sm font-bold mb-1 uppercase tracking-wider">
+                            <Calendar className="w-3 h-3 mr-1 shrink-0" />
+                            <span className={isSpecial ? 'text-yellow-400 transition-colors' : ''}>{date}</span>
+                            
+                            {isEditing ? (
                                 <button
-                                    onClick={handlePrevDay}
-                                    className="glass-button p-2 text-text-muted hover:text-white mr-2"
-                                    title="Previous Day"
+                                    onClick={() => setIsSpecial(!isSpecial)}
+                                    className={`ml-4 flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${
+                                        isSpecial 
+                                        ? 'bg-yellow-400 text-black border-yellow-400 font-bold shadow-lg shadow-yellow-400/20 scale-105' 
+                                        : 'bg-white/5 text-text-muted border-white/10 hover:border-white/30 hover:bg-white/10'
+                                    }`}
+                                    title={isSpecial ? "Marked as Special Day" : "Mark as Special Day"}
                                 >
-                                    <ChevronLeft className="w-5 h-5" />
+                                    <Star className={`w-4 h-4 ${isSpecial ? 'fill-black' : ''}`} />
+                                    <span className="text-[10px] sm:text-xs uppercase tracking-widest leading-none">Special Day</span>
                                 </button>
-                                <button
-                                    onClick={handleNextDay}
-                                    className="glass-button p-2 text-text-muted hover:text-white"
-                                    title="Next Day"
-                                >
-                                    <ChevronRight className="w-5 h-5" />
-                                </button>
-                            </div>
-                        )}
-                        {isEditing ? (
-                            <>
-                                <button
-                                    onClick={() => setIsEditing(false)}
-                                    className="glass-button px-4 py-2 text-text hover:bg-white/10 flex items-center justify-center"
-                                    disabled={saving}
-                                >
-                                    <X className="w-4 h-4 mr-2" />
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={getRandomPrompt}
-                                    className="glass-button p-2 text-secondary hover:text-white hover:bg-secondary/20 mr-2 shrink-0"
-                                    title="Get a Writing Prompt"
-                                >
-                                    <Sparkles className="w-5 h-5" />
-                                </button>
-                                <button
-                                    onClick={handleSave}
-                                    className="px-6 py-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-bold shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 flex items-center justify-center relative group"
-                                    disabled={saving}
-                                >
-                                    <Save className="w-4 h-4 mr-2" />
-                                    {saving ? 'Saving...' : 'Save'}
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <div className="flex items-center mr-2">
-                                    <label className="flex items-center space-x-2 text-xs text-text-muted cursor-pointer hover:text-white transition-colors group">
-                                        <div className="relative">
-                                            <input
-                                                type="checkbox"
-                                                checked={showRawHeader}
-                                                onChange={(e) => setShowRawHeader(e.target.checked)}
-                                                className="sr-only peer"
-                                            />
-                                            <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-primary/30 peer-checked:border-primary/50 transition-all duration-300"></div>
-                                            <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-text-muted rounded-full transition-all duration-300 peer-checked:translate-x-4 peer-checked:bg-primary peer-checked:shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
-                                        </div>
-                                        <span className="hidden sm:inline group-hover:text-white transition-colors">Raw Header</span>
-                                    </label>
-                                </div>
-                                <button
-                                    onClick={handleCopy}
-                                    className="glass-button px-5 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center mr-2"
-                                    title="Copy to Clipboard"
-                                >
-                                    <Copy className="w-4 h-4 mr-2" />
-                                    <span className="hidden sm:inline">Copy</span>
-                                </button>
-                                <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="glass-button px-5 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center"
-                                >
-                                    <Edit2 className="w-4 h-4 mr-2" />
-                                    Edit Entry
-                                </button>
-                            </>
-                        )}
+                            ) : isSpecial && (
+                                <Star className="w-6 h-6 ml-4 fill-yellow-400 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)] animate-pulse-slow font-bold" />
+                            )}
+                        </div>
+                        <h2 className="text-2xl sm:text-4xl font-serif font-bold text-white break-words mt-1">{displayDate}</h2>
+                        {title && !isEditing && <p className="text-secondary text-lg font-medium opacity-90 break-words mt-1">{title}</p>}
                     </div>
                 </div>
             </div>
@@ -1216,6 +1224,17 @@ export default function EntryEditor() {
                 message="Are you sure you want to remove this image? This action cannot be undone."
                 confirmText="Remove"
                 isDangerous={true}
+            />
+
+            <ConfirmModal
+                isOpen={showDuplicateConfirm}
+                onClose={() => setShowDuplicateConfirm(false)}
+                onConfirm={() => performSave()}
+                title="Warning: Duplicate Text"
+                message="Detected duplicate text in your entry. Are you sure you want to save this?"
+                confirmText="Yes, Save"
+                cancelText="Go back to editing"
+                isDangerous={false}
             />
 
             {/* Caption Edit Modal */}
