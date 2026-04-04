@@ -47,7 +47,6 @@ try {
 const authSection = document.getElementById('auth-section');
 const appSection = document.getElementById('app-section');
 const loginBtn = document.getElementById('login-btn');
-const logoutBtn = document.getElementById('logout-btn');
 const userPfp = document.getElementById('user-pfp');
 const userName = document.getElementById('user-name');
 const addPromptForm = document.getElementById('add-prompt-form');
@@ -74,10 +73,7 @@ const addRememberBlockBtn = document.getElementById('add-remember-block-btn');
 const searchInput = document.getElementById('search-prompts');
 const categoryFilter = document.getElementById('category-filter');
 const clearSearchBtn = document.getElementById('clear-search-btn');
-const exportBtn = document.getElementById('export-btn');
-const importTriggerBtn = document.getElementById('import-trigger-btn');
 const importFile = document.getElementById('import-file');
-const reorderBtn = document.getElementById('reorder-btn');
 const promptCountDisplay = document.getElementById('prompt-count-display');
 
 // Mobile Menu Elements
@@ -131,6 +127,9 @@ let promptIdToDelete = null;
 
 let allPromptsData = []; // Store the full list for local filtering
 let knownCategories = {}; // Maps category name to {bg, text}
+let currentMode = 'prompt'; // 'prompt' or 'command'
+
+const modeToggle = document.getElementById('mode-toggle-chk');
 
 // Auth Provider
 const provider = new GoogleAuthProvider();
@@ -157,18 +156,17 @@ mobileMenu.addEventListener('click', (e) => {
     if (e.target === mobileMenu) toggleMobileMenu(false);
 });
 
-// Bind Mobile Actions to existing logic
 mobileExportBtn.addEventListener('click', () => {
     toggleMobileMenu(false);
-    exportBtn.click();
+    handleExport();
 });
 mobileImportBtn.addEventListener('click', () => {
     toggleMobileMenu(false);
-    importTriggerBtn.click();
+    importFile.click();
 });
 mobileLogoutBtn.addEventListener('click', () => {
     toggleMobileMenu(false);
-    logoutBtn.click();
+    signOut(auth);
 });
 
 mobileReorderBtn.addEventListener('click', () => {
@@ -176,7 +174,24 @@ mobileReorderBtn.addEventListener('click', () => {
     openReorderModal();
 });
 
-reorderBtn.addEventListener('click', () => openReorderModal());
+// Mode Toggle logic
+modeToggle.addEventListener('change', () => {
+    currentMode = modeToggle.checked ? 'command' : 'prompt';
+    console.log(`🔄 Switched to ${currentMode} mode`);
+    
+    // Update UI
+    document.body.classList.toggle('command-mode-active', currentMode === 'command');
+    openModalBtn.textContent = currentMode === 'command' ? '+ New Command' : '+ New Prompt';
+    searchInput.placeholder = currentMode === 'command' ? 'Search commands...' : 'Search prompts (Ctrl+K)...';
+    
+    // Reset filters and search
+    searchInput.value = '';
+    categoryFilter.value = 'all';
+    
+    // Re-load categories and filter view
+    loadModeSpecificCategories();
+    applyFilters();
+});
 
 // Textarea Auto-Resize Logic
 const autoResizeTextarea = (el) => {
@@ -192,25 +207,26 @@ const autoResizeTextarea = (el) => {
 openModalBtn.addEventListener('click', () => {
     isEditing = false;
     currentPromptId = null;
-    modalTitle.textContent = "Add New Prompt";
-    submitPromptBtn.textContent = "Add Prompt";
-    
-    // Hide Delete button in Add mode
-    modalDeleteBtn.classList.add('hidden');
-    
-    addPromptForm.reset();
-    dynamicBlocksContainer.innerHTML = ''; // Clear dynamic blocks
-    modalMetadata.classList.add('hidden');
-    
-    // Reset category selection
-    modalCategorySelect.value = "";
-    manualCategoryInputs.classList.add('hidden');
-    promptCategory.value = "";
-    categoryBgColor.value = "#190d33";
-    categoryTextColor.value = "#ffffff";
-    categoryError.classList.add('hidden');
     promptCodeContainer.classList.add('hidden');
     submitPromptBtn.disabled = false;
+    
+    // Mode-specific modal adjustments
+    if (currentMode === 'command') {
+        modalTitle.textContent = "Add New Command";
+        submitPromptBtn.textContent = "Add Command";
+        document.getElementById('prompt-title').placeholder = "Command Title";
+        document.getElementById('prompt-content').required = false;
+        promptCodeContainer.classList.remove('hidden'); // Show code by default for commands
+        document.getElementById('prompt-code').placeholder = "Main command...";
+    } else {
+        modalTitle.textContent = "Add New Prompt";
+        submitPromptBtn.textContent = "Add Prompt";
+        document.getElementById('prompt-title').placeholder = "Prompt Title";
+        document.getElementById('prompt-content').required = true;
+        promptCodeContainer.classList.add('hidden'); // Hide code by default for prompts
+        document.getElementById('prompt-code').placeholder = "Optional Code Snippets...";
+    }
+
     addPromptModal.classList.remove('hidden');
     setTimeout(() => {
         const titleEl = document.getElementById('prompt-title');
@@ -471,7 +487,7 @@ window.addEventListener('keydown', (e) => {
 
 // --- Export & Import Logic ---
 
-exportBtn.addEventListener('click', () => {
+const handleExport = () => {
     if (allPromptsData.length === 0) {
         alert("No prompts to export!");
         return;
@@ -498,9 +514,7 @@ exportBtn.addEventListener('click', () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     console.log("✅ Data exported successfully.");
-});
-
-importTriggerBtn.addEventListener('click', () => importFile.click());
+};
 
 importFile.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -601,6 +615,7 @@ addPromptForm.addEventListener('submit', async (e) => {
                 content: content,
                 codeSnippet: code,
                 additionalBlocks: additionalBlocks,
+                mode: currentMode,
                 lastEdited: serverTimestamp()
             });
             console.log("✅ Prompt updated successfully!");
@@ -614,6 +629,7 @@ addPromptForm.addEventListener('submit', async (e) => {
                 content: content,
                 codeSnippet: code,
                 additionalBlocks: additionalBlocks,
+                mode: currentMode,
                 userId: auth.currentUser.uid,
                 createdAt: serverTimestamp()
             });
@@ -653,16 +669,10 @@ function loadPrompts() {
                     id: doc.id,
                     data: data
                 });
-                if (data.category) {
-                    categories.add(data.category);
-                    // Remember colors for this category
-                    knownCategories[data.category] = {
-                        bg: data.categoryBgColor || data.categoryColor || '#0a0514',
-                        text: data.categoryTextColor || '#ffffff'
-                    };
-                }
             }
         });
+
+        loadModeSpecificCategories();
 
         // Hybrid Sorting Logic:
         // 1. Pinned items at the top
@@ -685,13 +695,30 @@ function loadPrompts() {
             return dateB - dateA;
         });
 
-        updateCategoryFilter(categories);
-        updateModalCategoryDropdown();
         applyFilters();
         console.log("✅ Data sync complete.");
     }, (error) => {
         console.error("❌ Error fetching prompts: ", error);
     });
+}
+
+function loadModeSpecificCategories() {
+    knownCategories = {};
+    const categoriesSet = new Set();
+    
+    allPromptsData.forEach(item => {
+        const itemMode = item.data.mode || 'prompt';
+        if (itemMode === currentMode && item.data.category) {
+            categoriesSet.add(item.data.category);
+            knownCategories[item.data.category] = {
+                bg: item.data.categoryBgColor || item.data.categoryColor || '#0a0514',
+                text: item.data.categoryTextColor || '#ffffff'
+            };
+        }
+    });
+    
+    updateCategoryFilter(categoriesSet);
+    updateModalCategoryDropdown();
 }
 
 // Update the select dropdown with unique categories
@@ -737,6 +764,9 @@ function applyFilters() {
     const selectedCategory = categoryFilter.value;
 
     const filtered = allPromptsData.filter(item => {
+        const itemMode = item.data.mode || 'prompt';
+        if (itemMode !== currentMode) return false;
+        
         const matchesSearch = item.data.title.toLowerCase().includes(searchTerm);
         const matchesCategory = selectedCategory === 'all' || item.data.category === selectedCategory;
         return matchesSearch && matchesCategory;
@@ -744,14 +774,16 @@ function applyFilters() {
 
     // Update prompt count display
     if (promptCountDisplay) {
-        const total = allPromptsData.length;
+        const totalInMode = allPromptsData.filter(item => (item.data.mode || 'prompt') === currentMode).length;
         const filteredCount = filtered.length;
+        const label = currentMode === 'command' ? 'commands' : 'prompts';
+        
         if (selectedCategory !== 'all') {
-            promptCountDisplay.textContent = `Showing ${filteredCount} of ${total} prompts in "${selectedCategory}"`;
+            promptCountDisplay.textContent = `Showing ${filteredCount} of ${totalInMode} ${label} in "${selectedCategory}"`;
         } else if (searchTerm) {
-            promptCountDisplay.textContent = `Found ${filteredCount} of ${total} prompts`;
+            promptCountDisplay.textContent = `Found ${filteredCount} of ${totalInMode} ${label}`;
         } else {
-            promptCountDisplay.textContent = `Total Prompts: ${total}`;
+            promptCountDisplay.textContent = `Total ${label.charAt(0).toUpperCase() + label.slice(1)}: ${totalInMode}`;
         }
     }
 
@@ -763,7 +795,8 @@ function renderPrompts(prompts) {
     promptsFeed.innerHTML = '';
 
     if (prompts.length === 0) {
-        promptsFeed.innerHTML = '<div class="glass-card text-center"><p style="color: var(--text-muted);">No prompts found matching your criteria.</p></div>';
+        const message = currentMode === 'command' ? 'No commands found matching your criteria.' : 'No prompts found matching your criteria.';
+        promptsFeed.innerHTML = `<div class="glass-card text-center"><p style="color: var(--text-muted);">${message}</p></div>`;
         return;
     }
 
@@ -802,6 +835,9 @@ function renderPrompts(prompts) {
         
         let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${escapeHTML(data.category)}</span>` : '<span></span>';
  
+        const isCommand = (data.mode === 'command');
+        const contentHTML = (!isCommand && data.content) ? `<p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>` : '';
+
         card.innerHTML = `
             <div class="card-header-main">
                 <h3>${escapeHTML(data.title)}</h3>
@@ -817,11 +853,11 @@ function renderPrompts(prompts) {
                         </svg>
                     </button>
                     <button class="copy-btn" title="Copy Text">Copy</button>
-                    <button class="action-btn edit-btn" title="Edit Prompt">Edit</button>
+                    <button class="action-btn edit-btn" title="Edit ${isCommand ? 'Command' : 'Prompt'}">Edit</button>
                 </div>
             </div>
             <div class="prompt-body">
-                <p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>
+                ${contentHTML}
                 ${codeHTML}
                 ${additionalBlocksHTML}
             </div>
@@ -856,21 +892,23 @@ function renderPrompts(prompts) {
         // Copy Logic
         const copyBtn = card.querySelector('.copy-btn');
         copyBtn.addEventListener('click', () => {
+            let fullPromptText = "";
             const displayP = card.querySelector('.prompt-text-display');
-            const inputs = displayP.querySelectorAll('.prompt-input');
-            let reconstructedContent = data.content;
+            
+            if (displayP && data.content) {
+                const inputs = displayP.querySelectorAll('.prompt-input');
+                let inputIndex = 0;
+                fullPromptText = data.content.replace(/_{3,}/g, () => {
+                    const val = inputs[inputIndex++]?.value || '___';
+                    return val;
+                });
+            } else if (data.content) {
+                // Fallback for existing data or prompts without interactive inputs
+                fullPromptText = data.content;
+            }
 
-            // Simple replacement logic for copying:
-            // We find all ___ patterns and replace them one by one with the current input values
-            let inputIndex = 0;
-            reconstructedContent = data.content.replace(/_{3,}/g, () => {
-                const val = inputs[inputIndex++]?.value || '___';
-                return val;
-            });
-
-            let fullPromptText = reconstructedContent;
             if (data.codeSnippet) {
-                fullPromptText += `\n\n${data.codeSnippet}`;
+                fullPromptText += (fullPromptText ? "\n\n" : "") + data.codeSnippet;
             }
 
             // Append Additional Blocks (Filter out 'remember' blocks)
@@ -890,7 +928,7 @@ function renderPrompts(prompts) {
                             return blockInputs[inputIdx++]?.value || '___';
                         });
                     }
-                    fullPromptText += `\n\n${blockContent}`;
+                    fullPromptText += (fullPromptText ? "\n\n" : "") + blockContent;
                 });
             }
 
@@ -911,8 +949,16 @@ function renderPrompts(prompts) {
         editBtn.addEventListener('click', () => {
             isEditing = true;
             currentPromptId = id;
-            modalTitle.textContent = "Edit Prompt";
-            submitPromptBtn.textContent = "Update Prompt";
+            const itemMode = data.mode || 'prompt';
+            modalTitle.textContent = itemMode === 'command' ? "Edit Command" : "Edit Prompt";
+            submitPromptBtn.textContent = itemMode === 'command' ? "Update Command" : "Update Prompt";
+            
+            // Sync currentMode to item mode for editing context
+            currentMode = itemMode;
+            document.body.classList.toggle('command-mode-active', currentMode === 'command');
+            modeToggle.checked = currentMode === 'command';
+            openModalBtn.textContent = currentMode === 'command' ? '+ New Command' : '+ New Prompt';
+            searchInput.placeholder = currentMode === 'command' ? 'Search commands...' : 'Search prompts (Ctrl+K)...';
 
             document.getElementById('prompt-title').value = data.title;
             
@@ -927,6 +973,7 @@ function renderPrompts(prompts) {
             document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
             document.getElementById('prompt-content').value = data.content;
             document.getElementById('prompt-code').value = data.codeSnippet || '';
+            document.getElementById('prompt-code').placeholder = itemMode === 'command' ? "Main command..." : "Optional Code Snippets...";
             
             if (data.codeSnippet) {
                 promptCodeContainer.classList.remove('hidden');

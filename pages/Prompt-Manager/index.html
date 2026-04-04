@@ -52,17 +52,21 @@
                     <img id="user-pfp" src="" alt="Profile">
                     <span id="user-name">User</span>
                 </div>
+
+                <div class="mode-toggle-container">
+                    <div class="mode-switch">
+                        <input type="checkbox" id="mode-toggle-chk" class="mode-checkbox">
+                        <label for="mode-toggle-chk" class="mode-label">
+                            <span class="mode-text prompt-label">Prompts</span>
+                            <span class="mode-text command-label">Commands</span>
+                            <div class="mode-ball"></div>
+                        </label>
+                    </div>
+                </div>
                 <div class="header-actions">
-                    <button id="export-btn" class="outline-btn small-btn desktop-only"
-                        title="Export Backup">Export</button>
-                    <button id="import-trigger-btn" class="outline-btn small-btn desktop-only"
-                        title="Restore Backup">Import</button>
-                    <button id="reorder-btn" class="outline-btn small-btn desktop-only" title="Reorder Prompts">Custom
-                        Order</button>
                     <input type="file" id="import-file" class="hidden" accept=".json">
                     <button id="open-modal-btn" class="glow-btn small-btn">+ New Prompt</button>
-                    <button id="logout-btn" class="outline-btn desktop-only">Logout</button>
-                    <button id="burger-menu-btn" class="burger-btn mobile-only">☰</button>
+                    <button id="burger-menu-btn" class="burger-btn">☰</button>
                 </div>
             </header>
 
@@ -111,7 +115,9 @@
                                 </div>
                             </div>
                         </div>
-                        <textarea id="prompt-content" rows="4" placeholder="Main Prompt Content..." required></textarea>
+                        <div id="main-content-group">
+                            <textarea id="prompt-content" rows="4" placeholder="Main Prompt Content..." required></textarea>
+                        </div>
                         <div id="prompt-code-container" class="hidden">
                             <textarea id="prompt-code" rows="3" placeholder="Optional Code Snippets..."></textarea>
                         </div>
