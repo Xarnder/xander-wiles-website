@@ -291,12 +291,6 @@ closeModalBtn.addEventListener('click', () => {
     addPromptModal.classList.add('hidden');
 });
 
-// Close modal when clicking outside content
-addPromptModal.addEventListener('click', (e) => {
-    if (e.target === addPromptModal) {
-        addPromptModal.classList.add('hidden');
-    }
-});
 
 // Delete Modal Control
 const closeDeleteModal = () => {
