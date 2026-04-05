@@ -298,8 +298,14 @@ export function renderGroupedListSelect(select, includeNewListOption = false) {
     const listMap = new Map(rawLists.map(l => [l.id, l]));
     const assignedListIds = new Set();
 
-    // Group lists by board
-    boards.forEach(board => {
+    // Group lists by board, prioritizing the current board
+    const sortedBoards = [...state.appData.boards].sort((a, b) => {
+        if (a.id === state.appData.currentBoardId) return -1;
+        if (b.id === state.appData.currentBoardId) return 1;
+        return 0;
+    });
+
+    sortedBoards.forEach(board => {
         const group = document.createElement('optgroup');
         group.label = `Board: ${board.title}`;
         

@@ -75,6 +75,7 @@ const categoryFilter = document.getElementById('category-filter');
 const clearSearchBtn = document.getElementById('clear-search-btn');
 const importFile = document.getElementById('import-file');
 const promptCountDisplay = document.getElementById('prompt-count-display');
+const toastContainer = document.getElementById('toast-container');
 
 // Mobile Menu Elements
 const burgerMenuBtn = document.getElementById('burger-menu-btn');
@@ -868,6 +869,9 @@ function renderPrompts(prompts) {
                 ${contentHTML}
                 ${codeHTML}
                 ${additionalBlocksHTML}
+                <div class="card-body-footer">
+                    <button class="collapse-btn-bottom" title="Collapse Content">Collapse</button>
+                </div>
             </div>
             <div class="card-tag-row">
                 ${tagHTML}
@@ -878,10 +882,57 @@ function renderPrompts(prompts) {
 
         // --- Handlers ---
         
-        // Expansion Toggle
+        // Expansion Toggle Logic
+        const toggleExpansion = (forceState) => {
+            const isExpanding = forceState !== undefined ? forceState : !card.classList.contains('expanded');
+            
+            if (window.innerWidth > 800) {
+                const myOffset = card.offsetTop;
+                const allCardsInRow = Array.from(promptsFeed.querySelectorAll('.glass-card'))
+                    .filter(c => Math.abs(c.offsetTop - myOffset) < 10);
+                
+                let targetHeight = 0;
+                if (isExpanding) {
+                    // Temporarily expand the trigger card to measure its natural content height
+                    const body = card.querySelector('.prompt-body');
+                    const wasExpanded = card.classList.contains('expanded');
+                    card.classList.add('expanded');
+                    body.style.maxHeight = 'none';
+                    targetHeight = body.scrollHeight;
+                    body.style.maxHeight = ''; // Reset for the animation
+                    if (!wasExpanded) card.classList.remove('expanded'); // Reset state if we were just measuring
+                }
+
+                allCardsInRow.forEach(c => {
+                    const body = c.querySelector('.prompt-body');
+                    if (isExpanding) {
+                        c.classList.add('expanded');
+                        // Apply fixed height only if it's the trigger or needed to match the row
+                        body.style.maxHeight = (targetHeight + 20) + 'px'; // +20 for better padding
+                    } else {
+                        c.classList.remove('expanded');
+                        body.style.maxHeight = '';
+                    }
+                });
+            } else {
+                card.classList.toggle('expanded', isExpanding);
+                const body = card.querySelector('.prompt-body');
+                body.style.maxHeight = isExpanding ? '2000px' : ''; 
+            }
+        };
+
         const expandBtn = card.querySelector('.expand-btn');
-        expandBtn.addEventListener('click', () => {
-            card.classList.toggle('expanded');
+        expandBtn.addEventListener('click', () => toggleExpansion());
+        
+        const bottomCollapseBtn = card.querySelector('.collapse-btn-bottom');
+        bottomCollapseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleExpansion(false);
+            // After collapsing, scroll back to the top of this card if it's off-screen
+            const rect = card.getBoundingClientRect();
+            if (rect.top < 0) {
+                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         });
         
         // 0. Pin Logic
@@ -1072,6 +1123,30 @@ async function copyToClipboard(text, button) {
         }
         document.body.removeChild(textArea);
     }
+
+    showToast("Copied to clipboard!");
+}
+
+// Helper to show a toast message
+function showToast(message) {
+    if (!toastContainer) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `
+        <span>${message}</span>
+    `;
+
+    toastContainer.appendChild(toast);
+
+    // Trigger reflow for animation
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 // Security utility to prevent XSS injection
