@@ -1,5 +1,5 @@
 import { state } from './store.js';
-import { escapeHtml, showToast, generateId, formatDateTime } from './utils.js';
+import { escapeHtml, showToast, generateId, formatDateTime, getTerm } from './utils.js';
 import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, handleSyncError, updateDoc } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -90,7 +90,7 @@ export function renderBoard() {
             archiveBadge = document.createElement('div');
             archiveBadge.id = 'archive-view-badge';
             archiveBadge.className = 'archive-view-badge';
-            archiveBadge.innerHTML = '<i class="ph ph-archive-box"></i> VIEWING ARCHIVED TASKS';
+            archiveBadge.innerHTML = `<i class="ph ph-archive-box"></i> VIEWING ARCHIVED ${getTerm(false, true).toUpperCase()}`;
             document.body.appendChild(archiveBadge);
         }
     } else if (archiveBadge) {
@@ -248,7 +248,7 @@ export function renderBoardManager() {
                             <i class="ph ph-list-numbers" style="font-size: 0.85rem;"></i> ${listCount} ${listCount === 1 ? 'List' : 'Lists'}
                         </span>
                         <span style="display: flex; align-items: center; gap: 3px;">
-                            <i class="ph ph-check-square" style="font-size: 0.85rem;"></i> ${taskCount} ${taskCount === 1 ? 'Task' : 'Tasks'}
+                            <i class="ph ph-check-square" style="font-size: 0.85rem;"></i> ${taskCount} ${taskCount === 1 ? getTerm(true, true) : getTerm(false, true)}
                         </span>
                     </div>
                 </div>
@@ -385,7 +385,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     let headerButtons = isOrphan
         ? `<button class="icon-btn danger" onclick="window.emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
-             <button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed Tasks"><i class="ph ph-broom"></i></button>
+             <button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed ${getTerm(false, true)}"><i class="ph ph-broom"></i></button>
              <button class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
              <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
            </div>`;
@@ -395,7 +395,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     let addFormHtml = isOrphan ? '' : `
         <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
             <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                <input type="text" class="add-task-input" placeholder="+ Add task" name="taskText">
+                <input type="text" class="add-task-input" placeholder="+ Add ${getTerm(true)}" name="taskText">
                 <button type="submit" class="btn primary">+</button>
             </form>
         </div>`;
@@ -450,7 +450,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     if (visibleCount === 0) {
         const emptyMsg = document.createElement('div');
         emptyMsg.className = 'empty-list-msg';
-        emptyMsg.innerHTML = `<i class="ph ph-shooting-star"></i> No tasks here!`;
+        emptyMsg.innerHTML = `<i class="ph ph-shooting-star"></i> No ${getTerm(false)} here!`;
         taskListContainer.appendChild(emptyMsg);
     }
 
@@ -577,12 +577,19 @@ export function createTaskElement(task, sourceListId, number) {
         recentCompletedHtml = `<div style="font-size: 0.75rem; color: var(--accent-green); margin-top: 4px;"><i class="ph ph-check-circle"></i> Completed at ${timeStr} (${relativeStr})</div>`;
     }
 
+    let checkboxHtml = '';
+    if (!window.APP_CONFIG || !window.APP_CONFIG.hideCheckboxes) {
+        checkboxHtml = `
+            <input type="checkbox" class="task-checkbox" 
+                ${task.completed ? 'checked' : ''} 
+                onchange="window.toggleTaskComplete('${task.id}', this.checked)"
+                onclick="event.stopPropagation()"
+                ontouchstart="event.stopPropagation()">
+        `;
+    }
+
     el.innerHTML = `
-        <input type="checkbox" class="task-checkbox" 
-            ${task.completed ? 'checked' : ''} 
-            onchange="window.toggleTaskComplete('${task.id}', this.checked)"
-            onclick="event.stopPropagation()"
-            ontouchstart="event.stopPropagation()">
+        ${checkboxHtml}
         ${numberHtml}
         <div class="task-content-wrapper">
             <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml}</div>
@@ -1073,6 +1080,7 @@ export function triggerImageUpload(taskId) {
 export function performSearch(query) {
     const searchResultsContainer = document.getElementById('search-results-container');
     const searchEmptyState = document.getElementById('search-empty-state');
+    const searchTerm = getTerm(false);
 
     const term = query.trim().toLowerCase();
     searchResultsContainer.innerHTML = '';
@@ -1101,7 +1109,7 @@ export function performSearch(query) {
 
     if (matches.length === 0) {
         searchEmptyState.classList.remove('hidden');
-        searchEmptyState.querySelector('p').textContent = "No tasks found.";
+        searchEmptyState.querySelector('p').textContent = `No ${getTerm(false)} found.`;
     } else {
         searchEmptyState.classList.add('hidden');
         matches.forEach(match => {
@@ -1401,7 +1409,7 @@ export function openEditListModal(listId) {
             batch.update(listRef, { taskIds: arrayUnion(newId) });
         });
         batch.commit().then(() => {
-            showToast(`Added ${lines.length} tasks!`, "success");
+            showToast(`Added ${lines.length} ${lines.length === 1 ? getTerm(true) : getTerm(false)}!`, "success");
             bulkInput.value = '';
         }).catch(e => handleSyncError(e));
     };
@@ -1463,7 +1471,7 @@ document.getElementById('new-board-title-input').addEventListener('keypress', (e
     }
 });
 
-export function showAutomationReport(movedTasksLog, title = "Tasks Auto-Moved", subtitle = "The following tasks were moved automatically:") {
+export function showAutomationReport(movedTasksLog, title = `${getTerm(false, true)} Auto-Moved`, subtitle = `The following ${getTerm(false)} were moved automatically:`) {
     if (!movedTasksLog || movedTasksLog.length === 0) return;
     const modal = document.getElementById('automation-report-modal-overlay');
     const listContainer = document.getElementById('automation-report-list');

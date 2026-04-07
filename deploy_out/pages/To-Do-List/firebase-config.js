@@ -3,7 +3,7 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth
 import { getFirestore, enableMultiTabIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // --- FIREBASE CONFIG ---
-const firebaseConfig = {
+const defaultConfig = {
     apiKey: "AIzaSyC6PrlknJUGPIdyyUq78rKYEsbQ1v5bJNo",
     authDomain: "taskmaster-cloud-xander.firebaseapp.com",
     projectId: "taskmaster-cloud-xander",
@@ -11,6 +11,10 @@ const firebaseConfig = {
     messagingSenderId: "878016054387",
     appId: "1:878016054387:web:e38131dd806982a22a1606"
 };
+
+const firebaseConfig = (window.APP_CONFIG && window.APP_CONFIG.firebase && window.APP_CONFIG.firebase.apiKey) 
+    ? window.APP_CONFIG.firebase 
+    : defaultConfig;
 
 // --- INIT FIREBASE ---
 const app = initializeApp(firebaseConfig);

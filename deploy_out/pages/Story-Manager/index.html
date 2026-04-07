@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <base href="/pages/To-Do-List/">
+    <title>Story Manager</title>
+
+    <!-- STORY MANAGER CONFIGURATION -->
+    <script>
+        window.APP_CONFIG = {
+            appName: "Story Manager",
+            hideCheckboxes: true,
+            themeOverride: "story-manager",
+            terms: {
+                singular: "idea",
+                plural: "ideas"
+            },
+            firebase: {
+                // FILL THESE IN WITH YOUR NEW FIREBASE PROJECT KEYS
+                apiKey: "AIzaSyCND__tYIVR1oKAxzpG56bLb2BE4S35Bng",
+                authDomain: "xanders-story-manger.firebaseapp.com",
+                projectId: "xanders-story-manger",
+                storageBucket: "xanders-story-manger.firebasestorage.app",
+                messagingSenderId: "1057477476076",
+                appId: "1:1057477476076:web:aaac9cc783ded03bde6fc9"
+            }
+        };
+    </script>
+    <!-- Theme-aware SVG icons -->
+    <link rel="icon" href="/pages/Story-Manager/favicon.ico" sizes="any">
+    <link rel="icon" href="/pages/Story-Manager/favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="/pages/Story-Manager/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="/pages/Story-Manager/apple-touch-icon.png">
+    <link rel="manifest" href="site.webmanifest">
+
+    <!-- Mobile App Overrides -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+
+    <!-- Global Header -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Google Fonts: Outfit for Fancy Theme -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- App Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- SortableJS & Icons -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- INITIAL THEME APPLY -->
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem('theme') || 'oled';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+
+            // Status bar is always black on iOS regardless of theme
+
+            if (savedTheme === 'fancy') {
+                document.addEventListener('DOMContentLoaded', function () {
+                    for (let i = 1; i <= 3; i++) {
+                        const orb = document.createElement('div');
+                        orb.className = 'fancy-orb fancy-orb-' + i;
+                        orb.setAttribute('aria-hidden', 'true');
+                        document.body.appendChild(orb);
+                    }
+                });
+            }
+        })();
+    </script>
+</head>
+
+<body class="theme-story-manager">
+
+    <!-- iOS Status Bar Black Background -->
+    <!-- Physically paints black behind the notch/status bar on iOS Safari -->
+    <!-- iOS samples top pixels of <body> for "Website Tinting", this div ensures those are always black -->
+    <div id="ios-status-bar-bg"></div>
+
+    <!-- LOGIN OVERLAY -->
+    <div id="login-overlay">
+        <h1>Story Manager</h1>
+        <button id="google-login-btn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" height="24"
+                alt="G">
+            Login with Google
+        </button>
+    </div>
+
+    <!-- GLOBAL HEADER PLACEHOLDER -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <!-- APP CONTAINER -->
+    <div class="app-wrapper">
+        <header class="app-header glass-panel">
+            <div class="header-left">
+                <input type="text" id="project-title-input" class="project-title-input" value="Story Manager"
+                    placeholder="Project Name">
+                <div id="board-toggle-container" class="control-item"></div>
+                <span id="total-task-count" class="total-count-badge"></span>
+            </div>
+
+            <div class="header-controls">
+                <!-- Search Button -->
+                <button id="search-btn" class="icon-btn-large control-item" title="Search Ideas">
+                    <i class="ph ph-magnifying-glass"></i>
+                </button>
+
+                <!-- Search Lists Button -->
+                <button id="search-list-btn" class="icon-btn-large control-item" title="Search Lists">
+                    <i class="ph ph-list-magnifying-glass"></i>
+                </button>
+
+                <!-- Recent Completed Filter Button -->
+                <button id="recent-completed-btn" class="icon-btn-large control-item" title="Show Recent Completed">
+                    <i class="ph ph-check-circle"></i>
+                </button>
+
+                <div class="sort-container control-item">
+                    <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
+                    <select id="sort-select" class="glass-select">
+                        <option value="custom">Custom</option>
+                        <option value="alphabetical">A-Z</option>
+                        <option value="newest">Newest</option>
+                        <option value="oldest">Oldest</option>
+                    </select>
+                </div>
+
+                <div class="toggle-group control-item" title="Drag Mode">
+                    <span class="label">Drag:</span>
+                    <button id="mode-cut-btn" class="mode-btn active">Cut</button>
+                    <button id="mode-copy-btn" class="mode-btn">Copy</button>
+                </div>
+
+                <button id="multi-edit-btn" class="btn secondary control-item" title="Toggle Multi-Edit Mode">
+                    <i class="ph ph-checks"></i> Multi
+                </button>
+
+                <button id="add-list-btn" class="btn primary control-item">+ List</button>
+                <button id="options-btn" class="btn secondary control-item">Options</button>
+            </div>
+        </header>
+
+        <main id="board-container" class="board-container">
+            <!-- Lists injected here -->
+        </main>
+    </div>
+
+    <!-- Hidden File Input -->
+    <input type="file" id="hidden-image-input" accept="image/*" style="display: none;">
+
+    <!-- OPTIONS MODAL -->
+    <div id="options-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2>App Options</h2>
+                <button id="close-options-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <div class="options-list">
+                <button id="archive-mode-btn" class="menu-action-item" title="Open Archived Ideas">
+                    <i class="ph ph-archive-box"></i> Archived Ideas
+                </button>
+                <button id="theme-toggle" class="menu-action-item" title="Toggle Theme">
+                    <i class="ph ph-sun"></i> Change Theme
+                </button>
+                <button id="mobile-reorder-lists-btn" class="menu-action-item" title="Reorder Lists">
+                    <i class="ph ph-arrows-down-up"></i> Reorder Lists (Mobile)
+                </button>
+                <button id="time-automation-help-btn" class="menu-action-item" title="Time Automation Help">
+                    <i class="ph ph-question"></i> Time Automation Help
+                </button>
+                <button id="recent-auto-moved-btn" class="menu-action-item" title="Recent Auto-Moved Ideas">
+                    <i class="ph ph-clock-counter-clockwise"></i> Recent Auto-Moved Ideas
+                </button>
+
+                <hr class="dropdown-divider">
+                <label class="dropdown-item-toggle">
+                    <span>Enable Drag Ideas</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="drag-tasks-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+                <label class="dropdown-item-toggle">
+                    <span>Show Idea Numbers</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="show-numbers-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+                <label class="dropdown-item-toggle">
+                    <span>Auto-Archive Completed</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="auto-archive-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+                <label class="dropdown-item-toggle">
+                    <span>New Ideas at Bottom</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="add-bottom-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+                <label class="dropdown-item-toggle">
+                    <span>Show Site Header</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="show-site-header-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+                <hr class="dropdown-divider">
+
+                <div class="menu-action-item"
+                    style="cursor: default; flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <span><i class="ph ph-house"></i> Default Board</span>
+                    </div>
+                    <select id="default-board-select" class="glass-select full-width">
+                        <option value="" disabled selected>Loading Boards...</option>
+                    </select>
+                </div>
+
+                <!-- Fancy Speed Control (Hidden by default, shown via CSS in fancy mode) -->
+                <div id="fancy-speed-control" class="menu-action-item"
+                    style="cursor: default; flex-direction: column; align-items: flex-start; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <span><i class="ph ph-windmill"></i> Animation Speed</span>
+                    </div>
+                    <select id="fancy-speed-select" class="glass-select full-width">
+                        <option value="0.2">Super Slow</option>
+                        <option value="0.5">Slow</option>
+                        <option value="1" selected>Normal</option>
+                        <option value="1.5">Fast</option>
+                        <option value="2.5">Turbo</option>
+                    </select>
+                </div>
+
+                <hr class="dropdown-divider">
+
+                <!-- IMPORT / EXPORT -->
+                <button id="download-json-btn" class="menu-action-item"><i class="ph ph-download-simple"></i>
+                    Download
+                    Backup</button>
+                <label for="upload-json" class="menu-action-item"><i class="ph ph-upload-simple"></i> Restore
+                    Backup</label>
+                <input type="file" id="upload-json" accept=".json" style="display: none;">
+
+                <!-- TODOIST IMPORT (NEW) -->
+                <label for="import-todoist-csv" class="menu-action-item" style="color: #e44332;">
+                    <i class="ph ph-file-csv"></i> Import Todoist CSV
+                </label>
+                <input type="file" id="import-todoist-csv" accept=".csv" style="display: none;">
+
+                <hr class="dropdown-divider">
+                <div class="menu-action-item" style="cursor: default; flex-direction: column; align-items: flex-start;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 12px;">
+                        <span><i class="ph ph-bell-ringing"></i> Backup Freq</span>
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <input type="number" id="backup-frequency-input" value="10" min="1" max="1000"
+                                class="add-task-input"
+                                style="width: 60px; padding: 4px 8px; font-size: 0.9rem; text-align: center; height: 32px; box-sizing: border-box;">
+                            <button id="confirm-backup-freq-btn" class="btn secondary" title="Save Limit"
+                                style="padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"><i
+                                    class="ph ph-check"></i></button>
+                        </div>
+                    </div>
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; width: 100%; font-size: 0.85rem; color: var(--text-secondary);">
+                        <span>Current Count: <span id="tasks-since-backup-display"
+                                style="font-weight: bold; color: var(--text-primary);">0</span></span>
+                        <button id="reset-backup-count-btn" class="btn secondary" title="Reset Count"
+                            style="padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"><i
+                                class="ph ph-arrow-counter-clockwise"></i></button>
+                    </div>
+                </div>
+
+                <button id="trigger-reset-btn" class="menu-action-item danger-text"><i class="ph ph-trash"></i>
+                    Reset App Data
+                </button>
+
+                <hr class="dropdown-divider">
+                <button id="logout-btn" class="menu-action-item danger-text" style="display:none;">
+                    <i class="ph ph-sign-out"></i> Logout
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BULK ADD MODAL -->
+    <div id="bulk-add-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <h2>Bulk Add Ideas</h2>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px;">
+                Paste your list below. Each new line will become a separate idea.
+            </p>
+            <textarea id="bulk-add-input" rows="8" placeholder="Idea 1&#10;Idea 2..."></textarea>
+            <div class="modal-actions-bar">
+                <button id="bulk-add-confirm-btn" class="btn primary">Add Ideas</button>
+                <button id="bulk-add-close-btn" class="btn secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SEARCH MODAL -->
+    <div id="search-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel" style="max-height: 90vh;">
+            <div class="modal-header-row">
+                <h2>Search Ideas</h2>
+                <button id="close-search-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <div style="margin-bottom: 10px; display: flex; justify-content: flex-end;">
+                <label class="dropdown-item-toggle"
+                    style="padding: 6px 12px; font-size: 0.9rem; background: rgba(0,0,0,0.2);">
+                    <span style="margin-right: 10px;">Show Archived</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="search-show-archived-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+            </div>
+            <input type="text" id="search-input" class="add-task-input" placeholder="Type to search..."
+                style="margin-bottom: 15px; font-size: 1.1rem; padding: 12px;">
+            <div id="search-results-container" class="task-list" style="overflow-y: auto; max-height: 60vh;">
+                <!-- Results injected here -->
+            </div>
+            <div id="search-empty-state" class="hidden"
+                style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                <i class="ph ph-magnifying-glass" style="font-size: 3rem; opacity: 0.5; margin-bottom: 10px;"></i>
+                <p>No ideas found.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SEARCH LIST MODAL -->
+    <div id="search-list-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2>Search Lists</h2>
+                <button id="close-search-list-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px;">
+                Type a list name. Matching lists will be moved to the start of the board.
+            </p>
+            <input type="text" id="search-list-input" class="add-task-input" placeholder="List Name..."
+                style="font-size: 1.1rem; padding: 12px; margin-bottom: 10px;">
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button id="view-reordered-btn" class="btn primary">View Reordered Lists</button>
+                <button id="clear-list-search-btn" class="btn secondary">Clear & Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT TASK MODAL -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <h2>Edit Idea</h2>
+            <textarea id="modal-task-input" rows="4" placeholder="Idea description..."></textarea>
+
+            <div id="task-timestamps" class="task-metadata">
+                <div class="timestamp-item">
+                    <span class="timestamp-label">Created:</span>
+                    <span id="task-created-at" class="timestamp-value">-</span>
+                </div>
+                <div class="timestamp-item">
+                    <span class="timestamp-label">Updated:</span>
+                    <span id="task-updated-at" class="timestamp-value">-</span>
+                </div>
+                <div class="timestamp-item hidden" id="task-automation-item">
+                    <span class="timestamp-label" title="When this idea will be auto-moved">Auto-Move Date:</span>
+                    <span id="task-automation-value" class="timestamp-value">-</span>
+                </div>
+            </div>
+
+            <!-- GLOW COLOR PICKER -->
+            <div class="color-picker-section">
+                <h3>Card Glow Effect:</h3>
+                <div class="color-options" id="glow-color-options">
+                    <button class="color-btn" data-color="none" title="None"><i class="ph ph-prohibit"></i></button>
+                    <button class="color-btn" data-color="#ef4444" style="background:#ef4444;"></button>
+                    <!-- Red -->
+                    <button class="color-btn" data-color="#f97316" style="background:#f97316;"></button>
+                    <!-- Orange -->
+                    <button class="color-btn" data-color="#eab308" style="background:#eab308;"></button>
+                    <!-- Yellow -->
+                    <button class="color-btn" data-color="#22c55e" style="background:#22c55e;"></button>
+                    <!-- Green -->
+                    <button class="color-btn" data-color="#3b82f6" style="background:#3b82f6;"></button>
+                    <!-- Blue -->
+                    <button class="color-btn" data-color="#a855f7" style="background:#a855f7;"></button>
+                    <!-- Purple -->
+                </div>
+            </div>
+
+            <div class="modal-actions-bar">
+                <button id="modal-save-btn" class="btn primary">Save Changes</button>
+                <button id="modal-add-image-btn" class="btn secondary">
+                    <i class="ph ph-image"></i> Add Image
+                </button>
+                <button id="modal-close-btn" class="btn secondary">Close</button>
+            </div>
+
+            <div class="modal-divider"></div>
+            <div class="manual-move-section">
+                <h3>Currently In:</h3>
+                <div id="current-locations-list" class="current-locations-list"></div>
+
+                <h3>Add to another List:</h3>
+                <div class="move-controls">
+                    <select id="manual-move-select" class="glass-select full-width">
+                        <option value="" disabled selected>Select Destination...</option>
+                    </select>
+                    <div class="move-buttons">
+                        <button id="manual-link-btn" class="btn secondary">Link (Copy)</button>
+                        <button id="manual-move-btn" class="btn secondary">Move (Cut)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MULTI EDIT ACTIONS MODAL -->
+    <div id="multi-edit-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2 id="multi-edit-title">Edit Selected Ideas</h2>
+                <button id="multi-edit-close-modal-btn" class="icon-btn-large">&times;</button>
+            </div>
+
+            <div class="color-picker-section">
+                <h3>Set Color for All:</h3>
+                <div class="color-options" id="multi-glow-color-options">
+                    <!-- Same colors as single edit -->
+                    <button class="color-btn" data-color="none" title="None"><i class="ph ph-prohibit"></i></button>
+                    <button class="color-btn" data-color="#ef4444" style="background:#ef4444;"></button>
+                    <button class="color-btn" data-color="#f97316" style="background:#f97316;"></button>
+                    <button class="color-btn" data-color="#eab308" style="background:#eab308;"></button>
+                    <button class="color-btn" data-color="#22c55e" style="background:#22c55e;"></button>
+                    <button class="color-btn" data-color="#3b82f6" style="background:#3b82f6;"></button>
+                    <button class="color-btn" data-color="#a855f7" style="background:#a855f7;"></button>
+                </div>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="manual-move-section">
+                <h3>Batch Move / Copy:</h3>
+                <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:10px;">
+                    Select a destination list or create a new one.
+                </p>
+                <div class="move-controls">
+                    <select id="multi-move-select" class="glass-select full-width">
+                        <option value="" disabled selected>Select Destination...</option>
+                    </select>
+                    <div class="move-buttons">
+                        <button id="multi-link-btn" class="btn secondary">Link (Copy)</button>
+                        <button id="multi-move-btn" class="btn secondary">Move (Cut)</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-actions-bar" style="margin-top: 15px;">
+                <button id="multi-delete-btn" class="btn danger" style="margin-right: auto;">Delete All</button>
+                <button id="multi-close-btn" class="btn secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Action Button for Multi Edit -->
+    <div id="multi-edit-floating-bar" class="floating-action-bar hidden">
+        <span id="multi-selected-count">0 Selected</span>
+        <div class="floating-bar-buttons">
+            <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
+            <button id="multi-delete-forever-btn" class="btn danger hidden" style="display: none;"><i
+                    class="ph ph-trash"></i> Delete Forever</button>
+        </div>
+    </div>
+
+    <!-- BULK DELETE FOREVER MODAL -->
+    <div id="bulk-delete-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box" style="max-width: 400px;">
+            <div class="confirm-icon-area" style="color: var(--accent-red);"><i class="ph ph-trash"></i></div>
+            <h2>Delete Forever?</h2>
+            <p style="color: var(--accent-red); font-weight: bold; margin-bottom: 20px;">
+                This cannot be undone. Selected ideas will be permanently removed.
+            </p>
+            <div class="slider-container" id="bulk-delete-slider-container">
+                <div class="slider-track" id="bulk-delete-slider-track">
+                    <span class="slider-text">Slide to Delete</span>
+                </div>
+                <div class="slider-handle" id="bulk-delete-slider-handle"><i class="ph ph-trash"></i></div>
+            </div>
+            <button id="bulk-delete-cancel-btn" class="btn secondary full-width"
+                style="margin-top: 20px; width: 100%;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Image Lightbox -->
+    <div id="image-modal-overlay" class="modal-overlay hidden" style="background: rgba(0,0,0,0.95);">
+        <div class="image-modal-content">
+            <button id="image-modal-close" class="icon-btn-large"
+                style="position: absolute; top: 20px; right: 20px; color: white; z-index: 2000;">&times;</button>
+            <img id="full-size-image" src="" alt="Full view">
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden">
+        <i class="ph ph-warning"></i>
+        <span id="toast-message"></span>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box">
+            <div class="confirm-icon-area"><i class="ph ph-warning-circle"></i></div>
+            <h2 id="confirm-title">Are you sure?</h2>
+            <p id="confirm-desc">This action cannot be undone.</p>
+            <div class="modal-actions centered-actions">
+                <button id="confirm-cancel-btn" class="btn secondary">Cancel</button>
+                <button id="confirm-yes-btn" class="btn danger">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Slider -->
+    <div id="reset-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box">
+            <div class="confirm-icon-area" style="color: var(--accent-red);"><i class="ph ph-skull"></i></div>
+            <h2>Reset Everything?</h2>
+            <p>Delete all lists, ideas, and images.</p>
+            <p id="backup-reminder" class="backup-reminder"><i class="ph ph-warning"></i> You must download a backup
+                first.</p>
+            <button id="reset-download-backup-btn" class="btn secondary" style="width: 100%; margin-bottom: 10px;">
+                <i class="ph ph-download-simple"></i> Download Backup
+            </button>
+            <div class="slider-container disabled" id="slider-container">
+                <div class="slider-track" id="slider-track"><span class="slider-text">Download backup first</span>
+                </div>
+                <div class="slider-handle" id="slider-handle"><i class="ph ph-caret-right"></i></div>
+            </div>
+            <button id="reset-cancel-btn" class="btn secondary" style="margin-top: 15px; width: 100%;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- BACKUP REMINDER MODAL -->
+    <div id="backup-reminder-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box">
+            <div class="confirm-icon-area" style="color: var(--accent-yellow);"><i class="ph ph-warning"></i></div>
+            <h2>Backup Reminder</h2>
+            <p>You've added quite a few ideas! <br> Would you like to download a manual backup?</p>
+            <div class="modal-actions centered-actions"
+                style="display: flex; flex-direction: column; gap: 20px; width: 100%;">
+                <button id="reminder-download-btn" class="btn primary" style="width: 100%;">
+                    <i class="ph ph-download-simple"></i> Download JSON Backup
+                </button>
+                <button id="reminder-skip-btn" class="btn secondary" style="width: 100%;">
+                    No thanks, I will risk it
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Indicator -->
+    <div id="sync-console" class="sync-indicator hidden">
+        <div class="sync-pill glass-panel">
+            <div id="sync-dot" class="sync-dot"></div>
+            <span id="sync-status-text">Synced</span>
+        </div>
+    </div>
+
+    <!-- BACKUP MODAL -->
+    <div id="backup-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box">
+            <div class="confirm-icon-area" style="color: var(--accent-orange);"><i class="ph ph-warning-circle"></i>
+            </div>
+            <h2>Time to Backup?</h2>
+            <p>You've made a lot of changes since your last backup.</p>
+            <div class="modal-actions centered-actions">
+                <button id="backup-later-btn" class="btn secondary">I'll do it later</button>
+                <button id="backup-now-btn" class="btn primary">Backup Now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MOBILE REORDER LISTS MODAL -->
+    <div id="mobile-reorder-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2>Reorder Lists</h2>
+                <button id="close-mobile-reorder-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">
+                Drag to reorder your lists.
+            </p>
+            <div id="mobile-reorder-list-container" class="task-list"
+                style="max-height: 60vh; overflow-y: auto; padding: 0; margin-bottom: 15px;">
+                <!-- List items injected here -->
+            </div>
+            <div class="modal-actions-bar">
+                <button id="save-mobile-reorder-btn" class="btn primary full-width" style="width: 100%;">Save
+                    Order</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ARCHIVED TASK ACTION MODAL -->
+    <div id="archived-task-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box">
+            <div class="confirm-icon-area" style="color: var(--text-secondary);"><i class="ph ph-archive-box"></i>
+            </div>
+            <h2>Archived Idea</h2>
+            <p id="archived-task-preview" style="margin-bottom: 20px; font-style: italic; opacity: 0.8;"></p>
+
+            <div class="modal-actions centered-actions"
+                style="display: flex; flex-direction: column; width: 100%; gap: 32px;">
+                <button id="archived-unarchive-btn" class="btn primary"
+                    style="width: 100%; justify-content: center; padding: 16px;">
+                    <i class="ph ph-arrow-u-up-left" style="margin-right: 8px; font-size: 1.2rem;"></i> Put Back
+                    (Unarchive)
+                </button>
+                <button id="archived-delete-btn" class="btn danger"
+                    style="width: 100%; justify-content: center; padding: 16px;">
+                    <i class="ph ph-trash" style="margin-right: 8px; font-size: 1.2rem;"></i> Delete Forever
+                </button>
+                <button id="archived-cancel-btn" class="btn secondary"
+                    style="width: 100%; justify-content: center; padding: 16px;">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT LIST MODAL -->
+    <div id="edit-list-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2 id="edit-list-title">Edit List</h2>
+                <button id="close-edit-list-modal-btn" class="icon-btn-large">&times;</button>
+            </div>
+
+            <div class="modal-section">
+                <h3>Bulk Add Ideas:</h3>
+                <textarea id="edit-list-bulk-input" class="glass-input full-width"
+                    placeholder="Enter ideas (one per line)..." rows="4"></textarea>
+                <button id="edit-list-bulk-add-btn" class="btn primary full-width" style="margin-top: 10px;">
+                    <i class="ph ph-plus-circle"></i> Add Ideas
+                </button>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="margin: 0;">Time Automation</h3>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <button id="automation-unlock-btn" class="btn secondary"
+                            style="padding: 4px 8px; font-size: 0.8rem;"><i class="ph ph-lock-key"></i> Edit</button>
+                        <label class="dropdown-item-toggle" style="margin: 0; padding: 0; background: none;">
+                            <div class="switch-small">
+                                <input type="checkbox" id="automation-enable-toggle" disabled>
+                                <span class="slider-small round"></span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="automation-settings-container" class="hidden"
+                    style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <label style="font-size: 0.9em; display: block; margin-bottom: 5px;">Trigger Type:</label>
+                    <select id="automation-trigger-select" class="glass-select full-width" style="margin-bottom: 10px;">
+                        <option value="duration">After Time in List</option>
+                        <option value="schedule">On a specific Schedule</option>
+                    </select>
+
+                    <div id="automation-duration-group" style="margin-bottom: 10px;">
+                        <label style="font-size: 0.9em; display: block; margin-bottom: 5px;"
+                            id="automation-duration-label">Rules apply to ideas older than:</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="number" id="automation-duration-val" class="add-task-input" value="0" min="0"
+                                style="width: 50%;">
+                            <select id="automation-duration-unit" class="glass-select full-width">
+                                <option value="minutes">Minutes</option>
+                                <option value="hours">Hours</option>
+                                <option value="days">Days</option>
+                                <option value="weeks">Weeks</option>
+                                <option value="months">Months</option>
+                                <option value="years">Years</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="automation-schedule-group" class="hidden" style="margin-bottom: 10px;">
+                        <label style="font-size: 0.9em; display: block; margin-bottom: 5px;">Run Schedule:</label>
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <select id="automation-schedule-type" class="glass-select full-width">
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                            </select>
+                            <input type="time" id="automation-schedule-time" class="add-task-input" value="00:00"
+                                style="width: 50%;">
+                        </div>
+                    </div>
+
+                    <label style="font-size: 0.9em; display: block; margin-bottom: 5px;">Move to Destination
+                        List:</label>
+                    <select id="automation-dest-list" class="glass-select full-width" style="margin-bottom: 15px;">
+                        <option value="" disabled selected>Select List...</option>
+                    </select>
+
+                    <button id="automation-save-btn" class="btn primary full-width">Save Automation Settings</button>
+                </div>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-section">
+                <h3>Move to Different Board:</h3>
+                <div class="move-controls">
+                    <select id="edit-list-board-select" class="glass-select full-width">
+                        <option value="" disabled selected>Select Board...</option>
+                    </select>
+                    <button id="edit-list-move-btn" class="btn secondary full-width" style="margin-top: 10px;">
+                        Move to Board
+                    </button>
+                </div>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-actions-bar">
+                <button id="edit-list-delete-btn" class="btn danger" style="margin-right: auto;">
+                    <i class="ph ph-trash"></i> Delete List
+                </button>
+                <button id="edit-list-close-btn" class="btn secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TIME AUTOMATION HELP MODAL -->
+    <div id="time-automation-help-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel" style="max-width: 500px;">
+            <div class="modal-header-row">
+                <h2 style="display: flex; align-items: center; gap: 8px;"><i class="ph ph-clock"></i> Time Automations
+                </h2>
+                <button id="close-time-help-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <div style="text-align: left; font-size: 0.95rem; color: var(--text-secondary); line-height: 1.5;">
+                <p style="margin-bottom: 15px;">Time Automations allow lists to automatically forward ideas to another
+                    list.</p>
+                <h3 style="color: var(--text-primary); margin: 0 0 5px 0; font-size: 1rem;">After Time in List:</h3>
+                <p style="margin-bottom: 15px;">Moves an idea <strong>as soon as</strong> it reaches the specified age
+                    within the list. <em>(e.g. Move after 2 hours)</em></p>
+                <h3 style="color: var(--text-primary); margin: 0 0 5px 0; font-size: 1rem;">On a specific Schedule:</h3>
+                <p style="margin-bottom: 10px;">Checks the list at the <strong>Time of Day</strong> you set, moving any
+                    ideas that meet your age requirements.</p>
+                <p style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; font-style: italic;">
+                    <strong>Pro Tip:</strong> Set Schedule to 'Daily' at '00:00', and Age to '0', to migrate all ideas
+                    in a 'Tomorrow' list to a 'Today' list every Midnight!
+                </p>
+            </div>
+            <div class="modal-actions-bar" style="margin-top: 20px;">
+                <button id="close-time-help-btn-bottom" class="btn primary full-width">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AUTOMATION REPORT MODAL -->
+    <div id="automation-report-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2>Ideas Auto-Moved</h2>
+                <button id="close-automation-report-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px;">
+                The following ideas were moved automatically:
+            </p>
+            <div id="automation-report-list" class="task-list" style="max-height: 40vh; overflow-y: auto;">
+                <!-- Auto-moved tasks injected here -->
+            </div>
+            <div class="modal-actions-bar">
+                <button id="automation-report-ok-btn" class="btn primary full-width">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VERSION INDICATOR -->
+    <div id="app-version" class="app-version">
+        v1.20 <!-- UPDATE THIS ON EVERY CHANGE -->
+    </div>
+
+    <!-- BOARD MANAGER MODAL -->
+    <div id="board-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2>Manage Boards</h2>
+                <button id="close-board-modal-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">
+                Switch between different project boards.
+            </p>
+            <div id="board-list-container" class="task-list"
+                style="max-height: 50vh; overflow-y: auto; padding: 0; margin-bottom: 15px;">
+                <!-- Boards injected here -->
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-actions-bar" style="flex-direction: column; gap: 10px;">
+                <button id="modal-add-board-btn" class="btn primary full-width" style="width: 100%;">
+                    <i class="ph ph-plus-circle"></i> Create New Board
+                </button>
+                <button id="modal-rescue-boards-btn" class="btn secondary full-width" style="width: 100%;">
+                    <i class="ph ph-lifebuoy"></i> Rescue Orphan Lists
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD BOARD MODAL -->
+    <div id="add-board-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-box" style="max-width: 400px;">
+            <div class="confirm-icon-area" style="color: var(--accent-blue);"><i class="ph ph-plus-circle"></i></div>
+            <h2>Create New Board</h2>
+            <p>Enter a title for your new board.</p>
+            <input type="text" id="new-board-title-input" class="add-task-input" placeholder="Board Title..."
+                style="margin-bottom: 20px; font-size: 1.1rem; padding: 12px; text-align: center;">
+            <div class="modal-actions centered-actions">
+                <button id="cancel-add-board-btn" class="btn secondary">Cancel</button>
+                <button id="confirm-add-board-btn" class="btn primary">Create Board</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+
+</html>

@@ -3065,6 +3065,70 @@ input:checked+.slider-small:before {
 
 
 
+/* --- STORY MANAGER THEME OVERRIDE --- */
+body.theme-story-manager {
+    --bg-gradient: linear-gradient(135deg, #1a1005 0%, #000000 100%);
+    --glass-bg: rgba(20, 10, 0, 0.7);
+    --glass-border: rgba(255, 100, 0, 0.2);
+    --accent-blue: #ea580c; /* override blue with orange */
+    --accent-purple: #f97316; /* override purple with lighter orange */
+    --text-primary: #fff;
+    --text-secondary: #ffedd5;
+    --card-bg: rgba(30, 15, 0, 0.6);
+    /* Fancy Orbs - Orange and Red */
+    --fancy-glow-1: rgba(255, 100, 0, 0.6);   /* Vibrant Orange */
+    --fancy-glow-2: rgba(255, 50, 0, 0.55);  /* Red-Orange */
+    --fancy-glow-3: rgba(220, 20, 60, 0.5);  /* Crimson Red */
+}
+
+body.theme-story-manager .app-header {
+    background: var(--glass-bg);
+    border-bottom: 1px solid var(--accent-blue);
+}
+
+body.theme-story-manager .btn.primary {
+    background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+    box-shadow: 0 4px 15px rgba(234, 88, 12, 0.3);
+}
+
+body.theme-story-manager .task-card {
+    border-left: 3px solid var(--accent-blue);
+}
+
+body.theme-story-manager .list-column {
+    background: rgba(30, 15, 0, 0.4);
+    border: 1px solid var(--glass-border);
+}
+
+body.theme-story-manager .menu-action-item i {
+    color: var(--accent-blue);
+}
+
+body.theme-story-manager .menu-action-item:hover {
+    background: rgba(234, 88, 12, 0.1);
+    border-color: var(--accent-blue);
+}
+
+body.theme-story-manager [data-theme="fancy"] .menu-action-item:hover {
+    background: rgba(234, 88, 12, 0.15);
+    border-color: var(--accent-blue);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2), 0 0 10px rgba(234, 88, 12, 0.1);
+}
+
+body.theme-story-manager .dropdown-item-toggle:hover {
+    background: rgba(234, 88, 12, 0.05);
+}
+
+body.theme-story-manager input:checked + .slider-small {
+    background-color: var(--accent-blue) !important;
+}
+
+body.theme-story-manager [data-theme="fancy"] input:checked + .slider-small {
+    background-color: rgba(234, 88, 12, 0.4) !important;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 15px rgba(234, 88, 12, 0.2);
+}
+
 /* Force the body gradient to cover the bottom safe area in the Home Screen app */
 @media all and (display-mode: standalone) {
     body {

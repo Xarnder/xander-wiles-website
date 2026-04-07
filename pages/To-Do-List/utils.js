@@ -92,3 +92,19 @@ export function formatDateTime(timestamp) {
         hour12: true
     });
 }
+/**
+ * Returns the correct term (e.g. task vs idea) based on APP_CONFIG.
+ * @param {boolean} singular 
+ * @param {boolean} capitalize 
+ * @returns {string} The appropriate term
+ */
+export function getTerm(singular = true, capitalize = false) {
+    const config = window.APP_CONFIG || {};
+    const terms = config.terms || { singular: 'task', plural: 'tasks' };
+    let term = singular ? terms.singular : terms.plural;
+    
+    if (capitalize) {
+        term = term.charAt(0).toUpperCase() + term.slice(1);
+    }
+    return term;
+}

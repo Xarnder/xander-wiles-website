@@ -6,6 +6,7 @@ import { state, setCurrentUser, cleanupListeners } from './store.js';
 import * as API from './api.js';
 import * as UI from './ui.js';
 import * as Utils from './utils.js';
+import { getTerm } from './utils.js';
 
 console.log("[DEBUG] Main Module Initialized - v1.3 PWA Fixes");
 
@@ -56,12 +57,16 @@ window.handleAddTask = function (e, listId) {
         }
     });
 };
-window.archiveTask = API.archiveTask;
+window.archiveTask = (taskId) => {
+    API.archiveTask(taskId).then(() => {
+        Utils.showToast(`${getTerm(true, true)} archived.`, "success");
+    });
+};
 window.unarchiveTask = API.unarchiveTask;
 window.deleteTaskForever = (taskId) => {
     showConfirmModal(
-        "Delete Forever?",
-        "This task will be permanently removed. This action cannot be undone.",
+        `Delete ${getTerm(true, true)}?`,
+        `Are you sure you want to delete this ${getTerm(true)}?`,
         () => API.deleteTaskForever(taskId),
         "ph-trash"
     );
@@ -292,7 +297,7 @@ function setupFirestoreListeners(uid) {
                 state.appData.settings.dragEnabled = !isTouchDevice;
             }
 
-            state.appData.projectTitle = data.projectTitle || "Task Master";
+            state.appData.projectTitle = data.projectTitle || (window.APP_CONFIG && window.APP_CONFIG.appName) || "Task Master";
             if (!state.appData.currentBoardId) {
                 state.appData.listOrder = data.listOrder || [];
             }
@@ -581,8 +586,8 @@ document.addEventListener('DOMContentLoaded', () => {
             optionsModal.classList.add('hidden');
             timeHelpModal.classList.remove('hidden');
         };
-        document.getElementById('close-time-help-btn').onclick = () => timeHelpModal.classList.add('hidden');
-        document.getElementById('close-time-help-btn-bottom').onclick = () => timeHelpModal.classList.add('hidden');
+        document.getElementById('close-time-help-btn').onclick = () => timeHelpModal.classList.remove('hidden');
+        document.getElementById('close-time-help-btn-bottom').onclick = () => timeHelpModal.classList.remove('hidden');
     }
 
     // Automation Report Modal
@@ -803,7 +808,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const targetList = state.appData.rawLists.find(l => l.id === targetListId);
         if (targetList && targetList.taskIds && targetList.taskIds.includes(taskId)) {
-            Utils.showToast("Task is already in that list.");
+            Utils.showToast(`${getTerm(true, true)} is already in that list.`);
             return;
         }
         const batch = writeBatch(db);
@@ -817,7 +822,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         batch.commit().then(() => {
-            Utils.showToast("Task linked successfully.");
+            Utils.showToast(`${getTerm(true, true)} linked successfully.`);
             UI.renderCurrentLocations(taskId);
         }).catch(e => API.handleSyncError(e));
     };
@@ -952,7 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     showConfirmModal(
                         "Restore from backup?",
-                        `Restore ${listCount} lists and ${taskCount} tasks?\nThis will Add/Update your existing data.`,
+                        `Restore ${listCount} lists and ${taskCount} ${taskCount === 1 ? getTerm(true) : getTerm(false)}?\nThis will Add/Update your existing data.`,
                         () => restoreBackup(data)
                     );
                 } catch (err) {
@@ -1028,7 +1033,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (taskId) {
                 API.unarchiveTask(taskId);
                 archivedModal.classList.add('hidden');
-                Utils.showToast("Task unarchived");
+                Utils.showToast(`${getTerm(true, true)} unarchived`);
             }
         };
         document.getElementById('archived-delete-btn').onclick = () => {
@@ -1139,7 +1144,7 @@ function triggerBackupDownload() {
     const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-').slice(0, 5);
 
     // Sanitize Project Title
-    const safeTitle = (state.appData.projectTitle || "Task_Master").replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const safeTitle = (state.appData.projectTitle || getTerm(false, true)).replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
     const a = document.createElement('a');
     a.href = url;
