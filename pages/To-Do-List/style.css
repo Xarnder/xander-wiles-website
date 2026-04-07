@@ -3083,14 +3083,14 @@ body.theme-story-manager {
     --fancy-glow-3: rgba(220, 20, 60, 0.5);  /* Crimson Red */
 }
 
-body.theme-story-manager [data-theme="fancy"] .modal-overlay {
+html[data-theme="fancy"] body.theme-story-manager .modal-overlay {
     background: rgba(10, 5, 0, 0.85);
 }
 
-body.theme-story-manager [data-theme="fancy"] .confirm-box,
-body.theme-story-manager [data-theme="fancy"] .modal,
-body.theme-story-manager [data-theme="fancy"] .toast,
-body.theme-story-manager [data-theme="fancy"] .floating-action-bar {
+html[data-theme="fancy"] body.theme-story-manager .confirm-box,
+html[data-theme="fancy"] body.theme-story-manager .modal,
+html[data-theme="fancy"] body.theme-story-manager .toast,
+html[data-theme="fancy"] body.theme-story-manager .floating-action-bar {
     background: rgba(25, 15, 5, 0.85) !important;
     border-color: rgba(255, 100, 0, 0.3) !important;
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(234, 88, 12, 0.15) !important;
@@ -3124,7 +3124,7 @@ body.theme-story-manager .menu-action-item:hover {
     border-color: var(--accent-blue);
 }
 
-body.theme-story-manager [data-theme="fancy"] .menu-action-item:hover {
+html[data-theme="fancy"] body.theme-story-manager .menu-action-item:hover {
     background: rgba(234, 88, 12, 0.15);
     border-color: var(--accent-blue);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2), 0 0 10px rgba(234, 88, 12, 0.1);
@@ -3138,10 +3138,147 @@ body.theme-story-manager input:checked + .slider-small {
     background-color: var(--accent-blue) !important;
 }
 
-body.theme-story-manager [data-theme="fancy"] input:checked + .slider-small {
+html[data-theme="fancy"] body.theme-story-manager input:checked + .slider-small {
     background-color: rgba(234, 88, 12, 0.4) !important;
     border-color: var(--accent-blue);
     box-shadow: 0 0 15px rgba(234, 88, 12, 0.2);
+}
+
+/* ===================================================================
+   STORY MANAGER FANCY THEME FIXES 
+   =================================================================== */
+
+html[data-theme="fancy"] body.theme-story-manager {
+    --bg-gradient: linear-gradient(135deg, #000000 0%, #150500 20%, #2a0b00 40%, #3a0d00 60%, #2a0b00 80%, #000000 100%);
+}
+
+html[data-theme="fancy"] body.theme-story-manager .task-card:hover {
+    border-color: rgba(250, 204, 21, 0.4); /* Yellow tint border */
+    box-shadow: 0 8px 25px rgba(250, 204, 21, 0.15), 0 0 15px rgba(250, 204, 21, 0.08); /* Yellow glow */
+}
+
+html[data-theme="fancy"] body.theme-story-manager .add-task-form .btn.primary {
+    border-color: rgba(234, 88, 12, 0.4);
+    color: #f97316;
+}
+
+html[data-theme="fancy"] body.theme-story-manager .add-task-form .btn.primary:hover {
+    background: rgba(234, 88, 12, 0.15);
+    border-color: #ea580c;
+    color: #ffffff;
+    box-shadow: 0 0 15px rgba(234, 88, 12, 0.4);
+}
+
+html[data-theme="fancy"] body.theme-story-manager .total-count-badge {
+    background: rgba(234, 88, 12, 0.1);
+    border-color: rgba(234, 88, 12, 0.2);
+    color: #fbd38d; /* lighter orange/yellow text */
+}
+
+html[data-theme="fancy"] body.theme-story-manager .mode-btn.active {
+    background: rgba(234, 88, 12, 0.25);
+    color: #ffffff;
+    box-shadow: 0 0 15px rgba(234, 88, 12, 0.2), inset 0 0 8px rgba(255, 255, 255, 0.1);
+}
+
+/* Additional UI Elements Overrides for Story Manager Orange */
+body.theme-story-manager .icon-btn:hover,
+body.theme-story-manager .icon-btn-large:hover {
+    color: var(--accent-blue);
+}
+
+body.theme-story-manager .icon-btn-large:hover {
+    filter: drop-shadow(0 0 8px rgba(234, 88, 12, 0.6));
+}
+
+body.theme-story-manager .btn.secondary:hover,
+body.theme-story-manager #modal-add-image-btn:hover {
+    border-color: var(--accent-blue);
+}
+
+body.theme-story-manager .board-item:hover,
+body.theme-story-manager .board-item.active {
+    background: rgba(234, 88, 12, 0.1);
+}
+
+body.theme-story-manager .board-item.active {
+    color: var(--accent-blue);
+    border-left: 2px solid var(--accent-blue);
+}
+
+html[data-theme="fancy"] body.theme-story-manager .icon-btn:hover {
+    color: #f97316;
+}
+
+html[data-theme="fancy"] body.theme-story-manager .icon-btn-large:hover {
+    color: #f97316;
+    filter: drop-shadow(0 0 8px rgba(234, 88, 12, 0.6));
+}
+
+html[data-theme="fancy"] body.theme-story-manager .btn.primary {
+    background: linear-gradient(135deg, rgba(234, 88, 12, 0.8), rgba(249, 115, 22, 0.8));
+    border-color: rgba(234, 88, 12, 0.4);
+    box-shadow: 0 0 20px rgba(234, 88, 12, 0.3), 0 0 40px rgba(234, 88, 12, 0.05), inset 0 0 12px rgba(255, 255, 255, 0.2);
+}
+
+html[data-theme="fancy"] body.theme-story-manager .btn.primary:hover {
+    box-shadow: 0 0 35px rgba(234, 88, 12, 0.6), 0 0 15px rgba(234, 88, 12, 0.4), inset 0 0 15px rgba(255, 255, 255, 0.35);
+}
+
+html[data-theme="fancy"] body.theme-story-manager .btn.secondary:hover,
+html[data-theme="fancy"] body.theme-story-manager #modal-add-image-btn:hover {
+    border-color: rgba(234, 88, 12, 0.4);
+}
+
+html[data-theme="fancy"] body.theme-story-manager .board-item:hover {
+    background: rgba(234, 88, 12, 0.15);
+}
+
+html[data-theme="fancy"] body.theme-story-manager .board-item.active {
+    background: rgba(234, 88, 12, 0.2);
+    color: #f97316;
+}
+
+html[data-theme="fancy"] body.theme-story-manager #google-login-btn {
+    border-color: rgba(234, 88, 12, 0.3);
+    box-shadow: 0 0 25px rgba(234, 88, 12, 0.3);
+}
+
+html[data-theme="fancy"] body.theme-story-manager #google-login-btn:hover {
+    box-shadow: 0 0 40px rgba(234, 88, 12, 0.5);
+    background: rgba(234, 88, 12, 0.1);
+}
+
+html[data-theme="fancy"] body.theme-story-manager .slider-handle {
+    background: linear-gradient(135deg, #ea580c, #f97316);
+    box-shadow: 0 0 15px rgba(234, 88, 12, 0.4), inset 0 0 8px rgba(255, 255, 255, 0.2);
+}
+
+body.theme-story-manager .sync-pill {
+    background: rgba(30, 15, 0, 0.8) !important;
+    border: 1px solid var(--accent-blue) !important;
+    color: var(--text-secondary);
+}
+
+html[data-theme="fancy"] body.theme-story-manager .sync-pill {
+    background: rgba(25, 10, 0, 0.85) !important;
+    border-color: rgba(234, 88, 12, 0.3) !important;
+    box-shadow: 0 0 15px rgba(234, 88, 12, 0.1);
+}
+
+body.theme-story-manager #board-list-container .board-item:hover,
+body.theme-story-manager #board-list-container .board-item.active {
+    background: rgba(234, 88, 12, 0.15) !important;
+    border-color: var(--accent-blue) !important;
+}
+
+body.theme-story-manager #board-list-container .board-item.active {
+    box-shadow: 0 0 15px rgba(234, 88, 12, 0.2);
+}
+
+body.theme-story-manager #board-list-container .board-item.active span,
+body.theme-story-manager #board-list-container .board-item.active i {
+    color: var(--accent-blue) !important;
 }
 
 /* Force the body gradient to cover the bottom safe area in the Home Screen app */
