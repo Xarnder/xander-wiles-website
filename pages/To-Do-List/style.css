@@ -3075,10 +3075,25 @@ body.theme-story-manager {
     --text-primary: #fff;
     --text-secondary: #ffedd5;
     --card-bg: rgba(30, 15, 0, 0.6);
+    --dropdown-bg-glass: rgba(20, 10, 0, 0.95);
+    --dropdown-bg: #1a0f00;
     /* Fancy Orbs - Orange and Red */
     --fancy-glow-1: rgba(255, 100, 0, 0.6);   /* Vibrant Orange */
     --fancy-glow-2: rgba(255, 50, 0, 0.55);  /* Red-Orange */
     --fancy-glow-3: rgba(220, 20, 60, 0.5);  /* Crimson Red */
+}
+
+body.theme-story-manager [data-theme="fancy"] .modal-overlay {
+    background: rgba(10, 5, 0, 0.85);
+}
+
+body.theme-story-manager [data-theme="fancy"] .confirm-box,
+body.theme-story-manager [data-theme="fancy"] .modal,
+body.theme-story-manager [data-theme="fancy"] .toast,
+body.theme-story-manager [data-theme="fancy"] .floating-action-bar {
+    background: rgba(25, 15, 5, 0.85) !important;
+    border-color: rgba(255, 100, 0, 0.3) !important;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(234, 88, 12, 0.15) !important;
 }
 
 body.theme-story-manager .app-header {
