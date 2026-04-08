@@ -511,6 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 icon.className = 'ph ph-arrows-in-simple';
                 Utils.showToast("Expanded View Enabled");
             }
+            UI.renderBoard();
         };
     }
 
@@ -1731,3 +1732,25 @@ window.addEventListener('keydown', (e) => {
         if (searchBtn) searchBtn.click();
     }
 });
+
+// --- NESTED MULTI-SELECT HANDLERS ---
+window.toggleNestedMultiSelect = UI.toggleNestedMultiSelect;
+window.handleNestedAction = UI.handleNestedAction;
+
+document.getElementById('toggle-nested-multi-btn').onclick = window.toggleNestedMultiSelect;
+document.getElementById('nested-delete-btn').onclick = () => window.handleNestedAction('delete');
+document.getElementById('nested-indent-btn').onclick = () => window.handleNestedAction('indent');
+document.getElementById('nested-outdent-btn').onclick = () => window.handleNestedAction('outdent');
+
+// --- LIST DESCRIPTION HANDLER ---
+document.getElementById('edit-list-save-desc-btn').onclick = () => {
+    const modal = document.getElementById('edit-list-modal-overlay');
+    const listId = modal.dataset.listId;
+    const desc = document.getElementById('edit-list-description-input').value.trim();
+    
+    if (listId) {
+        API.updateListDescription(listId, desc).then(() => {
+            Utils.showToast("List info updated", "success");
+        });
+    }
+};

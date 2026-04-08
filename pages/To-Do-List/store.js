@@ -41,6 +41,10 @@ export const state = {
     // Search State
     searchShowArchived: false,
 
+    // Nested Multi-Edit State (Modal)
+    nestedMultiSelectMode: false,
+    selectedNestedIds: [], // IDs are unique symbols or strings assigned during edit session
+
     // Sync State
     hasPendingWrites: false
 };

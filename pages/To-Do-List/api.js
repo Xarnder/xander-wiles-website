@@ -136,6 +136,11 @@ export function updateListTitle(id, val) {
         .catch(e => handleSyncError(e));
 }
 
+export function updateListDescription(id, val) {
+    return updateDoc(doc(db, "users", state.currentUser.uid, "lists", id), { description: val })
+        .catch(e => handleSyncError(e));
+}
+
 export function deleteList(id) {
     const batch = writeBatch(db);
     batch.delete(doc(db, "users", state.currentUser.uid, "lists", id));

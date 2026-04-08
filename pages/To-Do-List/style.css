@@ -3437,3 +3437,80 @@ textarea[spellcheck="true"]:focus,
     box-shadow: 0 0 8px rgba(59, 130, 246, 0.4) !important;
     outline: none;
 }
+
+/* --- STORY MANAGER MULTI-SELECT OVERRIDE --- */
+body.theme-story-manager .task-card.selected {
+    border-color: #f97316 !important;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.4) !important;
+    background: rgba(249, 115, 22, 0.1) !important;
+}
+
+/* --- NESTED MULTI-SELECT --- */
+.nested-idea-editor-row.selected {
+    background: rgba(59, 130, 246, 0.2) !important;
+    border: 1px solid var(--accent-blue) !important;
+    border-radius: 8px;
+}
+
+body.theme-story-manager .nested-idea-editor-row.selected {
+    background: rgba(249, 115, 22, 0.2) !important;
+    border-color: #f97316 !important;
+}
+
+.nested-multi-select-active .nested-idea-input {
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+.nested-multi-select-active .nested-idea-editor-row {
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.nested-multi-select-active .nested-idea-editor-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.nested-multi-action-bar {
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    background: var(--dropdown-bg-glass);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    margin-top: 10px;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.nested-multi-action-bar.hidden {
+    display: none;
+}
+
+.nested-multi-action-bar .btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+/* --- LIST DESCRIPTION STYLING --- */
+.list-description {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: -5px 15px 12px 15px;
+    padding: 0 5px;
+    line-height: 1.4;
+    font-style: italic;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-left: 2px solid var(--glass-border);
+}
+
+[data-theme="light"] .list-description {
+    color: #6b7280;
+}

@@ -380,7 +380,23 @@
                     <i class="ph ph-plus"></i> Add Sub-Task
                 </button>
                 <button id="bulk-add-nested-btn" class="btn secondary" style="flex: 1; border-style: dashed;">
-                    <i class="ph ph-list-plus"></i> Bulk Add
+                    <i class="ph ph-list-plus"></i> Bulk
+                </button>
+                <button id="toggle-nested-multi-btn" class="btn secondary" style="flex: 1; border-style: dashed;">
+                    <i class="ph ph-check-square"></i> Multi
+                </button>
+            </div>
+            
+            <!-- NESTED MULTI-ACTION BAR -->
+            <div id="nested-multi-action-bar" class="nested-multi-action-bar hidden">
+                <button id="nested-outdent-btn" class="btn secondary" title="Move Out (Left)">
+                    <i class="ph ph-caret-left"></i>
+                </button>
+                <button id="nested-indent-btn" class="btn secondary" title="Move In (Right)">
+                    <i class="ph ph-caret-right"></i>
+                </button>
+                <button id="nested-delete-btn" class="btn danger" title="Delete Selected">
+                    <i class="ph ph-trash"></i>
                 </button>
             </div>
 
@@ -661,6 +677,18 @@
             </div>
 
             <div class="modal-section">
+                <h3>List Info:</h3>
+                <textarea id="edit-list-description-input" class="glass-input full-width"
+                    placeholder="Add a description for this list..." rows="3" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"
+                    style="margin-bottom: 10px;"></textarea>
+                <button id="edit-list-save-desc-btn" class="btn secondary full-width">
+                    <i class="ph ph-floppy-disk"></i> Save Info
+                </button>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-section">
                 <h3>Bulk Add Tasks:</h3>
                 <textarea id="edit-list-bulk-input" class="glass-input full-width"
                     placeholder="Enter tasks (one per line)..." rows="4" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"></textarea>
@@ -808,7 +836,7 @@
 
     <!-- VERSION INDICATOR -->
     <div id="app-version" class="app-version">
-        v1.31 <!-- UPDATE THIS ON EVERY CHANGE -->
+        v1.36 <!-- UPDATE THIS ON EVERY CHANGE -->
     </div>
 
     <!-- BOARD MANAGER MODAL -->

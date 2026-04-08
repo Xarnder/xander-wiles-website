@@ -378,44 +378,50 @@ function renderListColumn(list, isOrphan, isCustomSort) {
            </div>`
         : `<div class="list-header-left">
              <i class="ph ph-dots-six list-drag-handle" title="Drag to reorder list"></i>
-             <input type="text" class="list-title" value="${list.title}" onchange="window.updateListTitle('${list.id}', this.value)">
-             ${automationIcon}
-           </div>`;
+              <input type="text" class="list-title" value="${list.title}" onchange="window.updateListTitle('${list.id}', this.value)" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
+              ${automationIcon}
+            </div>`;
+
+    const descriptionHtml = (!state.compactView && list.description) 
+        ? `<p class="list-description">${escapeHtml(list.description)}</p>` 
+        : '';
 
     const hideCheckboxes = window.APP_CONFIG?.hideCheckboxes;
     let headerButtons = isOrphan
         ? `<button class="icon-btn danger" onclick="window.emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
              ${!hideCheckboxes ? `<button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed ${getTerm(false, true)}"><i class="ph ph-broom"></i></button>` : ''}
-             <button class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
-             <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
-           </div>`;
+              <button id="multi-select-all-btn" class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
+              <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
+            </div>`;
 
     const isBottom = state.appData.settings.addTaskLocation === 'bottom';
 
     let addFormHtml = isOrphan ? '' : `
         <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
             <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                <input type="text" class="add-task-input" placeholder="+ Add ${getTerm(true)}" name="taskText" oninput="this.nextElementSibling.disabled = !this.value.trim()">
+                <input type="text" class="add-task-input" placeholder="+ Add ${getTerm(true)}" name="taskText" oninput="this.nextElementSibling.disabled = !this.value.trim()" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
                 <button type="submit" class="btn primary" disabled>+</button>
             </form>
         </div>`;
 
+    const listHeader = `
+        <div class="list-header">
+            ${headerLeft}
+            ${headerButtons}
+        </div>
+        ${descriptionHtml}
+    `;
+
     if (isBottom) {
         listEl.innerHTML = `
-            <div class="list-header">
-                ${headerLeft}
-                ${headerButtons}
-            </div>
+            ${listHeader}
             <div class="task-list" id="container-${list.id}"></div>
             ${addFormHtml}
         `;
     } else {
         listEl.innerHTML = `
-            <div class="list-header">
-                ${headerLeft}
-                ${headerButtons}
-            </div>
+            ${listHeader}
             ${addFormHtml}
             <div class="task-list" id="container-${list.id}"></div>
         `;
@@ -511,7 +517,11 @@ export function generateNestedIdeasHtml(nestedIdeas) {
 
 export function renderNestedEditorList(container, dataArray, level = 1) {
     container.innerHTML = '';
-    dataArray.forEach(data => {
+    dataArray.forEach((data) => {
+        // Ensure each item has a persistent tempId for this edit session
+        if (!data.tempId) {
+            data.tempId = 'id-' + Math.random().toString(36).substr(2, 9);
+        }
         container.appendChild(createNestedIdeaEditorItem(data, level));
     });
 }
@@ -519,9 +529,13 @@ export function renderNestedEditorList(container, dataArray, level = 1) {
 export function createNestedIdeaEditorItem(data, level = 1) {
     const div = document.createElement('div');
     div.className = 'nested-idea-editor-item';
+    div.dataset.tempId = data.tempId;
     
     const row = document.createElement('div');
     row.className = 'nested-idea-editor-row';
+    if (state.selectedNestedIds.includes(data.tempId)) {
+        row.classList.add('selected');
+    }
     
     // Level Badge
     const levelBadge = document.createElement('span');
@@ -534,6 +548,14 @@ export function createNestedIdeaEditorItem(data, level = 1) {
     input.value = data.text || '';
     input.placeholder = 'Nested idea...';
     input.className = 'nested-idea-input';
+    input.setAttribute('spellcheck', 'true');
+    input.setAttribute('autocorrect', 'on');
+    input.setAttribute('autocomplete', 'on');
+    input.setAttribute('autocapitalize', 'sentences');
+
+    if (state.nestedMultiSelectMode) {
+        input.readOnly = true;
+    }
     
     const addBtn = document.createElement('button');
     addBtn.className = 'icon-btn';
@@ -560,13 +582,34 @@ export function createNestedIdeaEditorItem(data, level = 1) {
         renderNestedEditorList(childContainer, data.nestedIdeas, level + 1);
     }
     
+    // Toggle Selection in Multi-Select Mode
+    row.onclick = (e) => {
+        if (!state.nestedMultiSelectMode) return;
+        
+        const tempId = data.tempId;
+        const index = state.selectedNestedIds.indexOf(tempId);
+        if (index > -1) {
+            state.selectedNestedIds.splice(index, 1);
+            row.classList.remove('selected');
+        } else {
+            state.selectedNestedIds.push(tempId);
+            row.classList.add('selected');
+        }
+        updateNestedMultiActionBar();
+    };
+
     addBtn.onclick = (e) => {
+        e.stopPropagation();
         e.preventDefault();
-        childContainer.appendChild(createNestedIdeaEditorItem({ text: '', nestedIdeas: [] }, level + 1));
+        if (state.nestedMultiSelectMode) return;
+        const newItem = { text: '', nestedIdeas: [], tempId: 'id-' + Math.random().toString(36).substr(2, 9) };
+        childContainer.appendChild(createNestedIdeaEditorItem(newItem, level + 1));
     };
     
     delBtn.onclick = (e) => {
+        e.stopPropagation();
         e.preventDefault();
+        if (state.nestedMultiSelectMode) return;
         if (window.showConfirmModal) {
             window.showConfirmModal(
                 "Delete Nested Idea?",
@@ -586,6 +629,146 @@ export function createNestedIdeaEditorItem(data, level = 1) {
     return div;
 }
 
+export function toggleNestedMultiSelect() {
+    state.nestedMultiSelectMode = !state.nestedMultiSelectMode;
+    state.selectedNestedIds = [];
+    
+    const container = document.getElementById('nested-ideas-editor-container');
+    const btn = document.getElementById('toggle-nested-multi-btn');
+    
+    if (state.nestedMultiSelectMode) {
+        container.classList.add('nested-multi-select-active');
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="ph ph-x"></i> Exit Multi';
+    } else {
+        container.classList.remove('nested-multi-select-active');
+        btn.classList.remove('active');
+        btn.innerHTML = '<i class="ph ph-check-square"></i> Multi';
+    }
+    
+    updateNestedMultiActionBar();
+    
+    // Efficiently refresh the existing data to re-render in new mode
+    const currentData = serializeNestedEditorList(container);
+    renderNestedEditorList(container, currentData);
+}
+
+export function updateNestedMultiActionBar() {
+    const bar = document.getElementById('nested-multi-action-bar');
+    if (!state.nestedMultiSelectMode || state.selectedNestedIds.length === 0) {
+        bar.classList.add('hidden');
+    } else {
+        bar.classList.remove('hidden');
+    }
+}
+
+export function handleNestedAction(action) {
+    const container = document.getElementById('nested-ideas-editor-container');
+    const data = serializeNestedEditorList(container);
+    
+    if (action === 'delete') {
+        window.showConfirmModal(
+            "Delete Selected?",
+            `Are you sure you want to delete ${state.selectedNestedIds.length} items?`,
+            () => {
+                const newData = recursiveFilterById(data, state.selectedNestedIds);
+                state.selectedNestedIds = [];
+                renderNestedEditorList(container, newData);
+                updateNestedMultiActionBar();
+            },
+            "ph-trash"
+        );
+        return;
+    }
+
+    if (action === 'indent') {
+        const newData = moveSelectedNestedItems(data, state.selectedNestedIds, 1);
+        renderNestedEditorList(container, newData);
+    } else if (action === 'outdent') {
+        const newData = moveSelectedNestedItems(data, state.selectedNestedIds, -1);
+        renderNestedEditorList(container, newData);
+    }
+    
+    // Selection persists because we use IDs!
+    updateNestedMultiActionBar();
+}
+
+function recursiveFilterById(data, ids) {
+    return data.filter((item) => {
+        return !ids.includes(item.tempId);
+    }).map((item) => {
+        return {
+            ...item,
+            nestedIdeas: recursiveFilterById(item.nestedIdeas || [], ids)
+        };
+    });
+}
+
+function moveSelectedNestedItems(data, selectedIds, delta) {
+    const root = { nestedIdeas: data };
+    
+    if (delta === 1) { // INDENT
+        processIndent(root, selectedIds);
+    } else { // OUTDENT
+        processOutdent(root, selectedIds);
+    }
+
+    return root.nestedIdeas;
+}
+
+function processIndent(parent, selectedIds) {
+    if (!parent.nestedIdeas) return;
+
+    // Process each level
+    const items = parent.nestedIdeas;
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        
+        // If this item is selected, try to move it into the previous NON-SELECTED sibling
+        if (selectedIds.includes(item.tempId)) {
+            // Find the nearest previous sibling that is NOT selected
+            let anchorIndex = -1;
+            for (let k = i - 1; k >= 0; k--) {
+                if (!selectedIds.includes(items[k].tempId)) {
+                    anchorIndex = k;
+                    break;
+                }
+            }
+
+            if (anchorIndex !== -1) {
+                const anchor = items[anchorIndex];
+                anchor.nestedIdeas = anchor.nestedIdeas || [];
+                anchor.nestedIdeas.push(item);
+                items.splice(i, 1);
+                i--; // adjust for removal
+            }
+        } else {
+            // recurse
+            processIndent(item, selectedIds);
+        }
+    }
+}
+
+function processOutdent(parent, selectedIds, grandparent = null) {
+    if (!parent.nestedIdeas) return;
+
+    const items = parent.nestedIdeas;
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        
+        if (selectedIds.includes(item.tempId) && grandparent) {
+            // Move item to grandparent's list, after the current parent
+            const parentIndex = grandparent.nestedIdeas.indexOf(parent);
+            grandparent.nestedIdeas.splice(parentIndex + 1, 0, item);
+            items.splice(i, 1);
+            i--; // adjust
+        } else {
+            // recurse
+            processOutdent(item, selectedIds, parent);
+        }
+    }
+}
+
 export function serializeNestedEditorList(container) {
     const arr = [];
     const items = Array.from(container.children).filter(el => el.classList.contains('nested-idea-editor-item'));
@@ -595,6 +778,7 @@ export function serializeNestedEditorList(container) {
         if (input && input.value.trim() !== '') {
             arr.push({
                 text: input.value.trim(),
+                tempId: item.dataset.tempId, // Preserve tempId
                 nestedIdeas: childContainer ? serializeNestedEditorList(childContainer) : []
             });
         }
@@ -919,8 +1103,20 @@ export function openEditModal(taskId, listId) {
     document.getElementById('modal-task-input').value = task.text;
     modalOverlay.dataset.taskId = taskId;
 
+    // Reset Nested Multi-Select State
+    state.nestedMultiSelectMode = false;
+    state.selectedNestedIds = [];
+    const multiBtn = document.getElementById('toggle-nested-multi-btn');
+    if (multiBtn) {
+        multiBtn.classList.remove('active');
+        multiBtn.innerHTML = '<i class="ph ph-check-square"></i> Multi';
+    }
+    const actionBar = document.getElementById('nested-multi-action-bar');
+    if (actionBar) actionBar.classList.add('hidden');
+
     const nestedContainer = document.getElementById('nested-ideas-editor-container');
     if (nestedContainer) {
+        nestedContainer.classList.remove('nested-multi-select-active');
         nestedContainer.innerHTML = '';
         renderNestedEditorList(nestedContainer, task.nestedIdeas || []);
     }
@@ -1375,6 +1571,7 @@ export function openEditListModal(listId) {
 
     const modal = document.getElementById('edit-list-modal-overlay');
     const titleEl = document.getElementById('edit-list-title');
+    const descInput = document.getElementById('edit-list-description-input');
     const bulkInput = document.getElementById('edit-list-bulk-input');
     const boardSelect = document.getElementById('edit-list-board-select');
     const deleteBtn = document.getElementById('edit-list-delete-btn');
@@ -1383,6 +1580,7 @@ export function openEditListModal(listId) {
 
     modal.dataset.listId = listId;
     titleEl.textContent = `Manage: ${list.title}`;
+    descInput.value = list.description || '';
     bulkInput.value = '';
 
     // Populate Boards Select

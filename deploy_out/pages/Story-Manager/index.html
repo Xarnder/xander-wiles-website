@@ -187,6 +187,9 @@
                 <button id="export-all-boards-csv-btn" class="menu-action-item" title="Export ALL Boards to CSV">
                     <i class="ph ph-stack"></i> Export ALL Boards to CSV
                 </button>
+                <button id="toggle-spellcheck-btn" class="menu-action-item" title="Toggle Spellcheck Highlight">
+                    <i class="ph ph-spell-check"></i> Toggle Spellcheck (Test)
+                </button>
 
                 <hr class="dropdown-divider">
                 <label class="dropdown-item-toggle">
@@ -310,7 +313,7 @@
             <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 10px;">
                 Paste your list below. Each new line will become a separate idea.
             </p>
-            <textarea id="bulk-add-input" rows="8" placeholder="Idea 1&#10;Idea 2..."></textarea>
+            <textarea id="bulk-add-input" rows="8" placeholder="Idea 1&#10;Idea 2..." spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"></textarea>
             <div class="modal-actions-bar">
                 <button id="bulk-add-confirm-btn" class="btn primary">Add Ideas</button>
                 <button id="bulk-add-close-btn" class="btn secondary">Cancel</button>
@@ -336,7 +339,7 @@
                 </label>
             </div>
             <input type="text" id="search-input" class="add-task-input" placeholder="Type to search..."
-                style="margin-bottom: 15px; font-size: 1.1rem; padding: 12px;">
+                style="margin-bottom: 15px; font-size: 1.1rem; padding: 12px;" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
             <div id="search-results-container" class="task-list" style="overflow-y: auto; max-height: 60vh;">
                 <!-- Results injected here -->
             </div>
@@ -359,7 +362,7 @@
                 Type a list name. Matching lists will be moved to the start of the board.
             </p>
             <input type="text" id="search-list-input" class="add-task-input" placeholder="List Name..."
-                style="font-size: 1.1rem; padding: 12px; margin-bottom: 10px;">
+                style="font-size: 1.1rem; padding: 12px; margin-bottom: 10px;" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
 
             <div style="display: flex; justify-content: flex-end; gap: 10px;">
                 <button id="view-reordered-btn" class="btn primary">View Reordered Lists</button>
@@ -384,7 +387,7 @@
                 </button>
             </div>
             
-            <textarea id="modal-task-input" rows="10" placeholder="Idea description..." style="margin-top: 15px;"></textarea>
+            <textarea id="modal-task-input" rows="10" placeholder="Idea description..." style="margin-top: 15px;" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"></textarea>
 
             <div id="nested-ideas-editor-container" style="margin-top: 15px;"></div>
             <div style="display: flex; gap: 10px; margin-top: 10px; margin-bottom: 15px;">
@@ -392,7 +395,23 @@
                     <i class="ph ph-plus"></i> Add Sub-Idea
                 </button>
                 <button id="bulk-add-nested-btn" class="btn secondary" style="flex: 1; border-style: dashed;">
-                    <i class="ph ph-list-plus"></i> Bulk Add
+                    <i class="ph ph-list-plus"></i> Bulk
+                </button>
+                <button id="toggle-nested-multi-btn" class="btn secondary" style="flex: 1; border-style: dashed;">
+                    <i class="ph ph-check-square"></i> Multi
+                </button>
+            </div>
+
+            <!-- NESTED MULTI-ACTION BAR -->
+            <div id="nested-multi-action-bar" class="nested-multi-action-bar hidden">
+                <button id="nested-outdent-btn" class="btn secondary" title="Move Out (Left)">
+                    <i class="ph ph-caret-left"></i>
+                </button>
+                <button id="nested-indent-btn" class="btn secondary" title="Move In (Right)">
+                    <i class="ph ph-caret-right"></i>
+                </button>
+                <button id="nested-delete-btn" class="btn danger" title="Delete Selected">
+                    <i class="ph ph-trash"></i>
                 </button>
             </div>
 
@@ -673,9 +692,21 @@
             </div>
 
             <div class="modal-section">
+                <h3>List Info:</h3>
+                <textarea id="edit-list-description-input" class="glass-input full-width"
+                    placeholder="Add a description for this list (e.g. plot beats, character arcs)..." rows="3" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"
+                    style="margin-bottom: 10px;"></textarea>
+                <button id="edit-list-save-desc-btn" class="btn secondary full-width">
+                    <i class="ph ph-floppy-disk"></i> Save Info
+                </button>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-section">
                 <h3>Bulk Add Ideas:</h3>
                 <textarea id="edit-list-bulk-input" class="glass-input full-width"
-                    placeholder="Enter ideas (one per line)..." rows="4"></textarea>
+                    placeholder="Enter ideas (one per line)..." rows="4" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"></textarea>
                 <button id="edit-list-bulk-add-btn" class="btn primary full-width" style="margin-top: 10px;">
                     <i class="ph ph-plus-circle"></i> Add Ideas
                 </button>
@@ -820,7 +851,7 @@
 
     <!-- VERSION INDICATOR -->
     <div id="app-version" class="app-version">
-        v1.29 <!-- UPDATE THIS ON EVERY CHANGE -->
+        v1.36 <!-- UPDATE THIS ON EVERY CHANGE -->
     </div>
 
     <!-- BOARD MANAGER MODAL -->
