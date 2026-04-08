@@ -396,8 +396,8 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     let addFormHtml = isOrphan ? '' : `
         <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
             <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                <input type="text" class="add-task-input" placeholder="+ Add ${getTerm(true)}" name="taskText">
-                <button type="submit" class="btn primary">+</button>
+                <input type="text" class="add-task-input" placeholder="+ Add ${getTerm(true)}" name="taskText" oninput="this.nextElementSibling.disabled = !this.value.trim()">
+                <button type="submit" class="btn primary" disabled>+</button>
             </form>
         </div>`;
 

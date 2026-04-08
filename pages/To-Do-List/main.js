@@ -47,6 +47,7 @@ if ('serviceWorker' in navigator) {
 // This is critical for onclick="..." to work
 window.handleAddTask = function (e, listId) {
     API.handleAddTask(e, listId).then((newCount) => {
+        if (newCount === null) return; // Silent return if add was skipped/invalid
         console.log("DEBUG: handleAddTask finished. New Count:", newCount, "Limit:", state.appData.settings.backupFreq);
         if (newCount && newCount >= state.appData.settings.backupFreq) {
             console.log("DEBUG: Triggering Backup Modal. Element:", document.getElementById('backup-modal-overlay'));

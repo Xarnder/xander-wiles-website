@@ -21,9 +21,9 @@ export function handleAddTask(e, listId) {
     e.preventDefault();
     const input = e.target.elements.taskText;
     const text = input.value.trim();
-    if (!text) return;
+    if (!text) return Promise.resolve(null);
 
-    if (!state.currentUser) return;
+    if (!state.currentUser) return Promise.resolve(null);
 
     const newId = 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const newTask = {

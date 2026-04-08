@@ -3396,3 +3396,35 @@ body.theme-story-manager .nested-level-badge {
     border-color: rgba(234, 88, 12, 0.3);
     color: var(--accent-blue);
 }
+
+/* Sticky Modal Header Styles */
+.modal-header-sticky {
+    position: sticky;
+    top: -25px;
+    z-index: 100;
+    margin: -25px -25px 0 -25px;
+    padding: 20px 25px 15px 25px;
+    background: var(--dropdown-bg-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.modal-actions-group {
+    display: flex;
+    gap: 10px;
+}
+
+.modal-header-sticky .btn {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.modal-header-sticky .mini-action {
+    opacity: 0.8;
+}
+
+.modal-header-sticky .mini-action:hover {
+    opacity: 1;
+}

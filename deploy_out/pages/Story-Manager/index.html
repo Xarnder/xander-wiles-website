@@ -365,8 +365,20 @@
     <!-- EDIT TASK MODAL -->
     <div id="modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel">
-            <h2>Edit Idea</h2>
-            <textarea id="modal-task-input" rows="4" placeholder="Idea description..."></textarea>
+            <div class="modal-header-sticky">
+                <div class="modal-header-row">
+                    <h2>Edit Idea</h2>
+                    <div class="modal-actions-group">
+                        <button id="modal-save-btn" class="btn primary">Save Changes</button>
+                        <button id="modal-close-btn" class="btn secondary">Close</button>
+                    </div>
+                </div>
+                <button id="modal-add-image-btn" class="btn secondary mini-action" style="margin-top: 10px; width: 100%;">
+                    <i class="ph ph-image"></i> Add Image
+                </button>
+            </div>
+            
+            <textarea id="modal-task-input" rows="10" placeholder="Idea description..." style="margin-top: 15px;"></textarea>
 
             <div id="nested-ideas-editor-container" style="margin-top: 15px;"></div>
             <div style="display: flex; gap: 10px; margin-top: 10px; margin-bottom: 15px;">
@@ -413,13 +425,7 @@
                 </div>
             </div>
 
-            <div class="modal-actions-bar">
-                <button id="modal-save-btn" class="btn primary">Save Changes</button>
-                <button id="modal-add-image-btn" class="btn secondary">
-                    <i class="ph ph-image"></i> Add Image
-                </button>
-                <button id="modal-close-btn" class="btn secondary">Close</button>
-            </div>
+            <!-- Actions bar moved to top -->
 
             <div class="modal-divider"></div>
             <div class="manual-move-section">
@@ -808,7 +814,7 @@
 
     <!-- VERSION INDICATOR -->
     <div id="app-version" class="app-version">
-        v1.20 <!-- UPDATE THIS ON EVERY CHANGE -->
+        v1.25 <!-- UPDATE THIS ON EVERY CHANGE -->
     </div>
 
     <!-- BOARD MANAGER MODAL -->
