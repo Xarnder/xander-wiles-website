@@ -482,20 +482,44 @@ document.addEventListener('DOMContentLoaded', () => {
         UI.renderBoard();
     };
 
-    // Toggle Recent Completed Filter
-    document.getElementById('recent-completed-btn').onclick = function () {
-        state.showRecentCompleted = !state.showRecentCompleted;
-        const btn = this;
+    // Toggle Compact View
+    const compactBtn = document.getElementById('compact-view-btn');
+    if (compactBtn) {
+        // Init default state
+        document.body.classList.toggle('compact-view', state.compactView);
+        compactBtn.onclick = function () {
+            state.compactView = !state.compactView;
+            document.body.classList.toggle('compact-view', state.compactView);
+            const icon = this.querySelector('i');
+            if (state.compactView) {
+                this.classList.add('active');
+                icon.className = 'ph ph-arrows-out-simple';
+                Utils.showToast("Compact View Enabled");
+            } else {
+                this.classList.remove('active');
+                icon.className = 'ph ph-arrows-in-simple';
+                Utils.showToast("Expanded View Enabled");
+            }
+        };
+    }
 
-        if (state.showRecentCompleted) {
-            btn.classList.add('active');
-            Utils.showToast("Viewing Recent Completed Tasks");
-        } else {
-            btn.classList.remove('active');
-            Utils.showToast("Viewing All Tasks");
-        }
-        UI.renderBoard();
-    };
+    // Toggle Recent Completed Filter
+    const recentCompletedBtn = document.getElementById('recent-completed-btn');
+    if (recentCompletedBtn) {
+        recentCompletedBtn.onclick = function () {
+            state.showRecentCompleted = !state.showRecentCompleted;
+            const btn = this;
+
+            if (state.showRecentCompleted) {
+                btn.classList.add('active');
+                Utils.showToast("Viewing Recent Completed Tasks");
+            } else {
+                btn.classList.remove('active');
+                Utils.showToast("Viewing All Tasks");
+            }
+            UI.renderBoard();
+        };
+    }
 
     // Theme Toggle
     document.getElementById('theme-toggle').onclick = () => {
@@ -756,13 +780,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalOverlay = document.getElementById('modal-overlay');
         const taskId = modalOverlay.dataset.taskId;
         const text = document.getElementById('modal-task-input').value;
+        const nestedContainer = document.getElementById('nested-ideas-editor-container');
+        const nestedIdeas = nestedContainer ? UI.serializeNestedEditorList(nestedContainer) : [];
         updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
             text: text,
+            nestedIdeas: nestedIdeas,
             updatedAt: Date.now(),
             lastAutoMovedAt: null
         }).catch(e => API.handleSyncError(e));
         modalOverlay.classList.add('hidden');
     };
+
+    document.getElementById('add-nested-idea-btn').onclick = () => {
+        const container = document.getElementById('nested-ideas-editor-container');
+        if (container) {
+            container.appendChild(UI.createNestedIdeaEditorItem({ text: '', nestedIdeas: [] }));
+        }
+    };
+
     document.getElementById('modal-close-btn').onclick = () => document.getElementById('modal-overlay').classList.add('hidden');
 
     // Manual Move/Link (Single)

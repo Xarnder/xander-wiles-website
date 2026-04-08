@@ -125,6 +125,10 @@
                     <i class="ph ph-checks"></i> Multi
                 </button>
 
+                <button id="compact-view-btn" class="icon-btn-large control-item active" title="Toggle Compact View">
+                    <i class="ph ph-arrows-out-simple"></i>
+                </button>
+
                 <button id="add-list-btn" class="btn primary control-item">+ List</button>
                 <button id="options-btn" class="btn secondary control-item">Options</button>
             </div>
@@ -347,6 +351,11 @@
         <div class="modal glass-panel">
             <h2>Edit Task</h2>
             <textarea id="modal-task-input" rows="4" placeholder="Task description..."></textarea>
+
+            <div id="nested-ideas-editor-container" style="margin-top: 15px;"></div>
+            <button id="add-nested-idea-btn" class="btn secondary" style="margin-top: 10px; margin-bottom: 15px; width: 100%; border-style: dashed;">
+                <i class="ph ph-plus"></i> Add Sub-Task
+            </button>
 
             <div id="task-timestamps" class="task-metadata">
                 <div class="timestamp-item">

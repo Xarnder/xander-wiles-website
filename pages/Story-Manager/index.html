@@ -121,11 +121,6 @@
                     <i class="ph ph-list-magnifying-glass"></i>
                 </button>
 
-                <!-- Recent Completed Filter Button -->
-                <button id="recent-completed-btn" class="icon-btn-large control-item" title="Show Recent Completed">
-                    <i class="ph ph-check-circle"></i>
-                </button>
-
                 <div class="sort-container control-item">
                     <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
                     <select id="sort-select" class="glass-select">
@@ -144,6 +139,10 @@
 
                 <button id="multi-edit-btn" class="btn secondary control-item" title="Toggle Multi-Edit Mode">
                     <i class="ph ph-checks"></i> Multi
+                </button>
+
+                <button id="compact-view-btn" class="icon-btn-large control-item active" title="Toggle Compact View">
+                    <i class="ph ph-arrows-out-simple"></i>
                 </button>
 
                 <button id="add-list-btn" class="btn primary control-item">+ List</button>
@@ -368,6 +367,11 @@
         <div class="modal glass-panel">
             <h2>Edit Idea</h2>
             <textarea id="modal-task-input" rows="4" placeholder="Idea description..."></textarea>
+
+            <div id="nested-ideas-editor-container" style="margin-top: 15px;"></div>
+            <button id="add-nested-idea-btn" class="btn secondary" style="margin-top: 10px; margin-bottom: 15px; width: 100%; border-style: dashed;">
+                <i class="ph ph-plus"></i> Add Nested Idea
+            </button>
 
             <div id="task-timestamps" class="task-metadata">
                 <div class="timestamp-item">

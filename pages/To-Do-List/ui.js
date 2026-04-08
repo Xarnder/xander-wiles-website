@@ -382,10 +382,11 @@ function renderListColumn(list, isOrphan, isCustomSort) {
              ${automationIcon}
            </div>`;
 
+    const hideCheckboxes = window.APP_CONFIG?.hideCheckboxes;
     let headerButtons = isOrphan
         ? `<button class="icon-btn danger" onclick="window.emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
-             <button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed ${getTerm(false, true)}"><i class="ph ph-broom"></i></button>
+             ${!hideCheckboxes ? `<button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed ${getTerm(false, true)}"><i class="ph ph-broom"></i></button>` : ''}
              <button class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
              <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
            </div>`;
@@ -493,6 +494,107 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     }
 }
 
+export function generateNestedIdeasHtml(nestedIdeas) {
+    if (!nestedIdeas || nestedIdeas.length === 0) return '';
+    let html = '<div class="nested-ideas-list">';
+    nestedIdeas.forEach(idea => {
+        html += `<div class="nested-idea-display-item">
+            ${escapeHtml(idea.text)}
+        </div>`;
+        if (idea.nestedIdeas && idea.nestedIdeas.length > 0) {
+            html += generateNestedIdeasHtml(idea.nestedIdeas);
+        }
+    });
+    html += '</div>';
+    return html;
+}
+
+export function renderNestedEditorList(container, nestedIdeas) {
+    if (!nestedIdeas) return;
+    nestedIdeas.forEach(data => {
+        container.appendChild(createNestedIdeaEditorItem(data));
+    });
+}
+
+export function createNestedIdeaEditorItem(data) {
+    const div = document.createElement('div');
+    div.className = 'nested-idea-editor-item';
+    
+    const row = document.createElement('div');
+    row.className = 'nested-idea-editor-row';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = data.text || '';
+    input.placeholder = 'Nested idea...';
+    input.className = 'nested-idea-input';
+    
+    const addBtn = document.createElement('button');
+    addBtn.className = 'icon-btn';
+    addBtn.innerHTML = '<i class="ph ph-plus"></i>';
+    addBtn.title = 'Add Sub-Idea';
+    
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn danger';
+    delBtn.innerHTML = '<i class="ph ph-trash"></i>';
+    delBtn.title = 'Delete';
+    
+    row.appendChild(input);
+    row.appendChild(addBtn);
+    row.appendChild(delBtn);
+    
+    div.appendChild(row);
+    
+    const childContainer = document.createElement('div');
+    childContainer.className = 'nested-ideas-child-container';
+    div.appendChild(childContainer);
+    
+    if (data.nestedIdeas && data.nestedIdeas.length > 0) {
+        renderNestedEditorList(childContainer, data.nestedIdeas);
+    }
+    
+    addBtn.onclick = (e) => {
+        e.preventDefault();
+        childContainer.appendChild(createNestedIdeaEditorItem({ text: '', nestedIdeas: [] }));
+    };
+    
+    delBtn.onclick = (e) => {
+        e.preventDefault();
+        if (window.showConfirmModal) {
+            window.showConfirmModal(
+                "Delete Nested Idea?",
+                "Are you sure you want to remove this idea?",
+                () => {
+                    div.remove();
+                },
+                "ph-trash"
+            );
+        } else {
+            if (confirm("Are you sure you want to remove this idea?")) {
+                div.remove();
+            }
+        }
+    };
+    
+    return div;
+}
+
+export function serializeNestedEditorList(container) {
+    const arr = [];
+    const items = Array.from(container.children).filter(el => el.classList.contains('nested-idea-editor-item'));
+    items.forEach(item => {
+        const input = item.querySelector('.nested-idea-input');
+        const childContainer = item.querySelector('.nested-ideas-child-container');
+        if (input && input.value.trim() !== '') {
+            arr.push({
+                text: input.value.trim(),
+                nestedIdeas: childContainer ? serializeNestedEditorList(childContainer) : []
+            });
+        }
+    });
+    return arr;
+}
+
 export function createTaskElement(task, sourceListId, number) {
     const el = document.createElement('div');
     const isLocked = state.appData.settings.sortMode !== 'custom';
@@ -588,11 +690,16 @@ export function createTaskElement(task, sourceListId, number) {
         `;
     }
 
+    let nestedHtml = task.nestedIdeas ? generateNestedIdeasHtml(task.nestedIdeas) : '';
+    const hasNested = task.nestedIdeas && task.nestedIdeas.length > 0;
+    const nestedIndicatorHtml = hasNested ? `<i class="ph ph-list-plus nested-indicator" title="Has sub-ideas"></i>` : '';
+
     el.innerHTML = `
         ${checkboxHtml}
         ${numberHtml}
         <div class="task-content-wrapper">
-            <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml}</div>
+            <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml} ${nestedIndicatorHtml}</div>
+            ${nestedHtml}
             ${recentCompletedHtml}
             ${imagesHtml}
         </div>
@@ -804,6 +911,12 @@ export function openEditModal(taskId, listId) {
     if (!task) return;
     document.getElementById('modal-task-input').value = task.text;
     modalOverlay.dataset.taskId = taskId;
+
+    const nestedContainer = document.getElementById('nested-ideas-editor-container');
+    if (nestedContainer) {
+        nestedContainer.innerHTML = '';
+        renderNestedEditorList(nestedContainer, task.nestedIdeas || []);
+    }
 
     // Populate Timestamps
     document.getElementById('task-created-at').textContent = formatDateTime(task.createdAt);

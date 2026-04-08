@@ -29,6 +29,7 @@ export const state = {
     dragMode: 'move',
     showArchived: false,
     showRecentCompleted: false,
+    compactView: true,
     sortableInstances: [],
     listSortable: null,
 

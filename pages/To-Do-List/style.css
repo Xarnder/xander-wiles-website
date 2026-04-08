@@ -3287,3 +3287,79 @@ body.theme-story-manager #board-list-container .board-item.active i {
         height: 100vh !important;
     }
 }
+/* Nested Ideas Styles */
+.nested-ideas-list {
+    margin-top: 8px;
+    margin-left: 12px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+body.compact-view .nested-ideas-list {
+    display: none !important;
+}
+
+.nested-idea-display-item {
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    display: flex;
+    position: relative;
+}
+
+.nested-idea-display-item::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 0.6em;
+    width: 6px;
+    height: 2px;
+    background: var(--border-color);
+}
+
+.nested-idea-editor-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-left: 15px;
+    border-left: 2px solid var(--border-color);
+}
+
+.nested-idea-editor-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.nested-idea-editor-row input {
+    flex-grow: 1;
+    background: rgba(0,0,0,0.1);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+
+.nested-idea-actions {
+    display: flex;
+    gap: 5px;
+}
+
+
+.nested-indicator {
+    display: none;
+    font-size: 0.9rem;
+    color: var(--accent-blue);
+    margin-left: 5px;
+    vertical-align: middle;
+}
+
+body.compact-view .nested-indicator {
+    display: inline-block;
+}
+
