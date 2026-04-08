@@ -602,6 +602,17 @@ document.addEventListener('DOMContentLoaded', () => {
         UI.renderDefaultBoardSelect();
         optionsModal.classList.remove('hidden');
     };
+    
+    document.getElementById('export-board-csv-btn').onclick = () => {
+        triggerCSVExport();
+        optionsModal.classList.add('hidden');
+    };
+
+    document.getElementById('export-all-boards-csv-btn').onclick = () => {
+        triggerAllBoardsCSVExport();
+        optionsModal.classList.add('hidden');
+    };
+
     document.getElementById('close-options-btn').onclick = () => optionsModal.classList.add('hidden');
 
     // Time Automation Help Modal
@@ -1235,6 +1246,141 @@ function triggerBackupDownload() {
     if (state.currentUser) {
         API.updateSetting('tasksSinceBackup', 0);
     }
+}
+
+async function triggerCSVExport() {
+    const board = state.appData.boards.find(b => b.id === state.appData.currentBoardId);
+    if (!board) return Utils.showToast("No board selected for export");
+
+    const data = generateBoardGridData(board);
+    if (!data) return Utils.showToast("Board has no lists to export");
+
+    Utils.showToast("Generating CSV...", "info");
+
+    const csvLines = assembleCSVLines([ { boardTitle: board.title, ...data } ]);
+    downloadCSV(csvLines.join("\n"), `${(window.APP_CONFIG?.appName || "Task-Master").replace(/\s+/g, '-')}-Export`);
+}
+
+async function triggerAllBoardsCSVExport() {
+    const allBoards = state.appData.boards || [];
+    if (allBoards.length === 0) return Utils.showToast("No boards found to export");
+
+    Utils.showToast("Generating Global CSV...", "info");
+
+    const exportData = allBoards.map(board => {
+        const gridData = generateBoardGridData(board);
+        return gridData ? { boardTitle: board.title, ...gridData } : null;
+    }).filter(Boolean);
+
+    if (exportData.length === 0) return Utils.showToast("No boards with data to export");
+
+    const csvLines = assembleCSVLines(exportData);
+    downloadCSV(csvLines.join("\n"), `${(window.APP_CONFIG?.appName || "Task-Master").replace(/\s+/g, '-')}-Full-Project-Export`);
+}
+
+function generateBoardGridData(board) {
+    const lists = board.listOrder.map(lid => state.appData.rawLists.find(l => l.id === lid)).filter(Boolean);
+    if (lists.length === 0) return null;
+
+    const csvGrid = [];
+    const headers = [];
+    let currentColumnOffset = 0;
+
+    lists.forEach(list => {
+        const listTasks = (list.taskIds || []).map(id => state.appData.tasks[id]).filter(Boolean);
+        if (listTasks.length === 0) {
+            headers[currentColumnOffset] = list.title;
+            currentColumnOffset++;
+            return;
+        }
+
+        let listDepth = 0;
+        const findMaxDepth = (task, depth) => {
+            listDepth = Math.max(listDepth, depth);
+            if (task.nestedIdeas) task.nestedIdeas.forEach(sub => findMaxDepth(sub, depth + 1));
+        };
+        listTasks.forEach(t => findMaxDepth(t, 0));
+
+        headers[currentColumnOffset] = list.title;
+        for (let i = 1; i <= listDepth; i++) {
+            headers[currentColumnOffset + i] = `${list.title} > Level ${i}`;
+        }
+
+        const rowsForList = [];
+        const flattenToRows = (node, depth, currentRow) => {
+            const myRow = [...currentRow];
+            
+            let statusPrefix = "";
+            if (node.archived) statusPrefix += "[ARCHIVED] ";
+            if (node.completed) statusPrefix += "[DONE] ";
+            
+            myRow[depth] = statusPrefix + (node.text || "");
+            
+            if (node.nestedIdeas && node.nestedIdeas.length > 0) {
+                node.nestedIdeas.forEach(child => flattenToRows(child, depth + 1, myRow));
+            } else {
+                rowsForList.push(myRow);
+            }
+        };
+
+        listTasks.forEach(t => flattenToRows(t, 0, new Array(listDepth + 1).fill("")));
+
+        rowsForList.forEach((r, idx) => {
+            if (!csvGrid[idx]) csvGrid[idx] = [];
+            for (let c = 0; c < r.length; c++) {
+                csvGrid[idx][currentColumnOffset + c] = r[c];
+            }
+        });
+
+        currentColumnOffset += (listDepth + 1);
+    });
+
+    return { headers, csvGrid };
+}
+
+function assembleCSVLines(boardDataArray) {
+    const allLines = [];
+    const escapeCSV = (val) => {
+        if (!val) return '""';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+    };
+
+    boardDataArray.forEach((data, index) => {
+        if (index > 0) allLines.push(""); // Spacing between boards
+        
+        // Board Separator Row
+        allLines.push(escapeCSV(`### BOARD: ${data.boardTitle} ###`));
+        
+        // Headers
+        allLines.push(data.headers.map(h => escapeCSV(h)).join(","));
+
+        // Data Rows
+        data.csvGrid.forEach(gridRow => {
+            const row = [];
+            for (let i = 0; i < data.headers.length; i++) {
+                row.push(escapeCSV(gridRow[i]));
+            }
+            allLines.push(row.join(","));
+        });
+    });
+
+    return allLines;
+}
+
+function downloadCSV(csvContent, baseFilename) {
+    const finalContent = "\uFEFF" + csvContent; // BOM for UTF-8
+    const blob = new Blob([finalContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const timestamp = new Date().toISOString().split('T')[0];
+    
+    link.href = url;
+    link.download = `${baseFilename}-${timestamp}.csv`;
+    link.click();
+    
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+    Utils.showToast("CSV Export downloaded!", "success");
 }
 
 async function restoreBackup(data) {
