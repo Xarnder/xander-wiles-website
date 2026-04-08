@@ -369,9 +369,14 @@
             <textarea id="modal-task-input" rows="4" placeholder="Idea description..."></textarea>
 
             <div id="nested-ideas-editor-container" style="margin-top: 15px;"></div>
-            <button id="add-nested-idea-btn" class="btn secondary" style="margin-top: 10px; margin-bottom: 15px; width: 100%; border-style: dashed;">
-                <i class="ph ph-plus"></i> Add Nested Idea
-            </button>
+            <div style="display: flex; gap: 10px; margin-top: 10px; margin-bottom: 15px;">
+                <button id="add-nested-idea-btn" class="btn secondary" style="flex: 1; border-style: dashed;">
+                    <i class="ph ph-plus"></i> Add Sub-Idea
+                </button>
+                <button id="bulk-add-nested-btn" class="btn secondary" style="flex: 1; border-style: dashed;">
+                    <i class="ph ph-list-plus"></i> Bulk Add
+                </button>
+            </div>
 
             <div id="task-timestamps" class="task-metadata">
                 <div class="timestamp-item">

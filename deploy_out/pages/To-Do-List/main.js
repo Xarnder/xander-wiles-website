@@ -798,6 +798,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    document.getElementById('bulk-add-nested-btn').onclick = () => {
+        const bulkModal = document.getElementById('bulk-add-modal-overlay');
+        bulkModal.dataset.mode = 'nested';
+        bulkModal.dataset.returnToEdit = 'true'; // Flag to return to edit modal
+        
+        // Hide the edit modal first
+        document.getElementById('modal-overlay').classList.add('hidden');
+        
+        bulkModal.classList.remove('hidden');
+        document.getElementById('bulk-add-input').focus();
+    };
+
     document.getElementById('modal-close-btn').onclick = () => document.getElementById('modal-overlay').classList.add('hidden');
 
     // Manual Move/Link (Single)
@@ -863,33 +875,62 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Bulk Add
-    document.getElementById('bulk-add-close-btn').onclick = () => document.getElementById('bulk-add-modal-overlay').classList.add('hidden');
+    document.getElementById('bulk-add-close-btn').onclick = () => {
+        const bulkModal = document.getElementById('bulk-add-modal-overlay');
+        bulkModal.classList.add('hidden');
+        
+        // If we came from the edit modal, go back to it
+        if (bulkModal.dataset.returnToEdit === 'true') {
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            bulkModal.dataset.returnToEdit = 'false';
+        }
+    };
     document.getElementById('bulk-add-confirm-btn').onclick = () => {
         const bulkModal = document.getElementById('bulk-add-modal-overlay');
-        const listId = bulkModal.dataset.listId;
+        const mode = bulkModal.dataset.mode || 'list';
         const text = document.getElementById('bulk-add-input').value;
-        const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+        const items = Utils.parseNestedMarkdown(text);
+        if (items.length === 0) return;
 
-        const batch = writeBatch(db);
-        const listRef = doc(db, "users", state.currentUser.uid, "lists", listId);
+        if (mode === 'list') {
+            const listId = bulkModal.dataset.listId;
+            const batch = writeBatch(db);
+            const listRef = doc(db, "users", state.currentUser.uid, "lists", listId);
 
-        lines.forEach(line => {
-            const newId = Utils.generateId();
-            const newTask = {
-                text: line.trim(),
-                completed: false,
-                archived: false,
-                createdAt: Date.now(),
-                images: [],
-                glowColor: 'none',
-                listAddedAt: { [listId]: Date.now() }
-            };
-            batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), newTask);
-            batch.update(listRef, { taskIds: arrayUnion(newId) });
-        });
-        batch.commit().catch(e => API.handleSyncError(e));
+            items.forEach(item => {
+                const newId = Utils.generateId();
+                const newTask = {
+                    text: item.text,
+                    nestedIdeas: item.nestedIdeas || [],
+                    completed: false,
+                    archived: false,
+                    createdAt: Date.now(),
+                    images: [],
+                    glowColor: 'none',
+                    listAddedAt: { [listId]: Date.now() }
+                };
+                batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), newTask);
+                batch.update(listRef, { taskIds: arrayUnion(newId) });
+            });
+            batch.commit().then(() => {
+                Utils.showToast("Bulk tasks added successfully", "success");
+            }).catch(e => API.handleSyncError(e));
+        } else if (mode === 'nested') {
+            const container = document.getElementById('nested-ideas-editor-container');
+            if (container) {
+                UI.renderNestedEditorList(container, items);
+                Utils.showToast("Bulk nested ideas added to editor", "success");
+            }
+        }
+
         bulkModal.classList.add('hidden');
         document.getElementById('bulk-add-input').value = '';
+        
+        // If we came from the edit modal, go back to it
+        if (bulkModal.dataset.returnToEdit === 'true') {
+            document.getElementById('modal-overlay').classList.remove('hidden');
+            bulkModal.dataset.returnToEdit = 'false';
+        }
     };
 
     // Search

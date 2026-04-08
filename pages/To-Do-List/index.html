@@ -350,12 +350,17 @@
     <div id="modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel">
             <h2>Edit Task</h2>
-            <textarea id="modal-task-input" rows="4" placeholder="Task description..."></textarea>
+            <textarea id="modal-task-input" rows="10" placeholder="Task description..."></textarea>
 
             <div id="nested-ideas-editor-container" style="margin-top: 15px;"></div>
-            <button id="add-nested-idea-btn" class="btn secondary" style="margin-top: 10px; margin-bottom: 15px; width: 100%; border-style: dashed;">
-                <i class="ph ph-plus"></i> Add Sub-Task
-            </button>
+            <div style="display: flex; gap: 10px; margin-top: 10px; margin-bottom: 15px;">
+                <button id="add-nested-idea-btn" class="btn secondary" style="flex: 1; border-style: dashed;">
+                    <i class="ph ph-plus"></i> Add Sub-Task
+                </button>
+                <button id="bulk-add-nested-btn" class="btn secondary" style="flex: 1; border-style: dashed;">
+                    <i class="ph ph-list-plus"></i> Bulk Add
+                </button>
+            </div>
 
             <div id="task-timestamps" class="task-metadata">
                 <div class="timestamp-item">
@@ -787,7 +792,7 @@
 
     <!-- VERSION INDICATOR -->
     <div id="app-version" class="app-version">
-        v1.20 <!-- UPDATE THIS ON EVERY CHANGE -->
+        v1.22 <!-- UPDATE THIS ON EVERY CHANGE -->
     </div>
 
     <!-- BOARD MANAGER MODAL -->

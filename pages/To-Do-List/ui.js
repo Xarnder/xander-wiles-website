@@ -1,5 +1,5 @@
 import { state } from './store.js';
-import { escapeHtml, showToast, generateId, formatDateTime, getTerm } from './utils.js';
+import { escapeHtml, showToast, generateId, formatDateTime, getTerm, parseNestedMarkdown } from './utils.js';
 import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, handleSyncError, updateDoc } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -509,19 +509,25 @@ export function generateNestedIdeasHtml(nestedIdeas) {
     return html;
 }
 
-export function renderNestedEditorList(container, nestedIdeas) {
-    if (!nestedIdeas) return;
-    nestedIdeas.forEach(data => {
-        container.appendChild(createNestedIdeaEditorItem(data));
+export function renderNestedEditorList(container, dataArray, level = 1) {
+    container.innerHTML = '';
+    dataArray.forEach(data => {
+        container.appendChild(createNestedIdeaEditorItem(data, level));
     });
 }
 
-export function createNestedIdeaEditorItem(data) {
+export function createNestedIdeaEditorItem(data, level = 1) {
     const div = document.createElement('div');
     div.className = 'nested-idea-editor-item';
     
     const row = document.createElement('div');
     row.className = 'nested-idea-editor-row';
+    
+    // Level Badge
+    const levelBadge = document.createElement('span');
+    levelBadge.className = 'nested-level-badge';
+    levelBadge.textContent = level;
+    levelBadge.title = `Nesting Level ${level}`;
     
     const input = document.createElement('input');
     input.type = 'text';
@@ -539,6 +545,7 @@ export function createNestedIdeaEditorItem(data) {
     delBtn.innerHTML = '<i class="ph ph-trash"></i>';
     delBtn.title = 'Delete';
     
+    row.appendChild(levelBadge);
     row.appendChild(input);
     row.appendChild(addBtn);
     row.appendChild(delBtn);
@@ -550,12 +557,12 @@ export function createNestedIdeaEditorItem(data) {
     div.appendChild(childContainer);
     
     if (data.nestedIdeas && data.nestedIdeas.length > 0) {
-        renderNestedEditorList(childContainer, data.nestedIdeas);
+        renderNestedEditorList(childContainer, data.nestedIdeas, level + 1);
     }
     
     addBtn.onclick = (e) => {
         e.preventDefault();
-        childContainer.appendChild(createNestedIdeaEditorItem({ text: '', nestedIdeas: [] }));
+        childContainer.appendChild(createNestedIdeaEditorItem({ text: '', nestedIdeas: [] }, level + 1));
     };
     
     delBtn.onclick = (e) => {
@@ -1503,28 +1510,29 @@ export function openEditListModal(listId) {
     // Handlers
     newBulk.onclick = () => {
         const text = bulkInput.value;
-        const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
-        if (lines.length === 0) return;
+        const items = parseNestedMarkdown(text);
+        if (items.length === 0) return;
 
         const batch = writeBatch(db);
         const listRef = doc(db, "users", state.currentUser.uid, "lists", listId);
 
-        lines.forEach(line => {
+        items.forEach(item => {
             const newId = generateId();
             batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), {
-                text: line.trim(),
+                text: item.text,
+                nestedIdeas: item.nestedIdeas || [],
                 completed: false,
                 archived: false,
                 createdAt: Date.now(),
                 images: [],
-                glowColor: 'none'
+                glowColor: 'none',
+                listAddedAt: { [listId]: Date.now() }
             });
             batch.update(listRef, { taskIds: arrayUnion(newId) });
         });
-        batch.commit().then(() => {
-            showToast(`Added ${lines.length} ${lines.length === 1 ? getTerm(true) : getTerm(false)}!`, "success");
-            bulkInput.value = '';
-        }).catch(e => handleSyncError(e));
+        batch.commit().catch(e => handleSyncError(e));
+        bulkInput.value = '';
+        showToast("Bulk tasks added!", "success");
     };
 
     newMove.onclick = () => {

@@ -2095,10 +2095,8 @@ input:checked+.slider-small:before {
     display: flex;
     flex-direction: column;
     gap: 15px;
-    max-height: 90vh;
-    /* Slightly taller */
-    overflow: hidden;
-    /* Scroll handled by children */
+    max-height: 85vh;
+    overflow-y: auto; /* Allow scrolling for long lists */
 }
 
 .modal-header-row {
@@ -2118,12 +2116,14 @@ input:checked+.slider-small:before {
 #modal-task-input,
 #bulk-add-input {
     width: 100%;
+    min-height: 180px;
     background: var(--input-bg);
     color: var(--input-text);
-    border: 1px solid var(--input-border);
-    padding: 12px;
+    padding: 15px;
     border-radius: 12px;
+    border: 1px solid var(--glass-border);
     font-size: 1rem;
+    line-height: 1.5;
     font-family: inherit;
     resize: vertical;
     box-sizing: border-box;
@@ -3104,6 +3104,8 @@ body.theme-story-manager .app-header {
 body.theme-story-manager .btn.primary {
     background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
     box-shadow: 0 4px 15px rgba(234, 88, 12, 0.3);
+    color: #ffffff !important;
+    font-weight: 800;
 }
 
 body.theme-story-manager .task-card {
@@ -3158,8 +3160,9 @@ html[data-theme="fancy"] body.theme-story-manager .task-card:hover {
 }
 
 html[data-theme="fancy"] body.theme-story-manager .add-task-form .btn.primary {
-    border-color: rgba(234, 88, 12, 0.4);
-    color: #f97316;
+    border-color: rgba(255, 255, 255, 0.5);
+    color: #ffffff !important;
+    background: rgba(234, 88, 12, 0.2);
 }
 
 html[data-theme="fancy"] body.theme-story-manager .add-task-form .btn.primary:hover {
@@ -3281,6 +3284,15 @@ body.theme-story-manager #board-list-container .board-item.active i {
     color: var(--accent-blue) !important;
 }
 
+/* Scrollbar Orange Overrides */
+body.theme-story-manager *::-webkit-scrollbar-thumb {
+    background-color: var(--accent-blue) !important;
+}
+
+body.theme-story-manager *::-webkit-scrollbar-track {
+    background: rgba(30, 15, 0, 0.4) !important;
+}
+
 /* Force the body gradient to cover the bottom safe area in the Home Screen app */
 @media all and (display-mode: standalone) {
     body {
@@ -3363,3 +3375,24 @@ body.compact-view .nested-indicator {
     display: inline-block;
 }
 
+.nested-level-badge {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: bold;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    margin-right: 2px;
+    flex-shrink: 0;
+    border: 1px solid var(--glass-border);
+}
+
+body.theme-story-manager .nested-level-badge {
+    background: rgba(234, 88, 12, 0.1);
+    border-color: rgba(234, 88, 12, 0.3);
+    color: var(--accent-blue);
+}

@@ -108,3 +108,36 @@ export function getTerm(singular = true, capitalize = false) {
     }
     return term;
 }
+
+/**
+ * Parses indented text (markdown-style) into a recursive structure.
+ * @param {string} text 
+ * @returns {Array} Recursive array of {text, nestedIdeas: []}
+ */
+export function parseNestedMarkdown(text) {
+    if (!text) return [];
+    const lines = text.split('\n').filter(l => l.trim() !== '');
+    const result = [];
+    const stack = [{ indent: -1, children: result }];
+
+    lines.forEach(line => {
+        const indentMatch = line.match(/^(\s*)/);
+        // Treat tabs as 4 spaces for consistency
+        const indent = indentMatch ? indentMatch[1].replace(/\t/g, '    ').length : 0;
+        const cleanText = line.trim().replace(/^[-*+]\s+/, '');
+
+        if (!cleanText) return;
+
+        const newItem = { text: cleanText, nestedIdeas: [] };
+
+        // Pop until we find the parent level
+        while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
+            stack.pop();
+        }
+
+        stack[stack.length - 1].children.push(newItem);
+        stack.push({ indent: indent, children: newItem.nestedIdeas });
+    });
+
+    return result;
+}
