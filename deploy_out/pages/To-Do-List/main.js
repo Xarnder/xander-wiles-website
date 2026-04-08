@@ -118,6 +118,16 @@ window.deleteBoard = (id) => {
         "ph-trash"
     );
 };
+
+window.emptyOrphans = () => {
+    showConfirmModal(
+        `Delete All Orphaned ${getTerm(false, true)}?`,
+        `This will permanently delete every ${getTerm(true)} that doesn't belong to a list. This cannot be undone.`,
+        () => API.emptyOrphans(),
+        "ph-trash"
+    );
+};
+
 window.addNewBoard = API.addNewBoard;
 window.rescueOrphanLists = API.rescueOrphanLists;
 window.renderBoard = UI.renderBoard;

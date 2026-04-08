@@ -1546,11 +1546,18 @@ export function openEditListModal(listId) {
     };
 
     newDelete.onclick = () => {
-        import('./api.js').then(api => {
-            api.deleteList(listId).then((success) => {
-                if (success !== false) modal.classList.add('hidden');
-            });
-        });
+        window.showConfirmModal(
+            `Delete ${getTerm(true, true)} List?`,
+            `Are you sure you want to delete this list and all ${getTerm(false)} inside it? This action cannot be undone.`,
+            () => {
+                import('./api.js').then(api => {
+                    api.deleteList(listId).then((success) => {
+                        if (success !== false) modal.classList.add('hidden');
+                    });
+                });
+            },
+            "ph-trash"
+        );
     };
 }
 // --- BOARD MODAL LISTENERS ---
