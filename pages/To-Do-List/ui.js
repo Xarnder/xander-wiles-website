@@ -378,7 +378,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
            </div>`
         : `<div class="list-header-left">
              <i class="ph ph-dots-six list-drag-handle" title="Drag to reorder list"></i>
-             <input type="text" class="list-title" value="${list.title}" onchange="window.updateListTitle('${list.id}', this.value)">
+             <input type="text" class="list-title" value="${list.title}" onchange="window.updateListTitle('${list.id}', this.value)" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
              ${automationIcon}
            </div>`;
 
@@ -396,7 +396,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     let addFormHtml = isOrphan ? '' : `
         <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
             <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                <input type="text" class="add-task-input" placeholder="+ Add ${getTerm(true)}" name="taskText" oninput="this.nextElementSibling.disabled = !this.value.trim()">
+                <input type="text" class="add-task-input" placeholder="+ Add ${getTerm(true)}" name="taskText" oninput="this.nextElementSibling.disabled = !this.value.trim()" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
                 <button type="submit" class="btn primary" disabled>+</button>
             </form>
         </div>`;
@@ -534,6 +534,10 @@ export function createNestedIdeaEditorItem(data, level = 1) {
     input.value = data.text || '';
     input.placeholder = 'Nested idea...';
     input.className = 'nested-idea-input';
+    input.setAttribute('spellcheck', 'true');
+    input.setAttribute('autocorrect', 'on');
+    input.setAttribute('autocomplete', 'on');
+    input.setAttribute('autocapitalize', 'sentences');
     
     const addBtn = document.createElement('button');
     addBtn.className = 'icon-btn';

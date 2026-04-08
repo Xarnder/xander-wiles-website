@@ -3428,3 +3428,12 @@ body.theme-story-manager .nested-level-badge {
 .modal-header-sticky .mini-action:hover {
     opacity: 1;
 }
+
+/* --- SPELLCHECK HIGHLIGHT --- */
+input[spellcheck="true"]:focus, 
+textarea[spellcheck="true"]:focus,
+[contenteditable="true"][spellcheck="true"]:focus {
+    border-color: var(--accent-blue) !important;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4) !important;
+    outline: none;
+}

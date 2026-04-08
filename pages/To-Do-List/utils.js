@@ -141,3 +141,12 @@ export function parseNestedMarkdown(text) {
 
     return result;
 }
+/**
+ * Toggles native browser spellcheck on an element.
+ * @param {HTMLElement} el 
+ * @param {boolean} state 
+ */
+export function toggleSpellcheck(el, state) {
+    if (!el) return;
+    el.setAttribute('spellcheck', state ? 'true' : 'false');
+}
