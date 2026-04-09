@@ -3113,7 +3113,6 @@ html[data-theme="fancy"] body.theme-story-manager .floating-action-bar {
 
 body.theme-story-manager .app-header {
     background: var(--glass-bg);
-    border-bottom: 1px solid var(--accent-blue);
 }
 
 body.theme-story-manager .btn.primary {
@@ -3124,7 +3123,7 @@ body.theme-story-manager .btn.primary {
 }
 
 body.theme-story-manager .task-card {
-    border-left: 3px solid var(--accent-blue);
+    /* Bracket removed as requested */
 }
 
 body.theme-story-manager .list-column {
