@@ -224,24 +224,77 @@ a:hover {
     line-height: 1.6;
 }
 
-/* --- PROFILE PICTURE LAZY LOAD STYLES --- */
-.profile-picture {
-    width: 300px;
-    height: 300px;
-    border-radius: 50%;
-    object-fit: cover;
-    margin: 0 auto 1.5rem;
-    display: block;
-    border: 3px solid var(--glass-border);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    /* START: Styles for the blur-up effect */
-    filter: blur(20px);
-    transition: filter 0.3s ease-in-out;
-    /* END: Styles for the blur-up effect */
+.hero-contact {
+    margin-top: -0.75rem !important;
+    margin-bottom: 1.5rem !important;
+    font-size: 0.95rem;
+    font-weight: 600;
 }
 
-.profile-picture.loaded {
+.hero-contact a {
+    color: var(--accent-cyan);
+    text-decoration: underline;
+    transition: opacity 0.3s;
+}
+
+.hero-contact a:hover {
+    opacity: 0.8;
+}
+
+/* --- PROFILE PICTURE REVEAL ANIMATION (TIGHTENING CROP) --- */
+.profile-picture-wrapper {
+    /* INITIAL WINDOW SIZE - Controls the initial 'loose' crop */
+    width: 600px;
+    height: 600px;
+
+    margin: 0 auto 1.5rem;
+    border-radius: 50%;
+    overflow: hidden;
+    position: relative;
+    /* Needed for the absolute image inside */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 3px solid var(--glass-border);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+
+    /* INITIAL VISIBILITY */
+    opacity: 0;
+    filter: blur(20px);
+    -webkit-filter: blur(20px);
+    /* iOS Safari Support */
+
+    /* iOS FIX: Force hardware acceleration and fix overflow:hidden bug during transitions */
+    transform: translateZ(0);
+    -webkit-mask-image: -webkit-radial-gradient(white, black);
+
+    /* ANIMATION DEFINITION */
+    transition:
+        filter 0.6s ease-out,
+        -webkit-filter 1.2s ease-out,
+        opacity 1.2s ease-out,
+        width 1.8s cubic-bezier(0.16, 1, 0.3, 1) 1.2s,
+        height 1.8s cubic-bezier(0.16, 1, 0.3, 1) 1.2s;
+}
+
+.profile-picture-wrapper.loaded {
+    opacity: 1;
     filter: blur(0);
+    -webkit-filter: blur(0);
+
+    /* FINAL WINDOW SIZE - Controls the final display size on the page */
+    width: 300px;
+    height: 300px;
+}
+
+.profile-picture {
+    /* FIXED IMAGE SIZE - Controls the constant magnification/scale of the image */
+    width: 600px !important;
+    height: 600px !important;
+
+    object-fit: cover;
+    flex-shrink: 0;
+    /* No transitions or scale changes on the image itself to keep it constant */
 }
 
 /* --- END PROFILE PICTURE STYLES --- */
@@ -613,6 +666,21 @@ a:hover {
         /* Stack on mobile */
     }
 
+    /* --- MOBILE PROFILE PICTURE REFINEMENTS --- */
+    .profile-picture-wrapper {
+        /* Set fixed mobile size - No shrink animation on mobile */
+        width: 280px !important; 
+        height: 280px !important;
+        transition: filter 1.2s ease-out, opacity 1.2s ease-out, -webkit-filter 1.2s ease-out !important;
+    }
+
+    .profile-picture {
+        /* Ensure image fits the smaller mobile container */
+        width: 100% !important;
+        height: 100% !important;
+    }
+    /* ------------------------------------------ */
+
     .site-header {
         border-radius: 0;
         position: relative;
@@ -787,6 +855,7 @@ a:hover {
 .hidden-pages-container .page-card h3 {
     color: var(--accent-orange) !important;
 }
+
 /* --- PWA Standalone Mode Adjustments --- */
 @media (display-mode: standalone) {
     #main-nav-placeholder {

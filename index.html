@@ -44,18 +44,21 @@
     <main class="app-container">
         <div class="top-section-grid">
             <div class="hero-card glass-card">
-                <picture>
-                    <!-- The browser tries to load this AVIF file first -->
-                    <source srcset="assets/images/xander_Correted_Edited.avif" type="image/avif">
+                <div class="profile-picture-wrapper">
+                    <picture>
+                        <!-- The browser tries to load this AVIF file first -->
+                        <source srcset="assets/images/xander_Correted_Edited.avif" type="image/avif">
 
-                    <!-- If it can't, it tries this WebP file next -->
-                    <source srcset="assets/images/Xander_Corrected_Edited.webp" type="image/webp">
+                        <!-- If it can't, it tries this WebP file next -->
+                        <source srcset="assets/images/Xander_Corrected_Edited.webp" type="image/webp">
 
-                    <!-- This is the final fallback for older browsers. It also provides the alt text. -->
-                    <img src="assets/images/Xander Corrected Edited.png" alt="A profile picture of Xander Wiles"
-                        class="profile-picture" width="300" height="300" loading="lazy">
-                </picture>
-                <h1>Welcome</h1>
+                        <!-- This is the final fallback for older browsers. It also provides the alt text. -->
+                        <img src="assets/images/Xander Corrected Edited.png" alt="A profile picture of Xander Wiles"
+                            class="profile-picture" width="300" height="300" loading="lazy">
+                    </picture>
+                </div>
+                <h1>Hi, I'm Xander</h1>
+                <p class="hero-contact">contact me at <a href="mailto:xanderwileswork@gmail.com">xanderwileswork@gmail.com</a></p>
                 <p>Select a game or page from the navigation menu below to get started. All projects are built with
                     passion
                     and a lot of JavaScript.</p>

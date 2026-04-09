@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const unblurImage = () => {
         if (profilePic) {
             profilePic.classList.add('loaded');
+            // Also add to the wrapper if it exists
+            const wrapper = profilePic.closest('.profile-picture-wrapper');
+            if (wrapper) wrapper.classList.add('loaded');
         }
     };
 
