@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const paddingSlider = document.getElementById('padding-slider');
     const paddingValue = document.getElementById('padding-value');
     const paddingSmallIconsCheckbox = document.getElementById('padding-small-icons');
+    const chromeExtToggle = document.getElementById('chrome-ext-toggle');
     const paddingPreviewIcon = document.getElementById('padding-preview-icon');
 
     // --- Background Elements ---
@@ -494,6 +495,10 @@ document.addEventListener('DOMContentLoaded', () => {
         generateBtn.disabled = true; generateBtn.textContent = 'Generating...'; resultsCard.classList.remove('hidden'); updateStatus('Processing icons...');
         try {
             const iconSizes = [16, 32, 180, 192, 512];
+            if (chromeExtToggle.checked) {
+                if (!iconSizes.includes(48)) iconSizes.push(48);
+                if (!iconSizes.includes(128)) iconSizes.push(128);
+            }
             const imageBlobs = {};
 
             // If we are in Vector Mode, we need to rasterize the SVG to PNGs first
@@ -550,6 +555,14 @@ document.addEventListener('DOMContentLoaded', () => {
             zip.file('android-chrome-192x192.png', imageBlobs[192]);
             zip.file('android-chrome-512x512.png', imageBlobs[512]);
             zip.file('favicon.ico', imageBlobs[32]);
+
+            // Add Chrome extension icons if toggle is on
+            if (chromeExtToggle.checked) {
+                zip.file('icon16.png', imageBlobs[16]);
+                zip.file('icon32.png', imageBlobs[32]);
+                zip.file('icon48.png', imageBlobs[48]);
+                zip.file('icon128.png', imageBlobs[128]);
+            }
 
             // Add the SVGs currently displayed in preview
             // Add the SVGs currently displayed in preview
