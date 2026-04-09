@@ -63,6 +63,18 @@ window.archiveTask = (taskId) => {
         Utils.showToast(`${getTerm(true, true)} archived.`, "success");
     });
 };
+window.copyTaskToClipboard = (taskId) => {
+    const task = state.appData.tasks[taskId];
+    if (task) {
+        Utils.copyToClipboard(task.text).then(success => {
+            if (success) {
+                Utils.showToast(`${getTerm(true, true)} copied to clipboard.`, "success");
+            } else {
+                Utils.showToast("Failed to copy to clipboard.", "info");
+            }
+        });
+    }
+};
 window.unarchiveTask = API.unarchiveTask;
 window.deleteTaskForever = (taskId) => {
     showConfirmModal(

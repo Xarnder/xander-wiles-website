@@ -104,7 +104,8 @@ body {
     border: 1px solid var(--glass-border);
     border-radius: 24px;
     padding: 18px 24px;
-    margin-bottom: 0px; /* Managed by grid gap now */
+    margin-bottom: 0px;
+    /* Managed by grid gap now */
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease, border-color 0.4s ease;
     display: flex;
@@ -207,12 +208,15 @@ textarea:focus {
 }
 
 .error-msg {
-    color: #f72585; /* Vibrant pink */
+    color: #f72585;
+    /* Vibrant pink */
     font-size: 0.85rem;
     margin-bottom: 12px;
-    margin-top: 4px; /* Added spacing */
+    margin-top: 4px;
+    /* Added spacing */
     font-weight: 500;
-    width: 100%; /* Force wrap inside flex-wrap container */
+    width: 100%;
+    /* Force wrap inside flex-wrap container */
 }
 
 .error-msg.hidden {
@@ -228,7 +232,8 @@ textarea:focus {
 /* --- Dynamic Additional Blocks (Modal) --- */
 .add-block-actions {
     display: flex;
-    flex-wrap: wrap; /* Ensure buttons wrap if needed */
+    flex-wrap: wrap;
+    /* Ensure buttons wrap if needed */
     gap: 12px;
     margin: 10px 0 20px;
 }
@@ -292,6 +297,7 @@ textarea:focus {
     .desktop-only {
         display: none !important;
     }
+
     .mobile-only {
         display: inline-flex !important;
     }
@@ -346,8 +352,12 @@ textarea:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 30px;
-    margin-bottom: 32px; /* Prevent touching on hover */
+    padding: 16px 16px;
+    margin-bottom: 32px;
+    /* Prevent touching on hover */
+    flex-wrap: wrap;
+    gap: 24px 32px;
+    /* Row gap and column gap */
 }
 
 .user-info {
@@ -367,7 +377,8 @@ textarea:focus {
 .category-with-color {
     display: flex;
     align-items: flex-start;
-    flex-wrap: wrap; /* Allow wrapping for error messages */
+    flex-wrap: wrap;
+    /* Allow wrapping for error messages */
     gap: 10px;
     width: 100%;
 }
@@ -474,16 +485,18 @@ input[type="range"]::-webkit-slider-thumb {
 /* --- Header Actions --- */
 .header-actions {
     display: flex;
-    gap: 12px;
+    gap: 20px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .small-btn {
-    padding: 8px 16px;
+    padding: 10px 20px;
     font-size: 0.9rem;
 }
 
-#export-btn:hover, #import-trigger-btn:hover {
+#export-btn:hover,
+#import-trigger-btn:hover {
     border-color: #4cc9f0;
     color: #4cc9f0;
 }
@@ -550,12 +563,14 @@ input[type="range"]::-webkit-slider-thumb {
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(12px); /* Slightly increased blur for depth */
+    backdrop-filter: blur(12px);
+    /* Slightly increased blur for depth */
     -webkit-backdrop-filter: blur(12px);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 9999; /* Ensure it covers everything including the header */
+    z-index: 9999;
+    /* Ensure it covers everything including the header */
     opacity: 0;
     animation: fadeIn 0.3s forwards;
 }
@@ -635,7 +650,8 @@ input[type="range"]::-webkit-slider-thumb {
     line-height: 1.3;
     margin: 0;
     flex: 1;
-    word-break: break-word; /* Ensure titles wrap on mobile */
+    word-break: break-word;
+    /* Ensure titles wrap on mobile */
     overflow-wrap: break-word;
 }
 
@@ -653,7 +669,8 @@ input[type="range"]::-webkit-slider-thumb {
     display: flex;
     gap: 8px;
     align-items: flex-start;
-    flex-shrink: 0; /* Keep buttons together */
+    flex-shrink: 0;
+    /* Keep buttons together */
 }
 
 .copy-btn {
@@ -700,7 +717,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .edit-btn {
-    display: none !important; /* Managed by .expanded class in JS/CSS */
+    display: none !important;
+    /* Managed by .expanded class in JS/CSS */
 }
 
 .expanded .edit-btn {
@@ -769,7 +787,8 @@ input[type="range"]::-webkit-slider-thumb {
     display: flex;
     gap: 20px;
     padding: 15px 30px;
-    margin-bottom: 32px; /* Prevent touching on hover */
+    margin-bottom: 32px;
+    /* Prevent touching on hover */
     align-items: center;
     flex-wrap: wrap;
 }
@@ -835,8 +854,9 @@ select:focus {
         gap: 12px;
         padding: 20px;
     }
-    
-    .search-group, .filter-group {
+
+    .search-group,
+    .filter-group {
         width: 100%;
     }
 }
@@ -929,7 +949,8 @@ select:focus {
 .pin-icon-svg {
     width: 20px;
     height: 20px;
-    fill: #ffffff; /* Black when not pinned per request */
+    fill: #ffffff;
+    /* Black when not pinned per request */
     transition: all 0.3s ease;
 }
 
@@ -939,8 +960,10 @@ select:focus {
 }
 
 .pin-btn.active .pin-icon-svg {
-    fill: #ffd700; /* Yellow when pinned */
-    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8)); /* Yellow glow */
+    fill: #ffd700;
+    /* Yellow when pinned */
+    filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.8));
+    /* Yellow glow */
     transform: rotate(-45deg);
 }
 
@@ -1005,7 +1028,8 @@ select:focus {
 }
 
 .stat-line span {
-    color: #4cc9f0; /* Electric blue for counts */
+    color: #4cc9f0;
+    /* Electric blue for counts */
     font-size: 1.2rem;
     font-weight: 600;
 }
@@ -1093,27 +1117,32 @@ select:focus {
 }
 
 .expanded .prompt-body {
-    max-height: 5000px; /* Large enough to fit content */
+    max-height: 5000px;
+    /* Large enough to fit content */
     opacity: 1;
     transition: max-height 0.4s cubic-bezier(1, 0, 1, 0), opacity 0.4s ease, margin-top 0.4s ease;
     margin-top: 15px;
-    overflow-y: auto; /* Fallback for very long content */
+    overflow-y: auto;
+    /* Fallback for very long content */
 }
 
 /* Custom scrollbar for prompt-body when height is constrained */
 .prompt-body::-webkit-scrollbar {
     width: 4px;
 }
+
 .prompt-body::-webkit-scrollbar-track {
     background: transparent;
 }
+
 .prompt-body::-webkit-scrollbar-thumb {
     background: var(--glass-border);
     border-radius: 10px;
 }
 
 .card-body-footer {
-    display: none; /* Only show when expanded */
+    display: none;
+    /* Only show when expanded */
     margin-top: 20px;
     justify-content: flex-end;
     border-top: 1px dashed var(--glass-border);
@@ -1185,12 +1214,14 @@ select:focus {
 .expanded .caret-icon {
     transform: rotate(180deg);
 }
+
 /* --- Things to Remember (Card View) --- */
 .prompt-remember-note {
     margin-top: 15px;
     padding: 15px;
     border-radius: 12px;
-    background: rgba(255, 215, 0, 0.03); /* Subtle gold glass */
+    background: rgba(255, 215, 0, 0.03);
+    /* Subtle gold glass */
     border: 1px dashed rgba(255, 215, 0, 0.2);
 }
 
@@ -1209,7 +1240,8 @@ select:focus {
     font-style: italic;
     color: var(--text-muted);
     line-height: 1.5;
-    white-space: pre-wrap; /* Preserve line breaks */
+    white-space: pre-wrap;
+    /* Preserve line breaks */
 }
 
 .prompt-text-display,
@@ -1218,29 +1250,33 @@ select:focus {
     white-space: pre-wrap !important;
     word-break: break-word;
 }
+
 /* --- Slim Mobile View --- */
 @media (max-width: 480px) {
     .glass-card {
         padding: 24px 20px;
     }
+
     .card-header-main {
         margin-bottom: 12px;
     }
+
     .card-tag-row {
         margin-top: 8px;
     }
+
     .prompt-tag {
         margin-bottom: 8px;
     }
 }
+
 /* --- Mode Toggle Switch --- */
 .mode-toggle-container {
     background: rgba(0, 0, 0, 0.15);
-    padding: 4px;
+    padding: 5px;
     border-radius: 30px;
     border: 1px solid var(--glass-border);
     display: inline-flex;
-    margin: 0 15px;
     align-items: center;
 }
 
@@ -1275,11 +1311,11 @@ select:focus {
     z-index: 2;
 }
 
-.mode-checkbox:checked + .mode-label .command-label {
+.mode-checkbox:checked+.mode-label .command-label {
     color: white;
 }
 
-.mode-checkbox:not(:checked) + .mode-label .prompt-label {
+.mode-checkbox:not(:checked)+.mode-label .prompt-label {
     color: white;
 }
 
@@ -1297,7 +1333,7 @@ select:focus {
     box-shadow: 0 4px 12px rgba(123, 44, 191, 0.3);
 }
 
-.mode-checkbox:checked + .mode-label .mode-ball {
+.mode-checkbox:checked+.mode-label .mode-ball {
     left: calc(50% - 2px);
     background: linear-gradient(135deg, #4361ee, #4cc9f0);
     box-shadow: 0 4px 12px rgba(76, 201, 240, 0.3);
@@ -1313,15 +1349,15 @@ select:focus {
 @media (max-width: 850px) {
     .app-header {
         flex-direction: column;
-        gap: 15px;
-        padding: 20px;
+        gap: 20px;
+        padding: 24px;
     }
-    
+
     .mode-toggle-container {
         margin: 0;
         width: 100%;
     }
-    
+
     .mode-switch {
         width: 100%;
     }
@@ -1359,9 +1395,10 @@ select:focus {
     #prompts-feed {
         grid-template-columns: 1fr;
     }
-    
+
     .glass-card {
-        margin-bottom: 20px; /* Fallback for older browsers or simple stacks */
+        margin-bottom: 20px;
+        /* Fallback for older browsers or simple stacks */
     }
 }
 
@@ -1379,7 +1416,8 @@ select:focus {
 }
 
 .toast {
-    background: #ffbe0b; /* Vibrant Yellow */
+    background: #ffbe0b;
+    /* Vibrant Yellow */
     color: #0d0d0d;
     padding: 12px 24px;
     border-radius: 12px;

@@ -150,3 +150,44 @@ export function toggleSpellcheck(el, state) {
     if (!el) return;
     el.setAttribute('spellcheck', state ? 'true' : 'false');
 }
+
+/**
+ * Copies text to the clipboard with high compatibility (including iOS).
+ * @param {string} text 
+ * @returns {Promise<boolean>}
+ */
+export async function copyToClipboard(text) {
+    if (!text) return false;
+
+    // Modern API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (err) {
+            console.error('Clipboard API failed, falling back...', err);
+        }
+    }
+
+    // Fallback: Temporary textarea
+    try {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        
+        // Ensure it's not visible but exists in DOM
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        
+        textArea.focus();
+        textArea.select();
+        
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        return successful;
+    } catch (err) {
+        console.error('Fallback copy failed:', err);
+        return false;
+    }
+}

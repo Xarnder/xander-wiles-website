@@ -616,7 +616,8 @@
 [data-theme="fancy"] .edit-task-btn,
 [data-theme="fancy"] .archive-task-btn,
 [data-theme="fancy"] .unarchive-task-btn,
-[data-theme="fancy"] .delete-task-btn {
+[data-theme="fancy"] .delete-task-btn,
+[data-theme="fancy"] .copy-task-btn {
     background: rgba(255, 255, 255, 0.08);
     /* Translucent, no blur */
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1773,6 +1774,11 @@ body {
     border: none;
     cursor: pointer;
     border-radius: 6px;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .icon-btn:hover {
@@ -1805,6 +1811,15 @@ body {
 
 .archive-task-btn:hover {
     background: rgba(63, 63, 63, 0.617) !important;
+}
+
+.copy-task-btn {
+    background: rgba(50, 50, 50, 0.7) !important;
+    color: #ffffff !important;
+}
+
+.copy-task-btn:hover {
+    background: rgba(90, 90, 90, 0.7) !important;
 }
 
 
@@ -3067,33 +3082,33 @@ input:checked+.slider-small:before {
 
 /* --- STORY MANAGER THEME OVERRIDE --- */
 body.theme-story-manager {
-    --bg-gradient: linear-gradient(135deg, #1a1005 0%, #000000 100%);
-    --glass-bg: rgba(20, 10, 0, 0.7);
-    --glass-border: rgba(255, 100, 0, 0.2);
+    --bg-gradient: #000000;
+    --glass-bg: rgba(0, 0, 0, 0.7);
+    --glass-border: rgba(255, 140, 0, 0.25);
     --accent-blue: #ea580c; /* override blue with orange */
     --accent-purple: #f97316; /* override purple with lighter orange */
     --text-primary: #fff;
     --text-secondary: #ffedd5;
-    --card-bg: rgba(30, 15, 0, 0.6);
-    --dropdown-bg-glass: rgba(20, 10, 0, 0.95);
-    --dropdown-bg: #1a0f00;
-    /* Fancy Orbs - Orange and Red */
-    --fancy-glow-1: rgba(255, 100, 0, 0.6);   /* Vibrant Orange */
-    --fancy-glow-2: rgba(255, 50, 0, 0.55);  /* Red-Orange */
-    --fancy-glow-3: rgba(220, 20, 60, 0.5);  /* Crimson Red */
+    --card-bg: rgba(20, 20, 20, 0.6);
+    --dropdown-bg-glass: rgba(10, 5, 0, 0.95);
+    --dropdown-bg: #000000;
+    /* Fancy Orbs - All Orange */
+    --fancy-glow-1: rgba(255, 140, 0, 0.7);   /* Bright Orange */
+    --fancy-glow-2: rgba(255, 80, 0, 0.6);    /* Mid Orange */
+    --fancy-glow-3: rgba(200, 60, 0, 0.55);   /* Dark Orange */
 }
 
 html[data-theme="fancy"] body.theme-story-manager .modal-overlay {
-    background: rgba(10, 5, 0, 0.85);
+    background: rgba(0, 0, 0, 0.85);
 }
 
 html[data-theme="fancy"] body.theme-story-manager .confirm-box,
 html[data-theme="fancy"] body.theme-story-manager .modal,
 html[data-theme="fancy"] body.theme-story-manager .toast,
 html[data-theme="fancy"] body.theme-story-manager .floating-action-bar {
-    background: rgba(25, 15, 5, 0.85) !important;
-    border-color: rgba(255, 100, 0, 0.3) !important;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(234, 88, 12, 0.15) !important;
+    background: rgba(20, 20, 20, 0.9) !important;
+    border-color: rgba(255, 140, 0, 0.35) !important;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7), 0 0 30px rgba(234, 88, 12, 0.2) !important;
 }
 
 body.theme-story-manager .app-header {
@@ -3113,8 +3128,9 @@ body.theme-story-manager .task-card {
 }
 
 body.theme-story-manager .list-column {
-    background: rgba(30, 15, 0, 0.4);
+    background: rgba(0, 0, 0, 0.7);
     border: 1px solid var(--glass-border);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
 body.theme-story-manager .menu-action-item i {
@@ -3151,7 +3167,40 @@ html[data-theme="fancy"] body.theme-story-manager input:checked + .slider-small 
    =================================================================== */
 
 html[data-theme="fancy"] body.theme-story-manager {
-    --bg-gradient: linear-gradient(135deg, #000000 0%, #150500 20%, #2a0b00 40%, #3a0d00 60%, #2a0b00 80%, #000000 100%);
+    background: #000000 !important;
+    animation: none;
+}
+
+/* Centralized Glowing Orbs (Story Manager specific positions) */
+html[data-theme="fancy"] body.theme-story-manager .fancy-orb-1 { 
+    width: 350px; height: 350px; top: 15%; left: 15%; 
+    background: radial-gradient(circle, var(--fancy-glow-1) 0%, transparent 80%);
+    animation: fancyOrbDrift1 calc(12s / var(--fancy-speed-mult)) ease-in-out infinite alternate; 
+}
+html[data-theme="fancy"] body.theme-story-manager .fancy-orb-2 { 
+    width: 300px; height: 300px; bottom: 25%; right: 15%; 
+    background: radial-gradient(circle, var(--fancy-glow-2) 0%, transparent 80%);
+    animation: fancyOrbDrift2 calc(15s / var(--fancy-speed-mult)) ease-in-out infinite alternate; 
+}
+html[data-theme="fancy"] body.theme-story-manager .fancy-orb-3 { 
+    width: 250px; height: 250px; top: 45%; left: 35%; 
+    background: radial-gradient(circle, var(--fancy-glow-3) 0%, transparent 80%);
+    animation: fancyOrbDrift3 calc(10s / var(--fancy-speed-mult)) ease-in-out infinite alternate; 
+}
+html[data-theme="fancy"] body.theme-story-manager .fancy-orb-4 { 
+    width: 220px; height: 220px; top: 25%; right: 25%; 
+    background: radial-gradient(circle, var(--fancy-glow-1) 0%, transparent 80%); 
+    animation: fancyOrbDrift1 calc(14s / var(--fancy-speed-mult)) ease-in-out infinite alternate; 
+}
+html[data-theme="fancy"] body.theme-story-manager .fancy-orb-5 { 
+    width: 280px; height: 280px; bottom: 35%; left: 20%; 
+    background: radial-gradient(circle, var(--fancy-glow-2) 0%, transparent 80%); 
+    animation: fancyOrbDrift2 calc(11s / var(--fancy-speed-mult)) ease-in-out infinite alternate; 
+}
+html[data-theme="fancy"] body.theme-story-manager .fancy-orb-6 { 
+    width: 180px; height: 180px; top: 55%; left: 60%; 
+    background: radial-gradient(circle, var(--fancy-glow-3) 0%, transparent 80%); 
+    animation: fancyOrbDrift3 calc(13s / var(--fancy-speed-mult)) ease-in-out infinite alternate; 
 }
 
 html[data-theme="fancy"] body.theme-story-manager .task-card:hover {
@@ -3182,6 +3231,16 @@ html[data-theme="fancy"] body.theme-story-manager .mode-btn.active {
     background: rgba(234, 88, 12, 0.25);
     color: #ffffff;
     box-shadow: 0 0 15px rgba(234, 88, 12, 0.2), inset 0 0 8px rgba(255, 255, 255, 0.1);
+}
+
+/* Mobile Spread for Story Manager Orbs */
+@media (max-width: 600px) {
+    html[data-theme="fancy"] body.theme-story-manager .fancy-orb-1 { top: 2%; left: -10%; width: 200px; height: 200px; }
+    html[data-theme="fancy"] body.theme-story-manager .fancy-orb-2 { top: 85%; right: -10%; width: 180px; height: 180px; }
+    html[data-theme="fancy"] body.theme-story-manager .fancy-orb-3 { top: 25%; left: 5%; width: 160px; height: 160px; }
+    html[data-theme="fancy"] body.theme-story-manager .fancy-orb-4 { top: 45%; right: 5%; width: 140px; height: 140px; }
+    html[data-theme="fancy"] body.theme-story-manager .fancy-orb-5 { top: 65%; left: -5%; width: 190px; height: 190px; }
+    html[data-theme="fancy"] body.theme-story-manager .fancy-orb-6 { top: 55%; right: 10%; width: 130px; height: 130px; }
 }
 
 /* Additional UI Elements Overrides for Story Manager Orange */
@@ -3290,7 +3349,7 @@ body.theme-story-manager *::-webkit-scrollbar-thumb {
 }
 
 body.theme-story-manager *::-webkit-scrollbar-track {
-    background: rgba(30, 15, 0, 0.4) !important;
+    background: rgba(20, 20, 20, 0.4) !important;
 }
 
 /* Force the body gradient to cover the bottom safe area in the Home Screen app */
