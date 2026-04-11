@@ -4,12 +4,12 @@ import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.co
 
 // --- FIREBASE CONFIG ---
 const firebaseConfig = {
-    apiKey: "AIzaSyC6PrlknJUGPIdyyUq78rKYEsbQ1v5bJNo",
-    authDomain: "taskmaster-cloud-xander.firebaseapp.com",
-    projectId: "taskmaster-cloud-xander",
-    storageBucket: "taskmaster-cloud-xander.firebasestorage.app",
-    messagingSenderId: "878016054387",
-    appId: "1:878016054387:web:e38131dd806982a22a1606"
+    apiKey: "test_beta_key",
+    authDomain: "test_beta_domain",
+    projectId: "test_beta_project",
+    storageBucket: "test_beta_bucket",
+    messagingSenderId: "12345",
+    appId: "1:12345:web:test"
 };
 
 // --- INIT FIREBASE ---

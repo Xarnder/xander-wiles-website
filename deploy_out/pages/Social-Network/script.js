@@ -6,12 +6,12 @@ import { getStorage, ref, uploadBytes, getDownloadURL, listAll, getMetadata } fr
 
 // --- PASTE YOUR FIREBASE CONFIG HERE ---
 const firebaseConfig = {
-    apiKey: "AIzaSyC2wLw45JmXYov0lYOpMMZf3IYavURMwNc",
-    authDomain: "social-network-b6579.firebaseapp.com",
-    projectId: "social-network-b6579",
-    storageBucket: "social-network-b6579.firebasestorage.app",
-    messagingSenderId: "686831441900",
-    appId: "1:686831441900:web:28d02d913ce6382e58d2c9"
+    apiKey: "test_social_key",
+    authDomain: "test_social_domain",
+    projectId: "test_social_project",
+    storageBucket: "test_social_bucket",
+    messagingSenderId: "12345",
+    appId: "1:12345:web:test"
 };
 
 // Initialize

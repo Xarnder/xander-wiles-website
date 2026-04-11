@@ -20,7 +20,7 @@ export default async function handler(request) {
       });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = "test_gemini_key";
     if (!apiKey) {
       return new Response(JSON.stringify({ error: 'API Key not configured in environment variables.' }), {
         status: 500,

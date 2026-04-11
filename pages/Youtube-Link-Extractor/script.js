@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressTitleText = document.getElementById('progressTitleText');
     const processedPlaylistsList = document.getElementById('processedPlaylistsList');
 
-    const API_KEY = 'AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk';
+    const API_KEY = process.env.PUBLIC_YOUTUBE_API_KEY;
 
     let extractedVideos = []; // Store videos for download
     let playlistTitle = 'youtube_playlist'; // Default title

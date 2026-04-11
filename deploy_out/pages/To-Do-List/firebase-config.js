@@ -4,12 +4,12 @@ import { getFirestore, enableMultiTabIndexedDbPersistence } from "https://www.gs
 
 // --- FIREBASE CONFIG ---
 const defaultConfig = {
-    apiKey: "AIzaSyC6PrlknJUGPIdyyUq78rKYEsbQ1v5bJNo",
-    authDomain: "taskmaster-cloud-xander.firebaseapp.com",
-    projectId: "taskmaster-cloud-xander",
-    storageBucket: "taskmaster-cloud-xander.firebasestorage.app",
-    messagingSenderId: "878016054387",
-    appId: "1:878016054387:web:e38131dd806982a22a1606"
+    apiKey: "test_todo_key",
+    authDomain: "test_todo_domain",
+    projectId: "test_todo_project",
+    storageBucket: "test_todo_bucket",
+    messagingSenderId: "12345",
+    appId: "1:12345:web:test"
 };
 
 const firebaseConfig = (window.APP_CONFIG && window.APP_CONFIG.firebase && window.APP_CONFIG.firebase.apiKey) 

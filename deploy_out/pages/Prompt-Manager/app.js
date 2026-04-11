@@ -25,12 +25,12 @@ console.log("🚀 App initializing...");
 
 // TODO: Replace this object with your exact config from the Firebase Console
 const firebaseConfig = {
-    apiKey: "AIzaSyAbvX0d2UKFxykkv_ZIMqKIauHIWGukK28",
-    authDomain: "xanders-prompt-manager.firebaseapp.com",
-    projectId: "xanders-prompt-manager",
-    storageBucket: "xanders-prompt-manager.firebasestorage.app",
-    messagingSenderId: "428925411386",
-    appId: "1:428925411386:web:5308be7aa6aae62c515503"
+    apiKey: "test_prompt_key",
+    authDomain: "test_prompt_domain",
+    projectId: "test_prompt_project",
+    storageBucket: "test_prompt_bucket",
+    messagingSenderId: "12345",
+    appId: "1:12345:web:test"
 };
 // Initialize Firebase
 let app, auth, db;

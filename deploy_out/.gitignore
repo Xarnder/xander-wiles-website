@@ -15,9 +15,10 @@ pages/exprimental_align_tool/
 pages/XR_Viewer/assets/Make_Human.glb
 
 
+# Environment
+.env
 .env.local
-
-
+.env.*
+!.env.example
 
 .vercel
-.env*.local
