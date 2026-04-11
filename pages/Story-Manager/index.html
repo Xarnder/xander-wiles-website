@@ -10,6 +10,11 @@
 
     <!-- STORY MANAGER CONFIGURATION -->
     <script>
+        // Safety shim for browser environments
+        if (typeof process === 'undefined') {
+            window.process = { env: {} };
+        }
+
         window.APP_CONFIG = {
             appName: "Story Manager",
             hideCheckboxes: true,
@@ -20,12 +25,12 @@
             },
             firebase: {
                 // Values injected at build time from environment
-                apiKey: process.env.PUBLIC_STORY_FIREBASE_API_KEY,
-                authDomain: process.env.PUBLIC_STORY_FIREBASE_AUTH_DOMAIN,
-                projectId: process.env.PUBLIC_STORY_FIREBASE_PROJECT_ID,
-                storageBucket: process.env.PUBLIC_STORY_FIREBASE_STORAGE_BUCKET,
-                messagingSenderId: process.env.PUBLIC_STORY_FIREBASE_MESSAGING_SENDER_ID,
-                appId: process.env.PUBLIC_STORY_FIREBASE_APP_ID
+                apiKey: process.env.PUBLIC_STORY_FIREBASE_API_KEY || "AIzaSyCND__tYIVR1oKAxzpG56bLb2BE4S35Bng",
+                authDomain: process.env.PUBLIC_STORY_FIREBASE_AUTH_DOMAIN || "xanders-story-manger.firebaseapp.com",
+                projectId: process.env.PUBLIC_STORY_FIREBASE_PROJECT_ID || "xanders-story-manger",
+                storageBucket: process.env.PUBLIC_STORY_FIREBASE_STORAGE_BUCKET || "xanders-story-manger.firebasestorage.app",
+                messagingSenderId: process.env.PUBLIC_STORY_FIREBASE_MESSAGING_SENDER_ID || "1057477476076",
+                appId: process.env.PUBLIC_STORY_FIREBASE_APP_ID || "1:1057477476076:web:aaac9cc783ded03bde6fc9"
             }
         };
     </script>
