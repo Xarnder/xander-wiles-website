@@ -3,6 +3,9 @@
 ._*
 .Spotlight-V100
 .Trashes
+node_modules/
+deploy_out/
+dist/
 
 # VS Code
 .vscode/
