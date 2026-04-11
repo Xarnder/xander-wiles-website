@@ -50,6 +50,10 @@ window.handleAddTask = function (e, listId) {
         if (newCount === null) return; // Silent return if add was skipped/invalid
         console.log("DEBUG: handleAddTask finished. New Count:", newCount, "Limit:", state.appData.settings.backupFreq);
         if (newCount && newCount >= state.appData.settings.backupFreq) {
+            if (Utils.isUserTyping()) {
+                console.log("[Backup] User is typing another task, suppressing backup popup.");
+                return;
+            }
             console.log("DEBUG: Triggering Backup Modal. Element:", document.getElementById('backup-modal-overlay'));
             // Updated API to return newCount
             const modal = document.getElementById('backup-modal-overlay');

@@ -191,3 +191,15 @@ export async function copyToClipboard(text) {
         return false;
     }
 }
+
+/**
+ * Checks if the user is currently typing in an input or textarea.
+ * @returns {boolean}
+ */
+export function isUserTyping() {
+    const el = document.activeElement;
+    if (!el) return false;
+    const isInput = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
+    const hasValue = el.value && el.value.trim().length > 0;
+    return isInput && hasValue;
+}

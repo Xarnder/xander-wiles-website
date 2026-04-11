@@ -1720,7 +1720,7 @@ body {
 }
 
 .task-actions {
-    display: flex;
+    display: none; /* Hide by default and remove from layout */
     flex-direction: row;
     gap: 8px;
     margin-left: 2px;
@@ -1729,36 +1729,21 @@ body {
     align-self: flex-start;
     flex-shrink: 0;
     pointer-events: none;
-    /* Prevent accidental clicks when hidden */
 }
 
-/* DESKTOP HOVER */
-@media (hover: hover) {
-    .task-card:hover .task-actions {
-        opacity: 1;
-        pointer-events: auto;
-    }
+/* REVEAL LOGIC (Unified for Desktop Click and Mobile Touch) */
+.task-card.show-actions .task-actions {
+    display: flex;
+    flex-direction: column; /* Stack buttons vertically */
+    gap: 4px;
+    margin-left: 10px;
+    opacity: 1;
+    pointer-events: auto;
 }
 
-/* MOBILE TOUCH REVEAL */
+/* MOBILE SPECIFIC REFINEMENTS */
 @media (hover: none) {
-    .task-actions {
-        display: none;
-        /* Completely remove from layout by default on mobile */
-    }
-
-    .task-card.show-actions .task-actions {
-        display: flex;
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    /* Make actions vertical on mobile if shown to save width */
-    .task-card.show-actions .task-actions {
-        flex-direction: column;
-        gap: 4px;
-        margin-left: 10px;
-    }
+    /* Kept for consistency or specific mobile overrides if needed */
 }
 
 .task-card.vertical-actions .task-actions {

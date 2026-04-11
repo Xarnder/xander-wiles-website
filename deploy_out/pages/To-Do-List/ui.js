@@ -1,5 +1,5 @@
 import { state } from './store.js';
-import { escapeHtml, showToast, generateId, formatDateTime, getTerm, parseNestedMarkdown } from './utils.js';
+import { escapeHtml, showToast, generateId, formatDateTime, getTerm, parseNestedMarkdown, isUserTyping } from './utils.js';
 import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, handleSyncError, updateDoc } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -79,6 +79,23 @@ export function renderBoard() {
     state.sortableInstances.forEach(s => s.destroy());
     state.sortableInstances = [];
     if (state.listSortable) state.listSortable.destroy();
+
+    // Capture Focus/Typing State
+    const activeEl = document.activeElement;
+    let focusedListId = null;
+    let focusedValue = null;
+    let selectionStart = 0;
+    let selectionEnd = 0;
+
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        focusedValue = activeEl.value;
+        selectionStart = activeEl.selectionStart;
+        selectionEnd = activeEl.selectionEnd;
+        const listCol = activeEl.closest('.list-column');
+        if (listCol) {
+            focusedListId = listCol.dataset.listId;
+        }
+    }
 
     boardContainer.innerHTML = '';
 
@@ -171,6 +188,30 @@ export function renderBoard() {
     updateBoardUI();
     updateTotalTaskCount();
     applyStaticLayouts();
+
+    // Restore Focus/Typing State
+    if (activeEl && activeEl.id) {
+        const newEl = document.getElementById(activeEl.id);
+        if (newEl) {
+            newEl.value = focusedValue;
+            newEl.focus();
+            if (newEl.setSelectionRange) newEl.setSelectionRange(selectionStart, selectionEnd);
+        }
+    } else if (focusedListId) {
+        const listCol = document.querySelector(`.list-column[data-list-id="${focusedListId}"]`);
+        if (listCol) {
+            const input = listCol.querySelector('.add-task-input');
+            if (input) {
+                input.value = focusedValue;
+                input.focus();
+                input.setSelectionRange(selectionStart, selectionEnd);
+                // Also trigger oninput logic to enable submit button
+                if (input.nextElementSibling && input.nextElementSibling.tagName === 'BUTTON') {
+                    input.nextElementSibling.disabled = !input.value.trim();
+                }
+            }
+        }
+    }
 }
 
 export function updateBoardUI() {
@@ -899,9 +940,8 @@ export function createTaskElement(task, sourceListId, number) {
         <div class="task-actions">${actionsHtml}</div>
     `;
 
-    // Touch reveal logic
+    // Expand/Reveal actions logic
     el.addEventListener('click', () => {
-        if (!window.matchMedia("(hover: none)").matches) return;
         if (task.archived) return;
 
         const wasShowing = el.classList.contains('show-actions');
@@ -1801,6 +1841,10 @@ document.getElementById('new-board-title-input').addEventListener('keypress', (e
 
 export function showAutomationReport(movedTasksLog, title = `${getTerm(false, true)} Auto-Moved`, subtitle = `The following ${getTerm(false)} were moved automatically:`) {
     if (!movedTasksLog || movedTasksLog.length === 0) return;
+    if (isUserTyping()) {
+        console.log("[Automation] User is typing, suppression modal popup.");
+        return;
+    }
     const modal = document.getElementById('automation-report-modal-overlay');
     const listContainer = document.getElementById('automation-report-list');
     if (!modal || !listContainer) return;
