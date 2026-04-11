@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Grid Extractor</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <link rel="stylesheet" href="app.css">
+</head>
+
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+    <div id="main-nav-placeholder"></div>
+
+    <main class="app-container">
+        <div class="app-layout">
+            <aside class="sidebar">
+                <header class="glass-card header-card">
+                    <h1>Lossless Grid Extractor</h1>
+                    <p>Upload a composite image to auto-detect grid borders and extract individual images seamlessly.</p>
+
+                    <div class="upload-wrapper">
+                        <label for="imageUpload" class="upload-btn">Choose Image</label>
+                        <input type="file" id="imageUpload" accept="image/*">
+                        <button id="downloadAllBtn" class="action-btn" style="display: none;">Download All (ZIP)</button>
+                    </div>
+                    
+                    <div class="controls-wrapper glass-card">
+                        <div class="control-group">
+                            <div class="control-header">
+                                <label for="sensitivitySlider">Grid Sensitivity</label>
+                                <span id="sensitivityValue">10</span>
+                            </div>
+                            <input type="range" id="sensitivitySlider" min="1" max="50" value="10" step="1">
+                            <p class="control-hint">Adjust if detection is too aggressive or missing lines.</p>
+                        </div>
+                    </div>
+
+                    <p id="status-text" class="status">Waiting for image...</p>
+                </header>
+
+                <canvas id="processingCanvas" style="display: none;"></canvas>
+            </aside>
+
+            <div class="content-area">
+                <div id="resultsContainer" class="results-grid"></div>
+
+                <section id="visualizer-section" class="glass-card visualizer-card" style="display: none;">
+                    <h2>Detected Grid Map</h2>
+                    <p>A visualization of the detected horizontal and vertical cuts.</p>
+                    <div class="visualizer-wrapper">
+                        <img id="visualizerImage" src="" alt="Original Image">
+                        <canvas id="gridOverlay" class="grid-overlay"></canvas>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="/assets/js/nav-loader.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
