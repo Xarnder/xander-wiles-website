@@ -110,6 +110,19 @@ export default function CalendarView() {
         end: endOfYear(currentYearDate)
     });
 
+    // Auto-scroll to current month on mobile
+    useEffect(() => {
+        if (!loading && currentYear === new Date().getFullYear() && window.innerWidth < 640) {
+            const timer = setTimeout(() => {
+                const element = document.getElementById('current-month-card');
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [currentYear, loading]);
+
     return (
         <div className="space-y-6">
             {/* Stats Header - Hidden if entry selected on mobile to save space */}
@@ -191,7 +204,11 @@ export default function CalendarView() {
                                 }
 
                                 return (
-                                    <div key={monthDate.toString()} className="glass-card p-5 hover:border-primary/30 transition duration-300 group">
+                                    <div 
+                                        key={monthDate.toString()} 
+                                        id={monthIndex === new Date().getMonth() && currentYear === new Date().getFullYear() ? 'current-month-card' : undefined}
+                                        className="glass-card p-5 hover:border-primary/30 transition duration-300 group"
+                                    >
                                         <h3 className="text-center font-serif text-white font-bold mb-4 text-lg border-b border-white/5 pb-2 group-hover:text-primary transition-colors">{format(monthDate, 'MMMM')}</h3>
 
                                         <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2 text-text-muted font-bold opacity-60">
