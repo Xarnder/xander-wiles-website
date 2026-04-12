@@ -300,6 +300,26 @@ input[type="range"]:active::-webkit-slider-thumb {
     background: var(--accent);
 }
 
+/* --- Text Inputs --- */
+.text-input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 0.8rem 1.2rem;
+    color: white;
+    font-family: inherit;
+    font-size: 1rem;
+    transition: var(--transition-smooth);
+    width: 100%;
+}
+
+.text-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 15px var(--accent-glow);
+}
+
 /* --- Antigravity Buttons --- */
 .upload-wrapper {
     margin: 3rem 0;

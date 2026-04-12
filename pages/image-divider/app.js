@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const overlayCtx = gridOverlay.getContext('2d');
     const sensitivitySlider = document.getElementById('sensitivitySlider');
     const sensitivityValueDisplay = document.getElementById('sensitivityValue');
+    const baseFilenameInput = document.getElementById('baseFilenameInput');
 
     let extractedBlobs = []; // Store division objects: { id, blob, name, x, y, width, height, row, col, originalX, originalY, originalWidth, originalHeight }
     let originalFileName = "extracted_images";
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     fileInput.addEventListener('change', handleImageUpload);
     downloadAllBtn.addEventListener('click', downloadAllAsZip);
+    baseFilenameInput.addEventListener('input', handleFilenameChange);
 
     // Global Key Events for Nudging
     window.addEventListener('keydown', (e) => {
@@ -76,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         console.log(`[DEBUG] File selected: ${file.name}`);
         originalFileName = file.name.split('.')[0];
+        baseFilenameInput.value = originalFileName;
         statusText.textContent = "Processing image...";
         resultsContainer.innerHTML = ''; // Clear previous
         extractedBlobs = []; // Reset blobs
@@ -322,7 +325,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (extractedBlobs.length === 0) return;
 
         const zip = new JSZip();
-        const folder = zip.folder(originalFileName);
+        const zipName = baseFilenameInput.value || originalFileName;
+        const folder = zip.folder(zipName);
 
         extractedBlobs.forEach((item) => {
             folder.file(item.name, item.blob);
@@ -334,13 +338,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const url = URL.createObjectURL(content);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${originalFileName}.zip`;
+            link.download = `${zipName}.zip`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            URL.revokeObjectURL(url);
             statusText.textContent = `Downloaded ${extractedBlobs.length} images as ZIP.`;
         });
+    }
+
+    function handleFilenameChange() {
+        originalFileName = baseFilenameInput.value || "extracted_images";
+        
+        // Update all existing items in memory
+        extractedBlobs.forEach(item => {
+            item.name = `${originalFileName}_r${item.row + 1}_c${item.col + 1}.png`;
+            
+            // Update individual download link in the grid
+            const card = document.querySelector(`.result-card[data-id="${item.id}"]`);
+            if (card) {
+                const downloadBtn = card.querySelector('.download-link');
+                if (downloadBtn) {
+                    downloadBtn.download = item.name;
+                }
+            }
+        });
+
+        console.log(`[DEBUG] Updated prefix to: ${originalFileName}`);
     }
 
     function selectCard(id) {

@@ -1,4 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="Layer_2" data-name="Layer 2" viewBox="0 0 56.5 53.9">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 56.5 53.9">
   <defs>
     <style>
       .cls-1 {
@@ -6,9 +7,9 @@
       }
     </style>
     <linearGradient id="linear-gradient" x1="2.68" y1="2284.13" x2="53.08" y2="2233.63" gradientTransform="translate(0 -2231.95)" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#d08fd9"/>
-      <stop offset="0" stop-color="#fff"/>
-      <stop offset="1" stop-color="#66f"/>
+      <stop offset="0" stop-color="#583d5c"/>
+      <stop offset="0" stop-color="#0f2e4a"/>
+      <stop offset="1" stop-color="#1c54d6"/>
     </linearGradient>
   </defs>
   <g id="Layer_2-2" data-name="Layer 2">
