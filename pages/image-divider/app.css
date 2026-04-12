@@ -1,6 +1,7 @@
 /* --- Futuristic Antigravity Design System --- */
 
 :root {
+    color-scheme: dark;
     --bg-darker: #05050a;
     --bg-dark: #0a0a14;
     --bg-accent: #111122;
@@ -16,6 +17,11 @@
     --transition-smooth: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+html {
+    background-color: var(--bg-darker);
+    height: 100%;
+}
+
 * {
     box-sizing: border-box;
     -webkit-font-smoothing: antialiased;
@@ -24,10 +30,12 @@
 body {
     margin: 0;
     padding: 0;
+    background-color: var(--bg-darker);
     background: radial-gradient(circle at 50% 50%, var(--bg-accent) 0%, var(--bg-darker) 100%);
     color: var(--text-primary);
     font-family: 'Outfit', sans-serif;
     min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
     position: relative;
 }
