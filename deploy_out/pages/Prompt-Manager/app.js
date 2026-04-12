@@ -21,16 +21,19 @@ import {
     writeBatch
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-console.log("🚀 App initializing...");
+// Safety shim for browser environments
+if (typeof process === 'undefined') {
+    var process = { env: {} };
+}
 
 // TODO: Replace this object with your exact config from the Firebase Console
 const firebaseConfig = {
-    apiKey: "test_prompt_key",
-    authDomain: "test_prompt_domain",
-    projectId: "test_prompt_project",
-    storageBucket: "test_prompt_bucket",
-    messagingSenderId: "12345",
-    appId: "1:12345:web:test"
+    apiKey: "AIzaSyAbvX0d2UKFxykkv_ZIMqKIauHIWGukK28" || "AIzaSyAbvX0d2UKFxykkv_ZIMqKIauHIWGukK28",
+    authDomain: "xanders-prompt-manager.firebaseapp.com" || "xanders-prompt-manager.firebaseapp.com",
+    projectId: "xanders-prompt-manager" || "xanders-prompt-manager",
+    storageBucket: "xanders-prompt-manager.firebasestorage.app" || "xanders-prompt-manager.firebasestorage.app",
+    messagingSenderId: "428925411386" || "428925411386",
+    appId: "1:428925411386:web:5308be7aa6aae62c515503" || "1:428925411386:web:5308be7aa6aae62c515503"
 };
 // Initialize Firebase
 let app, auth, db;
@@ -71,7 +74,7 @@ const addRememberBlockBtn = document.getElementById('add-remember-block-btn');
 
 // Filter & Search DOM Elements
 const searchInput = document.getElementById('search-prompts');
-const categoryFilter = document.getElementById('category-filter');
+const categoryPills = document.getElementById('category-pills');
 const clearSearchBtn = document.getElementById('clear-search-btn');
 const importFile = document.getElementById('import-file');
 const promptCountDisplay = document.getElementById('prompt-count-display');
@@ -94,6 +97,7 @@ const bulkCategoryBg = document.getElementById('bulk-category-bg');
 const bulkCategoryText = document.getElementById('bulk-category-text');
 const updateCategoryColorsBtn = document.getElementById('update-category-colors-btn');
 const mobileReorderBtn = document.getElementById('mobile-reorder-btn');
+const modeToggle = document.getElementById('mode-toggle-chk');
 
 // Reorder Modal Elements
 const reorderModal = document.getElementById('reorder-modal');
@@ -138,8 +142,7 @@ let promptIdToDelete = null;
 let allPromptsData = []; // Store the full list for local filtering
 let knownCategories = {}; // Maps category name to {bg, text}
 let currentMode = 'prompt'; // 'prompt' or 'command'
-
-const modeToggle = document.getElementById('mode-toggle-chk');
+let selectedCategory = 'all'; // Default filter category
 
 // Auth Provider
 const provider = new GoogleAuthProvider();
@@ -201,7 +204,7 @@ modeToggle.addEventListener('change', () => {
     
     // Reset filters and search
     searchInput.value = '';
-    categoryFilter.value = 'all';
+    selectedCategory = 'all';
     
     // Re-load categories and filter view
     loadModeSpecificCategories();
@@ -420,7 +423,7 @@ clearSearchBtn.addEventListener('click', () => {
     searchInput.focus();
 });
 
-categoryFilter.addEventListener('change', () => applyFilters());
+// Category filter event listener removed (now handled by button clicks)
 
 // Category Modal Selection Interactivity
 modalCategorySelect.addEventListener('change', () => {
@@ -726,27 +729,62 @@ function loadModeSpecificCategories() {
         }
     });
     
+    if (selectedCategory !== 'all' && !categoriesSet.has(selectedCategory)) {
+        selectedCategory = 'all';
+    }
     updateCategoryFilter(categoriesSet);
     updateModalCategoryDropdown();
 }
 
-// Update the select dropdown with unique categories
+// Update the category filter buttons with unique categories
 function updateCategoryFilter(categories) {
-    const currentSelection = categoryFilter.value;
-    categoryFilter.innerHTML = '<option value="all">All Categories</option>';
+    categoryPills.innerHTML = '';
+
+    // Create "All" button
+    const allBtn = document.createElement('button');
+    allBtn.className = `category-pill ${selectedCategory === 'all' ? 'active' : ''}`;
+    allBtn.textContent = 'All Categories';
+    allBtn.onclick = () => {
+        selectedCategory = 'all';
+        updateActivePill();
+        applyFilters();
+    };
+    categoryPills.appendChild(allBtn);
 
     const sortedCategories = Array.from(categories).sort();
     sortedCategories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
-        categoryFilter.appendChild(option);
-    });
+        const btn = document.createElement('button');
+        btn.className = `category-pill ${selectedCategory === cat ? 'active' : ''}`;
+        btn.textContent = cat;
+        
+        // Apply category colors from knownCategories
+        const colors = knownCategories[cat];
+        if (colors) {
+            btn.style.setProperty('--pill-bg', colors.bg);
+            btn.style.setProperty('--pill-text', colors.text);
+        }
 
-    // Re-select previously selected category if it still exists
-    if (categories.has(currentSelection)) {
-        categoryFilter.value = currentSelection;
-    }
+        btn.onclick = () => {
+            selectedCategory = cat;
+            updateActivePill();
+            applyFilters();
+        };
+        categoryPills.appendChild(btn);
+    });
+}
+
+function updateActivePill() {
+    const pills = categoryPills.querySelectorAll('.category-pill');
+    pills.forEach(pill => {
+        const pillText = pill.textContent;
+        const normalizedPillText = pillText === 'All Categories' ? 'all' : pillText;
+        
+        if (normalizedPillText === selectedCategory) {
+            pill.classList.add('active');
+        } else {
+            pill.classList.remove('active');
+        }
+    });
 }
 
 // Update the category select within the Add/Edit Modal
@@ -770,7 +808,7 @@ function updateModalCategoryDropdown() {
 // Apply local search and filter
 function applyFilters() {
     const searchTerm = searchInput.value.toLowerCase();
-    const selectedCategory = categoryFilter.value;
+    // selectedCategory is now managed as a global variable
 
     const filtered = allPromptsData.filter(item => {
         const itemMode = item.data.mode || 'prompt';

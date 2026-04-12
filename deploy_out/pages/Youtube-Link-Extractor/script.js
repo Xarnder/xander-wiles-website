@@ -1,3 +1,8 @@
+// Safety shim for browser environments
+if (typeof process === 'undefined') {
+    var process = { env: {} };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const extractBtn = document.getElementById('extractBtn');
     const downloadBtn = document.getElementById('downloadBtn');
@@ -21,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressTitleText = document.getElementById('progressTitleText');
     const processedPlaylistsList = document.getElementById('processedPlaylistsList');
 
-    const API_KEY = "test_youtube_key";
+    const API_KEY = "AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk" || "AIzaSyAlNLhMAydCmqYjS2hAgh_uXYPeJqPaQnk";
 
     let extractedVideos = []; // Store videos for download
     let playlistTitle = 'youtube_playlist'; // Default title

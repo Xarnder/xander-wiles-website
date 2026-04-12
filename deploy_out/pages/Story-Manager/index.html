@@ -10,6 +10,11 @@
 
     <!-- STORY MANAGER CONFIGURATION -->
     <script>
+        // Safety shim for browser environments
+        if (typeof process === 'undefined') {
+            window.process = { env: {} };
+        }
+
         window.APP_CONFIG = {
             appName: "Story Manager",
             hideCheckboxes: true,
@@ -20,12 +25,12 @@
             },
             firebase: {
                 // Values injected at build time from environment
-                apiKey: "test_story_key",
-                authDomain: "test_story_domain",
-                projectId: "test_story_project",
-                storageBucket: "test_story_bucket",
-                messagingSenderId: "12345",
-                appId: "1:12345:web:test"
+                apiKey: "AIzaSyCND__tYIVR1oKAxzpG56bLb2BE4S35Bng" || "AIzaSyCND__tYIVR1oKAxzpG56bLb2BE4S35Bng",
+                authDomain: "xanders-story-manger.firebaseapp.com" || "xanders-story-manger.firebaseapp.com",
+                projectId: "xanders-story-manger" || "xanders-story-manger",
+                storageBucket: "xanders-story-manger.firebasestorage.app" || "xanders-story-manger.firebasestorage.app",
+                messagingSenderId: "1057477476076" || "1057477476076",
+                appId: "1:1057477476076:web:aaac9cc783ded03bde6fc9" || "1:1057477476076:web:aaac9cc783ded03bde6fc9"
             }
         };
     </script>

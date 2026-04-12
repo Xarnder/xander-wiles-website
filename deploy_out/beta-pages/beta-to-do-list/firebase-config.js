@@ -4,12 +4,12 @@ import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.co
 
 // --- FIREBASE CONFIG ---
 const firebaseConfig = {
-    apiKey: "test_beta_key",
-    authDomain: "test_beta_domain",
-    projectId: "test_beta_project",
-    storageBucket: "test_beta_bucket",
-    messagingSenderId: "12345",
-    appId: "1:12345:web:test"
+    apiKey: process.env.PUBLIC_BETA_TODO_FIREBASE_API_KEY,
+    authDomain: process.env.PUBLIC_BETA_TODO_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.PUBLIC_BETA_TODO_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.PUBLIC_BETA_TODO_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.PUBLIC_BETA_TODO_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.PUBLIC_BETA_TODO_FIREBASE_APP_ID
 };
 
 // --- INIT FIREBASE ---

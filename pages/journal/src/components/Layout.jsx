@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Outlet, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag } from 'lucide-react';
+import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, PenTool } from 'lucide-react';
+import { format, subDays } from 'date-fns';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, documentId } from 'firebase/firestore';
 import DirectoryImporter from './DirectoryImporter';
 import DataRepair from './DataRepair';
 import BackupOptions from './BackupOptions';
@@ -15,6 +18,58 @@ export default function Layout() {
     const params = useParams();
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isQuickWriting, setIsQuickWriting] = useState(false);
+
+    async function handleQuickWrite() {
+        if (!currentUser || isQuickWriting) return;
+        
+        try {
+            setIsQuickWriting(true);
+            const today = new Date();
+            const datesToCheck = [];
+            for (let i = 0; i < 7; i++) {
+                datesToCheck.push(format(subDays(today, i), 'yyyy-MM-dd'));
+            }
+
+            // Fetch entries for the last 7 days to check for gaps
+            const q = query(
+                collection(db, 'users', currentUser.uid, 'entries'),
+                where(documentId(), '>=', datesToCheck[6]),
+                where(documentId(), '<=', datesToCheck[0])
+            );
+
+            const snapshot = await getDocs(q);
+            const entries = {};
+            snapshot.forEach(doc => {
+                entries[doc.id] = doc.data();
+            });
+
+            // Find the most recent date with no content
+            let targetDate = datesToCheck[0]; // Default to today
+            
+            for (const dateStr of datesToCheck) {
+                const entry = entries[dateStr];
+                const hasContent = entry && (
+                    (entry.content && entry.content.trim().length > 0) || 
+                    (entry.images && entry.images.length > 0) || 
+                    (entry.title && entry.title.trim().length > 0)
+                );
+                
+                if (!hasContent) {
+                    targetDate = dateStr;
+                    break; // Found the most recent gap (starting from today backwards)
+                }
+            }
+
+            navigate(`/entry/${targetDate}`);
+        } catch (err) {
+            console.error("Quick write error:", err);
+            // Fallback to today on error
+            navigate(`/entry/${format(new Date(), 'yyyy-MM-dd')}`);
+        } finally {
+            setIsQuickWriting(false);
+        }
+    }
 
     async function handleLogout() {
         try {
@@ -106,6 +161,14 @@ export default function Layout() {
 
                         <div className="flex items-center gap-2 border-r border-white/10 pr-4 mr-1">
                             <button
+                                onClick={handleQuickWrite}
+                                className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
+                                title="Quick Write (Last unwritten day)"
+                                disabled={isQuickWriting}
+                            >
+                                <PenTool className="h-5 w-5" />
+                            </button>
+                            <button
                                 onClick={() => setIsSearchOpen(true)}
                                 className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
                                 title="Search (Cmd+K)"
@@ -185,6 +248,13 @@ export default function Layout() {
                     {/* Mobile Header Controls */}
                     <div className="flex md:hidden items-center gap-2">
                         <button
+                            onClick={handleQuickWrite}
+                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
+                            disabled={isQuickWriting}
+                        >
+                            <PenTool className="h-5 w-5" />
+                        </button>
+                        <button
                             onClick={() => setIsSearchOpen(true)}
                             className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
                         >
@@ -228,6 +298,22 @@ export default function Layout() {
             <main className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 animation-fade-in">
                 <Outlet />
             </main>
+
+            {/* Floating Action Button (Quick Write) */}
+            {!location.pathname.startsWith('/entry/') && currentUser && (
+                <button
+                    onClick={handleQuickWrite}
+                    className={`fixed bottom-6 right-6 p-4 rounded-full shadow-2xl z-40 transition-all duration-300 hover:scale-110 active:scale-95 md:bottom-8 md:right-8 group ${
+                        isQuickWriting 
+                            ? 'bg-primary/50 animate-pulse cursor-wait' 
+                            : 'bg-gradient-to-br from-primary to-primary-variant hover:shadow-[0_0_20px_rgba(139,92,246,0.4)]'
+                    }`}
+                    title="Quick Write (Last unwritten day)"
+                    disabled={isQuickWriting}
+                >
+                    <PenTool className="h-6 w-6 text-white group-hover:rotate-12 transition-transform duration-200" />
+                </button>
+            )}
         </div>
     );
 }

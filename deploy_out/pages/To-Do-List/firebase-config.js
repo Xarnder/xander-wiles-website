@@ -2,14 +2,19 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, enableMultiTabIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+// Safety shim for browser environments
+if (typeof process === 'undefined') {
+    var process = { env: {} };
+}
+
 // --- FIREBASE CONFIG ---
 const defaultConfig = {
-    apiKey: "test_todo_key",
-    authDomain: "test_todo_domain",
-    projectId: "test_todo_project",
-    storageBucket: "test_todo_bucket",
-    messagingSenderId: "12345",
-    appId: "1:12345:web:test"
+    apiKey: "AIzaSyC6PrlknJUGPIdyyUq78rKYEsbQ1v5bJNo" || "AIzaSyC6PrlknJUGPIdyyUq78rKYEsbQ1v5bJNo",
+    authDomain: "taskmaster-cloud-xander.firebaseapp.com" || "taskmaster-cloud-xander.firebaseapp.com",
+    projectId: "taskmaster-cloud-xander" || "taskmaster-cloud-xander",
+    storageBucket: "taskmaster-cloud-xander.firebasestorage.app" || "taskmaster-cloud-xander.firebasestorage.app",
+    messagingSenderId: "878016054387" || "878016054387",
+    appId: "1:878016054387:web:e38131dd806982a22a1606" || "1:878016054387:web:e38131dd806982a22a1606"
 };
 
 const firebaseConfig = (window.APP_CONFIG && window.APP_CONFIG.firebase && window.APP_CONFIG.firebase.apiKey) 

@@ -2,13 +2,18 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebas
 import { getAuth, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
 import { initializeFirestore } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 
+// Safety shim for browser environments
+if (typeof process === 'undefined') {
+    var process = { env: {} };
+}
+
 const firebaseConfig = {
-    apiKey: "test_work_key",
-    authDomain: "test_work_domain",
-    projectId: "test_work_project",
-    storageBucket: "test_work_bucket",
-    messagingSenderId: "12345",
-    appId: "1:12345:web:test"
+    apiKey: "AIzaSyCjNeg92N-4vHQAVLNMMNyPTBcGEsPcMBc" || "AIzaSyCjNeg92N-4vHQAVLNMMNyPTBcGEsPcMBc",
+    authDomain: "work-tracker-xander.firebaseapp.com" || "work-tracker-xander.firebaseapp.com",
+    projectId: "work-tracker-xander" || "work-tracker-xander",
+    storageBucket: "work-tracker-xander.firebasestorage.app" || "work-tracker-xander.firebasestorage.app",
+    messagingSenderId: "885496985060" || "885496985060",
+    appId: "1:885496985060:web:4cb7f5e8463471348743f1" || "1:885496985060:web:4cb7f5e8463471348743f1"
 };
 
 export const app = initializeApp(firebaseConfig);

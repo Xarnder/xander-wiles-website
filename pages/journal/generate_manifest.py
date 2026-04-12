@@ -15,7 +15,6 @@
 import argparse
 import sys
 from pathlib import Path
-from tqdm import tqdm
 
 def create_manifest(working_dir: Path, entries_dir_name: str, output_location: Path):
     """
@@ -32,15 +31,14 @@ def create_manifest(working_dir: Path, entries_dir_name: str, output_location: P
     
     print(f"DEBUG: Scanning for .md files in: '{entries_path.resolve()}'")
 
-    # 2. Find all .md files recursively
-    try:
-        # Using a list comprehension to gather files first for an accurate tqdm count
+        # Find all .md files recursively
         files_to_process = [file for file in entries_path.glob('**/*.md') if file.is_file()]
         if not files_to_process:
             print(f"WARNING: No .md files were found in '{entries_path.resolve()}'. The manifest will be empty.")
             
         # Use the file's "stem" (filename without extension) as the date
-        dates = [file.stem for file in tqdm(files_to_process, desc="Processing entries")]
+        print(f"Processing {len(files_to_process)} entries...")
+        dates = [file.stem for file in files_to_process]
         
         # 3. Sort the dates chronologically
         dates.sort()
