@@ -35,6 +35,7 @@ const previewCanvas = document.getElementById('previewCanvas');
 const previewLoader = document.getElementById('previewLoader');
 const verticalPosInput = document.getElementById('verticalPosInput');
 const verticalPosVal = document.getElementById('verticalPosVal');
+const processAllFacesInput = document.getElementById('processAllFaces');
 const presetBtns = document.querySelectorAll('.preset-btn');
 const modeBtns = document.querySelectorAll('.mode-btn');
 
@@ -175,6 +176,10 @@ shapeBtns.forEach(btn => {
         currentCensorShape = btn.dataset.shape;
         if (firstImageCache && firstFaceBox) updatePreviewCanvas();
     });
+});
+
+processAllFacesInput.addEventListener('change', () => {
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
 });
 
 censorColorInput.addEventListener('input', (e) => {
@@ -357,169 +362,98 @@ async function processImage(file, uniqueName) {
     }
 
     const detections = await faceapi.detectAllFaces(img);
-
-    let box;
-    let isError = false;
-
-    if (!detections || detections.length === 0) {
-        console.warn(`No face detected in ${file.name}, using full image.`);
-        // Fallback to full image
-        box = { x: 0, y: 0, width: img.width, height: img.height };
-        isError = true;
-    } else {
-        // Sort by area (largest face)
-        const largestFace = detections.sort((a, b) => {
-            const areaA = a.box.width * a.box.height;
-            const areaB = b.box.width * b.box.height;
-            return areaB - areaA;
-        })[0];
-        box = largestFace.box;
-    }
-
-    let x, y, width, height;
-
-    if (isError) {
-        // Use full image
-        x = 0;
-        y = 0;
-        width = img.width;
-        height = img.height;
-    } else {
-        // Calculate Padding
-        const paddingPercent = parseInt(paddingInput.value) / 100;
-        const padX = box.width * paddingPercent;
-        const padY = box.height * paddingPercent;
-
-        // Base crop box (Face + Padding)
-        let cx = Math.max(0, box.x - padX);
-        let cy = Math.max(0, box.y - padY);
-        let cw = Math.min(img.width - cx, box.width + (padX * 2));
-        let ch = Math.min(img.height - cy, box.height + (padY * 2));
-
-        // Aspect Ratio Adjustment
-        let targetRatio;
-        if (useOriginalRatioInput.checked) {
-            targetRatio = img.width / img.height;
-        } else {
-            const rW = parseFloat(ratioWidthInput.value) || 1;
-            const rH = parseFloat(ratioHeightInput.value) || 1;
-            targetRatio = rW / rH;
-        }
-
-        const currentRatio = cw / ch;
-
-        // Adjust dimensions to meet target ratio completely within image bounds if possible,
-        // or by expanding relevant dimension.
-        // Strategy: Expand the crop box to match ratio, centered on the current crop box.
-
-        let targetW, targetH;
-
-        if (currentRatio > targetRatio) {
-            // Current is wider than target. Need to increase height (or decrease width, but we prefer expanding context)
-            // Let's hold width constant and increase height
-            targetW = cw;
-            targetH = cw / targetRatio;
-        } else {
-            // Current is taller than target. Need to increase width
-            targetH = ch;
-            targetW = ch * targetRatio;
-        }
-
-        // Center the new dimensions on the old center
-        const centerX = cx + cw / 2;
-        const centerY = cy + ch / 2;
-
-        x = centerX - targetW / 2;
-        y = centerY - targetH / 2;
-        width = targetW;
-        height = targetH;
-
-        // Ensure bounds validation (might break ratio if image is too small,
-        // effectively similar to 'contain' logic but we want to crop)
-        // For simplicity, we just clamp and crop what we can, but ideally we'd shrink if out of bounds.
-        // A better approach for strict ratio is to shrink the box if it goes out of bounds.
-
-        // 1. Check if width is too big
-        if (width > img.width) {
-            width = img.width;
-            height = width / targetRatio;
-            x = (img.width - width) / 2;
-        }
-
-        // 2. Check if height is too big
-        if (height > img.height) {
-            height = img.height;
-            width = height * targetRatio;
-            // If height was forced to shrink, we should re-center or at least keep within image
-            // We'll handle y clamp below anyway.
-        }
-
-        // Apply Vertical Position
-        const verticalPosPercent = (parseInt(document.getElementById('verticalPosInput').value) || 50) / 100;
-        const faceCenterY = box.y + box.height / 2;
-        const faceCenterX = box.x + box.width / 2;
-
-        x = faceCenterX - width / 2;
-        y = faceCenterY - (height * verticalPosPercent);
-
-        // 3. Clamp positions AND Re-adjust if out of bounds (to preserve ratio)
-        // If x is < 0, we shift it right, if x + width > img.width, we shift it left.
-        // Same for y.
-        
-        x = Math.max(0, Math.min(x, img.width - width));
-        y = Math.max(0, Math.min(y, img.height - height));
-    }
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
 
     if (currentMode === 'censor') {
+        const canvas = document.createElement('canvas');
         canvas.width = img.width;
         canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0);
-        
-        drawCensor(ctx, x, y, width, height, {
-            type: currentCensorType,
-            shape: currentCensorShape,
-            color: censorColor,
-            blur: blurStrength,
-            emoji: censorEmoji
-        }, img);
-    } else {
-        canvas.width = width;
-        canvas.height = height;
-        ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
-    }
 
-    // Save to blob list for ZIP
-    return new Promise((resolve) => {
-        canvas.toBlob((blob) => {
-            if (blob) {
-                const prefix = currentMode === 'censor' ? 'censored_' : 'cropped_';
-                processedBlobs.push({
-                    name: `${prefix}${uniqueName}`,
-                    blob: blob,
-                    isError: isError,
-                    originalFile: file,
-                    outputWidth: currentMode === 'censor' ? img.width : width,
-                    outputHeight: currentMode === 'censor' ? img.height : height,
-                    cropWidth: width,
-                    cropHeight: height,
-                    cropX: x,
-                    cropY: y,
-                    mode: currentMode,
-                    censorType: currentCensorType,
-                    censorShape: currentCensorShape,
-                    censorColor: censorColor,
-                    censorEmoji: censorEmoji,
-                    blurStrength: blurStrength,
-                    targetRatio: useOriginalRatioInput.checked ? NaN : ((parseFloat(ratioWidthInput.value)||1)/(parseFloat(ratioHeightInput.value)||1))
-                });
-                displayResult(canvas.toDataURL(), isError);
-            }
-            resolve();
-        }, 'image/jpeg', 0.95);
-    });
+        let facesToCensor = [];
+        if (!detections || detections.length === 0) {
+            facesToCensor = [null]; // Fallback to full image
+        } else {
+            facesToCensor = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (const faceBox of facesToCensor) {
+            const rect = calculateCropRect(img, faceBox);
+            drawCensor(ctx, rect.x, rect.y, rect.width, rect.height, {
+                type: currentCensorType,
+                shape: currentCensorShape,
+                color: censorColor,
+                blur: blurStrength,
+                emoji: censorEmoji
+            }, img);
+        }
+
+        await new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    processedBlobs.push({
+                        name: `censored_${uniqueName}`,
+                        blob: blob,
+                        isError: (!detections || detections.length === 0),
+                        originalFile: file,
+                        outputWidth: img.width,
+                        outputHeight: img.height,
+                        mode: 'censor',
+                        censorType: currentCensorType,
+                        censorShape: currentCensorShape,
+                        censorColor: censorColor,
+                        blurStrength: blurStrength,
+                        censorEmoji: censorEmoji
+                    });
+                    displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
+                }
+                resolve();
+            }, 'image/jpeg', 0.95);
+        });
+    } else {
+        // Crop Mode
+        let facesToCrop = [];
+        if (!detections || detections.length === 0) {
+            facesToCrop = [null];
+        } else {
+            facesToCrop = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (let i = 0; i < facesToCrop.length; i++) {
+            const faceBox = facesToCrop[i];
+            const rect = calculateCropRect(img, faceBox);
+            const canvas = document.createElement('canvas');
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+
+            await new Promise((resolve) => {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        const countPrefix = (facesToCrop.length > 1) ? `face${i + 1}_` : '';
+                        processedBlobs.push({
+                            name: `${countPrefix}cropped_${uniqueName}`,
+                            blob: blob,
+                            isError: rect.isError,
+                            originalFile: file,
+                            outputWidth: rect.width,
+                            outputHeight: rect.height,
+                            cropWidth: rect.width,
+                            cropHeight: rect.height,
+                            cropX: rect.x,
+                            cropY: rect.y,
+                            mode: 'crop',
+                            targetRatio: useOriginalRatioInput.checked ? NaN : ((parseFloat(ratioWidthInput.value)||1)/(parseFloat(ratioHeightInput.value)||1))
+                        });
+                        displayResult(URL.createObjectURL(blob), rect.isError);
+                    }
+                    resolve();
+                }, 'image/jpeg', 0.95);
+            });
+        }
+    }
 }
 
 // 4. Preview Logic (Optimized)
@@ -574,88 +508,43 @@ async function setupPreview(filesToScan = loadedFiles) {
     if (previewLoader) previewLoader.style.display = 'none';
 }
 
-function updatePreviewCanvas() {
+async function updatePreviewCanvas() {
     if (!firstImageCache || !firstFaceBox) return;
 
-    const box = firstFaceBox;
-    const paddingPercent = parseInt(paddingInput.value) / 100;
+    const detections = await faceapi.detectAllFaces(firstImageCache);
+    const multi = processAllFacesInput ? processAllFacesInput.checked : false;
 
-    const padX = box.width * paddingPercent;
-    const padY = box.height * paddingPercent;
-
-    // Base crop
-    let cx = Math.max(0, box.x - padX);
-    let cy = Math.max(0, box.y - padY);
-    let cw = Math.min(firstImageCache.width - cx, box.width + (padX * 2));
-    let ch = Math.min(firstImageCache.height - cy, box.height + (padY * 2));
-
-    // Aspect Ratio Logic (Shared with processImage)
-    let targetRatio;
-    if (useOriginalRatioInput.checked) {
-        targetRatio = firstImageCache.width / firstImageCache.height;
-    } else {
-        const rW = parseFloat(ratioWidthInput.value) || 1;
-        const rH = parseFloat(ratioHeightInput.value) || 1;
-        targetRatio = rW / rH;
-    }
-
-    const currentRatio = cw / ch;
-    let targetW, targetH;
-
-    if (currentRatio > targetRatio) {
-        targetW = cw;
-        targetH = cw / targetRatio;
-    } else {
-        targetH = ch;
-        targetW = ch * targetRatio;
-    }
-
-    const centerX = cx + cw / 2;
-    const centerY = cy + ch / 2;
-
-    let x = centerX - targetW / 2;
-    let y = centerY - targetH / 2;
-    let width = targetW;
-    let height = targetH;
-
-    // Bounds Checks
-    if (width > firstImageCache.width) {
-        width = firstImageCache.width;
-        height = width / targetRatio;
-    }
-    if (height > firstImageCache.height) {
-        height = firstImageCache.height;
-        width = height * targetRatio;
-    }
-
-    // Apply Vertical Position
-    const vPos = (parseInt(verticalPosInput.value) || 50) / 100;
-    const faceCenterY = box.y + box.height / 2;
-    const faceCenterX = box.x + box.width / 2;
-
-    x = faceCenterX - width / 2;
-    y = faceCenterY - (height * vPos);
-
-    // Final Clamping
-    x = Math.max(0, Math.min(x, firstImageCache.width - width));
-    y = Math.max(0, Math.min(y, firstImageCache.height - height));
-
-
-    previewCanvas.width = (currentMode === 'censor') ? firstImageCache.width : width;
-    previewCanvas.height = (currentMode === 'censor') ? firstImageCache.height : height;
     const ctx = previewCanvas.getContext('2d');
 
     if (currentMode === 'censor') {
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
         ctx.drawImage(firstImageCache, 0, 0);
-        drawCensor(ctx, x, y, width, height, {
-            type: currentCensorType,
-            shape: currentCensorShape,
-            color: censorColor,
-            blur: blurStrength,
-            emoji: censorEmoji
-        }, firstImageCache);
+        
+        let facesToCensor = [];
+        if (!detections || detections.length === 0) {
+            facesToCensor = [null];
+        } else {
+            facesToCensor = multi ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (const faceBox of facesToCensor) {
+            const rect = calculateCropRect(firstImageCache, faceBox);
+            drawCensor(ctx, rect.x, rect.y, rect.width, rect.height, {
+                type: currentCensorType,
+                shape: currentCensorShape,
+                color: censorColor,
+                blur: blurStrength,
+                emoji: censorEmoji
+            }, firstImageCache);
+        }
     } else {
-        ctx.drawImage(firstImageCache, x, y, width, height, 0, 0, width, height);
+        // Crop Mode Preview (Always shows the first/largest detected face)
+        const faceBox = (detections && detections.length > 0) ? (multi ? detections[0].box : getLargestFace(detections).box) : null;
+        const rect = calculateCropRect(firstImageCache, faceBox);
+        previewCanvas.width = rect.width;
+        previewCanvas.height = rect.height;
+        ctx.drawImage(firstImageCache, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
     }
 }
 
@@ -761,7 +650,6 @@ function displayResult(dataUrl, isError = false) {
     }
     const img = document.createElement('img');
     img.src = dataUrl;
-
     const index = processedBlobs.length - 1;
     
     // Add Click to Open Lightbox
@@ -974,7 +862,80 @@ function updateGalleryLayout() {
 // Final Initialization
 loadModels();
 
-// 9. New Drawing Helper
+// 9. Processing Helpers
+function getLargestFace(detections) {
+    if (!detections || detections.length === 0) return null;
+    return detections.sort((a, b) => {
+        const areaA = a.box.width * a.box.height;
+        const areaB = b.box.width * b.box.height;
+        return areaB - areaA;
+    })[0];
+}
+
+function calculateCropRect(img, faceBox) {
+    if (!faceBox) return { x: 0, y: 0, width: img.width, height: img.height, isError: true };
+
+    // Calculate Padding
+    const paddingPercent = parseInt(paddingInput.value) / 100;
+    const padX = faceBox.width * paddingPercent;
+    const padY = faceBox.height * paddingPercent;
+
+    // Base crop box (Face + Padding)
+    let cx = Math.max(0, faceBox.x - padX);
+    let cy = Math.max(0, faceBox.y - padY);
+    let cw = Math.min(img.width - cx, faceBox.width + (padX * 2));
+    let ch = Math.min(img.height - cy, faceBox.height + (padY * 2));
+
+    // Aspect Ratio Adjustment
+    let targetRatio;
+    if (useOriginalRatioInput.checked) {
+        targetRatio = img.width / img.height;
+    } else {
+        const rW = parseFloat(ratioWidthInput.value) || 1;
+        const rH = parseFloat(ratioHeightInput.value) || 1;
+        targetRatio = rW / rH;
+    }
+
+    const currentRatio = cw / ch;
+    let targetW, targetH;
+
+    if (currentRatio > targetRatio) {
+        targetW = cw;
+        targetH = cw / targetRatio;
+    } else {
+        targetH = ch;
+        targetW = ch * targetRatio;
+    }
+
+    const centerX = cx + cw / 2;
+    const centerY = cy + ch / 2;
+
+    let width = targetW;
+    let height = targetH;
+
+    if (width > img.width) {
+        width = img.width;
+        height = width / targetRatio;
+    }
+    if (height > img.height) {
+        height = img.height;
+        width = height * targetRatio;
+    }
+
+    const verticalPosPercent = (parseInt(document.getElementById('verticalPosInput').value) || 50) / 100;
+    const faceCenterY = faceBox.y + faceBox.height / 2;
+    const faceCenterX = faceBox.x + faceBox.width / 2;
+
+    let x = faceCenterX - width / 2;
+    let y = faceCenterY - (height * verticalPosPercent);
+
+    x = Math.max(0, Math.min(x, img.width - width));
+    y = Math.max(0, Math.min(y, img.height - height));
+
+    return { x, y, width, height, isError: false, faceBox };
+}
+
+// 10. New Drawing Helper
 function drawCensor(ctx, x, y, width, height, options, sourceImg) {
     const { type, shape, color, blur } = options;
     
