@@ -38,6 +38,8 @@ let featherAmount = 30;
 let replaceHue = 0;
 let replaceSat = 100;
 let replaceLight = 100;
+let sourceFaceHSL = null; // Stores {h, s, l} of the replacement face
+let autoColorBatch = false;
 const aiLoadingOverlay = document.getElementById('aiLoadingOverlay');
 const aiProgressBar = document.getElementById('aiProgressBar');
 const aiStatusText = document.getElementById('aiStatusText');
@@ -127,6 +129,58 @@ const replaceSatInput = document.getElementById('replaceSatInput');
 const replaceSatVal = document.getElementById('replaceSatVal');
 const replaceLightInput = document.getElementById('replaceLightInput');
 const replaceLightVal = document.getElementById('replaceLightVal');
+const autoMatchColorBtn = document.getElementById('autoMatchColorBtn');
+const autoColorBatchInput = document.getElementById('autoColorBatch');
+
+// Color Logic Utilities
+function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+
+    if (max === min) {
+        h = s = 0;
+    } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+    return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+function getAverageFaceHSL(canvas, box) {
+    if (!box) return null;
+    const ctx = canvas.getContext('2d');
+    
+    // Sample a 40% area in the middle of the face box to get clean skin tone
+    const sampleW = Math.max(1, box.width * 0.4);
+    const sampleH = Math.max(1, box.height * 0.4);
+    const sampleX = box.x + (box.width - sampleW) / 2;
+    const sampleY = box.y + (box.height - sampleH) / 2;
+    
+    try {
+        const data = ctx.getImageData(sampleX, sampleY, sampleW, sampleH).data;
+        let r = 0, g = 0, b = 0, count = 0;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            r += data[i];
+            g += data[i+1];
+            b += data[i+2];
+            count++;
+        }
+        
+        if (count === 0) return null;
+        return rgbToHsl(r / count, g / count, b / count);
+    } catch (e) {
+        console.warn("Failed to sample face color:", e);
+        return null;
+    }
+}
 
 // Edit Crop Elements
 const editCropModal = document.getElementById('editCropModal');
@@ -395,10 +449,29 @@ paddingInput.addEventListener('input', (e) => {
     }
 });
 
-function handleRatioChange() {
+async function handleRatioChange() {
     // Re-extract replacement face if in replace mode to match aspect ratio
     if (currentMode === 'replace' && replacementFaceImageCache) {
-        extractReplacementSource(parseInt(replacementPaddingInput.value));
+        const box = await detectFace(replacementFaceImageCache);
+        if (box) {
+            replacementFaceBox = box;
+            replacementStatusText.textContent = "Face Detected";
+            replacementFacePreviewWrapper.style.display = "flex";
+            
+            // Calculate the base source profile for Auto Match
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = replacementFaceImageCache.width;
+            tempCanvas.height = replacementFaceImageCache.height;
+            tempCanvas.getContext('2d').drawImage(replacementFaceImageCache, 0, 0);
+            sourceFaceHSL = getAverageFaceHSL(tempCanvas, box);
+            
+            extractReplacementSource(parseInt(replacementPaddingInput.value));
+            if (currentMode === 'replace') updatePreviewCanvas();
+        } else {
+            replacementStatusText.textContent = "No Face Detected";
+            replacementFacePreviewWrapper.style.display = "none";
+            sourceFaceHSL = null;
+        }
     }
     if (firstImageCache && firstFaceBox) {
         updatePreviewCanvas();
@@ -571,6 +644,13 @@ if (replacementFileInput) {
                 const largest = detections.sort((a,b) => (b.box.width * b.box.height) - (a.box.width * a.box.height))[0];
                 replacementFaceBox = largest.box;
                 
+                // Calculate the base source profile for Auto Match immediately on upload
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = img.width;
+                tempCanvas.height = img.height;
+                tempCanvas.getContext('2d').drawImage(img, 0, 0);
+                sourceFaceHSL = getAverageFaceHSL(tempCanvas, replacementFaceBox);
+                
                 // Extract with initial (0) padding
                 extractReplacementSource(0);
                 
@@ -734,6 +814,49 @@ document.querySelectorAll('.reset-slider').forEach(btn => {
         }
     });
 });
+
+// Auto Match Button Handler
+if (autoMatchColorBtn) {
+    autoMatchColorBtn.addEventListener('click', () => {
+        if (!sourceFaceHSL || !firstImageCache || !firstFaceBox) {
+            alert("Upload both a target photo and a replacement face first.");
+            return;
+        }
+
+        // IMPORTANT: Sample from the ORIGINAL target image, not the preview canvas (which has filters/swaps)
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = firstImageCache.width;
+        tempCanvas.height = firstImageCache.height;
+        const tctx = tempCanvas.getContext('2d');
+        tctx.drawImage(firstImageCache, 0, 0);
+
+        const targetHSL = getAverageFaceHSL(tempCanvas, firstFaceBox);
+        if (targetHSL) {
+            // Calculate offsets
+            const hueShift = Math.round(targetHSL.h - sourceFaceHSL.h);
+            const satShift = Math.round((targetHSL.s / sourceFaceHSL.s) * 100);
+            const lightShift = Math.round((targetHSL.l / sourceFaceHSL.l) * 100);
+
+            // Apply to sliders
+            replaceHueInput.value = hueShift;
+            replaceSatInput.value = Math.min(200, Math.max(0, satShift));
+            replaceLightInput.value = Math.min(200, Math.max(0, lightShift));
+
+            // Trigger updates
+            [replaceHueInput, replaceSatInput, replaceLightInput].forEach(inp => {
+                inp.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            
+            log(`✅ Auto Color Match applied: H:${hueShift} S:${satShift}% L:${lightShift}%`, "success");
+        }
+    });
+}
+
+if (autoColorBatchInput) {
+    autoColorBatchInput.addEventListener('change', (e) => {
+        autoColorBatch = e.target.checked;
+    });
+}
 
 // Debug Console Handlers
 if (clearLogsBtn) {
@@ -1144,7 +1267,20 @@ async function processImage(file, batchIndex) {
             const faceBox = facesToReplace[i];
             if (faceBox) {
                 const rect = calculateCropRect(img, faceBox);
-                drawReplacement(ctx, rect.x, rect.y, rect.width, rect.height, featherAmount);
+                
+                let hslShift = null;
+                if (autoColorBatch && sourceFaceHSL) {
+                    const targetHSL = getAverageFaceHSL(canvas, faceBox);
+                    if (targetHSL) {
+                        hslShift = {
+                            h: Math.round(targetHSL.h - sourceFaceHSL.h),
+                            s: Math.round((targetHSL.s / sourceFaceHSL.s) * 100),
+                            l: Math.round((targetHSL.l / sourceFaceHSL.l) * 100)
+                        };
+                    }
+                }
+                
+                drawReplacement(ctx, rect.x, rect.y, rect.width, rect.height, featherAmount, hslShift);
             }
         }
 
@@ -1348,7 +1484,20 @@ async function updatePreviewCanvas() {
         for (const faceBox of facesToReplace) {
             if (faceBox) {
                 const rect = calculateCropRect(firstImageCache, faceBox);
-                drawReplacement(ctx, rect.x, rect.y, rect.width, rect.height, featherAmount);
+                
+                let hslShift = null;
+                if (autoColorBatch && sourceFaceHSL) {
+                    const targetHSL = getAverageFaceHSL(previewCanvas, faceBox);
+                    if (targetHSL) {
+                        hslShift = {
+                            h: Math.round(targetHSL.h - sourceFaceHSL.h),
+                            s: Math.round((targetHSL.s / sourceFaceHSL.s) * 100),
+                            l: Math.round((targetHSL.l / sourceFaceHSL.l) * 100)
+                        };
+                    }
+                }
+                
+                drawReplacement(ctx, rect.x, rect.y, rect.width, rect.height, featherAmount, hslShift);
             }
         }
     } else {
@@ -1811,7 +1960,7 @@ function calculateCropRect(img, faceBox) {
     return { x, y, width, height, isError: false, faceBox };
 }
 
-function drawReplacement(ctx, x, y, width, height, feather) {
+function drawReplacement(ctx, x, y, width, height, feather, hslShift = null) {
     if (!replacementFaceCanvasSource) {
         // Just draw a "placeholder" block since no source face is uploaded
         ctx.fillStyle = 'rgba(74, 158, 255, 0.5)';
@@ -1827,9 +1976,21 @@ function drawReplacement(ctx, x, y, width, height, feather) {
     tempCanvas.height = height;
     const tctx = tempCanvas.getContext('2d');
 
+    // Determine which HSL values to use
+    let h, s, l;
+    if (hslShift) {
+        h = hslShift.h;
+        s = Math.min(200, Math.max(0, hslShift.s));
+        l = Math.min(200, Math.max(0, hslShift.l));
+    } else {
+        h = replaceHue;
+        s = replaceSat;
+        l = replaceLight;
+    }
+
     // 1. Draw the replacement face into the temp canvas at target size
     // Apply real-time HSL filtering
-    tctx.filter = `hue-rotate(${replaceHue}deg) saturate(${replaceSat}%) brightness(${replaceLight}%)`;
+    tctx.filter = `hue-rotate(${h}deg) saturate(${s}%) brightness(${l}%)`;
     
     tctx.drawImage(replacementFaceCanvasSource, 0, 0, replacementFaceCanvasSource.width, replacementFaceCanvasSource.height, 0, 0, width, height);
 

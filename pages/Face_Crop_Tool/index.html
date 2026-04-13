@@ -197,7 +197,10 @@
                             <div class="sub-label"><span id="replacementPaddingVal">0</span>%</div>
                         </div>
                         <div class="color-grading-group">
-                            <label class="section-label-tiny">Color Match</label>
+                            <div class="flex-row-between">
+                                <label class="section-label-tiny">Color Match</label>
+                                <button id="autoMatchColorBtn" class="btn-tiny btn-action" title="Match skin color to target face">Auto Match</button>
+                            </div>
                             <div class="sub-setting">
                                 <label>Hue <button class="reset-slider" data-target="replaceHueInput" data-default="0">⟳</button></label>
                                 <input type="range" id="replaceHueInput" min="-180" max="180" value="0">
@@ -211,8 +214,11 @@
                             <div class="sub-setting">
                                 <label>Lightness <button class="reset-slider" data-target="replaceLightInput" data-default="100">⟳</button></label>
                                 <input type="range" id="replaceLightInput" min="0" max="200" value="100">
-                                <div class="sub-label"><span id="replaceLightVal">100</span>%</div>
                             </div>
+                        </div>
+                        <div class="checkbox-group compact-checkbox" style="margin-top: 5px; margin-bottom: 10px;">
+                            <input type="checkbox" id="autoColorBatch">
+                            <label for="autoColorBatch">Auto Match (Batch)</label>
                         </div>
                         <div class="sub-setting">
                             <label>Edge Feathering <button class="reset-slider" data-target="featheringInput" data-default="30">⟳</button></label>
