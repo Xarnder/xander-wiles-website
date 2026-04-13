@@ -1,3 +1,8 @@
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+// Note: Transformers.js is kept for potential future tasks, 
+// but Magic Mode now uses raw ONNX for stability.
+
 // Configuration
 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 let modelsLoaded = false;
@@ -21,6 +26,16 @@ let frameThickness = 5;
 let cropperInstance = null;
 let editingBlobIndex = -1;
 
+// AI Magic Mode Globals
+let aiModelLoaded = false;
+let inpainterSession = null;
+const aiLoadingOverlay = document.getElementById('aiLoadingOverlay');
+const aiProgressBar = document.getElementById('aiProgressBar');
+const aiStatusText = document.getElementById('aiStatusText');
+
+const LAMA_MODEL_URL = './models/lama_fp32.onnx';
+const ORT_WASM_PATH = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/';
+
 // Elements
 const imageInput = document.getElementById('imageInput');
 const paddingInput = document.getElementById('paddingInput');
@@ -37,12 +52,21 @@ const dropZone = document.getElementById('dropZone');
 const imageCounter = document.getElementById('imageCounter');
 const previewCard = document.getElementById('previewCard');
 const previewCanvas = document.getElementById('previewCanvas');
+const maskPreviewCanvas = document.getElementById('maskPreviewCanvas');
+const maskPreviewWindow = document.getElementById('maskPreviewWindow');
+const maskWindowMeta = document.getElementById('maskWindowMeta');
+const closeMaskWindowBtn = document.getElementById('closeMaskWindow');
 const previewLoader = document.getElementById('previewLoader');
 const verticalPosInput = document.getElementById('verticalPosInput');
 const verticalPosVal = document.getElementById('verticalPosVal');
 const processAllFacesInput = document.getElementById('processAllFaces');
 const presetBtns = document.querySelectorAll('.preset-btn');
 const modeBtns = document.querySelectorAll('.mode-btn');
+
+// Debug Console Elements
+const debugConsole = document.getElementById('debugConsole');
+const debugLogs = document.getElementById('debugLogs');
+const clearLogsBtn = document.getElementById('clearLogs');
 
 // Advanced Censor Elements
 const censorOptionsPanel = document.getElementById('censorOptionsPanel');
@@ -79,9 +103,26 @@ const editCropImage = document.getElementById('editCropImage');
 const cancelCropBtn = document.getElementById('cancelCropBtn');
 const saveCropBtn = document.getElementById('saveCropBtn');
 
+// Magic Mode Option Elements
+const magicOptionsPanel = document.getElementById('magicOptionsPanel');
+const magicPromptInput = document.getElementById('magicPromptInput');
+const magicPaddingInput = document.getElementById('magicPadding');
+const magicPaddingVal = document.getElementById('magicPaddingVal');
+
 // Debug Logger
 function log(message, type = 'info') {
     statusArea.textContent = message;
+    
+    // Write to Debug Console
+    if (debugLogs) {
+        const entry = document.createElement('div');
+        const timestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        entry.className = `log-entry log-${type}`;
+        entry.innerHTML = `[${timestamp}] ${message}`;
+        debugLogs.appendChild(entry);
+        debugLogs.scrollTop = debugLogs.scrollHeight;
+    }
+
     const style = type === 'error' ? 'color: red; background: #fff0f0;' : 'color: #bada55; background: #222;';
     console.log(`%c[FaceCrop] ${message}`, style);
 }
@@ -89,14 +130,242 @@ function log(message, type = 'info') {
 // 1. Initialize AI Models
 async function loadModels() {
     try {
-        log("Loading AI Models...");
+        log("Loading Detection Models...");
         await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
         modelsLoaded = true;
-        log("AI Models Ready. Please select a folder.");
+        log("AI Models Ready. Select a fold or images.");
     } catch (error) {
         console.error(error);
-        log("Error loading AI models. Check console.", "error");
+        log("Error loading AI models.", "error");
     }
+}
+
+// 2. AI Magic Mode Implementation (Raw ONNX)
+async function initMagicAI() {
+    if (aiModelLoaded) return true;
+
+    log("Initializing Magic AI (Raw ONNX)...", "magic");
+    aiLoadingOverlay.style.display = 'flex';
+    aiStatusText.textContent = "Setting up AI Runtime...";
+
+    try {
+        // Setup ORT WASM backend
+        ort.env.wasm.wasmPaths = ORT_WASM_PATH;
+        
+        log("Loading LaMa model (~198MB, cached after first load)...", "info");
+        aiStatusText.textContent = "Loading AI model...";
+        aiProgressBar.style.width = '5%';
+
+        // Fetch model with progress tracking
+        const response = await fetch(LAMA_MODEL_URL);
+        if (!response.ok) throw new Error(`Failed to load model: HTTP ${response.status}`);
+        
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        let received = 0;
+        
+        const reader = response.body.getReader();
+        const chunks = [];
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            if (total > 0) {
+                const pct = Math.round((received / total) * 90) + 5;
+                aiProgressBar.style.width = `${pct}%`;
+                aiStatusText.textContent = `Loading model... ${pct}%`;
+            }
+        }
+        
+        const modelBuffer = new Uint8Array(received);
+        let offset = 0;
+        for (const chunk of chunks) {
+            modelBuffer.set(chunk, offset);
+            offset += chunk.length;
+        }
+        
+        log("Model data loaded. Creating ONNX session...", "info");
+        aiStatusText.textContent = "Compiling AI graph...";
+        aiProgressBar.style.width = '95%';
+
+        inpainterSession = await ort.InferenceSession.create(modelBuffer.buffer, {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all'
+        });
+
+        log("✅ AI Magic Session Ready!", "success");
+        aiProgressBar.style.width = '100%';
+        aiModelLoaded = true;
+        setTimeout(() => aiLoadingOverlay.style.display = 'none', 500);
+        return true;
+    } catch (err) {
+        log(`Critical Error: Magic AI Failed. ${err.message}`, "error");
+        console.error("Magic AI Failed:", err);
+        aiStatusText.textContent = `Error: ${err.message}`;
+        setTimeout(() => aiLoadingOverlay.style.display = 'none', 4000);
+        return false;
+    }
+}
+
+async function runMagicInpaint(imageSource, faceBox) {
+    if (!aiModelLoaded) {
+        const ok = await initMagicAI();
+        if (!ok) return null;
+    }
+    
+    log("Running AI Inpainting (Raw ONNX)...", "magic");
+    const startTime = performance.now();
+
+    const targetSize = 512;
+    
+    // 1. Prepare tensors — returns mask canvas too for preview
+    log("Preprocessing image and mask (512x512)...", "info");
+    const { imageTensor, maskTensor, maskCanvas: scaledMask } = await prepareInpaintTensors(imageSource, faceBox, targetSize);
+
+    // Show mask preview in the floating window at ORIGINAL image aspect ratio
+    if (maskPreviewCanvas && maskPreviewWindow) {
+        // Draw at original image size so aspect ratio is preserved
+        maskPreviewCanvas.width = imageSource.width;
+        maskPreviewCanvas.height = imageSource.height;
+        const mCtx = maskPreviewCanvas.getContext('2d');
+        // Original image as background (grey tinted)
+        mCtx.drawImage(imageSource, 0, 0);
+        mCtx.fillStyle = 'rgba(0,0,0,0.5)';
+        mCtx.fillRect(0, 0, imageSource.width, imageSource.height);
+        // Scale scaledMask (512x512) back up to original dimensions so mask lines up
+        mCtx.globalAlpha = 0.85;
+        mCtx.drawImage(scaledMask, 0, 0, 512, 512, 0, 0, imageSource.width, imageSource.height);
+        mCtx.globalAlpha = 1.0;
+        // Update meta
+        if (maskWindowMeta) maskWindowMeta.textContent = `${imageSource.width}×${imageSource.height}px`;
+        maskPreviewWindow.style.display = 'block';
+    }
+
+    try {
+        log("Executing ONNX Inference...", "magic");
+        
+        const feeds = { image: imageTensor, mask: maskTensor };
+        const results = await inpainterSession.run(feeds);
+        const outputTensor = results['output']; // Carve LaMa outputs [0,255] directly
+
+        log("Post-processing AI output...", "info");
+        const outCanvas = tensorToCanvas(outputTensor, targetSize);
+        
+        // 2. Composite: draw original image, then paint ONLY the inpainted
+        //    face region back over it (scaled from 512x512 space to original coords)
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = imageSource.width;
+        finalCanvas.height = imageSource.height;
+        const ctx = finalCanvas.getContext('2d');
+
+        // Base: original image
+        ctx.drawImage(imageSource, 0, 0);
+
+        // Compute face bounding region (with padding) in ORIGINAL image space
+        const padding = magicPaddingInput ? (parseInt(magicPaddingInput.value) / 100) : 0.25;
+        const prompt = magicPromptInput ? magicPromptInput.value.trim() : '';
+        if (prompt) log(`Style hint: "${prompt}" (stored for future text-guided models)`, "info");
+        const bx = Math.max(0, faceBox.x - faceBox.width * padding);
+        const by = Math.max(0, faceBox.y - faceBox.height * padding);
+        const bw = Math.min(imageSource.width - bx, faceBox.width * (1 + padding * 2));
+        const bh = Math.min(imageSource.height - by, faceBox.height * (1 + padding * 2));
+
+        // Scale those same coordinates in 512x512 space
+        const scaleX = targetSize / imageSource.width;
+        const scaleY = targetSize / imageSource.height;
+        const sx = bx * scaleX;
+        const sy = by * scaleY;
+        const sw = bw * scaleX;
+        const sh = bh * scaleY;
+
+        // Paint only the face patch from the AI output onto the original
+        ctx.drawImage(outCanvas, sx, sy, sw, sh, bx, by, bw, bh);
+
+        const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+        log(`✅ Generation Successful! (took ${duration}s)`, "success");
+        
+        return finalCanvas; 
+    } catch (err) {
+        log(`Inference Error: ${err.message}`, "error");
+        throw err;
+    }
+}
+
+// 2.1 AI Pre-processors
+async function prepareInpaintTensors(img, faceBox, size) {
+    // Create 512x512 Canvas for Image
+    const imgCanvas = document.createElement('canvas');
+    imgCanvas.width = size;
+    imgCanvas.height = size;
+    const imgCtx = imgCanvas.getContext('2d');
+    imgCtx.drawImage(img, 0, 0, size, size);
+    
+    // Create 512x512 Canvas for Mask
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = size;
+    maskCanvas.height = size;
+    const mctx = maskCanvas.getContext('2d');
+    mctx.fillStyle = 'black';
+    mctx.fillRect(0, 0, size, size);
+    
+    // Scale mask coordinates to 512x512
+    const scaleX = size / img.width;
+    const scaleY = size / img.height;
+    
+    const padding = magicPaddingInput ? (parseInt(magicPaddingInput.value) / 100) : 0.25;
+    const bx = Math.max(0, (faceBox.x - faceBox.width * padding) * scaleX);
+    const by = Math.max(0, (faceBox.y - faceBox.height * padding) * scaleY);
+    const bw = Math.min(size - bx, (faceBox.width * (1 + padding * 2)) * scaleX);
+    const bh = Math.min(size - by, (faceBox.height * (1 + padding * 2)) * scaleY);
+    
+    mctx.fillStyle = 'white';
+    mctx.fillRect(bx, by, bw, bh);
+
+    // Convert to Float32 Tensors: image in [-1, 1], mask binary [0, 1]
+    // LaMa (Carve ONNX) expects image normalized to [-1, 1] range
+    const imgData = imgCtx.getImageData(0, 0, size, size).data;
+    const maskData = mctx.getImageData(0, 0, size, size).data;
+
+    const r = new Float32Array(size * size);
+    const g = new Float32Array(size * size);
+    const b = new Float32Array(size * size);
+    const m = new Float32Array(size * size);
+
+    for (let i = 0; i < size * size; i++) {
+        // Normalize image pixels from [0,255] -> [0,1] (Carve LaMa expects [0,1] input)
+        r[i] = imgData[i * 4]     / 255.0;
+        g[i] = imgData[i * 4 + 1] / 255.0;
+        b[i] = imgData[i * 4 + 2] / 255.0;
+        m[i] = maskData[i * 4] > 128 ? 1.0 : 0.0;
+    }
+
+    const imageTensor = new ort.Tensor('float32', new Float32Array([...r, ...g, ...b]), [1, 3, size, size]);
+    const maskTensor  = new ort.Tensor('float32', m, [1, 1, size, size]);
+
+    return { imageTensor, maskTensor, maskCanvas };
+}
+
+function tensorToCanvas(tensor, size) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(size, size);
+
+    const data = tensor.data;
+    const stride = size * size;
+
+    for (let i = 0; i < size * size; i++) {
+        // Output is already in [0,255] range — just clamp and write
+        imageData.data[i * 4]     = Math.max(0, Math.min(255, data[i]));
+        imageData.data[i * 4 + 1] = Math.max(0, Math.min(255, data[i + stride]));
+        imageData.data[i * 4 + 2] = Math.max(0, Math.min(255, data[i + stride * 2]));
+        imageData.data[i * 4 + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
 }
 
 // 2. Handle Inputs
@@ -165,6 +434,9 @@ modeBtns.forEach(btn => {
         }
         if (frameOptionsPanel) {
             frameOptionsPanel.style.display = currentMode === 'frame' ? 'block' : 'none';
+        }
+        if (magicOptionsPanel) {
+            magicOptionsPanel.style.display = currentMode === 'magic' ? 'block' : 'none';
         }
 
         if (firstImageCache && firstFaceBox) {
@@ -240,6 +512,21 @@ frameThicknessInput.addEventListener('input', (e) => {
     if (firstImageCache && firstFaceBox) updatePreviewCanvas();
 });
 
+// Magic Mode Listeners
+if (magicPaddingInput) {
+    magicPaddingInput.addEventListener('input', (e) => {
+        if (magicPaddingVal) magicPaddingVal.textContent = e.target.value;
+        if (firstImageCache && firstFaceBox && currentMode === 'magic') updatePreviewCanvas();
+    });
+}
+
+// Mask Window Close Button
+if (closeMaskWindowBtn) {
+    closeMaskWindowBtn.addEventListener('click', () => {
+        if (maskPreviewWindow) maskPreviewWindow.style.display = 'none';
+    });
+}
+
 // Naming Listeners
 namingScheme.addEventListener('change', (e) => {
     customBaseRow.style.display = e.target.value === 'custom' ? 'block' : 'none';
@@ -249,6 +536,13 @@ namingScheme.addEventListener('change', (e) => {
 [filenameBaseInput, filenamePrefixInput, filenameSuffixInput].forEach(input => {
     input.addEventListener('input', updateFilenamePreview);
 });
+
+// Debug Console Helper
+if (clearLogsBtn) {
+    clearLogsBtn.addEventListener('click', () => {
+        if (debugLogs) debugLogs.innerHTML = '';
+    });
+}
 
 function updateFilenamePreview() {
     if (!filenamePreview) return;
@@ -385,16 +679,17 @@ processBtn.addEventListener('click', async () => {
         gallery.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
 
-    log(`Starting batch processing for ${loadedFiles.length} images...`);
-
-    let processedCount = 0;
-    const usedNames = new Set();
+    log(`Starting batch processing for ${loadedFiles.length} images...`, "info");
+    log("Status: Clearing gallery and initializing processed storage.", "info");
 
     for (let i = 0; i < loadedFiles.length; i++) {
         const file = loadedFiles[i];
+        log(`Processing Image [${i + 1}/${loadedFiles.length}]: ${file.name}`, "info");
         try {
             await processImage(file, i + 1); // Pass 1-based batch index
+            log(`Successfully processed: ${file.name}`, "success");
         } catch (err) {
+            log(`Execution Error [${file.name}]: ${err.message}`, "error");
             console.error(`Failed to process ${file.name}:`, err);
             createErrorCard(file.name);
         }
@@ -402,7 +697,7 @@ processBtn.addEventListener('click', async () => {
         statusArea.textContent = `Processing: ${processedCount} / ${loadedFiles.length}`;
     }
 
-    log("Batch Processing Complete!");
+    log("✅ Batch Processing Complete!", "success");
     downloadBtn.disabled = false;
     processBtn.disabled = false;
     processBtn.innerText = "Process Again";
@@ -534,6 +829,39 @@ async function processImage(file, batchIndex) {
                         frameShape: currentFrameShape,
                         frameColor: frameColor,
                         frameThickness: frameThickness
+                    });
+                    displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
+                }
+                resolve();
+            }, 'image/jpeg', 0.95);
+        });
+    } else if (currentMode === 'magic') {
+        const faceBox = (detections && detections.length > 0) ? getLargestFace(detections).box : null;
+        
+        let outCanvas;
+        if (faceBox) {
+            outCanvas = await runMagicInpaint(img, faceBox);
+        } else {
+            // Fallback: just use original
+            outCanvas = document.createElement('canvas');
+            outCanvas.width = img.width;
+            outCanvas.height = img.height;
+            outCanvas.getContext('2d').drawImage(img, 0, 0);
+        }
+
+        const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'magic');
+
+        await new Promise((resolve) => {
+            outCanvas.toBlob((blob) => {
+                if (blob) {
+                    processedBlobs.push({
+                        name: finalFileName,
+                        blob: blob,
+                        isError: (!detections || detections.length === 0),
+                        originalFile: file,
+                        outputWidth: img.width,
+                        outputHeight: img.height,
+                        mode: 'magic'
                     });
                     displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
                 }
@@ -688,6 +1016,23 @@ async function updatePreviewCanvas() {
                 color: frameColor,
                 thickness: frameThickness
             }, firstImageCache);
+        }
+    } else if (currentMode === 'magic') {
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = '16px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText("AI Magic Preview Initializing...", previewCanvas.width / 2, previewCanvas.height / 2);
+
+        const faceBox = (detections && detections.length > 0) ? getLargestFace(detections).box : null;
+        if (faceBox) {
+            const outCanvas = await runMagicInpaint(firstImageCache, faceBox);
+            ctx.drawImage(outCanvas, 0, 0);
+        } else {
+            ctx.drawImage(firstImageCache, 0, 0);
         }
     } else {
         // Crop Mode Preview (Always shows the first/largest detected face)
@@ -1014,6 +1359,8 @@ function updateGalleryLayout() {
 
 // Final Initialization
 loadModels();
+log("System initialized. AI Detection Models loaded.", "success");
+log("Ready for image processing. Select mode to continue.", "info");
 
 // 9. Processing Helpers
 function getLargestFace(detections) {

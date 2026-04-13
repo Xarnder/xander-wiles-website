@@ -956,3 +956,256 @@ select option {
     max-height: 100%;
     display: block; /* Required by Cropper.js */
 }
+
+.ai-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ai-loader-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    padding: 40px;
+    border-radius: 20px;
+    text-align: center;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    animation: slideUp 0.5s ease-out;
+}
+
+.ai-stars {
+    font-size: 2rem;
+    margin-bottom: 20px;
+    animation: pulse 2s infinite;
+}
+
+.ai-loader-card h2 {
+    color: var(--text-main);
+    margin-bottom: 10px;
+}
+
+.ai-loader-card p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 30px;
+    line-height: 1.5;
+}
+
+.progress-container {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 15px;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #70b8ff);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.status-text {
+    font-size: 0.8rem;
+    color: var(--accent);
+    font-family: monospace;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.1); }
+}
+
+/* Debug Console */
+#debugConsole {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 320px;
+    height: 200px;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    z-index: 9999;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.debug-header {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#clearLogs {
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+#clearLogs:hover {
+    background: rgba(74, 158, 255, 0.1);
+}
+
+#debugLogs {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.85);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.log-entry {
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+.log-info { color: #88c0d0; }
+.log-success { color: #a3be8c; }
+.log-error { color: #bf616a; background: rgba(191, 97, 106, 0.1); }
+.log-magic { color: var(--accent); font-weight: bold; }
+
+/* Responsive Debug */
+@media (max-width: 768px) {
+    #debugConsole {
+        width: calc(100% - 40px);
+        bottom: 10px;
+        right: 20px;
+        height: 120px;
+    }
+}
+
+/* ─── AI Mask Preview Window ─────────────────────────────── */
+#maskPreviewWindow {
+    position: fixed;
+    bottom: 240px;         /* sits above the debug console */
+    right: 20px;
+    width: 280px;
+    background: rgba(10, 10, 20, 0.88);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(74, 158, 255, 0.35);
+    border-radius: 14px;
+    z-index: 9998;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    overflow: hidden;
+    animation: slideUp 0.3s ease-out;
+}
+
+.mask-window-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    background: rgba(74, 158, 255, 0.08);
+    border-bottom: 1px solid rgba(74, 158, 255, 0.2);
+}
+
+.mask-window-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+    flex: 1;
+}
+
+.mask-window-title svg {
+    opacity: 0.85;
+    flex-shrink: 0;
+}
+
+.mask-window-meta {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.mask-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 2px 4px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.2s, background 0.2s;
+    flex-shrink: 0;
+}
+
+.mask-close-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+}
+
+.mask-window-body {
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+}
+
+/* Canvas fills the container width and respects its own aspect ratio */
+#maskPreviewCanvas {
+    display: block;
+    width: 100%;
+    height: auto;      /* browser will maintain the canvas's native aspect ratio */
+    border-radius: 4px;
+}
+
+.mask-window-footer {
+    padding: 6px 12px;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 1px solid rgba(255,255,255,0.05);
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    #maskPreviewWindow {
+        width: calc(100% - 40px);
+        bottom: 140px;
+        right: 20px;
+    }
+}

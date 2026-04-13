@@ -27,17 +27,39 @@
     <!-- Tool Specific CSS -->
     <link rel="stylesheet" href="style.css">
 
-    <!-- Libraries: JSZip for zipping downloads -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Libraries: AI Runtime -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
+    
+    <!-- Libraries: Zip and File Saving -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    
     <!-- Library: Face-API.js -->
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    
+    <!-- Library: Cropper.js for manual cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Global Header Injection -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
     <!-- Library: Cropper.js for manual cropping -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 </head>
 
 <body>
+
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loader-content">
+            <div class="spinner"></div>
+            <p>Downloading AI models... (this only happens once)</p>
+        </div>
+    </div>
 
     <!-- Global Header Injection -->
     <div id="main-nav-placeholder"></div>
@@ -105,6 +127,10 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
                         Frame Mode
                     </button>
+                    <button class="mode-btn" data-mode="magic">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+                        Magic Mode
+                    </button>
                 </div>
             </div>
 
@@ -161,6 +187,22 @@
                     <div class="sub-setting">
                         <label>Thickness: <span id="frameThicknessVal">5</span>px</label>
                         <input type="range" id="frameThickness" min="1" max="50" value="5">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Magic Mode Options -->
+            <div class="setting-group" id="magicOptionsPanel" style="display: none;">
+                <label>✨ Magic Mode Settings</label>
+                <div class="control-sub-group">
+                    <div class="sub-setting">
+                        <label>Style hint <span style="color:var(--text-muted);font-weight:400;">(saved for future text-guided models)</span></label>
+                        <input type="text" id="magicPromptInput" placeholder="e.g. a close up of a female face" value="a close up of a female face">
+                        <p style="font-size:0.7rem; color:var(--text-muted); margin-top:6px; line-height:1.4;">ℹ️ LaMa fills faces using surrounding image context, not text. This prompt will activate once a text-guided model is enabled.</p>
+                    </div>
+                    <div class="sub-setting">
+                        <label>Mask Padding: <span id="magicPaddingVal">25</span>%</label>
+                        <input type="range" id="magicPadding" min="5" max="60" value="25">
                     </div>
                 </div>
             </div>
@@ -260,7 +302,7 @@
                     <p>Scanning for faces...</p>
                 </div>
             </div>
-            <p class="preview-hint">Adjust padding above to see changes live.</p>
+            <p class="preview-hint">Adjust settings above to see changes live.</p>
         </section>
 
         <!-- Status Area -->
@@ -304,7 +346,44 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <div id="aiLoadingOverlay" class="ai-overlay" style="display: none;">
+        <div class="ai-loader-card">
+            <div class="ai-stars">✨✨✨</div>
+            <h2>Initializing Magic AI</h2>
+            <p>Downloading local AI models (~150MB). This only happens once.</p>
+            <div class="progress-container">
+                <div id="aiProgressBar" class="progress-bar"></div>
+            </div>
+            <div id="aiStatusText" class="status-text">Starting download...</div>
+        </div>
+    </div>
+
+    <!-- AI Mask Preview Window -->
+    <div id="maskPreviewWindow" style="display: none;">
+        <div class="mask-window-header">
+            <div class="mask-window-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 9h.01M15 9h.01M8 14s1.5 2 4 2 4-2 4-2"/></svg>
+                <span>AI Mask Preview</span>
+            </div>
+            <div class="mask-window-meta" id="maskWindowMeta">white area = inpainted</div>
+            <button class="mask-close-btn" id="closeMaskWindow" title="Close">✕</button>
+        </div>
+        <div class="mask-window-body">
+            <canvas id="maskPreviewCanvas"></canvas>
+        </div>
+        <div class="mask-window-footer">🎭 LaMa fills the white region using surrounding context</div>
+    </div>
+
+    <!-- Debug Console -->
+    <div id="debugConsole">
+        <div class="debug-header">
+            <span>Processing Logs</span>
+            <button id="clearLogs">Clear</button>
+        </div>
+        <div id="debugLogs"></div>
+    </div>
+
+    <script type="module" src="script.js"></script>
 </body>
 
 </html>
