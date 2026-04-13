@@ -27,8 +27,17 @@ let cropperInstance = null;
 let editingBlobIndex = -1;
 
 // AI Magic Mode Globals
-let aiModelLoaded = false;
 let inpainterSession = null;
+let isBatchAborted = false;
+let replacementFaceCanvasSource = null; // Canvas storing the cropped source face
+let replacementFaceOriginalFile = null; // The raw original upload
+let replacementFaceImageCache = null;   // The decoded original image
+let replacementFaceBox = null;          // The detected face box 
+let isEditingReplacement = false; // Flag for Cropper modal
+let featherAmount = 30;
+let replaceHue = 0;
+let replaceSat = 100;
+let replaceLight = 100;
 const aiLoadingOverlay = document.getElementById('aiLoadingOverlay');
 const aiProgressBar = document.getElementById('aiProgressBar');
 const aiStatusText = document.getElementById('aiStatusText');
@@ -48,14 +57,14 @@ const gallery = document.getElementById('gallery');
 const galleryStatus = document.getElementById('galleryStatus');
 const downloadBtn = document.getElementById('downloadBtn');
 const processBtn = document.getElementById('processBtn');
+const stopBtn = document.getElementById('stopBtn');
 const dropZone = document.getElementById('dropZone');
 const imageCounter = document.getElementById('imageCounter');
 const previewCard = document.getElementById('previewCard');
 const previewCanvas = document.getElementById('previewCanvas');
+const maskPreviewCard = document.getElementById('maskPreviewCard');
 const maskPreviewCanvas = document.getElementById('maskPreviewCanvas');
-const maskPreviewWindow = document.getElementById('maskPreviewWindow');
-const maskWindowMeta = document.getElementById('maskWindowMeta');
-const closeMaskWindowBtn = document.getElementById('closeMaskWindow');
+const maskPreviewWrapper = document.getElementById('maskPreviewWrapper');
 const previewLoader = document.getElementById('previewLoader');
 const verticalPosInput = document.getElementById('verticalPosInput');
 const verticalPosVal = document.getElementById('verticalPosVal');
@@ -67,6 +76,8 @@ const modeBtns = document.querySelectorAll('.mode-btn');
 const debugConsole = document.getElementById('debugConsole');
 const debugLogs = document.getElementById('debugLogs');
 const clearLogsBtn = document.getElementById('clearLogs');
+const toggleConsoleBtn = document.getElementById('toggleConsole');
+const closeConsoleBtn = document.getElementById('closeConsole');
 
 // Advanced Censor Elements
 const censorOptionsPanel = document.getElementById('censorOptionsPanel');
@@ -97,17 +108,31 @@ const filenamePrefixInput = document.getElementById('filenamePrefix');
 const filenameSuffixInput = document.getElementById('filenameSuffix');
 const filenamePreview = document.getElementById('filenamePreview');
 
+// Face Replace Elements
+const replaceOptionsPanel = document.getElementById('replaceOptionsPanel');
+const replacementFileInput = document.getElementById('replacementFileInput');
+const replacementFaceCanvas = document.getElementById('replacementFaceCanvas');
+const replacementFacePreviewWrapper = document.getElementById('replacementFacePreviewWrapper');
+const replacementStatusText = document.getElementById('replacementStatusText');
+const editReplacementFaceBtn = document.getElementById('editReplacementFaceBtn');
+const replacementPaddingInput = document.getElementById('replacementPaddingInput');
+const replacementPaddingVal = document.getElementById('replacementPaddingVal');
+const featheringInput = document.getElementById('featheringInput');
+const featheringVal = document.getElementById('featheringVal');
+
+// Color Grading Elements
+const replaceHueInput = document.getElementById('replaceHueInput');
+const replaceHueVal = document.getElementById('replaceHueVal');
+const replaceSatInput = document.getElementById('replaceSatInput');
+const replaceSatVal = document.getElementById('replaceSatVal');
+const replaceLightInput = document.getElementById('replaceLightInput');
+const replaceLightVal = document.getElementById('replaceLightVal');
+
 // Edit Crop Elements
 const editCropModal = document.getElementById('editCropModal');
 const editCropImage = document.getElementById('editCropImage');
 const cancelCropBtn = document.getElementById('cancelCropBtn');
 const saveCropBtn = document.getElementById('saveCropBtn');
-
-// Magic Mode Option Elements
-const magicOptionsPanel = document.getElementById('magicOptionsPanel');
-const magicPromptInput = document.getElementById('magicPromptInput');
-const magicPaddingInput = document.getElementById('magicPadding');
-const magicPaddingVal = document.getElementById('magicPaddingVal');
 
 // Debug Logger
 function log(message, type = 'info') {
@@ -146,14 +171,14 @@ async function initMagicAI() {
 
     log("Initializing Magic AI (Raw ONNX)...", "magic");
     aiLoadingOverlay.style.display = 'flex';
-    aiStatusText.textContent = "Setting up AI Runtime...";
+    aiStatusText.textContent = "Booting Generative Engine...";
 
     try {
         // Setup ORT WASM backend
         ort.env.wasm.wasmPaths = ORT_WASM_PATH;
         
-        log("Loading LaMa model (~198MB, cached after first load)...", "info");
-        aiStatusText.textContent = "Loading AI model...";
+        log("Loading LaMa model weights (~198MB)...", "info");
+        aiStatusText.textContent = "Downloading Model Data (198MB)...";
         aiProgressBar.style.width = '5%';
 
         // Fetch model with progress tracking
@@ -174,7 +199,7 @@ async function initMagicAI() {
             if (total > 0) {
                 const pct = Math.round((received / total) * 90) + 5;
                 aiProgressBar.style.width = `${pct}%`;
-                aiStatusText.textContent = `Loading model... ${pct}%`;
+                aiStatusText.textContent = `Downloading Weights: ${pct}%`;
             }
         }
         
@@ -185,8 +210,8 @@ async function initMagicAI() {
             offset += chunk.length;
         }
         
-        log("Model data loaded. Creating ONNX session...", "info");
-        aiStatusText.textContent = "Compiling AI graph...";
+        log("Model data loaded. Compiling AI Graph...", "info");
+        aiStatusText.textContent = "Compiling AI Execution Graph...";
         aiProgressBar.style.width = '95%';
 
         inpainterSession = await ort.InferenceSession.create(modelBuffer.buffer, {
@@ -194,10 +219,11 @@ async function initMagicAI() {
             graphOptimizationLevel: 'all'
         });
 
-        log("✅ AI Magic Session Ready!", "success");
+        log("✅ Magic AI Ready!", "success");
+        aiStatusText.textContent = "Generative Engine Ready!";
         aiProgressBar.style.width = '100%';
         aiModelLoaded = true;
-        setTimeout(() => aiLoadingOverlay.style.display = 'none', 500);
+        setTimeout(() => aiLoadingOverlay.style.display = 'none', 800);
         return true;
     } catch (err) {
         log(`Critical Error: Magic AI Failed. ${err.message}`, "error");
@@ -223,23 +249,18 @@ async function runMagicInpaint(imageSource, faceBox) {
     log("Preprocessing image and mask (512x512)...", "info");
     const { imageTensor, maskTensor, maskCanvas: scaledMask } = await prepareInpaintTensors(imageSource, faceBox, targetSize);
 
-    // Show mask preview in the floating window at ORIGINAL image aspect ratio
-    if (maskPreviewCanvas && maskPreviewWindow) {
-        // Draw at original image size so aspect ratio is preserved
-        maskPreviewCanvas.width = imageSource.width;
-        maskPreviewCanvas.height = imageSource.height;
-        const mCtx = maskPreviewCanvas.getContext('2d');
-        // Original image as background (grey tinted)
-        mCtx.drawImage(imageSource, 0, 0);
-        mCtx.fillStyle = 'rgba(0,0,0,0.5)';
-        mCtx.fillRect(0, 0, imageSource.width, imageSource.height);
-        // Scale scaledMask (512x512) back up to original dimensions so mask lines up
-        mCtx.globalAlpha = 0.85;
-        mCtx.drawImage(scaledMask, 0, 0, 512, 512, 0, 0, imageSource.width, imageSource.height);
-        mCtx.globalAlpha = 1.0;
-        // Update meta
-        if (maskWindowMeta) maskWindowMeta.textContent = `${imageSource.width}×${imageSource.height}px`;
-        maskPreviewWindow.style.display = 'block';
+    // Show mask preview with correct aspect ratio
+    if (maskPreviewCanvas && maskPreviewCard) {
+        // Match the source image aspect ratio for the preview display
+        const displayRatio = imageSource.height / imageSource.width;
+        maskPreviewCanvas.width = 512;
+        maskPreviewCanvas.height = 512 * displayRatio;
+        
+        const mctx = maskPreviewCanvas.getContext('2d');
+        mctx.clearRect(0, 0, maskPreviewCanvas.width, maskPreviewCanvas.height);
+        mctx.drawImage(scaledMask, 0, 0, 512, 512, 0, 0, maskPreviewCanvas.width, maskPreviewCanvas.height);
+        
+        maskPreviewCard.style.display = 'block';
     }
 
     try {
@@ -263,9 +284,7 @@ async function runMagicInpaint(imageSource, faceBox) {
         ctx.drawImage(imageSource, 0, 0);
 
         // Compute face bounding region (with padding) in ORIGINAL image space
-        const padding = magicPaddingInput ? (parseInt(magicPaddingInput.value) / 100) : 0.25;
-        const prompt = magicPromptInput ? magicPromptInput.value.trim() : '';
-        if (prompt) log(`Style hint: "${prompt}" (stored for future text-guided models)`, "info");
+        const padding = 0.25;
         const bx = Math.max(0, faceBox.x - faceBox.width * padding);
         const by = Math.max(0, faceBox.y - faceBox.height * padding);
         const bw = Math.min(imageSource.width - bx, faceBox.width * (1 + padding * 2));
@@ -313,7 +332,7 @@ async function prepareInpaintTensors(img, faceBox, size) {
     const scaleX = size / img.width;
     const scaleY = size / img.height;
     
-    const padding = magicPaddingInput ? (parseInt(magicPaddingInput.value) / 100) : 0.25;
+    const padding = 0.25; 
     const bx = Math.max(0, (faceBox.x - faceBox.width * padding) * scaleX);
     const by = Math.max(0, (faceBox.y - faceBox.height * padding) * scaleY);
     const bw = Math.min(size - bx, (faceBox.width * (1 + padding * 2)) * scaleX);
@@ -377,8 +396,10 @@ paddingInput.addEventListener('input', (e) => {
 });
 
 function handleRatioChange() {
-    // Clear active presets if manual input is changed
-    // We check if the event caller was a preset btn to avoid circular logic
+    // Re-extract replacement face if in replace mode to match aspect ratio
+    if (currentMode === 'replace' && replacementFaceImageCache) {
+        extractReplacementSource(parseInt(replacementPaddingInput.value));
+    }
     if (firstImageCache && firstFaceBox) {
         updatePreviewCanvas();
     }
@@ -435,8 +456,8 @@ modeBtns.forEach(btn => {
         if (frameOptionsPanel) {
             frameOptionsPanel.style.display = currentMode === 'frame' ? 'block' : 'none';
         }
-        if (magicOptionsPanel) {
-            magicOptionsPanel.style.display = currentMode === 'magic' ? 'block' : 'none';
+        if (replaceOptionsPanel) {
+            replaceOptionsPanel.style.display = currentMode === 'replace' ? 'block' : 'none';
         }
 
         if (firstImageCache && firstFaceBox) {
@@ -512,21 +533,6 @@ frameThicknessInput.addEventListener('input', (e) => {
     if (firstImageCache && firstFaceBox) updatePreviewCanvas();
 });
 
-// Magic Mode Listeners
-if (magicPaddingInput) {
-    magicPaddingInput.addEventListener('input', (e) => {
-        if (magicPaddingVal) magicPaddingVal.textContent = e.target.value;
-        if (firstImageCache && firstFaceBox && currentMode === 'magic') updatePreviewCanvas();
-    });
-}
-
-// Mask Window Close Button
-if (closeMaskWindowBtn) {
-    closeMaskWindowBtn.addEventListener('click', () => {
-        if (maskPreviewWindow) maskPreviewWindow.style.display = 'none';
-    });
-}
-
 // Naming Listeners
 namingScheme.addEventListener('change', (e) => {
     customBaseRow.style.display = e.target.value === 'custom' ? 'block' : 'none';
@@ -537,10 +543,225 @@ namingScheme.addEventListener('change', (e) => {
     input.addEventListener('input', updateFilenamePreview);
 });
 
-// Debug Console Helper
+// Face Replace Handlers
+function updateReplaceStatus(msg, type = 'info') {
+    if (!replacementStatusText) return;
+    replacementStatusText.textContent = msg;
+    // Apply temporary color override for errors/success
+    replacementStatusText.style.color = type === 'error' ? '#ff6b6b' : (type === 'success' ? '#a3be8c' : 'var(--accent)');
+}
+
+if (replacementFileInput) {
+    replacementFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        replacementFaceOriginalFile = file;
+        log("Analyzing replacement source face...", "magic");
+        if (replacementFacePreviewWrapper) replacementFacePreviewWrapper.style.display = 'flex';
+        updateReplaceStatus("Analyzing...", "info");
+
+        try {
+            const img = await faceapi.bufferToImage(file);
+            replacementFaceImageCache = img;
+
+            const detections = await faceapi.detectAllFaces(img);
+            
+            if (detections && detections.length > 0) {
+                const largest = detections.sort((a,b) => (b.box.width * b.box.height) - (a.box.width * a.box.height))[0];
+                replacementFaceBox = largest.box;
+                
+                // Extract with initial (0) padding
+                extractReplacementSource(0);
+                
+                updateReplaceStatus("Face Ready!", "success");
+                log("✅ Replacement face extracted successfully.", "success");
+                
+                // Trigger preview update if in replace mode
+                if (currentMode === 'replace') updatePreviewCanvas();
+            } else {
+                updateReplaceStatus("No face detected", "error");
+                log("❌ Face Replace Failed: Could not find any faces in the source image.", "error");
+                replacementFaceCanvasSource = null;
+            }
+        } catch (err) {
+            updateReplaceStatus("Upload Error", "error");
+            log(`❌ Face Replace Error: ${err.message}`, "error");
+            replacementFaceCanvasSource = null;
+        }
+    });
+}
+
+if (featheringInput) {
+    featheringInput.addEventListener('input', (e) => {
+        featherAmount = parseInt(e.target.value);
+        if (featheringVal) featheringVal.textContent = featherAmount;
+        if (currentMode === 'replace') updatePreviewCanvas();
+    });
+}
+
+// Color Grading Listeners
+if (replaceHueInput) {
+    replaceHueInput.addEventListener('input', (e) => {
+        replaceHue = parseInt(e.target.value);
+        if (replaceHueVal) replaceHueVal.textContent = replaceHue;
+        if (currentMode === 'replace') updatePreviewCanvas();
+    });
+}
+if (replaceSatInput) {
+    replaceSatInput.addEventListener('input', (e) => {
+        replaceSat = parseInt(e.target.value);
+        if (replaceSatVal) replaceSatVal.textContent = replaceSat;
+        if (currentMode === 'replace') updatePreviewCanvas();
+    });
+}
+if (replaceLightInput) {
+    replaceLightInput.addEventListener('input', (e) => {
+        replaceLight = parseInt(e.target.value);
+        if (replaceLightVal) replaceLightVal.textContent = replaceLight;
+        if (currentMode === 'replace') updatePreviewCanvas();
+    });
+}
+
+if (editReplacementFaceBtn) {
+    editReplacementFaceBtn.addEventListener('click', () => {
+        if (!replacementFaceOriginalFile) return;
+        isEditingReplacement = true;
+        openEditModalForReplacement();
+    });
+}
+
+if (replacementPaddingInput) {
+    replacementPaddingInput.addEventListener('input', (e) => {
+        const pad = parseInt(e.target.value);
+        if (replacementPaddingVal) replacementPaddingVal.textContent = pad;
+        if (replacementFaceImageCache && replacementFaceBox) {
+            extractReplacementSource(pad);
+            if (currentMode === 'replace') updatePreviewCanvas();
+        }
+    });
+}
+
+function extractReplacementSource(paddingPercent) {
+    if (!replacementFaceImageCache || !replacementFaceBox) return;
+
+    const img = replacementFaceImageCache;
+    const box = replacementFaceBox;
+    const pad = (paddingPercent / 100);
+
+    // Calculate Aspect Ratio from current UI settings
+    let targetRatio;
+    if (useOriginalRatioInput.checked && firstImageCache) {
+        targetRatio = firstImageCache.width / firstImageCache.height;
+    } else {
+        const rW = parseFloat(ratioWidthInput.value) || 1;
+        const rH = parseFloat(ratioHeightInput.value) || 1;
+        targetRatio = rW / rH;
+    }
+
+    // Determine crop dimensions (centered on face box)
+    const padX = box.width * pad;
+    const padY = box.height * pad;
+
+    let cw = box.width + padX * 2;
+    let ch = box.height + padY * 2;
+    
+    // Adjust dimensions to match target aspect ratio
+    const currentRatio = cw / ch;
+    if (currentRatio > targetRatio) {
+        // Current is wider than target, increase height
+        ch = cw / targetRatio;
+    } else {
+        // Current is taller than target, increase width
+        cw = ch * targetRatio;
+    }
+
+    // Center the crop on the face box
+    const cx = (box.x + box.width / 2) - (cw / 2);
+    const cy = (box.y + box.height / 2) - (ch / 2);
+
+    // Create high-res source canvas
+    const sizeH = 1024;
+    const sizeW = sizeH * targetRatio;
+    const canvas = document.createElement('canvas');
+    canvas.width = sizeW;
+    canvas.height = sizeH;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    // Draw with safety clamping or just draw (Canvas handles out of bounds)
+    ctx.drawImage(img, cx, cy, cw, ch, 0, 0, sizeW, sizeH);
+
+    replacementFaceCanvasSource = canvas;
+
+    // Update UI thumbnail (Maintain square thumbnail view for UI consistency)
+    if (replacementFaceCanvas) {
+        const pCtx = replacementFaceCanvas.getContext('2d');
+        if (pCtx) {
+            const thumbSize = 80;
+            pCtx.clearRect(0, 0, thumbSize, thumbSize);
+            
+            // Draw centered and cover the square thumnbail
+            let drawW, drawH, dx, dy;
+            if (targetRatio > 1) {
+                drawH = thumbSize;
+                drawW = thumbSize * targetRatio;
+                dx = -(drawW - thumbSize) / 2;
+                dy = 0;
+            } else {
+                drawW = thumbSize;
+                drawH = thumbSize / targetRatio;
+                dx = 0;
+                dy = -(drawH - thumbSize) / 2;
+            }
+            pCtx.drawImage(canvas, 0, 0, sizeW, sizeH, dx, dy, drawW, drawH);
+        }
+    }
+}
+
+// Reset Slider Handler
+document.querySelectorAll('.reset-slider').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const targetId = btn.dataset.target;
+        const defaultVal = btn.dataset.default;
+        const target = document.getElementById(targetId);
+        if (target) {
+            target.value = defaultVal;
+            // Dispatch input event to trigger UI value update and preview update
+            target.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
+});
+
+// Debug Console Handlers
 if (clearLogsBtn) {
     clearLogsBtn.addEventListener('click', () => {
         if (debugLogs) debugLogs.innerHTML = '';
+    });
+}
+
+if (toggleConsoleBtn) {
+    toggleConsoleBtn.addEventListener('click', () => {
+        debugConsole.classList.add('visible');
+        toggleConsoleBtn.classList.add('hidden');
+    });
+}
+
+if (closeConsoleBtn) {
+    closeConsoleBtn.addEventListener('click', () => {
+        debugConsole.classList.remove('visible');
+        toggleConsoleBtn.classList.remove('hidden');
+    });
+}
+
+if (stopBtn) {
+    stopBtn.addEventListener('click', () => {
+        isBatchAborted = true;
+        log("Aborting batch... finishing current image.", "warning");
+        stopBtn.disabled = true;
+        stopBtn.innerText = "Aborting...";
     });
 }
 
@@ -670,6 +891,13 @@ processBtn.addEventListener('click', async () => {
     gallery.innerHTML = ''; // Clear prior results
     if (galleryStatus) galleryStatus.textContent = ''; // Clear status message
     processedBlobs = [];
+    let processedCount = 0;
+    isBatchAborted = false;
+
+    // Toggle button visibility
+    processBtn.style.display = 'none';
+    if (stopBtn) stopBtn.style.display = 'block';
+    downloadBtn.disabled = true;
 
     // Force space for scrolling (simulating ~3 rows) so valid scroll target exists
     gallery.style.minHeight = '800px';
@@ -680,9 +908,27 @@ processBtn.addEventListener('click', async () => {
     }, 100);
 
     log(`Starting batch processing for ${loadedFiles.length} images...`, "info");
+    
+    // Pre-initialize AI if in magic mode to avoid per-image overlay interruptions
+    if (currentMode === 'magic') {
+        log("Batch Mode: Initializing AI Generative Engine...", "magic");
+        const aiReady = await initMagicAI();
+        if (!aiReady) {
+            log("Batch aborted: AI Engine failed to initialize.", "error");
+            processBtn.disabled = false;
+            processBtn.innerText = "Process Batch";
+            return;
+        }
+    }
+
     log("Status: Clearing gallery and initializing processed storage.", "info");
 
     for (let i = 0; i < loadedFiles.length; i++) {
+        if (isBatchAborted) {
+            log("🛑 Batch processing aborted by user.", "error");
+            break;
+        }
+
         const file = loadedFiles[i];
         log(`Processing Image [${i + 1}/${loadedFiles.length}]: ${file.name}`, "info");
         try {
@@ -697,10 +943,17 @@ processBtn.addEventListener('click', async () => {
         statusArea.textContent = `Processing: ${processedCount} / ${loadedFiles.length}`;
     }
 
-    log("✅ Batch Processing Complete!", "success");
-    downloadBtn.disabled = false;
+    log(isBatchAborted ? "⚠️ Batch Aborted (Partial Results Available)" : "✅ Batch Processing Complete!", isBatchAborted ? "error" : "success");
+    
+    // Restore button states
+    processBtn.style.display = 'block';
     processBtn.disabled = false;
-    processBtn.innerText = "Process Again";
+    processBtn.innerText = isBatchAborted ? "Resume / Process Again" : "Process Again";
+    if (stopBtn) stopBtn.style.display = 'none';
+    
+    if (processedBlobs.length > 0) {
+        downloadBtn.disabled = false;
+    }
 
     // Dynamic Gallery AR Logic
     const ratios = processedBlobs.map(b => b.outputWidth / b.outputHeight);
@@ -836,23 +1089,28 @@ async function processImage(file, batchIndex) {
             }, 'image/jpeg', 0.95);
         });
     } else if (currentMode === 'magic') {
-        const faceBox = (detections && detections.length > 0) ? getLargestFace(detections).box : null;
-        
-        let outCanvas;
-        if (faceBox) {
-            outCanvas = await runMagicInpaint(img, faceBox);
+        let facesToMagic = [];
+        if (!detections || detections.length === 0) {
+            facesToMagic = [null];
         } else {
-            // Fallback: just use original
-            outCanvas = document.createElement('canvas');
-            outCanvas.width = img.width;
-            outCanvas.height = img.height;
-            outCanvas.getContext('2d').drawImage(img, 0, 0);
+            facesToMagic = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        log(`Batch Magic: Processing ${facesToMagic.length} face area(s) for ${file.name}`, "magic");
+        
+        let currentResult = img;
+        for (let i = 0; i < facesToMagic.length; i++) {
+            const faceBox = facesToMagic[i];
+            if (faceBox) {
+                log(`Inpainting face [${i + 1}/${facesToMagic.length}]...`, "info");
+                currentResult = await runMagicInpaint(currentResult, faceBox);
+            }
         }
 
         const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'magic');
 
         await new Promise((resolve) => {
-            outCanvas.toBlob((blob) => {
+            currentResult.toBlob((blob) => {
                 if (blob) {
                     processedBlobs.push({
                         name: finalFileName,
@@ -862,6 +1120,47 @@ async function processImage(file, batchIndex) {
                         outputWidth: img.width,
                         outputHeight: img.height,
                         mode: 'magic'
+                    });
+                    displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
+                }
+                resolve();
+            }, 'image/jpeg', 0.95);
+        });
+    } else if (currentMode === 'replace') {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        let facesToReplace = [];
+        if (!detections || detections.length === 0) {
+            facesToReplace = [null];
+        } else {
+            facesToReplace = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (let i = 0; i < facesToReplace.length; i++) {
+            const faceBox = facesToReplace[i];
+            if (faceBox) {
+                const rect = calculateCropRect(img, faceBox);
+                drawReplacement(ctx, rect.x, rect.y, rect.width, rect.height, featherAmount);
+            }
+        }
+
+        const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'replaced');
+
+        await new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    processedBlobs.push({
+                        name: finalFileName,
+                        blob: blob,
+                        isError: (!detections || detections.length === 0 || !replacementFaceCanvasSource),
+                        originalFile: file,
+                        outputWidth: img.width,
+                        outputHeight: img.height,
+                        mode: 'replace'
                     });
                     displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
                 }
@@ -1033,6 +1332,24 @@ async function updatePreviewCanvas() {
             ctx.drawImage(outCanvas, 0, 0);
         } else {
             ctx.drawImage(firstImageCache, 0, 0);
+        }
+    } else if (currentMode === 'replace') {
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
+        ctx.drawImage(firstImageCache, 0, 0);
+        
+        let facesToReplace = [];
+        if (!detections || detections.length === 0) {
+            facesToReplace = [null];
+        } else {
+            facesToReplace = multi ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (const faceBox of facesToReplace) {
+            if (faceBox) {
+                const rect = calculateCropRect(firstImageCache, faceBox);
+                drawReplacement(ctx, rect.x, rect.y, rect.width, rect.height, featherAmount);
+            }
         }
     } else {
         // Crop Mode Preview (Always shows the first/largest detected face)
@@ -1244,6 +1561,31 @@ function openEditModal(index) {
     };
 }
 
+function openEditModalForReplacement() {
+    if (!replacementFaceOriginalFile) return;
+
+    editingBlobIndex = -999; // Sentinel for replacement mode
+    const objectUrl = URL.createObjectURL(replacementFaceOriginalFile);
+    
+    editCropImage.src = objectUrl;
+    editCropModal.style.display = 'flex';
+
+    editCropImage.onload = () => {
+        if (cropperInstance) cropperInstance.destroy();
+
+        cropperInstance = new Cropper(editCropImage, {
+            viewMode: 1,
+            dragMode: 'move',
+            aspectRatio: NaN, // Free crop for source
+            autoCropArea: 0.8,
+            ready() {
+                // No specific start rect needed for source, 
+                // but user can now adjust what the AI found.
+            }
+        });
+    };
+}
+
 function closeEditModal() {
     editCropModal.style.display = 'none';
     if (cropperInstance) {
@@ -1258,10 +1600,44 @@ if (cancelCropBtn) cancelCropBtn.addEventListener('click', closeEditModal);
 
 if (saveCropBtn) {
     saveCropBtn.addEventListener('click', async () => {
-        if (!cropperInstance || editingBlobIndex < 0) return;
+        if (!cropperInstance) return;
+        if (editingBlobIndex === -1) return;
 
         saveCropBtn.disabled = true;
         saveCropBtn.innerText = "Saving...";
+
+        if (isEditingReplacement) {
+            // Special Case: Saving the replacement SOURCE face
+            const canvas = cropperInstance.getCroppedCanvas({
+                width: 512,
+                height: 512,
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high'
+            });
+
+            if (canvas) {
+                replacementFaceCanvasSource = canvas;
+                // Update UI thumbnail
+                if (replacementFaceCanvas) {
+                    const pCtx = replacementFaceCanvas.getContext('2d');
+                    if (pCtx) {
+                        pCtx.clearRect(0,0,100,100);
+                        pCtx.drawImage(canvas, 0,0,512,512, 0,0,100,100);
+                    }
+                }
+                updateReplaceStatus("New Crop Applied", "success");
+                log("✅ Replacement source crop updated.", "success");
+                updatePreviewCanvas();
+            }
+            
+            isEditingReplacement = false;
+            saveCropBtn.disabled = false;
+            saveCropBtn.innerText = "Save Crop";
+            closeEditModal();
+            return;
+        }
+
+        if (editingBlobIndex < 0) return; // Should only happen if index logic breaks
 
         const data = processedBlobs[editingBlobIndex];
         const cropData = cropperInstance.getData();
@@ -1433,6 +1809,56 @@ function calculateCropRect(img, faceBox) {
     y = Math.max(0, Math.min(y, img.height - height));
 
     return { x, y, width, height, isError: false, faceBox };
+}
+
+function drawReplacement(ctx, x, y, width, height, feather) {
+    if (!replacementFaceCanvasSource) {
+        // Just draw a "placeholder" block since no source face is uploaded
+        ctx.fillStyle = 'rgba(74, 158, 255, 0.5)';
+        ctx.fillRect(x, y, width, height);
+        ctx.strokeStyle = 'var(--accent)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, width, height);
+        return;
+    }
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tctx = tempCanvas.getContext('2d');
+
+    // 1. Draw the replacement face into the temp canvas at target size
+    // Apply real-time HSL filtering
+    tctx.filter = `hue-rotate(${replaceHue}deg) saturate(${replaceSat}%) brightness(${replaceLight}%)`;
+    
+    tctx.drawImage(replacementFaceCanvasSource, 0, 0, replacementFaceCanvasSource.width, replacementFaceCanvasSource.height, 0, 0, width, height);
+
+    // Reset filter
+    tctx.filter = 'none';
+
+    // 2. Apply elliptical feathering
+    // We do this by creating a mask with 'destination-in'
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+    const mctx = maskCanvas.getContext('2d');
+
+    const grad = mctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, width/2);
+    const stop = 1 - (feather / 100);
+    grad.addColorStop(0, 'white');
+    grad.addColorStop(Math.max(0, stop), 'white');
+    grad.addColorStop(1, 'transparent');
+
+    mctx.fillStyle = grad;
+    mctx.beginPath();
+    mctx.ellipse(width/2, height/2, width/2, height/2, 0, 0, Math.PI * 2);
+    mctx.fill();
+
+    tctx.globalCompositeOperation = 'destination-in';
+    tctx.drawImage(maskCanvas, 0, 0);
+
+    // 3. Draw final result back to target context
+    ctx.drawImage(tempCanvas, x, y);
 }
 
 // 10. New Drawing Helper
