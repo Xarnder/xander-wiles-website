@@ -145,7 +145,7 @@ input[type="file"] {
     flex-direction: column;
     gap: 8px;
     flex: 1;
-    min-width: 200px;
+    min-width: 250px;
 }
 
 input[type="range"] {
@@ -277,6 +277,7 @@ input[type="range"] {
     padding: 6px;
     border-radius: 12px;
     border: 1px solid var(--border);
+    flex-wrap: wrap;
 }
 
 .mode-btn {
@@ -288,9 +289,9 @@ input[type="range"] {
     background: transparent;
     border: none;
     color: var(--text-muted);
-    padding: 10px 16px;
+    padding: 10px 12px;
     border-radius: 8px;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
@@ -377,6 +378,34 @@ input[type="range"] {
 }
 
 .shape-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+.frame-shape-toggle {
+    display: flex;
+    gap: 8px;
+}
+
+.frame-shape-btn {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.frame-shape-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+}
+
+.frame-shape-btn.active {
     background: var(--accent);
     color: white;
     border-color: var(--accent);

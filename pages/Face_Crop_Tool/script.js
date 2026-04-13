@@ -12,6 +12,11 @@ let censorColor = '#000000';
 let censorEmoji = '🕶️';
 let blurStrength = 20;
 
+// Frame Settings
+let currentFrameShape = 'rect';
+let frameColor = '#4a9eff';
+let frameThickness = 5;
+
 // Manual Crop Globals
 let cropperInstance = null;
 let editingBlobIndex = -1;
@@ -51,6 +56,14 @@ const colorHexDisplay = document.getElementById('colorHex');
 const blurStrengthInput = document.getElementById('blurStrength');
 const blurStrengthVal = document.getElementById('blurStrengthVal');
 const censorEmojiInput = document.getElementById('censorEmoji');
+
+// Frame Elements
+const frameOptionsPanel = document.getElementById('frameOptionsPanel');
+const frameShapeBtns = document.querySelectorAll('.frame-shape-btn');
+const frameColorInput = document.getElementById('frameColor');
+const frameColorHex = document.getElementById('frameColorHex');
+const frameThicknessInput = document.getElementById('frameThickness');
+const frameThicknessVal = document.getElementById('frameThicknessVal');
 
 // Edit Crop Elements
 const editCropModal = document.getElementById('editCropModal');
@@ -142,6 +155,9 @@ modeBtns.forEach(btn => {
         if (censorOptionsPanel) {
             censorOptionsPanel.style.display = currentMode === 'censor' ? 'block' : 'none';
         }
+        if (frameOptionsPanel) {
+            frameOptionsPanel.style.display = currentMode === 'frame' ? 'block' : 'none';
+        }
 
         if (firstImageCache && firstFaceBox) {
             updatePreviewCanvas();
@@ -190,7 +206,29 @@ censorColorInput.addEventListener('input', (e) => {
 
 blurStrengthInput.addEventListener('input', (e) => {
     blurStrength = parseInt(e.target.value);
-    blurStrengthVal.textContent = blurStrength;
+    if (blurStrengthVal) blurStrengthVal.textContent = blurStrength;
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+// Frame Listeners
+frameShapeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        frameShapeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFrameShape = btn.dataset.shape;
+        if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+    });
+});
+
+frameColorInput.addEventListener('input', (e) => {
+    frameColor = e.target.value;
+    if (frameColorHex) frameColorHex.textContent = frameColor.toUpperCase();
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+frameThicknessInput.addEventListener('input', (e) => {
+    frameThickness = parseInt(e.target.value);
+    if (frameThicknessVal) frameThicknessVal.textContent = frameThickness;
     if (firstImageCache && firstFaceBox) updatePreviewCanvas();
 });
 
@@ -380,7 +418,8 @@ async function processImage(file, uniqueName) {
 
         for (const faceBox of facesToCensor) {
             const rect = calculateCropRect(img, faceBox);
-            drawCensor(ctx, rect.x, rect.y, rect.width, rect.height, {
+            drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                mode: 'censor',
                 type: currentCensorType,
                 shape: currentCensorShape,
                 color: censorColor,
@@ -405,6 +444,50 @@ async function processImage(file, uniqueName) {
                         censorColor: censorColor,
                         blurStrength: blurStrength,
                         censorEmoji: censorEmoji
+                    });
+                    displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
+                }
+                resolve();
+            }, 'image/jpeg', 0.95);
+        });
+    } else if (currentMode === 'frame') {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        let facesToFrame = [];
+        if (!detections || detections.length === 0) {
+            facesToFrame = [null];
+        } else {
+            facesToFrame = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (const faceBox of facesToFrame) {
+            const rect = calculateCropRect(img, faceBox);
+            drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                mode: 'frame',
+                shape: currentFrameShape,
+                color: frameColor,
+                thickness: frameThickness
+            }, img);
+        }
+
+        await new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    processedBlobs.push({
+                        name: `framed_${uniqueName}`,
+                        blob: blob,
+                        isError: (!detections || detections.length === 0),
+                        originalFile: file,
+                        outputWidth: img.width,
+                        outputHeight: img.height,
+                        mode: 'frame',
+                        frameShape: currentFrameShape,
+                        frameColor: frameColor,
+                        frameThickness: frameThickness
                     });
                     displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
                 }
@@ -530,12 +613,34 @@ async function updatePreviewCanvas() {
 
         for (const faceBox of facesToCensor) {
             const rect = calculateCropRect(firstImageCache, faceBox);
-            drawCensor(ctx, rect.x, rect.y, rect.width, rect.height, {
+            drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                mode: 'censor',
                 type: currentCensorType,
                 shape: currentCensorShape,
                 color: censorColor,
                 blur: blurStrength,
                 emoji: censorEmoji
+            }, firstImageCache);
+        }
+    } else if (currentMode === 'frame') {
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
+        ctx.drawImage(firstImageCache, 0, 0);
+        
+        let facesToFrame = [];
+        if (!detections || detections.length === 0) {
+            facesToFrame = [null];
+        } else {
+            facesToFrame = multi ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (const faceBox of facesToFrame) {
+            const rect = calculateCropRect(firstImageCache, faceBox);
+            drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                mode: 'frame',
+                shape: currentFrameShape,
+                color: frameColor,
+                thickness: frameThickness
             }, firstImageCache);
         }
     } else {
@@ -799,7 +904,7 @@ if (saveCropBtn) {
             closeEditModal();
         };
 
-        if (data.mode === 'censor') {
+        if (data.mode === 'censor' || data.mode === 'frame') {
             const img = editCropImage; // The original full image being edited
             const fullCanvas = document.createElement('canvas');
             fullCanvas.width = img.naturalWidth;
@@ -808,12 +913,14 @@ if (saveCropBtn) {
             if (fCtx) {
                 fCtx.drawImage(img, 0, 0);
                 
-                drawCensor(fCtx, cropData.x, cropData.y, cropData.width, cropData.height, {
+                drawOverlay(fCtx, cropData.x, cropData.y, cropData.width, cropData.height, {
+                    mode: data.mode,
                     type: data.censorType,
-                    shape: data.censorShape || currentCensorShape,
-                    color: data.censorColor || censorColor,
-                    blur: data.blurStrength,
-                    emoji: data.censorEmoji || censorEmoji
+                    color: data.censorColor || data.frameColor || censorColor,
+                    blur: data.blurStrength || blurStrength,
+                    emoji: data.censorEmoji || censorEmoji,
+                    thickness: data.frameThickness || frameThickness,
+                    shape: data.censorShape || data.frameShape || currentCensorShape || currentFrameShape
                 }, img);
                 
                 const newUrl = fullCanvas.toDataURL('image/jpeg', 0.95);
@@ -936,8 +1043,8 @@ function calculateCropRect(img, faceBox) {
 }
 
 // 10. New Drawing Helper
-function drawCensor(ctx, x, y, width, height, options, sourceImg) {
-    const { type, shape, color, blur } = options;
+function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
+    const { mode, type, shape, color, blur, thickness } = options;
     
     ctx.save();
     ctx.beginPath();
@@ -952,22 +1059,27 @@ function drawCensor(ctx, x, y, width, height, options, sourceImg) {
         ctx.rect(x, y, width, height);
     }
     
-    ctx.clip();
-    
-    if (type === 'blur') {
-        ctx.filter = `blur(${blur}px)`;
-        // Drawing full image censored
-        ctx.drawImage(sourceImg, 0, 0);
-    } else if (type === 'emoji') {
-        const emojiToDraw = options.emoji || '🕶️';
-        const fontSize = Math.min(width, height) * 0.9;
-        ctx.font = `${fontSize}px serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(emojiToDraw, x + width / 2, y + height / 2);
+    if (mode === 'frame') {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = thickness || 5;
+        ctx.stroke();
     } else {
-        ctx.fillStyle = color;
-        ctx.fill();
+        ctx.clip();
+        
+        if (type === 'blur') {
+            ctx.filter = `blur(${blur}px)`;
+            ctx.drawImage(sourceImg, 0, 0);
+        } else if (type === 'emoji') {
+            const emojiToDraw = options.emoji || '🕶️';
+            const fontSize = Math.min(width, height) * 0.9;
+            ctx.font = `${fontSize}px serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(emojiToDraw, x + width / 2, y + height / 2);
+        } else {
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
     }
     
     ctx.restore();
