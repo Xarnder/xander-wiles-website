@@ -165,6 +165,41 @@
                 </div>
             </div>
 
+            <div class="setting-group" id="namingOptionsPanel">
+                <label>Output Filename</label>
+                <div class="control-sub-group">
+                    <div class="sub-setting">
+                        <label>Naming Scheme</label>
+                        <select id="namingScheme">
+                            <option value="original">Original Name</option>
+                            <option value="custom">Custom Base Name</option>
+                            <option value="sequential">Sequential Numbers</option>
+                        </select>
+                    </div>
+
+                    <div class="sub-setting" id="customBaseRow" style="display: none;">
+                        <label>Base Filename</label>
+                        <input type="text" id="filenameBase" placeholder="e.g. Vacation" value="Result">
+                    </div>
+
+                    <div class="sub-setting-row">
+                        <div class="sub-setting">
+                            <label>Prefix</label>
+                            <input type="text" id="filenamePrefix" placeholder="e.g. edited_">
+                        </div>
+                        <div class="sub-setting">
+                            <label>Suffix</label>
+                            <input type="text" id="filenameSuffix" placeholder="e.g. _final">
+                        </div>
+                    </div>
+
+                    <div class="filename-preview-box">
+                        <span class="preview-label">Preview:</span>
+                        <code id="filenamePreview">original_name.jpg</code>
+                    </div>
+                </div>
+            </div>
+
             <div class="setting-group">
                 <label>Aspect Ratio (W : H)</label>
                 <div class="ratio-presets">

@@ -65,6 +65,14 @@ const frameColorHex = document.getElementById('frameColorHex');
 const frameThicknessInput = document.getElementById('frameThickness');
 const frameThicknessVal = document.getElementById('frameThicknessVal');
 
+// Naming Elements
+const namingScheme = document.getElementById('namingScheme');
+const customBaseRow = document.getElementById('customBaseRow');
+const filenameBaseInput = document.getElementById('filenameBase');
+const filenamePrefixInput = document.getElementById('filenamePrefix');
+const filenameSuffixInput = document.getElementById('filenameSuffix');
+const filenamePreview = document.getElementById('filenamePreview');
+
 // Edit Crop Elements
 const editCropModal = document.getElementById('editCropModal');
 const editCropImage = document.getElementById('editCropImage');
@@ -232,6 +240,63 @@ frameThicknessInput.addEventListener('input', (e) => {
     if (firstImageCache && firstFaceBox) updatePreviewCanvas();
 });
 
+// Naming Listeners
+namingScheme.addEventListener('change', (e) => {
+    customBaseRow.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    updateFilenamePreview();
+});
+
+[filenameBaseInput, filenamePrefixInput, filenameSuffixInput].forEach(input => {
+    input.addEventListener('input', updateFilenamePreview);
+});
+
+function updateFilenamePreview() {
+    if (!filenamePreview) return;
+    const exampleName = "image_01.jpg";
+    const finalName = generateOutputName(exampleName, 0, 1, 1);
+    filenamePreview.textContent = finalName;
+}
+
+function generateOutputName(originalName, faceIndex, totalFaces, batchIndex, mode) {
+    const scheme = namingScheme.value;
+    const prefix = filenamePrefixInput.value;
+    const suffix = filenameSuffixInput.value;
+    
+    let baseName = "";
+    const parts = originalName.split('.');
+    const ext = parts.length > 1 ? parts.pop() : 'jpg';
+    const nameNoExt = parts.join('.');
+
+    if (scheme === 'original') {
+        baseName = nameNoExt;
+    } else if (scheme === 'custom') {
+        const customBase = filenameBaseInput.value || 'Result';
+        baseName = customBase;
+        if (loadedFiles.length > 1) {
+             baseName += `_${batchIndex}`;
+        }
+    } else if (scheme === 'sequential') {
+        baseName = String(batchIndex).padStart(3, '0');
+    }
+
+    // Default mode prefix if user didn't provide a custom prefix?
+    // User might want BOTH. Let's keep the mode prefix unless prefix is set?
+    // Actually, usually users want one or the other. 
+    // Let's add the mode prefix ONLY if scheme is original and no custom prefix.
+    let modePrefix = "";
+    if (scheme === 'original' && !prefix) {
+        modePrefix = `${mode}_`;
+    }
+
+    // Add multi-face index if needed
+    let facePart = "";
+    if (totalFaces > 1) {
+        facePart = `_face${faceIndex + 1}`;
+    }
+
+    return `${prefix}${modePrefix}${baseName}${facePart}${suffix}.${ext}`;
+}
+
 imageInput.addEventListener('change', async (e) => {
     handleNewFiles(e.target.files);
 });
@@ -325,35 +390,10 @@ processBtn.addEventListener('click', async () => {
     let processedCount = 0;
     const usedNames = new Set();
 
-    for (const file of loadedFiles) {
-
-
+    for (let i = 0; i < loadedFiles.length; i++) {
+        const file = loadedFiles[i];
         try {
-            // Unique Name Generation - moved inside loop
-            let baseName = file.name;
-            let uniqueName = baseName;
-            let counter = 1;
-            const parts = baseName.split('.');
-            const ext = parts.length > 1 ? parts.pop() : '';
-            const nameNoExt = parts.join('.');
-
-            // Check against both usedNames set AND previously processed names to be safe?
-            // actually just usedNames set is cleared at start of processBtn click??
-            // NO, we want to allow accumulative processing? 
-            // "allow the user to keep drainging in new images" -> usually implies we process ALL of them.
-            // But if I already processed some, should I re-process them? 
-            // The user probably wants to add more, then click process.
-            // So `processedBlobs` is cleared on processBtn click, implying a fresh batch run.
-            // That's fine.
-
-            while (usedNames.has(uniqueName)) {
-                uniqueName = `${nameNoExt}_${counter}.${ext}`;
-                counter++;
-            }
-            usedNames.add(uniqueName);
-
-            // Process and ADD to batch
-            await processImage(file, uniqueName);
+            await processImage(file, i + 1); // Pass 1-based batch index
         } catch (err) {
             console.error(`Failed to process ${file.name}:`, err);
             createErrorCard(file.name);
@@ -390,7 +430,7 @@ processBtn.addEventListener('click', async () => {
 });
 
 // 3. Core Logic for Batch
-async function processImage(file, uniqueName) {
+async function processImage(file, batchIndex) {
     let img;
     try {
         img = await faceapi.bufferToImage(file);
@@ -416,7 +456,8 @@ async function processImage(file, uniqueName) {
             facesToCensor = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
         }
 
-        for (const faceBox of facesToCensor) {
+        for (let i = 0; i < facesToCensor.length; i++) {
+            const faceBox = facesToCensor[i];
             const rect = calculateCropRect(img, faceBox);
             drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
                 mode: 'censor',
@@ -428,11 +469,13 @@ async function processImage(file, uniqueName) {
             }, img);
         }
 
+        const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'censored');
+
         await new Promise((resolve) => {
             canvas.toBlob((blob) => {
                 if (blob) {
                     processedBlobs.push({
-                        name: `censored_${uniqueName}`,
+                        name: finalFileName,
                         blob: blob,
                         isError: (!detections || detections.length === 0),
                         originalFile: file,
@@ -464,7 +507,8 @@ async function processImage(file, uniqueName) {
             facesToFrame = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
         }
 
-        for (const faceBox of facesToFrame) {
+        for (let i = 0; i < facesToFrame.length; i++) {
+            const faceBox = facesToFrame[i];
             const rect = calculateCropRect(img, faceBox);
             drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
                 mode: 'frame',
@@ -474,11 +518,13 @@ async function processImage(file, uniqueName) {
             }, img);
         }
 
+        const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'framed');
+
         await new Promise((resolve) => {
             canvas.toBlob((blob) => {
                 if (blob) {
                     processedBlobs.push({
-                        name: `framed_${uniqueName}`,
+                        name: finalFileName,
                         blob: blob,
                         isError: (!detections || detections.length === 0),
                         originalFile: file,
@@ -515,9 +561,9 @@ async function processImage(file, uniqueName) {
             await new Promise((resolve) => {
                 canvas.toBlob((blob) => {
                     if (blob) {
-                        const countPrefix = (facesToCrop.length > 1) ? `face${i + 1}_` : '';
+                        const finalFileName = generateOutputName(file.name, i, facesToCrop.length, batchIndex, 'cropped');
                         processedBlobs.push({
-                            name: `${countPrefix}cropped_${uniqueName}`,
+                            name: finalFileName,
                             blob: blob,
                             isError: rect.isError,
                             originalFile: file,
