@@ -5,6 +5,11 @@ let processedBlobs = [];
 let loadedFiles = []; // Store files for deferred processing
 let firstImageCache = null; // Cache for the first image
 let firstFaceBox = null; // Cache for the detected face box
+let currentMode = 'crop'; // 'crop' or 'censor'
+let currentCensorType = 'solid'; // 'solid' or 'blur'
+let currentCensorShape = 'rect'; // 'rect' or 'circle'
+let censorColor = '#000000';
+let blurStrength = 20;
 
 // Manual Crop Globals
 let cropperInstance = null;
@@ -29,6 +34,18 @@ const previewLoader = document.getElementById('previewLoader');
 const verticalPosInput = document.getElementById('verticalPosInput');
 const verticalPosVal = document.getElementById('verticalPosVal');
 const presetBtns = document.querySelectorAll('.preset-btn');
+const modeBtns = document.querySelectorAll('.mode-btn');
+
+// Advanced Censor Elements
+const censorOptionsPanel = document.getElementById('censorOptionsPanel');
+const typeBtns = document.querySelectorAll('.type-btn');
+const shapeBtns = document.querySelectorAll('.shape-btn');
+const solidOptions = document.getElementById('solidOptions');
+const blurOptions = document.getElementById('blurOptions');
+const censorColorInput = document.getElementById('censorColor');
+const colorHexDisplay = document.getElementById('colorHex');
+const blurStrengthInput = document.getElementById('blurStrength');
+const blurStrengthVal = document.getElementById('blurStrengthVal');
 
 // Edit Crop Elements
 const editCropModal = document.getElementById('editCropModal');
@@ -107,6 +124,59 @@ presetBtns.forEach(btn => {
         ratioHeightInput.value = btn.dataset.h;
         handleRatioChange();
     });
+});
+
+modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        modeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMode = btn.dataset.mode;
+        log(`Switched to ${currentMode} mode.`);
+        
+        // Show/Hide advanced censor options
+        if (censorOptionsPanel) {
+            censorOptionsPanel.style.display = currentMode === 'censor' ? 'block' : 'none';
+        }
+
+        if (firstImageCache && firstFaceBox) {
+            updatePreviewCanvas();
+        }
+    });
+});
+
+// Advanced Censor Listeners
+typeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        typeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentCensorType = btn.dataset.type;
+        
+        solidOptions.style.display = currentCensorType === 'solid' ? 'block' : 'none';
+        blurOptions.style.display = currentCensorType === 'blur' ? 'block' : 'none';
+        
+        if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+    });
+});
+
+shapeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        shapeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentCensorShape = btn.dataset.shape;
+        if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+    });
+});
+
+censorColorInput.addEventListener('input', (e) => {
+    censorColor = e.target.value;
+    colorHexDisplay.textContent = censorColor.toUpperCase();
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+blurStrengthInput.addEventListener('input', (e) => {
+    blurStrength = parseInt(e.target.value);
+    blurStrengthVal.textContent = blurStrength;
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
 });
 
 imageInput.addEventListener('change', async (e) => {
@@ -372,18 +442,32 @@ async function processImage(file, uniqueName) {
     }
 
     const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
     const ctx = canvas.getContext('2d');
 
-    ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+    if (currentMode === 'censor') {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        
+        drawCensor(ctx, x, y, width, height, {
+            type: currentCensorType,
+            shape: currentCensorShape,
+            color: censorColor,
+            blur: blurStrength
+        }, img);
+    } else {
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
+    }
 
     // Save to blob list for ZIP
     return new Promise((resolve) => {
         canvas.toBlob((blob) => {
             if (blob) {
+                const prefix = currentMode === 'censor' ? 'censored_' : 'cropped_';
                 processedBlobs.push({
-                    name: `cropped_${uniqueName}`,
+                    name: `${prefix}${uniqueName}`,
                     blob: blob,
                     isError: isError,
                     originalFile: file,
@@ -391,6 +475,11 @@ async function processImage(file, uniqueName) {
                     cropHeight: height,
                     cropX: x,
                     cropY: y,
+                    mode: currentMode,
+                    censorType: currentCensorType,
+                    censorShape: currentCensorShape,
+                    censorColor: censorColor,
+                    blurStrength: blurStrength,
                     targetRatio: useOriginalRatioInput.checked ? NaN : ((parseFloat(ratioWidthInput.value)||1)/(parseFloat(ratioHeightInput.value)||1))
                 });
                 displayResult(canvas.toDataURL(), isError);
@@ -519,11 +608,21 @@ function updatePreviewCanvas() {
     y = Math.max(0, Math.min(y, firstImageCache.height - height));
 
 
-    previewCanvas.width = width;
-    previewCanvas.height = height;
+    previewCanvas.width = (currentMode === 'censor') ? firstImageCache.width : width;
+    previewCanvas.height = (currentMode === 'censor') ? firstImageCache.height : height;
     const ctx = previewCanvas.getContext('2d');
 
-    ctx.drawImage(firstImageCache, x, y, width, height, 0, 0, width, height);
+    if (currentMode === 'censor') {
+        ctx.drawImage(firstImageCache, 0, 0);
+        drawCensor(ctx, x, y, width, height, {
+            type: currentCensorType,
+            shape: currentCensorShape,
+            color: censorColor,
+            blur: blurStrength
+        }, firstImageCache);
+    } else {
+        ctx.drawImage(firstImageCache, x, y, width, height, 0, 0, width, height);
+    }
 }
 
 // 5. Lightbox Logic
@@ -677,7 +776,7 @@ downloadBtn.addEventListener('click', () => {
     });
 
     if (count === 0) {
-        alert("No valid cropped images to download!");
+        alert(`No valid ${currentMode === 'censor' ? 'censored' : 'cropped'} images to download!`);
         return;
     }
 
@@ -686,7 +785,7 @@ downloadBtn.addEventListener('click', () => {
     zip.generateAsync({ type: "blob" })
         .then(function (content) {
             // Use FileSaver.js for better cross-browser/mobile support
-            saveAs(content, "cropped_faces.zip");
+            saveAs(content, `${currentMode === 'censor' ? 'censored' : 'cropped'}_faces.zip`);
             log("Download started.");
         });
 });
@@ -740,50 +839,107 @@ function closeEditModal() {
 if (cancelCropBtn) cancelCropBtn.addEventListener('click', closeEditModal);
 
 if (saveCropBtn) {
-    saveCropBtn.addEventListener('click', () => {
+    saveCropBtn.addEventListener('click', async () => {
         if (!cropperInstance || editingBlobIndex < 0) return;
-
-        const canvas = cropperInstance.getCroppedCanvas({
-            imageSmoothingEnabled: true,
-            imageSmoothingQuality: 'high'
-        });
-
-        if (!canvas) return;
 
         saveCropBtn.disabled = true;
         saveCropBtn.innerText = "Saving...";
 
-        canvas.toBlob((blob) => {
-            if (blob) {
-                // Update internal state
-                const data = processedBlobs[editingBlobIndex];
-                data.blob = blob;
-                data.isError = false; 
-                
-                // Update new crop rect info so if they edit AGAIN, it starts from the new box!
-                const cropData = cropperInstance.getData();
-                data.cropX = cropData.x;
-                data.cropY = cropData.y;
-                data.cropWidth = cropData.width;
-                data.cropHeight = cropData.height;
+        const data = processedBlobs[editingBlobIndex];
+        const cropData = cropperInstance.getData();
+        
+        // Update new crop rect info
+        data.cropX = cropData.x;
+        data.cropY = cropData.y;
+        data.cropWidth = cropData.width;
+        data.cropHeight = cropData.height;
+        data.isError = false;
 
-                // Visually update the corresponding card
-                const newUrl = canvas.toDataURL('image/jpeg', 0.95);
-                const cards = gallery.querySelectorAll('.image-card');
-                if (cards[editingBlobIndex]) {
-                    const img = cards[editingBlobIndex].querySelector('img');
-                    if (img) img.src = newUrl;
-                    cards[editingBlobIndex].classList.remove('error-border');
-                }
+        const finalizeSave = (blob, newUrl) => {
+            data.blob = blob;
+            const cards = gallery.querySelectorAll('.image-card');
+            if (cards[editingBlobIndex]) {
+                const img = cards[editingBlobIndex].querySelector('img');
+                if (img) img.src = newUrl;
+                cards[editingBlobIndex].classList.remove('error-border');
             }
-            
             saveCropBtn.disabled = false;
             saveCropBtn.innerText = "Save Crop";
             closeEditModal();
-        }, 'image/jpeg', 0.95);
+        };
+
+        if (data.mode === 'censor') {
+            const img = editCropImage; // The original full image being edited
+            const fullCanvas = document.createElement('canvas');
+            fullCanvas.width = img.naturalWidth;
+            fullCanvas.height = img.naturalHeight;
+            const fCtx = fullCanvas.width && fullCanvas.height ? fullCanvas.getContext('2d') : null;
+            if (fCtx) {
+                fCtx.drawImage(img, 0, 0);
+                
+                drawCensor(fCtx, cropData.x, cropData.y, cropData.width, cropData.height, {
+                    type: data.censorType,
+                    shape: data.censorShape || currentCensorShape,
+                    color: data.censorColor || censorColor,
+                    blur: data.blurStrength
+                }, img);
+                
+                const newUrl = fullCanvas.toDataURL('image/jpeg', 0.95);
+                fullCanvas.toBlob((blob) => {
+                    finalizeSave(blob, newUrl);
+                }, 'image/jpeg', 0.95);
+            }
+        } else {
+            const canvas = cropperInstance.getCroppedCanvas({
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high'
+            });
+
+            if (!canvas) {
+                saveCropBtn.disabled = false;
+                saveCropBtn.innerText = "Save Crop";
+                return;
+            }
+
+            const newUrl = canvas.toDataURL('image/jpeg', 0.95);
+            canvas.toBlob((blob) => {
+                finalizeSave(blob, newUrl);
+            }, 'image/jpeg', 0.95);
+        }
     });
 }
 
 
-// Start initialization
+// Final Initialization
 loadModels();
+
+// 9. New Drawing Helper
+function drawCensor(ctx, x, y, width, height, options, sourceImg) {
+    const { type, shape, color, blur } = options;
+    
+    ctx.save();
+    ctx.beginPath();
+    
+    if (shape === 'circle') {
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        const radiusX = width / 2;
+        const radiusY = height / 2;
+        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+    } else {
+        ctx.rect(x, y, width, height);
+    }
+    
+    ctx.clip();
+    
+    if (type === 'blur') {
+        ctx.filter = `blur(${blur}px)`;
+        // Drawing full image censored
+        ctx.drawImage(sourceImg, 0, 0);
+    } else {
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+    
+    ctx.restore();
+}
