@@ -430,6 +430,31 @@ input[type="range"] {
     color: var(--accent);
 }
 
+.emoji-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#censorEmoji {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 1.5rem;
+    text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+}
+
+#censorEmoji:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(255, 255, 255, 0.1);
+}
+
 .compact-checkbox {
     margin-top: 5px;
     padding: 5px 0;
@@ -466,10 +491,19 @@ input[type="range"] {
 
 .status-text {
     text-align: center;
-    margin-bottom: 20px;
+    margin-bottom: 5px;
     color: var(--accent);
     font-family: monospace;
     min-height: 24px;
+}
+
+.gallery-status {
+    text-align: center;
+    margin-bottom: 25px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-style: italic;
+    min-height: 20px;
 }
 
 /* Grid Layout */
@@ -484,7 +518,7 @@ input[type="range"] {
     border-radius: 12px;
     overflow: hidden;
     position: relative;
-    aspect-ratio: 1;
+    aspect-ratio: var(--gallery-ar, 1);
 }
 
 .image-card img {

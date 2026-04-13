@@ -110,6 +110,7 @@
                     <div class="censor-type-toggle">
                         <button class="type-btn active" data-type="solid">Solid Color</button>
                         <button class="type-btn" data-type="blur">Blur</button>
+                        <button class="type-btn" data-type="emoji">Emoji</button>
                     </div>
 
                     <div class="censor-shape-toggle">
@@ -127,6 +128,13 @@
                     <div id="blurOptions" class="sub-setting" style="display: none;">
                         <input type="range" id="blurStrength" min="5" max="100" value="20">
                         <div class="sub-label">Blur Radius: <span id="blurStrengthVal">20</span>px</div>
+                    </div>
+
+                    <div id="emojiOptions" class="sub-setting" style="display: none;">
+                        <div class="emoji-input-wrapper">
+                            <input type="text" id="censorEmoji" value="🕶️" maxlength="2">
+                            <div class="sub-label">Type an emoji to use</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -191,6 +199,9 @@
 
         <!-- Status Area -->
         <div id="statusArea" class="status-text">Loading AI Models...</div>
+
+        <!-- Gallery Status Message -->
+        <div id="galleryStatus" class="gallery-status"></div>
 
         <!-- Results Grid -->
         <section id="gallery" class="gallery-grid">

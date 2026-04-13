@@ -9,6 +9,7 @@ let currentMode = 'crop'; // 'crop' or 'censor'
 let currentCensorType = 'solid'; // 'solid' or 'blur'
 let currentCensorShape = 'rect'; // 'rect' or 'circle'
 let censorColor = '#000000';
+let censorEmoji = '🕶️';
 let blurStrength = 20;
 
 // Manual Crop Globals
@@ -24,6 +25,7 @@ const ratioHeightInput = document.getElementById('ratioHeight');
 const useOriginalRatioInput = document.getElementById('useOriginalRatio');
 const statusArea = document.getElementById('statusArea');
 const gallery = document.getElementById('gallery');
+const galleryStatus = document.getElementById('galleryStatus');
 const downloadBtn = document.getElementById('downloadBtn');
 const processBtn = document.getElementById('processBtn');
 const dropZone = document.getElementById('dropZone');
@@ -42,10 +44,12 @@ const typeBtns = document.querySelectorAll('.type-btn');
 const shapeBtns = document.querySelectorAll('.shape-btn');
 const solidOptions = document.getElementById('solidOptions');
 const blurOptions = document.getElementById('blurOptions');
+const emojiOptions = document.getElementById('emojiOptions');
 const censorColorInput = document.getElementById('censorColor');
 const colorHexDisplay = document.getElementById('colorHex');
 const blurStrengthInput = document.getElementById('blurStrength');
 const blurStrengthVal = document.getElementById('blurStrengthVal');
+const censorEmojiInput = document.getElementById('censorEmoji');
 
 // Edit Crop Elements
 const editCropModal = document.getElementById('editCropModal');
@@ -153,9 +157,15 @@ typeBtns.forEach(btn => {
         
         solidOptions.style.display = currentCensorType === 'solid' ? 'block' : 'none';
         blurOptions.style.display = currentCensorType === 'blur' ? 'block' : 'none';
+        emojiOptions.style.display = currentCensorType === 'emoji' ? 'block' : 'none';
         
         if (firstImageCache && firstFaceBox) updatePreviewCanvas();
     });
+});
+
+censorEmojiInput.addEventListener('input', (e) => {
+    censorEmoji = e.target.value;
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
 });
 
 shapeBtns.forEach(btn => {
@@ -256,6 +266,7 @@ processBtn.addEventListener('click', async () => {
     // Don't hide preview! previewCard.style.display = 'none'; 
 
     gallery.innerHTML = ''; // Clear prior results
+    if (galleryStatus) galleryStatus.textContent = ''; // Clear status message
     processedBlobs = [];
 
     // Force space for scrolling (simulating ~3 rows) so valid scroll target exists
@@ -312,6 +323,24 @@ processBtn.addEventListener('click', async () => {
     downloadBtn.disabled = false;
     processBtn.disabled = false;
     processBtn.innerText = "Process Again";
+
+    // Dynamic Gallery AR Logic
+    const ratios = processedBlobs.map(b => b.outputWidth / b.outputHeight);
+    if (ratios.length > 0) {
+        const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+        // Check if all ratios are within 5% of the average
+        const allSimilar = ratios.every(r => Math.abs(r - avg) / avg <= 0.05);
+        if (allSimilar) {
+            gallery.style.setProperty('--gallery-ar', avg);
+            if (galleryStatus) {
+                const shape = avg > 1.1 ? "Landscape" : (avg < 0.9 ? "Portrait" : "Square");
+                galleryStatus.textContent = `✨ Detected uniform ${shape} aspect ratio. Layout adjusted.`;
+            }
+        } else {
+            gallery.style.removeProperty('--gallery-ar');
+            if (galleryStatus) galleryStatus.textContent = "Mixed aspect ratios detected. Using standard square grid.";
+        }
+    }
 
     // Restore preview so user can adjust and re-run
     previewCard.style.display = 'block';
@@ -453,7 +482,8 @@ async function processImage(file, uniqueName) {
             type: currentCensorType,
             shape: currentCensorShape,
             color: censorColor,
-            blur: blurStrength
+            blur: blurStrength,
+            emoji: censorEmoji
         }, img);
     } else {
         canvas.width = width;
@@ -471,6 +501,8 @@ async function processImage(file, uniqueName) {
                     blob: blob,
                     isError: isError,
                     originalFile: file,
+                    outputWidth: currentMode === 'censor' ? img.width : width,
+                    outputHeight: currentMode === 'censor' ? img.height : height,
                     cropWidth: width,
                     cropHeight: height,
                     cropX: x,
@@ -479,6 +511,7 @@ async function processImage(file, uniqueName) {
                     censorType: currentCensorType,
                     censorShape: currentCensorShape,
                     censorColor: censorColor,
+                    censorEmoji: censorEmoji,
                     blurStrength: blurStrength,
                     targetRatio: useOriginalRatioInput.checked ? NaN : ((parseFloat(ratioWidthInput.value)||1)/(parseFloat(ratioHeightInput.value)||1))
                 });
@@ -618,7 +651,8 @@ function updatePreviewCanvas() {
             type: currentCensorType,
             shape: currentCensorShape,
             color: censorColor,
-            blur: blurStrength
+            blur: blurStrength,
+            emoji: censorEmoji
         }, firstImageCache);
     } else {
         ctx.drawImage(firstImageCache, x, y, width, height, 0, 0, width, height);
@@ -863,6 +897,15 @@ if (saveCropBtn) {
                 if (img) img.src = newUrl;
                 cards[editingBlobIndex].classList.remove('error-border');
             }
+
+            // Update metadata for dynamic AR check if they edit!!
+            const imgEl = editCropImage;
+            data.outputWidth = (data.mode === 'censor') ? imgEl.naturalWidth : cropData.width;
+            data.outputHeight = (data.mode === 'censor') ? imgEl.naturalHeight : cropData.height;
+
+            // Re-run the similarity check since an image changed!
+            updateGalleryLayout();
+
             saveCropBtn.disabled = false;
             saveCropBtn.innerText = "Save Crop";
             closeEditModal();
@@ -881,7 +924,8 @@ if (saveCropBtn) {
                     type: data.censorType,
                     shape: data.censorShape || currentCensorShape,
                     color: data.censorColor || censorColor,
-                    blur: data.blurStrength
+                    blur: data.blurStrength,
+                    emoji: data.censorEmoji || censorEmoji
                 }, img);
                 
                 const newUrl = fullCanvas.toDataURL('image/jpeg', 0.95);
@@ -909,6 +953,23 @@ if (saveCropBtn) {
     });
 }
 
+function updateGalleryLayout() {
+    if (processedBlobs.length === 0) return;
+    const ratios = processedBlobs.map(b => (b.outputWidth || 1) / (b.outputHeight || 1));
+    const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+    
+    // Check if all ratios are within 5% of the average
+    const allSimilar = ratios.every(r => Math.abs(r - avg) / avg <= 0.05);
+    
+    if (allSimilar) {
+        gallery.style.setProperty('--gallery-ar', avg);
+        const shape = avg > 1.1 ? "Landscape" : (avg < 0.9 ? "Portrait" : "Square");
+        if (galleryStatus) galleryStatus.textContent = `✨ Detected uniform ${shape} aspect ratio. Layout adjusted.`;
+    } else {
+        gallery.style.removeProperty('--gallery-ar');
+        if (galleryStatus) galleryStatus.textContent = "Mixed aspect ratios detected. Using standard square grid.";
+    }
+}
 
 // Final Initialization
 loadModels();
@@ -936,6 +997,13 @@ function drawCensor(ctx, x, y, width, height, options, sourceImg) {
         ctx.filter = `blur(${blur}px)`;
         // Drawing full image censored
         ctx.drawImage(sourceImg, 0, 0);
+    } else if (type === 'emoji') {
+        const emojiToDraw = options.emoji || '🕶️';
+        const fontSize = Math.min(width, height) * 0.9;
+        ctx.font = `${fontSize}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emojiToDraw, x + width / 2, y + height / 2);
     } else {
         ctx.fillStyle = color;
         ctx.fill();
