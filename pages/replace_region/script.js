@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isDrawing: false,
         showMaskOverlay: false,
         showCropGuide: false,
+        hideEdit: false,
         isTouchMode: false
     };
 
@@ -111,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const showMaskToggle = document.getElementById('show-mask-toggle');
     const showCropGuideToggle = document.getElementById('show-crop-guide-toggle');
+    const hideOverlayToggle = document.getElementById('hide-overlay-toggle');
     const touchModeToggle = document.getElementById('touch-mode-toggle');
     const brushCursor = document.getElementById('brush-cursor');
 
@@ -402,9 +404,31 @@ document.addEventListener('DOMContentLoaded', () => {
         state.showCropGuide = e.target.checked;
         composeMaskAndDraw();
     });
+    
+    if (hideOverlayToggle) {
+        hideOverlayToggle.addEventListener('change', (e) => {
+            state.hideEdit = e.target.checked;
+            composeMaskAndDraw();
+        });
+    }
 
     touchModeToggle.addEventListener('change', (e) => {
         state.isTouchMode = e.target.checked;
+    });
+
+    // Reset Button Logic
+    document.querySelectorAll('.reset-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const targetId = btn.getAttribute('data-target');
+            const defaultValue = btn.getAttribute('data-default');
+            const input = document.getElementById(targetId);
+            if (input) {
+                input.value = defaultValue;
+                // Trigger input event to update state and UI
+                input.dispatchEvent(new Event('input'));
+            }
+        });
     });
 
     fillMaskBtn.addEventListener('click', () => {
@@ -1001,7 +1025,9 @@ document.addEventListener('DOMContentLoaded', () => {
         revealedEditCtx.globalCompositeOperation = 'destination-in';
         revealedEditCtx.drawImage(combinedMaskCanvas, 0, 0);
 
-        ctx.drawImage(revealedEditCanvas, 0, 0);
+        if (!state.hideEdit) {
+            ctx.drawImage(revealedEditCanvas, 0, 0);
+        }
 
         // 5. Overlays
         if (state.showMaskOverlay) {
