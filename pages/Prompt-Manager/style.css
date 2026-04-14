@@ -5,6 +5,9 @@
     --glow-color: #7b2cbf;
     --text-main: #ffffff;
     --text-muted: #a09eb0;
+
+    /* PWA Padding Adjustments */
+    --pwa-gap: 25px;
 }
 
 * {
@@ -84,7 +87,7 @@ body {
 }
 
 .ios-pwa .container {
-    padding-top: calc(80px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: calc(var(--pwa-gap) + env(safe-area-inset-top, 0px)) !important;
 }
 
 @media (min-width: 1000px) {
@@ -604,7 +607,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .ios-pwa .modal-content {
-    padding-top: calc(50px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: calc(var(--pwa-gap) - 20px + env(safe-area-inset-top, 0px)) !important;
 }
 
 .modal-content::-webkit-scrollbar {
@@ -640,9 +643,9 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .ios-pwa .modal-header {
-    top: calc(-50px - env(safe-area-inset-top, 0px)) !important;
-    padding-top: calc(30px + env(safe-area-inset-top, 0px)) !important;
-    margin-top: calc(-50px - env(safe-area-inset-top, 0px)) !important;
+    top: calc(-1 * (var(--pwa-gap) - 20px) - env(safe-area-inset-top, 0px)) !important;
+    padding-top: calc(var(--pwa-gap) - 40px + env(safe-area-inset-top, 0px)) !important;
+    margin-top: calc(-1 * (var(--pwa-gap) - 20px) - env(safe-area-inset-top, 0px)) !important;
 }
 
 .close-btn {
@@ -781,10 +784,12 @@ input[type="range"]::-webkit-slider-thumb {
 .modal-footer-actions {
     display: flex;
     gap: 12px;
-    width: calc(100% + 80px); /* Compensate for modal padding */
+    width: calc(100% + 80px);
+    /* Compensate for modal padding */
     margin-top: 24px;
     position: sticky;
-    bottom: calc(-30px - env(safe-area-inset-bottom, 0px)); /* Match safe area inset */
+    bottom: calc(-30px - env(safe-area-inset-bottom, 0px));
+    /* Match safe area inset */
     z-index: 100;
     background: rgba(10, 5, 20, 0.8);
     backdrop-filter: blur(12px);
@@ -834,7 +839,8 @@ input[type="range"]::-webkit-slider-thumb {
     margin-bottom: 32px;
     align-items: center;
     flex-wrap: wrap;
-    flex-direction: column; /* Use column to support row grouping */
+    flex-direction: column;
+    /* Use column to support row grouping */
 }
 
 .filter-row {
@@ -846,7 +852,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .filter-row:nth-child(2) {
-    margin-top: 12px; /* Added padding/margin above filters and sort */
+    margin-top: 12px;
+    /* Added padding/margin above filters and sort */
 }
 
 .sort-group {
@@ -1592,7 +1599,8 @@ select:focus {
         padding: 10px 12px;
         gap: 12px;
         margin-bottom: 16px;
-        flex-direction: row; /* Keep elements inline if possible or adjust wrapping */
+        flex-direction: row;
+        /* Keep elements inline if possible or adjust wrapping */
         justify-content: space-between;
     }
 
@@ -1610,7 +1618,8 @@ select:focus {
     }
 
     .mode-switch {
-        width: 140px; /* Slimmer toggle */
+        width: 140px;
+        /* Slimmer toggle */
     }
 
     .mode-text {
@@ -1656,7 +1665,8 @@ select:focus {
 
     .filter-group {
         flex: 1;
-        min-width: 0; /* Allows text truncation if absolutely needed, but flex: 1 gives it priority */
+        min-width: 0;
+        /* Allows text truncation if absolutely needed, but flex: 1 gives it priority */
         display: flex;
         justify-content: flex-start;
     }
@@ -1677,7 +1687,8 @@ select:focus {
         position: absolute;
         top: -4px;
         left: -4px;
-        width: calc(100vw - 40px); /* Fill most of the width */
+        width: calc(100vw - 40px);
+        /* Fill most of the width */
         z-index: 1000;
         background: #0f0a1f;
         border: 1px solid var(--glow-color);
@@ -1688,8 +1699,15 @@ select:focus {
     }
 
     @keyframes slideInLeft {
-        from { transform: translateX(-10px); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
+        from {
+            transform: translateX(-10px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
     }
 
     .search-group.active .search-toggle {
@@ -1700,7 +1718,8 @@ select:focus {
     #mobile-category-select {
         width: 100%;
         max-width: none;
-        text-overflow: ellipsis; /* Fallback but aim for full width */
+        text-overflow: ellipsis;
+        /* Fallback but aim for full width */
     }
 
     .glass-select {

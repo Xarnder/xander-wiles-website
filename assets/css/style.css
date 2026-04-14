@@ -17,6 +17,9 @@
     /* Neon cyan */
     --gradient-primary: linear-gradient(135deg, #9d4edd 0%, #00f5ff 100%);
     --radius-xl: 20px;
+
+    /* PWA Padding Adjustments */
+    --pwa-padding-top: 50px;
 }
 
 /* --- Global & Body Styles --- */
@@ -173,7 +176,7 @@ a:hover {
 }
 
 .ios-pwa .site-header {
-    padding-top: calc(60px + env(safe-area-inset-top, 0px)) !important;
+    padding-top: calc(var(--pwa-padding-top) + env(safe-area-inset-top, 0px)) !important;
 }
 
 .site-header .header-content {
@@ -774,7 +777,7 @@ a:hover {
     }
 
     .ios-pwa .nav-toggle {
-        top: calc(65px + env(safe-area-inset-top, 0px)) !important;
+        top: calc(var(--pwa-padding-top) + 5px + env(safe-area-inset-top, 0px)) !important;
     }
 
     /* 2. Create the full-screen, blurred overlay using a pseudo-element */
