@@ -9,6 +9,15 @@
     <meta name="apple-mobile-web-app-title" content="Prompt Manager">
     <title>AI Prompt Manager</title>
 
+    <script>
+        // Detection for iOS Standalone PWA mode
+        (function() {
+            if (window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches) {
+                document.documentElement.classList.add('ios-pwa');
+            }
+        })();
+    </script>
+
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
     <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">

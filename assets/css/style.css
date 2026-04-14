@@ -172,6 +172,10 @@ a:hover {
     }
 }
 
+.ios-pwa .site-header {
+    padding-top: calc(60px + env(safe-area-inset-top, 0px)) !important;
+}
+
 .site-header .header-content {
     display: flex;
     justify-content: space-between;
@@ -767,6 +771,10 @@ a:hover {
         .nav-toggle {
             top: calc(55px + env(safe-area-inset-top, 0px));
         }
+    }
+
+    .ios-pwa .nav-toggle {
+        top: calc(65px + env(safe-area-inset-top, 0px)) !important;
     }
 
     /* 2. Create the full-screen, blurred overlay using a pseudo-element */
