@@ -142,33 +142,65 @@
 
                     <div class="control-group-divider"></div>
 
-                    <!-- Group 2: File Naming & Format -->
-                    <div class="control-group-sub">
-                        <div class="control-group">
-                            <label>Filename Format</label>
-                            <div class="filename-inputs">
-                                <input type="text" id="filename-prefix" placeholder="Prefix_" title="Prefix" />
-                                <span style="color:var(--text-muted)">+ Name +</span>
-                                <input type="text" id="filename-suffix" placeholder="_Suffix" title="Suffix" />
+                    <div class="control-group-sub" style="flex-direction: column; width: 100%;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; justify-content: center; width: 100%;">
+                            <div class="control-group">
+                                <label for="filename-mode-select">Naming Mode</label>
+                                <select id="filename-mode-select">
+                                    <option value="original" selected>Original Name</option>
+                                    <option value="sequential">Sequential Mapping</option>
+                                </select>
+                            </div>
+
+                            <!-- Mode: Original -->
+                            <div id="naming-original-inputs" class="inline-controls">
+                                <div class="control-group">
+                                    <label>Prefix / Suffix</label>
+                                    <div class="filename-inputs">
+                                        <input type="text" id="filename-prefix" placeholder="Prefix_" title="Prefix" />
+                                        <span style="color:var(--text-muted)">+ Name +</span>
+                                        <input type="text" id="filename-suffix" placeholder="_Suffix" title="Suffix" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Mode: Sequential -->
+                            <div id="naming-sequential-inputs" class="inline-controls hidden">
+                                <div class="control-group">
+                                    <label for="filename-base">Base Name</label>
+                                    <input type="text" id="filename-base" placeholder="Image" style="width: 120px;" />
+                                </div>
+                                <div class="control-group">
+                                    <label for="filename-start-num">Start</label>
+                                    <input type="number" id="filename-start-num" value="1" min="0" style="width: 60px;" />
+                                </div>
+                                <div class="control-group">
+                                    <label for="filename-padding">Padding</label>
+                                    <input type="number" id="filename-padding" value="3" min="1" max="10" style="width: 60px;" />
+                                </div>
+                            </div>
+
+                            <div class="control-group">
+                                <label for="filename-spacing-select">Spacing</label>
+                                <select id="filename-spacing-select" style="width: 120px;">
+                                    <option value="spaces" selected>Spaces (Default)</option>
+                                    <option value="underscores">Underscores</option>
+                                    <option value="hyphens">Hyphens</option>
+                                </select>
+                            </div>
+
+                            <div class="control-group">
+                                <label for="export-format-select">Format</label>
+                                <select id="export-format-select" style="width: 100px;">
+                                    <option value="image/png" selected>PNG</option>
+                                    <option value="image/jpeg">JPG</option>
+                                    <option value="image/webp">WebP</option>
+                                    <option value="image/avif">AVIF</option>
+                                </select>
                             </div>
                         </div>
-                        <div class="control-group">
-                            <label for="filename-spacing-select">Filename Spacing</label>
-                            <select id="filename-spacing-select">
-                                <option value="spaces" selected>Spaces (Default)</option>
-                                <option value="underscores">Underscores</option>
-                                <option value="hyphens">Hyphens</option>
-                            </select>
-                        </div>
-                        <div class="control-group">
-                            <label for="export-format-select">Export Format</label>
-                            <select id="export-format-select">
-                                <option value="image/png" selected>PNG</option>
-                                <option value="image/jpeg">JPG</option>
-                                <option value="image/webp">WebP</option>
-                                <option value="image/avif">AVIF</option>
-                            </select>
-                        </div>
+                        <p id="naming-example-text" class="status-message" style="margin-top: 0.8rem; font-style: italic; opacity: 0.8;">Example: Prefix_Image Name_Suffix.png</p>
+                    </div>
                         <div class="control-group hidden" id="main-quality-wrapper">
                             <label for="main-quality-slider">Quality: <span id="main-quality-value">90</span>%</label>
                             <input type="range" id="main-quality-slider" min="1" max="100" value="90" step="1" />

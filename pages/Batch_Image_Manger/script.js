@@ -31,6 +31,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const filenamePrefixInput = document.getElementById('filename-prefix');
     const filenameSuffixInput = document.getElementById('filename-suffix');
 
+    // Naming Mode DOM
+    const filenameModeSelect = document.getElementById('filename-mode-select');
+    const namingOriginalInputs = document.getElementById('naming-original-inputs');
+    const namingSequentialInputs = document.getElementById('naming-sequential-inputs');
+    const filenameBaseInput = document.getElementById('filename-base');
+    const filenameStartNumInput = document.getElementById('filename-start-num');
+    const filenamePaddingInput = document.getElementById('filename-padding');
+    const namingExampleText = document.getElementById('naming-example-text');
+
     // Height/Pos Controls
     const headerHeightSlider = document.getElementById('header-height-slider');
     const headerHeightValueSpan = document.getElementById('header-height-value');
@@ -197,6 +206,12 @@ document.addEventListener('DOMContentLoaded', () => {
         mainQualityValue.textContent = mainQualitySlider.value;
     });
 
+    // Naming Mode Listeners
+    filenameModeSelect.addEventListener('change', updateNamingUI);
+    [filenamePrefixInput, filenameSuffixInput, filenameBaseInput, filenameStartNumInput, filenamePaddingInput, filenameSpacingSelect].forEach(el => {
+        el.addEventListener('input', updateNamingUI);
+    });
+
     // Navigation
     prevBtn.addEventListener('click', navigatePrev);
     nextBtn.addEventListener('click', navigateNext);
@@ -286,6 +301,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const mouseEvent = new MouseEvent('mouseup', {});
         window.dispatchEvent(mouseEvent);
     });
+
+    updateNamingUI();
+
 
     // --- Functions ---
 
@@ -668,9 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
                     if (!blob) throw new Error(`Failed to create blob for image ${i}`);
 
-                    let baseName = imageTitles[i];
-                    baseName = applySpacing(baseName, filenameSpacingSelect.value);
-                    const finalName = `${prefix}${baseName}${suffix}${ext}`;
+                    const finalName = generateFilename(i, imageTitles[i], ext);
 
                     if (imageFolders[i] !== "(Root)") {
                         zip.folder(imageFolders[i]).file(finalName, blob);
@@ -1449,6 +1465,37 @@ document.addEventListener('DOMContentLoaded', () => {
             default:
                 return text;
         }
+    }
+
+    function generateFilename(index, originalName, ext) {
+        const mode = filenameModeSelect.value;
+        const spacingMode = filenameSpacingSelect.value;
+        let finalBase = "";
+
+        if (mode === 'sequential') {
+            const base = filenameBaseInput.value || "Image";
+            const startNum = parseInt(filenameStartNumInput.value, 10) || 0;
+            const padding = parseInt(filenamePaddingInput.value, 10) || 1;
+            const numStr = (startNum + index).toString().padStart(padding, '0');
+            finalBase = `${base}_${numStr}`;
+        } else {
+            const prefix = filenamePrefixInput.value || "";
+            const suffix = filenameSuffixInput.value || "";
+            finalBase = `${prefix}${originalName}${suffix}`;
+        }
+
+        return applySpacing(finalBase, spacingMode) + ext;
+    }
+
+    function updateNamingUI() {
+        const mode = filenameModeSelect.value;
+        namingOriginalInputs.classList.toggle('hidden', mode !== 'original');
+        namingSequentialInputs.classList.toggle('hidden', mode !== 'sequential');
+
+        // Update example
+        const ext = getFileExtension(exportFormatSelect.value);
+        const exampleName = generateFilename(0, "Image Name", ext);
+        namingExampleText.textContent = `Example: ${exampleName}`;
     }
 
     // --- Batch Fast Crop Logic ---

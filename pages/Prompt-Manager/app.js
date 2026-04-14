@@ -217,7 +217,12 @@ const autoResizeTextarea = (el) => {
     el.style.height = el.scrollHeight + 'px';
 };
 
-[document.getElementById('prompt-title'), document.getElementById('prompt-category')].forEach(el => {
+[
+    document.getElementById('prompt-title'),
+    document.getElementById('prompt-category'),
+    document.getElementById('prompt-content'),
+    document.getElementById('prompt-code')
+].forEach(el => {
     el.addEventListener('input', () => autoResizeTextarea(el));
 });
 
@@ -251,6 +256,8 @@ openModalBtn.addEventListener('click', () => {
         titleEl.focus();
         autoResizeTextarea(titleEl);
         autoResizeTextarea(document.getElementById('prompt-category'));
+        autoResizeTextarea(document.getElementById('prompt-content'));
+        autoResizeTextarea(document.getElementById('prompt-code'));
     }, 100);
 });
 
