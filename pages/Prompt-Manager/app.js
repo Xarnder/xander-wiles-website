@@ -98,6 +98,7 @@ const bulkCategoryText = document.getElementById('bulk-category-text');
 const updateCategoryColorsBtn = document.getElementById('update-category-colors-btn');
 const mobileReorderBtn = document.getElementById('mobile-reorder-btn');
 const modeToggle = document.getElementById('mode-toggle-chk');
+const sortSelect = document.getElementById('sort-prompts');
 
 // Reorder Modal Elements
 const reorderModal = document.getElementById('reorder-modal');
@@ -143,6 +144,7 @@ let allPromptsData = []; // Store the full list for local filtering
 let knownCategories = {}; // Maps category name to {bg, text}
 let currentMode = 'prompt'; // 'prompt' or 'command'
 let selectedCategory = 'all'; // Default filter category
+let currentSort = 'custom'; // Default sort criteria
 
 // Auth Provider
 const provider = new GoogleAuthProvider();
@@ -432,6 +434,13 @@ clearSearchBtn.addEventListener('click', () => {
 
 // Category filter event listener removed (now handled by button clicks)
 
+// Sort Dropdown Event
+sortSelect.addEventListener('change', () => {
+    currentSort = sortSelect.value;
+    console.log(`🔢 Sort changed to: ${currentSort}`);
+    applyFilters();
+});
+
 // Category Modal Selection Interactivity
 modalCategorySelect.addEventListener('change', () => {
     const selected = modalCategorySelect.value;
@@ -692,28 +701,6 @@ function loadPrompts() {
         });
 
         loadModeSpecificCategories();
-
-        // Hybrid Sorting Logic:
-        // 1. Pinned items at the top
-        // 2. Custom sortOrder if available
-        // 3. Fallback to newest created (createdAt)
-        allPromptsData.sort((a, b) => {
-            // First: Pinned status
-            if ((b.data.isPinned || false) !== (a.data.isPinned || false)) {
-                return (b.data.isPinned || false) - (a.data.isPinned || false);
-            }
-            
-            // Second: Manual Sort Order
-            const orderA = a.data.sortOrder !== undefined ? a.data.sortOrder : 999999;
-            const orderB = b.data.sortOrder !== undefined ? b.data.sortOrder : 999999;
-            if (orderA !== orderB) return orderA - orderB;
-            
-            // Third: fallback to Date
-            const dateA = a.data.createdAt?.toMillis() || 0;
-            const dateB = b.data.createdAt?.toMillis() || 0;
-            return dateB - dateA;
-        });
-
         applyFilters();
         console.log("✅ Data sync complete.");
     }, (error) => {
@@ -841,7 +828,52 @@ function applyFilters() {
         }
     }
 
-    renderPrompts(filtered);
+    renderPrompts(sortData(filtered));
+}
+
+// Sorting Helper Function
+function sortData(prompts) {
+    const sorted = [...prompts]; // Clone to avoid mutating the original array
+
+    sorted.sort((a, b) => {
+        // Universal Rule: Pinned items always stay at the top
+        if ((b.data.isPinned || false) !== (a.data.isPinned || false)) {
+            return (b.data.isPinned || false) - (a.data.isPinned || false);
+        }
+
+        switch (currentSort) {
+            case 'alpha-asc':
+                return a.data.title.localeCompare(b.data.title);
+            case 'alpha-desc':
+                return b.data.title.localeCompare(a.data.title);
+            case 'created-desc':
+                return (b.data.createdAt?.toMillis() || 0) - (a.data.createdAt?.toMillis() || 0);
+            case 'created-asc':
+                return (a.data.createdAt?.toMillis() || 0) - (b.data.createdAt?.toMillis() || 0);
+            case 'edited-desc':
+                const editedB = b.data.lastEdited?.toMillis() || b.data.createdAt?.toMillis() || 0;
+                const editedA = a.data.lastEdited?.toMillis() || a.data.createdAt?.toMillis() || 0;
+                return editedB - editedA;
+            case 'edited-asc':
+                const eA = a.data.lastEdited?.toMillis() || a.data.createdAt?.toMillis() || 0;
+                const eB = b.data.lastEdited?.toMillis() || b.data.createdAt?.toMillis() || 0;
+                return eA - eB;
+            case 'used-desc':
+                return (b.data.lastUsed?.toMillis() || 0) - (a.data.lastUsed?.toMillis() || 0);
+            case 'used-asc':
+                return (a.data.lastUsed?.toMillis() || 0) - (b.data.lastUsed?.toMillis() || 0);
+            case 'custom':
+            default:
+                // Custom Order (Manual)
+                const orderA = a.data.sortOrder !== undefined ? a.data.sortOrder : 999999;
+                const orderB = b.data.sortOrder !== undefined ? b.data.sortOrder : 999999;
+                if (orderA !== orderB) return orderA - orderB;
+                // Fallback to newest if no order
+                return (b.data.createdAt?.toMillis() || 0) - (a.data.createdAt?.toMillis() || 0);
+        }
+    });
+
+    return sorted;
 }
 
 // Render the final list

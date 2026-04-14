@@ -816,6 +816,35 @@ input[type="range"]::-webkit-slider-thumb {
     flex-wrap: wrap;
 }
 
+.sort-group {
+    flex-shrink: 0;
+}
+
+.glass-select {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    outline: none;
+    min-width: 180px;
+}
+
+.glass-select:focus {
+    border-color: var(--glow-color);
+    box-shadow: 0 0 15px rgba(123, 44, 191, 0.4);
+}
+
+.glass-select option {
+    background-color: #0f0a1f;
+    color: white;
+    padding: 10px;
+}
+
 .filter-group {
     flex: 1;
     min-width: 200px;
