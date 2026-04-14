@@ -190,135 +190,148 @@
 
         <!-- NEW Step 3.5: Paint Editor -->
         <section id="paint-editor-step" class="glass-card hidden">
-            <h2>Step 3.5: Edit Crop</h2>
-            <p>Paint on your cropped image. Click "Save & Continue" when done.</p>
+            <div class="editor-layout">
+                <div class="editor-sidebar">
+                    <h2>Step 3.5: Edit Crop</h2>
+                    <p>Paint on your cropped image. Click "Save & Continue" when done.</p>
 
-            <div class="canvas-container" style="cursor: none;">
-                <canvas id="paint-editor-canvas"></canvas>
-            </div>
+                    <div class="controls-bar">
+                        <div class="tool-select">
+                            <button id="pe-brush-btn" class="tool-btn active">Brush</button>
+                            <button id="pe-eraser-btn" class="tool-btn">Eraser</button>
+                        </div>
 
-            <div class="controls-bar">
-                <div class="tool-select">
-                    <button id="pe-brush-btn" class="tool-btn active">Brush</button>
-                    <button id="pe-eraser-btn" class="tool-btn">Eraser</button>
+                        <div class="control-group">
+                            <label for="pe-color-picker">Color</label>
+                            <input type="color" id="pe-color-picker" value="#ff0000"
+                                style="height: 40px; width: 60px; cursor: pointer; background: transparent; border: none;">
+                        </div>
+
+                        <div class="control-group">
+                            <label for="pe-size-slider">Size: <span id="pe-size-value">20</span>px</label>
+                            <input type="range" id="pe-size-slider" min="1" max="200" value="20" step="1" />
+                        </div>
+
+                        <div class="control-group">
+                            <label for="pe-softness-slider">Softness: <span id="pe-softness-value">0</span>%</label>
+                            <input type="range" id="pe-softness-slider" min="0" max="100" value="0" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="controls-bar" style="margin-top: 10px;">
+                        <div class="control-group">
+                            <button id="pe-fill-btn" class="action-btn small-btn"
+                                style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan);">Fill
+                                Color</button>
+                        </div>
+                        <div class="control-group">
+                            <button id="pe-clear-btn" class="action-btn small-btn"
+                                style="background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Clear All
+                                Paint</button>
+                        </div>
+                    </div>
+
+                    <div class="controls-bar final-export">
+                        <button id="cancel-paint-btn" class="action-btn small-btn"
+                            style="background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted);">Cancel</button>
+                        <button id="save-paint-btn" class="action-btn">Save & Continue &rarr;</button>
+                    </div>
                 </div>
 
-                <div class="control-group">
-                    <label for="pe-color-picker">Color</label>
-                    <input type="color" id="pe-color-picker" value="#ff0000"
-                        style="height: 40px; width: 60px; cursor: pointer; background: transparent; border: none;">
+                <div class="editor-workspace">
+                    <div class="canvas-container" style="cursor: none;">
+                        <canvas id="paint-editor-canvas"></canvas>
+                    </div>
                 </div>
-
-                <div class="control-group">
-                    <label for="pe-size-slider">Size: <span id="pe-size-value">20</span>px</label>
-                    <input type="range" id="pe-size-slider" min="1" max="200" value="20" step="1" />
-                </div>
-
-                <div class="control-group">
-                    <label for="pe-softness-slider">Softness: <span id="pe-softness-value">0</span>%</label>
-                    <input type="range" id="pe-softness-slider" min="0" max="100" value="0" step="1" />
-                </div>
-            </div>
-
-            <div class="controls-bar" style="margin-top: 10px;">
-                <div class="control-group">
-                    <button id="pe-fill-btn" class="action-btn small-btn"
-                        style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan);">Fill
-                        Color</button>
-                </div>
-                <div class="control-group">
-                    <button id="pe-clear-btn" class="action-btn small-btn"
-                        style="background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Clear All
-                        Paint</button>
-                </div>
-            </div>
-
-            <div class="controls-bar final-export">
-                <button id="cancel-paint-btn" class="action-btn small-btn"
-                    style="background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted);">Cancel</button>
-                <button id="save-paint-btn" class="action-btn">Save & Continue &rarr;</button>
             </div>
         </section>
 
         <!-- Step 4: Masking Tool -->
         <section id="mask-step" class="glass-card hidden">
-            <h2>Step 4: Blend Your Edits</h2>
-            <p>Brush to reveal edit, Eraser to hide.</p>
-            <div class="canvas-container" style="cursor: none;">
-                <canvas id="mask-canvas"></canvas>
-            </div>
+            <div class="editor-layout">
+                <div class="editor-sidebar">
+                    <h2>Step 4: Blend Your Edits</h2>
+                    <p>Brush to reveal edit, Eraser to hide.</p>
 
-            <div class="controls-bar">
-                <div class="tool-select">
-                    <button id="brush-btn" class="tool-btn active">Brush</button>
-                    <button id="eraser-btn" class="tool-btn">Eraser</button>
+                    <div class="controls-bar">
+                        <div class="tool-select">
+                            <button id="brush-btn" class="tool-btn active">Brush</button>
+                            <button id="eraser-btn" class="tool-btn">Eraser</button>
+                        </div>
+
+                        <div class="control-group">
+                            <label for="brush-size-slider">Brush Size: <span id="brush-size-value">50</span>px</label>
+                            <input type="range" id="brush-size-slider" min="1" max="500" value="50" step="1" />
+                        </div>
+
+                        <div class="control-group">
+                            <label for="brush-softness-slider">Brush Softness: <span
+                                    id="brush-softness-value">25</span>%</label>
+                            <input type="range" id="brush-softness-slider" min="0" max="100" value="25" step="1" />
+                        </div>
+                    </div>
+
+                    <!-- Feather & Fill Controls -->
+                    <div class="controls-bar" style="margin-top: 10px;">
+                        <div class="control-group">
+                            <label for="feather-slider">Crop Edge Feather: <span id="feather-value">0</span>px</label>
+                            <input type="range" id="feather-slider" min="0" max="500" value="0" step="1" />
+                        </div>
+
+                        <div class="control-group">
+                            <button id="fill-mask-btn" class="action-btn small-btn"
+                                style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan);">Fill (Show
+                                All)</button>
+                        </div>
+                        <div class="control-group">
+                            <button id="clear-mask-btn" class="action-btn small-btn"
+                                style="background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Clear (Hide
+                                All)</button>
+                        </div>
+                    </div>
+
+                    <!-- Color Match Controls (HSL) -->
+                    <div class="controls-bar" style="margin-top: 10px;">
+                        <div class="control-group">
+                            <label for="hue-slider">Hue: <span id="hue-value">0</span>&deg;</label>
+                            <input type="range" id="hue-slider" min="-180" max="180" value="0" step="1" />
+                        </div>
+                        <div class="control-group">
+                            <label for="saturation-slider">Saturation: <span id="saturation-value">100</span>%</label>
+                            <input type="range" id="saturation-slider" min="0" max="200" value="100" step="1" />
+                        </div>
+                        <div class="control-group">
+                            <label for="lightness-slider">Lightness: <span id="lightness-value">100</span>%</label>
+                            <input type="range" id="lightness-slider" min="0" max="200" value="100" step="1" />
+                        </div>
+                    </div>
+
+                    <div class="controls-bar" style="margin-top: 10px;">
+                        <label class="toggle-switch">
+                            Show Mask
+                            <input type="checkbox" id="show-mask-toggle" />
+                            <span class="toggle-knob"></span>
+                        </label>
+                        <label class="toggle-switch">
+                            Show Crop Border
+                            <input type="checkbox" id="show-crop-guide-toggle" />
+                            <span class="toggle-knob"></span>
+                        </label>
+                    </div>
+
+                    <div class="controls-bar final-export">
+                        <button id="back-to-step3-btn" class="action-btn"
+                            style="background: var(--bg-secondary); border: 1px solid var(--glass-border);">Change Edited
+                            Image</button>
+                        <button id="save-final-btn" class="action-btn">Download Final Image</button>
+                    </div>
                 </div>
 
-                <div class="control-group">
-                    <label for="brush-size-slider">Brush Size: <span id="brush-size-value">50</span>px</label>
-                    <input type="range" id="brush-size-slider" min="1" max="500" value="50" step="1" />
+                <div class="editor-workspace">
+                    <div class="canvas-container" style="cursor: none;">
+                        <canvas id="mask-canvas"></canvas>
+                    </div>
                 </div>
-
-                <div class="control-group">
-                    <label for="brush-softness-slider">Brush Softness: <span
-                            id="brush-softness-value">25</span>%</label>
-                    <input type="range" id="brush-softness-slider" min="0" max="100" value="25" step="1" />
-                </div>
-            </div>
-
-            <!-- Feather & Fill Controls -->
-            <div class="controls-bar" style="margin-top: 10px;">
-                <div class="control-group">
-                    <label for="feather-slider">Crop Edge Feather: <span id="feather-value">0</span>px</label>
-                    <input type="range" id="feather-slider" min="0" max="500" value="0" step="1" />
-                </div>
-
-                <div class="control-group">
-                    <button id="fill-mask-btn" class="action-btn small-btn"
-                        style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan);">Fill (Show
-                        All)</button>
-                </div>
-                <div class="control-group">
-                    <button id="clear-mask-btn" class="action-btn small-btn"
-                        style="background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Clear (Hide
-                        All)</button>
-                </div>
-            </div>
-
-            <!-- Color Match Controls (HSL) -->
-            <div class="controls-bar" style="margin-top: 10px;">
-                <div class="control-group">
-                    <label for="hue-slider">Hue: <span id="hue-value">0</span>&deg;</label>
-                    <input type="range" id="hue-slider" min="-180" max="180" value="0" step="1" />
-                </div>
-                <div class="control-group">
-                    <label for="saturation-slider">Saturation: <span id="saturation-value">100</span>%</label>
-                    <input type="range" id="saturation-slider" min="0" max="200" value="100" step="1" />
-                </div>
-                <div class="control-group">
-                    <label for="lightness-slider">Lightness: <span id="lightness-value">100</span>%</label>
-                    <input type="range" id="lightness-slider" min="0" max="200" value="100" step="1" />
-                </div>
-            </div>
-
-            <div class="controls-bar" style="margin-top: 10px;">
-                <label class="toggle-switch">
-                    Show Mask
-                    <input type="checkbox" id="show-mask-toggle" />
-                    <span class="toggle-knob"></span>
-                </label>
-                <label class="toggle-switch">
-                    Show Crop Border
-                    <input type="checkbox" id="show-crop-guide-toggle" />
-                    <span class="toggle-knob"></span>
-                </label>
-            </div>
-
-            <div class="controls-bar final-export">
-                <button id="back-to-step3-btn" class="action-btn"
-                    style="background: var(--bg-secondary); border: 1px solid var(--glass-border);">Change Edited
-                    Image</button>
-                <button id="save-final-btn" class="action-btn">Download Final Image</button>
             </div>
         </section>
     </main>
