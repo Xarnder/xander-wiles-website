@@ -25,6 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
         brushSize: 50,
         brushSoftness: 25,
         cropFeather: 0,
+        hue: 0,
+        saturation: 100,
+        lightness: 100,
 
         // Settings - Paint Editor
         peBrushSize: 20,
@@ -98,6 +101,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const brushSizeValue = document.getElementById('brush-size-value');
     const brushSoftnessValue = document.getElementById('brush-softness-value');
     const featherValue = document.getElementById('feather-value');
+
+    const hueSlider = document.getElementById('hue-slider');
+    const saturationSlider = document.getElementById('saturation-slider');
+    const lightnessSlider = document.getElementById('lightness-slider');
+    const hueValue = document.getElementById('hue-value');
+    const saturationValue = document.getElementById('saturation-value');
+    const lightnessValue = document.getElementById('lightness-value');
 
     const showMaskToggle = document.getElementById('show-mask-toggle');
     const showCropGuideToggle = document.getElementById('show-crop-guide-toggle');
@@ -367,6 +377,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     showMaskToggle.addEventListener('change', (e) => {
         state.showMaskOverlay = e.target.checked;
+        composeMaskAndDraw();
+    });
+
+    hueSlider.addEventListener('input', (e) => {
+        state.hue = parseInt(e.target.value, 10);
+        hueValue.textContent = state.hue;
+        composeMaskAndDraw();
+    });
+
+    saturationSlider.addEventListener('input', (e) => {
+        state.saturation = parseInt(e.target.value, 10);
+        saturationValue.textContent = state.saturation;
+        composeMaskAndDraw();
+    });
+
+    lightnessSlider.addEventListener('input', (e) => {
+        state.lightness = parseInt(e.target.value, 10);
+        lightnessValue.textContent = state.lightness;
         composeMaskAndDraw();
     });
 
@@ -962,7 +990,13 @@ document.addEventListener('DOMContentLoaded', () => {
         revealedEditCanvas.height = ctx.canvas.height;
         const revealedEditCtx = revealedEditCanvas.getContext('2d');
 
+        revealedEditCtx.save();
+        const h = state.hue !== undefined ? state.hue : 0;
+        const s = state.saturation !== undefined ? state.saturation : 100;
+        const l = state.lightness !== undefined ? state.lightness : 100;
+        revealedEditCtx.filter = `hue-rotate(${h}deg) saturate(${s}%) brightness(${l}%)`;
         revealedEditCtx.drawImage(state.editedImage, state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
+        revealedEditCtx.restore();
 
         revealedEditCtx.globalCompositeOperation = 'destination-in';
         revealedEditCtx.drawImage(combinedMaskCanvas, 0, 0);

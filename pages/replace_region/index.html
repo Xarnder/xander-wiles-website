@@ -285,6 +285,22 @@
                 </div>
             </div>
 
+            <!-- Color Match Controls (HSL) -->
+            <div class="controls-bar" style="margin-top: 10px;">
+                <div class="control-group">
+                    <label for="hue-slider">Hue: <span id="hue-value">0</span>&deg;</label>
+                    <input type="range" id="hue-slider" min="-180" max="180" value="0" step="1" />
+                </div>
+                <div class="control-group">
+                    <label for="saturation-slider">Saturation: <span id="saturation-value">100</span>%</label>
+                    <input type="range" id="saturation-slider" min="0" max="200" value="100" step="1" />
+                </div>
+                <div class="control-group">
+                    <label for="lightness-slider">Lightness: <span id="lightness-value">100</span>%</label>
+                    <input type="range" id="lightness-slider" min="0" max="200" value="100" step="1" />
+                </div>
+            </div>
+
             <div class="controls-bar" style="margin-top: 10px;">
                 <label class="toggle-switch">
                     Show Mask

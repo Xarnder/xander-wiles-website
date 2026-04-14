@@ -183,6 +183,7 @@
                         <button id="open-grid-modal-btn" class="secondary-btn">Create Grid</button>
                         <button id="open-reorder-modal-btn" class="secondary-btn">Reorder Images</button>
                         <button id="open-downscale-modal-btn" class="secondary-btn">Batch Downscale</button>
+                        <button id="open-crop-modal-btn" class="secondary-btn" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">Batch Fast Crop</button>
                     </div>
                 </div>
 
@@ -497,6 +498,42 @@
 
             <div class="popup-actions" style="margin-top: 1rem;">
                 <button id="save-reorder-btn" class="popup-generate-btn">Save New Order</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Fast Crop Popup -->
+    <div id="crop-popup" class="popup-overlay hidden">
+        <div class="popup-card glass-card" style="max-width: 95vw; max-height: 95vh; width: 100%;">
+            <button class="popup-close-btn">&times;</button>
+            <h3>Batch Fast Crop</h3>
+            <p id="crop-progress-text" style="text-align: center; color: var(--text-secondary); margin-bottom: 0.5rem;">Image 1 of 10</p>
+            
+            <div id="crop-interface-container" class="crop-interface-container">
+                <canvas id="crop-canvas"></canvas>
+                <div id="crop-overlay-instructions" class="crop-instructions">Drag to select area</div>
+            </div>
+
+            <div class="crop-controls">
+                <div class="inline-controls" style="margin-top: 1rem; justify-content: space-between; width: 100%;">
+                    <div class="control-group" style="flex-direction: row; gap: 1rem; align-items: center;">
+                        <label for="crop-aspect-ratio">Aspect Lock:</label>
+                        <select id="crop-aspect-ratio" style="min-width: 120px;">
+                            <option value="free">Free</option>
+                            <option value="1:1">1:1 (Square)</option>
+                            <option value="4:5">4:5 (Portrait)</option>
+                            <option value="5:4">5:4 (Landscape)</option>
+                            <option value="16:9">16:9 (Widescreen)</option>
+                            <option value="9:16">9:16 (Vertical)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="popup-actions" style="margin-top: 0; gap: 0.5rem;">
+                        <button id="crop-back-btn" class="secondary-btn" style="padding: 0.5rem 1rem;">← Back & Redo</button>
+                        <button id="crop-skip-btn" class="secondary-btn" style="padding: 0.5rem 1rem;">Skip Current →</button>
+                        <button id="crop-finish-btn" class="popup-generate-btn" style="padding: 0.5rem 1rem; border-radius: var(--radius-md);">Done</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
