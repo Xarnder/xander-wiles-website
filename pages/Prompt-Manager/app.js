@@ -106,6 +106,9 @@ const reorderList = document.getElementById('reorder-list');
 const closeReorderModalBtn = document.getElementById('close-reorder-modal-btn');
 const cancelReorderBtn = document.getElementById('cancel-reorder-btn');
 const saveReorderBtn = document.getElementById('save-reorder-btn');
+const mobileCategorySelect = document.getElementById('mobile-category-select');
+const mobileSearchBtn = document.getElementById('mobile-search-btn');
+const searchWrapper = document.getElementById('search-wrapper');
 
 let sortableInstance = null;
 
@@ -441,6 +444,29 @@ sortSelect.addEventListener('change', () => {
     applyFilters();
 });
 
+// Mobile Mobile Search Toggle
+mobileSearchBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const group = mobileSearchBtn.closest('.search-group');
+    group.classList.add('active');
+    searchInput.focus();
+});
+
+// Close mobile search when clicking outside
+document.addEventListener('click', (e) => {
+    const isSearchGroup = e.target.closest('.search-group');
+    if (!isSearchGroup && window.innerWidth <= 600) {
+        document.querySelector('.search-group')?.classList.remove('active');
+    }
+});
+
+// Mobile Category Dropdown Event
+mobileCategorySelect.addEventListener('change', () => {
+    selectedCategory = mobileCategorySelect.value;
+    updateActivePill();
+    applyFilters();
+});
+
 // Category Modal Selection Interactivity
 modalCategorySelect.addEventListener('change', () => {
     const selected = modalCategorySelect.value;
@@ -765,9 +791,25 @@ function updateCategoryFilter(categories) {
         };
         categoryPills.appendChild(btn);
     });
+
+    // Populate Mobile Select
+    mobileCategorySelect.innerHTML = '<option value="all">All Categories</option>';
+    const sorted = Array.from(categories).sort();
+    sorted.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        if (selectedCategory === cat) opt.selected = true;
+        mobileCategorySelect.appendChild(opt);
+    });
 }
 
 function updateActivePill() {
+    // Sync Mobile Select value
+    if (mobileCategorySelect) {
+        mobileCategorySelect.value = selectedCategory;
+    }
+
     const pills = categoryPills.querySelectorAll('.category-pill');
     pills.forEach(pill => {
         const pillText = pill.textContent;

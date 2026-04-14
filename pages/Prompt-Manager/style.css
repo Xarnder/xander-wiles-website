@@ -290,7 +290,6 @@ textarea:focus {
 }
 
 /* --- Responsive Visibility --- */
-.desktop-only,
 .mobile-only {
     display: none !important;
 }
@@ -814,6 +813,19 @@ input[type="range"]::-webkit-slider-thumb {
     margin-bottom: 32px;
     align-items: center;
     flex-wrap: wrap;
+    flex-direction: column; /* Use column to support row grouping */
+}
+
+.filter-row {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.filter-row:nth-child(2) {
+    margin-top: 12px; /* Added padding/margin above filters and sort */
 }
 
 .sort-group {
@@ -1536,4 +1548,162 @@ select:focus {
 
 .toast-icon {
     font-size: 1.1rem;
+}
+
+.search-svg-icon {
+    width: 20px;
+    height: 20px;
+    fill: white;
+    transition: transform 0.3s ease;
+}
+
+.search-toggle:hover .search-svg-icon {
+    transform: scale(1.1);
+}
+
+/* --- Slim Mobile Compact Layout --- */
+@media (max-width: 600px) {
+    .container {
+        padding-top: 0 !important;
+    }
+
+    .app-header {
+        padding: 10px 12px;
+        gap: 12px;
+        margin-bottom: 16px;
+        flex-direction: row; /* Keep elements inline if possible or adjust wrapping */
+        justify-content: space-between;
+    }
+
+    .user-info {
+        display: none !important;
+    }
+
+    .header-actions {
+        gap: 12px;
+    }
+
+    .mode-toggle-container {
+        margin: 0;
+        width: auto;
+    }
+
+    .mode-switch {
+        width: 140px; /* Slimmer toggle */
+    }
+
+    .mode-text {
+        font-size: 0.72rem !important;
+    }
+
+    .filter-bar {
+        padding: 8px 12px;
+        gap: 10px;
+        border-radius: 16px;
+        margin-bottom: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filter-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        gap: 10px;
+    }
+
+    .search-group {
+        position: relative;
+        display: flex;
+        align-items: center;
+        flex: 1;
+    }
+
+    .prompt-count-text {
+        margin: 0 !important;
+        font-size: clamp(0.65rem, 2.5vw, 0.8rem);
+        color: var(--text-muted);
+        text-align: right;
+        flex-shrink: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-left: 8px !important;
+    }
+
+    .filter-group {
+        flex: 1;
+        min-width: 0; /* Allows text truncation if absolutely needed, but flex: 1 gives it priority */
+        display: flex;
+        justify-content: flex-start;
+    }
+
+    .sort-group {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    /* Search Toggle Logic */
+    .mobile-hidden {
+        display: none !important;
+    }
+
+    .search-group.active .search-wrapper {
+        display: flex !important;
+        position: absolute;
+        top: -4px;
+        left: -4px;
+        width: calc(100vw - 40px); /* Fill most of the width */
+        z-index: 1000;
+        background: #0f0a1f;
+        border: 1px solid var(--glow-color);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+        padding: 4px;
+        border-radius: 12px;
+        animation: slideInLeft 0.2s ease-out;
+    }
+
+    @keyframes slideInLeft {
+        from { transform: translateX(-10px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+
+    .search-group.active .search-toggle {
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    #mobile-category-select {
+        width: 100%;
+        max-width: none;
+        text-overflow: ellipsis; /* Fallback but aim for full width */
+    }
+
+    .glass-select {
+        min-width: 0;
+        width: 100%;
+        padding: 6px 8px;
+        font-size: 0.8rem;
+    }
+
+    .search-toggle {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(135deg, #7209b7, #3a0ca3);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        box-shadow: 0 4px 15px rgba(114, 9, 183, 0.4);
+        border-radius: 10px;
+    }
+
+    .search-toggle:active {
+        transform: scale(0.95);
+        background: linear-gradient(135deg, #3a0ca3, #7209b7);
+    }
 }
