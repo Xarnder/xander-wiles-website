@@ -72,7 +72,7 @@ body {
 .container {
     max-width: 800px;
     margin: 0 auto;
-    padding: calc(20px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom));
+    padding: calc(24px + env(safe-area-inset-top, 0px)) 20px calc(40px + env(safe-area-inset-bottom, 0px));
     transition: max-width 0.3s ease;
 }
 
@@ -579,14 +579,14 @@ input[type="range"]::-webkit-slider-thumb {
 .modal-content {
     width: 95%;
     max-width: 900px;
-    max-height: 90vh;
+    max-height: 95vh;
     overflow-y: auto;
     margin-bottom: 0;
     /* Reset margin from glass-card */
     transform: scale(0.9);
     animation: scaleUp 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    padding: 40px;
-    padding-bottom: calc(30px + env(safe-area-inset-bottom));
+    padding: calc(40px + env(safe-area-inset-top, 0px)) 40px 40px;
+    padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px));
     /* Custom Scrollbar for the glass look */
     scrollbar-width: thin;
     scrollbar-color: var(--glow-color) rgba(255, 255, 255, 0.05);
@@ -612,15 +612,15 @@ input[type="range"]::-webkit-slider-thumb {
     align-items: center;
     margin-bottom: 24px;
     position: sticky;
-    top: -40px;
+    top: calc(-40px - env(safe-area-inset-top, 0px));
     z-index: 100;
     background: rgba(10, 5, 20, 0.8);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     margin-left: -40px;
     margin-right: -40px;
-    padding: 20px 40px;
-    margin-top: -40px;
+    padding: calc(20px + env(safe-area-inset-top, 0px)) 40px 20px;
+    margin-top: calc(-40px - env(safe-area-inset-top, 0px));
     border-bottom: 1px solid var(--glass-border);
 }
 
@@ -763,15 +763,15 @@ input[type="range"]::-webkit-slider-thumb {
     width: calc(100% + 80px); /* Compensate for modal padding */
     margin-top: 24px;
     position: sticky;
-    bottom: -30px; /* Match safe area inset */
+    bottom: calc(-30px - env(safe-area-inset-bottom, 0px)); /* Match safe area inset */
     z-index: 100;
     background: rgba(10, 5, 20, 0.8);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     margin-left: -40px;
     margin-right: -40px;
-    padding: 20px 40px;
-    margin-bottom: -30px;
+    padding: 20px 40px calc(20px + env(safe-area-inset-bottom, 0px));
+    margin-bottom: calc(-30px - env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--glass-border);
 }
 

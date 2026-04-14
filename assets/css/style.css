@@ -160,7 +160,7 @@ a:hover {
     max-width: 2000px;
     /* Increased from 1600px to allow wider header as requested */
     margin: 0 auto;
-    padding: 1rem 2rem;
+    padding: calc(1rem + env(safe-area-inset-top, 0px)) 2rem 1rem;
     box-sizing: border-box;
     /* Ensure padding doesn't cause overflow */
 }
@@ -745,7 +745,7 @@ a:hover {
     .nav-toggle {
         display: block;
         position: fixed;
-        top: 1.5rem;
+        top: calc(1.5rem + env(safe-area-inset-top, 0px));
         right: 2rem;
         z-index: 1001;
         /* Highest z-index to stay on top */
