@@ -585,6 +585,45 @@ select option {
     border-color: var(--accent);
 }
 
+.feature-checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.premium-checkbox {
+    margin: 0;
+    padding: 12px;
+}
+
+.feature-ar-row {
+    display: flex;
+    gap: 12px;
+}
+
+.ar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ar-group label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.ratio-inputs.mini {
+    margin-top: 0;
+    padding: 6px;
+}
+
+.ratio-inputs.mini input {
+    width: 30px;
+}
+
 .frame-shape-toggle {
     display: flex;
     gap: 8px;

@@ -132,6 +132,22 @@ const replaceLightVal = document.getElementById('replaceLightVal');
 const autoMatchColorBtn = document.getElementById('autoMatchColorBtn');
 const autoColorBatchInput = document.getElementById('autoColorBatch');
 
+// Feature Elements
+const featureOptionsPanel = document.getElementById('featureOptionsPanel');
+const cropEyesInput = document.getElementById('cropEyes');
+const cropNoseInput = document.getElementById('cropNose');
+const cropLipsInput = document.getElementById('cropLips');
+const cropEyebrowsInput = document.getElementById('cropEyebrows');
+const featurePaddingInput = document.getElementById('featurePaddingInput');
+const featurePaddingVal = document.getElementById('featurePaddingVal');
+const combineFeaturesInput = document.getElementById('combineFeatures');
+const featureWideWInput = document.getElementById('featureWideW');
+const featureWideHInput = document.getElementById('featureWideH');
+const featureTallWInput = document.getElementById('featureTallW');
+const featureTallHInput = document.getElementById('featureTallH');
+
+let featurePadding = 30;
+
 // Color Logic Utilities
 function rgbToHsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
@@ -182,6 +198,55 @@ function getAverageFaceHSL(canvas, box) {
     }
 }
 
+function calculateFeatureBox(points, paddingPercent, imgWidth, imgHeight, targetRatio) {
+    if (!points || points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    
+    let minX = Math.min(...xs);
+    let maxX = Math.max(...xs);
+    let minY = Math.min(...ys);
+    let maxY = Math.max(...ys);
+    
+    let width = maxX - minX;
+    let height = maxY - minY;
+    
+    const pad = Math.max(width, height) * (paddingPercent / 100);
+    
+    // Initial padded box
+    let fx = Math.max(0, minX - pad);
+    let fy = Math.max(0, minY - pad);
+    let fw = Math.min(imgWidth - fx, width + pad * 2);
+    let fh = Math.min(imgHeight - fy, height + pad * 2);
+    
+    // Apply Aspect Ratio if requested
+    if (targetRatio && targetRatio > 0) {
+        const currentRatio = fw / fh;
+        
+        if (currentRatio > targetRatio) {
+            // Current is wider than target, increase height
+            const targetH = fw / targetRatio;
+            const diffH = targetH - fh;
+            fy -= diffH / 2;
+            fh = targetH;
+        } else {
+            // Current is taller than target, increase width
+            const targetW = fh * targetRatio;
+            const diffW = targetW - fw;
+            fx -= diffW / 2;
+            fw = targetW;
+        }
+        
+        // Final sanity clamping (might slightly alter aspect ratio if image is too small)
+        if (fx < 0) fx = 0;
+        if (fy < 0) fy = 0;
+        if (fx + fw > imgWidth) fw = imgWidth - fx;
+        if (fy + fh > imgHeight) fh = imgHeight - fy;
+    }
+    
+    return { x: fx, y: fy, width: fw, height: fh };
+}
+
 // Edit Crop Elements
 const editCropModal = document.getElementById('editCropModal');
 const editCropImage = document.getElementById('editCropImage');
@@ -211,6 +276,8 @@ async function loadModels() {
     try {
         log("Loading Detection Models...");
         await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+        log("Loading Landmark Models...");
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         modelsLoaded = true;
         log("AI Models Ready. Select a fold or images.");
     } catch (error) {
@@ -532,10 +599,28 @@ modeBtns.forEach(btn => {
         if (replaceOptionsPanel) {
             replaceOptionsPanel.style.display = currentMode === 'replace' ? 'block' : 'none';
         }
+        if (featureOptionsPanel) {
+            featureOptionsPanel.style.display = currentMode === 'feature' ? 'block' : 'none';
+        }
 
         if (firstImageCache && firstFaceBox) {
             updatePreviewCanvas();
         }
+    });
+});
+
+// Feature Mode Listeners
+if (featurePaddingInput) {
+    featurePaddingInput.addEventListener('input', (e) => {
+        featurePadding = parseInt(e.target.value);
+        if (featurePaddingVal) featurePaddingVal.textContent = featurePadding;
+        if (currentMode === 'feature') updatePreviewCanvas();
+    });
+}
+
+[cropEyesInput, cropNoseInput, cropLipsInput, cropEyebrowsInput, combineFeaturesInput, featureWideWInput, featureWideHInput, featureTallWInput, featureTallHInput].forEach(inp => {
+    if (inp) inp.addEventListener('change', () => {
+        if (currentMode === 'feature') updatePreviewCanvas();
     });
 });
 
@@ -895,15 +980,18 @@ function updateFilenamePreview() {
     filenamePreview.textContent = finalName;
 }
 
-function generateOutputName(originalName, faceIndex, totalFaces, batchIndex, mode) {
+function generateOutputName(originalName, faceIndex, totalFaces, batchIndex, mode, feature) {
     const scheme = namingScheme.value;
     const prefix = filenamePrefixInput.value;
     const suffix = filenameSuffixInput.value;
     
     let baseName = "";
     const parts = originalName.split('.');
-    const ext = parts.length > 1 ? parts.pop() : 'jpg';
+    let ext = parts.length > 1 ? parts.pop() : 'jpg';
     const nameNoExt = parts.join('.');
+
+    // Feature crops are always PNG for lossless quality
+    if (feature) ext = 'png';
 
     if (scheme === 'original') {
         baseName = nameNoExt;
@@ -917,10 +1005,6 @@ function generateOutputName(originalName, faceIndex, totalFaces, batchIndex, mod
         baseName = String(batchIndex).padStart(3, '0');
     }
 
-    // Default mode prefix if user didn't provide a custom prefix?
-    // User might want BOTH. Let's keep the mode prefix unless prefix is set?
-    // Actually, usually users want one or the other. 
-    // Let's add the mode prefix ONLY if scheme is original and no custom prefix.
     let modePrefix = "";
     if (scheme === 'original' && !prefix) {
         modePrefix = `${mode}_`;
@@ -932,7 +1016,13 @@ function generateOutputName(originalName, faceIndex, totalFaces, batchIndex, mod
         facePart = `_face${faceIndex + 1}`;
     }
 
-    return `${prefix}${modePrefix}${baseName}${facePart}${suffix}.${ext}`;
+    // Add feature name if provided
+    let featurePart = "";
+    if (feature) {
+        featurePart = `_${feature}`;
+    }
+
+    return `${prefix}${modePrefix}${baseName}${facePart}${featurePart}${suffix}.${ext}`;
 }
 
 imageInput.addEventListener('change', async (e) => {
@@ -1303,6 +1393,83 @@ async function processImage(file, batchIndex) {
                 resolve();
             }, 'image/jpeg', 0.95);
         });
+    } else if (currentMode === 'feature') {
+        const detections = await faceapi.detectAllFaces(img).withFaceLandmarks();
+        const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
+
+        if (!detections || detections.length === 0) {
+            log(`No faces detected in ${file.name} for feature extraction.`, "warning");
+            createErrorCard(file.name);
+            return;
+        }
+
+        const facesToProcess = processAll ? detections : [detections.sort((a,b) => (b.detection.box.width * b.detection.box.height) - (a.detection.box.width * a.detection.box.height))[0]];
+
+        for (let i = 0; i < facesToProcess.length; i++) {
+            const landmarks = facesToProcess[i].landmarks;
+            const features = [];
+
+            if (cropEyesInput.checked) {
+                if (combineFeaturesInput.checked) {
+                    features.push({ name: 'combined_eyes', points: [...landmarks.getLeftEye(), ...landmarks.getRightEye()] });
+                } else {
+                    features.push({ name: 'left_eye', points: landmarks.getLeftEye() });
+                    features.push({ name: 'right_eye', points: landmarks.getRightEye() });
+                }
+            }
+            if (cropNoseInput.checked) {
+                features.push({ name: 'nose', points: landmarks.getNose() });
+            }
+            if (cropLipsInput.checked) {
+                features.push({ name: 'lips', points: landmarks.getMouth() });
+            }
+            if (cropEyebrowsInput.checked) {
+                if (combineFeaturesInput.checked) {
+                    features.push({ name: 'combined_eyebrows', points: [...landmarks.getLeftEyeBrow(), ...landmarks.getRightEyeBrow()] });
+                } else {
+                    features.push({ name: 'left_eyebrow', points: landmarks.getLeftEyeBrow() });
+                    features.push({ name: 'right_eyebrow', points: landmarks.getRightEyeBrow() });
+                }
+            }
+
+            for (const feature of features) {
+                // Determine AR category
+                let targetAR = 0;
+                if (feature.name === 'nose') {
+                    targetAR = (parseFloat(featureTallWInput.value)||1) / (parseFloat(featureTallHInput.value)||1);
+                } else {
+                    targetAR = (parseFloat(featureWideWInput.value)||1) / (parseFloat(featureWideHInput.value)||1);
+                }
+
+                const rect = calculateFeatureBox(feature.points, featurePadding, img.width, img.height, targetAR);
+                const canvas = document.createElement('canvas');
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+
+                await new Promise((resolve) => {
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            const finalFileName = generateOutputName(file.name, i, facesToProcess.length, batchIndex, 'feature', feature.name);
+
+                            processedBlobs.push({
+                                name: finalFileName,
+                                blob: blob,
+                                isError: false,
+                                originalFile: file,
+                                outputWidth: rect.width,
+                                outputHeight: rect.height,
+                                mode: 'feature',
+                                featureType: feature.name
+                            });
+                            displayResult(URL.createObjectURL(blob), false);
+                        }
+                        resolve();
+                    }, 'image/png');
+                });
+            }
+        }
     } else {
         // Crop Mode
         let facesToCrop = [];
@@ -1499,6 +1666,60 @@ async function updatePreviewCanvas() {
                 
                 drawReplacement(ctx, rect.x, rect.y, rect.width, rect.height, featherAmount, hslShift);
             }
+        }
+    } else if (currentMode === 'feature') {
+        const detections = await faceapi.detectAllFaces(firstImageCache).withFaceLandmarks();
+        const multi = processAllFacesInput ? processAllFacesInput.checked : false;
+        
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
+        ctx.drawImage(firstImageCache, 0, 0);
+
+        if (detections && detections.length > 0) {
+            const facesToPreview = multi ? detections : [detections.sort((a,b) => (b.detection.box.width * b.detection.box.height) - (a.detection.box.width * a.detection.box.height))[0]];
+            
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 8;
+            ctx.setLineDash([12, 12]);
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+            ctx.shadowBlur = 4;
+
+            for (const face of facesToPreview) {
+                const landmarks = face.landmarks;
+                const features = [];
+                if (cropEyesInput.checked) {
+                    if (combineFeaturesInput.checked) {
+                        features.push({ name: 'combined_eyes', points: [...landmarks.getLeftEye(), ...landmarks.getRightEye()] });
+                    } else {
+                        features.push({ name: 'left_eye', points: landmarks.getLeftEye() }, { name: 'right_eye', points: landmarks.getRightEye() });
+                    }
+                }
+                if (cropNoseInput.checked) features.push({ name: 'nose', points: landmarks.getNose() });
+                if (cropLipsInput.checked) features.push({ name: 'lips', points: landmarks.getMouth() });
+                if (cropEyebrowsInput.checked) {
+                     if (combineFeaturesInput.checked) {
+                        features.push({ name: 'combined_eyebrows', points: [...landmarks.getLeftEyeBrow(), ...landmarks.getRightEyeBrow()] });
+                    } else {
+                        features.push({ name: 'left_eyebrow', points: landmarks.getLeftEyeBrow() }, { name: 'right_eyebrow', points: landmarks.getRightEyeBrow() });
+                    }
+                }
+
+                for (const feature of features) {
+                    let targetAR = 0;
+                    if (feature.name === 'nose') {
+                        targetAR = (parseFloat(featureTallWInput.value)||1) / (parseFloat(featureTallHInput.value)||1);
+                    } else {
+                        targetAR = (parseFloat(featureWideWInput.value)||1) / (parseFloat(featureWideHInput.value)||1);
+                    }
+                    
+                    const rect = calculateFeatureBox(feature.points, featurePadding, firstImageCache.width, firstImageCache.height, targetAR);
+                    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+                }
+            }
+            
+            // Reset shadow and dash for other modes
+            ctx.shadowBlur = 0;
+            ctx.setLineDash([]);
         }
     } else {
         // Crop Mode Preview (Always shows the first/largest detected face)
