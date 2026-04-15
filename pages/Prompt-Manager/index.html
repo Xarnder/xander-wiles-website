@@ -63,13 +63,17 @@
                 </div>
 
                 <div class="mode-toggle-container">
-                    <div class="mode-switch">
-                        <input type="checkbox" id="mode-toggle-chk" class="mode-checkbox">
-                        <label for="mode-toggle-chk" class="mode-label">
-                            <span class="mode-text prompt-label">Prompts</span>
-                            <span class="mode-text command-label">Commands</span>
-                            <div class="mode-ball"></div>
-                        </label>
+                    <div class="mode-switch-3">
+                        <input type="radio" name="mode-select" id="mode-prompt" value="prompt" class="mode-control" checked>
+                        <input type="radio" name="mode-select" id="mode-command" value="command" class="mode-control">
+                        <input type="radio" name="mode-select" id="mode-link" value="link" class="mode-control">
+                        
+                        <div class="mode-options">
+                            <label for="mode-prompt" class="mode-option">Prompts</label>
+                            <label for="mode-command" class="mode-option">Commands</label>
+                            <label for="mode-link" class="mode-option">Links</label>
+                            <div class="mode-glider"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="header-actions">

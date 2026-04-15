@@ -1405,79 +1405,118 @@ select:focus {
     }
 }
 
-/* --- Mode Toggle Switch --- */
-.mode-toggle-container {
-    background: rgba(0, 0, 0, 0.15);
-    padding: 5px;
-    border-radius: 30px;
-    border: 1px solid var(--glass-border);
-    display: inline-flex;
-    align-items: center;
-}
-
-.mode-switch {
+/* --- Mode Toggle Switch (3-state) --- */
+.mode-switch-3 {
     position: relative;
-    width: 180px;
-    height: 36px;
+    display: flex;
+    align-items: center;
+    width: 260px;
+    height: 38px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    padding: 3px;
+    cursor: pointer;
+    border: 1px solid var(--glass-border);
 }
 
-.mode-checkbox {
+.mode-control {
     display: none;
 }
 
-.mode-label {
+.mode-options {
     display: flex;
-    justify-content: space-around;
-    align-items: center;
     width: 100%;
     height: 100%;
-    cursor: pointer;
     z-index: 1;
-    position: relative;
 }
 
-.mode-text {
+.mode-option {
     flex: 1;
-    text-align: center;
-    font-size: 0.85rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-muted);
-    transition: color 0.3s;
+    transition: color 0.3s ease;
+    cursor: pointer;
     z-index: 2;
 }
 
-.mode-checkbox:checked+.mode-label .command-label {
-    color: white;
-}
-
-.mode-checkbox:not(:checked)+.mode-label .prompt-label {
-    color: white;
-}
-
-.mode-ball {
+.mode-glider {
     position: absolute;
-    top: 50%;
-    left: 2px;
-    transform: translateY(-50%);
-    width: calc(50% - 2px);
-    height: calc(100% - 4px);
+    top: 3px;
+    left: 3px;
+    width: calc(33.33% - 4px);
+    height: calc(100% - 6px);
     background: linear-gradient(135deg, #7b2cbf, #9d4edd);
-    border-radius: 25px;
+    border-radius: 18px;
     transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.4s;
     z-index: 1;
     box-shadow: 0 4px 12px rgba(123, 44, 191, 0.3);
 }
 
-.mode-checkbox:checked+.mode-label .mode-ball {
-    left: calc(50% - 2px);
+/* Handle Glider Position */
+#mode-prompt:checked ~ .mode-options .mode-glider {
+    transform: translateX(0);
+    background: linear-gradient(135deg, #7b2cbf, #9d4edd);
+}
+
+#mode-command:checked ~ .mode-options .mode-glider {
+    transform: translateX(calc(100% + 2px));
     background: linear-gradient(135deg, #4361ee, #4cc9f0);
     box-shadow: 0 4px 12px rgba(76, 201, 240, 0.3);
+}
+
+#mode-link:checked ~ .mode-options .mode-glider {
+    transform: translateX(calc(200% + 4px));
+    background: linear-gradient(135deg, #06d6a0, #118ab2);
+    box-shadow: 0 4px 12px rgba(6, 214, 160, 0.3);
+}
+
+/* Label Colors */
+#mode-prompt:checked ~ .mode-options label[for="mode-prompt"],
+#mode-command:checked ~ .mode-options label[for="mode-command"],
+#mode-link:checked ~ .mode-options label[for="mode-link"] {
+    color: white;
 }
 
 /* --- Mode-Specific Overrides --- */
 .command-mode-active #main-content-group,
 .command-mode-active #add-text-block-btn {
     display: none !important;
+}
+
+.link-mode-active #prompt-code-container,
+.link-mode-active .add-block-actions,
+.link-mode-active .counters {
+    display: none !important;
+}
+
+.card-action-row {
+    margin: 8px 0 16px;
+    width: 100%;
+}
+
+.card-action-row .visit-btn {
+    padding: 10px;
+    font-size: 0.9rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.visit-btn {
+    background: rgba(6, 214, 160, 0.1) !important;
+    border: 1px solid rgba(6, 214, 160, 0.4) !important;
+    color: #06d6a0 !important;
+}
+
+.visit-btn:hover {
+    background: #06d6a0 !important;
+    color: #0a0514 !important;
+    border-color: #06d6a0 !important;
+    box-shadow: 0 0 15px rgba(6, 214, 160, 0.4) !important;
 }
 
 /* Responsive adjustment for header */
@@ -1493,7 +1532,7 @@ select:focus {
         width: 100%;
     }
 
-    .mode-switch {
+    .mode-switch-3 {
         width: 100%;
     }
 }
@@ -1617,9 +1656,9 @@ select:focus {
         width: auto;
     }
 
-    .mode-switch {
-        width: 140px;
-        /* Slimmer toggle */
+    .mode-switch-3 {
+        width: 180px;
+        /* Balanced for 3 options */
     }
 
     .mode-text {

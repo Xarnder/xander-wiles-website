@@ -97,7 +97,7 @@ const bulkCategoryBg = document.getElementById('bulk-category-bg');
 const bulkCategoryText = document.getElementById('bulk-category-text');
 const updateCategoryColorsBtn = document.getElementById('update-category-colors-btn');
 const mobileReorderBtn = document.getElementById('mobile-reorder-btn');
-const modeToggle = document.getElementById('mode-toggle-chk');
+const modeRadios = document.querySelectorAll('input[name="mode-select"]');
 const sortSelect = document.getElementById('sort-prompts');
 
 // Reorder Modal Elements
@@ -198,14 +198,37 @@ mobileCategoryColorsBtn.addEventListener('click', () => {
 });
 
 // Mode Toggle logic
-modeToggle.addEventListener('change', () => {
-    currentMode = modeToggle.checked ? 'command' : 'prompt';
+modeRadios.forEach(radio => {
+    radio.addEventListener('change', () => {
+        if (radio.checked) {
+            currentMode = radio.value;
+            handleModeChange();
+        }
+    });
+});
+
+function handleModeChange() {
     console.log(`🔄 Switched to ${currentMode} mode`);
     
-    // Update UI
-    document.body.classList.toggle('command-mode-active', currentMode === 'command');
-    openModalBtn.textContent = currentMode === 'command' ? '+ New Command' : '+ New Prompt';
-    searchInput.placeholder = currentMode === 'command' ? 'Search commands...' : 'Search prompts (Ctrl+K)...';
+    // Update UI state classes
+    document.body.classList.remove('command-mode-active', 'link-mode-active');
+    if (currentMode === 'command') {
+        document.body.classList.add('command-mode-active');
+    } else if (currentMode === 'link') {
+        document.body.classList.add('link-mode-active');
+    }
+    
+    // Update labels
+    if (currentMode === 'command') {
+        openModalBtn.textContent = '+ New Command';
+        searchInput.placeholder = 'Search commands...';
+    } else if (currentMode === 'link') {
+        openModalBtn.textContent = '+ New Link';
+        searchInput.placeholder = 'Search links...';
+    } else {
+        openModalBtn.textContent = '+ New Prompt';
+        searchInput.placeholder = 'Search prompts (Ctrl+K)...';
+    }
     
     // Reset filters and search
     searchInput.value = '';
@@ -214,7 +237,7 @@ modeToggle.addEventListener('change', () => {
     // Re-load categories and filter view
     loadModeSpecificCategories();
     applyFilters();
-});
+}
 
 // Textarea Auto-Resize Logic
 const autoResizeTextarea = (el) => {
@@ -246,11 +269,20 @@ openModalBtn.addEventListener('click', () => {
         document.getElementById('prompt-content').required = false;
         promptCodeContainer.classList.remove('hidden'); // Show code by default for commands
         document.getElementById('prompt-code').placeholder = "Main command...";
+    } else if (currentMode === 'link') {
+        modalTitle.textContent = "Add New Link";
+        submitPromptBtn.textContent = "Add Link";
+        document.getElementById('prompt-title').placeholder = "Link Display Name (e.g. My Website)";
+        document.getElementById('prompt-content').required = true;
+        document.getElementById('prompt-content').placeholder = "URL (https://...)";
+        promptCodeContainer.classList.add('hidden');
+        document.getElementById('prompt-code').placeholder = "Optional notes...";
     } else {
         modalTitle.textContent = "Add New Prompt";
         submitPromptBtn.textContent = "Add Prompt";
         document.getElementById('prompt-title').placeholder = "Prompt Title";
         document.getElementById('prompt-content').required = true;
+        document.getElementById('prompt-content').placeholder = "Main Prompt Content...";
         promptCodeContainer.classList.add('hidden'); // Hide code by default for prompts
         document.getElementById('prompt-code').placeholder = "Optional Code Snippets...";
     }
@@ -859,7 +891,7 @@ function applyFilters() {
     if (promptCountDisplay) {
         const totalInMode = allPromptsData.filter(item => (item.data.mode || 'prompt') === currentMode).length;
         const filteredCount = filtered.length;
-        const label = currentMode === 'command' ? 'commands' : 'prompts';
+        const label = currentMode === 'command' ? 'commands' : (currentMode === 'link' ? 'links' : 'prompts');
         
         if (selectedCategory !== 'all') {
             promptCountDisplay.textContent = `Showing ${filteredCount} of ${totalInMode} ${label} in "${selectedCategory}"`;
@@ -923,7 +955,7 @@ function renderPrompts(prompts) {
     promptsFeed.innerHTML = '';
 
     if (prompts.length === 0) {
-        const message = currentMode === 'command' ? 'No commands found matching your criteria.' : 'No prompts found matching your criteria.';
+        const message = currentMode === 'command' ? 'No commands found matching your criteria.' : (currentMode === 'link' ? 'No links found matching your criteria.' : 'No prompts found matching your criteria.');
         promptsFeed.innerHTML = `<div class="glass-card text-center"><p style="color: var(--text-muted);">${message}</p></div>`;
         return;
     }
@@ -964,7 +996,14 @@ function renderPrompts(prompts) {
         let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${escapeHTML(data.category)}</span>` : '<span></span>';
  
         const isCommand = (data.mode === 'command');
-        const contentHTML = (!isCommand && data.content) ? `<p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>` : '';
+        const isLink = (data.mode === 'link');
+        
+        let contentHTML = '';
+        if (isLink && data.content) {
+            contentHTML = `<p class="prompt-text-display link-display" style="margin-top: 10px; line-height: 1.5; color: #06d6a0; font-weight: 500; word-break: break-all;"><a href="${data.content}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">${escapeHTML(data.content)}</a></p>`;
+        } else if (!isCommand && data.content) {
+            contentHTML = `<p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>`;
+        }
 
         card.innerHTML = `
             <div class="card-header-main">
@@ -980,10 +1019,14 @@ function renderPrompts(prompts) {
                             <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z"/>
                         </svg>
                     </button>
-                    <button class="copy-btn" title="Copy Text">Copy</button>
-                    <button class="action-btn edit-btn" title="Edit ${isCommand ? 'Command' : 'Prompt'}">Edit</button>
+                    <button class="copy-btn" title="Copy Text">${isLink ? 'Copy Link' : 'Copy'}</button>
+                    <button class="action-btn edit-btn" title="Edit ${isCommand ? 'Command' : (isLink ? 'Link' : 'Prompt')}">Edit</button>
                 </div>
             </div>
+            ${isLink ? `
+            <div class="card-action-row">
+                <button class="glow-btn visit-btn full-width" onclick="window.open('${escapeHTML(data.content)}', '_blank')" title="Visit Link">Visit Link</button>
+            </div>` : ''}
             <div class="prompt-body">
                 ${contentHTML}
                 ${codeHTML}
@@ -1128,15 +1171,21 @@ function renderPrompts(prompts) {
             isEditing = true;
             currentPromptId = id;
             const itemMode = data.mode || 'prompt';
-            modalTitle.textContent = itemMode === 'command' ? "Edit Command" : "Edit Prompt";
-            submitPromptBtn.textContent = itemMode === 'command' ? "Update Command" : "Update Prompt";
+            modalTitle.textContent = itemMode === 'command' ? "Edit Command" : (itemMode === 'link' ? "Edit Link" : "Edit Prompt");
+            submitPromptBtn.textContent = itemMode === 'command' ? "Update Command" : (itemMode === 'link' ? "Update Link" : "Update Prompt");
             
             // Sync currentMode to item mode for editing context
             currentMode = itemMode;
-            document.body.classList.toggle('command-mode-active', currentMode === 'command');
-            modeToggle.checked = currentMode === 'command';
-            openModalBtn.textContent = currentMode === 'command' ? '+ New Command' : '+ New Prompt';
-            searchInput.placeholder = currentMode === 'command' ? 'Search commands...' : 'Search prompts (Ctrl+K)...';
+            document.body.classList.remove('command-mode-active', 'link-mode-active');
+            if (currentMode === 'command') document.body.classList.add('command-mode-active');
+            if (currentMode === 'link') document.body.classList.add('link-mode-active');
+            
+            // Set the correct radio button
+            const targetRadio = document.querySelector(`input[name="mode-select"][value="${currentMode}"]`);
+            if (targetRadio) targetRadio.checked = true;
+
+            openModalBtn.textContent = currentMode === 'command' ? '+ New Command' : (currentMode === 'link' ? '+ New Link' : '+ New Prompt');
+            searchInput.placeholder = currentMode === 'command' ? 'Search commands...' : (currentMode === 'link' ? 'Search links...' : 'Search prompts (Ctrl+K)...');
 
             document.getElementById('prompt-title').value = data.title;
             
@@ -1151,7 +1200,7 @@ function renderPrompts(prompts) {
             document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
             document.getElementById('prompt-content').value = data.content;
             document.getElementById('prompt-code').value = data.codeSnippet || '';
-            document.getElementById('prompt-code').placeholder = itemMode === 'command' ? "Main command..." : "Optional Code Snippets...";
+            document.getElementById('prompt-code').placeholder = itemMode === 'command' ? "Main command..." : (itemMode === 'link' ? "Optional notes..." : "Optional Code Snippets...");
             
             if (data.codeSnippet) {
                 promptCodeContainer.classList.remove('hidden');
