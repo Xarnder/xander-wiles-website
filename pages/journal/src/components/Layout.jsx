@@ -44,10 +44,12 @@ export default function Layout() {
                 entries[doc.id] = doc.data();
             });
 
-            // Find the most recent date with no content
+            // Find the oldest date with no content within the last week
             let targetDate = datesToCheck[0]; // Default to today
             
-            for (const dateStr of datesToCheck) {
+            // Check from oldest (last item in datesToCheck) to newest (today)
+            for (let i = datesToCheck.length - 1; i >= 0; i--) {
+                const dateStr = datesToCheck[i];
                 const entry = entries[dateStr];
                 const hasContent = entry && (
                     (entry.content && entry.content.trim().length > 0) || 
@@ -57,7 +59,7 @@ export default function Layout() {
                 
                 if (!hasContent) {
                     targetDate = dateStr;
-                    break; // Found the most recent gap (starting from today backwards)
+                    break; // Found the oldest gap
                 }
             }
 
