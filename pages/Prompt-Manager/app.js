@@ -18,7 +18,8 @@ import {
     doc,
     updateDoc,
     deleteDoc,
-    writeBatch
+    writeBatch,
+    getDocs
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // Safety shim for browser environments
@@ -133,21 +134,39 @@ const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
 
 // Import Modal Elements
 const importStatusModal = document.getElementById('import-status-modal');
-const importAddedText = document.getElementById('import-added-text').querySelector('span');
-const importSkippedText = document.getElementById('import-skipped-text').querySelector('span');
+const importAddedText = document.getElementById('import-added-text')?.querySelector('span');
+const importSkippedText = document.getElementById('import-skipped-text')?.querySelector('span');
 const closeImportModalBtn = document.getElementById('close-import-modal-btn');
 const importDoneBtn = document.getElementById('import-done-btn');
+
+// History Modal Elements
+const historyModal = document.getElementById('input-history-modal');
+const historyList = document.getElementById('history-list');
+const closeHistoryModalBtn = document.getElementById('close-history-modal-btn');
+
+// History Delete Modal Elements
+const historyDeleteModal = document.getElementById('history-delete-confirm-modal');
+const closeHistoryDeleteModalBtn = document.getElementById('close-history-delete-modal-btn');
+const cancelHistoryDeleteBtn = document.getElementById('cancel-history-delete-btn');
+const confirmHistoryDeleteBtn = document.getElementById('confirm-history-delete-btn');
 
 // State for Editing/Deleting
 let isEditing = false;
 let currentPromptId = null;
 let promptIdToDelete = null;
+let historyIdToDelete = null;
+let historyItemElementToDelete = null;
 
 let allPromptsData = []; // Store the full list for local filtering
 let knownCategories = {}; // Maps category name to {bg, text}
 let currentMode = 'prompt'; // 'prompt' or 'command'
 let selectedCategory = 'all'; // Default filter category
 let currentSort = 'custom'; // Default sort criteria
+
+const historyIconSVG = `
+    <svg xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 512 512.584" class="history-icon-svg">
+        <path fill="currentColor" fill-rule="nonzero" d="M216.773 155.955c0-10.956 8.883-19.839 19.839-19.839 10.957 0 19.84 8.883 19.84 19.839v120.763l82.657 36.334c10.013 4.409 14.56 16.104 10.151 26.117-4.409 10.014-16.104 14.56-26.117 10.152l-93.509-41.105c-7.514-2.824-12.861-10.077-12.861-18.576V155.955zM9.217 153.551a21.428 21.428 0 01-.832-5.931l.161-73.416c0-11.838 9.597-21.435 21.435-21.435 11.837 0 21.434 9.597 21.434 21.435l-.062 27.86a254.75 254.75 0 0144.093-45.53c16.773-13.472 35.563-25.045 56.182-34.24C216.231-6.518 286.347-6.44 347.474 16.978c61.173 23.435 113.425 70.235 142.233 134.828 28.812 64.598 28.733 134.717 5.313 195.845-22.547 58.856-66.726 109.447-127.57 138.854l-.759.37-.495.24-.265.125a258.922 258.922 0 01-23.987 10.066c-46.959 16.986-97.357 19.764-144.937 8.557-46.364-10.918-90.11-35.071-125.474-72.238-26.203-27.538-45.267-59.347-57.102-93.082A255.833 255.833 0 011.056 232.619c.955-10.564 10.3-18.353 20.863-17.397 10.563.955 18.353 10.299 17.397 20.863-2.812 30.836 1.015 62.169 11.417 91.805 10.047 28.639 26.294 55.709 48.667 79.223 29.987 31.513 67.06 51.99 106.344 61.241 40.482 9.536 83.286 7.197 123.097-7.201 14.161-5.123 28.013-11.813 41.303-20.069a227.878 227.878 0 0036.794-28.486c.446-.422.904-.819 1.378-1.191 22.471-22.072 39.645-48.595 50.703-77.462 19.94-52.041 20.044-111.651-4.408-166.475-24.455-54.83-68.849-94.573-120.844-114.491-52.041-19.937-111.647-20.041-166.475 4.411-17.48 7.796-33.452 17.64-47.747 29.122a215.822 215.822 0 00-37.712 39.038l17.096-.966c11.837-.648 21.963 8.421 22.61 20.258.648 11.837-8.42 21.963-20.258 22.611l-69.723 3.942c-11.018.603-20.551-7.215-22.341-17.844z"/></svg>
+`;
 
 // Auth Provider
 const provider = new GoogleAuthProvider();
@@ -967,6 +986,7 @@ function renderPrompts(prompts) {
         } = item;
         const card = document.createElement('div');
         card.className = 'glass-card';
+        card.dataset.id = id;
 
         let codeHTML = data.codeSnippet ? `<div class="prompt-code-block">${escapeHTML(data.codeSnippet)}</div>` : '';
         
@@ -1019,6 +1039,10 @@ function renderPrompts(prompts) {
                             <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z"/>
                         </svg>
                     </button>
+                    ${((data.content && /_{3,}/.test(data.content)) || (data.additionalBlocks && data.additionalBlocks.some(b => b.type === 'text' && /_{3,}/.test(b.content)))) ? `
+                    <button class="history-btn outline-btn action-btn" title="Input History">
+                        ${historyIconSVG}
+                    </button>` : ''}
                     <button class="copy-btn" title="${isLink ? 'Copy Link' : 'Copy Text'}">
                         <svg viewBox="0 0 115.77 122.88" class="copy-icon-svg">
                             <path d="M89.62,13.96v7.73h12.19h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02v0.02 v73.27v0.01h-0.02c-0.01,3.84-1.57,7.33-4.1,9.86c-2.51,2.5-5.98,4.06-9.82,4.07v0.02h-0.02h-61.7H40.1v-0.02 c-3.84-0.01-7.34-1.57-9.86-4.1c-2.5-2.51-4.06-5.98-4.07-9.82h-0.02v-0.02V92.51H13.96h-0.01v-0.02c-3.84-0.01-7.34-1.57-9.86-4.1 c-2.5-2.51-4.06-5.98-4.07-9.82H0v-0.02V13.96v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07V0h0.02h61.7 h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02V13.96L89.62,13.96z M79.04,21.69v-7.73v-0.02h0.02 c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v64.59v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h12.19V35.65 v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07v-0.02h0.02H79.04L79.04,21.69z M105.18,108.92V35.65v-0.02 h0.02c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v73.27v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h61.7h0.02 v0.02c0.91,0,1.75-0.39,2.37-1.01c0.61-0.61,1-1.46,1-2.37h-0.02V108.92L105.18,108.92z" fill="currentColor"/>
@@ -1120,18 +1144,31 @@ function renderPrompts(prompts) {
             }
         });
 
+        // History Logic
+        const historyBtn = card.querySelector('.history-btn');
+        if (historyBtn) {
+            historyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openHistoryModal(id);
+            });
+        }
+
         // Copy Logic
         const copyBtn = card.querySelector('.copy-btn');
         copyBtn.addEventListener('click', () => {
             let fullPromptText = "";
+            const allInputValues = []; // Gather all values across all blocks
             const displayP = card.querySelector('.prompt-text-display');
             
             if (displayP && data.content) {
                 const inputs = displayP.querySelectorAll('.prompt-input');
                 let inputIndex = 0;
                 fullPromptText = data.content.replace(/_{3,}/g, () => {
-                    const val = inputs[inputIndex++]?.textContent || '___';
-                    return val.trim() || '___';
+                    const el = inputs[inputIndex++];
+                    const val = el?.textContent || '___';
+                    const trimmedVal = val.trim();
+                    if (trimmedVal) allInputValues.push(trimmedVal);
+                    return trimmedVal || '___';
                 });
             } else if (data.content) {
                 // Fallback for existing data or prompts without interactive inputs
@@ -1157,11 +1194,18 @@ function renderPrompts(prompts) {
                         let inputIdx = 0;
                         blockContent = block.content.replace(/_{3,}/g, () => {
                             const val = blockInputs[inputIdx++]?.textContent || '___';
-                            return val.trim() || '___';
+                            const trimmedVal = val.trim();
+                            if (trimmedVal) allInputValues.push(trimmedVal);
+                            return trimmedVal || '___';
                         });
                     }
                     fullPromptText += (fullPromptText ? "\n\n" : "") + blockContent;
                 });
+            }
+
+            // Save to history if we have any inputs
+            if (allInputValues.length > 0) {
+                saveInputHistory(id, allInputValues);
             }
 
             copyToClipboard(fullPromptText, copyBtn);
@@ -1463,4 +1507,128 @@ function timeAgo(date) {
     if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
     const years = Math.floor(months / 12);
     return `${years} year${years > 1 ? 's' : ''} ago`;
+}
+
+// --- Input History Logic ---
+async function saveInputHistory(promptId, inputs) {
+    if (!auth.currentUser) return;
+    try {
+        await addDoc(collection(db, "prompts", promptId, "history"), {
+            inputs: inputs,
+            timestamp: serverTimestamp()
+        });
+        console.log("✅ Input history saved.");
+    } catch (err) {
+        console.error("❌ Failed to save history:", err);
+    }
+}
+
+async function openHistoryModal(promptId) {
+    historyList.innerHTML = '<div class="text-center"><p>Loading history...</p></div>';
+    historyModal.classList.remove('hidden');
+
+    try {
+        // Fetch historical entries ordered by timestamp
+        const q = query(collection(db, "prompts", promptId, "history"), orderBy("timestamp", "desc"));
+        const snapshot = await getDocs(q);
+        
+        historyList.innerHTML = '';
+        if (snapshot.empty) {
+            historyList.innerHTML = '<div class="text-center"><p style="color: var(--text-muted);">No history found for this prompt.</p></div>';
+            return;
+        }
+
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const dateStr = data.timestamp ? timeAgo(data.timestamp.toDate()) : 'Recently';
+            const preview = data.inputs.join(', ');
+            
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerHTML = `
+                <div class="history-item-info">
+                    <span class="history-item-date">${dateStr}</span>
+                    <span class="history-item-preview" title="${escapeHTML(preview)}">${escapeHTML(preview)}</span>
+                </div>
+                <div class="history-item-actions">
+                    <button class="history-restore-btn">Restore</button>
+                    <button class="history-delete-btn" title="Delete Entry">&times;</button>
+                </div>
+            `;
+            
+            item.querySelector('.history-restore-btn').onclick = () => {
+                restoreHistory(promptId, data.inputs);
+                historyModal.classList.add('hidden');
+                showToast("Inputs restored!");
+            };
+            
+            item.querySelector('.history-delete-btn').onclick = (e) => {
+                e.stopPropagation();
+                historyIdToDelete = docSnap.id;
+                historyItemElementToDelete = item;
+                historyDeleteModal.classList.remove('hidden');
+            };
+            
+            historyList.appendChild(item);
+        });
+    } catch (err) {
+        console.error("❌ Error fetching history:", err);
+        historyList.innerHTML = '<div class="text-center"><p style="color: #f72585;">Error loading history.</p></div>';
+    }
+}
+
+function restoreHistory(promptId, inputsArr) {
+    // Find the card in the feed using data-id
+    const card = document.querySelector(`.glass-card[data-id="${promptId}"]`);
+    if (!card) return;
+
+    const inputs = card.querySelectorAll('.prompt-input');
+    inputs.forEach((input, index) => {
+        if (inputsArr[index] !== undefined) {
+            input.textContent = inputsArr[index];
+        }
+    });
+}
+
+// History Modal Close Handlers
+if (closeHistoryModalBtn) {
+    closeHistoryModalBtn.onclick = () => historyModal.classList.add('hidden');
+}
+if (historyModal) {
+    historyModal.onclick = (e) => {
+        if (e.target === historyModal) historyModal.classList.add('hidden');
+    };
+}
+
+// History Delete Modal Logic
+const closeHistoryDeleteModal = () => {
+    historyDeleteModal.classList.add('hidden');
+    historyIdToDelete = null;
+    historyItemElementToDelete = null;
+};
+
+if (closeHistoryDeleteModalBtn) closeHistoryDeleteModalBtn.onclick = closeHistoryDeleteModal;
+if (cancelHistoryDeleteBtn) cancelHistoryDeleteBtn.onclick = closeHistoryDeleteModal;
+if (confirmHistoryDeleteBtn) {
+    confirmHistoryDeleteBtn.onclick = async () => {
+        if (!historyIdToDelete || !currentPromptId) return;
+        
+        try {
+            await deleteDoc(doc(db, "prompts", currentPromptId, "history", historyIdToDelete));
+            if (historyItemElementToDelete) historyItemElementToDelete.remove();
+            if (historyList.children.length === 0) {
+                historyList.innerHTML = '<div class="text-center"><p style="color: var(--text-muted);">No history found for this prompt.</p></div>';
+            }
+            closeHistoryDeleteModal();
+            showToast("History entry deleted.");
+        } catch (err) {
+            console.error("❌ Failed to delete history entry:", err);
+            showToast("Failed to delete entry.");
+        }
+    };
+}
+if (historyDeleteModal) {
+    historyDeleteModal.onclick = (e) => {
+        if (e.target === historyDeleteModal) closeHistoryDeleteModal();
+    };
 }

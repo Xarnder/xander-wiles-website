@@ -789,7 +789,7 @@ input[type="range"]::-webkit-slider-thumb {
     white-space: nowrap;
 }
 
-.expand-btn, .copy-btn, .pin-btn, .edit-btn, .visit-btn {
+.expand-btn, .copy-btn, .pin-btn, .edit-btn, .visit-btn, .history-btn {
     width: 36px !important;
     height: 36px !important;
     min-width: 36px !important; /* Override any min-width */
@@ -1833,4 +1833,106 @@ select:focus {
         transform: scale(0.95);
         background: linear-gradient(135deg, #3a0ca3, #7209b7);
     }
+}
+
+/* --- History Modal & Items --- */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 50vh;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.history-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    transition: all 0.3s ease;
+}
+
+.history-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.history-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.history-item-date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    display: block;
+}
+
+.history-item-preview {
+    font-size: 0.9rem;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.history-item-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.history-restore-btn {
+    background: rgba(123, 44, 191, 0.2);
+    border: 1px solid var(--glow-color);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.history-restore-btn:hover {
+    background: var(--glow-color);
+    box-shadow: 0 0 10px rgba(123, 44, 191, 0.4);
+}
+
+.history-delete-btn {
+    background: rgba(247, 37, 133, 0.1);
+    border: 1px solid rgba(247, 37, 133, 0.4);
+    color: #f72585;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.history-delete-btn:hover {
+    background: #f72585;
+    color: white;
+}
+
+.history-btn {
+    display: none !important;
+}
+
+.expanded .history-btn {
+    display: flex !important;
+}
+
+.history-icon-svg {
+    width: 18px;
+    height: 18px;
 }
