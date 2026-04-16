@@ -1130,8 +1130,8 @@ function renderPrompts(prompts) {
                 const inputs = displayP.querySelectorAll('.prompt-input');
                 let inputIndex = 0;
                 fullPromptText = data.content.replace(/_{3,}/g, () => {
-                    const val = inputs[inputIndex++]?.value || '___';
-                    return val;
+                    const val = inputs[inputIndex++]?.textContent || '___';
+                    return val.trim() || '___';
                 });
             } else if (data.content) {
                 // Fallback for existing data or prompts without interactive inputs
@@ -1156,7 +1156,8 @@ function renderPrompts(prompts) {
                         const blockInputs = additionalPs[blockTextIndex++].querySelectorAll('.prompt-input');
                         let inputIdx = 0;
                         blockContent = block.content.replace(/_{3,}/g, () => {
-                            return blockInputs[inputIdx++]?.value || '___';
+                            const val = blockInputs[inputIdx++]?.textContent || '___';
+                            return val.trim() || '___';
                         });
                     }
                     fullPromptText += (fullPromptText ? "\n\n" : "") + blockContent;
@@ -1439,7 +1440,7 @@ function renderContentWithInputs(content) {
     parts.forEach((part, index) => {
         html += escapeHTML(part);
         if (index < parts.length - 1) {
-            html += `<input type="text" class="prompt-input" placeholder="..." oninput="this.style.width = this.value.length > 0 ? ((this.value.length + 2) * 10) + 'px' : '120px';">`;
+            html += `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="..."></span>`;
         }
     });
 

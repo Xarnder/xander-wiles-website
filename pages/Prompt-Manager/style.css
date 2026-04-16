@@ -1041,12 +1041,23 @@ select:focus {
     padding: 2px 8px;
     margin: 0 4px;
     border-radius: 4px 4px 0 0;
-    width: 120px;
-    /* Default width */
+    min-width: 60px;
     max-width: 100%;
     box-sizing: border-box;
     transition: all 0.3s ease;
     display: inline-block;
+    vertical-align: baseline;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.prompt-input:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-muted);
+    font-style: italic;
+    opacity: 0.5;
+    pointer-events: none;
 }
 
 .prompt-input:focus {
