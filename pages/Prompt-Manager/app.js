@@ -1524,6 +1524,7 @@ async function saveInputHistory(promptId, inputs) {
 }
 
 async function openHistoryModal(promptId) {
+    currentPromptId = promptId; // Fix: Set currentPromptId so delete works
     historyList.innerHTML = '<div class="text-center"><p>Loading history...</p></div>';
     historyModal.classList.remove('hidden');
 
@@ -1541,7 +1542,7 @@ async function openHistoryModal(promptId) {
         snapshot.forEach(docSnap => {
             const data = docSnap.data();
             const dateStr = data.timestamp ? timeAgo(data.timestamp.toDate()) : 'Recently';
-            const preview = data.inputs.join(', ');
+            const preview = data.inputs.join('\n');
             
             const item = document.createElement('div');
             item.className = 'history-item';
