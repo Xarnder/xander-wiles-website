@@ -1950,3 +1950,48 @@ select:focus {
     width: 18px;
     height: 18px;
 }
+
+/* --- Feed Section Headers --- */
+.feed-section-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin: 40px 0 20px;
+    padding: 0 10px;
+    grid-column: 1 / -1;
+}
+
+.feed-section-header:first-of-type {
+    margin-top: 10px;
+}
+
+.header-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--glass-border), transparent);
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    white-space: nowrap;
+}
+
+.section-icon {
+    width: 18px;
+    height: 18px;
+    opacity: 0.7;
+}
+
+.header-text {
+    background: linear-gradient(to right, #ffffff, var(--text-muted));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
