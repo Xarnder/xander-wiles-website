@@ -815,10 +815,15 @@ input[type="range"]::-webkit-slider-thumb {
     flex-shrink: 0;
 }
 
-.copy-icon-svg, .edit-icon-svg {
+.copy-icon-svg, .edit-icon-svg, .shortcut-icon-svg {
     width: 18px;
     height: 18px;
     fill: currentColor;
+}
+
+.shortcut-icon-svg {
+    width: 15px;
+    height: 15px;
 }
 
 .copy-btn.copied {
