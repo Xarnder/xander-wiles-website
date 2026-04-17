@@ -1995,3 +1995,59 @@ select:focus {
     background-clip: text;
     -webkit-text-fill-color: transparent;
 }
+
+.card-title-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.card-tag-container {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.card-tag-container .prompt-tag {
+    font-size: 0.75rem;
+    padding: 3px 10px;
+}
+
+/* --- Slim Mobile Optimization --- */
+@media (max-width: 480px) {
+    #prompts-feed {
+        gap: 12px;
+    }
+
+    .glass-card {
+        padding: 16px 20px !important;
+        margin-bottom: 12px !important;
+    }
+
+    .glass-card h3 {
+        font-size: 1.2rem;
+    }
+
+    .feed-section-header {
+        margin: 24px 0 12px;
+    }
+
+    .card-header-main {
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+
+    .card-title-wrapper {
+        gap: 4px;
+    }
+
+    .card-tag-container .prompt-tag {
+        font-size: 0.7rem;
+        padding: 2px 8px;
+    }
+
+    .card-header-actions {
+        margin-left: 8px;
+    }
+}

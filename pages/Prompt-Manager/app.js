@@ -1096,7 +1096,12 @@ function createPromptCard(item) {
 
     card.innerHTML = `
         <div class="card-header-main">
-            <h3>${escapeHTML(data.title)}</h3>
+            <div class="card-title-wrapper">
+                <h3>${escapeHTML(data.title)}</h3>
+                <div class="card-tag-container">
+                    ${tagHTML}
+                </div>
+            </div>
             <div class="card-header-actions">
                 <button class="expand-btn" title="Toggle Content">
                     <svg viewBox="0 0 512 336.36" class="caret-icon">
@@ -1137,9 +1142,6 @@ function createPromptCard(item) {
             <div class="card-body-footer">
                 <button class="collapse-btn-bottom" title="Collapse Content">Collapse</button>
             </div>
-        </div>
-        <div class="card-tag-row">
-            ${tagHTML}
         </div>
     `;
     
