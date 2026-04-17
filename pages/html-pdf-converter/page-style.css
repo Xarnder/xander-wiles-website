@@ -1,0 +1,166 @@
+/* Base Dark Theme Variables */
+:root {
+    --bg-color: #111115;
+    --card-bg: rgba(255, 255, 255, 0.05);
+    --card-border: rgba(255, 255, 255, 0.1);
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0a5;
+    --accent-color: #6366f1;
+    --accent-hover: #4f46e5;
+    --error-color: #ef4444;
+    --success-color: #10b981;
+}
+
+body,
+html {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Container & Layout */
+.converter-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+/* Translucent Glass Card */
+.glass-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--card-border);
+    border-radius: 24px;
+    padding: 40px;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    text-align: center;
+}
+
+h1 {
+    margin-top: 0;
+    font-size: 1.8rem;
+    font-weight: 600;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    margin-bottom: 30px;
+    font-size: 0.95rem;
+}
+
+/* Form Controls */
+.input-group {
+    margin-bottom: 25px;
+}
+
+.file-input {
+    width: 100%;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px dashed var(--card-border);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.file-input::file-selector-button {
+    background: var(--card-border);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    margin-right: 15px;
+    transition: background 0.2s ease;
+}
+
+.file-input::file-selector-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.primary-btn {
+    width: 100%;
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.primary-btn:hover {
+    background-color: var(--accent-hover);
+}
+
+.primary-btn:active {
+    transform: scale(0.98);
+}
+
+/* Status Messages */
+.status-message {
+    margin-top: 20px;
+    font-size: 0.9rem;
+    min-height: 20px;
+}
+
+.status-error {
+    color: var(--error-color);
+}
+
+.status-success {
+    color: var(--success-color);
+}
+
+.status-info {
+    color: var(--text-secondary);
+}
+
+/* Responsive adjustments for slim phone screens */
+@media (max-width: 480px) {
+    .glass-card {
+        padding: 25px 20px;
+        border-radius: 20px;
+    }
+
+    h1 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Privacy Note */
+.privacy-note {
+    margin-top: 35px;
+    padding-top: 20px;
+    border-top: 1px solid var(--card-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    letter-spacing: 0.02em;
+}
+
+.privacy-note svg {
+    color: var(--success-color);
+    flex-shrink: 0;
+}
+
+.privacy-note span {
+    opacity: 0.8;
+}

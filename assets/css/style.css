@@ -33,7 +33,7 @@ body {
     font-family: 'Outfit', 'Inter', sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
-    padding: 1rem;
+    padding: 0;
     position: relative;
     overflow-x: hidden;
 }
@@ -121,6 +121,7 @@ body.nav-open {
     max-width: 1200px;
     /* <<< CHANGED: Increased from 800px to allow wider grid */
     margin: 1.5rem auto 0;
+    padding: 0 1rem;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
@@ -160,12 +161,18 @@ a:hover {
 /* --- Header & Desktop Navigation --- */
 .site-header {
     width: 100%;
-    max-width: 2000px;
-    /* Increased from 1600px to allow wider header as requested */
-    margin: 0 auto;
+    max-width: none;
+    margin: 0;
     padding: calc(1rem + env(safe-area-inset-top, 0px)) 2rem 1rem;
     box-sizing: border-box;
-    /* Ensure padding doesn't cause overflow */
+
+    /* Glass Effect (Decoupled from .glass-card) */
+    background: var(--glass-bg-nav);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid var(--glass-border);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
 }
 
 /* Extra space for iOS Home Screen App */
@@ -183,6 +190,9 @@ a:hover {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .site-header .logo {
@@ -798,7 +808,7 @@ a:hover {
         display: none;
     }
 
-    /* 4. When the nav is active, display the list and style it as the glass card */
+    /* 4. When the nav is active, display the list */
     .main-nav.active .nav-links {
         display: flex;
         flex-direction: column;
