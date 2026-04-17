@@ -385,7 +385,7 @@ input[type="range"]:hover::-webkit-slider-runnable-track {
 }
 
 /* Specific fix for Puzzle Game Header to match page aesthetics */
-#main-nav-placeholder .site-header {
+#main-nav-placeholder .xw-main-nav-header {
     background: transparent !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -394,7 +394,7 @@ input[type="range"]:hover::-webkit-slider-runnable-track {
     padding-top: 10px;
 }
 
-#main-nav-placeholder .site-header .logo {
+#main-nav-placeholder .xw-main-nav-header .logo {
     text-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
