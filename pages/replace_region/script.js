@@ -111,6 +111,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const lightnessValue = document.getElementById('lightness-value');
     const maskUploadInput = document.getElementById('mask-upload');
 
+    // Custom Modal Elements
+    const customModal = document.getElementById('custom-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalCancel = document.getElementById('modal-cancel');
+    const modalConfirm = document.getElementById('modal-confirm');
+
     const showMaskToggle = document.getElementById('show-mask-toggle');
     const showCropGuideToggle = document.getElementById('show-crop-guide-toggle');
     const hideOverlayToggle = document.getElementById('hide-overlay-toggle');
@@ -333,21 +340,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     peFillBtn.addEventListener('click', () => {
-        if (confirm("Fill entire image with selected color?")) {
-            const ctx = state.peUserLayer.getContext('2d');
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillStyle = state.peColor;
-            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            composePaintEditor();
-        }
+        showCustomConfirm(
+            "Fill Image",
+            "Are you sure you want to fill the entire image with the selected color?",
+            () => {
+                const ctx = state.peUserLayer.getContext('2d');
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = state.peColor;
+                ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                composePaintEditor();
+            }
+        );
     });
 
     peClearBtn.addEventListener('click', () => {
-        if (confirm("Reset to original cropped image (Clear Paint)?")) {
-            const ctx = state.peUserLayer.getContext('2d');
-            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            composePaintEditor();
-        }
+        showCustomConfirm(
+            "Reset Paint",
+            "Are you sure you want to reset to the original cropped image? This will clear all your current paint.",
+            () => {
+                const ctx = state.peUserLayer.getContext('2d');
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                composePaintEditor();
+            }
+        );
     });
 
 
@@ -434,39 +449,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
     fillMaskBtn.addEventListener('click', () => {
         if (!state.userPaintLayer) return;
-        if (confirm("Fill brush area (Paint entire image white)?")) {
-            const ctx = state.userPaintLayer.getContext('2d');
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
-            composeMaskAndDraw();
-        }
+        showCustomConfirm(
+            "Fill Mask",
+            "Are you sure you want to fill the brush area? This will reveal the entire edited image.",
+            () => {
+                const ctx = state.userPaintLayer.getContext('2d');
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
+                composeMaskAndDraw();
+            }
+        );
     });
 
     clearMaskBtn.addEventListener('click', () => {
         if (!state.userPaintLayer) return;
-        if (confirm("Clear all paint (Hide edited image)?")) {
-            const ctx = state.userPaintLayer.getContext('2d');
-            ctx.clearRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
-            composeMaskAndDraw();
-        }
+        showCustomConfirm(
+            "Clear Mask",
+            "Are you sure you want to clear all paint? This will hide the edited image.",
+            () => {
+                const ctx = state.userPaintLayer.getContext('2d');
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                composeMaskAndDraw();
+            }
+        );
     });
 
     maskUploadInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        if (confirm("Upload new mask? This will replace your current blending mask.")) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = new Image();
-                img.onload = () => {
-                    processUploadedMask(img);
+        showCustomConfirm(
+            "Upload Mask",
+            "Are you sure you want to upload a new mask? This will replace your current blending work.",
+            () => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        processUploadedMask(img);
+                    };
+                    img.src = event.target.result;
                 };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
+                reader.readAsDataURL(file);
+            }
+        );
         // Reset input so the same file can be uploaded again
         e.target.value = '';
     });
@@ -1164,5 +1191,37 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!canvas || canvas.width === 0) return 1;
         const rect = canvas.getBoundingClientRect();
         return rect.width / canvas.width;
+    }
+
+    function showCustomConfirm(title, message, onConfirm) {
+        modalTitle.textContent = title;
+        modalMessage.textContent = message;
+        customModal.classList.remove('hidden');
+
+        // Remove old listeners (to prevent memory leaks/multiple triggers)
+        const newConfirm = modalConfirm.cloneNode(true);
+        const newCancel = modalCancel.cloneNode(true);
+        modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
+        modalCancel.parentNode.replaceChild(newCancel, modalCancel);
+
+        // Update local references
+        const confirmBtn = document.getElementById('modal-confirm');
+        const cancelBtn = document.getElementById('modal-cancel');
+
+        confirmBtn.addEventListener('click', () => {
+            customModal.classList.add('hidden');
+            if (onConfirm) onConfirm();
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            customModal.classList.add('hidden');
+        });
+
+        // Close on background click
+        customModal.addEventListener('click', (e) => {
+            if (e.target === customModal) {
+                customModal.classList.add('hidden');
+            }
+        });
     }
 });
