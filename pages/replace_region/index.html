@@ -81,7 +81,7 @@
                     <!-- NEW: Skip Crop Option -->
                     <label for="overlay-upload-skip" class="action-btn"
                         style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan); width: 100%; max-width: 250px;">
-                        Upload Overlay (Skip Crop)
+                        Upload Full-Size Overlay (Skip Crop)
                     </label>
                     <input type="file" id="overlay-upload-skip" accept="image/*" style="display:none;" />
 
@@ -302,6 +302,14 @@
                             <button id="clear-mask-btn" class="action-btn small-btn"
                                 style="background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Clear (Hide
                                 All)</button>
+                        </div>
+
+                        <div class="control-group">
+                            <label for="mask-upload" class="action-btn small-btn"
+                                style="background: var(--bg-secondary); border: 1px solid var(--accent-cyan); display: flex; align-items: center; justify-content: center; cursor: pointer;">
+                                Upload Mask
+                            </label>
+                            <input type="file" id="mask-upload" accept="image/*" style="display:none;" />
                         </div>
                     </div>
 

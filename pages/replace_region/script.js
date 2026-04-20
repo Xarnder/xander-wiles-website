@@ -109,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const hueValue = document.getElementById('hue-value');
     const saturationValue = document.getElementById('saturation-value');
     const lightnessValue = document.getElementById('lightness-value');
+    const maskUploadInput = document.getElementById('mask-upload');
 
     const showMaskToggle = document.getElementById('show-mask-toggle');
     const showCropGuideToggle = document.getElementById('show-crop-guide-toggle');
@@ -449,6 +450,25 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.clearRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
             composeMaskAndDraw();
         }
+    });
+
+    maskUploadInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (confirm("Upload new mask? This will replace your current blending mask.")) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    processUploadedMask(img);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        // Reset input so the same file can be uploaded again
+        e.target.value = '';
     });
 
     saveFinalBtn.addEventListener('click', saveFinalImage);
@@ -1063,6 +1083,53 @@ document.addEventListener('DOMContentLoaded', () => {
         brushBtn.classList.toggle('active', tool === 'brush');
         eraserBtn.classList.toggle('active', tool === 'eraser');
         brushCursor.style.borderColor = (tool === 'brush') ? 'white' : '#ff4444';
+    }
+
+    function processUploadedMask(img) {
+        if (!state.userPaintLayer) return;
+
+        const width = state.originalImage.width;
+        const height = state.originalImage.height;
+
+        // 1. Draw uploaded image to temporary canvas (stretched to fit)
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(img, 0, 0, width, height);
+
+        // 2. Get image data to convert B&W to Alpha
+        const imageData = tempCtx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const a = data[i + 3];
+
+            // Use brightness/intensity as the new alpha channel
+            // Formula: 0.299R + 0.587G + 0.114B (Standard grayscale)
+            const brightness = (0.299 * r) + (0.587 * g) + (0.114 * b);
+            
+            // If the image already has transparency, we respect it, 
+            // but we also apply the brightness as alpha.
+            const alphaFactor = a / 255;
+            const finalAlpha = brightness * alphaFactor;
+
+            // Set pixel to semi-transparent white (since state.userPaintLayer uses white for revealing)
+            data[i] = 255;     // R
+            data[i + 1] = 255; // G
+            data[i + 2] = 255; // B
+            data[i + 3] = finalAlpha; // A
+        }
+
+        // 3. Put processed data back into state.userPaintLayer
+        const ctx = state.userPaintLayer.getContext('2d');
+        ctx.clearRect(0, 0, width, height);
+        ctx.putImageData(imageData, 0, 0);
+
+        composeMaskAndDraw();
     }
 
     function updateCursorPosition(e) {
