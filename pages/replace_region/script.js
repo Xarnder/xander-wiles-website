@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const maskCanvas = document.getElementById('mask-canvas');
     const maskCtx = maskCanvas.getContext('2d');
     const saveFinalBtn = document.getElementById('save-final-btn');
+    const saveMaskBtn = document.getElementById('save-mask-btn');
     const backToStep3Btn = document.getElementById('back-to-step3-btn');
 
     // Step 4 Controls
@@ -498,6 +499,11 @@ document.addEventListener('DOMContentLoaded', () => {
         e.target.value = '';
     });
 
+    saveMaskBtn.addEventListener('click', () => {
+        if (!state.userPaintLayer) return;
+        downloadMask();
+    });
+
     saveFinalBtn.addEventListener('click', saveFinalImage);
 
     // --- GLOBAL CURSOR TRACKING ---
@@ -598,6 +604,92 @@ document.addEventListener('DOMContentLoaded', () => {
         state.showMaskOverlay = maskState;
         state.showCropGuide = guideState;
         composeMaskAndDraw();
+    }
+
+    function downloadMask() {
+        const maskCanvas = getFinalMaskCanvas();
+        const width = maskCanvas.width;
+        const height = maskCanvas.height;
+
+        // Create a black-and-white version (not just transparency)
+        const finalExportCanvas = document.createElement('canvas');
+        finalExportCanvas.width = width;
+        finalExportCanvas.height = height;
+        const ctx = finalExportCanvas.getContext('2d');
+
+        // Draw the mask directly (white pixels with alpha)
+        ctx.drawImage(maskCanvas, 0, 0);
+        
+        // Final pass: convert alpha channel to RGB brightness
+        const imgData = ctx.getImageData(0, 0, width, height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const alpha = data[i + 3]; // The mask intensity
+            data[i] = alpha;     // R
+            data[i+1] = alpha;   // G
+            data[i+2] = alpha;   // B
+            data[i+3] = 255;     // Opaque
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        const baseName = getBaseFilename();
+        handleImageExport(finalExportCanvas, `${baseName}-mask.png`);
+    }
+
+    function getFinalMaskCanvas() {
+        const width = state.originalImage.width;
+        const height = state.originalImage.height;
+
+        const combinedMaskCanvas = document.createElement('canvas');
+        combinedMaskCanvas.width = width;
+        combinedMaskCanvas.height = height;
+        const maskCtx = combinedMaskCanvas.getContext('2d');
+
+        maskCtx.drawImage(state.userPaintLayer, 0, 0);
+
+        if (state.isDrawing && state.tempStrokeLayer) {
+            maskCtx.save();
+            const blurAmount = (state.brushSize * (state.brushSoftness / 100)) / 2;
+            if (blurAmount > 0) maskCtx.filter = `blur(${blurAmount}px)`;
+
+            if (state.currentTool === 'brush') {
+                maskCtx.globalCompositeOperation = 'source-over';
+            } else {
+                maskCtx.globalCompositeOperation = 'destination-out';
+            }
+            maskCtx.drawImage(state.tempStrokeLayer, 0, 0);
+            maskCtx.restore();
+        }
+
+        // Crop Constraint
+        const constraintCanvas = document.createElement('canvas');
+        constraintCanvas.width = width;
+        constraintCanvas.height = height;
+        const constraintCtx = constraintCanvas.getContext('2d');
+
+        const feather = state.cropFeather;
+        constraintCtx.save();
+        if (feather > 0) {
+            const maxFeather = Math.min(state.cropRect.width, state.cropRect.height) / 2;
+            const effectiveFeather = Math.min(feather, maxFeather);
+            constraintCtx.filter = `blur(${effectiveFeather / 2}px)`;
+            constraintCtx.fillStyle = 'white';
+            constraintCtx.fillRect(
+                state.cropRect.x + effectiveFeather,
+                state.cropRect.y + effectiveFeather,
+                state.cropRect.width - (effectiveFeather * 2),
+                state.cropRect.height - (effectiveFeather * 2)
+            );
+        } else {
+            constraintCtx.fillStyle = 'white';
+            constraintCtx.fillRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
+        }
+        constraintCtx.restore();
+
+        maskCtx.globalCompositeOperation = 'destination-in';
+        maskCtx.drawImage(constraintCanvas, 0, 0);
+
+        return combinedMaskCanvas;
     }
 
     // --- STEP 2: CROPPING LOGIC ---
@@ -1005,57 +1097,10 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.globalCompositeOperation = 'source-over';
         ctx.drawImage(state.originalImage, 0, 0);
 
-        // 2. Prepare Combined Mask (History + Current Stroke)
-        const combinedMaskCanvas = document.createElement('canvas');
-        combinedMaskCanvas.width = ctx.canvas.width;
-        combinedMaskCanvas.height = ctx.canvas.height;
-        const maskCtx = combinedMaskCanvas.getContext('2d');
+        // 2. Get Combined Mask
+        const combinedMaskCanvas = getFinalMaskCanvas();
 
-        maskCtx.drawImage(state.userPaintLayer, 0, 0);
-
-        if (state.isDrawing && state.tempStrokeLayer) {
-            maskCtx.save();
-            const blurAmount = (state.brushSize * (state.brushSoftness / 100)) / 2;
-            if (blurAmount > 0) maskCtx.filter = `blur(${blurAmount}px)`;
-
-            if (state.currentTool === 'brush') {
-                maskCtx.globalCompositeOperation = 'source-over';
-            } else {
-                maskCtx.globalCompositeOperation = 'destination-out';
-            }
-            maskCtx.drawImage(state.tempStrokeLayer, 0, 0);
-            maskCtx.restore();
-        }
-
-        // 3. Crop Constraint
-        const constraintCanvas = document.createElement('canvas');
-        constraintCanvas.width = ctx.canvas.width;
-        constraintCanvas.height = ctx.canvas.height;
-        const constraintCtx = constraintCanvas.getContext('2d');
-
-        const feather = state.cropFeather;
-        constraintCtx.save();
-        if (feather > 0) {
-            const maxFeather = Math.min(state.cropRect.width, state.cropRect.height) / 2;
-            const effectiveFeather = Math.min(feather, maxFeather);
-            constraintCtx.filter = `blur(${effectiveFeather / 2}px)`;
-            constraintCtx.fillStyle = 'white';
-            constraintCtx.fillRect(
-                state.cropRect.x + effectiveFeather,
-                state.cropRect.y + effectiveFeather,
-                state.cropRect.width - (effectiveFeather * 2),
-                state.cropRect.height - (effectiveFeather * 2)
-            );
-        } else {
-            constraintCtx.fillStyle = 'white';
-            constraintCtx.fillRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
-        }
-        constraintCtx.restore();
-
-        maskCtx.globalCompositeOperation = 'destination-in';
-        maskCtx.drawImage(constraintCanvas, 0, 0);
-
-        // 4. Draw Edited Image
+        // 3. Draw Edited Image
         const revealedEditCanvas = document.createElement('canvas');
         revealedEditCanvas.width = ctx.canvas.width;
         revealedEditCanvas.height = ctx.canvas.height;
