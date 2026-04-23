@@ -298,14 +298,22 @@ document.addEventListener('DOMContentLoaded', function () {
             totalLivedEl.innerHTML = `${focusPerson.name} has lived for: <strong>${stats.lived.months.toLocaleString()}</strong> months, <strong>${stats.lived.weeks.toLocaleString()}</strong> weeks, or <strong>${stats.lived.days.toLocaleString()}</strong> days.`;
             totalLeftEl.innerHTML = `${focusPerson.name} has left (est.): <strong>${stats.left.months.toLocaleString()}</strong> months, <strong>${stats.left.weeks.toLocaleString()}</strong> weeks, or <strong>${stats.left.days.toLocaleString()}</strong> days.`;
         } else if (people.length > 0) {
-            const totalLived = people.reduce((acc, p) => acc + getStats(p).lived.days, 0);
+            // Summary mode
+            const totalLivedDays = people.reduce((acc, p) => acc + getStats(p).lived.days, 0);
             const avgAge = people.reduce((acc, p) => acc + (getStats(p).lived.days / 365.25), 0) / people.length;
             
+            // Average Birthday
+            const avgBirthTimestamp = people.reduce((acc, p) => acc + new Date(p.dob).getTime(), 0) / people.length;
+            const avgBirthDate = new Date(avgBirthTimestamp).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+            
+            // Average Lifespan
+            const avgLifespan = people.reduce((acc, p) => acc + p.lifespan, 0) / people.length;
+
             weeksSinceEl.innerHTML = `Tracking <strong>${people.length}</strong> people.`;
-            percentageThroughYearEl.innerHTML = `Average age: <strong>${avgAge.toFixed(1)}</strong> years.`;
-            percentageEl.innerHTML = `Combined days lived: <strong>${totalLived.toLocaleString()}</strong>`;
-            totalLivedEl.innerHTML = `Multiple lines on the grid show everyone's current week.`;
-            totalLeftEl.innerHTML = `Use the dropdown to see detailed stats per person.`;
+            percentageThroughYearEl.innerHTML = `Average Birth Date: <strong>${avgBirthDate}</strong>`;
+            percentageEl.innerHTML = `Average Lifespan: <strong>${avgLifespan.toFixed(1)}</strong> years.`;
+            totalLivedEl.innerHTML = `Combined days lived: <strong>${totalLivedDays.toLocaleString()}</strong> days (Avg age: ${avgAge.toFixed(1)}).`;
+            totalLeftEl.innerHTML = `Multiple lines on the grid show everyone's current week.`;
         } else {
             weeksSinceEl.innerHTML = `Add someone to see their journey.`;
             percentageThroughYearEl.innerHTML = `--`;
@@ -319,6 +327,43 @@ document.addEventListener('DOMContentLoaded', function () {
         renderPeopleList();
         renderGrid();
         updateStats();
+    }
+
+    function getNextColor() {
+        const presets = ['#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899', '#10b981', '#6366f1', '#f43f5e', '#eab308', '#a855f7', '#0ea5e9'];
+        const usedColors = people.map(p => p.color.toLowerCase());
+        
+        // Try to find an unused preset
+        const unusedPreset = presets.find(c => !usedColors.includes(c.toLowerCase()));
+        if (unusedPreset) return unusedPreset;
+        
+        // Otherwise generate a random HSL color for variety
+        const hue = Math.floor(Math.random() * 360);
+        return `hsl(${hue}, 70%, 60%)`; // Convert this to hex for the input[type=color]?
+        // Wait, input[type=color] requires hex. Let's use a hex generator.
+    }
+
+    // Helper to convert HSL to Hex
+    function hslToHex(h, s, l) {
+        l /= 100;
+        const a = s * Math.min(l, 1 - l) / 100;
+        const f = n => {
+            const k = (n + h / 30) % 12;
+            const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+            return Math.round(255 * color).toString(16).padStart(2, '0');
+        };
+        return `#${f(0)}${f(8)}${f(4)}`;
+    }
+
+    function generateUniqueColor() {
+        const presets = ['#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899', '#10b981', '#6366f1', '#f43f5e', '#eab308', '#a855f7', '#0ea5e9'];
+        const usedColors = people.map(p => p.color.toLowerCase());
+        
+        const unusedPreset = presets.find(c => !usedColors.includes(c.toLowerCase()));
+        if (unusedPreset) return unusedPreset;
+
+        // Random HSL to Hex
+        return hslToHex(Math.floor(Math.random() * 360), 70, 60);
     }
 
     // --- Event Handlers ---
@@ -348,6 +393,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         savePeople();
         cancelEdit(); // Reset form
+        
+        // Cycle to next color for the next person
+        newColorInput.value = generateUniqueColor();
+        
         updateAll();
     });
 
@@ -364,6 +413,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const thirtyYearsAgo = new Date();
         thirtyYearsAgo.setFullYear(thirtyYearsAgo.getFullYear() - 30);
         newDobInput.value = thirtyYearsAgo.toISOString().split('T')[0];
+        
+        // Initial color
+        newColorInput.value = generateUniqueColor();
+        
         updateAll();
     }
 
