@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const themeToggle = document.getElementById('theme-toggle');
     const peopleListEl = document.getElementById('people-list');
     const statsPersonSelect = document.getElementById('stats-person-select');
+    const personDobLifespanEl = document.getElementById('person-dob-lifespan');
     
     // Add Person Form elements
     const addPersonForm = document.querySelector('.add-person-form');
@@ -292,32 +293,38 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (focusPerson) {
             const stats = getStats(focusPerson);
+            const dobDate = new Date(focusPerson.dob).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+            
+            percentageEl.innerHTML = `Total life completed: <strong>${((stats.lived.weeks / (stats.lived.weeks + stats.left.weeks)) * 100).toFixed(2)}%</strong>`;
+            personDobLifespanEl.innerHTML = `Born: <strong>${dobDate}</strong> &nbsp; | &nbsp; Lifespan: <strong>${focusPerson.lifespan}y</strong>`;
             weeksSinceEl.innerHTML = `Weeks since ${focusPerson.name}'s last birthday: <strong>${stats.weeksSinceBirthday}</strong>`;
             percentageThroughYearEl.innerHTML = `Percentage through current year: <strong>${stats.percentageThroughYear.toFixed(2)}%</strong>`;
-            percentageEl.innerHTML = `Total life completed: <strong>${((stats.lived.weeks / (stats.lived.weeks + stats.left.weeks)) * 100).toFixed(2)}%</strong>`;
             totalLivedEl.innerHTML = `${focusPerson.name} has lived for: <strong>${stats.lived.months.toLocaleString()}</strong> months, <strong>${stats.lived.weeks.toLocaleString()}</strong> weeks, or <strong>${stats.lived.days.toLocaleString()}</strong> days.`;
             totalLeftEl.innerHTML = `${focusPerson.name} has left (est.): <strong>${stats.left.months.toLocaleString()}</strong> months, <strong>${stats.left.weeks.toLocaleString()}</strong> weeks, or <strong>${stats.left.days.toLocaleString()}</strong> days.`;
+            
+            personDobLifespanEl.style.display = 'block';
         } else if (people.length > 0) {
             // Summary mode
             const totalLivedDays = people.reduce((acc, p) => acc + getStats(p).lived.days, 0);
+            const totalLeftDays = people.reduce((acc, p) => acc + getStats(p).left.days, 0);
+            const avgPercentage = (totalLivedDays / (totalLivedDays + totalLeftDays)) * 100;
             const avgAge = people.reduce((acc, p) => acc + (getStats(p).lived.days / 365.25), 0) / people.length;
             
-            // Average Birthday
             const avgBirthTimestamp = people.reduce((acc, p) => acc + new Date(p.dob).getTime(), 0) / people.length;
             const avgBirthDate = new Date(avgBirthTimestamp).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-            
-            // Average Lifespan
             const avgLifespan = people.reduce((acc, p) => acc + p.lifespan, 0) / people.length;
 
+            percentageEl.innerHTML = `Average life completed: <strong>${avgPercentage.toFixed(2)}%</strong>`;
+            personDobLifespanEl.style.display = 'none';
             weeksSinceEl.innerHTML = `Tracking <strong>${people.length}</strong> people.`;
-            percentageThroughYearEl.innerHTML = `Average Birth Date: <strong>${avgBirthDate}</strong>`;
-            percentageEl.innerHTML = `Average Lifespan: <strong>${avgLifespan.toFixed(1)}</strong> years.`;
+            percentageThroughYearEl.innerHTML = `Avg. Birth Date: <strong>${avgBirthDate}</strong> &nbsp; | &nbsp; Avg. Lifespan: <strong>${avgLifespan.toFixed(1)}y</strong>`;
             totalLivedEl.innerHTML = `Combined days lived: <strong>${totalLivedDays.toLocaleString()}</strong> days (Avg age: ${avgAge.toFixed(1)}).`;
             totalLeftEl.innerHTML = `Multiple lines on the grid show everyone's current week.`;
         } else {
-            weeksSinceEl.innerHTML = `Add someone to see their journey.`;
+            percentageEl.innerHTML = `Add someone to see their journey.`;
+            personDobLifespanEl.style.display = 'none';
+            weeksSinceEl.innerHTML = `--`;
             percentageThroughYearEl.innerHTML = `--`;
-            percentageEl.innerHTML = `--`;
             totalLivedEl.innerHTML = `--`;
             totalLeftEl.innerHTML = `--`;
         }
