@@ -112,6 +112,68 @@ body {
     padding: 2rem;
 }
 
+#favorites-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    grid-column: span 12;
+    width: 100%;
+}
+
+.fav-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.dynamic-fav-card {
+    padding: 0; /* Remove padding to allow image to be full width at top */
+    overflow: hidden;
+    width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.card-content-wrapper {
+    padding: 2rem;
+}
+
+.card-image-container {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+}
+
+.card-image-placeholder {
+    font-size: 2rem;
+    opacity: 0.2;
+    filter: grayscale(1);
+    transition: transform 0.5s ease;
+    padding: 4rem 0; /* Ensure placeholder has height */
+}
+
+.glass-panel:hover .card-image-placeholder {
+    transform: scale(1.1);
+    opacity: 0.3;
+}
+
+.card-image-container img {
+    width: 100%;
+    height: auto;
+    display: block;
+    object-fit: cover; /* Still useful to ensure they fill width nicely if slightly off */
+}
+
+.priority-card {
+    grid-column: span 6;
+}
+
 .card-links {
     grid-column: span 12;
     padding: 2.5rem;
@@ -119,8 +181,13 @@ body {
 }
 
 @media (max-width: 768px) {
-    .card-education, .card-hobbies, .card-foods, .card-places, .card-enjoy, .card-happy {
+    .card-education, .card-hobbies, .card-foods, .card-places, .card-enjoy, .card-happy, .priority-card {
         grid-column: span 12;
+        margin-bottom: 1.5rem;
+    }
+
+    #favorites-grid {
+        grid-template-columns: 1fr;
     }
 }
 
