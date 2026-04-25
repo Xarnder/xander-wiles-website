@@ -855,18 +855,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!originalImage || !cropRect) return;
 
-        originalPreviewCanvas.width = originalImage.width;
-        originalPreviewCanvas.height = originalImage.height;
-        croppedPreviewCanvas.width = cropRect.width;
-        croppedPreviewCanvas.height = cropRect.height;
+        // NEW: Cap preview resolution to prevent black screens/memory issues
+        const MAX_PREVIEW_DIM = 1200;
+        let scale = 1;
+        if (originalImage.width > MAX_PREVIEW_DIM || originalImage.height > MAX_PREVIEW_DIM) {
+            scale = MAX_PREVIEW_DIM / Math.max(originalImage.width, originalImage.height);
+        }
 
+        originalPreviewCanvas.width = originalImage.width * scale;
+        originalPreviewCanvas.height = originalImage.height * scale;
+        
+        // For the cropped preview, we also cap it
+        let cropScale = 1;
+        if (cropRect.width > MAX_PREVIEW_DIM || cropRect.height > MAX_PREVIEW_DIM) {
+            cropScale = MAX_PREVIEW_DIM / Math.max(cropRect.width, cropRect.height);
+        }
+        croppedPreviewCanvas.width = cropRect.width * cropScale;
+        croppedPreviewCanvas.height = cropRect.height * cropScale;
+
+        // Draw original with scale
+        originalPreviewCtx.save();
+        originalPreviewCtx.scale(scale, scale);
         originalPreviewCtx.drawImage(originalImage, 0, 0);
+        
+        // Draw crop rect
         originalPreviewCtx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
         originalPreviewCtx.lineWidth = Math.max(5, originalImage.width * 0.005);
         originalPreviewCtx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
+        originalPreviewCtx.restore();
 
         if (cropRect.width > 0 && cropRect.height > 0) {
-            croppedPreviewCtx.drawImage(originalImage, cropRect.x, cropRect.y, cropRect.width, cropRect.height, 0, 0, cropRect.width, cropRect.height);
+            croppedPreviewCtx.save();
+            croppedPreviewCtx.scale(cropScale, cropScale);
+            croppedPreviewCtx.drawImage(originalImage, 
+                cropRect.x, cropRect.y, cropRect.width, cropRect.height, 
+                0, 0, cropRect.width, cropRect.height
+            );
+            croppedPreviewCtx.restore();
         }
     }
 
