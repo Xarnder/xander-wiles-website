@@ -88,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Step 4
     const maskCanvas = document.getElementById('mask-canvas');
+    const maskPreviewCanvas = document.getElementById('mask-preview-canvas');
     const maskCtx = maskCanvas.getContext('2d');
     const saveFinalBtn = document.getElementById('save-final-btn');
     const saveMaskBtn = document.getElementById('save-mask-btn');
@@ -1209,6 +1210,44 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.strokeRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
             ctx.restore();
         }
+
+        // 6. Update Small Mask Preview
+        updateMaskPreview(combinedMaskCanvas);
+    }
+
+    function updateMaskPreview(maskSource) {
+        if (!maskPreviewCanvas) return;
+        
+        // Match aspect ratio
+        if (maskPreviewCanvas.width !== maskSource.width || maskPreviewCanvas.height !== maskSource.height) {
+            maskPreviewCanvas.width = maskSource.width;
+            maskPreviewCanvas.height = maskSource.height;
+            
+            // Update container aspect ratio to prevent layout shift
+            const container = maskPreviewCanvas.closest('.mask-thumb-container');
+            if (container) {
+                container.style.aspectRatio = `${maskSource.width} / ${maskSource.height}`;
+            }
+        }
+
+        const pCtx = maskPreviewCanvas.getContext('2d');
+        pCtx.clearRect(0, 0, pCtx.canvas.width, pCtx.canvas.height);
+
+        // Fast B&W conversion using composition
+        pCtx.save();
+        // 1. Draw solid white
+        pCtx.fillStyle = 'white';
+        pCtx.fillRect(0, 0, pCtx.canvas.width, pCtx.canvas.height);
+        
+        // 2. Use mask alpha to trim the white
+        pCtx.globalCompositeOperation = 'destination-in';
+        pCtx.drawImage(maskSource, 0, 0);
+        
+        // 3. Draw black behind everything
+        pCtx.globalCompositeOperation = 'destination-over';
+        pCtx.fillStyle = 'black';
+        pCtx.fillRect(0, 0, pCtx.canvas.width, pCtx.canvas.height);
+        pCtx.restore();
     }
 
     function setMaskTool(tool) {

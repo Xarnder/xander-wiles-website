@@ -362,6 +362,11 @@ input[type="color"]::-webkit-color-swatch {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    padding-right: 0.5rem; /* Space for scrollbar */
     scrollbar-width: thin;
     scrollbar-color: var(--glass-border) transparent;
 }
@@ -377,6 +382,8 @@ input[type="color"]::-webkit-color-swatch {
 .editor-workspace {
     flex: 1;
     min-width: 0;
+    position: sticky;
+    top: 1rem;
 }
 
 .editor-sidebar .controls-bar {
@@ -407,6 +414,47 @@ input[type="color"]::-webkit-color-swatch {
     margin-left: 0;
     margin-right: 0;
     margin-bottom: 1rem;
+}
+
+/* Mask Preview Thumbnail */
+.mask-preview-card {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.mask-preview-card label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+}
+
+.mask-thumb-container {
+    width: 100%;
+    aspect-ratio: 16 / 9; /* Default aspect ratio, will be updated by JS */
+    background: #000;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+#mask-preview-canvas {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    display: block;
+    image-rendering: pixelated; /* Keep it sharp */
 }
 
 .editor-sidebar .tool-select {
@@ -443,6 +491,13 @@ input[type="color"]::-webkit-color-swatch {
     .editor-sidebar {
         flex: none;
         width: 100%;
+        position: static;
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    .editor-workspace {
+        position: static;
     }
     
     .editor-sidebar h2, .editor-sidebar p {
