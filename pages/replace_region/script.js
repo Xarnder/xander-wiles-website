@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveFinalBtn = document.getElementById('save-final-btn');
     const saveMaskBtn = document.getElementById('save-mask-btn');
     const backToStep3Btn = document.getElementById('back-to-step3-btn');
+    const swapImagesBtn = document.getElementById('swap-images-btn');
 
     // Step 4 Controls
     const brushBtn = document.getElementById('brush-btn');
@@ -374,6 +375,16 @@ document.addEventListener('DOMContentLoaded', () => {
         brushCursor.style.opacity = '0';
     });
 
+    if (swapImagesBtn) {
+        swapImagesBtn.addEventListener('click', () => {
+            showCustomConfirm(
+                "Swap Images",
+                "This will swap the base image and the overlay image. Your current mask will be preserved. Proceed?",
+                () => swapImages()
+            );
+        });
+    }
+
     brushBtn.addEventListener('click', () => setMaskTool('brush'));
     eraserBtn.addEventListener('click', () => setMaskTool('eraser'));
 
@@ -604,6 +615,56 @@ document.addEventListener('DOMContentLoaded', () => {
         state.showMaskOverlay = maskState;
         state.showCropGuide = guideState;
         composeMaskAndDraw();
+    }
+
+    function swapImages() {
+        if (!state.originalImage || !state.editedImage) return;
+
+        const oldOriginal = state.originalImage;
+        const oldEdited = state.editedImage;
+        const oldCropRect = { ...state.cropRect };
+
+        // 1. Create the new overlay image (the portion of the current original that was being edited)
+        const newEditedCanvas = document.createElement('canvas');
+        newEditedCanvas.width = oldCropRect.width;
+        newEditedCanvas.height = oldCropRect.height;
+        const newEditedCtx = newEditedCanvas.getContext('2d');
+        newEditedCtx.drawImage(oldOriginal,
+            oldCropRect.x, oldCropRect.y, oldCropRect.width, oldCropRect.height,
+            0, 0, oldCropRect.width, oldCropRect.height
+        );
+
+        // 2. Set the new original (base) image to the current edited image
+        state.originalImage = oldEdited;
+        state.editedImage = newEditedCanvas;
+
+        // 3. Reset cropRect to cover the full new base image
+        state.cropRect = {
+            x: 0,
+            y: 0,
+            width: oldEdited.width,
+            height: oldEdited.height
+        };
+
+        // 4. Update mask (preserve it by cropping/matching the new dimensions)
+        if (state.userPaintLayer) {
+            const oldMask = state.userPaintLayer;
+            const newMask = document.createElement('canvas');
+            newMask.width = oldEdited.width;
+            newMask.height = oldEdited.height;
+            const nmCtx = newMask.getContext('2d');
+            
+            // Take the portion of the old mask that corresponds to the old crop area
+            nmCtx.drawImage(oldMask, 
+                oldCropRect.x, oldCropRect.y, oldCropRect.width, oldCropRect.height,
+                0, 0, oldCropRect.width, oldCropRect.height
+            );
+            
+            state.userPaintLayer = newMask;
+        }
+
+        // 5. Refresh Step 4
+        setupMasking();
     }
 
     function downloadMask() {
@@ -1239,26 +1300,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showCustomConfirm(title, message, onConfirm) {
+        const currentConfirm = document.getElementById('modal-confirm');
+        const currentCancel = document.getElementById('modal-cancel');
+
         modalTitle.textContent = title;
         modalMessage.textContent = message;
         customModal.classList.remove('hidden');
 
         // Remove old listeners (to prevent memory leaks/multiple triggers)
-        const newConfirm = modalConfirm.cloneNode(true);
-        const newCancel = modalCancel.cloneNode(true);
-        modalConfirm.parentNode.replaceChild(newConfirm, modalConfirm);
-        modalCancel.parentNode.replaceChild(newCancel, modalCancel);
+        const newConfirm = currentConfirm.cloneNode(true);
+        const newCancel = currentCancel.cloneNode(true);
+        currentConfirm.parentNode.replaceChild(newConfirm, currentConfirm);
+        currentCancel.parentNode.replaceChild(newCancel, currentCancel);
 
-        // Update local references
-        const confirmBtn = document.getElementById('modal-confirm');
-        const cancelBtn = document.getElementById('modal-cancel');
-
-        confirmBtn.addEventListener('click', () => {
+        // Add fresh listeners
+        newConfirm.addEventListener('click', () => {
             customModal.classList.add('hidden');
             if (onConfirm) onConfirm();
         });
 
-        cancelBtn.addEventListener('click', () => {
+        newCancel.addEventListener('click', () => {
             customModal.classList.add('hidden');
         });
 
