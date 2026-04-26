@@ -50,6 +50,43 @@ async function initModel() {
 
 initModel();
 
+function handleImage(img) {
+    uploadedImage = img;
+    
+    // Calculate aspect ratio and set canvas size
+    const maxDisplaySize = 800; // Cap display size for performance
+    let width = img.width;
+    let height = img.height;
+
+    if (width > height) {
+        if (width > maxDisplaySize) {
+            height = Math.round((height * maxDisplaySize) / width);
+            width = maxDisplaySize;
+        }
+    } else {
+        if (height > maxDisplaySize) {
+            width = Math.round((width * maxDisplaySize) / height);
+            height = maxDisplaySize;
+        }
+    }
+
+    imageCanvas.width = width;
+    imageCanvas.height = height;
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+
+    // Update wrapper aspect ratio to match canvas
+    canvasWrapper.style.aspectRatio = `${width} / ${height}`;
+
+    imgCtx.clearRect(0, 0, width, height);
+    imgCtx.drawImage(img, 0, 0, width, height);
+
+    clearMask();
+    inpaintBtn.disabled = false;
+    statusText.innerText = "Image loaded. Draw a mask and click Run Inpaint.";
+    console.log(`[DEBUG] Image drawn to canvas. Size: ${width}x${height}.`);
+}
+
 // --- Image Upload Handling ---
 imageUpload.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -59,46 +96,31 @@ imageUpload.addEventListener('change', (e) => {
     const reader = new FileReader();
     reader.onload = (event) => {
         const img = new Image();
-        img.onload = () => {
-            uploadedImage = img;
-            
-            // Calculate aspect ratio and set canvas size
-            const maxDisplaySize = 800; // Cap display size for performance
-            let width = img.width;
-            let height = img.height;
-
-            if (width > height) {
-                if (width > maxDisplaySize) {
-                    height = Math.round((height * maxDisplaySize) / width);
-                    width = maxDisplaySize;
-                }
-            } else {
-                if (height > maxDisplaySize) {
-                    width = Math.round((width * maxDisplaySize) / height);
-                    height = maxDisplaySize;
-                }
-            }
-
-            imageCanvas.width = width;
-            imageCanvas.height = height;
-            maskCanvas.width = width;
-            maskCanvas.height = height;
-
-            // Update wrapper aspect ratio to match canvas
-            canvasWrapper.style.aspectRatio = `${width} / ${height}`;
-
-            imgCtx.clearRect(0, 0, width, height);
-            imgCtx.drawImage(img, 0, 0, width, height);
-
-            clearMask();
-            inpaintBtn.disabled = false;
-            statusText.innerText = "Image loaded. Draw a mask and click Run Inpaint.";
-            console.log(`[DEBUG] Image drawn to canvas. Size: ${width}x${height}.`);
-        };
+        img.onload = () => handleImage(img);
         img.src = event.target.result;
     };
     reader.readAsDataURL(file);
 });
+
+// --- Transfer Image Check ---
+async function checkTransferImage() {
+    try {
+        const blob = await ImageTransfer.get();
+        if (blob) {
+            console.log("[DEBUG] Found transferred image in IndexedDB.");
+            const img = new Image();
+            img.onload = () => {
+                handleImage(img);
+                ImageTransfer.clear();
+            };
+            img.src = URL.createObjectURL(blob);
+        }
+    } catch (err) {
+        console.error("Failed to retrieve transferred image:", err);
+    }
+}
+
+checkTransferImage();
 
 // --- Canvas Drawing Logic ---
 function getMousePos(canvas, evt) {

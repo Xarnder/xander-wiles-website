@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const maskPreviewCanvas = document.getElementById('mask-preview-canvas');
     const maskCtx = maskCanvas.getContext('2d');
     const saveFinalBtn = document.getElementById('save-final-btn');
+    const sendToInpaintingBtn = document.getElementById('send-to-inpainting-btn');
     const saveMaskBtn = document.getElementById('save-mask-btn');
     const backToStep3Btn = document.getElementById('back-to-step3-btn');
     const swapImagesBtn = document.getElementById('swap-images-btn');
@@ -517,6 +518,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     saveFinalBtn.addEventListener('click', saveFinalImage);
+
+    if (sendToInpaintingBtn) {
+        sendToInpaintingBtn.addEventListener('click', () => {
+            const maskState = state.showMaskOverlay;
+            const guideState = state.showCropGuide;
+            state.showMaskOverlay = false;
+            state.showCropGuide = false;
+            composeMaskAndDraw();
+
+            maskCanvas.toBlob(async (blob) => {
+                if (blob) {
+                    try {
+                        await ImageTransfer.save(blob);
+                        window.location.href = '../inpainting/index.html';
+                    } catch (err) {
+                        console.error("Failed to transfer image via IndexedDB:", err);
+                        alert("Failed to send image to inpainting tool.");
+                    }
+                } else {
+                    alert("Failed to capture image.");
+                }
+            }, 'image/png');
+
+            state.showMaskOverlay = maskState;
+            state.showCropGuide = guideState;
+            composeMaskAndDraw();
+        });
+    }
 
     // --- GLOBAL CURSOR TRACKING ---
     const handleCursorEnter = () => { if (!state.isTouchMode) brushCursor.style.opacity = '1'; updateCursorSize(); };
