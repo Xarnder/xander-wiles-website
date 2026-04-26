@@ -6,6 +6,7 @@ const canvasWrapper = document.querySelector('.canvas-wrapper');
 const brushSizeSlider = document.getElementById('brush-size');
 const brushSizeVal = document.getElementById('brush-size-val');
 const clearMaskBtn = document.getElementById('clear-mask-btn');
+const sendToCompareBtn = document.getElementById('send-to-compare-btn');
 const inpaintBtn = document.getElementById('inpaint-btn');
 const statusText = document.getElementById('status-text');
 
@@ -162,6 +163,42 @@ function draw(e) {
     maskCtx.stroke();
     maskCtx.beginPath();
     maskCtx.moveTo(pos.x, pos.y);
+}
+
+if (sendToCompareBtn) {
+    sendToCompareBtn.addEventListener('click', async () => {
+        if (!uploadedImage) {
+            alert("No image to compare.");
+            return;
+        }
+
+        try {
+            // 1. Get Original Image as Blob
+            const origCanvas = document.createElement('canvas');
+            origCanvas.width = uploadedImage.width;
+            origCanvas.height = uploadedImage.height;
+            origCanvas.getContext('2d').drawImage(uploadedImage, 0, 0);
+            
+            origCanvas.toBlob(async (origBlob) => {
+                if (!origBlob) return;
+
+                // 2. Get Current Canvas (Final) as Blob
+                imageCanvas.toBlob(async (finalBlob) => {
+                    if (!finalBlob) return;
+
+                    await ImageTransfer.saveMultiple({
+                        'image-0': origBlob,
+                        'image-1': finalBlob
+                    });
+                    window.location.href = '../Compare_Images/index.html';
+                }, 'image/png');
+            }, 'image/png');
+
+        } catch (err) {
+            console.error("Failed to transfer images:", err);
+            alert("Failed to send images to comparison tool.");
+        }
+    });
 }
 
 maskCanvas.addEventListener('mousedown', startDrawing);

@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const maskCtx = maskCanvas.getContext('2d');
     const saveFinalBtn = document.getElementById('save-final-btn');
     const sendToInpaintingBtn = document.getElementById('send-to-inpainting-btn');
+    const sendToCompareBtn = document.getElementById('send-to-compare-btn');
     const saveMaskBtn = document.getElementById('save-mask-btn');
     const backToStep3Btn = document.getElementById('back-to-step3-btn');
     const swapImagesBtn = document.getElementById('swap-images-btn');
@@ -535,6 +536,48 @@ document.addEventListener('DOMContentLoaded', () => {
                     } catch (err) {
                         console.error("Failed to transfer image via IndexedDB:", err);
                         alert("Failed to send image to inpainting tool.");
+                    }
+                } else {
+                    alert("Failed to capture image.");
+                }
+            }, 'image/png');
+
+            state.showMaskOverlay = maskState;
+            state.showCropGuide = guideState;
+            composeMaskAndDraw();
+        });
+    }
+
+    if (sendToCompareBtn) {
+        sendToCompareBtn.addEventListener('click', () => {
+            const maskState = state.showMaskOverlay;
+            const guideState = state.showCropGuide;
+            state.showMaskOverlay = false;
+            state.showCropGuide = false;
+            composeMaskAndDraw();
+
+            maskCanvas.toBlob(async (finalBlob) => {
+                if (finalBlob) {
+                    try {
+                        // We also need the original image. 
+                        // Since state.originalImage is an Image object, we need to draw it to a canvas first.
+                        const origCanvas = document.createElement('canvas');
+                        origCanvas.width = state.originalImage.width;
+                        origCanvas.height = state.originalImage.height;
+                        origCanvas.getContext('2d').drawImage(state.originalImage, 0, 0);
+                        
+                        origCanvas.toBlob(async (origBlob) => {
+                            if (origBlob) {
+                                await ImageTransfer.saveMultiple({
+                                    'image-0': origBlob,
+                                    'image-1': finalBlob
+                                });
+                                window.location.href = '../Compare_Images/index.html';
+                            }
+                        }, 'image/png');
+                    } catch (err) {
+                        console.error("Failed to transfer images via IndexedDB:", err);
+                        alert("Failed to send images to compare tool.");
                     }
                 } else {
                     alert("Failed to capture image.");
