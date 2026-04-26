@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lightweight Inpainting Web Tool</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <link rel="stylesheet" href="app.css">
+
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+</head>
+
+<body>
+
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="app-container">
+        <header class="app-header">
+            <h1>Lightweight AdInpainting Tool</h1>
+            <p id="status-text">Ready. Upload an image to begin.</p>
+            <div id="progress-container" class="progress-container" style="display: none;">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+        </header>
+
+        <section class="glass-card workspace">
+            <div class="toolbar">
+                <label class="btn-primary" for="image-upload">Upload Image</label>
+                <input type="file" id="image-upload" accept="image/*" hidden>
+
+                <div class="brush-controls">
+                    <label for="brush-size">Brush Size: <span id="brush-size-val">20</span>px</label>
+                    <input type="range" id="brush-size" min="5" max="100" value="20">
+                </div>
+
+                <button class="btn-secondary" id="clear-mask-btn">Clear Mask</button>
+                <button class="btn-accent" id="inpaint-btn" disabled>Run Inpaint</button>
+            </div>
+
+            <div class="canvas-wrapper">
+                <canvas id="image-canvas"></canvas>
+                <canvas id="mask-canvas"></canvas>
+            </div>
+            <p class="hint">Draw over the object you want to remove. Check browser console for debug logs.</p>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
