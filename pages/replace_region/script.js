@@ -28,6 +28,12 @@ document.addEventListener('DOMContentLoaded', () => {
         hue: 0,
         saturation: 100,
         lightness: 100,
+        blackLevel: 0,
+        highlightLevel: 100,
+        curvePoints: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 }
+        ],
 
         // Settings - Paint Editor
         peBrushSize: 20,
@@ -114,6 +120,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const hueValue = document.getElementById('hue-value');
     const saturationValue = document.getElementById('saturation-value');
     const lightnessValue = document.getElementById('lightness-value');
+    const blackLevelSlider = document.getElementById('black-level-slider');
+    const highlightLevelSlider = document.getElementById('highlight-level-slider');
+    const blackLevelValue = document.getElementById('black-level-value');
+    const highlightLevelValue = document.getElementById('highlight-level-value');
+
+    const curveCanvas = document.getElementById('curve-canvas');
+    const resetCurveBtn = document.getElementById('reset-curve-btn');
     const maskUploadInput = document.getElementById('mask-upload');
 
     // Custom Modal Elements
@@ -428,6 +441,20 @@ document.addEventListener('DOMContentLoaded', () => {
     lightnessSlider.addEventListener('input', (e) => {
         state.lightness = parseInt(e.target.value, 10);
         lightnessValue.textContent = state.lightness;
+        composeMaskAndDraw();
+    });
+
+    blackLevelSlider.addEventListener('input', (e) => {
+        state.blackLevel = parseInt(e.target.value, 10);
+        blackLevelValue.textContent = state.blackLevel;
+        updateSVGFilter();
+        composeMaskAndDraw();
+    });
+
+    highlightLevelSlider.addEventListener('input', (e) => {
+        state.highlightLevel = parseInt(e.target.value, 10);
+        highlightLevelValue.textContent = state.highlightLevel;
+        updateSVGFilter();
         composeMaskAndDraw();
     });
 
@@ -1269,7 +1296,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const h = state.hue !== undefined ? state.hue : 0;
         const s = state.saturation !== undefined ? state.saturation : 100;
         const l = state.lightness !== undefined ? state.lightness : 100;
-        revealedEditCtx.filter = `hue-rotate(${h}deg) saturate(${s}%) brightness(${l}%)`;
+        revealedEditCtx.filter = `hue-rotate(${h}deg) saturate(${s}%) brightness(${l}%) url(#custom-curves)`;
         revealedEditCtx.drawImage(state.editedImage, state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
         revealedEditCtx.restore();
 
@@ -1466,4 +1493,200 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    // --- CURVE EDITOR LOGIC ---
+    let draggedPointIndex = -1;
+
+    function initCurveEditor() {
+        if (!curveCanvas) return;
+
+        curveCanvas.addEventListener('mousedown', startDragCurve);
+        window.addEventListener('mousemove', dragCurve);
+        window.addEventListener('mouseup', stopDragCurve);
+
+        curveCanvas.addEventListener('touchstart', (e) => {
+            if (!state.isTouchMode) return;
+            startDragCurve(e.touches[0]);
+        }, { passive: false });
+        window.addEventListener('touchmove', (e) => {
+            if (!state.isTouchMode || draggedPointIndex === -1) return;
+            e.preventDefault();
+            dragCurve(e.touches[0]);
+        }, { passive: false });
+        window.addEventListener('touchend', stopDragCurve);
+
+        resetCurveBtn.addEventListener('click', () => {
+            state.curvePoints = [
+                { x: 0, y: 0 },
+                { x: 1, y: 1 }
+            ];
+            drawCurve();
+            updateSVGFilter();
+            composeMaskAndDraw();
+        });
+
+        drawCurve();
+    }
+
+    function startDragCurve(e) {
+        const rect = curveCanvas.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left) / rect.width;
+        const mouseY = 1 - (e.clientY - rect.top) / rect.height;
+
+        // Find if we are clicking near an existing point
+        const threshold = 0.05;
+        let foundIndex = -1;
+        for (let i = 0; i < state.curvePoints.length; i++) {
+            const p = state.curvePoints[i];
+            const dist = Math.sqrt(Math.pow(p.x - mouseX, 2) + Math.pow(p.y - mouseY, 2));
+            if (dist < threshold) {
+                foundIndex = i;
+                break;
+            }
+        }
+
+        if (foundIndex !== -1) {
+            draggedPointIndex = foundIndex;
+        } else {
+            // Add a new point
+            const newPoint = { x: mouseX, y: mouseY };
+            state.curvePoints.push(newPoint);
+            state.curvePoints.sort((a, b) => a.x - b.x);
+            draggedPointIndex = state.curvePoints.indexOf(newPoint);
+        }
+        drawCurve();
+    }
+
+    function dragCurve(e) {
+        if (draggedPointIndex === -1) return;
+
+        const rect = curveCanvas.getBoundingClientRect();
+        let mouseX = (e.clientX - rect.left) / rect.width;
+        let mouseY = 1 - (e.clientY - rect.top) / rect.height;
+
+        // Constrain
+        mouseX = Math.max(0, Math.min(1, mouseX));
+        mouseY = Math.max(0, Math.min(1, mouseY));
+
+        // Don't let points cross each other in X
+        
+        // Edge points can't change X
+        if (draggedPointIndex === 0) {
+            mouseX = 0;
+        } else if (draggedPointIndex === state.curvePoints.length - 1) {
+            mouseX = 1;
+        } else {
+            // Keep X between neighbors
+            const prevX = state.curvePoints[draggedPointIndex - 1].x;
+            const nextX = state.curvePoints[draggedPointIndex + 1].x;
+            mouseX = Math.max(prevX + 0.01, Math.min(nextX - 0.01, mouseX));
+        }
+
+        state.curvePoints[draggedPointIndex] = { x: mouseX, y: mouseY };
+        
+        drawCurve();
+        updateSVGFilter();
+        composeMaskAndDraw();
+    }
+
+    function stopDragCurve() {
+        if (draggedPointIndex !== -1) {
+            // If it's a middle point and we dragged it out of bounds (effectively), maybe remove it?
+            // For now, just keep it.
+        }
+        draggedPointIndex = -1;
+    }
+
+    function drawCurve() {
+        if (!curveCanvas) return;
+        const ctx = curveCanvas.getContext('2d');
+        const w = curveCanvas.width;
+        const h = curveCanvas.height;
+
+        ctx.clearRect(0, 0, w, h);
+
+        // Draw grid
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 1; i < 4; i++) {
+            ctx.moveTo(i * w / 4, 0);
+            ctx.lineTo(i * w / 4, h);
+            ctx.moveTo(0, i * h / 4);
+            ctx.lineTo(w, i * h / 4);
+        }
+        ctx.stroke();
+
+        // Draw curve
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(state.curvePoints[0].x * w, (1 - state.curvePoints[0].y) * h);
+        
+        for (let i = 1; i < state.curvePoints.length; i++) {
+            ctx.lineTo(state.curvePoints[i].x * w, (1 - state.curvePoints[i].y) * h);
+        }
+        ctx.stroke();
+
+        // Draw points
+        ctx.fillStyle = '#8b5cf6';
+        for (let i = 0; i < state.curvePoints.length; i++) {
+            const p = state.curvePoints[i];
+            ctx.beginPath();
+            ctx.arc(p.x * w, (1 - p.y) * h, 4, 0, Math.PI * 2);
+            ctx.fill();
+            if (i === draggedPointIndex) {
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+    }
+
+    function updateSVGFilter() {
+        // Calculate 256 values for the LUT
+        const lut = new Array(256);
+        const points = state.curvePoints;
+        const black = state.blackLevel / 100;
+        const highlight = state.highlightLevel / 100;
+
+        for (let i = 0; i < 256; i++) {
+            const x = i / 255;
+            
+            // 1. Apply Black/Highlight levels
+            let val = (x - black) / (highlight - black);
+            val = Math.max(0, Math.min(1, val));
+
+            // 2. Apply Curve
+            // Linear interpolation between points
+            let curveVal = 0;
+            if (val <= points[0].x) {
+                curveVal = points[0].y;
+            } else if (val >= points[points.length - 1].x) {
+                curveVal = points[points.length - 1].y;
+            } else {
+                for (let j = 0; j < points.length - 1; j++) {
+                    if (val >= points[j].x && val <= points[j + 1].x) {
+                        const t = (val - points[j].x) / (points[j + 1].x - points[j].x);
+                        curveVal = points[j].y + t * (points[j + 1].y - points[j].y);
+                        break;
+                    }
+                }
+            }
+            
+            lut[i] = Math.max(0, Math.min(1, curveVal)).toFixed(3);
+        }
+
+        const tableValues = lut.join(' ');
+        const r = document.getElementById('curveR');
+        const g = document.getElementById('curveG');
+        const b = document.getElementById('curveB');
+        if (r) r.setAttribute('tableValues', tableValues);
+        if (g) g.setAttribute('tableValues', tableValues);
+        if (b) b.setAttribute('tableValues', tableValues);
+    }
+
+    // Call init
+    initCurveEditor();
+    updateSVGFilter();
+
 });
