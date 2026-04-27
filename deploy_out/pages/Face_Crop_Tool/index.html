@@ -27,11 +27,26 @@
     <!-- Tool Specific CSS -->
     <link rel="stylesheet" href="style.css">
 
-    <!-- Libraries: JSZip for zipping downloads -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Libraries: AI Runtime -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
+    
+    <!-- Libraries: Zip and File Saving -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    
     <!-- Library: Face-API.js -->
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    
+    <!-- Library: Cropper.js for manual cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Global Header Injection -->
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
     <!-- Library: Cropper.js for manual cropping -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
@@ -39,123 +54,354 @@
 
 <body>
 
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loader-content">
+            <div class="spinner"></div>
+            <p>Downloading AI models... (this only happens once)</p>
+        </div>
+    </div>
+
     <!-- Global Header Injection -->
     <div id="main-nav-placeholder"></div>
     <script src="/assets/js/nav-loader.js"></script>
 
-    <main class="container">
-        <header class="tool-header">
-            <h1>Auto Face Cropper</h1>
-            <p>Upload a folder of images. AI will detect the largest face and crop it automatically.</p>
-            <p class="description">
-                Batch crop faces from a folder of photos automatically using AI.
-            </p>
-            <p class="privacy-notice">
-                🔒 All processing is done locally on your device. Your photos are completely private and never uploaded
-                to any server.
-            </p>
-        </header>
+    <div class="dashboard-layout">
+        <aside class="sidebar">
+            <header class="tool-header">
+                <h1>Face Cropper</h1>
+                <p class="privacy-notice">
+                    🔒 All processing is done locally on your device. Your photos are completely private and never uploaded to any server.
+                </p>
+            </header>
 
-        <!-- Controls Card -->
-        <section class="card controls">
-            <!-- Drop Zone Area -->
-            <div id="dropZone" class="drop-zone">
-                <div class="input-actions">
-                    <div class="input-group">
-                        <label for="imageInput" class="custom-file-upload">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
-                                </path>
-                            </svg>
-                            Select Folder
-                        </label>
-                        <input type="file" id="imageInput" webkitdirectory directory multiple>
+            <div class="sidebar-scroll-area">
+                <!-- Drop Zone Area (Now Scrollable) -->
+                <div id="dropZone" class="drop-zone">
+                    <div class="input-actions">
+                        <div class="input-group">
+                            <label for="imageInput" class="custom-file-upload">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                Folder
+                            </label>
+                            <input type="file" id="imageInput" webkitdirectory directory multiple>
+                        </div>
+    
+                        <div class="input-group">
+                            <label for="fileInput" class="custom-file-upload">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                Photos
+                            </label>
+                            <input type="file" id="fileInput" multiple accept="image/*">
+                        </div>
                     </div>
-
-                    <div class="input-group">
-                        <label for="fileInput" class="custom-file-upload">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                <polyline points="21 15 16 10 5 21"></polyline>
-                            </svg>
-                            Select Photos
-                        </label>
-                        <input type="file" id="fileInput" multiple accept="image/*">
+                    <div id="imageCounter" class="image-counter">0 images ready</div>
+                </div>
+                <div class="setting-group">
+                    <label>Tool Mode</label>
+                    <div class="mode-toggle">
+                        <button class="mode-btn active" data-mode="crop" title="Crop Mode">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.13 1L6 16a2 2 0 0 0 2 2h15"></path><path d="M1 6.13L16 6a2 2 0 0 1 2 2v15"></path></svg>
+                            <span>Crop</span>
+                        </button>
+                        <button class="mode-btn" data-mode="censor" title="Censor Mode">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="12" cy="12" r="3"></circle></svg>
+                            <span>Censor</span>
+                        </button>
+                        <button class="mode-btn" data-mode="frame" title="Frame Mode">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                            <span>Frame</span>
+                        </button>
+                        <button class="mode-btn" data-mode="magic" title="Magic Inpaint">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>
+                            <span>Magic</span>
+                        </button>
+                        <button class="mode-btn" data-mode="replace" title="Face Replace">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
+                            <span>Replace</span>
+                        </button>
+                        <button class="mode-btn" data-mode="feature" title="Face Feature Crop">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"></path><path d="M22 12A10 10 0 1 1 12 2v10z"></path></svg>
+                            <span>Features</span>
+                        </button>
                     </div>
                 </div>
-                <p class="drop-hint">or drop files here</p>
-                <div id="imageCounter" class="image-counter">0 images ready</div>
-            </div>
 
-            <div class="setting-group">
-                <label>Aspect Ratio (W : H)</label>
-                <div class="ratio-presets">
-                    <button class="preset-btn" data-w="1" data-h="1">1:1</button>
-                    <button class="preset-btn" data-w="4" data-h="5">4:5</button>
-                    <button class="preset-btn" data-w="2" data-h="3">2:3</button>
-                    <button class="preset-btn" data-w="9" data-h="16">9:16</button>
-                    <button class="preset-btn" data-w="16" data-h="9">16:9</button>
+                <!-- Mode Options Panels -->
+                <div class="setting-group" id="censorOptionsPanel" style="display: none;">
+                    <label>Censor Style</label>
+                    <div class="control-sub-group">
+                        <div class="censor-type-toggle">
+                            <button class="type-btn active" data-type="solid">Solid</button>
+                            <button class="type-btn" data-type="blur">Blur</button>
+                            <button class="type-btn" data-type="emoji">Emoji</button>
+                        </div>
+                        <div class="censor-shape-toggle">
+                            <button class="shape-btn active" data-shape="rect">Rect</button>
+                            <button class="shape-btn" data-shape="circle">Circle</button>
+                        </div>
+                        <div id="solidOptions" class="sub-setting">
+                            <div class="color-picker-wrapper">
+                                <input type="color" id="censorColor" value="#000000">
+                                <span id="colorHex">#000000</span>
+                            </div>
+                        </div>
+                        <div id="blurOptions" class="sub-setting" style="display: none;">
+                            <label>Blur Radius <button class="reset-slider" data-target="blurStrength" data-default="20">⟳</button></label>
+                            <input type="range" id="blurStrength" min="5" max="100" value="20">
+                            <div class="sub-label"><span id="blurStrengthVal">20</span>px</div>
+                        </div>
+                        <div id="emojiOptions" class="sub-setting" style="display: none;">
+                            <input type="text" id="censorEmoji" value="🕶️" maxlength="2">
+                        </div>
+                    </div>
                 </div>
-                <div class="ratio-inputs">
-                    <input type="number" id="ratioWidth" placeholder="W" value="1" min="0.1" step="0.1">
-                    <span>:</span>
-                    <input type="number" id="ratioHeight" placeholder="H" value="1" min="0.1" step="0.1">
+
+                <div class="setting-group" id="frameOptionsPanel" style="display: none;">
+                    <label>Frame Style</label>
+                    <div class="control-sub-group">
+                        <div class="frame-shape-toggle">
+                            <button class="frame-shape-btn active" data-shape="rect">Rect</button>
+                            <button class="frame-shape-btn" data-shape="circle">Circle</button>
+                        </div>
+                        <div class="sub-setting">
+                            <label>Color</label>
+                            <div class="color-picker-wrapper">
+                                <input type="color" id="frameColor" value="#4a9eff">
+                                <span id="frameColorHex">#4A9EFF</span>
+                            </div>
+                        </div>
+                        <div class="sub-setting">
+                            <label>Thickness <button class="reset-slider" data-target="frameThickness" data-default="5">⟳</button></label>
+                            <input type="range" id="frameThickness" min="1" max="50" value="5">
+                            <div class="sub-label"><span id="frameThicknessVal">5</span>px</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="checkbox-group compact-checkbox">
-                    <input type="checkbox" id="useOriginalRatio">
-                    <label for="useOriginalRatio">Use original aspect ratio</label>
+
+                <div class="setting-group" id="replaceOptionsPanel" style="display: none;">
+                    <label>Replace Source</label>
+                    <div class="control-sub-group">
+                        <div class="file-upload-small">
+                            <label for="replacementFileInput" class="btn-secondary small">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                Upload Face
+                            </label>
+                            <input type="file" id="replacementFileInput" accept="image/*" style="display: none;">
+                        </div>
+                        <div id="replacementFacePreviewWrapper" class="replace-preview-box" style="display: none;">
+                            <div class="replacement-preview-container">
+                                <canvas id="replacementFaceCanvas" width="80" height="80"></canvas>
+                                <button id="editReplacementFaceBtn" class="edit-btn-small"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></button>
+                            </div>
+                            <span id="replacementStatusText" class="status-text-tiny">Face Detected</span>
+                        </div>
+                        <div class="sub-setting">
+                            <label>Source Padding <button class="reset-slider" data-target="replacementPaddingInput" data-default="0">⟳</button></label>
+                            <input type="range" id="replacementPaddingInput" min="0" max="100" value="0">
+                            <div class="sub-label"><span id="replacementPaddingVal">0</span>%</div>
+                        </div>
+                        <div class="color-grading-group">
+                            <div class="flex-row-between">
+                                <label class="section-label-tiny">Color Match</label>
+                                <button id="autoMatchColorBtn" class="btn-tiny btn-action" title="Match skin color to target face">Auto Match</button>
+                            </div>
+                            <div class="sub-setting">
+                                <label>Hue <button class="reset-slider" data-target="replaceHueInput" data-default="0">⟳</button></label>
+                                <input type="range" id="replaceHueInput" min="-180" max="180" value="0">
+                                <div class="sub-label"><span id="replaceHueVal">0</span>°</div>
+                            </div>
+                            <div class="sub-setting">
+                                <label>Saturation <button class="reset-slider" data-target="replaceSatInput" data-default="100">⟳</button></label>
+                                <input type="range" id="replaceSatInput" min="0" max="200" value="100">
+                                <div class="sub-label"><span id="replaceSatVal">100</span>%</div>
+                            </div>
+                            <div class="sub-setting">
+                                <label>Lightness <button class="reset-slider" data-target="replaceLightInput" data-default="100">⟳</button></label>
+                                <input type="range" id="replaceLightInput" min="0" max="200" value="100">
+                            </div>
+                        </div>
+                        <div class="checkbox-group compact-checkbox" style="margin-top: 5px; margin-bottom: 10px;">
+                            <input type="checkbox" id="autoColorBatch">
+                            <label for="autoColorBatch">Auto Match (Batch)</label>
+                        </div>
+                        <div class="sub-setting">
+                            <label>Edge Feathering <button class="reset-slider" data-target="featheringInput" data-default="30">⟳</button></label>
+                            <input type="range" id="featheringInput" min="0" max="100" value="30">
+                            <div class="sub-label"><span id="featheringVal">30</span>%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-group" id="featureOptionsPanel" style="display: none;">
+                    <label>Feature Options</label>
+                    <div class="control-sub-group">
+                        <div class="feature-checkbox-grid">
+                            <div class="checkbox-group premium-checkbox">
+                                <input type="checkbox" id="cropEyes" checked>
+                                <label for="cropEyes">Eyes</label>
+                            </div>
+                            <div class="checkbox-group premium-checkbox">
+                                <input type="checkbox" id="cropNose" checked>
+                                <label for="cropNose">Nose</label>
+                            </div>
+                            <div class="checkbox-group premium-checkbox">
+                                <input type="checkbox" id="cropLips" checked>
+                                <label for="cropLips">Lips</label>
+                            </div>
+                            <div class="checkbox-group premium-checkbox">
+                                <input type="checkbox" id="cropEyebrows" checked>
+                                <label for="cropEyebrows">Eyebrows</label>
+                            </div>
+                        </div>
+                        <div class="sub-setting">
+                            <label>Feature Padding <button class="reset-slider" data-target="featurePaddingInput" data-default="30">⟳</button></label>
+                            <input type="range" id="featurePaddingInput" min="0" max="100" value="30">
+                            <div class="sub-label"><span id="featurePaddingVal">30</span>%</div>
+                        </div>
+                        <div class="feature-ar-row">
+                            <div class="ar-group">
+                                <label>Wide AR (Eyes/Lips)</label>
+                                <div class="ratio-inputs mini">
+                                    <input type="number" id="featureWideW" value="2" min="0.1" step="0.1">
+                                    <span>:</span>
+                                    <input type="number" id="featureWideH" value="1" min="0.1" step="0.1">
+                                </div>
+                            </div>
+                            <div class="ar-group">
+                                <label>Tall AR (Nose)</label>
+                                <div class="ratio-inputs mini">
+                                    <input type="number" id="featureTallW" value="4" min="0.1" step="0.1">
+                                    <span>:</span>
+                                    <input type="number" id="featureTallH" value="5" min="0.1" step="0.1">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="checkbox-group compact-checkbox">
+                            <input type="checkbox" id="combineFeatures">
+                            <label for="combineFeatures">Combine Left/Right features</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Global Sliders -->
+                <div class="setting-group">
+                    <label>Placement & Scaling</label>
+                    <div class="control-sub-group">
+                        <div class="sub-setting">
+                            <label>Face Padding <button class="reset-slider" data-target="paddingInput" data-default="50">⟳</button></label>
+                            <input type="range" id="paddingInput" min="0" max="200" value="50">
+                            <div class="sub-label"><span id="paddingVal">50</span>%</div>
+                        </div>
+                        <div class="sub-setting">
+                            <label>Vertical Offset <button class="reset-slider" data-target="verticalPosInput" data-default="50">⟳</button></label>
+                            <input type="range" id="verticalPosInput" min="0" max="100" value="50">
+                            <div class="sub-label"><span id="verticalPosVal">50</span>%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label>Aspect Ratio</label>
+                    <div class="control-sub-group">
+                        <div class="ratio-presets">
+                            <button class="preset-btn active" data-w="1" data-h="1">1:1</button>
+                            <button class="preset-btn" data-w="4" data-h="5">4:5</button>
+                            <button class="preset-btn" data-w="2" data-h="3">2:3</button>
+                            <button class="preset-btn" data-w="9" data-h="16">9:16</button>
+                        </div>
+                        <div class="ratio-inputs">
+                            <input type="number" id="ratioWidth" placeholder="W" value="1" min="0.1" step="0.1">
+                            <span>:</span>
+                            <input type="number" id="ratioHeight" placeholder="H" value="1" min="0.1" step="0.1">
+                        </div>
+                        <div class="checkbox-group compact-checkbox">
+                            <input type="checkbox" id="useOriginalRatio">
+                            <label for="useOriginalRatio">Use Original Ratio</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label>File Naming</label>
+                    <div class="control-sub-group">
+                        <select id="namingScheme">
+                            <option value="original">Original Name</option>
+                            <option value="custom">Custom Base</option>
+                        </select>
+                        <div id="customBaseRow" style="display: none;">
+                            <input type="text" id="filenameBase" value="Result" placeholder="Base name">
+                        </div>
+                        <div class="sub-setting-row">
+                            <input type="text" id="filenamePrefix" placeholder="Prefix">
+                            <input type="text" id="filenameSuffix" placeholder="Suffix">
+                        </div>
+                        <div class="filename-preview-box">
+                            <span class="preview-label">Preview:</span>
+                            <code id="filenamePreview">image_01.jpg</code>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="setting-group options-group">
+                    <div class="checkbox-group compact-checkbox">
+                        <input type="checkbox" id="processAllFaces">
+                        <label for="processAllFaces">Process all faces</label>
+                    </div>
+                    <div class="checkbox-group compact-checkbox">
+                        <input type="checkbox" id="excludeNoFace">
+                        <label for="excludeNoFace">Skip no-face images</label>
+                    </div>
+                </div>
+
+                <div class="sidebar-actions">
+                    <button id="processBtn" class="btn-primary main-action" disabled>Process Batch</button>
+                    <button id="stopBtn" class="btn-danger stop-action" style="display: none;">Stop</button>
+                    <button id="downloadBtn" class="btn-secondary main-action" disabled>Download ZIP</button>
                 </div>
             </div>
+        </aside>
 
-            <div class="setting-group">
-                <label for="verticalPosInput">Face Vertical Center: <span id="verticalPosVal">50</span>%</label>
-                <input type="range" id="verticalPosInput" min="0" max="100" value="50">
+        <main class="main-content">
+            <div class="content-row">
+                <!-- Preview Card -->
+                <section id="previewCard" class="card main-preview" style="display: none;">
+                    <div class="card-header">
+                        <h3>Live Preview</h3>
+                        <span class="preview-hint">Real-time adjustments visible here</span>
+                    </div>
+                    <div class="preview-box">
+                        <canvas id="previewCanvas"></canvas>
+                        <div id="previewLoader" class="loader-overlay" style="display: none;">
+                            <div class="spinner"></div>
+                            <p>Detecting...</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- AI Mask Preview Area -->
+                <section id="maskPreviewCard" class="card mask-preview" style="display: none;">
+                    <div class="card-header">
+                        <h3>AI Mask Logic</h3>
+                    </div>
+                    <div class="preview-box" id="maskPreviewWrapper">
+                        <canvas id="maskPreviewCanvas"></canvas>
+                    </div>
+                </section>
             </div>
 
-            <div class="setting-group">
-                <label for="paddingInput">Face Padding: <span id="paddingVal">50</span>%</label>
-                <input type="range" id="paddingInput" min="0" max="200" value="50">
-            </div>
-
-            <div class="checkbox-group">
-                <input type="checkbox" id="excludeNoFace">
-                <label for="excludeNoFace">Exclude images with no face detected</label>
-            </div>
-
-            <button id="processBtn" class="btn-primary" disabled>
-                Process Batch
-            </button>
-
-            <button id="downloadBtn" class="btn-primary" disabled>
-                Download ZIP
-            </button>
-        </section>
-
-        <!-- Preview Card -->
-        <section id="previewCard" class="card preview-container" style="display: none;">
-            <h3>Preview (First Image)</h3>
-            <div class="preview-box">
-                <canvas id="previewCanvas"></canvas>
-                <!-- Loading Indicator -->
-                <div id="previewLoader" class="loader-overlay" style="display: none;">
-                    <div class="spinner"></div>
-                    <p>Scanning for faces...</p>
+            <div id="statusArea" class="status-line">AI Models Ready</div>
+            
+            <div class="gallery-section">
+                <div class="section-header">
+                    <h3>Batch Results</h3>
+                    <div id="galleryStatus" class="gallery-count"></div>
                 </div>
+                <section id="gallery" class="gallery-grid">
+                    <!-- Results appear here -->
+                </section>
             </div>
-            <p class="preview-hint">Adjust padding above to see changes live.</p>
-        </section>
-
-        <!-- Status Area -->
-        <div id="statusArea" class="status-text">Loading AI Models...</div>
-
-        <!-- Results Grid -->
-        <section id="gallery" class="gallery-grid">
-            <!-- Cropped images appear here -->
-        </section>
-    </main>
+        </main>
+    </div>
 
     <!-- Lightbox Modal -->
     <div id="lightboxModal" class="lightbox">
@@ -186,7 +432,40 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <div id="aiLoadingOverlay" class="ai-overlay" style="display: none;">
+        <div class="ai-loader-card">
+            <div class="ai-spinner-box">
+                <div class="ai-loader-ring"></div>
+                <div class="ai-loader-pulse"></div>
+            </div>
+            <h2>Initializing Magic AI</h2>
+            <p>Readying generative engine and loading local model weights (~198MB). This only happens once.</p>
+            <div class="progress-container premium">
+                <div id="aiProgressBar" class="progress-bar glow"></div>
+            </div>
+            <div id="aiStatusText" class="status-text">Warming up engines...</div>
+        </div>
+    </div>
+
+    <!-- Console Toggle Button -->
+    <button id="toggleConsole" class="console-toggle-btn">
+        <span class="icon">💻</span>
+        <span class="text">Logs</span>
+    </button>
+
+    <!-- Debug Console -->
+    <div id="debugConsole" class="hidden">
+        <div class="debug-header">
+            <span>Processing Logs</span>
+            <div class="debug-actions">
+                <button id="clearLogs">Clear</button>
+                <button id="closeConsole" class="icon-only">&times;</button>
+            </div>
+        </div>
+        <div id="debugLogs"></div>
+    </div>
+
+    <script type="module" src="script.js"></script>
 </body>
 
 </html>

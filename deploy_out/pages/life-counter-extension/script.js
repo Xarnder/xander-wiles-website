@@ -3,11 +3,21 @@ document.addEventListener('DOMContentLoaded', function () {
     const lifeGrid = document.getElementById('life-grid');
     const ageLabels = document.getElementById('age-labels');
     const weekLabels = document.getElementById('week-labels');
-    const currentWeekLine = document.getElementById('current-week-line');
-    const saveButton = document.getElementById('save-button');
+    const linesContainer = document.getElementById('lines-container');
     const themeToggle = document.getElementById('theme-toggle');
-    const dobInput = document.getElementById('dob');
-    const lifespanInput = document.getElementById('lifespan');
+    const peopleListEl = document.getElementById('people-list');
+    const statsPersonSelect = document.getElementById('stats-person-select');
+    const personDobLifespanEl = document.getElementById('person-dob-lifespan');
+    
+    // Add Person Form elements
+    const addPersonForm = document.querySelector('.add-person-form');
+    const formTitle = document.getElementById('form-title');
+    const newNameInput = document.getElementById('new-name');
+    const newDobInput = document.getElementById('new-dob');
+    const newLifespanInput = document.getElementById('new-lifespan');
+    const newColorInput = document.getElementById('new-color');
+    const addPersonButton = document.getElementById('add-person-button');
+    const cancelEditButton = document.getElementById('cancel-edit-button');
 
     // Stats elements
     const weeksSinceEl = document.getElementById('weeks-since-birthday');
@@ -16,11 +26,17 @@ document.addEventListener('DOMContentLoaded', function () {
     const totalLivedEl = document.getElementById('total-lived');
     const totalLeftEl = document.getElementById('total-left');
 
-    // State
-    let dateOfBirth;
-    let predictedLifespan;
+    // Constants
+    const BOX_SIZE = 8; 
+    const GAP_SIZE = 3;
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    const MS_PER_WEEK = MS_PER_DAY * 7;
 
-    // Theme handling
+    // State
+    let people = [];
+    let editingId = null;
+
+    // --- Theme Handling ---
     function setTheme(theme) {
         if (theme === 'light') {
             document.body.classList.add('light-mode');
@@ -36,11 +52,37 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     setTheme(localStorage.getItem('theme') || 'dark');
 
-    // --- Calculation Helpers ---
-    const MS_PER_DAY = 1000 * 60 * 60 * 24;
-    const MS_PER_WEEK = MS_PER_DAY * 7;
+    // --- Data Persistence ---
+    function savePeople() {
+        localStorage.setItem('people_list', JSON.stringify(people));
+    }
 
-    function calculateStats(today, dob, lifespan) {
+    function loadPeople() {
+        const stored = localStorage.getItem('people_list');
+        if (stored) {
+            people = JSON.parse(stored);
+        } else {
+            // Legacy support
+            const oldDob = localStorage.getItem('dob');
+            const oldLifespan = localStorage.getItem('lifespan');
+            if (oldDob && oldLifespan) {
+                people = [{
+                    id: Date.now(),
+                    name: 'Me',
+                    dob: oldDob,
+                    lifespan: parseInt(oldLifespan),
+                    color: '#8b5cf6'
+                }];
+                savePeople();
+            }
+        }
+    }
+
+    // --- Calculation Helpers ---
+    function getStats(person, today = new Date()) {
+        const dob = new Date(person.dob);
+        const lifespan = person.lifespan;
+
         const lastBirthday = new Date(dob);
         lastBirthday.setFullYear(today.getFullYear());
         if (today < lastBirthday) {
@@ -50,18 +92,15 @@ document.addEventListener('DOMContentLoaded', function () {
         const nextBirthday = new Date(lastBirthday);
         nextBirthday.setFullYear(lastBirthday.getFullYear() + 1);
 
-        // --- NEW METRIC: Percentage through current year ---
         const totalMsInYear = nextBirthday - lastBirthday;
         const elapsedMsInYear = today - lastBirthday;
         const percentageThroughYear = (elapsedMsInYear / totalMsInYear) * 100;
 
-        // --- LIVED STATS ---
         const totalMsLived = today - dob;
         const totalDaysLived = Math.floor(totalMsLived / MS_PER_DAY);
         const totalWeeksLived = Math.floor(totalMsLived / MS_PER_WEEK);
         const totalMonthsLived = (today.getFullYear() - dob.getFullYear()) * 12 + (today.getMonth() - dob.getMonth());
 
-        // --- LEFT STATS ---
         const deathDate = new Date(dob);
         deathDate.setFullYear(dob.getFullYear() + lifespan);
         const totalMsLeft = deathDate - today;
@@ -69,53 +108,135 @@ document.addEventListener('DOMContentLoaded', function () {
         const totalWeeksLeft = Math.floor(totalMsLeft / MS_PER_WEEK);
         const totalMonthsLeft = (deathDate.getFullYear() - today.getFullYear()) * 12 + (deathDate.getMonth() - today.getMonth());
 
-        // --- Original Grid Stats ---
         const age = Math.floor(totalDaysLived / 365.25);
         const weeksSinceBirthday = Math.floor(elapsedMsInYear / MS_PER_WEEK);
+        const totalWeeksLivedGrid = (age * 52) + weeksSinceBirthday;
         const totalLifespanWeeks = lifespan * 52;
         
         return {
             weeksSinceBirthday,
             percentageThroughYear,
-            totalWeeksLivedGrid: (age * 52) + weeksSinceBirthday, // For grid filling
+            totalWeeksLivedGrid,
             totalLifespanWeeks,
-            lived: {
-                days: totalDaysLived,
-                weeks: totalWeeksLived,
-                months: totalMonthsLived
-            },
-            left: {
-                days: totalDaysLeft > 0 ? totalDaysLeft : 0,
-                weeks: totalWeeksLeft > 0 ? totalWeeksLeft : 0,
-                months: totalMonthsLeft > 0 ? totalMonthsLeft : 0
-            }
+            lived: { days: totalDaysLived, weeks: totalWeeksLived, months: totalMonthsLived },
+            left: { days: totalDaysLeft > 0 ? totalDaysLeft : 0, weeks: totalWeeksLeft > 0 ? totalWeeksLeft : 0, months: totalMonthsLeft > 0 ? totalMonthsLeft : 0 }
         };
     }
 
-    // --- Main Render Function ---
-    function renderGrid(lifespan, today) {
-        if (!dateOfBirth || !lifespan) return;
+    // --- Rendering logic ---
+    function renderPeopleList() {
+        peopleListEl.innerHTML = '';
+        const currentSelection = statsPersonSelect.value;
+        statsPersonSelect.innerHTML = '<option value="summary">Summary</option>';
+        
+        people.forEach(p => {
+            const tag = document.createElement('div');
+            tag.className = 'person-tag';
+            tag.innerHTML = `
+                <div class="person-color-dot" style="background-color: ${p.color}"></div>
+                <span>${p.name}</span>
+                <div class="person-actions">
+                    <button class="edit-person" data-id="${p.id}" title="Edit">✎</button>
+                    <button class="remove-person" data-id="${p.id}" title="Remove">&times;</button>
+                </div>
+            `;
+            peopleListEl.appendChild(tag);
 
+            const option = document.createElement('option');
+            option.value = p.id;
+            option.textContent = p.name;
+            statsPersonSelect.appendChild(option);
+        });
+
+        // Restore selection if possible
+        if (currentSelection && [...statsPersonSelect.options].some(opt => opt.value === currentSelection)) {
+            statsPersonSelect.value = currentSelection;
+        }
+
+        document.querySelectorAll('.remove-person').forEach(btn => {
+            btn.onclick = (e) => {
+                const id = parseInt(e.target.dataset.id);
+                people = people.filter(p => p.id !== id);
+                if (editingId === id) cancelEdit();
+                savePeople();
+                updateAll();
+            };
+        });
+
+        document.querySelectorAll('.edit-person').forEach(btn => {
+            btn.onclick = (e) => {
+                const id = parseInt(e.target.dataset.id);
+                startEdit(id);
+            };
+        });
+    }
+
+    function startEdit(id) {
+        const person = people.find(p => p.id === id);
+        if (!person) return;
+
+        editingId = id;
+        newNameInput.value = person.name;
+        newDobInput.value = person.dob;
+        newLifespanInput.value = person.lifespan;
+        newColorInput.value = person.color;
+
+        formTitle.textContent = 'Edit Person';
+        addPersonButton.textContent = 'Save Changes';
+        cancelEditButton.style.display = 'block';
+        addPersonForm.classList.add('editing');
+        newNameInput.focus();
+    }
+
+    function cancelEdit() {
+        editingId = null;
+        newNameInput.value = '';
+        newDobInput.value = '';
+        newLifespanInput.value = '90';
+        newColorInput.value = '#8b5cf6';
+        
+        formTitle.textContent = 'Add Person';
+        addPersonButton.textContent = 'Add to Grid';
+        cancelEditButton.style.display = 'none';
+        addPersonForm.classList.remove('editing');
+    }
+
+    function renderGrid() {
         lifeGrid.innerHTML = '';
         ageLabels.innerHTML = '';
         weekLabels.innerHTML = '';
+        linesContainer.innerHTML = '';
 
-        const BOX_SIZE = 8; 
-        const GAP_SIZE = 3;
-        
-        lifeGrid.style.gridTemplateColumns = `repeat(${lifespan}, ${BOX_SIZE}px)`;
-        ageLabels.style.gridTemplateColumns = `repeat(${lifespan}, ${BOX_SIZE}px)`;
+        if (people.length === 0) {
+            lifeGrid.style.gridTemplateColumns = 'repeat(90, 8px)';
+            return;
+        }
 
-        for (let i = 0; i < lifespan; i++) {
-            if (i % 5 === 0 || i === lifespan - 1) {
-                 const label = document.createElement('div');
-                 label.className = 'age-label';
-                 label.textContent = i;
-                 label.style.gridColumnStart = i + 1; 
-                 ageLabels.appendChild(label);
+        const today = new Date();
+        const processedPeople = people.map(p => ({
+            ...p,
+            stats: getStats(p, today)
+        }));
+
+        const maxLifespan = Math.max(...processedPeople.map(p => p.lifespan));
+        const maxLivedWeeks = Math.max(...processedPeople.map(p => p.stats.totalWeeksLivedGrid));
+        const totalWeeksNeeded = maxLifespan * 52;
+
+        lifeGrid.style.gridTemplateColumns = `repeat(${maxLifespan}, ${BOX_SIZE}px)`;
+        ageLabels.style.gridTemplateColumns = `repeat(${maxLifespan}, ${BOX_SIZE}px)`;
+
+        // Age labels
+        for (let i = 0; i < maxLifespan; i++) {
+            if (i % 5 === 0 || i === maxLifespan - 1) {
+                const label = document.createElement('div');
+                label.className = 'age-label';
+                label.textContent = i;
+                label.style.gridColumnStart = i + 1; 
+                ageLabels.appendChild(label);
             }
         }
 
+        // Week labels
         for (let i = 1; i <= 52; i++) {
             const label = document.createElement('div');
             label.className = 'week-label';
@@ -123,71 +244,187 @@ document.addEventListener('DOMContentLoaded', function () {
             weekLabels.appendChild(label);
         }
 
-        const stats = calculateStats(today, dateOfBirth, lifespan);
+        // --- GRID PRIORITY LOGIC ---
+        const sortedByLived = [...processedPeople].sort((a, b) => a.stats.totalWeeksLivedGrid - b.stats.totalWeeksLivedGrid);
+        const sortedByLifespan = [...processedPeople].sort((a, b) => a.lifespan - b.lifespan);
 
-        for (let i = 0; i < stats.totalLifespanWeeks; i++) {
+        for (let i = 0; i < totalWeeksNeeded; i++) {
             const box = document.createElement('div');
             box.className = 'square';
-            if (i < stats.totalWeeksLivedGrid) {
-                box.classList.add('filled');
+            const isLived = i < maxLivedWeeks;
+            
+            if (isLived) {
+                const person = sortedByLived.find(p => i < p.stats.totalWeeksLivedGrid);
+                if (person) {
+                    box.classList.add('filled');
+                    box.style.backgroundColor = person.color;
+                    box.style.borderColor = person.color;
+                }
+            } else {
+                const person = sortedByLifespan.find(p => i < p.stats.totalLifespanWeeks);
+                if (person) {
+                    box.style.backgroundColor = person.color + '22';
+                    box.style.borderColor = person.color + '44';
+                }
             }
             lifeGrid.appendChild(box);
         }
 
-        const lineTop = stats.weeksSinceBirthday * (BOX_SIZE + GAP_SIZE);
-        currentWeekLine.style.top = `${lineTop}px`;
+        // --- MULTIPLE WEEK LINES ---
+        const selectedId = statsPersonSelect.value;
+        processedPeople.forEach(p => {
+            const line = document.createElement('div');
+            line.className = 'week-line';
+            const isActive = p.id == selectedId || (selectedId === 'summary' && p === processedPeople[0]);
+            if (isActive) line.classList.add('active');
+            
+            const lineTop = p.stats.weeksSinceBirthday * (BOX_SIZE + GAP_SIZE);
+            line.style.top = `${lineTop}px`;
+            line.style.backgroundColor = p.color;
+            if (isActive) line.style.boxShadow = `0 0 8px ${p.color}`;
+            
+            linesContainer.appendChild(line);
+        });
+    }
 
-        // --- UPDATE ALL STATS TEXT ---
-        weeksSinceEl.innerHTML = `Weeks since last birthday: <strong>${stats.weeksSinceBirthday}</strong>`;
-        percentageThroughYearEl.innerHTML = `Percentage through current year: <strong>${stats.percentageThroughYear.toFixed(2)}%</strong>`;
-        percentageEl.innerHTML = `Total life completed: <strong>${((stats.lived.weeks / (stats.lived.weeks + stats.left.weeks)) * 100).toFixed(2)}%</strong>`;
-        totalLivedEl.innerHTML = `You have lived for: <strong>${stats.lived.months.toLocaleString()}</strong> months, <strong>${stats.lived.weeks.toLocaleString()}</strong> weeks, or <strong>${stats.lived.days.toLocaleString()}</strong> days.`;
-        totalLeftEl.innerHTML = `You have left (est.): <strong>${stats.left.months.toLocaleString()}</strong> months, <strong>${stats.left.weeks.toLocaleString()}</strong> weeks, or <strong>${stats.left.days.toLocaleString()}</strong> days.`;
+    function updateStats() {
+        const selectedId = statsPersonSelect.value;
+        const focusPerson = people.find(p => p.id == selectedId);
+
+        if (focusPerson) {
+            const stats = getStats(focusPerson);
+            const dobDate = new Date(focusPerson.dob).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+            
+            percentageEl.innerHTML = `Total life completed: <strong>${((stats.lived.weeks / (stats.lived.weeks + stats.left.weeks)) * 100).toFixed(2)}%</strong>`;
+            personDobLifespanEl.innerHTML = `Born: <strong>${dobDate}</strong> &nbsp; | &nbsp; Lifespan: <strong>${focusPerson.lifespan}y</strong>`;
+            weeksSinceEl.innerHTML = `Weeks since ${focusPerson.name}'s last birthday: <strong>${stats.weeksSinceBirthday}</strong>`;
+            percentageThroughYearEl.innerHTML = `Percentage through current year: <strong>${stats.percentageThroughYear.toFixed(2)}%</strong>`;
+            totalLivedEl.innerHTML = `${focusPerson.name} has lived for: <strong>${stats.lived.months.toLocaleString()}</strong> months, <strong>${stats.lived.weeks.toLocaleString()}</strong> weeks, or <strong>${stats.lived.days.toLocaleString()}</strong> days.`;
+            totalLeftEl.innerHTML = `${focusPerson.name} has left (est.): <strong>${stats.left.months.toLocaleString()}</strong> months, <strong>${stats.left.weeks.toLocaleString()}</strong> weeks, or <strong>${stats.left.days.toLocaleString()}</strong> days.`;
+            
+            personDobLifespanEl.style.display = 'block';
+        } else if (people.length > 0) {
+            // Summary mode
+            const totalLivedDays = people.reduce((acc, p) => acc + getStats(p).lived.days, 0);
+            const totalLeftDays = people.reduce((acc, p) => acc + getStats(p).left.days, 0);
+            const avgPercentage = (totalLivedDays / (totalLivedDays + totalLeftDays)) * 100;
+            const avgAge = people.reduce((acc, p) => acc + (getStats(p).lived.days / 365.25), 0) / people.length;
+            
+            const avgBirthTimestamp = people.reduce((acc, p) => acc + new Date(p.dob).getTime(), 0) / people.length;
+            const avgBirthDate = new Date(avgBirthTimestamp).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+            const avgLifespan = people.reduce((acc, p) => acc + p.lifespan, 0) / people.length;
+
+            percentageEl.innerHTML = `Average life completed: <strong>${avgPercentage.toFixed(2)}%</strong>`;
+            personDobLifespanEl.style.display = 'none';
+            weeksSinceEl.innerHTML = `Tracking <strong>${people.length}</strong> people.`;
+            percentageThroughYearEl.innerHTML = `Avg. Birth Date: <strong>${avgBirthDate}</strong> &nbsp; | &nbsp; Avg. Lifespan: <strong>${avgLifespan.toFixed(1)}y</strong>`;
+            totalLivedEl.innerHTML = `Combined days lived: <strong>${totalLivedDays.toLocaleString()}</strong> days (Avg age: ${avgAge.toFixed(1)}).`;
+            totalLeftEl.innerHTML = `Multiple lines on the grid show everyone's current week.`;
+        } else {
+            percentageEl.innerHTML = `Add someone to see their journey.`;
+            personDobLifespanEl.style.display = 'none';
+            weeksSinceEl.innerHTML = `--`;
+            percentageThroughYearEl.innerHTML = `--`;
+            totalLivedEl.innerHTML = `--`;
+            totalLeftEl.innerHTML = `--`;
+        }
+    }
+
+    function updateAll() {
+        renderPeopleList();
+        renderGrid();
+        updateStats();
+    }
+
+    function getNextColor() {
+        const presets = ['#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899', '#10b981', '#6366f1', '#f43f5e', '#eab308', '#a855f7', '#0ea5e9'];
+        const usedColors = people.map(p => p.color.toLowerCase());
+        
+        // Try to find an unused preset
+        const unusedPreset = presets.find(c => !usedColors.includes(c.toLowerCase()));
+        if (unusedPreset) return unusedPreset;
+        
+        // Otherwise generate a random HSL color for variety
+        const hue = Math.floor(Math.random() * 360);
+        return `hsl(${hue}, 70%, 60%)`; // Convert this to hex for the input[type=color]?
+        // Wait, input[type=color] requires hex. Let's use a hex generator.
+    }
+
+    // Helper to convert HSL to Hex
+    function hslToHex(h, s, l) {
+        l /= 100;
+        const a = s * Math.min(l, 1 - l) / 100;
+        const f = n => {
+            const k = (n + h / 30) % 12;
+            const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+            return Math.round(255 * color).toString(16).padStart(2, '0');
+        };
+        return `#${f(0)}${f(8)}${f(4)}`;
+    }
+
+    function generateUniqueColor() {
+        const presets = ['#8b5cf6', '#06b6d4', '#f59e0b', '#ec4899', '#10b981', '#6366f1', '#f43f5e', '#eab308', '#a855f7', '#0ea5e9'];
+        const usedColors = people.map(p => p.color.toLowerCase());
+        
+        const unusedPreset = presets.find(c => !usedColors.includes(c.toLowerCase()));
+        if (unusedPreset) return unusedPreset;
+
+        // Random HSL to Hex
+        return hslToHex(Math.floor(Math.random() * 360), 70, 60);
     }
 
     // --- Event Handlers ---
-    saveButton.addEventListener('click', () => {
-        const dobVal = dobInput.value;
-        const lifeVal = parseInt(lifespanInput.value);
+    addPersonButton.addEventListener('click', () => {
+        const name = newNameInput.value.trim() || `Person ${people.length + 1}`;
+        const dob = newDobInput.value;
+        const lifespan = parseInt(newLifespanInput.value);
+        const color = newColorInput.value;
 
-        if (!dobVal || !lifeVal || lifeVal <= 0) {
-            alert('Please enter a valid date and a positive lifespan.');
+        if (!dob || !lifespan || lifespan <= 0) {
+            alert('Please enter a valid date of birth and lifespan.');
             return;
         }
+
+        if (editingId) {
+            // Update existing
+            const index = people.findIndex(p => p.id === editingId);
+            if (index !== -1) {
+                people[index] = { ...people[index], name, dob, lifespan, color };
+            }
+            editingId = null;
+        } else {
+            // Add new
+            const newPerson = { id: Date.now(), name, dob, lifespan, color };
+            people.push(newPerson);
+        }
+
+        savePeople();
+        cancelEdit(); // Reset form
         
-        dateOfBirth = new Date(dobVal);
-        predictedLifespan = lifeVal;
+        // Cycle to next color for the next person
+        newColorInput.value = generateUniqueColor();
+        
+        updateAll();
+    });
 
-        localStorage.setItem('dob', dobVal);
-        localStorage.setItem('lifespan', lifeVal);
+    cancelEditButton.addEventListener('click', cancelEdit);
 
-        renderGrid(predictedLifespan, new Date());
+    statsPersonSelect.addEventListener('change', () => {
+        updateStats();
+        renderGrid();
     });
 
     // --- Initial Load ---
     function initialize() {
-        const storedDob = localStorage.getItem('dob');
-        const storedLifespan = localStorage.getItem('lifespan');
+        loadPeople();
+        const thirtyYearsAgo = new Date();
+        thirtyYearsAgo.setFullYear(thirtyYearsAgo.getFullYear() - 30);
+        newDobInput.value = thirtyYearsAgo.toISOString().split('T')[0];
         
-        if (storedDob && storedLifespan) {
-            dobInput.value = storedDob;
-            lifespanInput.value = storedLifespan;
-            dateOfBirth = new Date(storedDob);
-            predictedLifespan = parseInt(storedLifespan);
-        } else {
-            const today = new Date();
-            const defaultDob = new Date(today);
-            defaultDob.setFullYear(today.getFullYear() - 40);
-            defaultDob.setMonth(today.getMonth() - 6);
-
-            predictedLifespan = 82;
-            dateOfBirth = defaultDob;
-
-            dobInput.value = defaultDob.toISOString().split('T')[0];
-            lifespanInput.value = predictedLifespan;
-        }
-
-        renderGrid(predictedLifespan, new Date());
+        // Initial color
+        newColorInput.value = generateUniqueColor();
+        
+        updateAll();
     }
 
     initialize();

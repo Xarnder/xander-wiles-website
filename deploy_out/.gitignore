@@ -25,3 +25,5 @@ pages/XR_Viewer/assets/Make_Human.glb
 !.env.example
 
 .vercel
+
+pages/Face_Crop_Tool/models/

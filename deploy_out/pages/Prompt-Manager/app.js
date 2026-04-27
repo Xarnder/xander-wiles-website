@@ -18,7 +18,8 @@ import {
     doc,
     updateDoc,
     deleteDoc,
-    writeBatch
+    writeBatch,
+    getDocs
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // Safety shim for browser environments
@@ -97,7 +98,8 @@ const bulkCategoryBg = document.getElementById('bulk-category-bg');
 const bulkCategoryText = document.getElementById('bulk-category-text');
 const updateCategoryColorsBtn = document.getElementById('update-category-colors-btn');
 const mobileReorderBtn = document.getElementById('mobile-reorder-btn');
-const modeToggle = document.getElementById('mode-toggle-chk');
+const modeRadios = document.querySelectorAll('input[name="mode-select"]');
+const sortSelect = document.getElementById('sort-prompts');
 
 // Reorder Modal Elements
 const reorderModal = document.getElementById('reorder-modal');
@@ -105,6 +107,9 @@ const reorderList = document.getElementById('reorder-list');
 const closeReorderModalBtn = document.getElementById('close-reorder-modal-btn');
 const cancelReorderBtn = document.getElementById('cancel-reorder-btn');
 const saveReorderBtn = document.getElementById('save-reorder-btn');
+const mobileCategorySelect = document.getElementById('mobile-category-select');
+const mobileSearchBtn = document.getElementById('mobile-search-btn');
+const searchWrapper = document.getElementById('search-wrapper');
 
 let sortableInstance = null;
 
@@ -129,20 +134,39 @@ const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
 
 // Import Modal Elements
 const importStatusModal = document.getElementById('import-status-modal');
-const importAddedText = document.getElementById('import-added-text').querySelector('span');
-const importSkippedText = document.getElementById('import-skipped-text').querySelector('span');
+const importAddedText = document.getElementById('import-added-text')?.querySelector('span');
+const importSkippedText = document.getElementById('import-skipped-text')?.querySelector('span');
 const closeImportModalBtn = document.getElementById('close-import-modal-btn');
 const importDoneBtn = document.getElementById('import-done-btn');
+
+// History Modal Elements
+const historyModal = document.getElementById('input-history-modal');
+const historyList = document.getElementById('history-list');
+const closeHistoryModalBtn = document.getElementById('close-history-modal-btn');
+
+// History Delete Modal Elements
+const historyDeleteModal = document.getElementById('history-delete-confirm-modal');
+const closeHistoryDeleteModalBtn = document.getElementById('close-history-delete-modal-btn');
+const cancelHistoryDeleteBtn = document.getElementById('cancel-history-delete-btn');
+const confirmHistoryDeleteBtn = document.getElementById('confirm-history-delete-btn');
 
 // State for Editing/Deleting
 let isEditing = false;
 let currentPromptId = null;
 let promptIdToDelete = null;
+let historyIdToDelete = null;
+let historyItemElementToDelete = null;
 
 let allPromptsData = []; // Store the full list for local filtering
 let knownCategories = {}; // Maps category name to {bg, text}
 let currentMode = 'prompt'; // 'prompt' or 'command'
 let selectedCategory = 'all'; // Default filter category
+let currentSort = 'custom'; // Default sort criteria
+
+const historyIconSVG = `
+    <svg xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 512 512.584" class="history-icon-svg">
+        <path fill="currentColor" fill-rule="nonzero" d="M216.773 155.955c0-10.956 8.883-19.839 19.839-19.839 10.957 0 19.84 8.883 19.84 19.839v120.763l82.657 36.334c10.013 4.409 14.56 16.104 10.151 26.117-4.409 10.014-16.104 14.56-26.117 10.152l-93.509-41.105c-7.514-2.824-12.861-10.077-12.861-18.576V155.955zM9.217 153.551a21.428 21.428 0 01-.832-5.931l.161-73.416c0-11.838 9.597-21.435 21.435-21.435 11.837 0 21.434 9.597 21.434 21.435l-.062 27.86a254.75 254.75 0 0144.093-45.53c16.773-13.472 35.563-25.045 56.182-34.24C216.231-6.518 286.347-6.44 347.474 16.978c61.173 23.435 113.425 70.235 142.233 134.828 28.812 64.598 28.733 134.717 5.313 195.845-22.547 58.856-66.726 109.447-127.57 138.854l-.759.37-.495.24-.265.125a258.922 258.922 0 01-23.987 10.066c-46.959 16.986-97.357 19.764-144.937 8.557-46.364-10.918-90.11-35.071-125.474-72.238-26.203-27.538-45.267-59.347-57.102-93.082A255.833 255.833 0 011.056 232.619c.955-10.564 10.3-18.353 20.863-17.397 10.563.955 18.353 10.299 17.397 20.863-2.812 30.836 1.015 62.169 11.417 91.805 10.047 28.639 26.294 55.709 48.667 79.223 29.987 31.513 67.06 51.99 106.344 61.241 40.482 9.536 83.286 7.197 123.097-7.201 14.161-5.123 28.013-11.813 41.303-20.069a227.878 227.878 0 0036.794-28.486c.446-.422.904-.819 1.378-1.191 22.471-22.072 39.645-48.595 50.703-77.462 19.94-52.041 20.044-111.651-4.408-166.475-24.455-54.83-68.849-94.573-120.844-114.491-52.041-19.937-111.647-20.041-166.475 4.411-17.48 7.796-33.452 17.64-47.747 29.122a215.822 215.822 0 00-37.712 39.038l17.096-.966c11.837-.648 21.963 8.421 22.61 20.258.648 11.837-8.42 21.963-20.258 22.611l-69.723 3.942c-11.018.603-20.551-7.215-22.341-17.844z"/></svg>
+`;
 
 // Auth Provider
 const provider = new GoogleAuthProvider();
@@ -193,14 +217,37 @@ mobileCategoryColorsBtn.addEventListener('click', () => {
 });
 
 // Mode Toggle logic
-modeToggle.addEventListener('change', () => {
-    currentMode = modeToggle.checked ? 'command' : 'prompt';
+modeRadios.forEach(radio => {
+    radio.addEventListener('change', () => {
+        if (radio.checked) {
+            currentMode = radio.value;
+            handleModeChange();
+        }
+    });
+});
+
+function handleModeChange() {
     console.log(`🔄 Switched to ${currentMode} mode`);
     
-    // Update UI
-    document.body.classList.toggle('command-mode-active', currentMode === 'command');
-    openModalBtn.textContent = currentMode === 'command' ? '+ New Command' : '+ New Prompt';
-    searchInput.placeholder = currentMode === 'command' ? 'Search commands...' : 'Search prompts (Ctrl+K)...';
+    // Update UI state classes
+    document.body.classList.remove('command-mode-active', 'link-mode-active');
+    if (currentMode === 'command') {
+        document.body.classList.add('command-mode-active');
+    } else if (currentMode === 'link') {
+        document.body.classList.add('link-mode-active');
+    }
+    
+    // Update labels
+    if (currentMode === 'command') {
+        openModalBtn.textContent = '+ New Command';
+        searchInput.placeholder = 'Search commands...';
+    } else if (currentMode === 'link') {
+        openModalBtn.textContent = '+ New Link';
+        searchInput.placeholder = 'Search links...';
+    } else {
+        openModalBtn.textContent = '+ New Prompt';
+        searchInput.placeholder = 'Search prompts (Ctrl+K)...';
+    }
     
     // Reset filters and search
     searchInput.value = '';
@@ -209,7 +256,7 @@ modeToggle.addEventListener('change', () => {
     // Re-load categories and filter view
     loadModeSpecificCategories();
     applyFilters();
-});
+}
 
 // Textarea Auto-Resize Logic
 const autoResizeTextarea = (el) => {
@@ -217,7 +264,12 @@ const autoResizeTextarea = (el) => {
     el.style.height = el.scrollHeight + 'px';
 };
 
-[document.getElementById('prompt-title'), document.getElementById('prompt-category')].forEach(el => {
+[
+    document.getElementById('prompt-title'),
+    document.getElementById('prompt-category'),
+    document.getElementById('prompt-content'),
+    document.getElementById('prompt-code')
+].forEach(el => {
     el.addEventListener('input', () => autoResizeTextarea(el));
 });
 
@@ -236,11 +288,20 @@ openModalBtn.addEventListener('click', () => {
         document.getElementById('prompt-content').required = false;
         promptCodeContainer.classList.remove('hidden'); // Show code by default for commands
         document.getElementById('prompt-code').placeholder = "Main command...";
+    } else if (currentMode === 'link') {
+        modalTitle.textContent = "Add New Link";
+        submitPromptBtn.textContent = "Add Link";
+        document.getElementById('prompt-title').placeholder = "Link Display Name (e.g. My Website)";
+        document.getElementById('prompt-content').required = true;
+        document.getElementById('prompt-content').placeholder = "URL (https://...)";
+        promptCodeContainer.classList.add('hidden');
+        document.getElementById('prompt-code').placeholder = "Optional notes...";
     } else {
         modalTitle.textContent = "Add New Prompt";
         submitPromptBtn.textContent = "Add Prompt";
         document.getElementById('prompt-title').placeholder = "Prompt Title";
         document.getElementById('prompt-content').required = true;
+        document.getElementById('prompt-content').placeholder = "Main Prompt Content...";
         promptCodeContainer.classList.add('hidden'); // Hide code by default for prompts
         document.getElementById('prompt-code').placeholder = "Optional Code Snippets...";
     }
@@ -251,6 +312,8 @@ openModalBtn.addEventListener('click', () => {
         titleEl.focus();
         autoResizeTextarea(titleEl);
         autoResizeTextarea(document.getElementById('prompt-category'));
+        autoResizeTextarea(document.getElementById('prompt-content'));
+        autoResizeTextarea(document.getElementById('prompt-code'));
     }, 100);
 });
 
@@ -424,6 +487,36 @@ clearSearchBtn.addEventListener('click', () => {
 });
 
 // Category filter event listener removed (now handled by button clicks)
+
+// Sort Dropdown Event
+sortSelect.addEventListener('change', () => {
+    currentSort = sortSelect.value;
+    console.log(`🔢 Sort changed to: ${currentSort}`);
+    applyFilters();
+});
+
+// Mobile Mobile Search Toggle
+mobileSearchBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const group = mobileSearchBtn.closest('.search-group');
+    group.classList.add('active');
+    searchInput.focus();
+});
+
+// Close mobile search when clicking outside
+document.addEventListener('click', (e) => {
+    const isSearchGroup = e.target.closest('.search-group');
+    if (!isSearchGroup && window.innerWidth <= 600) {
+        document.querySelector('.search-group')?.classList.remove('active');
+    }
+});
+
+// Mobile Category Dropdown Event
+mobileCategorySelect.addEventListener('change', () => {
+    selectedCategory = mobileCategorySelect.value;
+    updateActivePill();
+    applyFilters();
+});
 
 // Category Modal Selection Interactivity
 modalCategorySelect.addEventListener('change', () => {
@@ -685,28 +778,6 @@ function loadPrompts() {
         });
 
         loadModeSpecificCategories();
-
-        // Hybrid Sorting Logic:
-        // 1. Pinned items at the top
-        // 2. Custom sortOrder if available
-        // 3. Fallback to newest created (createdAt)
-        allPromptsData.sort((a, b) => {
-            // First: Pinned status
-            if ((b.data.isPinned || false) !== (a.data.isPinned || false)) {
-                return (b.data.isPinned || false) - (a.data.isPinned || false);
-            }
-            
-            // Second: Manual Sort Order
-            const orderA = a.data.sortOrder !== undefined ? a.data.sortOrder : 999999;
-            const orderB = b.data.sortOrder !== undefined ? b.data.sortOrder : 999999;
-            if (orderA !== orderB) return orderA - orderB;
-            
-            // Third: fallback to Date
-            const dateA = a.data.createdAt?.toMillis() || 0;
-            const dateB = b.data.createdAt?.toMillis() || 0;
-            return dateB - dateA;
-        });
-
         applyFilters();
         console.log("✅ Data sync complete.");
     }, (error) => {
@@ -771,9 +842,25 @@ function updateCategoryFilter(categories) {
         };
         categoryPills.appendChild(btn);
     });
+
+    // Populate Mobile Select
+    mobileCategorySelect.innerHTML = '<option value="all">All Categories</option>';
+    const sorted = Array.from(categories).sort();
+    sorted.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        if (selectedCategory === cat) opt.selected = true;
+        mobileCategorySelect.appendChild(opt);
+    });
 }
 
 function updateActivePill() {
+    // Sync Mobile Select value
+    if (mobileCategorySelect) {
+        mobileCategorySelect.value = selectedCategory;
+    }
+
     const pills = categoryPills.querySelectorAll('.category-pill');
     pills.forEach(pill => {
         const pillText = pill.textContent;
@@ -823,7 +910,7 @@ function applyFilters() {
     if (promptCountDisplay) {
         const totalInMode = allPromptsData.filter(item => (item.data.mode || 'prompt') === currentMode).length;
         const filteredCount = filtered.length;
-        const label = currentMode === 'command' ? 'commands' : 'prompts';
+        const label = currentMode === 'command' ? 'commands' : (currentMode === 'link' ? 'links' : 'prompts');
         
         if (selectedCategory !== 'all') {
             promptCountDisplay.textContent = `Showing ${filteredCount} of ${totalInMode} ${label} in "${selectedCategory}"`;
@@ -834,288 +921,457 @@ function applyFilters() {
         }
     }
 
-    renderPrompts(filtered);
+    renderPrompts(sortData(filtered));
 }
 
-// Render the final list
+// Sorting Helper Function
+function sortData(prompts) {
+    const sorted = [...prompts]; // Clone to avoid mutating the original array
+
+    sorted.sort((a, b) => {
+        // Universal Rule: Pinned items always stay at the top
+        if ((b.data.isPinned || false) !== (a.data.isPinned || false)) {
+            return (b.data.isPinned || false) - (a.data.isPinned || false);
+        }
+
+        switch (currentSort) {
+            case 'alpha-asc':
+                return a.data.title.localeCompare(b.data.title);
+            case 'alpha-desc':
+                return b.data.title.localeCompare(a.data.title);
+            case 'created-desc':
+                return (b.data.createdAt?.toMillis() || 0) - (a.data.createdAt?.toMillis() || 0);
+            case 'created-asc':
+                return (a.data.createdAt?.toMillis() || 0) - (b.data.createdAt?.toMillis() || 0);
+            case 'edited-desc':
+                const editedB = b.data.lastEdited?.toMillis() || b.data.createdAt?.toMillis() || 0;
+                const editedA = a.data.lastEdited?.toMillis() || a.data.createdAt?.toMillis() || 0;
+                return editedB - editedA;
+            case 'edited-asc':
+                const eA = a.data.lastEdited?.toMillis() || a.data.createdAt?.toMillis() || 0;
+                const eB = b.data.lastEdited?.toMillis() || b.data.createdAt?.toMillis() || 0;
+                return eA - eB;
+            case 'used-desc':
+                return (b.data.lastUsed?.toMillis() || 0) - (a.data.lastUsed?.toMillis() || 0);
+            case 'used-asc':
+                return (a.data.lastUsed?.toMillis() || 0) - (b.data.lastUsed?.toMillis() || 0);
+            case 'custom':
+            default:
+                // Custom Order (Manual)
+                const orderA = a.data.sortOrder !== undefined ? a.data.sortOrder : 999999;
+                const orderB = b.data.sortOrder !== undefined ? b.data.sortOrder : 999999;
+                if (orderA !== orderB) return orderA - orderB;
+                // Fallback to newest if no order
+                return (b.data.createdAt?.toMillis() || 0) - (a.data.createdAt?.toMillis() || 0);
+        }
+    });
+
+    return sorted;
+}
+
+// Helper to create a section header in the feed
+function addSectionHeader(text, icon = '') {
+    const header = document.createElement('div');
+    header.className = 'feed-section-header';
+    header.innerHTML = `
+        <div class="header-line"></div>
+        <div class="header-content">
+            ${icon}
+            <span class="header-text">${text}</span>
+        </div>
+        <div class="header-line"></div>
+    `;
+    promptsFeed.appendChild(header);
+}
+
+// Render the final list with sections
 function renderPrompts(prompts) {
     promptsFeed.innerHTML = '';
 
     if (prompts.length === 0) {
-        const message = currentMode === 'command' ? 'No commands found matching your criteria.' : 'No prompts found matching your criteria.';
+        const message = currentMode === 'command' ? 'No commands found matching your criteria.' : (currentMode === 'link' ? 'No links found matching your criteria.' : 'No prompts found matching your criteria.');
         promptsFeed.innerHTML = `<div class="glass-card text-center"><p style="color: var(--text-muted);">${message}</p></div>`;
         return;
     }
 
-    prompts.forEach((item) => {
-        const {
-            id,
-            data
-        } = item;
-        const card = document.createElement('div');
-        card.className = 'glass-card';
+    // --- Partitioning Logic ---
+    
+    // 1. Most Recent (Top 4 used, regardless of pin status, but must have been used)
+    const recent = prompts
+        .filter(p => p.data.lastUsed)
+        .sort((a, b) => (b.data.lastUsed?.toMillis() || 0) - (a.data.lastUsed?.toMillis() || 0))
+        .slice(0, 4);
+    
+    const recentIds = new Set(recent.map(r => r.id));
 
-        let codeHTML = data.codeSnippet ? `<div class="prompt-code-block">${escapeHTML(data.codeSnippet)}</div>` : '';
+    // 2. Pinned (Remaining pinned items)
+    const remainingAfterRecent = prompts.filter(p => !recentIds.has(p.id));
+    const pinned = remainingAfterRecent.filter(p => p.data.isPinned);
+    
+    const pinnedIds = new Set(pinned.map(p => p.id));
+
+    // 3. Others (Everything else)
+    const others = remainingAfterRecent.filter(p => !p.data.isPinned);
+
+    // --- Rendering ---
+    
+    // Most Recent Section
+    if (recent.length > 0) {
+        addSectionHeader("Most Recent", `
+            <svg viewBox="0 0 512 512" class="section-icon">
+                <path d="M256 0C114.6 0 0 114.6 0 256s114.6 256 256 256 256-114.6 256-256S397.4 0 256 0zm0 472c-119.1 0-216-96.9-216-216S136.9 40 256 40s216 96.9 216 216-96.9 216-216 216zm110-262h-90v-90c0-11-9-20-20-20s-20 9-20 20v110c0 11 9 20 20 20h110c11 0 20-9 20-20s-9-20-20-20z" fill="currentColor"/>
+            </svg>
+        `);
+        recent.forEach(item => createPromptCard(item));
+    }
+
+    // Pinned Section
+    if (pinned.length > 0) {
+        addSectionHeader("Pinned", `
+            <svg viewBox="0 0 122.879 122.867" class="section-icon">
+                <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z" fill="currentColor"/>
+            </svg>
+        `);
+        pinned.forEach(item => createPromptCard(item));
+    }
+
+    // All Prompts Section
+    if (others.length > 0) {
+        // Only show header if there was recent or pinned items, to avoid redundancy when collection is small
+        if (recent.length > 0 || pinned.length > 0) {
+            const label = currentMode === 'command' ? 'All Commands' : (currentMode === 'link' ? 'All Links' : 'All Prompts');
+            addSectionHeader(label);
+        }
+        others.forEach(item => createPromptCard(item));
+    }
+}
+
+// Logic to create and append a single prompt card
+function createPromptCard(item) {
+
+    const {
+        id,
+        data
+    } = item;
+    const card = document.createElement('div');
+    card.className = 'glass-card';
+    card.dataset.id = id;
+
+    let codeHTML = data.codeSnippet ? `<div class="prompt-code-block">${escapeHTML(data.codeSnippet)}</div>` : '';
+    
+    let additionalBlocksHTML = '';
+    if (data.additionalBlocks && data.additionalBlocks.length > 0) {
+        data.additionalBlocks.forEach(block => {
+            if (block.type === 'code') {
+                additionalBlocksHTML += `<div class="prompt-code-block additional-block">${escapeHTML(block.content)}</div>`;
+            } else if (block.type === 'remember') {
+                additionalBlocksHTML += `
+                    <div class="prompt-remember-note">
+                        <span class="remember-label">Things to Remember</span>
+                        <div class="remember-content">${escapeHTML(block.content)}</div>
+                    </div>`;
+            } else {
+                additionalBlocksHTML += `<p class="prompt-text-display additional-block" style="line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(block.content)}</p>`;
+            }
+        });
+    }
+    
+    // Handle dual colors with fallbacks for older data
+    let bg = data.categoryBgColor || data.categoryColor || '#0a0514';
+    let text = data.categoryTextColor || '#ffffff';
+    // If it was the old single-color format, we use it as 33% opacity background
+    let finalBg = (data.categoryColor && !data.categoryBgColor) ? `${bg}33` : bg;
+    
+    let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${escapeHTML(data.category)}</span>` : '<span></span>';
+
+    const isCommand = (data.mode === 'command');
+    const isLink = (data.mode === 'link');
+    
+    let contentHTML = '';
+    if (isLink && data.content) {
+        contentHTML = `<p class="prompt-text-display link-display" style="margin-top: 10px; line-height: 1.5; color: #06d6a0; font-weight: 500; word-break: break-all;"><a href="${data.content}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">${escapeHTML(data.content)}</a></p>`;
+    } else if (!isCommand && data.content) {
+        contentHTML = `<p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>`;
+    }
+
+    card.innerHTML = `
+        <div class="card-header-main">
+            <div class="card-title-wrapper">
+                <h3>${escapeHTML(data.title)}</h3>
+                <div class="card-tag-container">
+                    ${tagHTML}
+                </div>
+            </div>
+            <div class="card-header-actions">
+                <button class="expand-btn" title="Toggle Content">
+                    <svg viewBox="0 0 512 336.36" class="caret-icon">
+                        <path d="M42.47.01 469.5 0C492.96 0 512 19.04 512 42.5c0 11.07-4.23 21.15-11.17 28.72L294.18 320.97c-14.93 18.06-41.7 20.58-59.76 5.65-1.8-1.49-3.46-3.12-4.97-4.83L10.43 70.39C-4.97 52.71-3.1 25.86 14.58 10.47 22.63 3.46 32.57.02 42.47.01z"/>
+                    </svg>
+                </button>
+                <button class="pin-btn ${data.isPinned ? 'active' : ''}" title="${data.isPinned ? 'Unpin' : 'Pin to Top'}">
+                    <svg viewBox="0 0 122.879 122.867" class="pin-icon-svg">
+                        <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z"/>
+                    </svg>
+                </button>
+                ${((data.content && /_{3,}/.test(data.content)) || (data.additionalBlocks && data.additionalBlocks.some(b => b.type === 'text' && /_{3,}/.test(b.content)))) ? `
+                <button class="history-btn outline-btn action-btn" title="Input History">
+                    ${historyIconSVG}
+                </button>` : ''}
+                <button class="copy-btn" title="${isLink ? 'Copy Link' : 'Copy Text'}">
+                    <svg viewBox="0 0 115.77 122.88" class="copy-icon-svg">
+                        <path d="M89.62,13.96v7.73h12.19h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02v0.02 v73.27v0.01h-0.02c-0.01,3.84-1.57,7.33-4.1,9.86c-2.51,2.5-5.98,4.06-9.82,4.07v0.02h-0.02h-61.7H40.1v-0.02 c-3.84-0.01-7.34-1.57-9.86-4.1c-2.5-2.51-4.06-5.98-4.07-9.82h-0.02v-0.02V92.51H13.96h-0.01v-0.02c-3.84-0.01-7.34-1.57-9.86-4.1 c-2.5-2.51-4.06-5.98-4.07-9.82H0v-0.02V13.96v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07V0h0.02h61.7 h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02V13.96L89.62,13.96z M79.04,21.69v-7.73v-0.02h0.02 c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v64.59v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h12.19V35.65 v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07v-0.02h0.02H79.04L79.04,21.69z M105.18,108.92V35.65v-0.02 h0.02c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v73.27v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h61.7h0.02 v0.02c0.91,0,1.75-0.39,2.37-1.01c0.61-0.61,1-1.46,1-2.37h-0.02V108.92L105.18,108.92z" fill="currentColor"/>
+                    </svg>
+                </button>
+                ${isLink ? `
+                <button class="action-btn visit-btn" onclick="window.open('${escapeHTML(data.content)}', '_blank')" title="Visit Link">
+                    <svg viewBox="0 0 122.88 115.71" class="shortcut-icon-svg">
+                        <path d="M116.56,3.69l-3.84,53.76l-17.69-15c-19.5,8.72-29.96,23.99-30.51,43.77c-17.95-26.98-7.46-50.4,12.46-65.97 L64.96,3L116.56,3.69L116.56,3.69z M28.3,0h14.56v19.67H32.67c-4.17,0-7.96,1.71-10.72,4.47c-2.75,2.75-4.46,6.55-4.46,10.72 l-0.03,46c0.03,4.16,1.75,7.95,4.5,10.71c2.76,2.76,6.56,4.48,10.71,4.48h58.02c4.15,0,7.95-1.72,10.71-4.48 c2.76-2.76,4.48-6.55,4.48-10.71v-6.96h17.01v11.33c0,7.77-3.2,17.04-8.32,22.16c-5.12,5.12-12.21,8.32-19.98,8.32H28.3 c-7.77,0-14.86-3.2-19.98-8.32C3.19,102.26,0,95.18,0,87.41l0.03-59.1C0,20.52,3.19,13.43,8.31,8.31C13.43,3.19,20.51,0,28.3,0 L28.3,0z" fill="currentColor"/>
+                    </svg>
+                </button>` : ''}
+                <button class="action-btn edit-btn" title="Edit ${isCommand ? 'Command' : (isLink ? 'Link' : 'Prompt')}">
+                    <svg viewBox="0 0 121.48 122.88" class="edit-icon-svg">
+                        <path d="M96.84,2.22l22.42,22.42c2.96,2.96,2.96,7.8,0,10.76l-12.4,12.4L73.68,14.62l12.4-12.4 C89.04-0.74,93.88-0.74,96.84,2.22L96.84,2.22z M70.18,52.19L70.18,52.19l0,0.01c0.92,0.92,1.38,2.14,1.38,3.34 c0,1.2-0.46,2.41-1.38,3.34v0.01l-0.01,0.01L40.09,88.99l0,0h-0.01c-0.26,0.26-0.55,0.48-0.84,0.67h-0.01 c-0.3,0.19-0.61,0.34-0.93,0.45c-1.66,0.58-3.59,0.2-4.91-1.12h-0.01l0,0v-0.01c-0.26-0.26-0.48-0.55-0.67-0.84v-0.01 c-0.19-0.3-0.34-0.61-0.45-0.93c-0.58-1.66-0.2-3.59,1.11-4.91v-0.01l30.09-30.09l0,0h0.01c0.92-0.92,2.14-1.38,3.34-1.38 c1.2,0,2.41,0.46,3.34,1.38L70.18,52.19L70.18,52.19L70.18,52.19z M45.48,109.11c-8.98,2.78-17.95,5.55-26.93,8.33 C-2.55,123.97-2.46,128.32,3.3,108l9.07-32v0l-0.03-0.03L67.4,20.9l33.18,33.18l-55.07,55.07L45.48,109.11L45.48,109.11z M18.03,81.66l21.79,21.79c-5.9,1.82-11.8,3.64-17.69,5.45c-13.86,4.27-13.8,7.13-10.03-6.22L18.03,81.66L18.03,81.66z" fill="currentColor"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="prompt-body">
+            ${contentHTML}
+            ${codeHTML}
+            ${additionalBlocksHTML}
+            <div class="card-body-footer">
+                <button class="collapse-btn-bottom" title="Collapse Content">Collapse</button>
+            </div>
+        </div>
+    `;
+    
+    if (data.isPinned) card.classList.add('pinned-card');
+
+    // --- Handlers ---
+    
+    // Expansion Toggle Logic
+    const toggleExpansion = (forceState) => {
+        const isExpanding = forceState !== undefined ? forceState : !card.classList.contains('expanded');
         
-        let additionalBlocksHTML = '';
-        if (data.additionalBlocks && data.additionalBlocks.length > 0) {
-            data.additionalBlocks.forEach(block => {
-                if (block.type === 'code') {
-                    additionalBlocksHTML += `<div class="prompt-code-block additional-block">${escapeHTML(block.content)}</div>`;
-                } else if (block.type === 'remember') {
-                    additionalBlocksHTML += `
-                        <div class="prompt-remember-note">
-                            <span class="remember-label">Things to Remember</span>
-                            <div class="remember-content">${escapeHTML(block.content)}</div>
-                        </div>`;
+        if (window.innerWidth > 800) {
+            const myOffset = card.offsetTop;
+            const allCardsInRow = Array.from(promptsFeed.querySelectorAll('.glass-card'))
+                .filter(c => Math.abs(c.offsetTop - myOffset) < 10);
+            
+            let targetHeight = 0;
+            if (isExpanding) {
+                // Temporarily expand the trigger card to measure its natural content height
+                const body = card.querySelector('.prompt-body');
+                const wasExpanded = card.classList.contains('expanded');
+                card.classList.add('expanded');
+                body.style.maxHeight = 'none';
+                targetHeight = body.scrollHeight;
+                body.style.maxHeight = ''; // Reset for the animation
+                if (!wasExpanded) card.classList.remove('expanded'); // Reset state if we were just measuring
+            }
+
+            allCardsInRow.forEach(c => {
+                const body = c.querySelector('.prompt-body');
+                if (isExpanding) {
+                    c.classList.add('expanded');
+                    // Apply fixed height only if it's the trigger or needed to match the row
+                    body.style.maxHeight = (targetHeight + 20) + 'px'; // +20 for better padding
                 } else {
-                    additionalBlocksHTML += `<p class="prompt-text-display additional-block" style="line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(block.content)}</p>`;
+                    c.classList.remove('expanded');
+                    body.style.maxHeight = '';
                 }
             });
+        } else {
+            card.classList.toggle('expanded', isExpanding);
+            const body = card.querySelector('.prompt-body');
+            body.style.maxHeight = isExpanding ? '2000px' : ''; 
+        }
+    };
+
+    const expandBtn = card.querySelector('.expand-btn');
+    expandBtn.addEventListener('click', () => toggleExpansion());
+    
+    const bottomCollapseBtn = card.querySelector('.collapse-btn-bottom');
+    bottomCollapseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleExpansion(false);
+        // After collapsing, scroll back to the top of this card if it's off-screen
+        const rect = card.getBoundingClientRect();
+        if (rect.top < 0) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+    
+    // 0. Pin Logic
+    const pinBtn = card.querySelector('.pin-btn');
+    pinBtn.addEventListener('click', async () => {
+        const newPinnedState = !data.isPinned;
+        try {
+            await updateDoc(doc(db, "prompts", id), {
+                isPinned: newPinnedState
+            });
+        } catch (err) {
+            console.error("❌ Failed to toggle pin:", err);
+        }
+    });
+
+    // History Logic
+    const historyBtn = card.querySelector('.history-btn');
+    if (historyBtn) {
+        historyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openHistoryModal(id);
+        });
+    }
+
+    // Copy Logic
+    const copyBtn = card.querySelector('.copy-btn');
+    copyBtn.addEventListener('click', () => {
+        let fullPromptText = "";
+        const allInputValues = []; // Gather all values across all blocks
+        const displayP = card.querySelector('.prompt-text-display');
+        
+        if (displayP && data.content) {
+            const inputs = displayP.querySelectorAll('.prompt-input');
+            let inputIndex = 0;
+            fullPromptText = data.content.replace(/_{3,}/g, () => {
+                const el = inputs[inputIndex++];
+                const val = el?.textContent || '___';
+                const trimmedVal = val.trim();
+                if (trimmedVal) allInputValues.push(trimmedVal);
+                return trimmedVal || '___';
+            });
+        } else if (data.content) {
+            // Fallback for existing data or prompts without interactive inputs
+            fullPromptText = data.content;
+        }
+
+        if (data.codeSnippet) {
+            fullPromptText += (fullPromptText ? "\n\n" : "") + data.codeSnippet;
+        }
+
+        // Append Additional Blocks (Filter out 'remember' blocks)
+        if (data.additionalBlocks && data.additionalBlocks.length > 0) {
+            const additionalPs = card.querySelectorAll('.prompt-text-display.additional-block');
+            let blockTextIndex = 0;
+
+            data.additionalBlocks.forEach(block => {
+                if (block.type === 'remember') return; // Do not copy internal notes
+
+                let blockContent = block.content;
+                if (block.type === 'text') {
+                    // Reconstruct inputs for each additional text block
+                    const blockInputs = additionalPs[blockTextIndex++].querySelectorAll('.prompt-input');
+                    let inputIdx = 0;
+                    blockContent = block.content.replace(/_{3,}/g, () => {
+                        const val = blockInputs[inputIdx++]?.textContent || '___';
+                        const trimmedVal = val.trim();
+                        if (trimmedVal) allInputValues.push(trimmedVal);
+                        return trimmedVal || '___';
+                    });
+                }
+                fullPromptText += (fullPromptText ? "\n\n" : "") + blockContent;
+            });
+        }
+
+        // Save to history if we have any inputs
+        if (allInputValues.length > 0) {
+            saveInputHistory(id, allInputValues);
+        }
+
+        copyToClipboard(fullPromptText, copyBtn);
+
+        // Update Last Used in Firestore
+        try {
+            updateDoc(doc(db, "prompts", id), {
+                lastUsed: serverTimestamp()
+            });
+        } catch (err) {
+            console.error("❌ Failed to update last used:", err);
+        }
+    });
+
+    // Edit Logic
+    const editBtn = card.querySelector('.edit-btn');
+    editBtn.addEventListener('click', () => {
+        isEditing = true;
+        currentPromptId = id;
+        const itemMode = data.mode || 'prompt';
+        modalTitle.textContent = itemMode === 'command' ? "Edit Command" : (itemMode === 'link' ? "Edit Link" : "Edit Prompt");
+        submitPromptBtn.textContent = itemMode === 'command' ? "Update Command" : (itemMode === 'link' ? "Update Link" : "Update Prompt");
+        
+        // Sync currentMode to item mode for editing context
+        currentMode = itemMode;
+        document.body.classList.remove('command-mode-active', 'link-mode-active');
+        if (currentMode === 'command') document.body.classList.add('command-mode-active');
+        if (currentMode === 'link') document.body.classList.add('link-mode-active');
+        
+        // Set the correct radio button
+        const targetRadio = document.querySelector(`input[name="mode-select"][value="${currentMode}"]`);
+        if (targetRadio) targetRadio.checked = true;
+
+        openModalBtn.textContent = currentMode === 'command' ? '+ New Command' : (currentMode === 'link' ? '+ New Link' : '+ New Prompt');
+        searchInput.placeholder = currentMode === 'command' ? 'Search commands...' : (currentMode === 'link' ? 'Search links...' : 'Search prompts (Ctrl+K)...');
+
+        document.getElementById('prompt-title').value = data.title;
+        
+        // Sync category components
+        modalCategorySelect.value = data.category || "";
+        manualCategoryInputs.classList.add('hidden');
+        categoryError.classList.add('hidden');
+        submitPromptBtn.disabled = false;
+        
+        document.getElementById('prompt-category').value = data.category || '';
+        document.getElementById('category-bg-color').value = data.categoryBgColor || data.categoryColor || '#0a0514';
+        document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
+        document.getElementById('prompt-content').value = data.content;
+        document.getElementById('prompt-code').value = data.codeSnippet || '';
+        document.getElementById('prompt-code').placeholder = itemMode === 'command' ? "Main command..." : (itemMode === 'link' ? "Optional notes..." : "Optional Code Snippets...");
+        
+        if (data.codeSnippet) {
+            promptCodeContainer.classList.remove('hidden');
+        } else {
+            promptCodeContainer.classList.add('hidden');
         }
         
-        // Handle dual colors with fallbacks for older data
-        let bg = data.categoryBgColor || data.categoryColor || '#0a0514';
-        let text = data.categoryTextColor || '#ffffff';
-        // If it was the old single-color format, we use it as 33% opacity background
-        let finalBg = (data.categoryColor && !data.categoryBgColor) ? `${bg}33` : bg;
+        // Render Dynamic Blocks in Modal
+        dynamicBlocksContainer.innerHTML = '';
+        if (data.additionalBlocks && data.additionalBlocks.length > 0) {
+            data.additionalBlocks.forEach(block => {
+                addDynamicBlock(block.type, block.content);
+            });
+        }
+
+        updateCounters(); 
         
-        let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${escapeHTML(data.category)}</span>` : '<span></span>';
- 
-        const isCommand = (data.mode === 'command');
-        const contentHTML = (!isCommand && data.content) ? `<p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>` : '';
+        // Show Delete button in Edit mode
+        modalDeleteBtn.classList.remove('hidden');
 
-        card.innerHTML = `
-            <div class="card-header-main">
-                <h3>${escapeHTML(data.title)}</h3>
-                <div class="card-header-actions">
-                    <button class="expand-btn" title="Toggle Content">
-                        <svg viewBox="0 0 512 336.36" class="caret-icon">
-                            <path d="M42.47.01 469.5 0C492.96 0 512 19.04 512 42.5c0 11.07-4.23 21.15-11.17 28.72L294.18 320.97c-14.93 18.06-41.7 20.58-59.76 5.65-1.8-1.49-3.46-3.12-4.97-4.83L10.43 70.39C-4.97 52.71-3.1 25.86 14.58 10.47 22.63 3.46 32.57.02 42.47.01z"/>
-                        </svg>
-                    </button>
-                    <button class="pin-btn ${data.isPinned ? 'active' : ''}" title="${data.isPinned ? 'Unpin' : 'Pin to Top'}">
-                        <svg viewBox="0 0 122.879 122.867" class="pin-icon-svg">
-                            <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z"/>
-                        </svg>
-                    </button>
-                    <button class="copy-btn" title="Copy Text">Copy</button>
-                    <button class="action-btn edit-btn" title="Edit ${isCommand ? 'Command' : 'Prompt'}">Edit</button>
-                </div>
-            </div>
-            <div class="prompt-body">
-                ${contentHTML}
-                ${codeHTML}
-                ${additionalBlocksHTML}
-                <div class="card-body-footer">
-                    <button class="collapse-btn-bottom" title="Collapse Content">Collapse</button>
-                </div>
-            </div>
-            <div class="card-tag-row">
-                ${tagHTML}
-            </div>
-        `;
-        
-        if (data.isPinned) card.classList.add('pinned-card');
+        // Show Metadata
+        modalMetadata.classList.remove('hidden');
+        createdAtText.innerHTML = `Created: <span>${data.createdAt ? timeAgo(data.createdAt.toDate()) : 'Recently'}</span>`;
+        lastEditedText.innerHTML = `Last Edited: <span>${data.lastEdited ? timeAgo(data.lastEdited.toDate()) : 'Never'}</span>`;
+        lastUsedText.innerHTML = `Last Used: <span>${data.lastUsed ? timeAgo(data.lastUsed.toDate()) : 'Never'}</span>`;
 
-        // --- Handlers ---
-        
-        // Expansion Toggle Logic
-        const toggleExpansion = (forceState) => {
-            const isExpanding = forceState !== undefined ? forceState : !card.classList.contains('expanded');
+        addPromptModal.classList.remove('hidden');
+        setTimeout(() => {
+            const titleEl = document.getElementById('prompt-title');
+            titleEl.focus();
+            autoResizeTextarea(titleEl);
+            autoResizeTextarea(document.getElementById('prompt-category'));
+            autoResizeTextarea(document.getElementById('prompt-content'));
+            autoResizeTextarea(document.getElementById('prompt-code'));
             
-            if (window.innerWidth > 800) {
-                const myOffset = card.offsetTop;
-                const allCardsInRow = Array.from(promptsFeed.querySelectorAll('.glass-card'))
-                    .filter(c => Math.abs(c.offsetTop - myOffset) < 10);
-                
-                let targetHeight = 0;
-                if (isExpanding) {
-                    // Temporarily expand the trigger card to measure its natural content height
-                    const body = card.querySelector('.prompt-body');
-                    const wasExpanded = card.classList.contains('expanded');
-                    card.classList.add('expanded');
-                    body.style.maxHeight = 'none';
-                    targetHeight = body.scrollHeight;
-                    body.style.maxHeight = ''; // Reset for the animation
-                    if (!wasExpanded) card.classList.remove('expanded'); // Reset state if we were just measuring
-                }
-
-                allCardsInRow.forEach(c => {
-                    const body = c.querySelector('.prompt-body');
-                    if (isExpanding) {
-                        c.classList.add('expanded');
-                        // Apply fixed height only if it's the trigger or needed to match the row
-                        body.style.maxHeight = (targetHeight + 20) + 'px'; // +20 for better padding
-                    } else {
-                        c.classList.remove('expanded');
-                        body.style.maxHeight = '';
-                    }
-                });
-            } else {
-                card.classList.toggle('expanded', isExpanding);
-                const body = card.querySelector('.prompt-body');
-                body.style.maxHeight = isExpanding ? '2000px' : ''; 
-            }
-        };
-
-        const expandBtn = card.querySelector('.expand-btn');
-        expandBtn.addEventListener('click', () => toggleExpansion());
-        
-        const bottomCollapseBtn = card.querySelector('.collapse-btn-bottom');
-        bottomCollapseBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleExpansion(false);
-            // After collapsing, scroll back to the top of this card if it's off-screen
-            const rect = card.getBoundingClientRect();
-            if (rect.top < 0) {
-                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        });
-        
-        // 0. Pin Logic
-        const pinBtn = card.querySelector('.pin-btn');
-        pinBtn.addEventListener('click', async () => {
-            const newPinnedState = !data.isPinned;
-            try {
-                await updateDoc(doc(db, "prompts", id), {
-                    isPinned: newPinnedState
-                });
-            } catch (err) {
-                console.error("❌ Failed to toggle pin:", err);
-            }
-        });
-
-        // Copy Logic
-        const copyBtn = card.querySelector('.copy-btn');
-        copyBtn.addEventListener('click', () => {
-            let fullPromptText = "";
-            const displayP = card.querySelector('.prompt-text-display');
-            
-            if (displayP && data.content) {
-                const inputs = displayP.querySelectorAll('.prompt-input');
-                let inputIndex = 0;
-                fullPromptText = data.content.replace(/_{3,}/g, () => {
-                    const val = inputs[inputIndex++]?.value || '___';
-                    return val;
-                });
-            } else if (data.content) {
-                // Fallback for existing data or prompts without interactive inputs
-                fullPromptText = data.content;
-            }
-
-            if (data.codeSnippet) {
-                fullPromptText += (fullPromptText ? "\n\n" : "") + data.codeSnippet;
-            }
-
-            // Append Additional Blocks (Filter out 'remember' blocks)
-            if (data.additionalBlocks && data.additionalBlocks.length > 0) {
-                const additionalPs = card.querySelectorAll('.prompt-text-display.additional-block');
-                let blockTextIndex = 0;
-
-                data.additionalBlocks.forEach(block => {
-                    if (block.type === 'remember') return; // Do not copy internal notes
-
-                    let blockContent = block.content;
-                    if (block.type === 'text') {
-                        // Reconstruct inputs for each additional text block
-                        const blockInputs = additionalPs[blockTextIndex++].querySelectorAll('.prompt-input');
-                        let inputIdx = 0;
-                        blockContent = block.content.replace(/_{3,}/g, () => {
-                            return blockInputs[inputIdx++]?.value || '___';
-                        });
-                    }
-                    fullPromptText += (fullPromptText ? "\n\n" : "") + blockContent;
-                });
-            }
-
-            copyToClipboard(fullPromptText, copyBtn);
-
-            // Update Last Used in Firestore
-            try {
-                updateDoc(doc(db, "prompts", id), {
-                    lastUsed: serverTimestamp()
-                });
-            } catch (err) {
-                console.error("❌ Failed to update last used:", err);
-            }
-        });
-
-        // Edit Logic
-        const editBtn = card.querySelector('.edit-btn');
-        editBtn.addEventListener('click', () => {
-            isEditing = true;
-            currentPromptId = id;
-            const itemMode = data.mode || 'prompt';
-            modalTitle.textContent = itemMode === 'command' ? "Edit Command" : "Edit Prompt";
-            submitPromptBtn.textContent = itemMode === 'command' ? "Update Command" : "Update Prompt";
-            
-            // Sync currentMode to item mode for editing context
-            currentMode = itemMode;
-            document.body.classList.toggle('command-mode-active', currentMode === 'command');
-            modeToggle.checked = currentMode === 'command';
-            openModalBtn.textContent = currentMode === 'command' ? '+ New Command' : '+ New Prompt';
-            searchInput.placeholder = currentMode === 'command' ? 'Search commands...' : 'Search prompts (Ctrl+K)...';
-
-            document.getElementById('prompt-title').value = data.title;
-            
-            // Sync category components
-            modalCategorySelect.value = data.category || "";
-            manualCategoryInputs.classList.add('hidden');
-            categoryError.classList.add('hidden');
-            submitPromptBtn.disabled = false;
-            
-            document.getElementById('prompt-category').value = data.category || '';
-            document.getElementById('category-bg-color').value = data.categoryBgColor || data.categoryColor || '#0a0514';
-            document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
-            document.getElementById('prompt-content').value = data.content;
-            document.getElementById('prompt-code').value = data.codeSnippet || '';
-            document.getElementById('prompt-code').placeholder = itemMode === 'command' ? "Main command..." : "Optional Code Snippets...";
-            
-            if (data.codeSnippet) {
-                promptCodeContainer.classList.remove('hidden');
-            } else {
-                promptCodeContainer.classList.add('hidden');
-            }
-            
-            // Render Dynamic Blocks in Modal
-            dynamicBlocksContainer.innerHTML = '';
-            if (data.additionalBlocks && data.additionalBlocks.length > 0) {
-                data.additionalBlocks.forEach(block => {
-                    addDynamicBlock(block.type, block.content);
-                });
-            }
-
-            updateCounters(); 
-            
-            // Show Delete button in Edit mode
-            modalDeleteBtn.classList.remove('hidden');
-
-            // Show Metadata
-            modalMetadata.classList.remove('hidden');
-            createdAtText.innerHTML = `Created: <span>${data.createdAt ? timeAgo(data.createdAt.toDate()) : 'Recently'}</span>`;
-            lastEditedText.innerHTML = `Last Edited: <span>${data.lastEdited ? timeAgo(data.lastEdited.toDate()) : 'Never'}</span>`;
-            lastUsedText.innerHTML = `Last Used: <span>${data.lastUsed ? timeAgo(data.lastUsed.toDate()) : 'Never'}</span>`;
-
-            addPromptModal.classList.remove('hidden');
-            setTimeout(() => {
-                const titleEl = document.getElementById('prompt-title');
-                titleEl.focus();
-                autoResizeTextarea(titleEl);
-                autoResizeTextarea(document.getElementById('prompt-category'));
-                autoResizeTextarea(document.getElementById('prompt-content'));
-                autoResizeTextarea(document.getElementById('prompt-code'));
-                
-                // Also resize all dynamically added blocks
-                dynamicBlocksContainer.querySelectorAll('textarea').forEach(tx => {
-                    autoResizeTextarea(tx);
-                });
-            }, 100);
-        });
-
-        promptsFeed.appendChild(card);
+            // Also resize all dynamically added blocks
+            dynamicBlocksContainer.querySelectorAll('textarea').forEach(tx => {
+                autoResizeTextarea(tx);
+            });
+        }, 100);
     });
+
+    promptsFeed.appendChild(card);
 }
+
 
 // Global modal delete logic
 modalDeleteBtn.addEventListener('click', () => {
@@ -1130,12 +1386,9 @@ async function copyToClipboard(text, button) {
         await navigator.clipboard.writeText(text);
 
         // Visual Feedback
-        const originalText = button.textContent;
-        button.textContent = 'Copied!';
         button.classList.add('copied');
 
         setTimeout(() => {
-            button.textContent = originalText;
             button.classList.remove('copied');
         }, 2000);
 
@@ -1302,7 +1555,7 @@ function renderContentWithInputs(content) {
     parts.forEach((part, index) => {
         html += escapeHTML(part);
         if (index < parts.length - 1) {
-            html += `<input type="text" class="prompt-input" placeholder="..." oninput="this.style.width = this.value.length > 0 ? ((this.value.length + 2) * 10) + 'px' : '120px';">`;
+            html += `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="..."></span>`;
         }
     });
 
@@ -1325,4 +1578,129 @@ function timeAgo(date) {
     if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
     const years = Math.floor(months / 12);
     return `${years} year${years > 1 ? 's' : ''} ago`;
+}
+
+// --- Input History Logic ---
+async function saveInputHistory(promptId, inputs) {
+    if (!auth.currentUser) return;
+    try {
+        await addDoc(collection(db, "prompts", promptId, "history"), {
+            inputs: inputs,
+            timestamp: serverTimestamp()
+        });
+        console.log("✅ Input history saved.");
+    } catch (err) {
+        console.error("❌ Failed to save history:", err);
+    }
+}
+
+async function openHistoryModal(promptId) {
+    currentPromptId = promptId; // Fix: Set currentPromptId so delete works
+    historyList.innerHTML = '<div class="text-center"><p>Loading history...</p></div>';
+    historyModal.classList.remove('hidden');
+
+    try {
+        // Fetch historical entries ordered by timestamp
+        const q = query(collection(db, "prompts", promptId, "history"), orderBy("timestamp", "desc"));
+        const snapshot = await getDocs(q);
+        
+        historyList.innerHTML = '';
+        if (snapshot.empty) {
+            historyList.innerHTML = '<div class="text-center"><p style="color: var(--text-muted);">No history found for this prompt.</p></div>';
+            return;
+        }
+
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const dateStr = data.timestamp ? timeAgo(data.timestamp.toDate()) : 'Recently';
+            const preview = data.inputs.join('\n');
+            
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerHTML = `
+                <div class="history-item-info">
+                    <span class="history-item-date">${dateStr}</span>
+                    <span class="history-item-preview" title="${escapeHTML(preview)}">${escapeHTML(preview)}</span>
+                </div>
+                <div class="history-item-actions">
+                    <button class="history-restore-btn">Restore</button>
+                    <button class="history-delete-btn" title="Delete Entry">&times;</button>
+                </div>
+            `;
+            
+            item.querySelector('.history-restore-btn').onclick = () => {
+                restoreHistory(promptId, data.inputs);
+                historyModal.classList.add('hidden');
+                showToast("Inputs restored!");
+            };
+            
+            item.querySelector('.history-delete-btn').onclick = (e) => {
+                e.stopPropagation();
+                historyIdToDelete = docSnap.id;
+                historyItemElementToDelete = item;
+                historyDeleteModal.classList.remove('hidden');
+            };
+            
+            historyList.appendChild(item);
+        });
+    } catch (err) {
+        console.error("❌ Error fetching history:", err);
+        historyList.innerHTML = '<div class="text-center"><p style="color: #f72585;">Error loading history.</p></div>';
+    }
+}
+
+function restoreHistory(promptId, inputsArr) {
+    // Find the card in the feed using data-id
+    const card = document.querySelector(`.glass-card[data-id="${promptId}"]`);
+    if (!card) return;
+
+    const inputs = card.querySelectorAll('.prompt-input');
+    inputs.forEach((input, index) => {
+        if (inputsArr[index] !== undefined) {
+            input.textContent = inputsArr[index];
+        }
+    });
+}
+
+// History Modal Close Handlers
+if (closeHistoryModalBtn) {
+    closeHistoryModalBtn.onclick = () => historyModal.classList.add('hidden');
+}
+if (historyModal) {
+    historyModal.onclick = (e) => {
+        if (e.target === historyModal) historyModal.classList.add('hidden');
+    };
+}
+
+// History Delete Modal Logic
+const closeHistoryDeleteModal = () => {
+    historyDeleteModal.classList.add('hidden');
+    historyIdToDelete = null;
+    historyItemElementToDelete = null;
+};
+
+if (closeHistoryDeleteModalBtn) closeHistoryDeleteModalBtn.onclick = closeHistoryDeleteModal;
+if (cancelHistoryDeleteBtn) cancelHistoryDeleteBtn.onclick = closeHistoryDeleteModal;
+if (confirmHistoryDeleteBtn) {
+    confirmHistoryDeleteBtn.onclick = async () => {
+        if (!historyIdToDelete || !currentPromptId) return;
+        
+        try {
+            await deleteDoc(doc(db, "prompts", currentPromptId, "history", historyIdToDelete));
+            if (historyItemElementToDelete) historyItemElementToDelete.remove();
+            if (historyList.children.length === 0) {
+                historyList.innerHTML = '<div class="text-center"><p style="color: var(--text-muted);">No history found for this prompt.</p></div>';
+            }
+            closeHistoryDeleteModal();
+            showToast("History entry deleted.");
+        } catch (err) {
+            console.error("❌ Failed to delete history entry:", err);
+            showToast("Failed to delete entry.");
+        }
+    };
+}
+if (historyDeleteModal) {
+    historyDeleteModal.onclick = (e) => {
+        if (e.target === historyDeleteModal) closeHistoryDeleteModal();
+    };
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { BarChart as BarChartIcon, TrendingUp, Type, MessageSquare, Tag, Image as ImageIcon, Download, X, Calendar, FileText, CheckCircle, AlertCircle, Loader, Star } from 'lucide-react';
+import { BarChart as BarChartIcon, TrendingUp, Type, MessageSquare, Tag, Image as ImageIcon, Download, X, Calendar, FileText, CheckCircle, AlertCircle, Loader, Star, Smile, Meh, Frown, Heart, Zap } from 'lucide-react';
 import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
 import { collection, query, where, documentId, onSnapshot, getDocs, orderBy } from 'firebase/firestore';
 import { saveAs } from 'file-saver';
@@ -34,6 +34,14 @@ const STOP_WORDS = new Set([
     'to', 'from', 'in', 'on', 'at', 'by', 'about', 'like', 'really', 'would',
     'get', 'got', 'going', 'go', 'know', 'think', 'thought', 'time', 'day'
 ]);
+ 
+const MOOD_CONFIG = {
+    1: { icon: Frown, label: 'Bad', color: '#f87171' },
+    2: { icon: Meh, label: 'Okay', color: '#fb923c' },
+    3: { icon: Smile, label: 'Good', color: '#facc15' },
+    4: { icon: Heart, label: 'Great', color: '#4ade80' },
+    5: { icon: Zap, label: 'Amazing', color: '#8b5cf6' },
+};
 
 import { useNavigate } from 'react-router-dom';
 
@@ -217,7 +225,8 @@ export default function StatsView() {
                 totalImages += imageCount;
                 totalSizeBytes += calculateEntrySize(entry);
 
-                return `"${date}","${entryTitle}",${wordCount},${imageCount},"${entryTags}"`;
+                const moodLabel = entry.mood ? MOOD_CONFIG[entry.mood]?.label || entry.mood : '';
+                return `"${date}","${entryTitle}",${wordCount},${imageCount},"${entryTags}","${moodLabel}"`;
             });
 
             const avgWords = exportEntries.length > 0 ? (totalWords / exportEntries.length).toFixed(1) : 0;
@@ -233,7 +242,7 @@ export default function StatsView() {
             csvContent += `Total Storage Usage,${storageFormatted}\n\n`;
             
             csvContent += "DATA\n";
-            csvContent += "Date,Title,Word Count,Image Count,Tags\n";
+            csvContent += "Date,Title,Word Count,Image Count,Tags,Mood\n";
             csvContent += processedRows.join('\n');
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -278,7 +287,8 @@ export default function StatsView() {
                 count, 
                 title: displayTitle, 
                 isSpecial: entry.isSpecial || false,
-                tags: entry.tags || []
+                tags: entry.tags || [],
+                mood: entry.mood || null
             });
 
             // Word frequency analysis
@@ -352,6 +362,7 @@ export default function StatsView() {
                 date: dateKey,
                 displayDate: format(iterDate, timeRange === 'year' ? 'MMM d' : 'd MMM'),
                 words: count,
+                mood: entryData.mood,
                 average: currentAvg,
                 title: entryData.title,
                 isSpecial: entryData.isSpecial,
@@ -414,6 +425,18 @@ export default function StatsView() {
                     <p className="text-sm">
                         Word Count: <span className="font-mono text-purple-400">{data.words}</span>
                     </p>
+                    {data.mood && MOOD_CONFIG[data.mood] && (
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-sm text-text-muted">Mood:</span>
+                            {React.createElement(MOOD_CONFIG[data.mood].icon, { 
+                                className: "w-4 h-4", 
+                                style: { color: MOOD_CONFIG[data.mood].color } 
+                            })}
+                            <span className="text-sm font-bold" style={{ color: MOOD_CONFIG[data.mood].color }}>
+                                {MOOD_CONFIG[data.mood].label}
+                            </span>
+                        </div>
+                    )}
                     {data.isSpecial && (
                         <p className="text-sm text-yellow-400 flex items-center gap-1 mt-1 font-bold">
                             <Star className="w-3 h-3 fill-yellow-400" /> Special Day
@@ -422,6 +445,44 @@ export default function StatsView() {
                     {data.average > 0 && (
                         <p className="text-xs text-text-muted mt-1">
                             Average: <span className="text-pink-400">{data.average}</span>
+                        </p>
+                    )}
+                </div>
+            );
+        }
+        return null;
+    };
+
+    const CustomMoodTooltip = ({ active, payload }) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            const mood = data.mood;
+            const config = MOOD_CONFIG[mood];
+
+            return (
+                <div className="bg-[#1a1b1e] border border-white/10 p-3 rounded shadow-xl text-white">
+                    {data.title && (
+                        <p className="font-bold text-sm mb-2 text-primary break-words whitespace-pre-wrap max-w-xs">
+                            {data.title}
+                        </p>
+                    )}
+                    {mood && config ? (
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-text-muted">Mood:</span>
+                            {React.createElement(config.icon, { 
+                                className: "w-4 h-4", 
+                                style: { color: config.color } 
+                            })}
+                            <span className="text-sm font-bold" style={{ color: config.color }}>
+                                {config.label}
+                            </span>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-text-muted">No mood recorded</p>
+                    )}
+                    {data.isSpecial && (
+                        <p className="text-sm text-yellow-400 flex items-center gap-1 mt-1 font-bold">
+                            <Star className="w-3 h-3 fill-yellow-400" /> Special Day
                         </p>
                     )}
                 </div>
@@ -526,9 +587,8 @@ export default function StatsView() {
                                     <LabelList
                                         dataKey="words"
                                         content={(props) => {
-                                            const { x, y, width, index } = props;
-                                            const entry = stats.chartData[index];
-                                            if (entry && entry.isSpecial && entry.words > 0) {
+                                            const { x, y, width, payload } = props;
+                                            if (payload && payload.isSpecial && payload.words > 0) {
                                                 return (
                                                     <text
                                                         x={x + width / 2}
@@ -555,6 +615,79 @@ export default function StatsView() {
                                 activeDot={{ r: 6 }}
                             />
                         </ComposedChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            {/* Mood Chart */}
+            <div className="glass-card p-6 min-h-[400px]">
+                <h3 className="text-lg font-serif font-bold text-white mb-6 flex items-center gap-2">
+                    <Smile className="w-5 h-5 text-primary" /> Mood Level History
+                </h3>
+
+                <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                            data={stats.chartData}
+                            margin={{ top: 30, right: 10, left: -20, bottom: 0 }}
+                            barCategoryGap={timeRange === 'week' ? "10%" : "20%"}
+                        >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                            <XAxis
+                                dataKey="displayDate"
+                                stroke="rgba(255,255,255,0.5)"
+                                tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
+                                tickLine={false}
+                                axisLine={false}
+                                minTickGap={30}
+                            />
+                            <YAxis
+                                domain={[0, 5]}
+                                ticks={[0, 1, 2, 3, 4, 5]}
+                                stroke="rgba(255,255,255,0.5)"
+                                tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12 }}
+                                tickLine={false}
+                                axisLine={false}
+                            />
+                            <Tooltip content={<CustomMoodTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
+                            <Bar
+                                dataKey="mood"
+                                name="Mood Level"
+                                radius={[4, 4, 0, 0]}
+                                maxBarSize={timeRange === 'week' ? 100 : 50}
+                                onClick={(data) => {
+                                    if (data && data.date) {
+                                        navigate(`/entry/${data.date}`, { state: { from: '/stats' } });
+                                    }
+                                }}
+                                style={{ cursor: 'pointer' }}
+                            >
+                                {stats.chartData.map((entry, index) => (
+                                    <Cell
+                                        key={`cell-${index}`}
+                                        fill={MOOD_CONFIG[entry.mood]?.color || 'rgba(255,255,255,0.05)'}
+                                    />
+                                ))}
+                                <LabelList
+                                    dataKey="mood"
+                                    content={(props) => {
+                                        const { x, y, width, value } = props;
+                                        if (value && MOOD_CONFIG[value]) {
+                                            const Icon = MOOD_CONFIG[value].icon;
+                                            return (
+                                                <foreignObject x={x + width / 2 - 10} y={y - 25} width={20} height={20}>
+                                                    <Icon 
+                                                        className="w-5 h-5" 
+                                                        style={{ color: MOOD_CONFIG[value].color }} 
+                                                    />
+                                                </foreignObject>
+                                            );
+                                        }
+                                        return null;
+                                    }}
+                                />
+                            </Bar>
+                        </BarChart>
                     </ResponsiveContainer>
                 </div>
             </div>

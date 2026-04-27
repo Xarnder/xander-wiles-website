@@ -31,6 +31,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const filenamePrefixInput = document.getElementById('filename-prefix');
     const filenameSuffixInput = document.getElementById('filename-suffix');
 
+    // Naming Mode DOM
+    const filenameModeSelect = document.getElementById('filename-mode-select');
+    const namingOriginalInputs = document.getElementById('naming-original-inputs');
+    const namingSequentialInputs = document.getElementById('naming-sequential-inputs');
+    const filenameBaseInput = document.getElementById('filename-base');
+    const filenameStartNumInput = document.getElementById('filename-start-num');
+    const filenamePaddingInput = document.getElementById('filename-padding');
+    const namingExampleText = document.getElementById('naming-example-text');
+
     // Height/Pos Controls
     const headerHeightSlider = document.getElementById('header-height-slider');
     const headerHeightValueSpan = document.getElementById('header-height-value');
@@ -130,8 +139,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const pdfProgressStatus = document.getElementById('pdf-progress-status');
     const pdfProgressPercent = document.getElementById('pdf-progress-percent');
 
+    // Crop DOM
+    const openCropModalBtn = document.getElementById('open-crop-modal-btn');
+    const cropPopup = document.getElementById('crop-popup');
+    const closeCropPopupBtn = cropPopup.querySelector('.popup-close-btn');
+    const cropCanvas = document.getElementById('crop-canvas');
+    const cropCtx = cropCanvas.getContext('2d');
+    const cropProgressText = document.getElementById('crop-progress-text');
+    const cropAspectRatioSelect = document.getElementById('crop-aspect-ratio');
+    const cropBackBtn = document.getElementById('crop-back-btn');
+    const cropSkipBtn = document.getElementById('crop-skip-btn');
+    const cropFinishBtn = document.getElementById('crop-finish-btn');
+    const cropInterfaceContainer = document.getElementById('crop-interface-container');
+
     // --- State ---
     let imageFiles = [];
+    let originalImageFiles = []; // [NEW] Keep originals for re-cropping
     let pdfFiles = []; // [NEW] Store PDFs temporarily
     let imageTitles = [];
 
@@ -139,6 +162,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let availableFolders = ["(Root)"];
     let currentIndex = 0;
     const MEGAPixel_limit = 24 * 1000 * 1000;
+
+    // Crop State
+    let isCropMode = false;
+    let cropIndex = 0;
+    let isDraggingCrop = false;
+    let cropStart = { x: 0, y: 0 };
+    let cropEnd = { x: 0, y: 0 };
+    let activeCropImage = null; // HTMLImageElement
+    let cropDisplayScale = 1; // Scale factor from actual pixels to canvas pixels
+    let cropOffset = { x: 0, y: 0 }; // Offset of image on canvas if centered
 
     // --- Event Listeners ---
     directoryUploadInput.addEventListener('change', handleDirectoryUpload);
@@ -171,6 +204,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     mainQualitySlider.addEventListener('input', () => {
         mainQualityValue.textContent = mainQualitySlider.value;
+    });
+
+    // Naming Mode Listeners
+    filenameModeSelect.addEventListener('change', updateNamingUI);
+    [filenamePrefixInput, filenameSuffixInput, filenameBaseInput, filenameStartNumInput, filenamePaddingInput, filenameSpacingSelect].forEach(el => {
+        el.addEventListener('input', updateNamingUI);
     });
 
     // Navigation
@@ -223,6 +262,49 @@ document.addEventListener('DOMContentLoaded', () => {
     reorderPopup.addEventListener('click', (e) => { if (e.target === reorderPopup) closeReorderModal(); });
     saveReorderBtn.addEventListener('click', saveReorder);
 
+    // Crop Listeners
+    openCropModalBtn.addEventListener('click', openCropModal);
+    closeCropPopupBtn.addEventListener('click', closeCropModal);
+    cropPopup.addEventListener('click', (e) => { if (e.target === cropPopup) closeCropModal(); });
+    cropBackBtn.addEventListener('click', navigateCropPrev);
+    cropSkipBtn.addEventListener('click', navigateCropNext);
+    cropFinishBtn.addEventListener('click', closeCropModal);
+
+    cropCanvas.addEventListener('mousedown', handleCropMouseDown);
+    window.addEventListener('mousemove', handleCropMouseMove);
+    window.addEventListener('mouseup', handleCropMouseUp);
+
+    // Touch support for crop
+    cropCanvas.addEventListener('touchstart', (e) => {
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousedown', {
+            clientX: touch.clientX,
+            clientY: touch.clientY
+        });
+        cropCanvas.dispatchEvent(mouseEvent);
+        e.preventDefault();
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+        if (!isDraggingCrop) return;
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousemove', {
+            clientX: touch.clientX,
+            clientY: touch.clientY
+        });
+        window.dispatchEvent(mouseEvent);
+        e.preventDefault();
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+        if (!isDraggingCrop) return;
+        const mouseEvent = new MouseEvent('mouseup', {});
+        window.dispatchEvent(mouseEvent);
+    });
+
+    updateNamingUI();
+
+
     // --- Functions ---
 
     function handleDirectoryUpload(e) {
@@ -237,6 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Separate Images and PDFs
         imageFiles = files.filter(file => file.type.startsWith('image/') || imageRegex.test(file.name));
+        originalImageFiles = [...imageFiles]; // Store originals
         pdfFiles = files.filter(file => file.type === 'application/pdf' || pdfRegex.test(file.name));
 
         console.log(`DEBUG: Found ${imageFiles.length} images and ${pdfFiles.length} PDFs.`);
@@ -327,6 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Add to main arrays
                     imageFiles.push(imageFile);
+                    originalImageFiles.push(imageFile);
                     imageTitles.push(formatTitle(pageName));
                     imageFolders.push("(Root)");
 
@@ -602,9 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
                     if (!blob) throw new Error(`Failed to create blob for image ${i}`);
 
-                    let baseName = imageTitles[i];
-                    baseName = applySpacing(baseName, filenameSpacingSelect.value);
-                    const finalName = `${prefix}${baseName}${suffix}${ext}`;
+                    const finalName = generateFilename(i, imageTitles[i], ext);
 
                     if (imageFolders[i] !== "(Root)") {
                         zip.folder(imageFolders[i]).file(finalName, blob);
@@ -815,18 +897,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Rebuild arrays based on the original indices
         const newImageFiles = [];
+        const newOriginalFiles = [];
         const newImageTitles = [];
         const newImageFolders = [];
 
         listItems.forEach(item => {
             const oldIndex = parseInt(item.getAttribute('data-original-index'), 10);
             newImageFiles.push(imageFiles[oldIndex]);
+            newOriginalFiles.push(originalImageFiles[oldIndex]);
             newImageTitles.push(imageTitles[oldIndex]);
             newImageFolders.push(imageFolders[oldIndex]);
         });
 
         // Update Global State
         imageFiles = newImageFiles;
+        originalImageFiles = newOriginalFiles;
         imageTitles = newImageTitles;
         imageFolders = newImageFolders;
 
@@ -1379,6 +1464,252 @@ document.addEventListener('DOMContentLoaded', () => {
                 return text.replace(/_+/g, ' ').replace(/-+/g, ' ');
             default:
                 return text;
+        }
+    }
+
+    function generateFilename(index, originalName, ext) {
+        const mode = filenameModeSelect.value;
+        const spacingMode = filenameSpacingSelect.value;
+        let finalBase = "";
+
+        if (mode === 'sequential') {
+            const base = filenameBaseInput.value || "Image";
+            const startNum = parseInt(filenameStartNumInput.value, 10) || 0;
+            const padding = parseInt(filenamePaddingInput.value, 10) || 1;
+            const numStr = (startNum + index).toString().padStart(padding, '0');
+            finalBase = `${base}_${numStr}`;
+        } else {
+            const prefix = filenamePrefixInput.value || "";
+            const suffix = filenameSuffixInput.value || "";
+            finalBase = `${prefix}${originalName}${suffix}`;
+        }
+
+        return applySpacing(finalBase, spacingMode) + ext;
+    }
+
+    function updateNamingUI() {
+        const mode = filenameModeSelect.value;
+        namingOriginalInputs.classList.toggle('hidden', mode !== 'original');
+        namingSequentialInputs.classList.toggle('hidden', mode !== 'sequential');
+
+        // Update example
+        const ext = getFileExtension(exportFormatSelect.value);
+        const exampleName = generateFilename(0, "Image Name", ext);
+        namingExampleText.textContent = `Example: ${exampleName}`;
+    }
+
+    // --- Batch Fast Crop Logic ---
+    async function openCropModal() {
+        if (imageFiles.length === 0) {
+            alert("No images loaded to crop.");
+            return;
+        }
+        isCropMode = true;
+        cropIndex = currentIndex; // Start from current image
+        document.body.classList.add('popup-open');
+        cropPopup.classList.remove('hidden');
+        await loadCropImage(cropIndex);
+    }
+
+    function closeCropModal() {
+        isCropMode = false;
+        document.body.classList.remove('popup-open');
+        cropPopup.classList.add('hidden');
+        updateUIForCurrentIndex(); // Ensure main UI stays in sync
+    }
+
+    async function loadCropImage(index) {
+        cropProgressText.textContent = `Image ${index + 1} of ${imageFiles.length}`;
+        try {
+            activeCropImage = await loadImage(originalImageFiles[index]);
+            resizeCropCanvas();
+            renderCropUI();
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function resizeCropCanvas() {
+        // Set canvas to occupy most of the container
+        const containerRect = cropInterfaceContainer.getBoundingClientRect();
+        const padding = 20;
+        const maxWidth = containerRect.width - padding;
+        const maxHeight = containerRect.height - padding;
+
+        const imgRatio = activeCropImage.width / activeCropImage.height;
+        const containerRatio = maxWidth / maxHeight;
+
+        if (imgRatio > containerRatio) {
+            cropCanvas.width = maxWidth;
+            cropCanvas.height = maxWidth / imgRatio;
+        } else {
+            cropCanvas.height = maxHeight;
+            cropCanvas.width = maxHeight * imgRatio;
+        }
+
+        cropDisplayScale = cropCanvas.width / activeCropImage.width;
+        // Since we center it in container using Flexbox, offset is just (0,0) relative to canvas
+        cropOffset = { x: 0, y: 0 };
+    }
+
+    function renderCropUI() {
+        if (!activeCropImage) return;
+
+        // Draw Image
+        cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+        cropCtx.drawImage(activeCropImage, 0, 0, cropCanvas.width, cropCanvas.height);
+
+        // Draw Selection Overlay
+        if (isDraggingCrop || (cropStart.x !== cropEnd.x && cropStart.y !== cropEnd.y)) {
+            // Darken outside
+            cropCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            
+            const x = Math.min(cropStart.x, cropEnd.x);
+            const y = Math.min(cropStart.y, cropEnd.y);
+            const w = Math.abs(cropStart.x - cropEnd.x);
+            const h = Math.abs(cropStart.y - cropEnd.y);
+
+            // top
+            cropCtx.fillRect(0, 0, cropCanvas.width, y);
+            // bottom
+            cropCtx.fillRect(0, y + h, cropCanvas.width, cropCanvas.height - (y + h));
+            // left
+            cropCtx.fillRect(0, y, x, h);
+            // right
+            cropCtx.fillRect(x + w, y, cropCanvas.width - (x + w), h);
+
+            // Selection Border
+            cropCtx.strokeStyle = 'var(--accent-cyan)';
+            cropCtx.lineWidth = 2;
+            cropCtx.setLineDash([5, 5]);
+            cropCtx.strokeRect(x, y, w, h);
+            cropCtx.setLineDash([]);
+            
+            // Corner handles (purely visual)
+            cropCtx.fillStyle = 'var(--accent-cyan)';
+            const sz = 6;
+            cropCtx.fillRect(x - sz/2, y - sz/2, sz, sz);
+            cropCtx.fillRect(x + w - sz/2, y - sz/2, sz, sz);
+            cropCtx.fillRect(x - sz/2, y + h - sz/2, sz, sz);
+            cropCtx.fillRect(x + w - sz/2, y + h - sz/2, sz, sz);
+        }
+    }
+
+    function handleCropMouseDown(e) {
+        const rect = cropCanvas.getBoundingClientRect();
+        cropStart.x = e.clientX - rect.left;
+        cropStart.y = e.clientY - rect.top;
+        cropEnd.x = cropStart.x;
+        cropEnd.y = cropStart.y;
+        isDraggingCrop = true;
+    }
+
+    function handleCropMouseMove(e) {
+        if (!isDraggingCrop) return;
+        const rect = cropCanvas.getBoundingClientRect();
+        let curX = e.clientX - rect.left;
+        let curY = e.clientY - rect.top;
+
+        // Constrain to canvas
+        curX = Math.max(0, Math.min(curX, cropCanvas.width));
+        curY = Math.max(0, Math.min(curY, cropCanvas.height));
+
+        const aspect = cropAspectRatioSelect.value;
+        if (aspect !== 'free') {
+            const [ratioW, ratioH] = aspect.split(':').map(Number);
+            const targetRatio = ratioW / ratioH;
+            
+            let dx = curX - cropStart.x;
+            let dy = curY - cropStart.y;
+            
+            // Maintain ratio based on largest movement
+            if (Math.abs(dx) / targetRatio > Math.abs(dy)) {
+                dy = Math.sign(dy) * Math.abs(dx) / targetRatio;
+            } else {
+                dx = Math.sign(dx) * Math.abs(dy) * targetRatio;
+            }
+            
+            curX = cropStart.x + dx;
+            curY = cropStart.y + dy;
+
+            // Re-constrain after ratio adjustment
+            if (curX < 0 || curX > cropCanvas.width || curY < 0 || curY > cropCanvas.height) {
+                // If out of bounds, scale back until inside
+                const scaleX = curX < 0 ? (cropStart.x / Math.abs(dx)) : (curX > cropCanvas.width ? (cropCanvas.width - cropStart.x) / Math.abs(dx) : 1);
+                const scaleY = curY < 0 ? (cropStart.y / Math.abs(dy)) : (curY > cropCanvas.height ? (cropCanvas.height - cropStart.y) / Math.abs(dy) : 1);
+                const minScale = Math.min(scaleX, scaleY);
+                curX = cropStart.x + dx * minScale;
+                curY = cropStart.y + dy * minScale;
+            }
+        }
+
+        cropEnd.x = curX;
+        cropEnd.y = curY;
+        renderCropUI();
+    }
+
+    async function handleCropMouseUp() {
+        if (!isDraggingCrop) return;
+        isDraggingCrop = false;
+
+        const w = Math.abs(cropStart.x - cropEnd.x);
+        const h = Math.abs(cropStart.y - cropEnd.y);
+
+        // Min size threshold to prevent accidental clicks
+        if (w > 10 && h > 10) {
+            await applyCrop(cropIndex);
+            navigateCropNext();
+        } else {
+            // Reset selection on accidental click
+            cropStart = { x: 0, y: 0 };
+            cropEnd = { x: 0, y: 0 };
+            renderCropUI();
+        }
+    }
+
+    async function applyCrop(index) {
+        const x = Math.min(cropStart.x, cropEnd.x) / cropDisplayScale;
+        const y = Math.min(cropStart.y, cropEnd.y) / cropDisplayScale;
+        const w = Math.abs(cropStart.x - cropEnd.x) / cropDisplayScale;
+        const h = Math.abs(cropStart.y - cropEnd.y) / cropDisplayScale;
+
+        const offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = w;
+        offscreenCanvas.height = h;
+        const octx = offscreenCanvas.getContext('2d');
+
+        octx.drawImage(activeCropImage, x, y, w, h, 0, 0, w, h);
+
+        const format = exportFormatSelect.value;
+        const quality = parseInt(mainQualitySlider.value, 10) / 100;
+        const blob = await new Promise(resolve => offscreenCanvas.toBlob(resolve, format, quality));
+        
+        const originalFile = imageFiles[index];
+        const newFile = new File([blob], originalFile.name, { type: format });
+        
+        // Update state
+        imageFiles[index] = newFile;
+        
+        // Reset selection for next image
+        cropStart = { x: 0, y: 0 };
+        cropEnd = { x: 0, y: 0 };
+    }
+
+    function navigateCropNext() {
+        if (cropIndex < imageFiles.length - 1) {
+            cropIndex++;
+            loadCropImage(cropIndex);
+        } else {
+            // End of batch
+            closeCropModal();
+            showStatus(exportStatus, "Batch cropping complete!", false);
+        }
+    }
+
+    function navigateCropPrev() {
+        if (cropIndex > 0) {
+            cropIndex--;
+            loadCropImage(cropIndex);
         }
     }
 });

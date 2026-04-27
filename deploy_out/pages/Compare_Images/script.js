@@ -246,6 +246,32 @@ document.addEventListener('DOMContentLoaded', () => {
     initSliders();
   };
 
+  const checkTransferImages = async () => {
+    try {
+      const images = await ImageTransfer.getAll();
+      const keys = Object.keys(images).filter(k => k.startsWith('image-'));
+      if (keys.length > 0) {
+        console.log(`[DEBUG] Found ${keys.length} transferred images in IndexedDB.`);
+        
+        // Auto-set the count
+        imageCountInput.value = keys.length;
+        setupUI(); // Re-setup with correct count
+
+        for (const key of keys) {
+            const index = parseInt(key.split('-')[1]);
+            const blob = images[key];
+            const file = new File([blob], `transferred-${key}.png`, { type: 'image/png' });
+            processAndLoadImage(file, index);
+        }
+        
+        // Clear storage after a delay to allow loading
+        setTimeout(() => ImageTransfer.clear(), 1000);
+      }
+    } catch (err) {
+      console.error("Failed to check for transferred images:", err);
+    }
+  };
+
   // --- UPLOAD HANDLERS ---
   const handleDirectoryUpload = (event) => {
     const files = Array.from(event.target.files);
@@ -822,4 +848,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // initial
   setupUI();
+  checkTransferImages();
 });

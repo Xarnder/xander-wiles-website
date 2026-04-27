@@ -17,6 +17,9 @@
     /* Neon cyan */
     --gradient-primary: linear-gradient(135deg, #9d4edd 0%, #00f5ff 100%);
     --radius-xl: 20px;
+
+    /* PWA Padding Adjustments */
+    --pwa-padding-top: 50px;
 }
 
 /* --- Global & Body Styles --- */
@@ -30,7 +33,7 @@ body {
     font-family: 'Outfit', 'Inter', sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
-    padding: 1rem;
+    padding: 0;
     position: relative;
     overflow-x: hidden;
 }
@@ -118,6 +121,7 @@ body.nav-open {
     max-width: 1200px;
     /* <<< CHANGED: Increased from 800px to allow wider grid */
     margin: 1.5rem auto 0;
+    padding: 0 1rem;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
@@ -155,26 +159,54 @@ a:hover {
 }
 
 /* --- Header & Desktop Navigation --- */
-.site-header {
-    width: 100%;
-    max-width: 2000px;
-    /* Increased from 1600px to allow wider header as requested */
-    margin: 0 auto;
-    padding: 1rem 2rem;
+.xw-main-nav-header {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: calc(1rem + env(safe-area-inset-top, 0px)) 2rem 1rem;
     box-sizing: border-box;
-    /* Ensure padding doesn't cause overflow */
+
+    /* Glass Effect (Decoupled from .glass-card) */
+    background: var(--glass-bg-nav);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid var(--glass-border);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
 }
 
-.site-header .header-content {
+/* Extra space for iOS Home Screen App */
+@media screen and (max-width: 768px) and (display-mode: standalone) {
+    .xw-main-nav-header {
+        padding-top: calc(50px + env(safe-area-inset-top, 0px));
+    }
+}
+
+.ios-pwa .xw-main-nav-header {
+    padding-top: calc(var(--pwa-padding-top) + env(safe-area-inset-top, 0px)) !important;
+}
+
+.xw-main-nav-header .header-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
 }
 
-.site-header .logo {
+.xw-main-nav-header .logo {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--text-primary);
+    text-decoration: none;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+
+.xw-main-nav-header .logo img {
+    box-shadow: none !important;
+    filter: none !important;
 }
 
 .nav-links {
@@ -227,7 +259,6 @@ a:hover {
 .nav-links a.nav-button-glow:hover {
     background: rgba(15, 15, 25, 0.6);
     border-color: var(--accent-cyan);
-    box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
     transform: translateY(-2px);
 }
 
@@ -733,27 +764,71 @@ a:hover {
 
     /* ------------------------------------------ */
 
-    .site-header {
+    .xw-main-nav-header {
         border-radius: 0;
         position: relative;
         /* Lifts the header stacking context */
-        z-index: 9999;
+        z-index: 10000;
         /* Ensures header is above the main content */
     }
 
     /* 1. Show the hamburger button and fix its position */
     .nav-toggle {
-        display: block;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         position: fixed;
-        top: 1.5rem;
+        top: calc(1.5rem + env(safe-area-inset-top, 0px));
         right: 2rem;
-        z-index: 1001;
-        /* Highest z-index to stay on top */
+        z-index: 10002;
         background: transparent;
-        border: 0;
+        border: none;
+        box-shadow: none;
+        outline: none;
+        padding: 0;
         cursor: pointer;
-        width: 2rem;
-        height: 1.5rem;
+        width: 32px;
+        height: 32px;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .nav-toggle img {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        filter: brightness(0) invert(1);
+    }
+
+    .nav-toggle .icon-close {
+        opacity: 0;
+        transform: scale(0.6) rotate(-90deg);
+        pointer-events: none;
+    }
+
+    .main-nav.active .nav-toggle .icon-menu {
+        opacity: 0;
+        transform: scale(0.6) rotate(90deg);
+        pointer-events: none;
+    }
+
+    .main-nav.active .nav-toggle .icon-close {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+        pointer-events: auto;
+        box-shadow: none !important;
+        filter: brightness(0) invert(1) !important;
+    }
+
+    @media (display-mode: standalone) {
+        .nav-toggle {
+            top: calc(55px + env(safe-area-inset-top, 0px));
+        }
+    }
+
+    .ios-pwa .nav-toggle {
+        top: calc(var(--pwa-padding-top) + 5px + env(safe-area-inset-top, 0px)) !important;
     }
 
     /* 2. Create the full-screen, blurred overlay using a pseudo-element */
@@ -762,7 +837,7 @@ a:hover {
         content: '';
         position: fixed;
         inset: 0;
-        z-index: 999;
+        z-index: 10000;
         /* Below the menu card but above page content */
         background: rgba(10, 10, 11, 0.5);
         backdrop-filter: blur(40px);
@@ -774,7 +849,7 @@ a:hover {
         display: none;
     }
 
-    /* 4. When the nav is active, display the list and style it as the glass card */
+    /* 4. When the nav is active, display the list */
     .main-nav.active .nav-links {
         display: flex;
         flex-direction: column;
@@ -782,7 +857,7 @@ a:hover {
         align-items: center;
 
         position: fixed;
-        z-index: 9999;
+        z-index: 10001;
 
         /* === FIX STARTS HERE === */
         top: 4.5rem;
@@ -801,50 +876,12 @@ a:hover {
         padding: 3rem 2rem;
     }
 
-    /* 5. The hamburger to 'X' animation */
-    .hamburger {
-        display: block;
-        background: var(--text-primary);
-        height: 3px;
-        width: 100%;
-        border-radius: 2px;
-        position: absolute;
-        z-index: 9999;
-        left: 0;
-        transition: transform 300ms, opacity 300ms;
-    }
 
-    .hamburger:nth-child(1) {
-        top: 0;
-    }
-
-    .hamburger:nth-child(2) {
-        top: 50%;
-        transform: translateY(-50%);
-    }
-
-    .hamburger:nth-child(3) {
-        bottom: 0;
-    }
-
-    .main-nav.active .hamburger:nth-child(1) {
-        transform: translateY(10.5px) rotate(45deg);
-    }
-
-    .main-nav.active .hamburger:nth-child(2) {
-        opacity: 0;
-    }
-
-    .main-nav.active .hamburger:nth-child(3) {
-        transform: translateY(-10.5px) rotate(-45deg);
-    }
 }
 
 .main-nav .nav-links a.active {
     color: #ffffff;
     font-weight: bold;
-    /* Add this line for the glow effect */
-    text-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
 }
 
 /* --- Glow Buttons (Condensed Light) --- */

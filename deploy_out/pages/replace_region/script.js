@@ -25,6 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
         brushSize: 50,
         brushSoftness: 25,
         cropFeather: 0,
+        hue: 0,
+        saturation: 100,
+        lightness: 100,
 
         // Settings - Paint Editor
         peBrushSize: 20,
@@ -36,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isDrawing: false,
         showMaskOverlay: false,
         showCropGuide: false,
+        hideEdit: false,
         isTouchMode: false
     };
 
@@ -84,9 +88,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Step 4
     const maskCanvas = document.getElementById('mask-canvas');
+    const maskPreviewCanvas = document.getElementById('mask-preview-canvas');
     const maskCtx = maskCanvas.getContext('2d');
     const saveFinalBtn = document.getElementById('save-final-btn');
+    const sendToInpaintingBtn = document.getElementById('send-to-inpainting-btn');
+    const sendToCompareBtn = document.getElementById('send-to-compare-btn');
+    const saveMaskBtn = document.getElementById('save-mask-btn');
     const backToStep3Btn = document.getElementById('back-to-step3-btn');
+    const swapImagesBtn = document.getElementById('swap-images-btn');
 
     // Step 4 Controls
     const brushBtn = document.getElementById('brush-btn');
@@ -99,8 +108,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const brushSoftnessValue = document.getElementById('brush-softness-value');
     const featherValue = document.getElementById('feather-value');
 
+    const hueSlider = document.getElementById('hue-slider');
+    const saturationSlider = document.getElementById('saturation-slider');
+    const lightnessSlider = document.getElementById('lightness-slider');
+    const hueValue = document.getElementById('hue-value');
+    const saturationValue = document.getElementById('saturation-value');
+    const lightnessValue = document.getElementById('lightness-value');
+    const maskUploadInput = document.getElementById('mask-upload');
+
+    // Custom Modal Elements
+    const customModal = document.getElementById('custom-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalMessage = document.getElementById('modal-message');
+    const modalCancel = document.getElementById('modal-cancel');
+    const modalConfirm = document.getElementById('modal-confirm');
+
     const showMaskToggle = document.getElementById('show-mask-toggle');
     const showCropGuideToggle = document.getElementById('show-crop-guide-toggle');
+    const hideOverlayToggle = document.getElementById('hide-overlay-toggle');
     const touchModeToggle = document.getElementById('touch-mode-toggle');
     const brushCursor = document.getElementById('brush-cursor');
 
@@ -320,21 +345,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     peFillBtn.addEventListener('click', () => {
-        if (confirm("Fill entire image with selected color?")) {
-            const ctx = state.peUserLayer.getContext('2d');
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillStyle = state.peColor;
-            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            composePaintEditor();
-        }
+        showCustomConfirm(
+            "Fill Image",
+            "Are you sure you want to fill the entire image with the selected color?",
+            () => {
+                const ctx = state.peUserLayer.getContext('2d');
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = state.peColor;
+                ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                composePaintEditor();
+            }
+        );
     });
 
     peClearBtn.addEventListener('click', () => {
-        if (confirm("Reset to original cropped image (Clear Paint)?")) {
-            const ctx = state.peUserLayer.getContext('2d');
-            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            composePaintEditor();
-        }
+        showCustomConfirm(
+            "Reset Paint",
+            "Are you sure you want to reset to the original cropped image? This will clear all your current paint.",
+            () => {
+                const ctx = state.peUserLayer.getContext('2d');
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                composePaintEditor();
+            }
+        );
     });
 
 
@@ -344,6 +377,16 @@ document.addEventListener('DOMContentLoaded', () => {
         reUploadStep.classList.remove('hidden');
         brushCursor.style.opacity = '0';
     });
+
+    if (swapImagesBtn) {
+        swapImagesBtn.addEventListener('click', () => {
+            showCustomConfirm(
+                "Swap Images",
+                "This will swap the base image and the overlay image. Your current mask will be preserved. Proceed?",
+                () => swapImages()
+            );
+        });
+    }
 
     brushBtn.addEventListener('click', () => setMaskTool('brush'));
     eraserBtn.addEventListener('click', () => setMaskTool('eraser'));
@@ -370,36 +413,182 @@ document.addEventListener('DOMContentLoaded', () => {
         composeMaskAndDraw();
     });
 
+    hueSlider.addEventListener('input', (e) => {
+        state.hue = parseInt(e.target.value, 10);
+        hueValue.textContent = state.hue;
+        composeMaskAndDraw();
+    });
+
+    saturationSlider.addEventListener('input', (e) => {
+        state.saturation = parseInt(e.target.value, 10);
+        saturationValue.textContent = state.saturation;
+        composeMaskAndDraw();
+    });
+
+    lightnessSlider.addEventListener('input', (e) => {
+        state.lightness = parseInt(e.target.value, 10);
+        lightnessValue.textContent = state.lightness;
+        composeMaskAndDraw();
+    });
+
     showCropGuideToggle.addEventListener('change', (e) => {
         state.showCropGuide = e.target.checked;
         composeMaskAndDraw();
     });
+    
+    if (hideOverlayToggle) {
+        hideOverlayToggle.addEventListener('change', (e) => {
+            state.hideEdit = e.target.checked;
+            composeMaskAndDraw();
+        });
+    }
 
     touchModeToggle.addEventListener('change', (e) => {
         state.isTouchMode = e.target.checked;
     });
 
+    // Reset Button Logic
+    document.querySelectorAll('.reset-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const targetId = btn.getAttribute('data-target');
+            const defaultValue = btn.getAttribute('data-default');
+            const input = document.getElementById(targetId);
+            if (input) {
+                input.value = defaultValue;
+                // Trigger input event to update state and UI
+                input.dispatchEvent(new Event('input'));
+            }
+        });
+    });
+
     fillMaskBtn.addEventListener('click', () => {
         if (!state.userPaintLayer) return;
-        if (confirm("Fill brush area (Paint entire image white)?")) {
-            const ctx = state.userPaintLayer.getContext('2d');
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
-            composeMaskAndDraw();
-        }
+        showCustomConfirm(
+            "Fill Mask",
+            "Are you sure you want to fill the brush area? This will reveal the entire edited image.",
+            () => {
+                const ctx = state.userPaintLayer.getContext('2d');
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
+                composeMaskAndDraw();
+            }
+        );
     });
 
     clearMaskBtn.addEventListener('click', () => {
         if (!state.userPaintLayer) return;
-        if (confirm("Clear all paint (Hide edited image)?")) {
-            const ctx = state.userPaintLayer.getContext('2d');
-            ctx.clearRect(0, 0, state.userPaintLayer.width, state.userPaintLayer.height);
-            composeMaskAndDraw();
-        }
+        showCustomConfirm(
+            "Clear Mask",
+            "Are you sure you want to clear all paint? This will hide the edited image.",
+            () => {
+                const ctx = state.userPaintLayer.getContext('2d');
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                composeMaskAndDraw();
+            }
+        );
+    });
+
+    maskUploadInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        showCustomConfirm(
+            "Upload Mask",
+            "Are you sure you want to upload a new mask? This will replace your current blending work.",
+            () => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        processUploadedMask(img);
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        );
+        // Reset input so the same file can be uploaded again
+        e.target.value = '';
+    });
+
+    saveMaskBtn.addEventListener('click', () => {
+        if (!state.userPaintLayer) return;
+        downloadMask();
     });
 
     saveFinalBtn.addEventListener('click', saveFinalImage);
+
+    if (sendToInpaintingBtn) {
+        sendToInpaintingBtn.addEventListener('click', () => {
+            const maskState = state.showMaskOverlay;
+            const guideState = state.showCropGuide;
+            state.showMaskOverlay = false;
+            state.showCropGuide = false;
+            composeMaskAndDraw();
+
+            maskCanvas.toBlob(async (blob) => {
+                if (blob) {
+                    try {
+                        await ImageTransfer.save(blob);
+                        window.location.href = '../inpainting/index.html';
+                    } catch (err) {
+                        console.error("Failed to transfer image via IndexedDB:", err);
+                        alert("Failed to send image to inpainting tool.");
+                    }
+                } else {
+                    alert("Failed to capture image.");
+                }
+            }, 'image/png');
+
+            state.showMaskOverlay = maskState;
+            state.showCropGuide = guideState;
+            composeMaskAndDraw();
+        });
+    }
+
+    if (sendToCompareBtn) {
+        sendToCompareBtn.addEventListener('click', () => {
+            const maskState = state.showMaskOverlay;
+            const guideState = state.showCropGuide;
+            state.showMaskOverlay = false;
+            state.showCropGuide = false;
+            composeMaskAndDraw();
+
+            maskCanvas.toBlob(async (finalBlob) => {
+                if (finalBlob) {
+                    try {
+                        // We also need the original image. 
+                        // Since state.originalImage is an Image object, we need to draw it to a canvas first.
+                        const origCanvas = document.createElement('canvas');
+                        origCanvas.width = state.originalImage.width;
+                        origCanvas.height = state.originalImage.height;
+                        origCanvas.getContext('2d').drawImage(state.originalImage, 0, 0);
+                        
+                        origCanvas.toBlob(async (origBlob) => {
+                            if (origBlob) {
+                                await ImageTransfer.saveMultiple({
+                                    'image-0': origBlob,
+                                    'image-1': finalBlob
+                                });
+                                window.location.href = '../Compare_Images/index.html';
+                            }
+                        }, 'image/png');
+                    } catch (err) {
+                        console.error("Failed to transfer images via IndexedDB:", err);
+                        alert("Failed to send images to compare tool.");
+                    }
+                } else {
+                    alert("Failed to capture image.");
+                }
+            }, 'image/png');
+
+            state.showMaskOverlay = maskState;
+            state.showCropGuide = guideState;
+            composeMaskAndDraw();
+        });
+    }
 
     // --- GLOBAL CURSOR TRACKING ---
     const handleCursorEnter = () => { if (!state.isTouchMode) brushCursor.style.opacity = '1'; updateCursorSize(); };
@@ -499,6 +688,142 @@ document.addEventListener('DOMContentLoaded', () => {
         state.showMaskOverlay = maskState;
         state.showCropGuide = guideState;
         composeMaskAndDraw();
+    }
+
+    function swapImages() {
+        if (!state.originalImage || !state.editedImage) return;
+
+        const oldOriginal = state.originalImage;
+        const oldEdited = state.editedImage;
+        const oldCropRect = { ...state.cropRect };
+
+        // 1. Create the new overlay image (the portion of the current original that was being edited)
+        const newEditedCanvas = document.createElement('canvas');
+        newEditedCanvas.width = oldCropRect.width;
+        newEditedCanvas.height = oldCropRect.height;
+        const newEditedCtx = newEditedCanvas.getContext('2d');
+        newEditedCtx.drawImage(oldOriginal,
+            oldCropRect.x, oldCropRect.y, oldCropRect.width, oldCropRect.height,
+            0, 0, oldCropRect.width, oldCropRect.height
+        );
+
+        // 2. Set the new original (base) image to the current edited image
+        state.originalImage = oldEdited;
+        state.editedImage = newEditedCanvas;
+
+        // 3. Reset cropRect to cover the full new base image
+        state.cropRect = {
+            x: 0,
+            y: 0,
+            width: oldEdited.width,
+            height: oldEdited.height
+        };
+
+        // 4. Update mask (preserve it by cropping/matching the new dimensions)
+        if (state.userPaintLayer) {
+            const oldMask = state.userPaintLayer;
+            const newMask = document.createElement('canvas');
+            newMask.width = oldEdited.width;
+            newMask.height = oldEdited.height;
+            const nmCtx = newMask.getContext('2d');
+            
+            // Take the portion of the old mask that corresponds to the old crop area
+            nmCtx.drawImage(oldMask, 
+                oldCropRect.x, oldCropRect.y, oldCropRect.width, oldCropRect.height,
+                0, 0, oldCropRect.width, oldCropRect.height
+            );
+            
+            state.userPaintLayer = newMask;
+        }
+
+        // 5. Refresh Step 4
+        setupMasking();
+    }
+
+    function downloadMask() {
+        const maskCanvas = getFinalMaskCanvas();
+        const width = maskCanvas.width;
+        const height = maskCanvas.height;
+
+        // Create a black-and-white version (not just transparency)
+        const finalExportCanvas = document.createElement('canvas');
+        finalExportCanvas.width = width;
+        finalExportCanvas.height = height;
+        const ctx = finalExportCanvas.getContext('2d');
+
+        // Draw the mask directly (white pixels with alpha)
+        ctx.drawImage(maskCanvas, 0, 0);
+        
+        // Final pass: convert alpha channel to RGB brightness
+        const imgData = ctx.getImageData(0, 0, width, height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const alpha = data[i + 3]; // The mask intensity
+            data[i] = alpha;     // R
+            data[i+1] = alpha;   // G
+            data[i+2] = alpha;   // B
+            data[i+3] = 255;     // Opaque
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        const baseName = getBaseFilename();
+        handleImageExport(finalExportCanvas, `${baseName}-mask.png`);
+    }
+
+    function getFinalMaskCanvas() {
+        const width = state.originalImage.width;
+        const height = state.originalImage.height;
+
+        const combinedMaskCanvas = document.createElement('canvas');
+        combinedMaskCanvas.width = width;
+        combinedMaskCanvas.height = height;
+        const maskCtx = combinedMaskCanvas.getContext('2d');
+
+        maskCtx.drawImage(state.userPaintLayer, 0, 0);
+
+        if (state.isDrawing && state.tempStrokeLayer) {
+            maskCtx.save();
+            const blurAmount = (state.brushSize * (state.brushSoftness / 100)) / 2;
+            if (blurAmount > 0) maskCtx.filter = `blur(${blurAmount}px)`;
+
+            if (state.currentTool === 'brush') {
+                maskCtx.globalCompositeOperation = 'source-over';
+            } else {
+                maskCtx.globalCompositeOperation = 'destination-out';
+            }
+            maskCtx.drawImage(state.tempStrokeLayer, 0, 0);
+            maskCtx.restore();
+        }
+
+        // Crop Constraint
+        const constraintCanvas = document.createElement('canvas');
+        constraintCanvas.width = width;
+        constraintCanvas.height = height;
+        const constraintCtx = constraintCanvas.getContext('2d');
+
+        const feather = state.cropFeather;
+        constraintCtx.save();
+        if (feather > 0) {
+            const maxFeather = Math.min(state.cropRect.width, state.cropRect.height) / 2;
+            const effectiveFeather = Math.min(feather, maxFeather);
+            constraintCtx.filter = `blur(${effectiveFeather / 2}px)`;
+            constraintCtx.fillStyle = 'white';
+            constraintCtx.fillRect(
+                state.cropRect.x + effectiveFeather,
+                state.cropRect.y + effectiveFeather,
+                state.cropRect.width - (effectiveFeather * 2),
+                state.cropRect.height - (effectiveFeather * 2)
+            );
+        } else {
+            constraintCtx.fillStyle = 'white';
+            constraintCtx.fillRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
+        }
+        constraintCtx.restore();
+
+        maskCtx.globalCompositeOperation = 'destination-in';
+        maskCtx.drawImage(constraintCanvas, 0, 0);
+
+        return combinedMaskCanvas;
     }
 
     // --- STEP 2: CROPPING LOGIC ---
@@ -602,18 +927,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!originalImage || !cropRect) return;
 
-        originalPreviewCanvas.width = originalImage.width;
-        originalPreviewCanvas.height = originalImage.height;
-        croppedPreviewCanvas.width = cropRect.width;
-        croppedPreviewCanvas.height = cropRect.height;
+        // NEW: Cap preview resolution to prevent black screens/memory issues
+        const MAX_PREVIEW_DIM = 1200;
+        let scale = 1;
+        if (originalImage.width > MAX_PREVIEW_DIM || originalImage.height > MAX_PREVIEW_DIM) {
+            scale = MAX_PREVIEW_DIM / Math.max(originalImage.width, originalImage.height);
+        }
 
+        originalPreviewCanvas.width = originalImage.width * scale;
+        originalPreviewCanvas.height = originalImage.height * scale;
+        
+        // For the cropped preview, we also cap it
+        let cropScale = 1;
+        if (cropRect.width > MAX_PREVIEW_DIM || cropRect.height > MAX_PREVIEW_DIM) {
+            cropScale = MAX_PREVIEW_DIM / Math.max(cropRect.width, cropRect.height);
+        }
+        croppedPreviewCanvas.width = cropRect.width * cropScale;
+        croppedPreviewCanvas.height = cropRect.height * cropScale;
+
+        // Draw original with scale
+        originalPreviewCtx.save();
+        originalPreviewCtx.scale(scale, scale);
         originalPreviewCtx.drawImage(originalImage, 0, 0);
+        
+        // Draw crop rect
         originalPreviewCtx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
         originalPreviewCtx.lineWidth = Math.max(5, originalImage.width * 0.005);
         originalPreviewCtx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
+        originalPreviewCtx.restore();
 
         if (cropRect.width > 0 && cropRect.height > 0) {
-            croppedPreviewCtx.drawImage(originalImage, cropRect.x, cropRect.y, cropRect.width, cropRect.height, 0, 0, cropRect.width, cropRect.height);
+            croppedPreviewCtx.save();
+            croppedPreviewCtx.scale(cropScale, cropScale);
+            croppedPreviewCtx.drawImage(originalImage, 
+                cropRect.x, cropRect.y, cropRect.width, cropRect.height, 
+                0, 0, cropRect.width, cropRect.height
+            );
+            croppedPreviewCtx.restore();
         }
     }
 
@@ -906,68 +1256,29 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.globalCompositeOperation = 'source-over';
         ctx.drawImage(state.originalImage, 0, 0);
 
-        // 2. Prepare Combined Mask (History + Current Stroke)
-        const combinedMaskCanvas = document.createElement('canvas');
-        combinedMaskCanvas.width = ctx.canvas.width;
-        combinedMaskCanvas.height = ctx.canvas.height;
-        const maskCtx = combinedMaskCanvas.getContext('2d');
+        // 2. Get Combined Mask
+        const combinedMaskCanvas = getFinalMaskCanvas();
 
-        maskCtx.drawImage(state.userPaintLayer, 0, 0);
-
-        if (state.isDrawing && state.tempStrokeLayer) {
-            maskCtx.save();
-            const blurAmount = (state.brushSize * (state.brushSoftness / 100)) / 2;
-            if (blurAmount > 0) maskCtx.filter = `blur(${blurAmount}px)`;
-
-            if (state.currentTool === 'brush') {
-                maskCtx.globalCompositeOperation = 'source-over';
-            } else {
-                maskCtx.globalCompositeOperation = 'destination-out';
-            }
-            maskCtx.drawImage(state.tempStrokeLayer, 0, 0);
-            maskCtx.restore();
-        }
-
-        // 3. Crop Constraint
-        const constraintCanvas = document.createElement('canvas');
-        constraintCanvas.width = ctx.canvas.width;
-        constraintCanvas.height = ctx.canvas.height;
-        const constraintCtx = constraintCanvas.getContext('2d');
-
-        const feather = state.cropFeather;
-        constraintCtx.save();
-        if (feather > 0) {
-            const maxFeather = Math.min(state.cropRect.width, state.cropRect.height) / 2;
-            const effectiveFeather = Math.min(feather, maxFeather);
-            constraintCtx.filter = `blur(${effectiveFeather / 2}px)`;
-            constraintCtx.fillStyle = 'white';
-            constraintCtx.fillRect(
-                state.cropRect.x + effectiveFeather,
-                state.cropRect.y + effectiveFeather,
-                state.cropRect.width - (effectiveFeather * 2),
-                state.cropRect.height - (effectiveFeather * 2)
-            );
-        } else {
-            constraintCtx.fillStyle = 'white';
-            constraintCtx.fillRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
-        }
-        constraintCtx.restore();
-
-        maskCtx.globalCompositeOperation = 'destination-in';
-        maskCtx.drawImage(constraintCanvas, 0, 0);
-
-        // 4. Draw Edited Image
+        // 3. Draw Edited Image
         const revealedEditCanvas = document.createElement('canvas');
         revealedEditCanvas.width = ctx.canvas.width;
         revealedEditCanvas.height = ctx.canvas.height;
         const revealedEditCtx = revealedEditCanvas.getContext('2d');
 
+        revealedEditCtx.save();
+        const h = state.hue !== undefined ? state.hue : 0;
+        const s = state.saturation !== undefined ? state.saturation : 100;
+        const l = state.lightness !== undefined ? state.lightness : 100;
+        revealedEditCtx.filter = `hue-rotate(${h}deg) saturate(${s}%) brightness(${l}%)`;
         revealedEditCtx.drawImage(state.editedImage, state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
+        revealedEditCtx.restore();
 
         revealedEditCtx.globalCompositeOperation = 'destination-in';
         revealedEditCtx.drawImage(combinedMaskCanvas, 0, 0);
 
-        ctx.drawImage(revealedEditCanvas, 0, 0);
+        if (!state.hideEdit) {
+            ctx.drawImage(revealedEditCanvas, 0, 0);
+        }
 
         // 5. Overlays
         if (state.showMaskOverlay) {
@@ -996,6 +1307,44 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.strokeRect(state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
             ctx.restore();
         }
+
+        // 6. Update Small Mask Preview
+        updateMaskPreview(combinedMaskCanvas);
+    }
+
+    function updateMaskPreview(maskSource) {
+        if (!maskPreviewCanvas) return;
+        
+        // Match aspect ratio
+        if (maskPreviewCanvas.width !== maskSource.width || maskPreviewCanvas.height !== maskSource.height) {
+            maskPreviewCanvas.width = maskSource.width;
+            maskPreviewCanvas.height = maskSource.height;
+            
+            // Update container aspect ratio to prevent layout shift
+            const container = maskPreviewCanvas.closest('.mask-thumb-container');
+            if (container) {
+                container.style.aspectRatio = `${maskSource.width} / ${maskSource.height}`;
+            }
+        }
+
+        const pCtx = maskPreviewCanvas.getContext('2d');
+        pCtx.clearRect(0, 0, pCtx.canvas.width, pCtx.canvas.height);
+
+        // Fast B&W conversion using composition
+        pCtx.save();
+        // 1. Draw solid white
+        pCtx.fillStyle = 'white';
+        pCtx.fillRect(0, 0, pCtx.canvas.width, pCtx.canvas.height);
+        
+        // 2. Use mask alpha to trim the white
+        pCtx.globalCompositeOperation = 'destination-in';
+        pCtx.drawImage(maskSource, 0, 0);
+        
+        // 3. Draw black behind everything
+        pCtx.globalCompositeOperation = 'destination-over';
+        pCtx.fillStyle = 'black';
+        pCtx.fillRect(0, 0, pCtx.canvas.width, pCtx.canvas.height);
+        pCtx.restore();
     }
 
     function setMaskTool(tool) {
@@ -1003,6 +1352,53 @@ document.addEventListener('DOMContentLoaded', () => {
         brushBtn.classList.toggle('active', tool === 'brush');
         eraserBtn.classList.toggle('active', tool === 'eraser');
         brushCursor.style.borderColor = (tool === 'brush') ? 'white' : '#ff4444';
+    }
+
+    function processUploadedMask(img) {
+        if (!state.userPaintLayer) return;
+
+        const width = state.originalImage.width;
+        const height = state.originalImage.height;
+
+        // 1. Draw uploaded image to temporary canvas (stretched to fit)
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(img, 0, 0, width, height);
+
+        // 2. Get image data to convert B&W to Alpha
+        const imageData = tempCtx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const a = data[i + 3];
+
+            // Use brightness/intensity as the new alpha channel
+            // Formula: 0.299R + 0.587G + 0.114B (Standard grayscale)
+            const brightness = (0.299 * r) + (0.587 * g) + (0.114 * b);
+            
+            // If the image already has transparency, we respect it, 
+            // but we also apply the brightness as alpha.
+            const alphaFactor = a / 255;
+            const finalAlpha = brightness * alphaFactor;
+
+            // Set pixel to semi-transparent white (since state.userPaintLayer uses white for revealing)
+            data[i] = 255;     // R
+            data[i + 1] = 255; // G
+            data[i + 2] = 255; // B
+            data[i + 3] = finalAlpha; // A
+        }
+
+        // 3. Put processed data back into state.userPaintLayer
+        const ctx = state.userPaintLayer.getContext('2d');
+        ctx.clearRect(0, 0, width, height);
+        ctx.putImageData(imageData, 0, 0);
+
+        composeMaskAndDraw();
     }
 
     function updateCursorPosition(e) {
@@ -1037,5 +1433,37 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!canvas || canvas.width === 0) return 1;
         const rect = canvas.getBoundingClientRect();
         return rect.width / canvas.width;
+    }
+
+    function showCustomConfirm(title, message, onConfirm) {
+        const currentConfirm = document.getElementById('modal-confirm');
+        const currentCancel = document.getElementById('modal-cancel');
+
+        modalTitle.textContent = title;
+        modalMessage.textContent = message;
+        customModal.classList.remove('hidden');
+
+        // Remove old listeners (to prevent memory leaks/multiple triggers)
+        const newConfirm = currentConfirm.cloneNode(true);
+        const newCancel = currentCancel.cloneNode(true);
+        currentConfirm.parentNode.replaceChild(newConfirm, currentConfirm);
+        currentCancel.parentNode.replaceChild(newCancel, currentCancel);
+
+        // Add fresh listeners
+        newConfirm.addEventListener('click', () => {
+            customModal.classList.add('hidden');
+            if (onConfirm) onConfirm();
+        });
+
+        newCancel.addEventListener('click', () => {
+            customModal.classList.add('hidden');
+        });
+
+        // Close on background click
+        customModal.addEventListener('click', (e) => {
+            if (e.target === customModal) {
+                customModal.classList.add('hidden');
+            }
+        });
     }
 });

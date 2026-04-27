@@ -1,3 +1,8 @@
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+// Note: Transformers.js is kept for potential future tasks, 
+// but Magic Mode now uses raw ONNX for stability.
+
 // Configuration
 const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
 let modelsLoaded = false;
@@ -5,10 +10,42 @@ let processedBlobs = [];
 let loadedFiles = []; // Store files for deferred processing
 let firstImageCache = null; // Cache for the first image
 let firstFaceBox = null; // Cache for the detected face box
+let currentMode = 'crop'; // 'crop' or 'censor'
+let currentCensorType = 'solid'; // 'solid' or 'blur'
+let currentCensorShape = 'rect'; // 'rect' or 'circle'
+let censorColor = '#000000';
+let censorEmoji = '🕶️';
+let blurStrength = 20;
+
+// Frame Settings
+let currentFrameShape = 'rect';
+let frameColor = '#4a9eff';
+let frameThickness = 5;
 
 // Manual Crop Globals
 let cropperInstance = null;
 let editingBlobIndex = -1;
+
+// AI Magic Mode Globals
+let inpainterSession = null;
+let isBatchAborted = false;
+let replacementFaceCanvasSource = null; // Canvas storing the cropped source face
+let replacementFaceOriginalFile = null; // The raw original upload
+let replacementFaceImageCache = null;   // The decoded original image
+let replacementFaceBox = null;          // The detected face box 
+let isEditingReplacement = false; // Flag for Cropper modal
+let featherAmount = 30;
+let replaceHue = 0;
+let replaceSat = 100;
+let replaceLight = 100;
+let sourceFaceHSL = null; // Stores {h, s, l} of the replacement face
+let autoColorBatch = false;
+const aiLoadingOverlay = document.getElementById('aiLoadingOverlay');
+const aiProgressBar = document.getElementById('aiProgressBar');
+const aiStatusText = document.getElementById('aiStatusText');
+
+const LAMA_MODEL_URL = './models/lama_fp32.onnx';
+const ORT_WASM_PATH = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/';
 
 // Elements
 const imageInput = document.getElementById('imageInput');
@@ -19,16 +56,196 @@ const ratioHeightInput = document.getElementById('ratioHeight');
 const useOriginalRatioInput = document.getElementById('useOriginalRatio');
 const statusArea = document.getElementById('statusArea');
 const gallery = document.getElementById('gallery');
+const galleryStatus = document.getElementById('galleryStatus');
 const downloadBtn = document.getElementById('downloadBtn');
 const processBtn = document.getElementById('processBtn');
+const stopBtn = document.getElementById('stopBtn');
 const dropZone = document.getElementById('dropZone');
 const imageCounter = document.getElementById('imageCounter');
 const previewCard = document.getElementById('previewCard');
 const previewCanvas = document.getElementById('previewCanvas');
+const maskPreviewCard = document.getElementById('maskPreviewCard');
+const maskPreviewCanvas = document.getElementById('maskPreviewCanvas');
+const maskPreviewWrapper = document.getElementById('maskPreviewWrapper');
 const previewLoader = document.getElementById('previewLoader');
 const verticalPosInput = document.getElementById('verticalPosInput');
 const verticalPosVal = document.getElementById('verticalPosVal');
+const processAllFacesInput = document.getElementById('processAllFaces');
 const presetBtns = document.querySelectorAll('.preset-btn');
+const modeBtns = document.querySelectorAll('.mode-btn');
+
+// Debug Console Elements
+const debugConsole = document.getElementById('debugConsole');
+const debugLogs = document.getElementById('debugLogs');
+const clearLogsBtn = document.getElementById('clearLogs');
+const toggleConsoleBtn = document.getElementById('toggleConsole');
+const closeConsoleBtn = document.getElementById('closeConsole');
+
+// Advanced Censor Elements
+const censorOptionsPanel = document.getElementById('censorOptionsPanel');
+const typeBtns = document.querySelectorAll('.type-btn');
+const shapeBtns = document.querySelectorAll('.shape-btn');
+const solidOptions = document.getElementById('solidOptions');
+const blurOptions = document.getElementById('blurOptions');
+const emojiOptions = document.getElementById('emojiOptions');
+const censorColorInput = document.getElementById('censorColor');
+const colorHexDisplay = document.getElementById('colorHex');
+const blurStrengthInput = document.getElementById('blurStrength');
+const blurStrengthVal = document.getElementById('blurStrengthVal');
+const censorEmojiInput = document.getElementById('censorEmoji');
+
+// Frame Elements
+const frameOptionsPanel = document.getElementById('frameOptionsPanel');
+const frameShapeBtns = document.querySelectorAll('.frame-shape-btn');
+const frameColorInput = document.getElementById('frameColor');
+const frameColorHex = document.getElementById('frameColorHex');
+const frameThicknessInput = document.getElementById('frameThickness');
+const frameThicknessVal = document.getElementById('frameThicknessVal');
+
+// Naming Elements
+const namingScheme = document.getElementById('namingScheme');
+const customBaseRow = document.getElementById('customBaseRow');
+const filenameBaseInput = document.getElementById('filenameBase');
+const filenamePrefixInput = document.getElementById('filenamePrefix');
+const filenameSuffixInput = document.getElementById('filenameSuffix');
+const filenamePreview = document.getElementById('filenamePreview');
+
+// Face Replace Elements
+const replaceOptionsPanel = document.getElementById('replaceOptionsPanel');
+const replacementFileInput = document.getElementById('replacementFileInput');
+const replacementFaceCanvas = document.getElementById('replacementFaceCanvas');
+const replacementFacePreviewWrapper = document.getElementById('replacementFacePreviewWrapper');
+const replacementStatusText = document.getElementById('replacementStatusText');
+const editReplacementFaceBtn = document.getElementById('editReplacementFaceBtn');
+const replacementPaddingInput = document.getElementById('replacementPaddingInput');
+const replacementPaddingVal = document.getElementById('replacementPaddingVal');
+const featheringInput = document.getElementById('featheringInput');
+const featheringVal = document.getElementById('featheringVal');
+
+// Color Grading Elements
+const replaceHueInput = document.getElementById('replaceHueInput');
+const replaceHueVal = document.getElementById('replaceHueVal');
+const replaceSatInput = document.getElementById('replaceSatInput');
+const replaceSatVal = document.getElementById('replaceSatVal');
+const replaceLightInput = document.getElementById('replaceLightInput');
+const replaceLightVal = document.getElementById('replaceLightVal');
+const autoMatchColorBtn = document.getElementById('autoMatchColorBtn');
+const autoColorBatchInput = document.getElementById('autoColorBatch');
+
+// Feature Elements
+const featureOptionsPanel = document.getElementById('featureOptionsPanel');
+const cropEyesInput = document.getElementById('cropEyes');
+const cropNoseInput = document.getElementById('cropNose');
+const cropLipsInput = document.getElementById('cropLips');
+const cropEyebrowsInput = document.getElementById('cropEyebrows');
+const featurePaddingInput = document.getElementById('featurePaddingInput');
+const featurePaddingVal = document.getElementById('featurePaddingVal');
+const combineFeaturesInput = document.getElementById('combineFeatures');
+const featureWideWInput = document.getElementById('featureWideW');
+const featureWideHInput = document.getElementById('featureWideH');
+const featureTallWInput = document.getElementById('featureTallW');
+const featureTallHInput = document.getElementById('featureTallH');
+
+let featurePadding = 30;
+
+// Color Logic Utilities
+function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+
+    if (max === min) {
+        h = s = 0;
+    } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+    return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+function getAverageFaceHSL(canvas, box) {
+    if (!box) return null;
+    const ctx = canvas.getContext('2d');
+    
+    // Sample a 40% area in the middle of the face box to get clean skin tone
+    const sampleW = Math.max(1, box.width * 0.4);
+    const sampleH = Math.max(1, box.height * 0.4);
+    const sampleX = box.x + (box.width - sampleW) / 2;
+    const sampleY = box.y + (box.height - sampleH) / 2;
+    
+    try {
+        const data = ctx.getImageData(sampleX, sampleY, sampleW, sampleH).data;
+        let r = 0, g = 0, b = 0, count = 0;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            r += data[i];
+            g += data[i+1];
+            b += data[i+2];
+            count++;
+        }
+        
+        if (count === 0) return null;
+        return rgbToHsl(r / count, g / count, b / count);
+    } catch (e) {
+        console.warn("Failed to sample face color:", e);
+        return null;
+    }
+}
+
+function calculateFeatureBox(points, paddingPercent, imgWidth, imgHeight, targetRatio) {
+    if (!points || points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+    const xs = points.map(p => p.x);
+    const ys = points.map(p => p.y);
+    
+    let minX = Math.min(...xs);
+    let maxX = Math.max(...xs);
+    let minY = Math.min(...ys);
+    let maxY = Math.max(...ys);
+    
+    let width = maxX - minX;
+    let height = maxY - minY;
+    
+    const pad = Math.max(width, height) * (paddingPercent / 100);
+    
+    // Initial padded box
+    let fx = Math.max(0, minX - pad);
+    let fy = Math.max(0, minY - pad);
+    let fw = Math.min(imgWidth - fx, width + pad * 2);
+    let fh = Math.min(imgHeight - fy, height + pad * 2);
+    
+    // Apply Aspect Ratio if requested
+    if (targetRatio && targetRatio > 0) {
+        const currentRatio = fw / fh;
+        
+        if (currentRatio > targetRatio) {
+            // Current is wider than target, increase height
+            const targetH = fw / targetRatio;
+            const diffH = targetH - fh;
+            fy -= diffH / 2;
+            fh = targetH;
+        } else {
+            // Current is taller than target, increase width
+            const targetW = fh * targetRatio;
+            const diffW = targetW - fw;
+            fx -= diffW / 2;
+            fw = targetW;
+        }
+        
+        // Final sanity clamping (might slightly alter aspect ratio if image is too small)
+        if (fx < 0) fx = 0;
+        if (fy < 0) fy = 0;
+        if (fx + fw > imgWidth) fw = imgWidth - fx;
+        if (fy + fh > imgHeight) fh = imgHeight - fy;
+    }
+    
+    return { x: fx, y: fy, width: fw, height: fh };
+}
 
 // Edit Crop Elements
 const editCropModal = document.getElementById('editCropModal');
@@ -39,6 +256,17 @@ const saveCropBtn = document.getElementById('saveCropBtn');
 // Debug Logger
 function log(message, type = 'info') {
     statusArea.textContent = message;
+    
+    // Write to Debug Console
+    if (debugLogs) {
+        const entry = document.createElement('div');
+        const timestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        entry.className = `log-entry log-${type}`;
+        entry.innerHTML = `[${timestamp}] ${message}`;
+        debugLogs.appendChild(entry);
+        debugLogs.scrollTop = debugLogs.scrollHeight;
+    }
+
     const style = type === 'error' ? 'color: red; background: #fff0f0;' : 'color: #bada55; background: #222;';
     console.log(`%c[FaceCrop] ${message}`, style);
 }
@@ -46,14 +274,238 @@ function log(message, type = 'info') {
 // 1. Initialize AI Models
 async function loadModels() {
     try {
-        log("Loading AI Models...");
+        log("Loading Detection Models...");
         await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+        log("Loading Landmark Models...");
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         modelsLoaded = true;
-        log("AI Models Ready. Please select a folder.");
+        log("AI Models Ready. Select a fold or images.");
     } catch (error) {
         console.error(error);
-        log("Error loading AI models. Check console.", "error");
+        log("Error loading AI models.", "error");
     }
+}
+
+// 2. AI Magic Mode Implementation (Raw ONNX)
+async function initMagicAI() {
+    if (aiModelLoaded) return true;
+
+    log("Initializing Magic AI (Raw ONNX)...", "magic");
+    aiLoadingOverlay.style.display = 'flex';
+    aiStatusText.textContent = "Booting Generative Engine...";
+
+    try {
+        // Setup ORT WASM backend
+        ort.env.wasm.wasmPaths = ORT_WASM_PATH;
+        
+        log("Loading LaMa model weights (~198MB)...", "info");
+        aiStatusText.textContent = "Downloading Model Data (198MB)...";
+        aiProgressBar.style.width = '5%';
+
+        // Fetch model with progress tracking
+        const response = await fetch(LAMA_MODEL_URL);
+        if (!response.ok) throw new Error(`Failed to load model: HTTP ${response.status}`);
+        
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        let received = 0;
+        
+        const reader = response.body.getReader();
+        const chunks = [];
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            if (total > 0) {
+                const pct = Math.round((received / total) * 90) + 5;
+                aiProgressBar.style.width = `${pct}%`;
+                aiStatusText.textContent = `Downloading Weights: ${pct}%`;
+            }
+        }
+        
+        const modelBuffer = new Uint8Array(received);
+        let offset = 0;
+        for (const chunk of chunks) {
+            modelBuffer.set(chunk, offset);
+            offset += chunk.length;
+        }
+        
+        log("Model data loaded. Compiling AI Graph...", "info");
+        aiStatusText.textContent = "Compiling AI Execution Graph...";
+        aiProgressBar.style.width = '95%';
+
+        inpainterSession = await ort.InferenceSession.create(modelBuffer.buffer, {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all'
+        });
+
+        log("✅ Magic AI Ready!", "success");
+        aiStatusText.textContent = "Generative Engine Ready!";
+        aiProgressBar.style.width = '100%';
+        aiModelLoaded = true;
+        setTimeout(() => aiLoadingOverlay.style.display = 'none', 800);
+        return true;
+    } catch (err) {
+        log(`Critical Error: Magic AI Failed. ${err.message}`, "error");
+        console.error("Magic AI Failed:", err);
+        aiStatusText.textContent = `Error: ${err.message}`;
+        setTimeout(() => aiLoadingOverlay.style.display = 'none', 4000);
+        return false;
+    }
+}
+
+async function runMagicInpaint(imageSource, faceBox) {
+    if (!aiModelLoaded) {
+        const ok = await initMagicAI();
+        if (!ok) return null;
+    }
+    
+    log("Running AI Inpainting (Raw ONNX)...", "magic");
+    const startTime = performance.now();
+
+    const targetSize = 512;
+    
+    // 1. Prepare tensors — returns mask canvas too for preview
+    log("Preprocessing image and mask (512x512)...", "info");
+    const { imageTensor, maskTensor, maskCanvas: scaledMask } = await prepareInpaintTensors(imageSource, faceBox, targetSize);
+
+    // Show mask preview with correct aspect ratio
+    if (maskPreviewCanvas && maskPreviewCard) {
+        // Match the source image aspect ratio for the preview display
+        const displayRatio = imageSource.height / imageSource.width;
+        maskPreviewCanvas.width = 512;
+        maskPreviewCanvas.height = 512 * displayRatio;
+        
+        const mctx = maskPreviewCanvas.getContext('2d');
+        mctx.clearRect(0, 0, maskPreviewCanvas.width, maskPreviewCanvas.height);
+        mctx.drawImage(scaledMask, 0, 0, 512, 512, 0, 0, maskPreviewCanvas.width, maskPreviewCanvas.height);
+        
+        maskPreviewCard.style.display = 'block';
+    }
+
+    try {
+        log("Executing ONNX Inference...", "magic");
+        
+        const feeds = { image: imageTensor, mask: maskTensor };
+        const results = await inpainterSession.run(feeds);
+        const outputTensor = results['output']; // Carve LaMa outputs [0,255] directly
+
+        log("Post-processing AI output...", "info");
+        const outCanvas = tensorToCanvas(outputTensor, targetSize);
+        
+        // 2. Composite: draw original image, then paint ONLY the inpainted
+        //    face region back over it (scaled from 512x512 space to original coords)
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = imageSource.width;
+        finalCanvas.height = imageSource.height;
+        const ctx = finalCanvas.getContext('2d');
+
+        // Base: original image
+        ctx.drawImage(imageSource, 0, 0);
+
+        // Compute face bounding region (with padding) in ORIGINAL image space
+        const padding = 0.25;
+        const bx = Math.max(0, faceBox.x - faceBox.width * padding);
+        const by = Math.max(0, faceBox.y - faceBox.height * padding);
+        const bw = Math.min(imageSource.width - bx, faceBox.width * (1 + padding * 2));
+        const bh = Math.min(imageSource.height - by, faceBox.height * (1 + padding * 2));
+
+        // Scale those same coordinates in 512x512 space
+        const scaleX = targetSize / imageSource.width;
+        const scaleY = targetSize / imageSource.height;
+        const sx = bx * scaleX;
+        const sy = by * scaleY;
+        const sw = bw * scaleX;
+        const sh = bh * scaleY;
+
+        // Paint only the face patch from the AI output onto the original
+        ctx.drawImage(outCanvas, sx, sy, sw, sh, bx, by, bw, bh);
+
+        const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+        log(`✅ Generation Successful! (took ${duration}s)`, "success");
+        
+        return finalCanvas; 
+    } catch (err) {
+        log(`Inference Error: ${err.message}`, "error");
+        throw err;
+    }
+}
+
+// 2.1 AI Pre-processors
+async function prepareInpaintTensors(img, faceBox, size) {
+    // Create 512x512 Canvas for Image
+    const imgCanvas = document.createElement('canvas');
+    imgCanvas.width = size;
+    imgCanvas.height = size;
+    const imgCtx = imgCanvas.getContext('2d');
+    imgCtx.drawImage(img, 0, 0, size, size);
+    
+    // Create 512x512 Canvas for Mask
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = size;
+    maskCanvas.height = size;
+    const mctx = maskCanvas.getContext('2d');
+    mctx.fillStyle = 'black';
+    mctx.fillRect(0, 0, size, size);
+    
+    // Scale mask coordinates to 512x512
+    const scaleX = size / img.width;
+    const scaleY = size / img.height;
+    
+    const padding = 0.25; 
+    const bx = Math.max(0, (faceBox.x - faceBox.width * padding) * scaleX);
+    const by = Math.max(0, (faceBox.y - faceBox.height * padding) * scaleY);
+    const bw = Math.min(size - bx, (faceBox.width * (1 + padding * 2)) * scaleX);
+    const bh = Math.min(size - by, (faceBox.height * (1 + padding * 2)) * scaleY);
+    
+    mctx.fillStyle = 'white';
+    mctx.fillRect(bx, by, bw, bh);
+
+    // Convert to Float32 Tensors: image in [-1, 1], mask binary [0, 1]
+    // LaMa (Carve ONNX) expects image normalized to [-1, 1] range
+    const imgData = imgCtx.getImageData(0, 0, size, size).data;
+    const maskData = mctx.getImageData(0, 0, size, size).data;
+
+    const r = new Float32Array(size * size);
+    const g = new Float32Array(size * size);
+    const b = new Float32Array(size * size);
+    const m = new Float32Array(size * size);
+
+    for (let i = 0; i < size * size; i++) {
+        // Normalize image pixels from [0,255] -> [0,1] (Carve LaMa expects [0,1] input)
+        r[i] = imgData[i * 4]     / 255.0;
+        g[i] = imgData[i * 4 + 1] / 255.0;
+        b[i] = imgData[i * 4 + 2] / 255.0;
+        m[i] = maskData[i * 4] > 128 ? 1.0 : 0.0;
+    }
+
+    const imageTensor = new ort.Tensor('float32', new Float32Array([...r, ...g, ...b]), [1, 3, size, size]);
+    const maskTensor  = new ort.Tensor('float32', m, [1, 1, size, size]);
+
+    return { imageTensor, maskTensor, maskCanvas };
+}
+
+function tensorToCanvas(tensor, size) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(size, size);
+
+    const data = tensor.data;
+    const stride = size * size;
+
+    for (let i = 0; i < size * size; i++) {
+        // Output is already in [0,255] range — just clamp and write
+        imageData.data[i * 4]     = Math.max(0, Math.min(255, data[i]));
+        imageData.data[i * 4 + 1] = Math.max(0, Math.min(255, data[i + stride]));
+        imageData.data[i * 4 + 2] = Math.max(0, Math.min(255, data[i + stride * 2]));
+        imageData.data[i * 4 + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
 }
 
 // 2. Handle Inputs
@@ -64,9 +516,30 @@ paddingInput.addEventListener('input', (e) => {
     }
 });
 
-function handleRatioChange() {
-    // Clear active presets if manual input is changed
-    // We check if the event caller was a preset btn to avoid circular logic
+async function handleRatioChange() {
+    // Re-extract replacement face if in replace mode to match aspect ratio
+    if (currentMode === 'replace' && replacementFaceImageCache) {
+        const box = await detectFace(replacementFaceImageCache);
+        if (box) {
+            replacementFaceBox = box;
+            replacementStatusText.textContent = "Face Detected";
+            replacementFacePreviewWrapper.style.display = "flex";
+            
+            // Calculate the base source profile for Auto Match
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = replacementFaceImageCache.width;
+            tempCanvas.height = replacementFaceImageCache.height;
+            tempCanvas.getContext('2d').drawImage(replacementFaceImageCache, 0, 0);
+            sourceFaceHSL = getAverageFaceHSL(tempCanvas, box);
+            
+            extractReplacementSource(parseInt(replacementPaddingInput.value));
+            if (currentMode === 'replace') updatePreviewCanvas();
+        } else {
+            replacementStatusText.textContent = "No Face Detected";
+            replacementFacePreviewWrapper.style.display = "none";
+            sourceFaceHSL = null;
+        }
+    }
     if (firstImageCache && firstFaceBox) {
         updatePreviewCanvas();
     }
@@ -108,6 +581,449 @@ presetBtns.forEach(btn => {
         handleRatioChange();
     });
 });
+
+modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        modeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMode = btn.dataset.mode;
+        log(`Switched to ${currentMode} mode.`);
+        
+        // Show/Hide advanced censor options
+        if (censorOptionsPanel) {
+            censorOptionsPanel.style.display = currentMode === 'censor' ? 'block' : 'none';
+        }
+        if (frameOptionsPanel) {
+            frameOptionsPanel.style.display = currentMode === 'frame' ? 'block' : 'none';
+        }
+        if (replaceOptionsPanel) {
+            replaceOptionsPanel.style.display = currentMode === 'replace' ? 'block' : 'none';
+        }
+        if (featureOptionsPanel) {
+            featureOptionsPanel.style.display = currentMode === 'feature' ? 'block' : 'none';
+        }
+
+        if (firstImageCache && firstFaceBox) {
+            updatePreviewCanvas();
+        }
+    });
+});
+
+// Feature Mode Listeners
+if (featurePaddingInput) {
+    featurePaddingInput.addEventListener('input', (e) => {
+        featurePadding = parseInt(e.target.value);
+        if (featurePaddingVal) featurePaddingVal.textContent = featurePadding;
+        if (currentMode === 'feature') updatePreviewCanvas();
+    });
+}
+
+[cropEyesInput, cropNoseInput, cropLipsInput, cropEyebrowsInput, combineFeaturesInput, featureWideWInput, featureWideHInput, featureTallWInput, featureTallHInput].forEach(inp => {
+    if (inp) inp.addEventListener('change', () => {
+        if (currentMode === 'feature') updatePreviewCanvas();
+    });
+});
+
+// Advanced Censor Listeners
+typeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        typeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentCensorType = btn.dataset.type;
+        
+        solidOptions.style.display = currentCensorType === 'solid' ? 'block' : 'none';
+        blurOptions.style.display = currentCensorType === 'blur' ? 'block' : 'none';
+        emojiOptions.style.display = currentCensorType === 'emoji' ? 'block' : 'none';
+        
+        if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+    });
+});
+
+censorEmojiInput.addEventListener('input', (e) => {
+    censorEmoji = e.target.value;
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+shapeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        shapeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentCensorShape = btn.dataset.shape;
+        if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+    });
+});
+
+processAllFacesInput.addEventListener('change', () => {
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+censorColorInput.addEventListener('input', (e) => {
+    censorColor = e.target.value;
+    colorHexDisplay.textContent = censorColor.toUpperCase();
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+blurStrengthInput.addEventListener('input', (e) => {
+    blurStrength = parseInt(e.target.value);
+    if (blurStrengthVal) blurStrengthVal.textContent = blurStrength;
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+// Frame Listeners
+frameShapeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        frameShapeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFrameShape = btn.dataset.shape;
+        if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+    });
+});
+
+frameColorInput.addEventListener('input', (e) => {
+    frameColor = e.target.value;
+    if (frameColorHex) frameColorHex.textContent = frameColor.toUpperCase();
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+frameThicknessInput.addEventListener('input', (e) => {
+    frameThickness = parseInt(e.target.value);
+    if (frameThicknessVal) frameThicknessVal.textContent = frameThickness;
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+// Naming Listeners
+namingScheme.addEventListener('change', (e) => {
+    customBaseRow.style.display = e.target.value === 'custom' ? 'block' : 'none';
+    updateFilenamePreview();
+});
+
+[filenameBaseInput, filenamePrefixInput, filenameSuffixInput].forEach(input => {
+    input.addEventListener('input', updateFilenamePreview);
+});
+
+// Face Replace Handlers
+function updateReplaceStatus(msg, type = 'info') {
+    if (!replacementStatusText) return;
+    replacementStatusText.textContent = msg;
+    // Apply temporary color override for errors/success
+    replacementStatusText.style.color = type === 'error' ? '#ff6b6b' : (type === 'success' ? '#a3be8c' : 'var(--accent)');
+}
+
+if (replacementFileInput) {
+    replacementFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        replacementFaceOriginalFile = file;
+        log("Analyzing replacement source face...", "magic");
+        if (replacementFacePreviewWrapper) replacementFacePreviewWrapper.style.display = 'flex';
+        updateReplaceStatus("Analyzing...", "info");
+
+        try {
+            const img = await faceapi.bufferToImage(file);
+            replacementFaceImageCache = img;
+
+            const detections = await faceapi.detectAllFaces(img);
+            
+            if (detections && detections.length > 0) {
+                const largest = detections.sort((a,b) => (b.box.width * b.box.height) - (a.box.width * a.box.height))[0];
+                replacementFaceBox = largest.box;
+                
+                // Calculate the base source profile for Auto Match immediately on upload
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = img.width;
+                tempCanvas.height = img.height;
+                tempCanvas.getContext('2d').drawImage(img, 0, 0);
+                sourceFaceHSL = getAverageFaceHSL(tempCanvas, replacementFaceBox);
+                
+                // Extract with initial (0) padding
+                extractReplacementSource(0);
+                
+                updateReplaceStatus("Face Ready!", "success");
+                log("✅ Replacement face extracted successfully.", "success");
+                
+                // Trigger preview update if in replace mode
+                if (currentMode === 'replace') updatePreviewCanvas();
+            } else {
+                updateReplaceStatus("No face detected", "error");
+                log("❌ Face Replace Failed: Could not find any faces in the source image.", "error");
+                replacementFaceCanvasSource = null;
+            }
+        } catch (err) {
+            updateReplaceStatus("Upload Error", "error");
+            log(`❌ Face Replace Error: ${err.message}`, "error");
+            replacementFaceCanvasSource = null;
+        }
+    });
+}
+
+if (featheringInput) {
+    featheringInput.addEventListener('input', (e) => {
+        featherAmount = parseInt(e.target.value);
+        if (featheringVal) featheringVal.textContent = featherAmount;
+        if (currentMode === 'replace') updatePreviewCanvas();
+    });
+}
+
+// Color Grading Listeners
+if (replaceHueInput) {
+    replaceHueInput.addEventListener('input', (e) => {
+        replaceHue = parseInt(e.target.value);
+        if (replaceHueVal) replaceHueVal.textContent = replaceHue;
+        if (currentMode === 'replace') updatePreviewCanvas();
+    });
+}
+if (replaceSatInput) {
+    replaceSatInput.addEventListener('input', (e) => {
+        replaceSat = parseInt(e.target.value);
+        if (replaceSatVal) replaceSatVal.textContent = replaceSat;
+        if (currentMode === 'replace') updatePreviewCanvas();
+    });
+}
+if (replaceLightInput) {
+    replaceLightInput.addEventListener('input', (e) => {
+        replaceLight = parseInt(e.target.value);
+        if (replaceLightVal) replaceLightVal.textContent = replaceLight;
+        if (currentMode === 'replace') updatePreviewCanvas();
+    });
+}
+
+if (editReplacementFaceBtn) {
+    editReplacementFaceBtn.addEventListener('click', () => {
+        if (!replacementFaceOriginalFile) return;
+        isEditingReplacement = true;
+        openEditModalForReplacement();
+    });
+}
+
+if (replacementPaddingInput) {
+    replacementPaddingInput.addEventListener('input', (e) => {
+        const pad = parseInt(e.target.value);
+        if (replacementPaddingVal) replacementPaddingVal.textContent = pad;
+        if (replacementFaceImageCache && replacementFaceBox) {
+            extractReplacementSource(pad);
+            if (currentMode === 'replace') updatePreviewCanvas();
+        }
+    });
+}
+
+function extractReplacementSource(paddingPercent) {
+    if (!replacementFaceImageCache || !replacementFaceBox) return;
+
+    const img = replacementFaceImageCache;
+    const box = replacementFaceBox;
+    const pad = (paddingPercent / 100);
+
+    // Calculate Aspect Ratio from current UI settings
+    let targetRatio;
+    if (useOriginalRatioInput.checked && firstImageCache) {
+        targetRatio = firstImageCache.width / firstImageCache.height;
+    } else {
+        const rW = parseFloat(ratioWidthInput.value) || 1;
+        const rH = parseFloat(ratioHeightInput.value) || 1;
+        targetRatio = rW / rH;
+    }
+
+    // Determine crop dimensions (centered on face box)
+    const padX = box.width * pad;
+    const padY = box.height * pad;
+
+    let cw = box.width + padX * 2;
+    let ch = box.height + padY * 2;
+    
+    // Adjust dimensions to match target aspect ratio
+    const currentRatio = cw / ch;
+    if (currentRatio > targetRatio) {
+        // Current is wider than target, increase height
+        ch = cw / targetRatio;
+    } else {
+        // Current is taller than target, increase width
+        cw = ch * targetRatio;
+    }
+
+    // Center the crop on the face box
+    const cx = (box.x + box.width / 2) - (cw / 2);
+    const cy = (box.y + box.height / 2) - (ch / 2);
+
+    // Create high-res source canvas
+    const sizeH = 1024;
+    const sizeW = sizeH * targetRatio;
+    const canvas = document.createElement('canvas');
+    canvas.width = sizeW;
+    canvas.height = sizeH;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    // Draw with safety clamping or just draw (Canvas handles out of bounds)
+    ctx.drawImage(img, cx, cy, cw, ch, 0, 0, sizeW, sizeH);
+
+    replacementFaceCanvasSource = canvas;
+
+    // Update UI thumbnail (Maintain square thumbnail view for UI consistency)
+    if (replacementFaceCanvas) {
+        const pCtx = replacementFaceCanvas.getContext('2d');
+        if (pCtx) {
+            const thumbSize = 80;
+            pCtx.clearRect(0, 0, thumbSize, thumbSize);
+            
+            // Draw centered and cover the square thumnbail
+            let drawW, drawH, dx, dy;
+            if (targetRatio > 1) {
+                drawH = thumbSize;
+                drawW = thumbSize * targetRatio;
+                dx = -(drawW - thumbSize) / 2;
+                dy = 0;
+            } else {
+                drawW = thumbSize;
+                drawH = thumbSize / targetRatio;
+                dx = 0;
+                dy = -(drawH - thumbSize) / 2;
+            }
+            pCtx.drawImage(canvas, 0, 0, sizeW, sizeH, dx, dy, drawW, drawH);
+        }
+    }
+}
+
+// Reset Slider Handler
+document.querySelectorAll('.reset-slider').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const targetId = btn.dataset.target;
+        const defaultVal = btn.dataset.default;
+        const target = document.getElementById(targetId);
+        if (target) {
+            target.value = defaultVal;
+            // Dispatch input event to trigger UI value update and preview update
+            target.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
+});
+
+// Auto Match Button Handler
+if (autoMatchColorBtn) {
+    autoMatchColorBtn.addEventListener('click', () => {
+        if (!sourceFaceHSL || !firstImageCache || !firstFaceBox) {
+            alert("Upload both a target photo and a replacement face first.");
+            return;
+        }
+
+        // IMPORTANT: Sample from the ORIGINAL target image, not the preview canvas (which has filters/swaps)
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = firstImageCache.width;
+        tempCanvas.height = firstImageCache.height;
+        const tctx = tempCanvas.getContext('2d');
+        tctx.drawImage(firstImageCache, 0, 0);
+
+        const targetHSL = getAverageFaceHSL(tempCanvas, firstFaceBox);
+        if (targetHSL) {
+            // Calculate offsets
+            const hueShift = Math.round(targetHSL.h - sourceFaceHSL.h);
+            const satShift = Math.round((targetHSL.s / sourceFaceHSL.s) * 100);
+            const lightShift = Math.round((targetHSL.l / sourceFaceHSL.l) * 100);
+
+            // Apply to sliders
+            replaceHueInput.value = hueShift;
+            replaceSatInput.value = Math.min(200, Math.max(0, satShift));
+            replaceLightInput.value = Math.min(200, Math.max(0, lightShift));
+
+            // Trigger updates
+            [replaceHueInput, replaceSatInput, replaceLightInput].forEach(inp => {
+                inp.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            
+            log(`✅ Auto Color Match applied: H:${hueShift} S:${satShift}% L:${lightShift}%`, "success");
+        }
+    });
+}
+
+if (autoColorBatchInput) {
+    autoColorBatchInput.addEventListener('change', (e) => {
+        autoColorBatch = e.target.checked;
+    });
+}
+
+// Debug Console Handlers
+if (clearLogsBtn) {
+    clearLogsBtn.addEventListener('click', () => {
+        if (debugLogs) debugLogs.innerHTML = '';
+    });
+}
+
+if (toggleConsoleBtn) {
+    toggleConsoleBtn.addEventListener('click', () => {
+        debugConsole.classList.add('visible');
+        toggleConsoleBtn.classList.add('hidden');
+    });
+}
+
+if (closeConsoleBtn) {
+    closeConsoleBtn.addEventListener('click', () => {
+        debugConsole.classList.remove('visible');
+        toggleConsoleBtn.classList.remove('hidden');
+    });
+}
+
+if (stopBtn) {
+    stopBtn.addEventListener('click', () => {
+        isBatchAborted = true;
+        log("Aborting batch... finishing current image.", "warning");
+        stopBtn.disabled = true;
+        stopBtn.innerText = "Aborting...";
+    });
+}
+
+function updateFilenamePreview() {
+    if (!filenamePreview) return;
+    const exampleName = "image_01.jpg";
+    const finalName = generateOutputName(exampleName, 0, 1, 1);
+    filenamePreview.textContent = finalName;
+}
+
+function generateOutputName(originalName, faceIndex, totalFaces, batchIndex, mode, feature) {
+    const scheme = namingScheme.value;
+    const prefix = filenamePrefixInput.value;
+    const suffix = filenameSuffixInput.value;
+    
+    let baseName = "";
+    const parts = originalName.split('.');
+    let ext = parts.length > 1 ? parts.pop() : 'jpg';
+    const nameNoExt = parts.join('.');
+
+    // Feature crops are always PNG for lossless quality
+    if (feature) ext = 'png';
+
+    if (scheme === 'original') {
+        baseName = nameNoExt;
+    } else if (scheme === 'custom') {
+        const customBase = filenameBaseInput.value || 'Result';
+        baseName = customBase;
+        if (loadedFiles.length > 1) {
+             baseName += `_${batchIndex}`;
+        }
+    } else if (scheme === 'sequential') {
+        baseName = String(batchIndex).padStart(3, '0');
+    }
+
+    let modePrefix = "";
+    if (scheme === 'original' && !prefix) {
+        modePrefix = `${mode}_`;
+    }
+
+    // Add multi-face index if needed
+    let facePart = "";
+    if (totalFaces > 1) {
+        facePart = `_face${faceIndex + 1}`;
+    }
+
+    // Add feature name if provided
+    let featurePart = "";
+    if (feature) {
+        featurePart = `_${feature}`;
+    }
+
+    return `${prefix}${modePrefix}${baseName}${facePart}${featurePart}${suffix}.${ext}`;
+}
 
 imageInput.addEventListener('change', async (e) => {
     handleNewFiles(e.target.files);
@@ -186,7 +1102,15 @@ processBtn.addEventListener('click', async () => {
     // Don't hide preview! previewCard.style.display = 'none'; 
 
     gallery.innerHTML = ''; // Clear prior results
+    if (galleryStatus) galleryStatus.textContent = ''; // Clear status message
     processedBlobs = [];
+    let processedCount = 0;
+    isBatchAborted = false;
+
+    // Toggle button visibility
+    processBtn.style.display = 'none';
+    if (stopBtn) stopBtn.style.display = 'block';
+    downloadBtn.disabled = true;
 
     // Force space for scrolling (simulating ~3 rows) so valid scroll target exists
     gallery.style.minHeight = '800px';
@@ -196,41 +1120,35 @@ processBtn.addEventListener('click', async () => {
         gallery.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
 
-    log(`Starting batch processing for ${loadedFiles.length} images...`);
+    log(`Starting batch processing for ${loadedFiles.length} images...`, "info");
+    
+    // Pre-initialize AI if in magic mode to avoid per-image overlay interruptions
+    if (currentMode === 'magic') {
+        log("Batch Mode: Initializing AI Generative Engine...", "magic");
+        const aiReady = await initMagicAI();
+        if (!aiReady) {
+            log("Batch aborted: AI Engine failed to initialize.", "error");
+            processBtn.disabled = false;
+            processBtn.innerText = "Process Batch";
+            return;
+        }
+    }
 
-    let processedCount = 0;
-    const usedNames = new Set();
+    log("Status: Clearing gallery and initializing processed storage.", "info");
 
-    for (const file of loadedFiles) {
+    for (let i = 0; i < loadedFiles.length; i++) {
+        if (isBatchAborted) {
+            log("🛑 Batch processing aborted by user.", "error");
+            break;
+        }
 
-
+        const file = loadedFiles[i];
+        log(`Processing Image [${i + 1}/${loadedFiles.length}]: ${file.name}`, "info");
         try {
-            // Unique Name Generation - moved inside loop
-            let baseName = file.name;
-            let uniqueName = baseName;
-            let counter = 1;
-            const parts = baseName.split('.');
-            const ext = parts.length > 1 ? parts.pop() : '';
-            const nameNoExt = parts.join('.');
-
-            // Check against both usedNames set AND previously processed names to be safe?
-            // actually just usedNames set is cleared at start of processBtn click??
-            // NO, we want to allow accumulative processing? 
-            // "allow the user to keep drainging in new images" -> usually implies we process ALL of them.
-            // But if I already processed some, should I re-process them? 
-            // The user probably wants to add more, then click process.
-            // So `processedBlobs` is cleared on processBtn click, implying a fresh batch run.
-            // That's fine.
-
-            while (usedNames.has(uniqueName)) {
-                uniqueName = `${nameNoExt}_${counter}.${ext}`;
-                counter++;
-            }
-            usedNames.add(uniqueName);
-
-            // Process and ADD to batch
-            await processImage(file, uniqueName);
+            await processImage(file, i + 1); // Pass 1-based batch index
+            log(`Successfully processed: ${file.name}`, "success");
         } catch (err) {
+            log(`Execution Error [${file.name}]: ${err.message}`, "error");
             console.error(`Failed to process ${file.name}:`, err);
             createErrorCard(file.name);
         }
@@ -238,17 +1156,42 @@ processBtn.addEventListener('click', async () => {
         statusArea.textContent = `Processing: ${processedCount} / ${loadedFiles.length}`;
     }
 
-    log("Batch Processing Complete!");
-    downloadBtn.disabled = false;
+    log(isBatchAborted ? "⚠️ Batch Aborted (Partial Results Available)" : "✅ Batch Processing Complete!", isBatchAborted ? "error" : "success");
+    
+    // Restore button states
+    processBtn.style.display = 'block';
     processBtn.disabled = false;
-    processBtn.innerText = "Process Again";
+    processBtn.innerText = isBatchAborted ? "Resume / Process Again" : "Process Again";
+    if (stopBtn) stopBtn.style.display = 'none';
+    
+    if (processedBlobs.length > 0) {
+        downloadBtn.disabled = false;
+    }
+
+    // Dynamic Gallery AR Logic
+    const ratios = processedBlobs.map(b => b.outputWidth / b.outputHeight);
+    if (ratios.length > 0) {
+        const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+        // Check if all ratios are within 5% of the average
+        const allSimilar = ratios.every(r => Math.abs(r - avg) / avg <= 0.05);
+        if (allSimilar) {
+            gallery.style.setProperty('--gallery-ar', avg);
+            if (galleryStatus) {
+                const shape = avg > 1.1 ? "Landscape" : (avg < 0.9 ? "Portrait" : "Square");
+                galleryStatus.textContent = `✨ Detected uniform ${shape} aspect ratio. Layout adjusted.`;
+            }
+        } else {
+            gallery.style.removeProperty('--gallery-ar');
+            if (galleryStatus) galleryStatus.textContent = "Mixed aspect ratios detected. Using standard square grid.";
+        }
+    }
 
     // Restore preview so user can adjust and re-run
     previewCard.style.display = 'block';
 });
 
 // 3. Core Logic for Batch
-async function processImage(file, uniqueName) {
+async function processImage(file, batchIndex) {
     let img;
     try {
         img = await faceapi.bufferToImage(file);
@@ -258,146 +1201,318 @@ async function processImage(file, uniqueName) {
     }
 
     const detections = await faceapi.detectAllFaces(img);
+    const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
 
-    let box;
-    let isError = false;
+    if (currentMode === 'censor') {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
 
-    if (!detections || detections.length === 0) {
-        console.warn(`No face detected in ${file.name}, using full image.`);
-        // Fallback to full image
-        box = { x: 0, y: 0, width: img.width, height: img.height };
-        isError = true;
-    } else {
-        // Sort by area (largest face)
-        const largestFace = detections.sort((a, b) => {
-            const areaA = a.box.width * a.box.height;
-            const areaB = b.box.width * b.box.height;
-            return areaB - areaA;
-        })[0];
-        box = largestFace.box;
-    }
-
-    let x, y, width, height;
-
-    if (isError) {
-        // Use full image
-        x = 0;
-        y = 0;
-        width = img.width;
-        height = img.height;
-    } else {
-        // Calculate Padding
-        const paddingPercent = parseInt(paddingInput.value) / 100;
-        const padX = box.width * paddingPercent;
-        const padY = box.height * paddingPercent;
-
-        // Base crop box (Face + Padding)
-        let cx = Math.max(0, box.x - padX);
-        let cy = Math.max(0, box.y - padY);
-        let cw = Math.min(img.width - cx, box.width + (padX * 2));
-        let ch = Math.min(img.height - cy, box.height + (padY * 2));
-
-        // Aspect Ratio Adjustment
-        let targetRatio;
-        if (useOriginalRatioInput.checked) {
-            targetRatio = img.width / img.height;
+        let facesToCensor = [];
+        if (!detections || detections.length === 0) {
+            facesToCensor = [null]; // Fallback to full image
         } else {
-            const rW = parseFloat(ratioWidthInput.value) || 1;
-            const rH = parseFloat(ratioHeightInput.value) || 1;
-            targetRatio = rW / rH;
+            facesToCensor = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
         }
 
-        const currentRatio = cw / ch;
+        for (let i = 0; i < facesToCensor.length; i++) {
+            const faceBox = facesToCensor[i];
+            const rect = calculateCropRect(img, faceBox);
+            drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                mode: 'censor',
+                type: currentCensorType,
+                shape: currentCensorShape,
+                color: censorColor,
+                blur: blurStrength,
+                emoji: censorEmoji
+            }, img);
+        }
 
-        // Adjust dimensions to meet target ratio completely within image bounds if possible,
-        // or by expanding relevant dimension.
-        // Strategy: Expand the crop box to match ratio, centered on the current crop box.
+        const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'censored');
 
-        let targetW, targetH;
+        await new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    processedBlobs.push({
+                        name: finalFileName,
+                        blob: blob,
+                        isError: (!detections || detections.length === 0),
+                        originalFile: file,
+                        outputWidth: img.width,
+                        outputHeight: img.height,
+                        mode: 'censor',
+                        censorType: currentCensorType,
+                        censorShape: currentCensorShape,
+                        censorColor: censorColor,
+                        blurStrength: blurStrength,
+                        censorEmoji: censorEmoji
+                    });
+                    displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
+                }
+                resolve();
+            }, 'image/jpeg', 0.95);
+        });
+    } else if (currentMode === 'frame') {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
 
-        if (currentRatio > targetRatio) {
-            // Current is wider than target. Need to increase height (or decrease width, but we prefer expanding context)
-            // Let's hold width constant and increase height
-            targetW = cw;
-            targetH = cw / targetRatio;
+        let facesToFrame = [];
+        if (!detections || detections.length === 0) {
+            facesToFrame = [null];
         } else {
-            // Current is taller than target. Need to increase width
-            targetH = ch;
-            targetW = ch * targetRatio;
+            facesToFrame = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
         }
 
-        // Center the new dimensions on the old center
-        const centerX = cx + cw / 2;
-        const centerY = cy + ch / 2;
-
-        x = centerX - targetW / 2;
-        y = centerY - targetH / 2;
-        width = targetW;
-        height = targetH;
-
-        // Ensure bounds validation (might break ratio if image is too small,
-        // effectively similar to 'contain' logic but we want to crop)
-        // For simplicity, we just clamp and crop what we can, but ideally we'd shrink if out of bounds.
-        // A better approach for strict ratio is to shrink the box if it goes out of bounds.
-
-        // 1. Check if width is too big
-        if (width > img.width) {
-            width = img.width;
-            height = width / targetRatio;
-            x = (img.width - width) / 2;
+        for (let i = 0; i < facesToFrame.length; i++) {
+            const faceBox = facesToFrame[i];
+            const rect = calculateCropRect(img, faceBox);
+            drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                mode: 'frame',
+                shape: currentFrameShape,
+                color: frameColor,
+                thickness: frameThickness
+            }, img);
         }
 
-        // 2. Check if height is too big
-        if (height > img.height) {
-            height = img.height;
-            width = height * targetRatio;
-            // If height was forced to shrink, we should re-center or at least keep within image
-            // We'll handle y clamp below anyway.
+        const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'framed');
+
+        await new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    processedBlobs.push({
+                        name: finalFileName,
+                        blob: blob,
+                        isError: (!detections || detections.length === 0),
+                        originalFile: file,
+                        outputWidth: img.width,
+                        outputHeight: img.height,
+                        mode: 'frame',
+                        frameShape: currentFrameShape,
+                        frameColor: frameColor,
+                        frameThickness: frameThickness
+                    });
+                    displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
+                }
+                resolve();
+            }, 'image/jpeg', 0.95);
+        });
+    } else if (currentMode === 'magic') {
+        let facesToMagic = [];
+        if (!detections || detections.length === 0) {
+            facesToMagic = [null];
+        } else {
+            facesToMagic = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
         }
 
-        // Apply Vertical Position
-        const verticalPosPercent = (parseInt(document.getElementById('verticalPosInput').value) || 50) / 100;
-        const faceCenterY = box.y + box.height / 2;
-        const faceCenterX = box.x + box.width / 2;
-
-        x = faceCenterX - width / 2;
-        y = faceCenterY - (height * verticalPosPercent);
-
-        // 3. Clamp positions AND Re-adjust if out of bounds (to preserve ratio)
-        // If x is < 0, we shift it right, if x + width > img.width, we shift it left.
-        // Same for y.
+        log(`Batch Magic: Processing ${facesToMagic.length} face area(s) for ${file.name}`, "magic");
         
-        x = Math.max(0, Math.min(x, img.width - width));
-        y = Math.max(0, Math.min(y, img.height - height));
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-
-    ctx.drawImage(img, x, y, width, height, 0, 0, width, height);
-
-    // Save to blob list for ZIP
-    return new Promise((resolve) => {
-        canvas.toBlob((blob) => {
-            if (blob) {
-                processedBlobs.push({
-                    name: `cropped_${uniqueName}`,
-                    blob: blob,
-                    isError: isError,
-                    originalFile: file,
-                    cropWidth: width,
-                    cropHeight: height,
-                    cropX: x,
-                    cropY: y,
-                    targetRatio: useOriginalRatioInput.checked ? NaN : ((parseFloat(ratioWidthInput.value)||1)/(parseFloat(ratioHeightInput.value)||1))
-                });
-                displayResult(canvas.toDataURL(), isError);
+        let currentResult = img;
+        for (let i = 0; i < facesToMagic.length; i++) {
+            const faceBox = facesToMagic[i];
+            if (faceBox) {
+                log(`Inpainting face [${i + 1}/${facesToMagic.length}]...`, "info");
+                currentResult = await runMagicInpaint(currentResult, faceBox);
             }
-            resolve();
-        }, 'image/jpeg', 0.95);
-    });
+        }
+
+        const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'magic');
+
+        await new Promise((resolve) => {
+            currentResult.toBlob((blob) => {
+                if (blob) {
+                    processedBlobs.push({
+                        name: finalFileName,
+                        blob: blob,
+                        isError: (!detections || detections.length === 0),
+                        originalFile: file,
+                        outputWidth: img.width,
+                        outputHeight: img.height,
+                        mode: 'magic'
+                    });
+                    displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
+                }
+                resolve();
+            }, 'image/jpeg', 0.95);
+        });
+    } else if (currentMode === 'replace') {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        let facesToReplace = [];
+        if (!detections || detections.length === 0) {
+            facesToReplace = [null];
+        } else {
+            facesToReplace = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (let i = 0; i < facesToReplace.length; i++) {
+            const faceBox = facesToReplace[i];
+            if (faceBox) {
+                const rect = calculateCropRect(img, faceBox);
+                
+                let hslShift = null;
+                if (autoColorBatch && sourceFaceHSL) {
+                    const targetHSL = getAverageFaceHSL(canvas, faceBox);
+                    if (targetHSL) {
+                        hslShift = {
+                            h: Math.round(targetHSL.h - sourceFaceHSL.h),
+                            s: Math.round((targetHSL.s / sourceFaceHSL.s) * 100),
+                            l: Math.round((targetHSL.l / sourceFaceHSL.l) * 100)
+                        };
+                    }
+                }
+                
+                drawReplacement(ctx, rect.x, rect.y, rect.width, rect.height, featherAmount, hslShift);
+            }
+        }
+
+        const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'replaced');
+
+        await new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    processedBlobs.push({
+                        name: finalFileName,
+                        blob: blob,
+                        isError: (!detections || detections.length === 0 || !replacementFaceCanvasSource),
+                        originalFile: file,
+                        outputWidth: img.width,
+                        outputHeight: img.height,
+                        mode: 'replace'
+                    });
+                    displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
+                }
+                resolve();
+            }, 'image/jpeg', 0.95);
+        });
+    } else if (currentMode === 'feature') {
+        const detections = await faceapi.detectAllFaces(img).withFaceLandmarks();
+        const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
+
+        if (!detections || detections.length === 0) {
+            log(`No faces detected in ${file.name} for feature extraction.`, "warning");
+            createErrorCard(file.name);
+            return;
+        }
+
+        const facesToProcess = processAll ? detections : [detections.sort((a,b) => (b.detection.box.width * b.detection.box.height) - (a.detection.box.width * a.detection.box.height))[0]];
+
+        for (let i = 0; i < facesToProcess.length; i++) {
+            const landmarks = facesToProcess[i].landmarks;
+            const features = [];
+
+            if (cropEyesInput.checked) {
+                if (combineFeaturesInput.checked) {
+                    features.push({ name: 'combined_eyes', points: [...landmarks.getLeftEye(), ...landmarks.getRightEye()] });
+                } else {
+                    features.push({ name: 'left_eye', points: landmarks.getLeftEye() });
+                    features.push({ name: 'right_eye', points: landmarks.getRightEye() });
+                }
+            }
+            if (cropNoseInput.checked) {
+                features.push({ name: 'nose', points: landmarks.getNose() });
+            }
+            if (cropLipsInput.checked) {
+                features.push({ name: 'lips', points: landmarks.getMouth() });
+            }
+            if (cropEyebrowsInput.checked) {
+                if (combineFeaturesInput.checked) {
+                    features.push({ name: 'combined_eyebrows', points: [...landmarks.getLeftEyeBrow(), ...landmarks.getRightEyeBrow()] });
+                } else {
+                    features.push({ name: 'left_eyebrow', points: landmarks.getLeftEyeBrow() });
+                    features.push({ name: 'right_eyebrow', points: landmarks.getRightEyeBrow() });
+                }
+            }
+
+            for (const feature of features) {
+                // Determine AR category
+                let targetAR = 0;
+                if (feature.name === 'nose') {
+                    targetAR = (parseFloat(featureTallWInput.value)||1) / (parseFloat(featureTallHInput.value)||1);
+                } else {
+                    targetAR = (parseFloat(featureWideWInput.value)||1) / (parseFloat(featureWideHInput.value)||1);
+                }
+
+                const rect = calculateFeatureBox(feature.points, featurePadding, img.width, img.height, targetAR);
+                const canvas = document.createElement('canvas');
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+
+                await new Promise((resolve) => {
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            const finalFileName = generateOutputName(file.name, i, facesToProcess.length, batchIndex, 'feature', feature.name);
+
+                            processedBlobs.push({
+                                name: finalFileName,
+                                blob: blob,
+                                isError: false,
+                                originalFile: file,
+                                outputWidth: rect.width,
+                                outputHeight: rect.height,
+                                mode: 'feature',
+                                featureType: feature.name
+                            });
+                            displayResult(URL.createObjectURL(blob), false);
+                        }
+                        resolve();
+                    }, 'image/png');
+                });
+            }
+        }
+    } else {
+        // Crop Mode
+        let facesToCrop = [];
+        if (!detections || detections.length === 0) {
+            facesToCrop = [null];
+        } else {
+            facesToCrop = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (let i = 0; i < facesToCrop.length; i++) {
+            const faceBox = facesToCrop[i];
+            const rect = calculateCropRect(img, faceBox);
+            const canvas = document.createElement('canvas');
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+
+            await new Promise((resolve) => {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        const finalFileName = generateOutputName(file.name, i, facesToCrop.length, batchIndex, 'cropped');
+                        processedBlobs.push({
+                            name: finalFileName,
+                            blob: blob,
+                            isError: rect.isError,
+                            originalFile: file,
+                            outputWidth: rect.width,
+                            outputHeight: rect.height,
+                            cropWidth: rect.width,
+                            cropHeight: rect.height,
+                            cropX: rect.x,
+                            cropY: rect.y,
+                            mode: 'crop',
+                            targetRatio: useOriginalRatioInput.checked ? NaN : ((parseFloat(ratioWidthInput.value)||1)/(parseFloat(ratioHeightInput.value)||1))
+                        });
+                        displayResult(URL.createObjectURL(blob), rect.isError);
+                    }
+                    resolve();
+                }, 'image/jpeg', 0.95);
+            });
+        }
+    }
 }
 
 // 4. Preview Logic (Optimized)
@@ -452,78 +1567,168 @@ async function setupPreview(filesToScan = loadedFiles) {
     if (previewLoader) previewLoader.style.display = 'none';
 }
 
-function updatePreviewCanvas() {
+async function updatePreviewCanvas() {
     if (!firstImageCache || !firstFaceBox) return;
 
-    const box = firstFaceBox;
-    const paddingPercent = parseInt(paddingInput.value) / 100;
+    const detections = await faceapi.detectAllFaces(firstImageCache);
+    const multi = processAllFacesInput ? processAllFacesInput.checked : false;
 
-    const padX = box.width * paddingPercent;
-    const padY = box.height * paddingPercent;
-
-    // Base crop
-    let cx = Math.max(0, box.x - padX);
-    let cy = Math.max(0, box.y - padY);
-    let cw = Math.min(firstImageCache.width - cx, box.width + (padX * 2));
-    let ch = Math.min(firstImageCache.height - cy, box.height + (padY * 2));
-
-    // Aspect Ratio Logic (Shared with processImage)
-    let targetRatio;
-    if (useOriginalRatioInput.checked) {
-        targetRatio = firstImageCache.width / firstImageCache.height;
-    } else {
-        const rW = parseFloat(ratioWidthInput.value) || 1;
-        const rH = parseFloat(ratioHeightInput.value) || 1;
-        targetRatio = rW / rH;
-    }
-
-    const currentRatio = cw / ch;
-    let targetW, targetH;
-
-    if (currentRatio > targetRatio) {
-        targetW = cw;
-        targetH = cw / targetRatio;
-    } else {
-        targetH = ch;
-        targetW = ch * targetRatio;
-    }
-
-    const centerX = cx + cw / 2;
-    const centerY = cy + ch / 2;
-
-    let x = centerX - targetW / 2;
-    let y = centerY - targetH / 2;
-    let width = targetW;
-    let height = targetH;
-
-    // Bounds Checks
-    if (width > firstImageCache.width) {
-        width = firstImageCache.width;
-        height = width / targetRatio;
-    }
-    if (height > firstImageCache.height) {
-        height = firstImageCache.height;
-        width = height * targetRatio;
-    }
-
-    // Apply Vertical Position
-    const vPos = (parseInt(verticalPosInput.value) || 50) / 100;
-    const faceCenterY = box.y + box.height / 2;
-    const faceCenterX = box.x + box.width / 2;
-
-    x = faceCenterX - width / 2;
-    y = faceCenterY - (height * vPos);
-
-    // Final Clamping
-    x = Math.max(0, Math.min(x, firstImageCache.width - width));
-    y = Math.max(0, Math.min(y, firstImageCache.height - height));
-
-
-    previewCanvas.width = width;
-    previewCanvas.height = height;
     const ctx = previewCanvas.getContext('2d');
 
-    ctx.drawImage(firstImageCache, x, y, width, height, 0, 0, width, height);
+    if (currentMode === 'censor') {
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
+        ctx.drawImage(firstImageCache, 0, 0);
+        
+        let facesToCensor = [];
+        if (!detections || detections.length === 0) {
+            facesToCensor = [null];
+        } else {
+            facesToCensor = multi ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (const faceBox of facesToCensor) {
+            const rect = calculateCropRect(firstImageCache, faceBox);
+            drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                mode: 'censor',
+                type: currentCensorType,
+                shape: currentCensorShape,
+                color: censorColor,
+                blur: blurStrength,
+                emoji: censorEmoji
+            }, firstImageCache);
+        }
+    } else if (currentMode === 'frame') {
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
+        ctx.drawImage(firstImageCache, 0, 0);
+        
+        let facesToFrame = [];
+        if (!detections || detections.length === 0) {
+            facesToFrame = [null];
+        } else {
+            facesToFrame = multi ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (const faceBox of facesToFrame) {
+            const rect = calculateCropRect(firstImageCache, faceBox);
+            drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                mode: 'frame',
+                shape: currentFrameShape,
+                color: frameColor,
+                thickness: frameThickness
+            }, firstImageCache);
+        }
+    } else if (currentMode === 'magic') {
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = '16px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText("AI Magic Preview Initializing...", previewCanvas.width / 2, previewCanvas.height / 2);
+
+        const faceBox = (detections && detections.length > 0) ? getLargestFace(detections).box : null;
+        if (faceBox) {
+            const outCanvas = await runMagicInpaint(firstImageCache, faceBox);
+            ctx.drawImage(outCanvas, 0, 0);
+        } else {
+            ctx.drawImage(firstImageCache, 0, 0);
+        }
+    } else if (currentMode === 'replace') {
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
+        ctx.drawImage(firstImageCache, 0, 0);
+        
+        let facesToReplace = [];
+        if (!detections || detections.length === 0) {
+            facesToReplace = [null];
+        } else {
+            facesToReplace = multi ? detections.map(d => d.box) : [getLargestFace(detections).box];
+        }
+
+        for (const faceBox of facesToReplace) {
+            if (faceBox) {
+                const rect = calculateCropRect(firstImageCache, faceBox);
+                
+                let hslShift = null;
+                if (autoColorBatch && sourceFaceHSL) {
+                    const targetHSL = getAverageFaceHSL(previewCanvas, faceBox);
+                    if (targetHSL) {
+                        hslShift = {
+                            h: Math.round(targetHSL.h - sourceFaceHSL.h),
+                            s: Math.round((targetHSL.s / sourceFaceHSL.s) * 100),
+                            l: Math.round((targetHSL.l / sourceFaceHSL.l) * 100)
+                        };
+                    }
+                }
+                
+                drawReplacement(ctx, rect.x, rect.y, rect.width, rect.height, featherAmount, hslShift);
+            }
+        }
+    } else if (currentMode === 'feature') {
+        const detections = await faceapi.detectAllFaces(firstImageCache).withFaceLandmarks();
+        const multi = processAllFacesInput ? processAllFacesInput.checked : false;
+        
+        previewCanvas.width = firstImageCache.width;
+        previewCanvas.height = firstImageCache.height;
+        ctx.drawImage(firstImageCache, 0, 0);
+
+        if (detections && detections.length > 0) {
+            const facesToPreview = multi ? detections : [detections.sort((a,b) => (b.detection.box.width * b.detection.box.height) - (a.detection.box.width * a.detection.box.height))[0]];
+            
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 8;
+            ctx.setLineDash([12, 12]);
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+            ctx.shadowBlur = 4;
+
+            for (const face of facesToPreview) {
+                const landmarks = face.landmarks;
+                const features = [];
+                if (cropEyesInput.checked) {
+                    if (combineFeaturesInput.checked) {
+                        features.push({ name: 'combined_eyes', points: [...landmarks.getLeftEye(), ...landmarks.getRightEye()] });
+                    } else {
+                        features.push({ name: 'left_eye', points: landmarks.getLeftEye() }, { name: 'right_eye', points: landmarks.getRightEye() });
+                    }
+                }
+                if (cropNoseInput.checked) features.push({ name: 'nose', points: landmarks.getNose() });
+                if (cropLipsInput.checked) features.push({ name: 'lips', points: landmarks.getMouth() });
+                if (cropEyebrowsInput.checked) {
+                     if (combineFeaturesInput.checked) {
+                        features.push({ name: 'combined_eyebrows', points: [...landmarks.getLeftEyeBrow(), ...landmarks.getRightEyeBrow()] });
+                    } else {
+                        features.push({ name: 'left_eyebrow', points: landmarks.getLeftEyeBrow() }, { name: 'right_eyebrow', points: landmarks.getRightEyeBrow() });
+                    }
+                }
+
+                for (const feature of features) {
+                    let targetAR = 0;
+                    if (feature.name === 'nose') {
+                        targetAR = (parseFloat(featureTallWInput.value)||1) / (parseFloat(featureTallHInput.value)||1);
+                    } else {
+                        targetAR = (parseFloat(featureWideWInput.value)||1) / (parseFloat(featureWideHInput.value)||1);
+                    }
+                    
+                    const rect = calculateFeatureBox(feature.points, featurePadding, firstImageCache.width, firstImageCache.height, targetAR);
+                    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+                }
+            }
+            
+            // Reset shadow and dash for other modes
+            ctx.shadowBlur = 0;
+            ctx.setLineDash([]);
+        }
+    } else {
+        // Crop Mode Preview (Always shows the first/largest detected face)
+        const faceBox = (detections && detections.length > 0) ? (multi ? detections[0].box : getLargestFace(detections).box) : null;
+        const rect = calculateCropRect(firstImageCache, faceBox);
+        previewCanvas.width = rect.width;
+        previewCanvas.height = rect.height;
+        ctx.drawImage(firstImageCache, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+    }
 }
 
 // 5. Lightbox Logic
@@ -628,7 +1833,6 @@ function displayResult(dataUrl, isError = false) {
     }
     const img = document.createElement('img');
     img.src = dataUrl;
-
     const index = processedBlobs.length - 1;
     
     // Add Click to Open Lightbox
@@ -677,7 +1881,7 @@ downloadBtn.addEventListener('click', () => {
     });
 
     if (count === 0) {
-        alert("No valid cropped images to download!");
+        alert(`No valid ${currentMode === 'censor' ? 'censored' : 'cropped'} images to download!`);
         return;
     }
 
@@ -686,7 +1890,7 @@ downloadBtn.addEventListener('click', () => {
     zip.generateAsync({ type: "blob" })
         .then(function (content) {
             // Use FileSaver.js for better cross-browser/mobile support
-            saveAs(content, "cropped_faces.zip");
+            saveAs(content, `${currentMode === 'censor' ? 'censored' : 'cropped'}_faces.zip`);
             log("Download started.");
         });
 });
@@ -727,6 +1931,31 @@ function openEditModal(index) {
     };
 }
 
+function openEditModalForReplacement() {
+    if (!replacementFaceOriginalFile) return;
+
+    editingBlobIndex = -999; // Sentinel for replacement mode
+    const objectUrl = URL.createObjectURL(replacementFaceOriginalFile);
+    
+    editCropImage.src = objectUrl;
+    editCropModal.style.display = 'flex';
+
+    editCropImage.onload = () => {
+        if (cropperInstance) cropperInstance.destroy();
+
+        cropperInstance = new Cropper(editCropImage, {
+            viewMode: 1,
+            dragMode: 'move',
+            aspectRatio: NaN, // Free crop for source
+            autoCropArea: 0.8,
+            ready() {
+                // No specific start rect needed for source, 
+                // but user can now adjust what the AI found.
+            }
+        });
+    };
+}
+
 function closeEditModal() {
     editCropModal.style.display = 'none';
     if (cropperInstance) {
@@ -740,50 +1969,319 @@ function closeEditModal() {
 if (cancelCropBtn) cancelCropBtn.addEventListener('click', closeEditModal);
 
 if (saveCropBtn) {
-    saveCropBtn.addEventListener('click', () => {
-        if (!cropperInstance || editingBlobIndex < 0) return;
-
-        const canvas = cropperInstance.getCroppedCanvas({
-            imageSmoothingEnabled: true,
-            imageSmoothingQuality: 'high'
-        });
-
-        if (!canvas) return;
+    saveCropBtn.addEventListener('click', async () => {
+        if (!cropperInstance) return;
+        if (editingBlobIndex === -1) return;
 
         saveCropBtn.disabled = true;
         saveCropBtn.innerText = "Saving...";
 
-        canvas.toBlob((blob) => {
-            if (blob) {
-                // Update internal state
-                const data = processedBlobs[editingBlobIndex];
-                data.blob = blob;
-                data.isError = false; 
-                
-                // Update new crop rect info so if they edit AGAIN, it starts from the new box!
-                const cropData = cropperInstance.getData();
-                data.cropX = cropData.x;
-                data.cropY = cropData.y;
-                data.cropWidth = cropData.width;
-                data.cropHeight = cropData.height;
+        if (isEditingReplacement) {
+            // Special Case: Saving the replacement SOURCE face
+            const canvas = cropperInstance.getCroppedCanvas({
+                width: 512,
+                height: 512,
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high'
+            });
 
-                // Visually update the corresponding card
-                const newUrl = canvas.toDataURL('image/jpeg', 0.95);
-                const cards = gallery.querySelectorAll('.image-card');
-                if (cards[editingBlobIndex]) {
-                    const img = cards[editingBlobIndex].querySelector('img');
-                    if (img) img.src = newUrl;
-                    cards[editingBlobIndex].classList.remove('error-border');
+            if (canvas) {
+                replacementFaceCanvasSource = canvas;
+                // Update UI thumbnail
+                if (replacementFaceCanvas) {
+                    const pCtx = replacementFaceCanvas.getContext('2d');
+                    if (pCtx) {
+                        pCtx.clearRect(0,0,100,100);
+                        pCtx.drawImage(canvas, 0,0,512,512, 0,0,100,100);
+                    }
                 }
+                updateReplaceStatus("New Crop Applied", "success");
+                log("✅ Replacement source crop updated.", "success");
+                updatePreviewCanvas();
             }
             
+            isEditingReplacement = false;
             saveCropBtn.disabled = false;
             saveCropBtn.innerText = "Save Crop";
             closeEditModal();
-        }, 'image/jpeg', 0.95);
+            return;
+        }
+
+        if (editingBlobIndex < 0) return; // Should only happen if index logic breaks
+
+        const data = processedBlobs[editingBlobIndex];
+        const cropData = cropperInstance.getData();
+        
+        // Update new crop rect info
+        data.cropX = cropData.x;
+        data.cropY = cropData.y;
+        data.cropWidth = cropData.width;
+        data.cropHeight = cropData.height;
+        data.isError = false;
+
+        const finalizeSave = (blob, newUrl) => {
+            data.blob = blob;
+            const cards = gallery.querySelectorAll('.image-card');
+            if (cards[editingBlobIndex]) {
+                const img = cards[editingBlobIndex].querySelector('img');
+                if (img) img.src = newUrl;
+                cards[editingBlobIndex].classList.remove('error-border');
+            }
+
+            // Update metadata for dynamic AR check if they edit!!
+            const imgEl = editCropImage;
+            data.outputWidth = (data.mode === 'censor') ? imgEl.naturalWidth : cropData.width;
+            data.outputHeight = (data.mode === 'censor') ? imgEl.naturalHeight : cropData.height;
+
+            // Re-run the similarity check since an image changed!
+            updateGalleryLayout();
+
+            saveCropBtn.disabled = false;
+            saveCropBtn.innerText = "Save Crop";
+            closeEditModal();
+        };
+
+        if (data.mode === 'censor' || data.mode === 'frame') {
+            const img = editCropImage; // The original full image being edited
+            const fullCanvas = document.createElement('canvas');
+            fullCanvas.width = img.naturalWidth;
+            fullCanvas.height = img.naturalHeight;
+            const fCtx = fullCanvas.width && fullCanvas.height ? fullCanvas.getContext('2d') : null;
+            if (fCtx) {
+                fCtx.drawImage(img, 0, 0);
+                
+                drawOverlay(fCtx, cropData.x, cropData.y, cropData.width, cropData.height, {
+                    mode: data.mode,
+                    type: data.censorType,
+                    color: data.censorColor || data.frameColor || censorColor,
+                    blur: data.blurStrength || blurStrength,
+                    emoji: data.censorEmoji || censorEmoji,
+                    thickness: data.frameThickness || frameThickness,
+                    shape: data.censorShape || data.frameShape || currentCensorShape || currentFrameShape
+                }, img);
+                
+                const newUrl = fullCanvas.toDataURL('image/jpeg', 0.95);
+                fullCanvas.toBlob((blob) => {
+                    finalizeSave(blob, newUrl);
+                }, 'image/jpeg', 0.95);
+            }
+        } else {
+            const canvas = cropperInstance.getCroppedCanvas({
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high'
+            });
+
+            if (!canvas) {
+                saveCropBtn.disabled = false;
+                saveCropBtn.innerText = "Save Crop";
+                return;
+            }
+
+            const newUrl = canvas.toDataURL('image/jpeg', 0.95);
+            canvas.toBlob((blob) => {
+                finalizeSave(blob, newUrl);
+            }, 'image/jpeg', 0.95);
+        }
     });
 }
 
+function updateGalleryLayout() {
+    if (processedBlobs.length === 0) return;
+    const ratios = processedBlobs.map(b => (b.outputWidth || 1) / (b.outputHeight || 1));
+    const avg = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+    
+    // Check if all ratios are within 5% of the average
+    const allSimilar = ratios.every(r => Math.abs(r - avg) / avg <= 0.05);
+    
+    if (allSimilar) {
+        gallery.style.setProperty('--gallery-ar', avg);
+        const shape = avg > 1.1 ? "Landscape" : (avg < 0.9 ? "Portrait" : "Square");
+        if (galleryStatus) galleryStatus.textContent = `✨ Detected uniform ${shape} aspect ratio. Layout adjusted.`;
+    } else {
+        gallery.style.removeProperty('--gallery-ar');
+        if (galleryStatus) galleryStatus.textContent = "Mixed aspect ratios detected. Using standard square grid.";
+    }
+}
 
-// Start initialization
+// Final Initialization
 loadModels();
+log("System initialized. AI Detection Models loaded.", "success");
+log("Ready for image processing. Select mode to continue.", "info");
+
+// 9. Processing Helpers
+function getLargestFace(detections) {
+    if (!detections || detections.length === 0) return null;
+    return detections.sort((a, b) => {
+        const areaA = a.box.width * a.box.height;
+        const areaB = b.box.width * b.box.height;
+        return areaB - areaA;
+    })[0];
+}
+
+function calculateCropRect(img, faceBox) {
+    if (!faceBox) return { x: 0, y: 0, width: img.width, height: img.height, isError: true };
+
+    // Calculate Padding
+    const paddingPercent = parseInt(paddingInput.value) / 100;
+    const padX = faceBox.width * paddingPercent;
+    const padY = faceBox.height * paddingPercent;
+
+    // Base crop box (Face + Padding)
+    let cx = Math.max(0, faceBox.x - padX);
+    let cy = Math.max(0, faceBox.y - padY);
+    let cw = Math.min(img.width - cx, faceBox.width + (padX * 2));
+    let ch = Math.min(img.height - cy, faceBox.height + (padY * 2));
+
+    // Aspect Ratio Adjustment
+    let targetRatio;
+    if (useOriginalRatioInput.checked) {
+        targetRatio = img.width / img.height;
+    } else {
+        const rW = parseFloat(ratioWidthInput.value) || 1;
+        const rH = parseFloat(ratioHeightInput.value) || 1;
+        targetRatio = rW / rH;
+    }
+
+    const currentRatio = cw / ch;
+    let targetW, targetH;
+
+    if (currentRatio > targetRatio) {
+        targetW = cw;
+        targetH = cw / targetRatio;
+    } else {
+        targetH = ch;
+        targetW = ch * targetRatio;
+    }
+
+    const centerX = cx + cw / 2;
+    const centerY = cy + ch / 2;
+
+    let width = targetW;
+    let height = targetH;
+
+    if (width > img.width) {
+        width = img.width;
+        height = width / targetRatio;
+    }
+    if (height > img.height) {
+        height = img.height;
+        width = height * targetRatio;
+    }
+
+    const verticalPosPercent = (parseInt(document.getElementById('verticalPosInput').value) || 50) / 100;
+    const faceCenterY = faceBox.y + faceBox.height / 2;
+    const faceCenterX = faceBox.x + faceBox.width / 2;
+
+    let x = faceCenterX - width / 2;
+    let y = faceCenterY - (height * verticalPosPercent);
+
+    x = Math.max(0, Math.min(x, img.width - width));
+    y = Math.max(0, Math.min(y, img.height - height));
+
+    return { x, y, width, height, isError: false, faceBox };
+}
+
+function drawReplacement(ctx, x, y, width, height, feather, hslShift = null) {
+    if (!replacementFaceCanvasSource) {
+        // Just draw a "placeholder" block since no source face is uploaded
+        ctx.fillStyle = 'rgba(74, 158, 255, 0.5)';
+        ctx.fillRect(x, y, width, height);
+        ctx.strokeStyle = 'var(--accent)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, width, height);
+        return;
+    }
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tctx = tempCanvas.getContext('2d');
+
+    // Determine which HSL values to use
+    let h, s, l;
+    if (hslShift) {
+        h = hslShift.h;
+        s = Math.min(200, Math.max(0, hslShift.s));
+        l = Math.min(200, Math.max(0, hslShift.l));
+    } else {
+        h = replaceHue;
+        s = replaceSat;
+        l = replaceLight;
+    }
+
+    // 1. Draw the replacement face into the temp canvas at target size
+    // Apply real-time HSL filtering
+    tctx.filter = `hue-rotate(${h}deg) saturate(${s}%) brightness(${l}%)`;
+    
+    tctx.drawImage(replacementFaceCanvasSource, 0, 0, replacementFaceCanvasSource.width, replacementFaceCanvasSource.height, 0, 0, width, height);
+
+    // Reset filter
+    tctx.filter = 'none';
+
+    // 2. Apply elliptical feathering
+    // We do this by creating a mask with 'destination-in'
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+    const mctx = maskCanvas.getContext('2d');
+
+    const grad = mctx.createRadialGradient(width/2, height/2, 0, width/2, height/2, width/2);
+    const stop = 1 - (feather / 100);
+    grad.addColorStop(0, 'white');
+    grad.addColorStop(Math.max(0, stop), 'white');
+    grad.addColorStop(1, 'transparent');
+
+    mctx.fillStyle = grad;
+    mctx.beginPath();
+    mctx.ellipse(width/2, height/2, width/2, height/2, 0, 0, Math.PI * 2);
+    mctx.fill();
+
+    tctx.globalCompositeOperation = 'destination-in';
+    tctx.drawImage(maskCanvas, 0, 0);
+
+    // 3. Draw final result back to target context
+    ctx.drawImage(tempCanvas, x, y);
+}
+
+// 10. New Drawing Helper
+function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
+    const { mode, type, shape, color, blur, thickness } = options;
+    
+    ctx.save();
+    ctx.beginPath();
+    
+    if (shape === 'circle') {
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        const radiusX = width / 2;
+        const radiusY = height / 2;
+        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+    } else {
+        ctx.rect(x, y, width, height);
+    }
+    
+    if (mode === 'frame') {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = thickness || 5;
+        ctx.stroke();
+    } else {
+        ctx.clip();
+        
+        if (type === 'blur') {
+            ctx.filter = `blur(${blur}px)`;
+            ctx.drawImage(sourceImg, 0, 0);
+        } else if (type === 'emoji') {
+            const emojiToDraw = options.emoji || '🕶️';
+            const fontSize = Math.min(width, height) * 0.9;
+            ctx.font = `${fontSize}px serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(emojiToDraw, x + width / 2, y + height / 2);
+        } else {
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+    }
+    
+    ctx.restore();
+}
