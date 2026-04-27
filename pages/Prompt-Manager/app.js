@@ -162,6 +162,7 @@ let knownCategories = {}; // Maps category name to {bg, text}
 let currentMode = 'prompt'; // 'prompt' or 'command'
 let selectedCategory = 'all'; // Default filter category
 let currentSort = 'custom'; // Default sort criteria
+let pendingMoves = {}; // Track scheduled reorders: { id: { timeout, startTime, barContainer } }
 
 const historyIconSVG = `
     <svg xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd" viewBox="0 0 512 512.584" class="history-icon-svg">
@@ -1057,6 +1058,28 @@ function createPromptCard(item) {
     card.className = 'glass-card';
     card.dataset.id = id;
 
+    // Restore countdown bar if a move is pending for this card
+    if (pendingMoves[id]) {
+        const elapsed = Date.now() - pendingMoves[id].startTime;
+        const remaining = 2000 - elapsed;
+        
+        if (remaining > 0) {
+            const barContainer = document.createElement('div');
+            barContainer.className = 'countdown-bar-container';
+            const bar = document.createElement('div');
+            bar.className = 'countdown-bar';
+            bar.style.animationDuration = `${remaining}ms`;
+            barContainer.appendChild(bar);
+            card.appendChild(barContainer);
+            
+            // Update the pending move's bar reference to this new element
+            pendingMoves[id].barContainer = barContainer;
+        } else {
+            // Already expired, but re-render happened before timeout fired
+            delete pendingMoves[id];
+        }
+    }
+
     let codeHTML = data.codeSnippet ? `<div class="prompt-code-block">${escapeHTML(data.codeSnippet)}</div>` : '';
     
     let additionalBlocksHTML = '';
@@ -1281,14 +1304,44 @@ function createPromptCard(item) {
 
         copyToClipboard(fullPromptText, copyBtn);
 
-        // Update Last Used in Firestore
-        try {
-            updateDoc(doc(db, "prompts", id), {
-                lastUsed: serverTimestamp()
-            });
-        } catch (err) {
-            console.error("❌ Failed to update last used:", err);
+        // --- Delayed Reordering Logic ---
+        
+        // 1. Clear any existing pending move for this card
+        if (pendingMoves[id]) {
+            clearTimeout(pendingMoves[id].timeout);
+            if (pendingMoves[id].barContainer) pendingMoves[id].barContainer.remove();
         }
+
+        // 2. Create the visual countdown bar
+        const barContainer = document.createElement('div');
+        barContainer.className = 'countdown-bar-container';
+        const bar = document.createElement('div');
+        bar.className = 'countdown-bar';
+        bar.style.animationDuration = '2000ms';
+        barContainer.appendChild(bar);
+        card.appendChild(barContainer);
+
+        // 3. Schedule the Firestore update
+        pendingMoves[id] = {
+            startTime: Date.now(),
+            barContainer: barContainer,
+            timeout: setTimeout(async () => {
+                try {
+                    await updateDoc(doc(db, "prompts", id), {
+                        lastUsed: serverTimestamp()
+                    });
+                    // Note: Firestore update will trigger onSnapshot -> re-render
+                    // We don't need to manually remove the bar as re-render will clear it
+                    // but we should cleanup the state
+                    delete pendingMoves[id];
+                } catch (err) {
+                    console.error("❌ Failed to update last used:", err);
+                    // Cleanup on error too
+                    if (pendingMoves[id]?.barContainer) pendingMoves[id].barContainer.remove();
+                    delete pendingMoves[id];
+                }
+            }, 2000)
+        };
     });
 
     // Edit Logic
