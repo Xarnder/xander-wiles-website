@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Multi-Image Comparison Tool</title>
 
     <!-- Optional font; safe to remove if you want zero network deps -->
@@ -13,15 +14,25 @@
     <!-- Stylesheets -->
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="/assets/css/style.css">
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
 
-    <!-- Favicons (leave or remove as you like) -->
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/icon32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="assets/images/icon16.png">
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 </head>
 
 <body>
     <!-- ===== FIX: The placeholder MUST be the first thing inside the body ===== -->
-    <div id="main-nav-placeholder"></div> 
+    <div id="main-nav-placeholder"></div>
 
     <div class="background-overlay"></div>
     <div class="floating-shapes">
@@ -51,16 +62,23 @@
                     <input type="number" id="image-count" value="2" min="2" max="5" />
                     <label>images</label>
                     <button id="setup-btn">Set Up Manually</button>
+                    <button id="add-image-btn" class="secondary-btn" title="Add another image slot">+</button>
+                    <button id="reset-tool-btn" class="secondary-btn" title="Reset all images and settings">Reset</button>
                 </div>
+                <div class="setup-divider">OR</div>
                 <div class="setup-directory">
                     <label for="directory-upload" class="directory-btn">Upload Directory</label>
                     <input type="file" id="directory-upload" webkitdirectory directory multiple style="display:none;" />
                 </div>
             </div>
             <div id="upload-area-dynamic" class="upload-area"></div>
+            <div id="drop-hint" class="drop-hint">Drop images anywhere to upload</div>
         </section>
 
         <section id="comparison-container" class="glass-card hidden">
+            <button id="fullscreen-btn" class="fullscreen-btn" title="Toggle Fullscreen">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            </button>
             <!-- All view divs remain the same -->
             <div id="split-view" class="view active">
                 <div class="comparison-tool split-view-tool">
@@ -149,7 +167,8 @@
                             <div class="control-group">
                                 <label>Position</label>
                                 <div class="radio-group">
-                                    <label><input type="radio" name="filename-position" value="top" checked /> Top</label>
+                                    <label><input type="radio" name="filename-position" value="top" checked />
+                                        Top</label>
                                     <label><input type="radio" name="filename-position" value="bottom" /> Bottom</label>
                                 </div>
                             </div>
@@ -162,8 +181,10 @@
                                 <input type="color" id="export-text-color" value="#a1a1aa" />
                             </div>
                             <div class="control-group">
-                                <label for="export-font-size-slider">Font Size: <span id="font-size-value">50</span>%</label>
-                                <input type="range" id="export-font-size-slider" min="10" max="80" value="50" step="1" />
+                                <label for="export-font-size-slider">Font Size: <span
+                                        id="font-size-value">50</span>%</label>
+                                <input type="range" id="export-font-size-slider" min="10" max="80" value="50"
+                                    step="1" />
                             </div>
                         </div>
                         <div class="control-group-divider"></div>
@@ -182,6 +203,7 @@
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" defer></script>
     <script src="/assets/js/image-transfer.js"></script>
     <script src="script.js" defer></script>
-    <script src="/assets/js/nav-loader.js"></script> 
+    <script src="/assets/js/nav-loader.js"></script>
 </body>
+
 </html>
