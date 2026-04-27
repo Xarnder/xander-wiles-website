@@ -8,7 +8,7 @@ import {
     onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import {
-    getFirestore,
+    initializeFirestore,
     collection,
     addDoc,
     onSnapshot,
@@ -41,8 +41,12 @@ let app, auth, db;
 try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-    db = getFirestore(app);
-    console.log("✅ Firebase initialized successfully.");
+    // Use initializeFirestore with long polling to fix connection errors (404/400 on Write/channel)
+    db = initializeFirestore(app, {
+        experimentalForceLongPolling: true,
+        useFetchStreams: false // Also helps in some browser environments
+    });
+    console.log("✅ Firebase initialized successfully with stable connection settings.");
 } catch (error) {
     console.error("❌ Error initializing Firebase. Did you add your config?", error);
 }
@@ -139,6 +143,16 @@ const importSkippedText = document.getElementById('import-skipped-text')?.queryS
 const closeImportModalBtn = document.getElementById('close-import-modal-btn');
 const importDoneBtn = document.getElementById('import-done-btn');
 
+// Export Modal Elements
+const exportOptionsModal = document.getElementById('export-options-modal');
+const closeExportOptionsModalBtn = document.getElementById('close-export-modal-btn');
+const cancelExportBtn = document.getElementById('cancel-export-btn');
+const confirmExportBtn = document.getElementById('confirm-export-btn');
+const exportFormatSelect = document.getElementById('export-format');
+const exportScopeSelect = document.getElementById('export-scope');
+const exportCategorySelect = document.getElementById('export-category');
+const headerExportBtn = document.getElementById('header-export-btn');
+
 // History Modal Elements
 const historyModal = document.getElementById('input-history-modal');
 const historyList = document.getElementById('history-list');
@@ -196,8 +210,9 @@ mobileMenu.addEventListener('click', (e) => {
 
 mobileExportBtn.addEventListener('click', () => {
     toggleMobileMenu(false);
-    handleExport();
+    openExportModal();
 });
+headerExportBtn?.addEventListener('click', openExportModal);
 mobileImportBtn.addEventListener('click', () => {
     toggleMobileMenu(false);
     importFile.click();
@@ -308,6 +323,10 @@ openModalBtn.addEventListener('click', () => {
     }
 
     addPromptModal.classList.remove('hidden');
+    
+    // Draft restoration check
+    checkAndRestoreDraft();
+
     setTimeout(() => {
         const titleEl = document.getElementById('prompt-title');
         titleEl.focus();
@@ -371,6 +390,7 @@ addRememberBlockBtn.addEventListener('click', () => addDynamicBlock('remember'))
 
 closeModalBtn.addEventListener('click', () => {
     addPromptModal.classList.add('hidden');
+    // We don't clear draft here, only on successful save or explicit discard
 });
 
 
@@ -593,34 +613,133 @@ window.addEventListener('keydown', (e) => {
 
 // --- Export & Import Logic ---
 
-const handleExport = () => {
+function openExportModal() {
+    // Populate category dropdown
+    exportCategorySelect.innerHTML = '<option value="all">All Categories</option>';
+    
+    // Get unique categories across all prompts
+    const categories = [...new Set(allPromptsData.map(item => item.data.category).filter(cat => cat))];
+    categories.sort().forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = cat;
+        exportCategorySelect.appendChild(opt);
+    });
+
+    // Set default scope label
+    const label = currentMode === 'command' ? 'Commands' : (currentMode === 'link' ? 'Links' : 'Prompts');
+    exportScopeSelect.options[0].textContent = `Current View (${label})`;
+
+    exportOptionsModal.classList.remove('hidden');
+}
+
+function closeExportModal() {
+    exportOptionsModal.classList.add('hidden');
+}
+
+closeExportOptionsModalBtn.addEventListener('click', closeExportModal);
+cancelExportBtn.addEventListener('click', closeExportModal);
+exportOptionsModal.addEventListener('click', (e) => {
+    if (e.target === exportOptionsModal) closeExportModal();
+});
+
+confirmExportBtn.addEventListener('click', () => {
+    const format = exportFormatSelect.value;
+    const scope = exportScopeSelect.value;
+    const category = exportCategorySelect.value;
+    
+    handleExport(format, scope, category);
+    closeExportModal();
+});
+
+function handleExport(format = 'json', scope = 'all', categoryFilter = 'all') {
     if (allPromptsData.length === 0) {
         alert("No prompts to export!");
         return;
     }
 
-    // Prepare data (strip Firestore-specific IDs)
-    const exportData = allPromptsData.map(item => ({
+    // Filter data
+    let filteredData = allPromptsData;
+    
+    if (scope === 'current') {
+        filteredData = filteredData.filter(item => (item.data.mode || 'prompt') === currentMode);
+    }
+    
+    if (categoryFilter !== 'all') {
+        filteredData = filteredData.filter(item => item.data.category === categoryFilter);
+    }
+
+    if (filteredData.length === 0) {
+        alert("No data found matching your export criteria.");
+        return;
+    }
+
+    // Prepare data
+    const exportData = filteredData.map(item => ({
+        mode: item.data.mode || 'prompt',
         title: item.data.title,
         category: item.data.category || '',
-        categoryBgColor: item.data.categoryBgColor || item.data.categoryColor || '#0a0514',
-        categoryTextColor: item.data.categoryTextColor || '#ffffff',
         content: item.data.content,
         codeSnippet: item.data.codeSnippet || '',
-        isPinned: item.data.isPinned || false
+        isPinned: item.data.isPinned || false,
+        additionalBlocks: item.data.additionalBlocks || []
     }));
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    let blob;
+    let filename = `prompts_export_${new Date().toISOString().slice(0, 10)}`;
+
+    if (format === 'csv') {
+        const csvContent = convertToCSV(exportData);
+        blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        filename += '.csv';
+    } else {
+        blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        filename += '.json';
+    }
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `prompts_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    console.log("✅ Data exported successfully.");
+    
+    showToast(`Successfully exported ${filteredData.length} items to ${format.toUpperCase()}`);
 };
+
+function convertToCSV(data) {
+    if (data.length === 0) return '';
+
+    // Define headers
+    const headers = ['Mode', 'Title', 'Category', 'Main Content', 'Code Snippet', 'Pinned', 'Additional Blocks'];
+    
+    const rows = data.map(item => {
+        // Flatten additional blocks for CSV
+        const blocksStr = item.additionalBlocks.map(b => `[${b.type}] ${b.content}`).join(' | ');
+        
+        return [
+            item.mode,
+            item.title,
+            item.category,
+            item.content,
+            item.codeSnippet,
+            item.isPinned ? 'Yes' : 'No',
+            blocksStr
+        ].map(val => {
+            // Escape double quotes and wrap in quotes if contains comma/newline
+            let s = String(val).replace(/"/g, '""');
+            if (s.includes(',') || s.includes('\n') || s.includes('"')) {
+                s = `"${s}"`;
+            }
+            return s;
+        });
+    });
+
+    return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+}
+
 
 importFile.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -743,6 +862,7 @@ addPromptForm.addEventListener('submit', async (e) => {
         }
         addPromptForm.reset(); // Clear the form
         addPromptModal.classList.add('hidden'); // Close the modal
+        clearDraft(); // Clear draft on successful save
     } catch (error) {
         console.error("❌ Error adding/updating document: ", error);
 
@@ -922,7 +1042,8 @@ function applyFilters() {
         }
     }
 
-    renderPrompts(sortData(filtered));
+    const sortedData = sortData(filtered);
+    renderPrompts(sortedData, searchTerm);
 }
 
 // Sorting Helper Function
@@ -986,7 +1107,7 @@ function addSectionHeader(text, icon = '') {
 }
 
 // Render the final list with sections
-function renderPrompts(prompts) {
+function renderPrompts(prompts, searchTerm = '') {
     promptsFeed.innerHTML = '';
 
     if (prompts.length === 0) {
@@ -1023,7 +1144,7 @@ function renderPrompts(prompts) {
                 <path d="M256 0C114.6 0 0 114.6 0 256s114.6 256 256 256 256-114.6 256-256S397.4 0 256 0zm0 472c-119.1 0-216-96.9-216-216S136.9 40 256 40s216 96.9 216 216-96.9 216-216 216zm110-262h-90v-90c0-11-9-20-20-20s-20 9-20 20v110c0 11 9 20 20 20h110c11 0 20-9 20-20s-9-20-20-20z" fill="currentColor"/>
             </svg>
         `);
-        recent.forEach(item => createPromptCard(item));
+        recent.forEach(item => createPromptCard(item, searchTerm));
     }
 
     // Pinned Section
@@ -1033,7 +1154,7 @@ function renderPrompts(prompts) {
                 <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z" fill="currentColor"/>
             </svg>
         `);
-        pinned.forEach(item => createPromptCard(item));
+        pinned.forEach(item => createPromptCard(item, searchTerm));
     }
 
     // All Prompts Section
@@ -1043,17 +1164,18 @@ function renderPrompts(prompts) {
             const label = currentMode === 'command' ? 'All Commands' : (currentMode === 'link' ? 'All Links' : 'All Prompts');
             addSectionHeader(label);
         }
-        others.forEach(item => createPromptCard(item));
+        others.forEach(item => createPromptCard(item, searchTerm));
     }
 }
 
 // Logic to create and append a single prompt card
-function createPromptCard(item) {
+function createPromptCard(item, searchTerm = '') {
 
     const {
         id,
         data
     } = item;
+    const isPinned = data.isPinned || false;
     const card = document.createElement('div');
     card.className = 'glass-card';
     card.dataset.id = id;
@@ -1086,15 +1208,21 @@ function createPromptCard(item) {
     if (data.additionalBlocks && data.additionalBlocks.length > 0) {
         data.additionalBlocks.forEach(block => {
             if (block.type === 'code') {
-                additionalBlocksHTML += `<div class="prompt-code-block additional-block">${escapeHTML(block.content)}</div>`;
+                additionalBlocksHTML += `
+                    <div class="prompt-code-block additional-block">
+                        <button class="code-copy-btn" title="Copy Code">
+                            <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path fill="currentColor" d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                        </button>
+                        <div class="code-content">${highlightSearch(escapeHTML(block.content), searchTerm)}</div>
+                    </div>`;
             } else if (block.type === 'remember') {
                 additionalBlocksHTML += `
                     <div class="prompt-remember-note">
                         <span class="remember-label">Things to Remember</span>
-                        <div class="remember-content">${escapeHTML(block.content)}</div>
+                        <div class="remember-content">${highlightSearch(escapeHTML(block.content), searchTerm)}</div>
                     </div>`;
             } else {
-                additionalBlocksHTML += `<p class="prompt-text-display additional-block" style="line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(block.content)}</p>`;
+                additionalBlocksHTML += `<p class="prompt-text-display additional-block" style="line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(block.content, searchTerm)}</p>`;
             }
         });
     }
@@ -1112,39 +1240,44 @@ function createPromptCard(item) {
     
     let contentHTML = '';
     if (isLink && data.content) {
-        contentHTML = `<p class="prompt-text-display link-display" style="margin-top: 10px; line-height: 1.5; color: #06d6a0; font-weight: 500; word-break: break-all;"><a href="${data.content}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">${escapeHTML(data.content)}</a></p>`;
+        contentHTML = `<p class="prompt-text-display link-display" style="margin-top: 10px; line-height: 1.5; color: #06d6a0; font-weight: 500; word-break: break-all;"><a href="${data.content}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">${highlightSearch(escapeHTML(data.content), searchTerm)}</a></p>`;
     } else if (!isCommand && data.content) {
-        contentHTML = `<p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content)}</p>`;
+        contentHTML = `<p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content, searchTerm)}</p>`;
     }
 
     card.innerHTML = `
         <div class="card-header-main">
             <div class="card-title-wrapper">
-                <h3>${escapeHTML(data.title)}</h3>
+                <h3>${highlightSearch(escapeHTML(data.title), searchTerm)}</h3>
                 <div class="card-tag-container">
                     ${tagHTML}
                 </div>
             </div>
             <div class="card-header-actions">
-                <button class="expand-btn" title="Toggle Content">
-                    <svg viewBox="0 0 512 336.36" class="caret-icon">
-                        <path d="M42.47.01 469.5 0C492.96 0 512 19.04 512 42.5c0 11.07-4.23 21.15-11.17 28.72L294.18 320.97c-14.93 18.06-41.7 20.58-59.76 5.65-1.8-1.49-3.46-3.12-4.97-4.83L10.43 70.39C-4.97 52.71-3.1 25.86 14.58 10.47 22.63 3.46 32.57.02 42.47.01z"/>
-                    </svg>
-                </button>
-                <button class="pin-btn ${data.isPinned ? 'active' : ''}" title="${data.isPinned ? 'Unpin' : 'Pin to Top'}">
+                <button class="pin-btn action-btn ${isPinned ? 'pinned' : ''}" title="${isPinned ? 'Unpin' : 'Pin'}">
                     <svg viewBox="0 0 122.879 122.867" class="pin-icon-svg">
-                        <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z"/>
+                        <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z" fill="currentColor"/>
                     </svg>
                 </button>
-                ${((data.content && /_{3,}/.test(data.content)) || (data.additionalBlocks && data.additionalBlocks.some(b => b.type === 'text' && /_{3,}/.test(b.content)))) ? `
-                <button class="history-btn outline-btn action-btn" title="Input History">
-                    ${historyIconSVG}
-                </button>` : ''}
-                <button class="copy-btn" title="${isLink ? 'Copy Link' : 'Copy Text'}">
+                <button class="expand-btn action-btn" title="Toggle Content">
+                    <svg viewBox="0 0 512 336.36" class="caret-icon" style="width: 14px; height: 14px;">
+                        <path d="M42.47.01 469.5 0C492.96 0 512 19.04 512 42.5c0 11.07-4.23 21.15-11.17 28.72L294.18 320.97c-14.93 18.06-41.7 20.58-59.76 5.65-1.8-1.49-3.46-3.12-4.97-4.83L10.43 70.39C-4.97 52.71-3.1 25.86 14.58 10.47 22.63 3.46 32.57.02 42.47.01z" fill="currentColor"/>
+                    </svg>
+                </button>
+                <button class="copy-btn action-btn" title="${isLink ? 'Copy Link' : 'Copy Text'}">
                     <svg viewBox="0 0 115.77 122.88" class="copy-icon-svg">
                         <path d="M89.62,13.96v7.73h12.19h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02v0.02 v73.27v0.01h-0.02c-0.01,3.84-1.57,7.33-4.1,9.86c-2.51,2.5-5.98,4.06-9.82,4.07v0.02h-0.02h-61.7H40.1v-0.02 c-3.84-0.01-7.34-1.57-9.86-4.1c-2.5-2.51-4.06-5.98-4.07-9.82h-0.02v-0.02V92.51H13.96h-0.01v-0.02c-3.84-0.01-7.34-1.57-9.86-4.1 c-2.5-2.51-4.06-5.98-4.07-9.82H0v-0.02V13.96v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07V0h0.02h61.7 h0.01v0.02c3.85,0.01,7.34,1.57,9.86,4.1c2.5,2.51,4.06,5.98,4.07,9.82h0.02V13.96L89.62,13.96z M79.04,21.69v-7.73v-0.02h0.02 c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v64.59v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h12.19V35.65 v-0.01h0.02c0.01-3.85,1.58-7.34,4.1-9.86c2.51-2.5,5.98-4.06,9.82-4.07v-0.02h0.02H79.04L79.04,21.69z M105.18,108.92V35.65v-0.02 h0.02c0-0.91-0.39-1.75-1.01-2.37c-0.61-0.61-1.46-1-2.37-1v0.02h-0.01h-61.7h-0.02v-0.02c-0.91,0-1.75,0.39-2.37,1.01 c-0.61,0.61-1,1.46-1,2.37h0.02v0.01v73.27v0.02h-0.02c0,0.91,0.39,1.75,1.01,2.37c0.61,0.61,1.46,1,2.37,1v-0.02h0.01h61.7h0.02 v0.02c0.91,0,1.75-0.39,2.37-1.01c0.61-0.61,1-1.46,1-2.37h-0.02V108.92L105.18,108.92z" fill="currentColor"/>
                     </svg>
                 </button>
+                <button class="duplicate-btn action-btn" title="Duplicate Prompt">
+                    <svg viewBox="0 0 20 20" class="duplicate-icon-svg" style="width: 18px; height: 18px;">
+                        <path fill="currentColor" d="M6 6V2c0-1.1.9-2 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-4v4a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V8c0-1.1.9-2 2-2h4zm2 0h4a2 2 0 0 1 2 2v4h4V2H8v4zM2 8v10h10V8H2zm4 4v-2h2v2h2v2H8v2H6v-2H4v-2h2z"/>
+                    </svg>
+                </button>
+                ${(data.mode !== 'command' && !isLink) ? `
+                <button class="history-btn outline-btn action-btn" title="Input History">
+                    ${historyIconSVG}
+                </button>` : ''}
                 ${isLink ? `
                 <button class="action-btn visit-btn" onclick="window.open('${escapeHTML(data.content)}', '_blank')" title="Visit Link">
                     <svg viewBox="0 0 122.88 115.71" class="shortcut-icon-svg">
@@ -1160,7 +1293,13 @@ function createPromptCard(item) {
         </div>
         <div class="prompt-body">
             ${contentHTML}
-            ${codeHTML}
+            ${data.codeSnippet ? `
+                <div class="prompt-code-block">
+                    <button class="code-copy-btn" title="Copy Code">
+                        <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path fill="currentColor" d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    </button>
+                    <div class="code-content">${highlightSearch(escapeHTML(data.codeSnippet), searchTerm)}</div>
+                </div>` : ''}
             ${additionalBlocksHTML}
             <div class="card-body-footer">
                 <button class="collapse-btn-bottom" title="Collapse Content">Collapse</button>
@@ -1178,8 +1317,9 @@ function createPromptCard(item) {
         
         if (window.innerWidth > 800) {
             const myOffset = card.offsetTop;
+            // Slightly more robust check for cards in the same row
             const allCardsInRow = Array.from(promptsFeed.querySelectorAll('.glass-card'))
-                .filter(c => Math.abs(c.offsetTop - myOffset) < 10);
+                .filter(c => Math.abs(c.offsetTop - myOffset) < 30);
             
             let targetHeight = 0;
             if (isExpanding) {
@@ -1211,6 +1351,15 @@ function createPromptCard(item) {
         }
     };
 
+    // Code Block Copy Logic
+    card.querySelectorAll('.code-copy-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const code = btn.nextElementSibling.innerText;
+            copyToClipboard(code, btn);
+        });
+    });
+    
     const expandBtn = card.querySelector('.expand-btn');
     expandBtn.addEventListener('click', () => toggleExpansion());
     
@@ -1257,7 +1406,8 @@ function createPromptCard(item) {
         if (displayP && data.content) {
             const inputs = displayP.querySelectorAll('.prompt-input');
             let inputIndex = 0;
-            fullPromptText = data.content.replace(/_{3,}/g, () => {
+            // Handle both {{...}} and ___
+            fullPromptText = data.content.replace(/_{3,}|{{(.*?)}}/g, () => {
                 const el = inputs[inputIndex++];
                 const val = el?.textContent || '___';
                 const trimmedVal = val.trim();
@@ -1286,7 +1436,7 @@ function createPromptCard(item) {
                     // Reconstruct inputs for each additional text block
                     const blockInputs = additionalPs[blockTextIndex++].querySelectorAll('.prompt-input');
                     let inputIdx = 0;
-                    blockContent = block.content.replace(/_{3,}/g, () => {
+                    blockContent = block.content.replace(/_{3,}|{{(.*?)}}/g, () => {
                         const val = blockInputs[inputIdx++]?.textContent || '___';
                         const trimmedVal = val.trim();
                         if (trimmedVal) allInputValues.push(trimmedVal);
@@ -1343,6 +1493,57 @@ function createPromptCard(item) {
             }, 2000)
         };
     });
+
+    // Duplicate Logic
+    const duplicateBtn = card.querySelector('.duplicate-btn');
+    if (duplicateBtn) {
+        duplicateBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            isEditing = false;
+            currentPromptId = null;
+            
+            const itemMode = data.mode || 'prompt';
+            modalTitle.textContent = "Duplicate Prompt";
+            submitPromptBtn.textContent = "Add Prompt";
+            
+            // pre-fill from data
+            document.getElementById('prompt-title').value = data.title + " (Copy)";
+            modalCategorySelect.value = data.category || "";
+            document.getElementById('prompt-category').value = data.category || '';
+            document.getElementById('category-bg-color').value = data.categoryBgColor || data.categoryColor || '#0a0514';
+            document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
+            document.getElementById('prompt-content').value = data.content;
+            document.getElementById('prompt-code').value = data.codeSnippet || '';
+            
+            if (data.codeSnippet) {
+                promptCodeContainer.classList.remove('hidden');
+            } else {
+                promptCodeContainer.classList.add('hidden');
+            }
+            
+            dynamicBlocksContainer.innerHTML = '';
+            if (data.additionalBlocks && data.additionalBlocks.length > 0) {
+                data.additionalBlocks.forEach(block => {
+                    addDynamicBlock(block.type, block.content);
+                });
+            }
+            
+            modalDeleteBtn.classList.add('hidden');
+            modalMetadata.classList.add('hidden');
+            updateCounters();
+            addPromptModal.classList.remove('hidden');
+            
+            setTimeout(() => {
+                const titleEl = document.getElementById('prompt-title');
+                titleEl.focus();
+                autoResizeTextarea(titleEl);
+                autoResizeTextarea(document.getElementById('prompt-category'));
+                autoResizeTextarea(document.getElementById('prompt-content'));
+                autoResizeTextarea(document.getElementById('prompt-code'));
+                dynamicBlocksContainer.querySelectorAll('textarea').forEach(tx => autoResizeTextarea(tx));
+            }, 100);
+        });
+    }
 
     // Edit Logic
     const editBtn = card.querySelector('.edit-btn');
@@ -1506,6 +1707,13 @@ function escapeHTML(str) {
     );
 }
 
+// Helper to highlight search terms
+function highlightSearch(text, searchTerm) {
+    if (!searchTerm || searchTerm.trim() === '') return text;
+    const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    return text.replace(regex, '<mark class="search-highlight">$1</mark>');
+}
+
 // --- Category Colors Modal Logic ---
 function openCategoryColorsModal() {
     categoryColorSelect.innerHTML = '<option value="" disabled selected>Choose a category...</option>';
@@ -1599,17 +1807,21 @@ if (updateCategoryColorsBtn) {
     });
 }
 
-// Function to turn ___ into interactive inputs
-function renderContentWithInputs(content) {
-    const parts = content.split(/_{3,}/g);
-    if (parts.length === 1) return escapeHTML(content);
+// Function to turn ___ or {{Name}} into interactive inputs
+function renderContentWithInputs(content, searchTerm = '') {
+    // Escape HTML first
+    let escaped = escapeHTML(content);
+    
+    // Highlight search term in the escaped text BEFORE turning markers into spans
+    if (searchTerm) {
+        escaped = highlightSearch(escaped, searchTerm);
+    }
 
-    let html = '';
-    parts.forEach((part, index) => {
-        html += escapeHTML(part);
-        if (index < parts.length - 1) {
-            html += `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="..."></span>`;
-        }
+    // Replace markers with interactive spans
+    // Support both ___ and {{...}}
+    const html = escaped.replace(/_{3,}|{{(.*?)}}/g, (match, p1) => {
+        const placeholder = p1 ? p1 : '...';
+        return `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="${placeholder}"></span>`;
     });
 
     return html;
@@ -1752,8 +1964,148 @@ if (confirmHistoryDeleteBtn) {
         }
     };
 }
+
 if (historyDeleteModal) {
     historyDeleteModal.onclick = (e) => {
         if (e.target === historyDeleteModal) closeHistoryDeleteModal();
     };
 }
+
+// --- Draft System ---
+function saveDraft() {
+    if (isEditing) return; // Don't auto-save while editing existing entries to avoid mess
+    
+    const draftData = {
+        title: document.getElementById('prompt-title').value,
+        category: document.getElementById('prompt-category').value,
+        bg: document.getElementById('category-bg-color').value,
+        text: document.getElementById('category-text-color').value,
+        content: document.getElementById('prompt-content').value,
+        code: document.getElementById('prompt-code').value,
+        blocks: []
+    };
+    
+    dynamicBlocksContainer.querySelectorAll('.dynamic-block-item').forEach(block => {
+        draftData.blocks.push({
+            type: block.dataset.type,
+            content: block.querySelector('textarea').value
+        });
+    });
+    
+    localStorage.setItem(`prompt_draft_${currentMode}`, JSON.stringify(draftData));
+}
+
+function checkAndRestoreDraft() {
+    if (isEditing) return;
+    
+    const draft = localStorage.getItem(`prompt_draft_${currentMode}`);
+    if (!draft) return;
+    
+    const data = JSON.parse(draft);
+    // Simple check if draft is empty
+    if (!data.title && !data.content && !data.code && data.blocks.length === 0) return;
+    
+    // Auto-restore but maybe we should ask? For now let's just do it.
+    document.getElementById('prompt-title').value = data.title;
+    document.getElementById('prompt-category').value = data.category;
+    document.getElementById('category-bg-color').value = data.bg;
+    document.getElementById('category-text-color').value = data.text;
+    document.getElementById('prompt-content').value = data.content;
+    document.getElementById('prompt-code').value = data.code;
+    
+    if (data.code) promptCodeContainer.classList.remove('hidden');
+    
+    dynamicBlocksContainer.innerHTML = '';
+    data.blocks.forEach(b => addDynamicBlock(b.type, b.content));
+    
+    updateCounters();
+    showToast("Restored your draft.");
+}
+
+function clearDraft() {
+    localStorage.removeItem(`prompt_draft_${currentMode}`);
+}
+
+// Listen for inputs to save draft
+[
+    'prompt-title', 'prompt-category', 'prompt-content', 'prompt-code'
+].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+        if (!isEditing) saveDraft();
+    });
+});
+
+// Dynamic blocks also need to trigger draft save
+dynamicBlocksContainer.addEventListener('input', () => {
+    if (!isEditing) saveDraft();
+});
+
+// --- Scroll to Top FAB ---
+const scrollBtn = document.createElement('button');
+scrollBtn.id = 'scroll-to-top';
+scrollBtn.className = 'fab-btn hidden';
+scrollBtn.innerHTML = `
+    <svg viewBox="0 0 512 512" style="width: 24px; height: 24px;">
+        <path fill="currentColor" d="M256 217.9L383 345c9.4 9.4 24.6 9.4 33.9 0 9.4-9.4 9.4-24.6 0-33.9l-144-144c-9.4-9.4-24.6-9.4-33.9 0l-144 144c-9.4 9.4-9.4 24.6 0 33.9 9.4 9.4 24.6 9.4 33.9 0l127.1-127.1z"/>
+    </svg>
+`;
+document.body.appendChild(scrollBtn);
+
+window.addEventListener('scroll', () => {
+    if (window.scrollY > 300) {
+        scrollBtn.classList.remove('hidden');
+    } else {
+        scrollBtn.classList.add('hidden');
+    }
+});
+
+scrollBtn.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// --- Keyboard Shortcut Legend ---
+const shortcutModal = document.createElement('div');
+shortcutModal.id = 'shortcut-modal';
+shortcutModal.className = 'modal-overlay hidden';
+shortcutModal.innerHTML = `
+    <div class="modal-content glass-card slim-modal">
+        <div class="modal-header">
+            <h3>Keyboard Shortcuts</h3>
+            <button class="close-btn" id="close-shortcut-modal">&times;</button>
+        </div>
+        <div class="shortcut-list">
+            <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>K</kbd> <span>Focus Search</span></div>
+            <div class="shortcut-item"><kbd>Shift</kbd> + <kbd>N</kbd> <span>New Prompt</span></div>
+            <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> <span>Save Modal</span></div>
+            <div class="shortcut-item"><kbd>Esc</kbd> <span>Close Modal</span></div>
+        </div>
+    </div>
+`;
+document.body.appendChild(shortcutModal);
+
+document.getElementById('close-shortcut-modal').onclick = () => shortcutModal.classList.add('hidden');
+shortcutModal.onclick = (e) => { if (e.target === shortcutModal) shortcutModal.classList.add('hidden'); };
+
+// Help Buttons
+const headerHelpBtn = document.getElementById('header-help-btn');
+const mobileHelpBtn = document.getElementById('mobile-help-btn');
+
+const openHelp = () => {
+    toggleMobileMenu(false);
+    shortcutModal.classList.remove('hidden');
+};
+
+headerHelpBtn?.addEventListener('click', openHelp);
+mobileHelpBtn?.addEventListener('click', openHelp);
+
+
+// Add shortcut for New Prompt
+window.addEventListener('keydown', (e) => {
+    if (e.shiftKey && e.key === 'N' && addPromptModal.classList.contains('hidden')) {
+        e.preventDefault();
+        openModalBtn.click();
+    }
+    if (e.key === '?' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        shortcutModal.classList.remove('hidden');
+    }
+});

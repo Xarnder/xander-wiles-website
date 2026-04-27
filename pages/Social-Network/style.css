@@ -1075,3 +1075,80 @@ input[type="range"]:disabled::-webkit-slider-thumb {
     opacity: 0.5;
     font-size: 1.2rem;
 }
+/* Search Clear Button */
+#clear-search-btn {
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+#clear-search-btn:hover {
+    color: white;
+    transform: translateY(-50%) scale(1.2);
+}
+
+/* Scroll to Top Refinement */
+#scroll-to-top:hover {
+    transform: scale(1.1) translateY(-5px);
+    background: var(--primary-hover);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+}
+
+#scroll-to-top.show {
+    display: flex !important;
+}
+
+/* Empty State Styles */
+#empty-state {
+    animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Export Progress Bar Styles */
+#export-progress-container {
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+    border: 1px solid var(--glass-border);
+}
+
+/* Card Selection Visuals Refinement */
+.friend-card.selecting:hover {
+    transform: translateY(-5px) scale(1.01);
+}
+
+.friend-card.selected::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(99, 102, 241, 0.1);
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Responsive Toolbar */
+@media (max-width: 600px) {
+    .selection-toolbar {
+        flex-direction: column;
+        width: 90%;
+        bottom: 20px;
+        gap: 15px;
+        padding: 15px;
+    }
+
+    .selection-info {
+        border-right: none;
+        border-bottom: 1px solid var(--glass-border);
+        padding-right: 0;
+        padding-bottom: 15px;
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .selection-actions {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}

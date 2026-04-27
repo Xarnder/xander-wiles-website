@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Prompt Manager">
@@ -80,6 +81,8 @@
                 <div class="header-actions">
                     <input type="file" id="import-file" class="hidden" accept=".json">
                     <button id="open-modal-btn" class="glow-btn small-btn">+ New Prompt</button>
+                    <button id="header-help-btn" class="outline-btn small-btn desktop-only">Help</button>
+                    <button id="header-export-btn" class="outline-btn small-btn desktop-only">Export</button>
                     <button id="burger-menu-btn" class="burger-btn">☰</button>
                 </div>
             </header>
@@ -93,6 +96,7 @@
                     </div>
                     <div class="mobile-nav-links">
                         <button id="mobile-reorder-btn" class="outline-btn full-width">Custom Order</button>
+                        <button id="mobile-help-btn" class="outline-btn full-width">Help & Shortcuts</button>
                         <button id="mobile-export-btn" class="outline-btn full-width">Export Backup</button>
                         <button id="mobile-import-btn" class="outline-btn full-width">Import Backup</button>
                         <button id="mobile-category-colors-btn" class="outline-btn full-width">Change Category
@@ -250,6 +254,44 @@
                     <div class="header-actions" style="justify-content: flex-end; gap: 12px;">
                         <button id="cancel-history-delete-btn" class="outline-btn">Cancel</button>
                         <button id="confirm-history-delete-btn" class="glow-btn danger-btn">Delete Entry</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal for Advanced Export -->
+            <div id="export-options-modal" class="modal-overlay hidden">
+                <div class="modal-content glass-card slim-modal">
+                    <div class="modal-header">
+                        <h3>Export Data</h3>
+                        <button id="close-export-modal-btn" class="close-btn">&times;</button>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="export-format">Export Format</label>
+                        <select id="export-format" class="glass-input">
+                            <option value="json">JSON (Backup format)</option>
+                            <option value="csv">CSV (Spreadsheet format)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="export-scope">Data to Export</label>
+                        <select id="export-scope" class="glass-input">
+                            <option value="current">Current View (e.g. only Prompts)</option>
+                            <option value="all">Everything (All Modes)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 20px;">
+                        <label for="export-category">Category Filter</label>
+                        <select id="export-category" class="glass-input">
+                            <option value="all">All Categories</option>
+                        </select>
+                    </div>
+
+                    <div class="modal-footer-actions" style="margin-top: 32px;">
+                        <button id="cancel-export-btn" class="outline-btn full-width">Cancel</button>
+                        <button id="confirm-export-btn" class="glow-btn full-width">Export Now</button>
                     </div>
                 </div>
             </div>

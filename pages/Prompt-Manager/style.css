@@ -14,6 +14,7 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -455,7 +456,52 @@ textarea:focus {
     color: #a8dadc;
     margin-top: 10px;
     overflow-x: auto;
+    position: relative;
+    transition: border-color 0.3s;
 }
+
+.prompt-code-block:hover {
+    border-color: var(--glow-color);
+}
+
+.code-content {
+    white-space: pre;
+    font-size: 0.9rem;
+}
+
+.code-copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    z-index: 5;
+}
+
+.prompt-code-block:hover .code-copy-btn {
+    opacity: 1;
+}
+
+.code-copy-btn:hover {
+    background: var(--glow-color);
+    color: white;
+}
+
+.code-copy-btn.copied {
+    background: #06d6a0;
+    color: white;
+}
+
 
 /* --- Custom Modern Slider --- */
 .slider-group {
@@ -601,9 +647,92 @@ input[type="range"]::-webkit-slider-thumb {
     /* Reset margin from glass-card */
     transform: scale(0.9);
     animation: scaleUp 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    padding: calc(40px + env(safe-area-inset-top, 0px)) 40px 40px;
-    padding-bottom: calc(30px + env(safe-area-inset-bottom, 0px));
-    /* Custom Scrollbar for the glass look */
+    padding: 0 50px 50px;
+    padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px));
+}
+
+.slim-modal {
+    max-width: 550px !important;
+    min-height: 450px;
+}
+    /* Search Highlighting */
+mark.search-highlight {
+    background: rgba(123, 44, 191, 0.4);
+    color: #fff;
+    border-radius: 2px;
+    padding: 0 2px;
+    font-weight: 600;
+}
+
+/* FAB Scroll to Top */
+.fab-btn {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: var(--glow-color);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    opacity: 1;
+}
+
+.fab-btn:hover {
+    transform: translateY(-5px) scale(1.1);
+    box-shadow: 0 8px 25px rgba(123, 44, 191, 0.5);
+}
+
+.fab-btn.hidden {
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+    pointer-events: none;
+}
+
+/* Shortcut Legend */
+.shortcut-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+}
+
+.shortcut-item kbd {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: white;
+    min-width: 30px;
+    text-align: center;
+}
+
+.shortcut-item span {
+    flex: 1;
+}
+
+/* Variable Placeholder improvement */
+.prompt-input:empty::before {
+    content: attr(data-placeholder);
+    color: rgba(255, 255, 255, 0.3);
+    font-style: italic;
+}
     scrollbar-width: thin;
     scrollbar-color: var(--glow-color) rgba(255, 255, 255, 0.05);
 }
@@ -630,24 +759,22 @@ input[type="range"]::-webkit-slider-thumb {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 30px;
     position: sticky;
-    top: calc(-40px - env(safe-area-inset-top, 0px));
+    top: 0;
     z-index: 100;
-    background: rgba(10, 5, 20, 0.8);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    margin-left: -40px;
-    margin-right: -40px;
-    padding: calc(20px + env(safe-area-inset-top, 0px)) 40px 20px;
-    margin-top: calc(-40px - env(safe-area-inset-top, 0px));
+    background: rgba(15, 10, 30, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    margin-left: -50px;
+    margin-right: -50px;
+    padding: calc(30px + env(safe-area-inset-top, 0px)) 50px 20px;
     border-bottom: 1px solid var(--glass-border);
 }
 
-.ios-pwa .modal-header {
-    top: calc(-1 * (var(--pwa-gap) - 20px) - env(safe-area-inset-top, 0px)) !important;
-    padding-top: calc(var(--pwa-gap) - 40px + env(safe-area-inset-top, 0px)) !important;
-    margin-top: calc(-1 * (var(--pwa-gap) - 20px) - env(safe-area-inset-top, 0px)) !important;
+/* Specific help/shortcut modal styling */
+#shortcut-modal .shortcut-list {
+    padding-top: 10px;
 }
 
 .close-btn {
@@ -708,24 +835,38 @@ input[type="range"]::-webkit-slider-thumb {
     justify-content: flex-start;
 }
 .card-header-actions {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, 36px);
+    grid-auto-rows: 36px;
     gap: 8px;
-    align-items: flex-end;
-    text-align: right;
+    justify-content: end;
+    align-items: center;
     flex-shrink: 0;
     margin-left: 16px;
     transition: all 0.3s ease;
 }
 
-.expanded .card-header-actions {
-    display: grid !important;
-    grid-template-columns: repeat(2, 36px) !important;
-    grid-auto-rows: 36px !important;
-    gap: 8px !important;
-    justify-content: end !important;
-    align-items: center !important;
+/* Ensure Expand and Pin have stable grid positions */
+.pin-btn {
+    grid-column: 1;
+    grid-row: 1;
 }
+
+.expand-btn {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+/* Caret Rotation */
+.caret-icon {
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.expanded .caret-icon {
+    transform: rotate(180deg);
+}
+
+
 
 .copy-btn {
     background: rgba(255, 255, 255, 0.1);
@@ -796,14 +937,39 @@ input[type="range"]::-webkit-slider-thumb {
     gap: 10px;
 }
 
-.edit-btn {
-    display: none !important;
-    /* Managed by .expanded class in JS/CSS */
+.edit-btn, .duplicate-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
 }
 
-.expanded .edit-btn {
+.edit-btn:hover, .duplicate-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.duplicate-btn:hover {
+    color: #4cc9f0;
+    border-color: #4cc9f0;
+}
+
+.edit-btn, .duplicate-btn {
+    display: none !important;
+}
+
+.expanded .edit-btn, .expanded .duplicate-btn {
     display: flex !important;
 }
+
 
 .action-btn {
     background: rgba(255, 255, 255, 0.05);
@@ -831,12 +997,12 @@ input[type="range"]::-webkit-slider-thumb {
     white-space: nowrap;
 }
 
-.expand-btn, .copy-btn, .pin-btn, .edit-btn, .visit-btn, .history-btn {
+.expand-btn, .copy-btn, .pin-btn, .edit-btn, .visit-btn, .history-btn, .duplicate-btn {
     width: 36px !important;
     height: 36px !important;
     min-width: 36px !important; /* Override any min-width */
     padding: 0 !important;
-    display: flex !important;
+    display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 10px !important;

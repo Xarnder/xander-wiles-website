@@ -58,6 +58,7 @@ let currentDashboardFilterId = ""; // Filter selected in normal mode
 let activeRankingFilter = null; // Filter currently being edited in Ranking Mode
 let tempTierAssignments = {}; // { tierId: [personId, personId] }
 let sortableInstances = []; // To destroy when exiting
+let scrollTimeout = null;
 
 // DOM Elements
 const views = {
@@ -70,6 +71,23 @@ const friendsGrid = document.getElementById('friends-grid');
 const searchInput = document.getElementById('search-input');
 const filterCategory = document.getElementById('filter-category');
 const statusMsg = document.getElementById('status-msg');
+const clearSearchBtn = document.getElementById('clear-search-btn');
+const emptyState = document.getElementById('empty-state');
+const scrollToTopBtn = document.getElementById('scroll-to-top');
+
+// Selection Toolbar Elements
+const selectAllBtn = document.getElementById('select-all-btn');
+const deselectAllBtn = document.getElementById('deselect-all-btn');
+const bulkTodayBtn = document.getElementById('bulk-today-btn');
+const bulkCategoryBtn = document.getElementById('bulk-category-btn');
+
+// Bulk Modal Elements
+const bulkCategoryModal = document.getElementById('bulk-category-modal');
+const closeBulkCategory = document.getElementById('close-bulk-category');
+const cancelBulkCategory = document.getElementById('cancel-bulk-category');
+const confirmBulkCategory = document.getElementById('confirm-bulk-category');
+const bulkInpCategory = document.getElementById('bulk-inp-category');
+const bulkCatCount = document.getElementById('bulk-cat-count');
 
 // --- AUTHENTICATION ---
 document.getElementById('google-login-btn').addEventListener('click', async () => {
@@ -98,6 +116,52 @@ onAuthStateChanged(auth, (user) => {
         console.log("User logged out");
         views.login.classList.remove('hidden');
         views.dashboard.classList.add('hidden');
+    }
+});
+
+// --- KEYBOARD SHORTCUTS ---
+window.addEventListener('keydown', (e) => {
+    // Don't trigger if user is typing in an input or textarea
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+        if (e.key === 'Escape') {
+            e.target.blur();
+        }
+        return;
+    }
+
+    switch (e.key.toLowerCase()) {
+        case '/':
+            e.preventDefault();
+            searchInput.focus();
+            break;
+        case 'escape':
+            // Close all modals
+            closeModal();
+            if (exportModal) exportModal.classList.add('hidden');
+            if (statsModal) statsModal.classList.add('hidden');
+            if (bulkCategoryModal) bulkCategoryModal.classList.add('hidden');
+            if (imageViewerModal) imageViewerModal.classList.add('hidden');
+            
+            // Exit selection mode if active
+            if (isSelectionMode) toggleSelectionMode(false);
+            break;
+        case 'a':
+            if (!isSelectionMode && addBtn) {
+                e.preventDefault();
+                addBtn.click();
+            }
+            break;
+        case 'm':
+            e.preventDefault();
+            toggleSelectionMode(!isSelectionMode);
+            break;
+        case 's':
+            e.preventDefault();
+            if (statsBtn) statsBtn.click();
+            break;
+        case 'g':
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            break;
     }
 });
 
@@ -488,26 +552,43 @@ function renderCard(data) {
         </div>
         <div class="card-actions" style="${isSelectionMode ? 'visibility:hidden' : ''}">
             <!-- New Today Button -->
-            <button class="btn secondary-btn today-btn" style="color:var(--success); border-color:rgba(16,185,129,0.3)">Met Today</button>
-            <button class="btn secondary-btn edit-btn">Edit</button>
-            <button class="btn secondary-btn delete-btn" style="color:var(--danger);border-color:rgba(239,68,68,0.3)">Delete</button>
+            <button class="btn secondary-btn action-today" style="color:var(--success); border-color:rgba(16,185,129,0.3)">Met Today</button>
+            <button class="btn secondary-btn action-edit">Edit</button>
+            <button class="btn secondary-btn action-delete" style="color:var(--danger);border-color:rgba(239,68,68,0.3)">Delete</button>
         </div>
     `;
 
-    // Event Listeners for buttons
-    if (!isSelectionMode) {
-        card.querySelector('.today-btn').addEventListener('click', (e) => { e.stopPropagation(); markToday(data.id, data.lastContact); });
-        card.querySelector('.delete-btn').addEventListener('click', (e) => { e.stopPropagation(); deletePerson(data.id); });
-        card.querySelector('.edit-btn').addEventListener('click', (e) => { e.stopPropagation(); openEdit(data); });
-    }
-
-    // Card Selection Click
-    if (isSelectionMode) {
-        card.addEventListener('click', () => toggleCardSelection(data.id));
-    }
+    // No individual listeners anymore! Event delegation handles it.
 
     friendsGrid.appendChild(card);
 }
+
+// Event Delegation for Grid Actions
+friendsGrid.addEventListener('click', (e) => {
+    const card = e.target.closest('.friend-card');
+    if (!card) return;
+
+    const id = card.dataset.id;
+    const friend = allFriends.find(f => f.id === id);
+    if (!friend) return;
+
+    if (isSelectionMode) {
+        toggleCardSelection(id);
+        return;
+    }
+
+    // Button Actions
+    if (e.target.closest('.action-today')) {
+        e.stopPropagation();
+        markToday(id, friend.lastContact);
+    } else if (e.target.closest('.action-edit')) {
+        e.stopPropagation();
+        openEdit(friend);
+    } else if (e.target.closest('.action-delete')) {
+        e.stopPropagation();
+        deletePerson(id);
+    }
+});
 
 // --- Quick Actions ---
 const undoToast = document.getElementById('undo-toast');
@@ -899,11 +980,29 @@ function filterGrid() {
 
     // Re-render
     friendsGrid.innerHTML = '';
-    if (filtered.length === 0) {
-        friendsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#666">No matches found.</p>';
+    
+    // Show/Hide Clear Search Button
+    if (clearSearchBtn) {
+        if (textVal.length > 0) clearSearchBtn.classList.remove('hidden');
+        else clearSearchBtn.classList.add('hidden');
     }
 
-    filtered.forEach(friend => renderCard(friend));
+    if (filtered.length === 0) {
+        if (emptyState) emptyState.classList.remove('hidden');
+        else friendsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#666">No matches found.</p>';
+    } else {
+        if (emptyState) emptyState.classList.add('hidden');
+        filtered.forEach(friend => renderCard(friend));
+    }
+}
+
+// Clear Search Logic
+if (clearSearchBtn) {
+    clearSearchBtn.onclick = () => {
+        searchInput.value = '';
+        filterGrid();
+        searchInput.focus();
+    };
 }
 
 searchInput.addEventListener('input', filterGrid);
@@ -1093,9 +1192,21 @@ async function prepareZipImages(zip, statusEl) {
     let count = 0;
     const total = allFriends.length;
 
+    const progressContainer = document.getElementById('export-progress-container');
+    const progressBar = document.getElementById('export-progress-bar');
+    const progressPercent = document.getElementById('export-progress-percent');
+    const progressLabel = document.getElementById('export-progress-label');
+
+    if (progressContainer) progressContainer.classList.remove('hidden');
+
     for (const friend of allFriends) {
         count++;
+        const percent = Math.round((count / total) * 100);
+        
         if (statusEl) statusEl.innerText = `Processing image ${count}/${total}...`;
+        if (progressBar) progressBar.style.width = `${percent}%`;
+        if (progressPercent) progressPercent.innerText = `${percent}%`;
+        if (progressLabel) progressLabel.innerText = `Downloading images (${count}/${total})`;
 
         // Skip default/placeholder if you want, or download them too.
         // UI Avatars might work if fetch is allowed.
@@ -1114,6 +1225,8 @@ async function prepareZipImages(zip, statusEl) {
             }
         }
     }
+
+    if (progressLabel) progressLabel.innerText = "Finalizing package...";
     return idToPath;
 }
 
@@ -1155,6 +1268,9 @@ document.getElementById('export-zip-csv').addEventListener('click', async () => 
 
         statusEl.innerText = "";
         exportModal.classList.add('hidden');
+        if (document.getElementById('export-progress-container')) {
+            document.getElementById('export-progress-container').classList.add('hidden');
+        }
     } catch (err) {
         console.error(err);
         statusEl.innerText = "Error exporting ZIP.";
@@ -1275,8 +1391,8 @@ function toggleSelectionMode(active) {
         document.getElementById('mobile-menu-btn').classList.remove('hidden');
     }
 
-    // Re-render cards to show/hide checkboxes & update click behavior
-    loadFriends();
+    // Performance Optimization: Don't reload from Firebase, just re-render local data
+    filterGrid(); 
 }
 
 
@@ -1301,6 +1417,99 @@ function toggleCardSelection(id) {
 
 function updateSelectionCount() {
     selectionCount.innerText = `${selectedFriendIds.size} Selected`;
+}
+
+// Bulk Selection Actions
+if (selectAllBtn) {
+    selectAllBtn.onclick = () => {
+        // Only select those currently visible (filtered)
+        const currentFiltered = allFriends.filter(friend => {
+            const textVal = searchInput.value.toLowerCase();
+            const catVal = filterCategory.value;
+            const text = (friend.name || '').toLowerCase() + ' ' + (friend.notes || '').toLowerCase() + ' ' + (friend.met || '').toLowerCase();
+            const matchesText = text.includes(textVal);
+            const matchesCategory = catVal === "" || (friend.category || "") === catVal;
+            return matchesText && matchesCategory;
+        });
+
+        currentFiltered.forEach(f => selectedFriendIds.add(f.id));
+        updateSelectionCount();
+        filterGrid(); // Re-render to show selection
+    };
+}
+
+if (deselectAllBtn) {
+    deselectAllBtn.onclick = () => {
+        selectedFriendIds.clear();
+        updateSelectionCount();
+        filterGrid();
+    };
+}
+
+// Bulk Functional Actions
+if (bulkTodayBtn) {
+    bulkTodayBtn.onclick = async () => {
+        if (selectedFriendIds.size === 0) return;
+        
+        const count = selectedFriendIds.size;
+        const confirmMsg = `Mark ${count} people as contacted today?`;
+        
+        if (confirm(confirmMsg)) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const batch = writeBatch(db);
+            
+            selectedFriendIds.forEach(id => {
+                const docRef = doc(db, "friends", id);
+                batch.update(docRef, { 
+                    lastContact: todayStr,
+                    updatedAt: new Date()
+                });
+            });
+
+            await batch.commit();
+            showToast(`Updated ${count} connections`, "success");
+            toggleSelectionMode(false);
+        }
+    };
+}
+
+if (bulkCategoryBtn) {
+    bulkCategoryBtn.onclick = () => {
+        if (selectedFriendIds.size === 0) return;
+        bulkCatCount.innerText = selectedFriendIds.size;
+        bulkCategoryModal.classList.remove('hidden');
+    };
+}
+
+// Bulk Category Modal Logic
+if (closeBulkCategory) closeBulkCategory.onclick = () => bulkCategoryModal.classList.add('hidden');
+if (cancelBulkCategory) cancelBulkCategory.onclick = () => bulkCategoryModal.classList.add('hidden');
+
+if (confirmBulkCategory) {
+    confirmBulkCategory.onclick = async () => {
+        const newCat = bulkInpCategory.value.trim();
+        if (!newCat) {
+            showToast("Please enter a category", "error");
+            return;
+        }
+
+        const count = selectedFriendIds.size;
+        const batch = writeBatch(db);
+        
+        selectedFriendIds.forEach(id => {
+            const docRef = doc(db, "friends", id);
+            batch.update(docRef, { 
+                category: newCat,
+                updatedAt: new Date()
+            });
+        });
+
+        await batch.commit();
+        showToast(`Moved ${count} people to ${newCat}`, "success");
+        bulkCategoryModal.classList.add('hidden');
+        bulkInpCategory.value = '';
+        toggleSelectionMode(false);
+    };
 }
 
 // --- Grid Export Logic ---
@@ -2465,3 +2674,32 @@ function showFilterSelector(onSelect) {
     closeBtn.onclick = () => modal.classList.add('hidden');
     modal.classList.remove('hidden');
 }
+
+// Scroll to Top Logic
+window.addEventListener('scroll', () => {
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+    
+    scrollTimeout = setTimeout(() => {
+        if (window.scrollY > 300) {
+            scrollToTopBtn.classList.add('show');
+            scrollToTopBtn.classList.remove('hidden');
+        } else {
+            scrollToTopBtn.classList.remove('show');
+            scrollToTopBtn.classList.add('hidden');
+        }
+    }, 100);
+});
+
+if (scrollToTopBtn) {
+    scrollToTopBtn.onclick = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+}
+
+// Ensure modals can be closed via X button if not already covered
+document.querySelectorAll('.close').forEach(btn => {
+    btn.onclick = () => {
+        const modal = btn.closest('.modal');
+        if (modal) modal.classList.add('hidden');
+    };
+});

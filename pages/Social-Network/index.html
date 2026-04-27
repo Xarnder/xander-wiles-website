@@ -97,7 +97,10 @@
 
             <!-- Search / Filter -->
             <div class="search-bar" style="display:flex; gap:10px; margin-bottom: 20px; flex-wrap: wrap;">
-                <input type="text" id="search-input" placeholder="Search friends..." style="flex:1; margin-bottom:0; min-width: 200px;">
+                <div style="position:relative; flex:1; min-width: 200px;">
+                    <input type="text" id="search-input" placeholder="Search friends..." style="width:100%; margin-bottom:0; padding-right: 40px;">
+                    <button id="clear-search-btn" class="hidden" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem; padding:5px;">&times;</button>
+                </div>
                 <select id="filter-category"
                     style="padding:12px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:10px; color:white; min-width:150px;">
                     <option value="">All Categories</option>
@@ -136,9 +139,17 @@
             </div>
 
             <!-- Grid -->
-            <div id="friends-grid" class="friends-grid">
-                <!-- Javascript fills this -->
-                <div class="loader">Loading...</div>
+            <div id="friends-grid-container" style="position:relative;">
+                <div id="friends-grid" class="friends-grid">
+                    <!-- Javascript fills this -->
+                    <div class="loader">Loading...</div>
+                </div>
+                <div id="empty-state" class="hidden" style="text-align:center; padding:60px 20px; background:var(--glass-bg); border-radius:var(--radius); border:1px dashed var(--glass-border); margin-top:20px;">
+                    <div style="font-size:3rem; margin-bottom:20px;">👥</div>
+                    <h3>No connections found</h3>
+                    <p style="color:var(--text-muted); margin-bottom:20px;">Try adjusting your filters or add someone new.</p>
+                    <button class="btn primary-btn" onclick="document.getElementById('add-btn').click()">+ Add Person</button>
+                </div>
             </div>
 
         </section>
@@ -180,14 +191,20 @@
     <div id="selection-toolbar" class="selection-toolbar hidden">
         <div class="selection-info">
             <span id="selection-count">0 Selected</span>
+            <div style="display:flex; gap:5px;">
+                <button id="select-all-btn" class="btn secondary-btn" style="padding: 5px 10px; font-size: 0.8rem;">All</button>
+                <button id="deselect-all-btn" class="btn secondary-btn" style="padding: 5px 10px; font-size: 0.8rem;">None</button>
+            </div>
             <button id="cancel-selection" class="btn secondary-btn">Cancel</button>
         </div>
         <div class="selection-actions">
-            <button id="rank-selected-btn" class="btn secondary-btn" style="margin-right:10px;">Rank Selected</button>
+            <button id="bulk-today-btn" class="btn secondary-btn" style="color:var(--success); border-color:rgba(16,185,129,0.3); margin-right:5px;">Met Today</button>
+            <button id="bulk-category-btn" class="btn secondary-btn" style="margin-right:5px;">Category</button>
+            <button id="rank-selected-btn" class="btn secondary-btn" style="margin-right:5px;">Rank</button>
             <button id="delete-selected-btn" class="btn secondary-btn"
-                style="color:var(--danger); border-color:var(--danger); margin-right:10px;">Delete Selected</button>
-            <button id="export-grid-img" class="btn primary-btn">Export Image</button>
-            <button id="export-grid-pdf" class="btn primary-btn">Export PDF</button>
+                style="color:var(--danger); border-color:var(--danger); margin-right:5px;">Delete</button>
+            <button id="export-grid-img" class="btn primary-btn">Image</button>
+            <button id="export-grid-pdf" class="btn primary-btn">PDF</button>
         </div>
     </div>
 
@@ -357,6 +374,16 @@
                 <button id="export-zip-html" class="btn primary-btn full-width">Export Offline Website (ZIP +
                     Viewer)</button>
             </div>
+            </div>
+            <div id="export-progress-container" class="hidden" style="margin-top:20px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:0.8rem;">
+                    <span id="export-progress-label">Progress</span>
+                    <span id="export-progress-percent">0%</span>
+                </div>
+                <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden;">
+                    <div id="export-progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.3s ease;"></div>
+                </div>
+            </div>
             <div id="export-status"
                 style="margin-top:10px; font-size:0.9rem; color:var(--text-main); text-align:center;"></div>
         </div>
@@ -524,6 +551,29 @@
             </div>
         </div>
     </div>
+    <!-- Bulk Change Category Modal -->
+    <div id="bulk-category-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 400px;">
+            <span id="close-bulk-category" class="close" style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h3>Change Category</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom: 20px;">Update category for <span id="bulk-cat-count">0</span> people.</p>
+            
+            <div class="input-group">
+                <label>New Category</label>
+                <input type="text" id="bulk-inp-category" list="category-list" placeholder="e.g. Work, Family">
+            </div>
+
+            <div class="modal-actions" style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+                <button id="cancel-bulk-category" class="btn secondary-btn">Cancel</button>
+                <button id="confirm-bulk-category" class="btn primary-btn">Update All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scroll to Top Button -->
+    <button id="scroll-to-top" class="hidden" title="Scroll to Top" style="position:fixed; bottom:100px; right:30px; width:50px; height:50px; border-radius:50%; background:var(--primary); color:white; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1.5rem; box-shadow:0 5px 15px rgba(0,0,0,0.3); z-index:900; transition:all 0.3s ease;">
+        ↑
+    </button>
 </body>
 
 </html>
