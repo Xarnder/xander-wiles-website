@@ -53,8 +53,8 @@ class PDFViewer {
             this.allItems.push(...textContent.items);
         }
 
-        // We join with a space to build a searchable full text
-        this.fullText = this.allItems.map(item => item.str).join(' ');
+        // Reconstruct text with structural awareness (newlines)
+        this.fullText = this.reconstructText(this.allItems);
         this.sentences = this.parseSentences(this.fullText);
         
         // Map sentences back to text item indices for highlighting
@@ -62,29 +62,74 @@ class PDFViewer {
     }
 
     /**
+     * Reconstructs text from items while preserving structural line breaks.
+     */
+    reconstructText(items) {
+        if (items.length === 0) return "";
+        let text = "";
+        let lastY = items[0].transform[5];
+        this.itemOffsets = []; // Store the range of each item in the reconstructed string
+        
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const currentY = item.transform[5];
+            
+            // If the vertical position changes significantly, it's a new line
+            if (Math.abs(currentY - lastY) > 5) {
+                text += "\n";
+            } else if (i > 0 && text.length > 0 && !text.endsWith(' ') && !text.endsWith('\n')) {
+                // If on the same line, ensure there's at least a space between items
+                text += " ";
+            }
+            
+            const start = text.length;
+            text += item.str;
+            const end = text.length;
+            this.itemOffsets.push({ start, end });
+            
+            lastY = currentY;
+        }
+        return text;
+    }
+
+    /**
      * Parses full text into individual sentences with match metadata.
      */
     parseSentences(text) {
-        // Normalize whitespace
-        const cleanText = text.replace(/\s+/g, ' ').trim();
-        // Regex for sentence splitting (punctuation followed by space or end of string)
-        const sentences = cleanText.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) || [cleanText];
+        // Split by structural newlines first
+        const lines = text.split('\n');
+        const sentences = [];
+
+        lines.forEach(line => {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) return;
+
+            // Within each line, split by sentence endings (punctuation followed by space)
+            // This ensures bullet points on their own lines are preserved as units.
+            const parts = trimmedLine.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) || [trimmedLine];
+            
+            parts.forEach(p => {
+                const trimmed = p.trim();
+                if (trimmed.length > 0) {
+                    sentences.push({
+                        text: trimmed,
+                        normalized: this.normalize(trimmed),
+                        itemIndices: []
+                    });
+                }
+            });
+        });
         
-        return sentences.map(s => {
-            const trimmed = s.trim();
-            return {
-                text: trimmed,
-                normalized: this.normalize(trimmed),
-                itemIndices: []
-            };
-        }).filter(s => s.text.length > 1); // Ignore very short fragments
+        return sentences;
     }
 
     /**
      * Normalizes a string for comparison (lowercase, alphanumeric only).
      */
     normalize(text) {
-        return text.toLowerCase().replace(/[^a-z0-9]/g, '');
+        // Lowercase and collapse whitespace, but preserve punctuation and bullets.
+        // This ensures changes in symbols or structure are detected.
+        return text.toLowerCase().replace(/\s+/g, ' ').trim();
     }
 
     /**
@@ -96,18 +141,14 @@ class PDFViewer {
             const start = this.fullText.indexOf(s.text, currentPos);
             if (start !== -1) {
                 const end = start + s.text.length;
-                let runningLength = 0;
                 
                 for (let i = 0; i < this.allItems.length; i++) {
-                    const itemLen = this.allItems[i].str.length;
-                    const itemStart = runningLength;
-                    const itemEnd = itemStart + itemLen;
+                    const offset = this.itemOffsets[i];
                     
                     // Check if item overlaps with the sentence range
-                    if (itemEnd > start && itemStart < end) {
+                    if (offset.end > start && offset.start < end) {
                         s.itemIndices.push(i);
                     }
-                    runningLength += itemLen + 1; // +1 for the joining space
                 }
                 currentPos = end;
             }
