@@ -1,7 +1,21 @@
+// Shim for process.env in browser (for local dev without build)
+if (typeof process === 'undefined') {
+    window.process = {
+        env: {
+            PUBLIC_SOCIAL_FIREBASE_API_KEY: "AIzaSyC2wLw45JmXYov0lYOpMMZf3IYavURMwNc",
+            PUBLIC_SOCIAL_FIREBASE_AUTH_DOMAIN: "social-network-b6579.firebaseapp.com",
+            PUBLIC_SOCIAL_FIREBASE_PROJECT_ID: "social-network-b6579",
+            PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: "social-network-b6579.firebasestorage.app",
+            PUBLIC_SOCIAL_FIREBASE_MESSAGING_SENDER_ID: "686831441900",
+            PUBLIC_SOCIAL_FIREBASE_APP_ID: "1:686831441900:web:28d02d913ce6382e58d2c9"
+        }
+    };
+}
+
 // Import Firebase SDKs from CDN
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, deleteDoc, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, deleteDoc, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, getMetadata } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // --- PASTE YOUR FIREBASE CONFIG HERE ---
@@ -38,6 +52,13 @@ let tempUndoData = null; // Store old date for undo
 let isSelectionMode = false;
 let selectedFriendIds = new Set();
 
+// Ranking State
+let allRankingFilters = [];
+let currentDashboardFilterId = ""; // Filter selected in normal mode
+let activeRankingFilter = null; // Filter currently being edited in Ranking Mode
+let tempTierAssignments = {}; // { tierId: [personId, personId] }
+let sortableInstances = []; // To destroy when exiting
+
 // DOM Elements
 const views = {
     login: document.getElementById('login-view'),
@@ -71,6 +92,7 @@ onAuthStateChanged(auth, (user) => {
         views.dashboard.classList.remove('hidden');
         document.getElementById('user-name').textContent = user.displayName;
         loadFriends();
+        loadRankingFilters();
         updateStorageStats(); // Initial load
     } else {
         console.log("User logged out");
@@ -427,6 +449,12 @@ function renderCard(data) {
         ? `<span class="category-badge" style="background-color:${data.categoryColor || '#4f46e5'}">${data.category}</span>`
         : '';
 
+    let tierBadgeHTML = '';
+    if (currentDashboardFilterId && data.rankings && data.rankings[currentDashboardFilterId]) {
+        const rank = data.rankings[currentDashboardFilterId];
+        tierBadgeHTML = `<div class="tier-badge" style="background-color: var(--primary);" title="Ranked ${rank.tierName} in ${rank.filterName}">${rank.tierName.substring(0, 2)}</div>`;
+    }
+
     const card = document.createElement('div');
     card.className = 'glass-card friend-card';
     if (isSelectionMode) card.classList.add('selecting');
@@ -439,6 +467,7 @@ function renderCard(data) {
     const selectionHTML = isSelectionMode ? `<div class="selection-checkbox"></div>` : '';
 
     card.innerHTML = `
+        ${tierBadgeHTML}
         ${selectionHTML}
         <img src="${data.photoURL}" class="card-img" alt="${data.name}" loading="lazy" style="${isSelectionMode ? '' : 'cursor:zoom-in'}" ${!isSelectionMode ? `onclick="openImageViewer('${data.photoURL}', '${data.name.replace(/'/g, "\\'")}')"` : ''}>
         <div class="card-info">
@@ -1884,5 +1913,465 @@ async function performBulkDelete() {
         deleteSlider.value = 0;
         updateSliderVisuals(0);
         sliderThumb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
+    }
+}
+
+// =========================================================================
+// TIER RANKING SYSTEM
+// =========================================================================
+
+// --- FireStore Filter Loading ---
+function loadRankingFilters() {
+    if (!currentUser) return;
+    const q = query(collection(db, "rankingFilters"), where("userId", "==", currentUser.uid));
+    onSnapshot(q, (snapshot) => {
+        allRankingFilters = [];
+        snapshot.forEach(doc => allRankingFilters.push({ id: doc.id, ...doc.data() }));
+        // Sort by date client-side to avoid needing a Firestore index
+        allRankingFilters.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        updateRankingFilterDropdowns();
+    }, (err) => console.error("Error loading ranking filters:", err));
+}
+
+function updateRankingFilterDropdowns() {
+    const dashboardSelect = document.getElementById('ranking-filter-select');
+    if (!dashboardSelect) return;
+    
+    // Store current selection if possible
+    const currentVal = dashboardSelect.value;
+    
+    dashboardSelect.innerHTML = '<option value="">No Ranking Filter</option>';
+    allRankingFilters.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = f.name;
+        dashboardSelect.appendChild(opt);
+    });
+    
+    if (allRankingFilters.find(f => f.id === currentVal)) {
+        dashboardSelect.value = currentVal;
+    } else {
+        currentDashboardFilterId = "";
+    }
+    if (typeof filterGrid === 'function') filterGrid(); // Re-render grid
+}
+
+document.getElementById('ranking-filter-select')?.addEventListener('change', (e) => {
+    currentDashboardFilterId = e.target.value;
+    if (typeof filterGrid === 'function') filterGrid(); 
+});
+
+// --- Modal Management ---
+const manageFiltersModal = document.getElementById('manage-filters-modal');
+document.getElementById('manage-filters-btn')?.addEventListener('click', () => {
+    renderFiltersList();
+    manageFiltersModal.classList.remove('hidden');
+});
+document.getElementById('close-manage-filters')?.addEventListener('click', () => manageFiltersModal.classList.add('hidden'));
+
+const manageTiersModal = document.getElementById('manage-tiers-modal');
+document.getElementById('manage-tiers-btn')?.addEventListener('click', () => {
+    renderTiersEditList();
+    manageTiersModal.classList.remove('hidden');
+});
+document.getElementById('close-manage-tiers')?.addEventListener('click', () => manageTiersModal.classList.add('hidden'));
+
+// --- Filter CRUD ---
+document.getElementById('create-filter-btn')?.addEventListener('click', async () => {
+    const nameInput = document.getElementById('new-filter-name');
+    const name = nameInput.value.trim();
+    if (!name) return;
+    
+    const newFilter = {
+        userId: currentUser.uid,
+        name: name,
+        tiers: [
+            { id: "tier-s", name: "S", order: 0 },
+            { id: "tier-a", name: "A", order: 1 },
+            { id: "tier-b", name: "B", order: 2 },
+            { id: "tier-c", name: "C", order: 3 },
+            { id: "tier-d", name: "D", order: 4 }
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date()
+    };
+    
+    nameInput.value = '';
+    const btn = document.getElementById('create-filter-btn');
+    btn.disabled = true;
+    try {
+        await addDoc(collection(db, "rankingFilters"), newFilter);
+    } catch(e) {
+        console.error("Error creating filter", e);
+    }
+    btn.disabled = false;
+});
+
+function renderFiltersList() {
+    const list = document.getElementById('filters-list');
+    list.innerHTML = '';
+    
+    if (allRankingFilters.length === 0) {
+        list.innerHTML = '<p style="color:var(--text-muted); text-align:center;">No filters created yet.</p>';
+        return;
+    }
+    
+    allRankingFilters.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'filter-item';
+        item.innerHTML = `
+            <span>${f.name}</span>
+            <div class="filter-item-actions">
+                <button class="btn secondary-btn" style="padding:4px 8px; font-size:0.8rem; border-color:var(--danger); color:var(--danger);" onclick="deleteRankingFilter('${f.id}')">Delete</button>
+            </div>
+        `;
+        list.appendChild(item);
+    });
+}
+
+window.deleteRankingFilter = async (id) => {
+    if (confirm("Are you sure? This won't remove the rank data from people, but the filter will be gone.")) {
+        try {
+            await deleteDoc(doc(db, "rankingFilters", id));
+            if (activeRankingFilter && activeRankingFilter.id === id) {
+                exitRankingMode();
+            }
+        } catch(e) { console.error(e); }
+    }
+};
+
+// --- Ranking Mode Entry ---
+document.getElementById('rank-mode-btn')?.addEventListener('click', () => {
+    enterRankingMode();
+});
+
+document.getElementById('rank-selected-btn')?.addEventListener('click', () => {
+    enterRankingMode(Array.from(selectedFriendIds));
+});
+
+function enterRankingMode(specificIds = null) {
+    if (allRankingFilters.length === 0) {
+        alert("Please create a ranking filter first!");
+        manageFiltersModal.classList.remove('hidden');
+        return;
+    }
+    
+    // Choose active filter
+    let filterToUse = allRankingFilters[0];
+    if (currentDashboardFilterId) {
+        filterToUse = allRankingFilters.find(f => f.id === currentDashboardFilterId) || filterToUse;
+    } else {
+        if (allRankingFilters.length > 1) {
+            const filterName = prompt("Enter the exact name of the filter to use:\n" + allRankingFilters.map(f=>f.name).join("\n"));
+            if (!filterName) return;
+            filterToUse = allRankingFilters.find(f => f.name.toLowerCase() === filterName.toLowerCase());
+            if (!filterToUse) { alert("Filter not found."); return; }
+        }
+    }
+    
+    activeRankingFilter = filterToUse;
+    document.getElementById('active-ranking-filter-name').innerText = activeRankingFilter.name;
+    
+    // Determine people to rank
+    let peopleToRank = [];
+    if (specificIds && specificIds.length > 0) {
+        peopleToRank = allFriends.filter(f => specificIds.includes(f.id));
+    } else {
+        peopleToRank = [...allFriends];
+    }
+    
+    // Initialize tempTierAssignments
+    tempTierAssignments = { "unranked": [] };
+    activeRankingFilter.tiers.forEach(t => tempTierAssignments[t.id] = []);
+    
+    // Populate assignments based on existing friend data
+    peopleToRank.forEach(person => {
+        let assignedTierId = "unranked";
+        if (person.rankings && person.rankings[activeRankingFilter.id]) {
+            const savedTierId = person.rankings[activeRankingFilter.id].tierId;
+            // Verify tier still exists
+            if (activeRankingFilter.tiers.find(t => t.id === savedTierId)) {
+                assignedTierId = savedTierId;
+            }
+        }
+        tempTierAssignments[assignedTierId].push(person);
+    });
+    
+    // Switch views
+    document.getElementById('dashboard-view').classList.add('hidden');
+    document.getElementById('ranking-view').classList.remove('hidden');
+    
+    if (isSelectionMode) toggleSelectionMode(false);
+    
+    renderRankingLayout();
+}
+
+document.getElementById('exit-ranking-btn')?.addEventListener('click', () => {
+    if(confirm("Exit without saving changes?")) {
+        exitRankingMode();
+    }
+});
+
+function exitRankingMode() {
+    activeRankingFilter = null;
+    tempTierAssignments = {};
+    
+    // Destroy SortableJS instances
+    sortableInstances.forEach(inst => inst.destroy());
+    sortableInstances = [];
+    
+    document.getElementById('ranking-view').classList.add('hidden');
+    document.getElementById('dashboard-view').classList.remove('hidden');
+    if (typeof filterGrid === 'function') filterGrid();
+}
+
+// --- Ranking Layout & Drag and Drop ---
+function renderRankingLayout() {
+    // Clear old instances
+    sortableInstances.forEach(inst => inst.destroy());
+    sortableInstances = [];
+    
+    const unrankedContainer = document.getElementById('unranked-container');
+    const tiersContainer = document.getElementById('tiers-container');
+    
+    unrankedContainer.innerHTML = '';
+    tiersContainer.innerHTML = '';
+    
+    // Sort tiers
+    const sortedTiers = [...activeRankingFilter.tiers].sort((a,b) => a.order - b.order);
+    
+    // Render Tiers
+    sortedTiers.forEach(tier => {
+        const row = document.createElement('div');
+        row.className = 'tier-row';
+        row.innerHTML = `
+            <div class="tier-label">${tier.name}</div>
+            <div id="tier-list-${tier.id}" class="tier-container" data-tier-id="${tier.id}"></div>
+        `;
+        tiersContainer.appendChild(row);
+        
+        const listEl = document.getElementById(`tier-list-${tier.id}`);
+        // Populate existing people in this tier
+        if (tempTierAssignments[tier.id]) {
+            tempTierAssignments[tier.id].forEach(person => {
+                listEl.appendChild(createRankingCard(person));
+            });
+        }
+        
+        // Init Sortable
+        sortableInstances.push(new Sortable(listEl, {
+            group: 'ranking',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            dragClass: 'sortable-drag',
+            onEnd: handleDragEnd
+        }));
+    });
+    
+    // Render Unranked
+    if (tempTierAssignments["unranked"]) {
+        tempTierAssignments["unranked"].forEach(person => {
+            unrankedContainer.appendChild(createRankingCard(person));
+        });
+    }
+    
+    sortableInstances.push(new Sortable(unrankedContainer, {
+        group: 'ranking',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        dragClass: 'sortable-drag',
+        onEnd: handleDragEnd
+    }));
+    
+    // Set unranked container data attr for drop handling
+    unrankedContainer.dataset.tierId = "unranked";
+}
+
+function createRankingCard(person) {
+    const card = document.createElement('div');
+    card.className = 'ranking-card';
+    card.dataset.personId = person.id;
+    card.innerHTML = `
+        <img src="${person.photoURL}" class="ranking-card-img" alt="${person.name}">
+        <div class="ranking-card-name">${person.firstName || person.name.split(' ')[0]}</div>
+    `;
+    return card;
+}
+
+function handleDragEnd(evt) {
+    const itemEl = evt.item; 
+    const toEl = evt.to;
+    const fromEl = evt.from;
+    
+    const personId = itemEl.dataset.personId;
+    const toTierId = toEl.dataset.tierId;
+    const fromTierId = fromEl.dataset.tierId;
+    
+    if (fromTierId !== toTierId) {
+        // Find person object in tempTierAssignments
+        const personObjIndex = tempTierAssignments[fromTierId].findIndex(p => p.id === personId);
+        if (personObjIndex > -1) {
+            const personObj = tempTierAssignments[fromTierId].splice(personObjIndex, 1)[0];
+            tempTierAssignments[toTierId].push(personObj); 
+        }
+    }
+}
+
+// --- Save Rankings ---
+document.getElementById('save-ranking-btn')?.addEventListener('click', async () => {
+    if (!activeRankingFilter) return;
+    
+    const btn = document.getElementById('save-ranking-btn');
+    btn.disabled = true;
+    btn.innerText = "Saving...";
+    
+    try {
+        const batch = writeBatch(db);
+        let updatesCount = 0;
+        
+        const tierElements = document.querySelectorAll('.tier-container');
+        tierElements.forEach(container => {
+            const tierId = container.dataset.tierId;
+            if (tierId === "unranked") return; 
+            
+            const tierDef = activeRankingFilter.tiers.find(t => t.id === tierId);
+            if (!tierDef) return;
+            
+            const cards = container.querySelectorAll('.ranking-card');
+            cards.forEach((card, index) => {
+                const personId = card.dataset.personId;
+                const personRef = doc(db, "friends", personId);
+                
+                const rankingData = {
+                    filterId: activeRankingFilter.id,
+                    filterName: activeRankingFilter.name,
+                    tierId: tierDef.id,
+                    tierName: tierDef.name,
+                    tierIndex: index,
+                    updatedAt: new Date().toISOString()
+                };
+                
+                const updateObj = {};
+                updateObj[`rankings.${activeRankingFilter.id}`] = rankingData;
+                
+                batch.update(personRef, updateObj);
+                updatesCount++;
+            });
+        });
+        
+        // Clear rankings for those moved to Unranked
+        const unrankedCards = document.getElementById('unranked-container').querySelectorAll('.ranking-card');
+        unrankedCards.forEach(card => {
+            const personId = card.dataset.personId;
+            const personRef = doc(db, "friends", personId);
+            
+            const updateObj = {};
+            updateObj[`rankings.${activeRankingFilter.id}`] = null; // Set to null instead of deleting field
+            
+            batch.update(personRef, updateObj);
+            updatesCount++;
+        });
+        
+        if (updatesCount > 0) {
+            await batch.commit();
+        }
+        
+        // Also update local allFriends state so badge renders immediately
+        // Wait for the snapshot listener to fire is one way, but local update is faster.
+        // We'll just rely on snapshot listener which should be near-instant.
+        
+        alert("Rankings saved successfully!");
+        exitRankingMode();
+        
+    } catch(e) {
+        console.error("Error saving rankings:", e);
+        alert("Error saving: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Save Rankings";
+    }
+});
+
+// --- Tiers Management ---
+function renderTiersEditList() {
+    const list = document.getElementById('tiers-edit-list');
+    list.innerHTML = '';
+    
+    if (!activeRankingFilter) return;
+    
+    const sortedTiers = [...activeRankingFilter.tiers].sort((a,b) => a.order - b.order);
+    
+    sortedTiers.forEach(tier => {
+        const item = document.createElement('div');
+        item.className = 'tier-edit-item';
+        item.innerHTML = `
+            <input type="text" value="${tier.name}" class="tier-name-input" data-id="${tier.id}" style="flex:1; padding:8px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); border-radius:5px; color:white;">
+            <button class="btn secondary-btn" style="padding:4px 8px; font-size:0.8rem; color:var(--danger); border-color:var(--danger);" onclick="deleteTier('${tier.id}')">Delete</button>
+        `;
+        list.appendChild(item);
+    });
+    
+    let saveBtn = document.getElementById('save-tiers-changes-btn');
+    if (!saveBtn) {
+        saveBtn = document.createElement('button');
+        saveBtn.id = 'save-tiers-changes-btn';
+        saveBtn.className = 'btn primary-btn full-width';
+        saveBtn.innerText = 'Save Tier Changes';
+        saveBtn.style.marginTop = '15px';
+        list.parentElement.appendChild(saveBtn);
+        
+        saveBtn.addEventListener('click', async () => {
+            await saveTierChanges();
+        });
+    }
+}
+
+document.getElementById('create-tier-btn')?.addEventListener('click', () => {
+    if (!activeRankingFilter) return;
+    const nameInput = document.getElementById('new-tier-name');
+    const name = nameInput.value.trim();
+    if (!name) return;
+    
+    const newTier = {
+        id: "tier-" + Date.now(),
+        name: name,
+        order: activeRankingFilter.tiers.length
+    };
+    
+    activeRankingFilter.tiers.push(newTier);
+    nameInput.value = '';
+    renderTiersEditList();
+});
+
+window.deleteTier = (tierId) => {
+    if (!activeRankingFilter) return;
+    activeRankingFilter.tiers = activeRankingFilter.tiers.filter(t => t.id !== tierId);
+    renderTiersEditList();
+};
+
+async function saveTierChanges() {
+    if (!activeRankingFilter) return;
+    
+    const inputs = document.querySelectorAll('.tier-name-input');
+    inputs.forEach((input, index) => {
+        const id = input.dataset.id;
+        const tier = activeRankingFilter.tiers.find(t => t.id === id);
+        if (tier) {
+            tier.name = input.value.trim() || tier.name;
+            tier.order = index; 
+        }
+    });
+    
+    try {
+        await updateDoc(doc(db, "rankingFilters", activeRankingFilter.id), {
+            tiers: activeRankingFilter.tiers,
+            updatedAt: new Date()
+        });
+        alert("Tiers updated!");
+        renderRankingLayout(); 
+        manageTiersModal.classList.add('hidden');
+    } catch(e) {
+        console.error(e);
+        alert("Failed to update tiers");
     }
 }

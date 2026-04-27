@@ -75,6 +75,7 @@
                         <button id="cancel-select-header-btn" class="btn secondary-btn hidden"
                             style="padding: 8px 15px; border-color:var(--danger); color:var(--danger);">Cancel</button>
                         <button id="stats-btn" class="btn secondary-btn" style="padding: 8px 15px;">Stats</button>
+                        <button id="rank-mode-btn" class="btn secondary-btn" style="padding: 8px 15px;">Rank Mode</button>
                         <button id="add-btn" class="btn primary-btn">+ Add Person</button>
                         <button id="logout-btn" class="btn secondary-btn"
                             style="border-color:var(--danger); color:var(--danger)">Logout</button>
@@ -95,12 +96,19 @@
             </div>
 
             <!-- Search / Filter -->
-            <div class="search-bar" style="display:flex; gap:10px; margin-bottom: 20px;">
-                <input type="text" id="search-input" placeholder="Search friends..." style="flex:1; margin-bottom:0;">
+            <div class="search-bar" style="display:flex; gap:10px; margin-bottom: 20px; flex-wrap: wrap;">
+                <input type="text" id="search-input" placeholder="Search friends..." style="flex:1; margin-bottom:0; min-width: 200px;">
                 <select id="filter-category"
                     style="padding:12px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:10px; color:white; min-width:150px;">
                     <option value="">All Categories</option>
                 </select>
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <select id="ranking-filter-select"
+                        style="padding:12px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:10px; color:white; min-width:150px;">
+                        <option value="">No Ranking Filter</option>
+                    </select>
+                    <button id="manage-filters-btn" class="btn secondary-btn icon-btn" style="padding: 8px 12px; height: 100%; border-radius: 10px;" title="Manage Ranking Filters">⚙️</button>
+                </div>
                 <select id="sort-select"
                     style="padding:12px; border-radius:10px; border:1px solid var(--glass-border); background:var(--glass-bg); color:white; min-width:140px;">
                     <option value="status">Status (Default)</option>
@@ -134,6 +142,38 @@
             </div>
 
         </section>
+
+        <!-- Ranking View (Hidden by default) -->
+        <section id="ranking-view" class="hidden" style="height: calc(100vh - 100px); display: flex; flex-direction: column;">
+            <header class="app-header" style="margin-bottom: 10px; padding: 15px;">
+                <div class="header-left">
+                    <h2>Ranking Mode</h2>
+                    <span id="active-ranking-filter-name" style="font-size: 1.1rem; color: var(--primary); margin-left: 15px; font-weight: bold;">Filter Name</span>
+                </div>
+                <div class="header-right">
+                    <button id="manage-tiers-btn" class="btn secondary-btn" style="padding: 8px 15px;">Manage Tiers</button>
+                    <button id="exit-ranking-btn" class="btn secondary-btn" style="padding: 8px 15px; border-color: var(--danger); color: var(--danger);">Exit</button>
+                    <button id="save-ranking-btn" class="btn primary-btn" style="padding: 8px 15px;">Save Rankings</button>
+                </div>
+            </header>
+
+            <div class="ranking-layout" style="display: flex; gap: 20px; flex: 1; min-height: 0; overflow: hidden;">
+                <!-- Unranked Pool -->
+                <div class="unranked-pool glass-card" style="width: 300px; display: flex; flex-direction: column; overflow: hidden; padding: 15px;">
+                    <h3 style="margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">Unranked</h3>
+                    <div id="unranked-container" class="tier-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 50px;">
+                        <!-- Cards go here -->
+                    </div>
+                </div>
+
+                <!-- Tiers List -->
+                <div class="tiers-list" style="flex: 1; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 10px;">
+                    <div id="tiers-container" style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- Tiers go here -->
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- Selection Action Toolbar -->
@@ -143,6 +183,7 @@
             <button id="cancel-selection" class="btn secondary-btn">Cancel</button>
         </div>
         <div class="selection-actions">
+            <button id="rank-selected-btn" class="btn secondary-btn" style="margin-right:10px;">Rank Selected</button>
             <button id="delete-selected-btn" class="btn secondary-btn"
                 style="color:var(--danger); border-color:var(--danger); margin-right:10px;">Delete Selected</button>
             <button id="export-grid-img" class="btn primary-btn">Export Image</button>
@@ -402,6 +443,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
     <!-- Firebase SDKs & Logic -->
     <script type="module" src="script.js"></script>
@@ -414,6 +456,42 @@
             <h2>Network Statistics</h2>
             <div id="stats-content" style="margin-top:20px;">
                 <!-- Stats injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Ranking Filters Modal -->
+    <div id="manage-filters-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 500px;">
+            <span id="close-manage-filters" class="close" style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h3>Manage Ranking Filters</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom: 15px;">Create or edit your ranking categories.</p>
+            
+            <div style="display:flex; gap:10px; margin-bottom: 20px;">
+                <input type="text" id="new-filter-name" placeholder="New filter name..." style="flex:1;">
+                <button id="create-filter-btn" class="btn primary-btn">Create</button>
+            </div>
+
+            <div id="filters-list" style="display:flex; flex-direction:column; gap:10px; max-height: 400px; overflow-y: auto;">
+                <!-- Filter items injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Tiers Modal -->
+    <div id="manage-tiers-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 500px;">
+            <span id="close-manage-tiers" class="close" style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h3>Manage Tiers</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom: 15px;">Add, rename, or reorder tiers for the current filter.</p>
+            
+            <div style="display:flex; gap:10px; margin-bottom: 20px;">
+                <input type="text" id="new-tier-name" placeholder="New tier name..." style="flex:1;">
+                <button id="create-tier-btn" class="btn primary-btn">Add Tier</button>
+            </div>
+
+            <div id="tiers-edit-list" style="display:flex; flex-direction:column; gap:10px; max-height: 400px; overflow-y: auto;">
+                <!-- Tier items injected here -->
             </div>
         </div>
     </div>
