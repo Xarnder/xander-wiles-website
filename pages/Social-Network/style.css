@@ -325,38 +325,16 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    animation: float 6s ease-in-out infinite;
     transform: translateY(0);
     transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
-.friend-card:nth-child(even) {
-    animation-delay: -3s;
-}
 
-.friend-card:nth-child(3n) {
-    animation-duration: 8s;
-}
-
-@keyframes float {
-    0% {
-        transform: translateY(0);
-    }
-
-    50% {
-        transform: translateY(-8px);
-    }
-
-    100% {
-        transform: translateY(0);
-    }
-}
 
 .friend-card:hover {
     transform: translateY(-12px) scale(1.02);
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.3);
     border-color: rgba(255, 255, 255, 0.3);
-    animation-play-state: paused;
 }
 
 .card-img {
@@ -496,7 +474,9 @@ body {
 }
 
 .input-group input,
-.input-group textarea {
+.input-group textarea,
+#new-filter-name,
+#new-tier-name {
     width: 100%;
     padding: 10px;
     background: rgba(0, 0, 0, 0.3);
@@ -506,12 +486,88 @@ body {
     box-sizing: border-box;
 }
 
-.custom-checkbox {
-    width: 20px !important;
-    height: 20px !important;
-    accent-color: var(--primary);
+/* Custom Checkbox Styling */
+input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid var(--glass-border);
+    border-radius: 6px;
     cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+input[type="checkbox"]:checked {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+input[type="checkbox"]:checked::after {
+    content: '✓';
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+input[type="checkbox"]:hover {
+    border-color: var(--primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+input[type="checkbox"]:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+/* Range Slider Styling */
+input[type="range"] {
+    -webkit-appearance: none;
+    background: rgba(255, 255, 255, 0.1);
+    height: 12px;
+    border-radius: 6px;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 5px 0;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: var(--primary);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    transition: transform 0.2s ease, background 0.3s ease;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    margin-top: -4px; /* Centers the 20px thumb on the 12px track */
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
     transform: scale(1.1);
+}
+
+input[type="range"]:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+input[type="range"]:disabled::-webkit-slider-thumb {
+    background: #555;
+}
+
+#confirm-modal, #filter-select-modal {
+    z-index: 2000;
 }
 
 .custom-checkbox-label {
@@ -955,4 +1011,67 @@ body {
 .filter-item-actions {
     display: flex;
     gap: 5px;
+}
+
+/* Generic Toast Styling */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(30, 30, 45, 0.95);
+    color: white;
+    padding: 12px 25px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    z-index: 3000;
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border: 1px solid var(--glass-border);
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
+}
+
+.toast.hidden {
+    transform: translateY(100px);
+    opacity: 0;
+    display: flex !important;
+    pointer-events: none;
+}
+
+.toast.success {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.toast.error {
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.15);
+}
+
+/* Filter Option Item in Selection Modal */
+.filter-option-item {
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.filter-option-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(5px);
+    border-color: var(--primary);
+}
+
+.filter-option-item h4 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.filter-option-item .arrow {
+    opacity: 0.5;
+    font-size: 1.2rem;
 }

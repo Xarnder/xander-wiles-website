@@ -131,7 +131,7 @@
                     <label for="grid-size-slider"
                         style="color:var(--text-muted); font-size: 0.9rem; white-space: nowrap;">Grid Size:</label>
                     <input type="range" id="grid-size-slider" min="100" max="400" value="280" step="10"
-                        style="flex:1; accent-color: var(--primary);">
+                        style="flex:1;">
                 </div>
             </div>
 
@@ -447,6 +447,35 @@
 
     <!-- Firebase SDKs & Logic -->
     <script type="module" src="script.js"></script>
+
+    <!-- Custom Notification Toast -->
+    <div id="notification-toast" class="toast hidden">
+        <span id="notification-msg">Message goes here</span>
+    </div>
+
+    <!-- Generic Confirmation Modal -->
+    <div id="confirm-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 400px; text-align: center;">
+            <h3 id="confirm-title">Confirm Action</h3>
+            <p id="confirm-msg" style="color:var(--text-muted); margin: 20px 0;">Are you sure?</p>
+            <div class="modal-actions" style="display:flex; gap:10px; justify-content:center;">
+                <button id="confirm-cancel-btn" class="btn secondary-btn">Cancel</button>
+                <button id="confirm-ok-btn" class="btn primary-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Selection Modal (Replacing prompt) -->
+    <div id="filter-select-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 450px;">
+            <span id="close-filter-select" class="close" style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h3>Select Ranking Filter</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom: 20px;">Choose a filter to use for ranking.</p>
+            <div id="filter-options-list" style="display:flex; flex-direction:column; gap:10px;">
+                <!-- Filter options injected here -->
+            </div>
+        </div>
+    </div>
 
     <!-- Stats Modal -->
     <div id="stats-modal" class="modal hidden">

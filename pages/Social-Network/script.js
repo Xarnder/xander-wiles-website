@@ -647,7 +647,7 @@ document.getElementById('confirm-delete').addEventListener('click', async () => 
         deleteModal.classList.add('hidden');
     } catch (e) {
         console.error("Delete Error", e);
-        alert("Error deleting: " + e.message);
+        showToast("Error deleting: " + e.message, "error");
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
@@ -1041,7 +1041,7 @@ document.getElementById('export-json').addEventListener('click', () => {
 
 document.getElementById('export-csv').addEventListener('click', () => {
     if (allFriends.length === 0) {
-        alert("No data to export.");
+        showToast("No data to export.", "error");
         return;
     }
 
@@ -1324,7 +1324,7 @@ if (selectionActions && !document.getElementById('export-print')) {
 
 async function generateGridExport(type) {
     if (selectedFriendIds.size === 0) {
-        alert("Please select at least one person.");
+        showToast("Please select at least one person.", "error");
         return;
     }
 
@@ -1511,7 +1511,7 @@ async function generateGridExport(type) {
 
     } catch (err) {
         console.error("Export Failed", err);
-        alert("Export failed. See console.");
+        showToast("Export failed. See console.", "error");
     } finally {
         // Optional: clear staging
         stagingGrid.innerHTML = '';
@@ -1638,7 +1638,7 @@ if (cancelImportBtn) {
 if (confirmImportBtn) {
     confirmImportBtn.addEventListener('click', async () => {
         if (currentImportData.length === 0) {
-            alert("No data to import.");
+            showToast("No data to import.", "error");
             return;
         }
 
@@ -1673,7 +1673,7 @@ if (confirmImportBtn) {
 
         } catch (error) {
             console.error("Import Error:", error);
-            alert("Error importing contacts: " + error.message);
+            showToast("Error importing contacts: " + error.message, "error");
             btn.disabled = false;
             btn.innerText = "Confirm Import";
         }
@@ -1682,7 +1682,7 @@ if (confirmImportBtn) {
 
 function parseCSV(file) {
     if (typeof Papa === 'undefined') {
-        alert("CSV Parser not loaded. Please refresh.");
+        showToast("CSV Parser not loaded. Please refresh.", "error");
         return;
     }
 
@@ -1692,7 +1692,7 @@ function parseCSV(file) {
         complete: (results) => {
             const data = results.data;
             if (data.length === 0) {
-                alert("CSV is empty.");
+                showToast("CSV is empty.", "error");
                 return;
             }
 
@@ -1701,7 +1701,7 @@ function parseCSV(file) {
             const hasKey = (key) => Object.keys(firstRow).some(k => k.trim() === key);
 
             if (!hasKey("Forename") || !hasKey("Surname")) {
-                alert("Error: CSV must have 'Forename' and 'Surname' columns.");
+                showToast("Error: CSV must have 'Forename' and 'Surname' columns.", "error");
                 return;
             }
 
@@ -1743,7 +1743,7 @@ function parseCSV(file) {
             });
 
             if (currentImportData.length === 0) {
-                alert("No valid rows found to import.");
+                showToast("No valid rows found to import.", "error");
                 return;
             }
 
@@ -1752,7 +1752,7 @@ function parseCSV(file) {
         },
         error: (err) => {
             console.error("CSV Parse Error:", err);
-            alert("Failed to parse CSV file.");
+            showToast("Failed to parse CSV file.", "error");
         }
     });
 }
@@ -1905,7 +1905,7 @@ async function performBulkDelete() {
 
     } catch (error) {
         console.error("Bulk Delete Error:", error);
-        alert("Failed to delete some contacts: " + error.message);
+        showToast("Failed to delete some contacts: " + error.message, "error");
         slideDeleteModal.classList.add('hidden');
     } finally {
         // Reset slider
@@ -1930,6 +1930,7 @@ function loadRankingFilters() {
         // Sort by date client-side to avoid needing a Firestore index
         allRankingFilters.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         updateRankingFilterDropdowns();
+        if (typeof renderFiltersList === 'function') renderFiltersList();
     }, (err) => console.error("Error loading ranking filters:", err));
 }
 
@@ -2030,14 +2031,22 @@ function renderFiltersList() {
 }
 
 window.deleteRankingFilter = async (id) => {
-    if (confirm("Are you sure? This won't remove the rank data from people, but the filter will be gone.")) {
+    // Close the management modal first as requested
+    const manageFiltersModal = document.getElementById('manage-filters-modal');
+    if (manageFiltersModal) manageFiltersModal.classList.add('hidden');
+
+    showConfirm("Delete Filter", "Are you sure? This won't remove the rank data from people, but the filter will be gone.", async () => {
         try {
             await deleteDoc(doc(db, "rankingFilters", id));
             if (activeRankingFilter && activeRankingFilter.id === id) {
                 exitRankingMode();
             }
-        } catch(e) { console.error(e); }
-    }
+            showToast("Filter deleted");
+        } catch(e) { 
+            console.error(e); 
+            showToast("Error deleting filter", "error");
+        }
+    });
 };
 
 // --- Ranking Mode Entry ---
@@ -2051,24 +2060,32 @@ document.getElementById('rank-selected-btn')?.addEventListener('click', () => {
 
 function enterRankingMode(specificIds = null) {
     if (allRankingFilters.length === 0) {
-        alert("Please create a ranking filter first!");
+        showToast("Please create a ranking filter first!", "error");
         manageFiltersModal.classList.remove('hidden');
         return;
     }
     
     // Choose active filter
-    let filterToUse = allRankingFilters[0];
     if (currentDashboardFilterId) {
-        filterToUse = allRankingFilters.find(f => f.id === currentDashboardFilterId) || filterToUse;
-    } else {
-        if (allRankingFilters.length > 1) {
-            const filterName = prompt("Enter the exact name of the filter to use:\n" + allRankingFilters.map(f=>f.name).join("\n"));
-            if (!filterName) return;
-            filterToUse = allRankingFilters.find(f => f.name.toLowerCase() === filterName.toLowerCase());
-            if (!filterToUse) { alert("Filter not found."); return; }
+        const filterToUse = allRankingFilters.find(f => f.id === currentDashboardFilterId);
+        if (filterToUse) {
+            startRankingWithFilter(filterToUse, specificIds);
+            return;
         }
     }
     
+    // If multiple filters exist and none selected, show selector
+    if (allRankingFilters.length > 1) {
+        showFilterSelector((filterToUse) => {
+            startRankingWithFilter(filterToUse, specificIds);
+        });
+    } else {
+        // Just use the only one
+        startRankingWithFilter(allRankingFilters[0], specificIds);
+    }
+}
+
+function startRankingWithFilter(filterToUse, specificIds) {
     activeRankingFilter = filterToUse;
     document.getElementById('active-ranking-filter-name').innerText = activeRankingFilter.name;
     
@@ -2107,9 +2124,9 @@ function enterRankingMode(specificIds = null) {
 }
 
 document.getElementById('exit-ranking-btn')?.addEventListener('click', () => {
-    if(confirm("Exit without saving changes?")) {
+    showConfirm("Exit Ranking", "Are you sure you want to exit? Any unsaved changes will be lost.", () => {
         exitRankingMode();
-    }
+    });
 });
 
 function exitRankingMode() {
@@ -2276,16 +2293,12 @@ document.getElementById('save-ranking-btn')?.addEventListener('click', async () 
             await batch.commit();
         }
         
-        // Also update local allFriends state so badge renders immediately
-        // Wait for the snapshot listener to fire is one way, but local update is faster.
-        // We'll just rely on snapshot listener which should be near-instant.
-        
-        alert("Rankings saved successfully!");
+        showToast("Rankings saved successfully!");
         exitRankingMode();
         
     } catch(e) {
         console.error("Error saving rankings:", e);
-        alert("Error saving: " + e.message);
+        showToast("Error saving: " + e.message, "error");
     } finally {
         btn.disabled = false;
         btn.innerText = "Save Rankings";
@@ -2367,11 +2380,88 @@ async function saveTierChanges() {
             tiers: activeRankingFilter.tiers,
             updatedAt: new Date()
         });
-        alert("Tiers updated!");
+        showToast("Tiers updated!");
         renderRankingLayout(); 
         manageTiersModal.classList.add('hidden');
     } catch(e) {
         console.error(e);
-        alert("Failed to update tiers");
+        showToast("Failed to update tiers", "error");
     }
+}
+
+// --- Custom Popup System ---
+function showToast(msg, type = 'success') {
+    const toast = document.getElementById('notification-toast');
+    const msgEl = document.getElementById('notification-msg');
+    if (!toast || !msgEl) return;
+    
+    msgEl.innerText = msg;
+    toast.className = `toast ${type}`;
+    toast.classList.remove('hidden');
+    
+    setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 3000);
+}
+
+function showConfirm(title, msg, onConfirm) {
+    const modal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-title');
+    const msgEl = document.getElementById('confirm-msg');
+    const okBtn = document.getElementById('confirm-ok-btn');
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    
+    if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) return;
+    
+    titleEl.innerText = title;
+    msgEl.innerText = msg;
+    modal.classList.remove('hidden');
+    
+    const handleOk = () => {
+        modal.classList.add('hidden');
+        onConfirm();
+        cleanup();
+    };
+    
+    const handleCancel = () => {
+        modal.classList.add('hidden');
+        cleanup();
+    };
+    
+    const cleanup = () => {
+        okBtn.removeEventListener('click', handleOk);
+        cancelBtn.removeEventListener('click', handleCancel);
+    };
+    
+    okBtn.addEventListener('click', handleOk, { once: true });
+    cancelBtn.addEventListener('click', handleCancel, { once: true });
+}
+
+function showFilterSelector(onSelect) {
+    const modal = document.getElementById('filter-select-modal');
+    const list = document.getElementById('filter-options-list');
+    const closeBtn = document.getElementById('close-filter-select');
+    
+    if (!modal || !list || !closeBtn) return;
+    
+    list.innerHTML = '';
+    allRankingFilters.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'filter-option-item';
+        item.innerHTML = `
+            <div>
+                <h4>${f.name}</h4>
+                <div style="font-size:0.8rem; color:var(--text-muted);">${f.tiers.length} Tiers</div>
+            </div>
+            <span class="arrow">→</span>
+        `;
+        item.onclick = () => {
+            modal.classList.add('hidden');
+            onSelect(f);
+        };
+        list.appendChild(item);
+    });
+    
+    closeBtn.onclick = () => modal.classList.add('hidden');
+    modal.classList.remove('hidden');
 }
