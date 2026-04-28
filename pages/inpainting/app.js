@@ -2,12 +2,16 @@
 const imageUpload = document.getElementById('image-upload');
 const imageCanvas = document.getElementById('image-canvas');
 const maskCanvas = document.getElementById('mask-canvas');
+const brushCursor = document.getElementById('brush-cursor');
 const canvasWrapper = document.querySelector('.canvas-wrapper');
 const brushSizeSlider = document.getElementById('brush-size');
 const brushSizeVal = document.getElementById('brush-size-val');
 const clearMaskBtn = document.getElementById('clear-mask-btn');
 const sendToCompareBtn = document.getElementById('send-to-compare-btn');
 const inpaintBtn = document.getElementById('inpaint-btn');
+const undoBtn = document.getElementById('undo-btn');
+const downloadBtn = document.getElementById('download-btn');
+const downloadJpgBtn = document.getElementById('download-jpg-btn');
 const statusText = document.getElementById('status-text');
 
 const progressContainer = document.getElementById('progress-container');
@@ -21,6 +25,7 @@ let onnxSession = null;
 let isDrawing = false;
 let uploadedImage = null;
 const INFERENCE_SIZE = 512;
+let history = []; // To store previous image states (DataURLs)
 
 console.log("[DEBUG] Application initialized. Waiting for WASM backend to load.");
 
@@ -84,9 +89,49 @@ function handleImage(img) {
 
     clearMask();
     inpaintBtn.disabled = false;
+    downloadBtn.disabled = false;
+    downloadJpgBtn.disabled = false;
+    sendToCompareBtn.disabled = false;
+    history = []; // Reset history for new image
+    undoBtn.disabled = true;
+    
     statusText.innerText = "Image loaded. Draw a mask and click Run Inpaint.";
     console.log(`[DEBUG] Image drawn to canvas. Size: ${width}x${height}.`);
 }
+
+function saveToHistory() {
+    history.push(imageCanvas.toDataURL());
+    if (history.length > 20) history.shift(); // Limit history to last 20 steps
+    undoBtn.disabled = false;
+}
+
+undoBtn.addEventListener('click', () => {
+    if (history.length === 0) return;
+    
+    const lastState = history.pop();
+    const img = new Image();
+    img.onload = () => {
+        imgCtx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+        imgCtx.drawImage(img, 0, 0);
+        statusText.innerText = "Undo successful.";
+        if (history.length === 0) undoBtn.disabled = true;
+    };
+    img.src = lastState;
+});
+
+downloadBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'inpainted-image.png';
+    link.href = imageCanvas.toDataURL('image/png');
+    link.click();
+});
+
+downloadJpgBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'inpainted-image.jpg';
+    link.href = imageCanvas.toDataURL('image/jpeg', 0.92);
+    link.click();
+});
 
 // --- Image Upload Handling ---
 imageUpload.addEventListener('change', (e) => {
@@ -165,6 +210,33 @@ function draw(e) {
     maskCtx.moveTo(pos.x, pos.y);
 }
 
+function updateCursor(e) {
+    if (!uploadedImage) return;
+    
+    const rect = canvasWrapper.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    
+    // Check if mouse is within bounds
+    if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
+        brushCursor.style.display = 'none';
+        return;
+    }
+
+    brushCursor.style.display = 'block';
+    brushCursor.style.left = `${x}px`;
+    brushCursor.style.top = `${y}px`;
+    
+    // Scale brush size to display size
+    const scale = rect.width / maskCanvas.width;
+    const displaySize = brushSizeSlider.value * scale;
+    brushCursor.style.width = `${displaySize}px`;
+    brushCursor.style.height = `${displaySize}px`;
+}
+
 if (sendToCompareBtn) {
     sendToCompareBtn.addEventListener('click', async () => {
         if (!uploadedImage) {
@@ -173,6 +245,12 @@ if (sendToCompareBtn) {
         }
 
         try {
+            // Trigger auto-download of final image before comparing
+            const link = document.createElement('a');
+            link.download = 'inpainted-final-result.png';
+            link.href = imageCanvas.toDataURL('image/png');
+            link.click();
+
             // 1. Get Original Image as Blob
             const origCanvas = document.createElement('canvas');
             origCanvas.width = uploadedImage.width;
@@ -201,17 +279,45 @@ if (sendToCompareBtn) {
     });
 }
 
-maskCanvas.addEventListener('mousedown', startDrawing);
-maskCanvas.addEventListener('mousemove', draw);
+maskCanvas.addEventListener('mousedown', (e) => {
+    startDrawing(e);
+    updateCursor(e);
+});
+maskCanvas.addEventListener('mousemove', (e) => {
+    draw(e);
+    updateCursor(e);
+});
 maskCanvas.addEventListener('mouseup', stopDrawing);
-maskCanvas.addEventListener('mouseout', stopDrawing);
+maskCanvas.addEventListener('mouseout', () => {
+    stopDrawing();
+    brushCursor.style.display = 'none';
+});
 
-maskCanvas.addEventListener('touchstart', startDrawing, { passive: false });
-maskCanvas.addEventListener('touchmove', draw, { passive: false });
-maskCanvas.addEventListener('touchend', stopDrawing);
+maskCanvas.addEventListener('mouseenter', () => {
+    if (uploadedImage) brushCursor.style.display = 'block';
+});
+
+maskCanvas.addEventListener('touchstart', (e) => {
+    startDrawing(e);
+    updateCursor(e);
+}, { passive: false });
+maskCanvas.addEventListener('touchmove', (e) => {
+    draw(e);
+    updateCursor(e);
+}, { passive: false });
+maskCanvas.addEventListener('touchend', () => {
+    stopDrawing();
+    brushCursor.style.display = 'none';
+});
 
 brushSizeSlider.addEventListener('input', (e) => {
     brushSizeVal.innerText = e.target.value;
+    // Update cursor size immediately if it's visible
+    const rect = canvasWrapper.getBoundingClientRect();
+    const scale = rect.width / maskCanvas.width;
+    const displaySize = e.target.value * scale;
+    brushCursor.style.width = `${displaySize}px`;
+    brushCursor.style.height = `${displaySize}px`;
 });
 
 clearMaskBtn.addEventListener('click', clearMask);
@@ -236,6 +342,10 @@ inpaintBtn.addEventListener('click', async () => {
         // Disable UI and show progress
         inpaintBtn.disabled = true;
         clearMaskBtn.disabled = true;
+        undoBtn.disabled = true;
+        downloadBtn.disabled = true;
+        downloadJpgBtn.disabled = true;
+        sendToCompareBtn.disabled = true;
         uploadLabel.classList.add('disabled');
         progressContainer.style.display = 'block';
 
@@ -320,6 +430,9 @@ inpaintBtn.addEventListener('click', async () => {
         const tempCtx = tempCanvas.getContext('2d');
         tempCtx.putImageData(newImageData, 0, 0);
 
+        // Save current state to history before drawing the new result
+        saveToHistory();
+
         // Draw the inpainted result back onto the main canvas, stretching it to match the current aspect ratio
         imgCtx.drawImage(tempCanvas, 0, 0, imageCanvas.width, imageCanvas.height);
         
@@ -333,6 +446,10 @@ inpaintBtn.addEventListener('click', async () => {
         // Re-enable UI and hide progress
         inpaintBtn.disabled = false;
         clearMaskBtn.disabled = false;
+        undoBtn.disabled = history.length === 0;
+        downloadBtn.disabled = false;
+        downloadJpgBtn.disabled = false;
+        sendToCompareBtn.disabled = false;
         uploadLabel.classList.remove('disabled');
         progressContainer.style.display = 'none';
     }

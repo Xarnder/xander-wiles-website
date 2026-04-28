@@ -193,8 +193,19 @@ canvas {
 }
 
 #mask-canvas {
-    cursor: crosshair;
+    cursor: none; /* Hide default cursor to show brush outline */
     z-index: 10;
+}
+
+#brush-cursor {
+    position: absolute;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    pointer-events: none; /* Let clicks pass through */
+    z-index: 20;
+    display: none; /* Hidden by default, shown on mouseenter */
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
 }
 
 .hint {
