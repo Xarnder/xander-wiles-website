@@ -585,6 +585,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             maskCanvas.toBlob(async (finalBlob) => {
                 if (finalBlob) {
+                    // Automatically download the final image before sending to compare
+                    const baseName = getBaseFilename();
+                    forceDownload(finalBlob, `${baseName}-final.png`);
+
                     try {
                         // We also need the original image. 
                         // Since state.originalImage is an Image object, we need to draw it to a canvas first.
