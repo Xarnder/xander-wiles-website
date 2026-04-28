@@ -6,6 +6,8 @@ const brushCursor = document.getElementById('brush-cursor');
 const canvasWrapper = document.querySelector('.canvas-wrapper');
 const brushSizeSlider = document.getElementById('brush-size');
 const brushSizeVal = document.getElementById('brush-size-val');
+const featherSlider = document.getElementById('feather-amount');
+const featherVal = document.getElementById('feather-val');
 const clearMaskBtn = document.getElementById('clear-mask-btn');
 const sendToCompareBtn = document.getElementById('send-to-compare-btn');
 const inpaintBtn = document.getElementById('inpaint-btn');
@@ -59,27 +61,17 @@ initModel();
 function handleImage(img) {
     uploadedImage = img;
     
-    // Calculate aspect ratio and set canvas size
-    const maxDisplaySize = 800; // Cap display size for performance
+    // Keep original resolution
     let width = img.width;
     let height = img.height;
-
-    if (width > height) {
-        if (width > maxDisplaySize) {
-            height = Math.round((height * maxDisplaySize) / width);
-            width = maxDisplaySize;
-        }
-    } else {
-        if (height > maxDisplaySize) {
-            width = Math.round((width * maxDisplaySize) / height);
-            height = maxDisplaySize;
-        }
-    }
 
     imageCanvas.width = width;
     imageCanvas.height = height;
     maskCanvas.width = width;
     maskCanvas.height = height;
+
+    // Apply current feathering preview
+    updateFeatherPreview();
 
     // Update wrapper aspect ratio to match canvas
     canvasWrapper.style.aspectRatio = `${width} / ${height}`;
@@ -320,6 +312,24 @@ brushSizeSlider.addEventListener('input', (e) => {
     brushCursor.style.height = `${displaySize}px`;
 });
 
+featherSlider.addEventListener('input', (e) => {
+    const val = e.target.value;
+    featherVal.innerText = val;
+    updateFeatherPreview();
+});
+
+function updateFeatherPreview() {
+    if (uploadedImage) {
+        const val = featherSlider.value;
+        const rect = maskCanvas.getBoundingClientRect();
+        const scale = rect.width / maskCanvas.width;
+        const displayFeather = val * scale;
+        maskCanvas.style.filter = `blur(${displayFeather}px)`;
+    }
+}
+
+window.addEventListener('resize', updateFeatherPreview);
+
 clearMaskBtn.addEventListener('click', clearMask);
 
 function clearMask() {
@@ -345,6 +355,7 @@ inpaintBtn.addEventListener('click', async () => {
         undoBtn.disabled = true;
         downloadBtn.disabled = true;
         downloadJpgBtn.disabled = true;
+        featherSlider.disabled = true;
         sendToCompareBtn.disabled = true;
         uploadLabel.classList.add('disabled');
         progressContainer.style.display = 'block';
@@ -433,8 +444,35 @@ inpaintBtn.addEventListener('click', async () => {
         // Save current state to history before drawing the new result
         saveToHistory();
 
-        // Draw the inpainted result back onto the main canvas, stretching it to match the current aspect ratio
-        imgCtx.drawImage(tempCanvas, 0, 0, imageCanvas.width, imageCanvas.height);
+        // --- Intelligent Blending for High-Resolution ---
+        // 1. Create a high-res temporary canvas for the upscaled result
+        const highResTemp = document.createElement('canvas');
+        highResTemp.width = imageCanvas.width;
+        highResTemp.height = imageCanvas.height;
+        const highResTempCtx = highResTemp.getContext('2d');
+        
+        // 2. Draw the 512x512 result upscaled to original resolution
+        highResTempCtx.drawImage(tempCanvas, 0, 0, highResTemp.width, highResTemp.height);
+        
+        // 3. Mask the upscaled result so only the inpainted parts remain
+        // Use 'destination-in' to keep only pixels that overlap with the user's mask
+        highResTempCtx.globalCompositeOperation = 'destination-in';
+        
+        // Apply feathering via blur filter
+        const feather = parseInt(featherSlider.value);
+        if (feather > 0) {
+            // We scale the feather relative to the image size for consistent look
+            // but for now, let's keep it simple with absolute image pixels.
+            highResTempCtx.filter = `blur(${feather}px)`;
+        }
+        
+        highResTempCtx.drawImage(maskCanvas, 0, 0);
+        
+        // Reset filter for future operations
+        highResTempCtx.filter = 'none';
+        
+        // 4. Draw the isolated inpainted parts back onto the original high-res image
+        imgCtx.drawImage(highResTemp, 0, 0);
         
         clearMask();
 
@@ -449,6 +487,7 @@ inpaintBtn.addEventListener('click', async () => {
         undoBtn.disabled = history.length === 0;
         downloadBtn.disabled = false;
         downloadJpgBtn.disabled = false;
+        featherSlider.disabled = false;
         sendToCompareBtn.disabled = false;
         uploadLabel.classList.remove('disabled');
         progressContainer.style.display = 'none';
