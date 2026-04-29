@@ -37,6 +37,10 @@ export const models = [
     {
         name: 'Bedroom',
         path: '/assets/models/Bedroom.glb'
+    },
+    {
+        name: 'Ford Fiesta',
+        path: '/assets/models/Ford_Fiesta.glb'
     }
 ];
 

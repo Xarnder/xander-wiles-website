@@ -148,5 +148,15 @@
         "background": "#1a1c20",
         "text": "#f7fafc",
         "icon": "🧙‍♂️"
+    },
+    {
+        "id": "Hot Songs",
+        "csvPath": "/assets/Music_CSV/something_else_playlist_metadata.csv",
+        "description": "A collection of hot songs.",
+        "theme": "#ff0000",
+        "accent": "#a0aec0",
+        "background": "#1a1c20",
+        "text": "#f7fafc",
+        "icon": "💋"
     }
 ]
