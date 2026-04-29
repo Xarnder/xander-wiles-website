@@ -727,6 +727,60 @@ mark.search-highlight {
     flex: 1;
 }
 
+/* Help & Variable Explanations */
+.help-section {
+    margin-top: 25px;
+    border-top: 1px solid var(--glass-border);
+    padding-top: 20px;
+}
+
+.help-section h4 {
+    margin-bottom: 12px;
+    color: var(--glow-color);
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.help-description {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.variable-type {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border-left: 3px solid #4cc9f0;
+}
+
+.variable-type strong {
+    color: #4cc9f0;
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+}
+
+.variable-type p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.variable-example {
+    display: block;
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #a8dadc;
+    border: 1px solid rgba(168, 218, 220, 0.2);
+}
+
 /* Variable Placeholder improvement */
 .prompt-input:empty::before {
     content: attr(data-placeholder);

@@ -2117,14 +2117,34 @@ shortcutModal.className = 'modal-overlay hidden';
 shortcutModal.innerHTML = `
     <div class="modal-content glass-card slim-modal">
         <div class="modal-header">
-            <h3>Keyboard Shortcuts</h3>
+            <h3>Help & Shortcuts</h3>
             <button class="close-btn" id="close-shortcut-modal">&times;</button>
         </div>
         <div class="shortcut-list">
             <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>K</kbd> <span>Focus Search</span></div>
-            <div class="shortcut-item"><kbd>Shift</kbd> + <kbd>N</kbd> <span>New Prompt</span></div>
+            <div class="shortcut-item"><kbd>Shift</kbd> + <kbd>N</kbd> <span>New Entry</span></div>
             <div class="shortcut-item"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> <span>Save Modal</span></div>
             <div class="shortcut-item"><kbd>Esc</kbd> <span>Close Modal</span></div>
+            <div class="shortcut-item"><kbd>?</kbd> <span>Open this Help menu</span></div>
+        </div>
+
+        <div class="help-section">
+            <h4>Interactive Variables</h4>
+            <p class="help-description">
+                Add dynamic placeholders to your prompts or commands. They become editable fields when you view the card!
+            </p>
+            
+            <div class="variable-type">
+                <strong>Named Variables</strong>
+                <p>Creates a field with the name as the placeholder.</p>
+                <span class="variable-example">Write a story about {{Main Character}}.</span>
+            </div>
+            
+            <div class="variable-type">
+                <strong>Anonymous Variables</strong>
+                <p>Use 3 or more underscores for a simple blank field.</p>
+                <span class="variable-example">Improve this code: ___</span>
+            </div>
         </div>
     </div>
 `;
