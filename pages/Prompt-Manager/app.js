@@ -289,38 +289,46 @@ const autoResizeTextarea = (el) => {
     el.addEventListener('input', () => autoResizeTextarea(el));
 });
 
-// Modal Logic
-openModalBtn.addEventListener('click', () => {
-    isEditing = false;
-    currentPromptId = null;
-    promptCodeContainer.classList.add('hidden');
-    submitPromptBtn.disabled = false;
+// Central function to adjust modal fields based on mode
+function updateModalUI(mode, isEdit = false) {
+    const isNew = !isEdit;
     
-    // Mode-specific modal adjustments
-    if (currentMode === 'command') {
-        modalTitle.textContent = "Add New Command";
-        submitPromptBtn.textContent = "Add Command";
+    if (mode === 'command') {
+        modalTitle.textContent = isNew ? "Add New Command" : (isEditing ? "Edit Command" : "Duplicate Command");
+        submitPromptBtn.textContent = isNew ? "Add Command" : (isEditing ? "Update Command" : "Add Command");
         document.getElementById('prompt-title').placeholder = "Command Title";
         document.getElementById('prompt-content').required = false;
-        promptCodeContainer.classList.remove('hidden'); // Show code by default for commands
+        document.getElementById('prompt-content').placeholder = "Optional notes...";
+        promptCodeContainer.classList.remove('hidden'); 
         document.getElementById('prompt-code').placeholder = "Main command...";
-    } else if (currentMode === 'link') {
-        modalTitle.textContent = "Add New Link";
-        submitPromptBtn.textContent = "Add Link";
+        document.getElementById('prompt-code').required = true;
+    } else if (mode === 'link') {
+        modalTitle.textContent = isNew ? "Add New Link" : (isEditing ? "Edit Link" : "Duplicate Link");
+        submitPromptBtn.textContent = isNew ? "Add Link" : (isEditing ? "Update Link" : "Add Link");
         document.getElementById('prompt-title').placeholder = "Link Display Name (e.g. My Website)";
         document.getElementById('prompt-content').required = true;
         document.getElementById('prompt-content').placeholder = "URL (https://...)";
         promptCodeContainer.classList.add('hidden');
         document.getElementById('prompt-code').placeholder = "Optional notes...";
+        document.getElementById('prompt-code').required = false;
     } else {
-        modalTitle.textContent = "Add New Prompt";
-        submitPromptBtn.textContent = "Add Prompt";
+        modalTitle.textContent = isNew ? "Add New Prompt" : (isEditing ? "Edit Prompt" : "Duplicate Prompt");
+        submitPromptBtn.textContent = isNew ? "Add Prompt" : (isEditing ? "Update Prompt" : "Add Prompt");
         document.getElementById('prompt-title').placeholder = "Prompt Title";
         document.getElementById('prompt-content').required = true;
         document.getElementById('prompt-content').placeholder = "Main Prompt Content...";
-        promptCodeContainer.classList.add('hidden'); // Hide code by default for prompts
         document.getElementById('prompt-code').placeholder = "Optional Code Snippets...";
+        document.getElementById('prompt-code').required = false;
     }
+}
+
+// Modal Logic
+openModalBtn.addEventListener('click', () => {
+    isEditing = false;
+    currentPromptId = null;
+    submitPromptBtn.disabled = false;
+    
+    updateModalUI(currentMode, false);
 
     addPromptModal.classList.remove('hidden');
     
@@ -1202,7 +1210,7 @@ function createPromptCard(item, searchTerm = '') {
         }
     }
 
-    let codeHTML = data.codeSnippet ? `<div class="prompt-code-block">${escapeHTML(data.codeSnippet)}</div>` : '';
+    let codeHTML = data.codeSnippet ? `<div class="prompt-code-block">${renderContentWithInputs(data.codeSnippet, searchTerm)}</div>` : '';
     
     let additionalBlocksHTML = '';
     if (data.additionalBlocks && data.additionalBlocks.length > 0) {
@@ -1213,7 +1221,7 @@ function createPromptCard(item, searchTerm = '') {
                         <button class="code-copy-btn" title="Copy Code">
                             <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path fill="currentColor" d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                         </button>
-                        <div class="code-content">${highlightSearch(escapeHTML(block.content), searchTerm)}</div>
+                        <div class="code-content">${renderContentWithInputs(block.content, searchTerm)}</div>
                     </div>`;
             } else if (block.type === 'remember') {
                 additionalBlocksHTML += `
@@ -1241,8 +1249,8 @@ function createPromptCard(item, searchTerm = '') {
     let contentHTML = '';
     if (isLink && data.content) {
         contentHTML = `<p class="prompt-text-display link-display" style="margin-top: 10px; line-height: 1.5; color: #06d6a0; font-weight: 500; word-break: break-all;"><a href="${data.content}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">${highlightSearch(escapeHTML(data.content), searchTerm)}</a></p>`;
-    } else if (!isCommand && data.content) {
-        contentHTML = `<p class="prompt-text-display" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content, searchTerm)}</p>`;
+    } else if (data.content && !isLink) {
+        contentHTML = `<p class="prompt-text-display ${isCommand ? 'command-notes' : ''}" style="margin-top: 10px; line-height: 1.5; color: var(--text-muted);">${renderContentWithInputs(data.content, searchTerm)}</p>`;
     }
 
     card.innerHTML = `
@@ -1274,7 +1282,7 @@ function createPromptCard(item, searchTerm = '') {
                         <path fill="currentColor" d="M6 6V2c0-1.1.9-2 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-4v4a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V8c0-1.1.9-2 2-2h4zm2 0h4a2 2 0 0 1 2 2v4h4V2H8v4zM2 8v10h10V8H2zm4 4v-2h2v2h2v2H8v2H6v-2H4v-2h2z"/>
                     </svg>
                 </button>
-                ${(data.mode !== 'command' && !isLink) ? `
+                ${(!isLink) ? `
                 <button class="history-btn outline-btn action-btn" title="Input History">
                     ${historyIconSVG}
                 </button>` : ''}
@@ -1298,7 +1306,7 @@ function createPromptCard(item, searchTerm = '') {
                     <button class="code-copy-btn" title="Copy Code">
                         <svg viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path fill="currentColor" d="M16 1H4C2.9 1 2 1.9 2 3v14h2V3h12V1zm3 4H8C6.9 5 6 5.9 6 7v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
                     </button>
-                    <div class="code-content">${highlightSearch(escapeHTML(data.codeSnippet), searchTerm)}</div>
+                    <div class="code-content">${renderContentWithInputs(data.codeSnippet, searchTerm)}</div>
                 </div>` : ''}
             ${additionalBlocksHTML}
             <div class="card-body-footer">
@@ -1355,8 +1363,32 @@ function createPromptCard(item, searchTerm = '') {
     card.querySelectorAll('.code-copy-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const code = btn.nextElementSibling.innerText;
-            copyToClipboard(code, btn);
+            const codeContainer = btn.nextElementSibling;
+            const inputs = codeContainer.querySelectorAll('.prompt-input');
+            
+            if (inputs.length > 0) {
+                // Find which block this is to get the raw content for accurate reconstruction
+                let rawContent = "";
+                const isMainCode = !btn.parentElement.classList.contains('additional-block');
+                
+                if (isMainCode) {
+                    rawContent = data.codeSnippet;
+                } else {
+                    const codeBlockEls = Array.from(card.querySelectorAll('.prompt-code-block.additional-block'));
+                    const blockIdx = codeBlockEls.indexOf(btn.parentElement);
+                    const codeBlocksData = data.additionalBlocks.filter(b => b.type === 'code');
+                    rawContent = codeBlocksData[blockIdx]?.content || "";
+                }
+                
+                let idx = 0;
+                const processed = rawContent.replace(/_{3,}|{{(.*?)}}/g, () => {
+                    const val = inputs[idx++]?.textContent || '___';
+                    return val.trim() || '___';
+                });
+                copyToClipboard(processed, btn);
+            } else {
+                copyToClipboard(codeContainer.innerText, btn);
+            }
         });
     });
     
@@ -1400,44 +1432,61 @@ function createPromptCard(item, searchTerm = '') {
     const copyBtn = card.querySelector('.copy-btn');
     copyBtn.addEventListener('click', () => {
         let fullPromptText = "";
-        const allInputValues = []; // Gather all values across all blocks
-        const displayP = card.querySelector('.prompt-text-display');
-        
-        if (displayP && data.content) {
-            const inputs = displayP.querySelectorAll('.prompt-input');
-            let inputIndex = 0;
-            // Handle both {{...}} and ___
-            fullPromptText = data.content.replace(/_{3,}|{{(.*?)}}/g, () => {
-                const el = inputs[inputIndex++];
-                const val = el?.textContent || '___';
-                const trimmedVal = val.trim();
-                if (trimmedVal) allInputValues.push(trimmedVal);
-                return trimmedVal || '___';
-            });
-        } else if (data.content) {
-            // Fallback for existing data or prompts without interactive inputs
-            fullPromptText = data.content;
+        const allInputValues = [];
+        // 1. Handle Main Content (data.content)
+        if (data.content && !isLink) {
+            const mainContentEl = card.querySelector('.prompt-text-display:not(.additional-block)');
+            if (mainContentEl) {
+                const inputs = mainContentEl.querySelectorAll('.prompt-input');
+                let inputIndex = 0;
+                const processed = data.content.replace(/_{3,}|{{(.*?)}}/g, () => {
+                    const val = inputs[inputIndex++]?.textContent || '___';
+                    const trimmedVal = val.trim();
+                    if (trimmedVal) allInputValues.push(trimmedVal);
+                    return trimmedVal || '___';
+                });
+                fullPromptText = processed;
+            } else {
+                fullPromptText = data.content;
+            }
         }
 
+        // 2. Handle Main Code Snippet (data.codeSnippet)
         if (data.codeSnippet) {
-            fullPromptText += (fullPromptText ? "\n\n" : "") + data.codeSnippet;
+            const codeBlock = card.querySelector('.prompt-code-block:not(.additional-block) .code-content');
+            let processedCode = data.codeSnippet;
+            if (codeBlock) {
+                const codeInputs = codeBlock.querySelectorAll('.prompt-input');
+                let inputIdx = 0;
+                processedCode = data.codeSnippet.replace(/_{3,}|{{(.*?)}}/g, () => {
+                    const val = codeInputs[inputIdx++]?.textContent || '___';
+                    const trimmedVal = val.trim();
+                    if (trimmedVal) allInputValues.push(trimmedVal);
+                    return trimmedVal || '___';
+                });
+            }
+            fullPromptText += (fullPromptText ? "\n\n" : "") + processedCode;
         }
 
-        // Append Additional Blocks (Filter out 'remember' blocks)
+        // 3. Handle Additional Blocks (Filter out 'remember' blocks)
         if (data.additionalBlocks && data.additionalBlocks.length > 0) {
-            const additionalPs = card.querySelectorAll('.prompt-text-display.additional-block');
-            let blockTextIndex = 0;
+            const additionalBlockEls = card.querySelectorAll('.additional-block');
+            let blockElIdx = 0;
 
             data.additionalBlocks.forEach(block => {
                 if (block.type === 'remember') return; // Do not copy internal notes
 
+                const blockEl = additionalBlockEls[blockElIdx++];
+                if (!blockEl) return;
+
                 let blockContent = block.content;
-                if (block.type === 'text') {
-                    // Reconstruct inputs for each additional text block
-                    const blockInputs = additionalPs[blockTextIndex++].querySelectorAll('.prompt-input');
+                const inputContainer = block.type === 'code' ? blockEl.querySelector('.code-content') : blockEl;
+
+                if (inputContainer) {
+                    const inputs = inputContainer.querySelectorAll('.prompt-input');
                     let inputIdx = 0;
                     blockContent = block.content.replace(/_{3,}|{{(.*?)}}/g, () => {
-                        const val = blockInputs[inputIdx++]?.textContent || '___';
+                        const val = inputs[inputIdx++]?.textContent || '___';
                         const trimmedVal = val.trim();
                         if (trimmedVal) allInputValues.push(trimmedVal);
                         return trimmedVal || '___';
@@ -1503,8 +1552,7 @@ function createPromptCard(item, searchTerm = '') {
             currentPromptId = null;
             
             const itemMode = data.mode || 'prompt';
-            modalTitle.textContent = "Duplicate Prompt";
-            submitPromptBtn.textContent = "Add Prompt";
+            updateModalUI(itemMode, false); // false because it's a new entry (duplicate)
             
             // pre-fill from data
             document.getElementById('prompt-title').value = data.title + " (Copy)";
@@ -1551,8 +1599,7 @@ function createPromptCard(item, searchTerm = '') {
         isEditing = true;
         currentPromptId = id;
         const itemMode = data.mode || 'prompt';
-        modalTitle.textContent = itemMode === 'command' ? "Edit Command" : (itemMode === 'link' ? "Edit Link" : "Edit Prompt");
-        submitPromptBtn.textContent = itemMode === 'command' ? "Update Command" : (itemMode === 'link' ? "Update Link" : "Update Prompt");
+        updateModalUI(itemMode, true);
         
         // Sync currentMode to item mode for editing context
         currentMode = itemMode;
