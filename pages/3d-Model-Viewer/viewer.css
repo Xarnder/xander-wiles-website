@@ -55,7 +55,22 @@ html {
     gap: 15px;
     max-height: calc(100vh - 120px);
     overflow-y: auto;
-    pointer-events: none;
+    pointer-events: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+    width: fit-content;
+}
+
+/* Force permanent scrollbar */
+.ui-container::-webkit-scrollbar {
+    width: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+.ui-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
 }
 
 /* Glass Card Style */
@@ -70,6 +85,14 @@ html {
     width: 280px;
     pointer-events: auto;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    transition: none; /* Override global transition */
+}
+
+/* Remove global hover lift effect */
+.ui-container .glass-card:hover {
+    transform: none;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.1);
 }
 
 .ui-container .glass-card h3 {
@@ -231,6 +254,7 @@ input[type="range"] {
         /* Center items */
 
         overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
         /* Scroll vertically */
         padding: 20px;
         box-sizing: border-box;
