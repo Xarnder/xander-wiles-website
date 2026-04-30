@@ -1381,9 +1381,12 @@ function createPromptCard(item, searchTerm = '') {
                 }
                 
                 let idx = 0;
-                const processed = rawContent.replace(/_{3,}|{{(.*?)}}/g, () => {
-                    const val = inputs[idx++]?.textContent || '___';
-                    return val.trim() || '___';
+                const processed = rawContent.replace(/_{3,}|{{(.*?)}}/g, (match, p1) => {
+                    const val = inputs[idx++]?.textContent || '';
+                    const trimmedVal = val.trim();
+                    if (trimmedVal) return trimmedVal;
+                    if (p1) return p1.trim();
+                    return '___';
                 });
                 copyToClipboard(processed, btn);
             } else {
@@ -1439,11 +1442,15 @@ function createPromptCard(item, searchTerm = '') {
             if (mainContentEl) {
                 const inputs = mainContentEl.querySelectorAll('.prompt-input');
                 let inputIndex = 0;
-                const processed = data.content.replace(/_{3,}|{{(.*?)}}/g, () => {
-                    const val = inputs[inputIndex++]?.textContent || '___';
+                const processed = data.content.replace(/_{3,}|{{(.*?)}}/g, (match, p1) => {
+                    const val = inputs[inputIndex++]?.textContent || '';
                     const trimmedVal = val.trim();
-                    if (trimmedVal) allInputValues.push(trimmedVal);
-                    return trimmedVal || '___';
+                    if (trimmedVal) {
+                        allInputValues.push(trimmedVal);
+                        return trimmedVal;
+                    }
+                    if (p1) return p1.trim();
+                    return '___';
                 });
                 fullPromptText = processed;
             } else {
@@ -1458,11 +1465,15 @@ function createPromptCard(item, searchTerm = '') {
             if (codeBlock) {
                 const codeInputs = codeBlock.querySelectorAll('.prompt-input');
                 let inputIdx = 0;
-                processedCode = data.codeSnippet.replace(/_{3,}|{{(.*?)}}/g, () => {
-                    const val = codeInputs[inputIdx++]?.textContent || '___';
+                processedCode = data.codeSnippet.replace(/_{3,}|{{(.*?)}}/g, (match, p1) => {
+                    const val = codeInputs[inputIdx++]?.textContent || '';
                     const trimmedVal = val.trim();
-                    if (trimmedVal) allInputValues.push(trimmedVal);
-                    return trimmedVal || '___';
+                    if (trimmedVal) {
+                        allInputValues.push(trimmedVal);
+                        return trimmedVal;
+                    }
+                    if (p1) return p1.trim();
+                    return '___';
                 });
             }
             fullPromptText += (fullPromptText ? "\n\n" : "") + processedCode;
@@ -1485,11 +1496,15 @@ function createPromptCard(item, searchTerm = '') {
                 if (inputContainer) {
                     const inputs = inputContainer.querySelectorAll('.prompt-input');
                     let inputIdx = 0;
-                    blockContent = block.content.replace(/_{3,}|{{(.*?)}}/g, () => {
-                        const val = inputs[inputIdx++]?.textContent || '___';
+                    blockContent = block.content.replace(/_{3,}|{{(.*?)}}/g, (match, p1) => {
+                        const val = inputs[inputIdx++]?.textContent || '';
                         const trimmedVal = val.trim();
-                        if (trimmedVal) allInputValues.push(trimmedVal);
-                        return trimmedVal || '___';
+                        if (trimmedVal) {
+                            allInputValues.push(trimmedVal);
+                            return trimmedVal;
+                        }
+                        if (p1) return p1.trim();
+                        return '___';
                     });
                 }
                 fullPromptText += (fullPromptText ? "\n\n" : "") + blockContent;
