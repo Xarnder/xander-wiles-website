@@ -129,6 +129,25 @@ body {
     overflow: hidden; /* Ensure countdown bar doesn't bleed out of rounded corners */
 }
 
+.variable-status-icon {
+    position: absolute;
+    bottom: 26px;
+    left: 26px;
+    width: 12px;
+    height: 12px;
+    color: var(--text-muted);
+    opacity: 0.2;
+    pointer-events: none;
+    z-index: 5;
+    transition: all 0.3s ease;
+}
+
+.glass-card:hover .variable-status-icon {
+    opacity: 1.0;
+    color: #fdffff;
+    /* transform: scale(1.5); */
+}
+
 .glass-card:hover {
     transform: translateY(-8px);
     box-shadow: 0 15px 45px rgba(123, 44, 191, 0.2);
