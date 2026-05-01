@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Bullet Extractor</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global Website Header Styles -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    
+    <!-- Local Page Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- PDF.js Library via CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <!-- Global Nav Placeholder -->
+    <div id="main-nav-placeholder"></div> 
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="container">
+        <header class="glass-card">
+            <h1>📄 Note Structure Extractor</h1>
+            <p>Upload a PDF. The system will calculate indentations to detect nested bullet points.</p>
+            
+            <div class="upload-area">
+                <input type="file" id="pdf-upload" accept="application/pdf" />
+                <label for="pdf-upload" class="btn">Select PDF File</label>
+                <span id="file-name">No file selected</span>
+            </div>
+
+            <div class="settings-area">
+                <h3>Bullet Recognition Settings</h3>
+                <p>Toggle which symbols should be detected as bullet points:</p>
+                <div id="bullet-toggles" class="bullet-toggles">
+                    <!-- Toggles will be injected here by JS -->
+                </div>
+            </div>
+        </header>
+
+        <section class="results glass-card">
+            <h2>Extraction Results</h2>
+            <div class="actions">
+                <button id="download-json" class="btn btn-primary" disabled>Download JSON</button>
+                <button id="download-csv" class="btn btn-secondary" disabled>Download CSV</button>
+            </div>
+            
+            <div class="preview-area">
+                <h3>JSON Preview</h3>
+                <pre id="json-preview">Upload a PDF to see the structured output here...</pre>
+            </div>
+        </section>
+    </main>
+
+    <!-- Local Script -->
+    <script src="script.js"></script>
+</body>
+</html>
