@@ -10,6 +10,16 @@ const RATE_BASIC = 0.20;
 const RATE_HIGHER = 0.40;
 const RATE_ADDITIONAL = 0.45;
 
+// --- Constants (Dividends & CGT) ---
+const DIVIDEND_ALLOWANCE = 500;
+const DIVIDEND_RATE_BASIC = 0.0875;
+const DIVIDEND_RATE_HIGHER = 0.3375;
+const DIVIDEND_RATE_ADDITIONAL = 0.3935;
+
+const CGT_ALLOWANCE = 3000;
+const CGT_RATE_BASIC = 0.18;
+const CGT_RATE_HIGHER = 0.24;
+
 // --- Constants (NI 2024/25) ---
 const NI_PRIMARY_THRESHOLD = 12570;
 const NI_UPPER_LIMIT = 50270;
@@ -25,6 +35,34 @@ const effectiveRateDisplay = document.getElementById('effectiveRateDisplay');
 const breakdownList = document.getElementById('breakdownList');
 const formulaDisplay = document.getElementById('formulaDisplay');
 
+// --- Passive Mode Elements ---
+const passiveModeToggle = document.getElementById('passiveModeToggle');
+const passiveIncomeTypeGroup = document.getElementById('passiveIncomeTypeGroup');
+const passiveGoalGroup = document.getElementById('passiveGoalGroup');
+const passiveValueGroup = document.getElementById('passiveValueGroup');
+const passiveRateGroup = document.getElementById('passiveRateGroup');
+const passiveSummaryCard = document.getElementById('passiveSummaryCard');
+const passiveGraphCard = document.getElementById('passiveGraphCard');
+
+const standardInputCard = document.getElementById('standardInputCard');
+const standardIncomeGroup = document.getElementById('standardIncomeGroup');
+const standardCalcBtnGroup = document.getElementById('standardCalcBtnGroup');
+const standardSummaryCard = document.getElementById('standardSummaryCard');
+const standardBreakdownCard = document.getElementById('standardBreakdownCard');
+const standardFormulaCard = document.getElementById('standardFormulaCard');
+const standardGraphCard1 = document.getElementById('standardGraphCard1');
+const standardGraphCard2 = document.getElementById('standardGraphCard2');
+
+const passiveIncomeTypeSelect = document.getElementById('passiveIncomeTypeSelect');
+const passiveModeSelect = document.getElementById('passiveModeSelect');
+const passiveValueInput = document.getElementById('passiveValueInput');
+const passiveRateInput = document.getElementById('passiveRateInput');
+
+const passivePotDisplay = document.getElementById('passivePotDisplay');
+const passiveGrossDisplay = document.getElementById('passiveGrossDisplay');
+const passiveTaxDisplay = document.getElementById('passiveTaxDisplay');
+const passiveNetDisplay = document.getElementById('passiveNetDisplay');
+
 // New toggle elements (created later)
 let rateModeToggle = null;   // Average vs Marginal
 let rateModeCaption = null;  // "Showing: Average view / Marginal view"
@@ -32,9 +70,11 @@ let rateModeCaption = null;  // "Showing: Average view / Marginal view"
 // Chart Contexts
 const ctx = document.getElementById('taxChart').getContext('2d');
 const ctxComp = document.getElementById('comparisonChart').getContext('2d');
+const ctxPassive = document.getElementById('passiveChart') ? document.getElementById('passiveChart').getContext('2d') : null;
 
 let taxChart = null;
 let comparisonChart = null;
+let passiveChart = null;
 
 const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-GB', {
@@ -76,39 +116,97 @@ function getNIRates(letter) {
     }
 }
 
-// --- Calculation: Income Tax ---
-function calculateIncomeTax(income) {
-    const allowance = getPersonalAllowance(income);
-    let tax = 0;
-    const taxableIncome = Math.max(0, income - allowance);
-
-    const BASIC_BAND_WIDTH = 37700; // 50,270 - 12,570
-    let tempTaxable = taxableIncome;
-
-    // Basic 20%
-    const basicChunk = Math.min(tempTaxable, BASIC_BAND_WIDTH);
-    tax += basicChunk * RATE_BASIC;
-    tempTaxable -= basicChunk;
-
-    const additionalThreshold = 125140;
-
-    if (income > additionalThreshold) {
-        const additionalChunk = income - additionalThreshold;
-        tax += additionalChunk * RATE_ADDITIONAL;
-
-        const startHigher = allowance + BASIC_BAND_WIDTH;
-        if (additionalThreshold > startHigher) {
-            tax += (additionalThreshold - startHigher) * RATE_HIGHER;
+// --- Reverse Calculation: Gross from Net ---
+function calculateGrossFromNet(targetNet, type = 'paye') {
+    if (targetNet <= 0) return 0;
+    
+    let low = 0;
+    let high = targetNet * 3; // safe upper bound
+    let currentGross = 0;
+    
+    for (let i = 0; i < 60; i++) { // binary search iterations
+        currentGross = (low + high) / 2;
+        const tax = calculateIncomeTax(currentGross, type);
+        const ni = calculateNI(currentGross, type);
+        const net = currentGross - tax - ni;
+        
+        if (Math.abs(net - targetNet) < 0.01) break;
+        
+        if (net < targetNet) {
+            low = currentGross;
+        } else {
+            high = currentGross;
         }
-    } else if (tempTaxable > 0) {
-        tax += tempTaxable * RATE_HIGHER;
+    }
+    return currentGross;
+}
+
+// --- Calculation: Income Tax ---
+function calculateIncomeTax(income, type = 'paye') {
+    let tempIncome = income;
+    let tax = 0;
+
+    if (type === 'cgt') {
+        const exemptChunk = Math.min(tempIncome, CGT_ALLOWANCE);
+        tempIncome -= exemptChunk;
+        
+        const basicChunk = Math.min(tempIncome, BASIC_RATE_LIMIT);
+        tax += basicChunk * CGT_RATE_BASIC;
+        tempIncome -= basicChunk;
+        
+        if (tempIncome > 0) {
+            tax += tempIncome * CGT_RATE_HIGHER;
+        }
+        return tax;
+    }
+
+    const allowance = getPersonalAllowance(income);
+    const paChunk = Math.min(tempIncome, allowance);
+    tempIncome -= paChunk;
+
+    if (type === 'dividends') {
+        const daChunk = Math.min(tempIncome, DIVIDEND_ALLOWANCE);
+        tempIncome -= daChunk;
+        
+        const basicBandRemaining = Math.max(0, 37700 - daChunk);
+        const basicChunk = Math.min(tempIncome, basicBandRemaining);
+        tax += basicChunk * DIVIDEND_RATE_BASIC;
+        tempIncome -= basicChunk;
+        
+        const accountedSoFar = allowance + daChunk + basicChunk;
+        const higherBandSize = Math.max(0, HIGHER_RATE_LIMIT - accountedSoFar);
+        const higherChunk = Math.min(tempIncome, higherBandSize);
+        tax += higherChunk * DIVIDEND_RATE_HIGHER;
+        tempIncome -= higherChunk;
+        
+        if (tempIncome > 0) {
+            tax += tempIncome * DIVIDEND_RATE_ADDITIONAL;
+        }
+        return tax;
+    }
+
+    // Default PAYE logic
+    const basicChunk = Math.min(tempIncome, 37700);
+    tax += basicChunk * RATE_BASIC;
+    tempIncome -= basicChunk;
+    
+    const accountedSoFar = allowance + basicChunk;
+    const higherBandSize = Math.max(0, HIGHER_RATE_LIMIT - accountedSoFar);
+    const higherChunk = Math.min(tempIncome, higherBandSize);
+    tax += higherChunk * RATE_HIGHER;
+    tempIncome -= higherChunk;
+    
+    if (tempIncome > 0) {
+        tax += tempIncome * RATE_ADDITIONAL;
     }
 
     return tax;
 }
 
 // --- Calculation: NI ---
-function calculateNI(income) {
+function calculateNI(income, type = 'paye') {
+    if (type === 'dividends' || type === 'cgt') return 0;
+    
     const rates = getNIRates(niLetterSelect.value);
     let ni = 0;
 
@@ -122,66 +220,143 @@ function calculateNI(income) {
 }
 
 // --- UI: Breakdown ---
-function updateBreakdownUI(income, tax, ni) {
-    const allowance = getPersonalAllowance(income);
-    const taxableIncome = Math.max(0, income - allowance);
-    const niRates = getNIRates(niLetterSelect.value);
+function updateBreakdownUI(income, tax, ni, type = 'paye') {
     let html = '';
 
-    // Income Tax breakdown
-    html += `<div class="breakdown-header">Income Tax</div>`;
-    html += `<div class="breakdown-row">
-                <span class="breakdown-label">Personal Allowance</span>
-                <span class="breakdown-val">£0 <span class="sub-text">on first ${formatCurrency(
-                    allowance
-                )}</span></span>
-            </div>`;
-
-    if (taxableIncome > 0) {
-        const BASIC_BAND_WIDTH = 37700;
-        const basicChunk = Math.min(taxableIncome, BASIC_BAND_WIDTH);
-        const taxBasic = basicChunk * RATE_BASIC;
-        if (basicChunk > 0) {
-            html += `<div class="breakdown-row">
-                        <span class="breakdown-label">Basic Rate (20%)</span>
-                        <span class="breakdown-val">${formatCurrency(
-                            taxBasic
-                        )} <span class="sub-text">on next ${formatCurrency(basicChunk)}</span></span>
-                     </div>`;
+    if (type === 'cgt') {
+        html += `<div class="breakdown-header">Capital Gains Tax</div>`;
+        const exemptAmount = Math.min(income, CGT_ALLOWANCE);
+        html += `<div class="breakdown-row">
+                    <span class="breakdown-label">Annual Exempt Amount</span>
+                    <span class="breakdown-val">£0 <span class="sub-text">on first ${formatCurrency(exemptAmount)}</span></span>
+                 </div>`;
+                 
+        let tempIncome = Math.max(0, income - CGT_ALLOWANCE);
+        if (tempIncome > 0) {
+            const basicChunk = Math.min(tempIncome, BASIC_RATE_LIMIT);
+            const taxBasic = basicChunk * CGT_RATE_BASIC;
+            if (basicChunk > 0) {
+                html += `<div class="breakdown-row">
+                            <span class="breakdown-label">Basic Rate (18%)</span>
+                            <span class="breakdown-val">${formatCurrency(taxBasic)} <span class="sub-text">on next ${formatCurrency(basicChunk)}</span></span>
+                         </div>`;
+            }
+            
+            tempIncome -= basicChunk;
+            if (tempIncome > 0) {
+                const taxHigher = tempIncome * CGT_RATE_HIGHER;
+                html += `<div class="breakdown-row">
+                            <span class="breakdown-label">Higher Rate (24%)</span>
+                            <span class="breakdown-val">${formatCurrency(taxHigher)} <span class="sub-text">on remaining ${formatCurrency(tempIncome)}</span></span>
+                         </div>`;
+            }
         }
-
-        const remaining = taxableIncome - basicChunk;
-        if (remaining > 0) {
-            const additionalThreshold = 125140;
-            const higherChunk =
-                income > additionalThreshold
-                    ? additionalThreshold - (allowance + BASIC_BAND_WIDTH)
-                    : remaining;
-            const taxHigher = Math.max(0, higherChunk * RATE_HIGHER);
+    } else if (type === 'dividends') {
+        html += `<div class="breakdown-header">Dividend Tax</div>`;
+        
+        const allowance = getPersonalAllowance(income);
+        const paChunk = Math.min(income, allowance);
+        html += `<div class="breakdown-row">
+                    <span class="breakdown-label">Personal Allowance</span>
+                    <span class="breakdown-val">£0 <span class="sub-text">on first ${formatCurrency(paChunk)}</span></span>
+                 </div>`;
+                 
+        let tempIncome = Math.max(0, income - paChunk);
+        
+        if (tempIncome > 0) {
+            const daChunk = Math.min(tempIncome, DIVIDEND_ALLOWANCE);
+            if (daChunk > 0) {
+                html += `<div class="breakdown-row">
+                            <span class="breakdown-label">Dividend Allowance</span>
+                            <span class="breakdown-val">£0 <span class="sub-text">on next ${formatCurrency(daChunk)}</span></span>
+                         </div>`;
+            }
+            tempIncome -= daChunk;
+            
+            const basicBandRemaining = Math.max(0, 37700 - daChunk);
+            const basicChunk = Math.min(tempIncome, basicBandRemaining);
+            const taxBasic = basicChunk * DIVIDEND_RATE_BASIC;
+            
+            if (basicChunk > 0) {
+                html += `<div class="breakdown-row">
+                            <span class="breakdown-label">Basic Rate (8.75%)</span>
+                            <span class="breakdown-val">${formatCurrency(taxBasic)} <span class="sub-text">on next ${formatCurrency(basicChunk)}</span></span>
+                         </div>`;
+            }
+            tempIncome -= basicChunk;
+            
+            const accountedSoFar = paChunk + daChunk + basicChunk;
+            const higherBandSize = Math.max(0, HIGHER_RATE_LIMIT - accountedSoFar);
+            const higherChunk = Math.min(tempIncome, higherBandSize);
+            const taxHigher = higherChunk * DIVIDEND_RATE_HIGHER;
+            
             if (higherChunk > 0) {
                 html += `<div class="breakdown-row">
-                            <span class="breakdown-label">Higher Rate (40%)</span>
-                            <span class="breakdown-val">${formatCurrency(
-                                taxHigher
-                            )} <span class="sub-text">on next ${formatCurrency(higherChunk)}</span></span>
+                            <span class="breakdown-label">Higher Rate (33.75%)</span>
+                            <span class="breakdown-val">${formatCurrency(taxHigher)} <span class="sub-text">on next ${formatCurrency(higherChunk)}</span></span>
+                         </div>`;
+            }
+            tempIncome -= higherChunk;
+            
+            if (tempIncome > 0) {
+                const taxAdd = tempIncome * DIVIDEND_RATE_ADDITIONAL;
+                html += `<div class="breakdown-row">
+                            <span class="breakdown-label">Additional Rate (39.35%)</span>
+                            <span class="breakdown-val">${formatCurrency(taxAdd)} <span class="sub-text">on remaining ${formatCurrency(tempIncome)}</span></span>
+                         </div>`;
+            }
+        }
+    } else {
+        // PAYE breakdown
+        const allowance = getPersonalAllowance(income);
+        const paChunk = Math.min(income, allowance);
+        html += `<div class="breakdown-header">Income Tax</div>`;
+        html += `<div class="breakdown-row">
+                    <span class="breakdown-label">Personal Allowance</span>
+                    <span class="breakdown-val">£0 <span class="sub-text">on first ${formatCurrency(paChunk)}</span></span>
+                 </div>`;
+
+        let tempIncome = Math.max(0, income - paChunk);
+        
+        if (tempIncome > 0) {
+            const basicChunk = Math.min(tempIncome, 37700);
+            const taxBasic = basicChunk * RATE_BASIC;
+            if (basicChunk > 0) {
+                html += `<div class="breakdown-row">
+                            <span class="breakdown-label">Basic Rate (20%)</span>
+                            <span class="breakdown-val">${formatCurrency(taxBasic)} <span class="sub-text">on next ${formatCurrency(basicChunk)}</span></span>
                          </div>`;
             }
 
-            if (income > additionalThreshold) {
-                const addChunk = income - additionalThreshold;
-                const taxAdd = addChunk * RATE_ADDITIONAL;
+            tempIncome -= basicChunk;
+            
+            const accountedSoFar = paChunk + basicChunk;
+            const higherBandSize = Math.max(0, HIGHER_RATE_LIMIT - accountedSoFar);
+            const higherChunk = Math.min(tempIncome, higherBandSize);
+            const taxHigher = higherChunk * RATE_HIGHER;
+            
+            if (higherChunk > 0) {
+                html += `<div class="breakdown-row">
+                            <span class="breakdown-label">Higher Rate (40%)</span>
+                            <span class="breakdown-val">${formatCurrency(taxHigher)} <span class="sub-text">on next ${formatCurrency(higherChunk)}</span></span>
+                         </div>`;
+            }
+            tempIncome -= higherChunk;
+
+            if (tempIncome > 0) {
+                const taxAdd = tempIncome * RATE_ADDITIONAL;
                 html += `<div class="breakdown-row">
                             <span class="breakdown-label">Additional Rate (45%)</span>
-                            <span class="breakdown-val">${formatCurrency(
-                                taxAdd
-                            )} <span class="sub-text">on remaining ${formatCurrency(addChunk)}</span></span>
+                            <span class="breakdown-val">${formatCurrency(taxAdd)} <span class="sub-text">on remaining ${formatCurrency(tempIncome)}</span></span>
                          </div>`;
             }
         }
     }
 
-    // NI breakdown
-    html += `<div class="breakdown-header" style="margin-top:20px; color:#fb923c;">
+    // NI breakdown (only for PAYE)
+    if (type === 'paye') {
+        const niRates = getNIRates(niLetterSelect.value);
+        html += `<div class="breakdown-header" style="margin-top:20px; color:#fb923c;">
                 National Insurance (${niRates.name})
              </div>`;
 
@@ -197,16 +372,17 @@ function updateBreakdownUI(income, tax, ni) {
                      </div>`;
         }
     }
-    if (income > NI_UPPER_LIMIT) {
-        const niTaxable = income - NI_UPPER_LIMIT;
-        const niVal = niTaxable * niRates.upper;
-        if (niRates.upper > 0) {
-            html += `<div class="breakdown-row">
-                        <span class="breakdown-label">Upper Rate (${niRates.upper * 100}%)</span>
-                        <span class="breakdown-val">${formatCurrency(
-                            niVal
-                        )} <span class="sub-text">on remaining ${formatCurrency(niTaxable)}</span></span>
-                     </div>`;
+        if (income > NI_UPPER_LIMIT) {
+            const niTaxable = income - NI_UPPER_LIMIT;
+            const niVal = niTaxable * niRates.upper;
+            if (niRates.upper > 0) {
+                html += `<div class="breakdown-row">
+                            <span class="breakdown-label">Upper Rate (${niRates.upper * 100}%)</span>
+                            <span class="breakdown-val">${formatCurrency(
+                                niVal
+                            )} <span class="sub-text">on remaining ${formatCurrency(niTaxable)}</span></span>
+                         </div>`;
+            }
         }
     }
 
@@ -214,73 +390,133 @@ function updateBreakdownUI(income, tax, ni) {
 }
 
 // --- UI: Formula text ---
-function generateFormula(income) {
-    const niRates = getNIRates(niLetterSelect.value);
+function generateFormula(income, type = 'paye') {
     let parts = [];
+    let tempIncome = income;
 
-    const allowance = getPersonalAllowance(income);
-    const chunk1 = Math.min(income, allowance);
-    if (allowance > 0 && chunk1 > 0) {
-        parts.push(
-            `(<span class="math-num">£${chunk1.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">1.00</span>)`
-        );
-    }
+    if (type === 'cgt') {
+        const exemptChunk = Math.min(tempIncome, CGT_ALLOWANCE);
+        if (exemptChunk > 0) {
+            parts.push(`(<span class="math-num">£${exemptChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">1.00</span>)`);
+        }
+        tempIncome -= exemptChunk;
 
-    const basicEnd = 50270;
-    const basicStart = allowance;
-    if (income > basicStart) {
-        const chunk2 = Math.min(income, basicEnd) - basicStart;
-        if (chunk2 > 0) {
-            const mult = (1 - 0.20 - niRates.main).toFixed(2);
-            parts.push(
-                `(<span class="math-num">£${chunk2.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`
-            );
+        const basicChunk = Math.min(tempIncome, BASIC_RATE_LIMIT);
+        if (basicChunk > 0) {
+            const mult = (1 - CGT_RATE_BASIC).toFixed(2);
+            parts.push(`(<span class="math-num">£${basicChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
+        }
+        tempIncome -= basicChunk;
+
+        if (tempIncome > 0) {
+            const mult = (1 - CGT_RATE_HIGHER).toFixed(2);
+            parts.push(`(<span class="math-num">£${tempIncome.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
+        }
+    } else if (type === 'dividends') {
+        const allowance = getPersonalAllowance(income);
+        const paChunk = Math.min(tempIncome, allowance);
+        if (paChunk > 0) {
+            parts.push(`(<span class="math-num">£${paChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">1.00</span>)`);
+        }
+        tempIncome -= paChunk;
+
+        const daChunk = Math.min(tempIncome, DIVIDEND_ALLOWANCE);
+        if (daChunk > 0) {
+            parts.push(`(<span class="math-num">£${daChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">1.00</span>)`);
+        }
+        tempIncome -= daChunk;
+
+        const basicBandRemaining = Math.max(0, 37700 - daChunk);
+        const basicChunk = Math.min(tempIncome, basicBandRemaining);
+        if (basicChunk > 0) {
+            const mult = (1 - DIVIDEND_RATE_BASIC).toFixed(4);
+            parts.push(`(<span class="math-num">£${basicChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
+        }
+        tempIncome -= basicChunk;
+
+        const accountedSoFar = paChunk + daChunk + basicChunk;
+        const higherBandSize = Math.max(0, HIGHER_RATE_LIMIT - accountedSoFar);
+        const higherChunk = Math.min(tempIncome, higherBandSize);
+        if (higherChunk > 0) {
+            const mult = (1 - DIVIDEND_RATE_HIGHER).toFixed(4);
+            parts.push(`(<span class="math-num">£${higherChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
+        }
+        tempIncome -= higherChunk;
+
+        if (tempIncome > 0) {
+            const mult = (1 - DIVIDEND_RATE_ADDITIONAL).toFixed(4);
+            parts.push(`(<span class="math-num">£${tempIncome.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
+        }
+    } else {
+        const niRates = getNIRates(niLetterSelect.value);
+        const allowance = getPersonalAllowance(income);
+        
+        const paChunk = Math.min(tempIncome, allowance);
+        if (paChunk > 0) {
+            parts.push(`(<span class="math-num">£${paChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">1.00</span>)`);
+        }
+        tempIncome -= paChunk;
+
+        const basicChunk = Math.min(tempIncome, 37700);
+        if (basicChunk > 0) {
+            const mult = (1 - RATE_BASIC - niRates.main).toFixed(2);
+            parts.push(`(<span class="math-num">£${basicChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
+        }
+        tempIncome -= basicChunk;
+
+        const accountedSoFar = paChunk + basicChunk;
+        const higherBandSize = Math.max(0, HIGHER_RATE_LIMIT - accountedSoFar);
+        const higherChunk = Math.min(tempIncome, higherBandSize);
+        if (higherChunk > 0) {
+            const mult = (1 - RATE_HIGHER - niRates.upper).toFixed(2);
+            parts.push(`(<span class="math-num">£${higherChunk.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
+        }
+        tempIncome -= higherChunk;
+
+        if (tempIncome > 0) {
+            const mult = (1 - RATE_ADDITIONAL - niRates.upper).toFixed(2);
+            parts.push(`(<span class="math-num">£${tempIncome.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`);
         }
     }
 
-    const higherEnd = 125140;
-    if (income > basicEnd) {
-        const chunk3 = Math.min(income, higherEnd) - basicEnd;
-        if (chunk3 > 0) {
-            const mult = (1 - 0.40 - niRates.upper).toFixed(2);
-            parts.push(
-                `(<span class="math-num">£${chunk3.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`
-            );
-        }
-    }
-
-    if (income > higherEnd) {
-        const chunk4 = income - higherEnd;
-        const mult = (1 - 0.45 - niRates.upper).toFixed(2);
-        parts.push(
-            `(<span class="math-num">£${chunk4.toLocaleString()}</span> <span class="math-op">×</span> <span class="math-mult">${mult}</span>)`
-        );
-    }
-
-    const tax = calculateIncomeTax(income);
-    const ni = calculateNI(income);
+    const tax = calculateIncomeTax(income, type);
+    const ni = calculateNI(income, type);
     const takeHome = income - tax - ni;
 
     let html = parts.join('<span class="math-op"> + </span>');
-    html += ` <span class="math-op"> = </span> <span class="math-total">${formatCurrency(
-        takeHome
-    )}</span>`;
+    html += ` <span class="math-op"> = </span> <span class="math-total">${formatCurrency(takeHome)}</span>`;
     formulaDisplay.innerHTML = html;
 }
 
 // --- Marginal helpers (for marginal view) ---
-function getMarginalTaxRate(incomePoint) {
-    const allowance = getPersonalAllowance(incomePoint);
-    if (incomePoint <= allowance) return 0;
+function getMarginalTaxRate(incomePoint, type = 'paye') {
+    if (type === 'cgt') {
+        if (incomePoint <= CGT_ALLOWANCE) return 0;
+        if (incomePoint <= CGT_ALLOWANCE + BASIC_RATE_LIMIT) return CGT_RATE_BASIC * 100;
+        return CGT_RATE_HIGHER * 100;
+    }
 
-    // 60% effective band from 100k–125,140
+    const allowance = getPersonalAllowance(incomePoint);
+    
+    if (type === 'dividends') {
+        if (incomePoint <= allowance + DIVIDEND_ALLOWANCE) return 0;
+        if (incomePoint > 100000 && incomePoint <= 125140) return DIVIDEND_RATE_HIGHER * 100 + 20; // Taper effect
+        if (incomePoint <= allowance + DIVIDEND_ALLOWANCE + 37700) return DIVIDEND_RATE_BASIC * 100;
+        if (incomePoint <= HIGHER_RATE_LIMIT) return DIVIDEND_RATE_HIGHER * 100;
+        return DIVIDEND_RATE_ADDITIONAL * 100;
+    }
+
+    // PAYE
+    if (incomePoint <= allowance) return 0;
     if (incomePoint > 100000 && incomePoint <= 125140) return 60;
+
     if (incomePoint <= 50270) return 20;
     if (incomePoint <= 125140) return 40;
     return 45;
 }
 
-function getMarginalNIRate(incomePoint) {
+function getMarginalNIRate(incomePoint, type = 'paye') {
+    if (type === 'dividends' || type === 'cgt') return 0;
     const rates = getNIRates(niLetterSelect.value);
     if (incomePoint <= NI_PRIMARY_THRESHOLD) return 0;
     if (incomePoint <= NI_UPPER_LIMIT) return rates.main * 100;
@@ -288,7 +524,7 @@ function getMarginalNIRate(incomePoint) {
 }
 
 // --- Main Chart (supports Average vs Marginal + Green/Red bottom) ---
-function updateChart(income) {
+function updateChart(income, type = 'paye') {
     const maxView = Math.max(income, 60000);
 
     // Decide mode
@@ -338,10 +574,10 @@ function updateChart(income) {
         }
 
         // Average
-        const tax = calculateIncomeTax(point);
-        const ni = calculateNI(point);
-        const taxPct = (tax / point) * 100;
-        const niPct = (ni / point) * 100;
+        const tax = calculateIncomeTax(point, type);
+        const ni = calculateNI(point, type);
+        const taxPct = point > 0 ? (tax / point) * 100 : 0;
+        const niPct = point > 0 ? (ni / point) * 100 : 0;
         const keepPct = Math.max(0, 100 - taxPct - niPct);
 
         avgTaxOnly.push(taxPct);
@@ -350,8 +586,8 @@ function updateChart(income) {
         avgTakeHomeAndNi.push(keepPct + niPct);
 
         // Marginal
-        const tRate = getMarginalTaxRate(point);
-        const nRate = getMarginalNIRate(point);
+        const tRate = getMarginalTaxRate(point, type);
+        const nRate = getMarginalNIRate(point, type);
         const keepMarg = Math.max(0, 100 - tRate - nRate);
 
         margTaxOnly.push(tRate);
@@ -603,11 +839,18 @@ function updateChart(income) {
                     callbacks: {
                         label: (ctxTooltip) => {
                             const label = ctxTooltip.dataset.label || '';
-                            const value = ctxTooltip.parsed.y;
+                            const pct = ctxTooltip.parsed.y;
+                            const income = ctxTooltip.parsed.x;
+                            const absValue = (pct / 100) * income;
                             const suffix = showMarginal
                                 ? ' of your next £'
                                 : ' of your total income';
-                            return `${label}: ${value.toFixed(1)}%${suffix}`;
+                            
+                            if (showMarginal) {
+                                return `${label}: ${pct.toFixed(1)}%`;
+                            } else {
+                                return `${label}: ${pct.toFixed(1)}% (${formatCurrency(absValue)})`;
+                            }
                         }
                     }
                 }
@@ -617,7 +860,7 @@ function updateChart(income) {
 }
 
 // --- Comparison chart (unchanged logic) ---
-function updateComparisonChart(income) {
+function updateComparisonChart(income, type = 'paye') {
     const maxRange = Math.max(income * 1.2, 120000);
     const step = maxRange / 50;
     const labels = [];
@@ -625,7 +868,7 @@ function updateComparisonChart(income) {
 
     for (let i = 0; i <= maxRange; i += step) {
         labels.push(i);
-        const total = calculateIncomeTax(i) + calculateNI(i);
+        const total = calculateIncomeTax(i, type) + calculateNI(i, type);
         dataPoints.push(i - total);
     }
 
@@ -664,12 +907,24 @@ function updateComparisonChart(income) {
             },
             plugins: {
                 legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: (ctxTooltip) => {
+                            const label = ctxTooltip.dataset.label || '';
+                            const value = ctxTooltip.parsed.y;
+                            const x = ctxTooltip.parsed.x;
+                            return `${label}: ${formatCurrency(value)} at gross ${formatCurrency(x)}`;
+                        }
+                    }
+                },
                 annotation: {
                     annotations: {
                         userPoint: {
                             type: 'point',
                             xValue: income,
-                            yValue: income - (calculateIncomeTax(income) + calculateNI(income)),
+                            yValue: income - (calculateIncomeTax(income, type) + calculateNI(income, type)),
                             backgroundColor: '#4ade80',
                             radius: 6,
                             borderColor: '#fff',
@@ -768,6 +1023,156 @@ function processInput() {
     updateComparisonChart(income);
 }
 
+// --- Passive Logic ---
+function processPassiveInput() {
+    const mode = passiveModeSelect.value;
+    const value = parseFloat(passiveValueInput.value);
+    const ratePct = parseFloat(passiveRateInput.value);
+    const type = passiveIncomeTypeSelect ? passiveIncomeTypeSelect.value : 'paye';
+    
+    if (isNaN(value) || value < 0 || isNaN(ratePct) || ratePct <= 0) {
+        alert('Invalid inputs for passive mode');
+        return;
+    }
+    
+    const rate = ratePct / 100;
+    let potSize = 0;
+    let gross = 0;
+    
+    if (mode === 'pot') {
+        potSize = value;
+        gross = potSize * rate;
+    } else if (mode === 'gross') {
+        gross = value;
+        potSize = gross / rate;
+    } else if (mode === 'net') {
+        gross = calculateGrossFromNet(value, type);
+        potSize = gross / rate;
+    }
+    
+    const tax = calculateIncomeTax(gross, type);
+    const ni = calculateNI(gross, type);
+    const totalTax = tax + ni;
+    const net = gross - totalTax;
+    
+    passivePotDisplay.textContent = formatCurrency(potSize);
+    passiveGrossDisplay.textContent = formatCurrency(gross);
+    passiveTaxDisplay.textContent = formatCurrency(totalTax);
+    passiveNetDisplay.textContent = formatCurrency(net);
+    
+    // Also update the standard UI components using the calculated gross
+    const rate_eff = gross > 0 ? (totalTax / gross) * 100 : 0;
+    totalTaxDisplay.textContent = formatCurrency(totalTax);
+    takeHomeDisplay.textContent = formatCurrency(net);
+    effectiveRateDisplay.textContent = rate_eff.toFixed(1) + '%';
+    
+    updateBreakdownUI(gross, tax, ni, type);
+    generateFormula(gross, type);
+    updateChart(gross, type);
+    updateComparisonChart(gross, type);
+    
+    updatePassiveChart(potSize, ratePct, type);
+}
+
+function updatePassiveChart(currentPotSize, ratePct, type = 'paye') {
+    if (!ctxPassive) return;
+    const rate = ratePct / 100;
+    const maxPot = Math.max(currentPotSize * 1.5, 2000000);
+    const step = maxPot / 50;
+    
+    const labels = [];
+    const netData = [];
+    
+    for (let i = 0; i <= maxPot; i += step) {
+        labels.push(i);
+        const g = i * rate;
+        const t = calculateIncomeTax(g, type);
+        const n = calculateNI(g, type);
+        netData.push(g - t - n);
+    }
+    
+    if (passiveChart) passiveChart.destroy();
+    
+    const greenGradient = ctxPassive.createLinearGradient(0, 0, 0, 400);
+    greenGradient.addColorStop(0, 'rgba(74, 222, 128, 0.7)');
+    greenGradient.addColorStop(1, 'rgba(74, 222, 128, 0.1)');
+    
+    const currentGross = currentPotSize * rate;
+    const currentTax = calculateIncomeTax(currentGross, type);
+    const currentNI = calculateNI(currentGross, type);
+    const currentNet = currentGross - currentTax - currentNI;
+    
+    passiveChart = new Chart(ctxPassive, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Net Income',
+                data: netData,
+                borderColor: '#4ade80',
+                backgroundColor: greenGradient,
+                borderWidth: 3,
+                fill: true,
+                pointRadius: 0,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    type: 'linear',
+                    title: { display: true, text: 'Investment Pot Size (£)', color: '#94a3b8' },
+                    ticks: { color: '#cbd5e1' },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                y: {
+                    title: { display: true, text: 'Net Passive Income (£)', color: '#94a3b8' },
+                    ticks: { color: '#cbd5e1' },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    min: 0
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: (ctxTooltip) => {
+                            const label = ctxTooltip.dataset.label || '';
+                            const value = ctxTooltip.parsed.y;
+                            const x = ctxTooltip.parsed.x;
+                            return `Pot: ${formatCurrency(x)} -> Net: ${formatCurrency(value)}`;
+                        }
+                    }
+                },
+                annotation: {
+                    annotations: {
+                        userPoint: {
+                            type: 'point',
+                            xValue: currentPotSize,
+                            yValue: currentNet,
+                            backgroundColor: '#38bdf8',
+                            radius: 6,
+                            borderColor: '#fff',
+                            borderWidth: 2,
+                            label: {
+                                display: true,
+                                content: `Pot: ${formatCurrency(currentPotSize)}`,
+                                position: 'top',
+                                backgroundColor: 'rgba(0,0,0,0.8)',
+                                color: '#fff'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 // Event Listeners
 document.getElementById('btnDownloadPNG').addEventListener('click', () =>
     downloadChart('png')
@@ -775,14 +1180,105 @@ document.getElementById('btnDownloadPNG').addEventListener('click', () =>
 document.getElementById('btnDownloadJPEG').addEventListener('click', () =>
     downloadChart('jpeg')
 );
-calculateBtn.addEventListener('click', processInput);
-niLetterSelect.addEventListener('change', processInput);
+calculateBtn.addEventListener('click', () => {
+    if (passiveModeToggle && passiveModeToggle.checked) {
+        processPassiveInput();
+    } else {
+        processInput();
+    }
+});
+niLetterSelect.addEventListener('change', () => {
+    if (passiveModeToggle && passiveModeToggle.checked) {
+        processPassiveInput();
+    } else {
+        processInput();
+    }
+});
 viewToggle.addEventListener('change', () =>
     updateChart(parseFloat(incomeInput.value) || 0)
 );
 incomeInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') processInput();
 });
+
+// Passive Mode Event Listeners
+if (passiveModeToggle) {
+    passiveModeToggle.addEventListener('change', () => {
+        const isPassive = passiveModeToggle.checked;
+        
+        if (isPassive) {
+            // Disable annual income input
+            incomeInput.disabled = true;
+            incomeInput.parentElement.style.opacity = '0.5';
+            
+            // Show passive inputs in the same row
+            if (passiveIncomeTypeGroup) passiveIncomeTypeGroup.style.display = 'block';
+            if (passiveGoalGroup) passiveGoalGroup.style.display = 'block';
+            if (passiveValueGroup) passiveValueGroup.style.display = 'block';
+            if (passiveRateGroup) passiveRateGroup.style.display = 'block';
+            
+            // Show summary and graph
+            passiveSummaryCard.style.display = 'grid';
+            passiveGraphCard.style.display = 'flex';
+            
+            processPassiveInput();
+        } else {
+            // Enable annual income input
+            incomeInput.disabled = false;
+            incomeInput.parentElement.style.opacity = '1';
+            
+            // Hide passive inputs
+            if (passiveIncomeTypeGroup) passiveIncomeTypeGroup.style.display = 'none';
+            if (passiveGoalGroup) passiveGoalGroup.style.display = 'none';
+            if (passiveValueGroup) passiveValueGroup.style.display = 'none';
+            if (passiveRateGroup) passiveRateGroup.style.display = 'none';
+            
+            // Hide summary and graph
+            passiveSummaryCard.style.display = 'none';
+            passiveGraphCard.style.display = 'none';
+            
+            processInput();
+        }
+    });
+}
+
+if (passiveIncomeTypeSelect) {
+    passiveIncomeTypeSelect.addEventListener('change', processPassiveInput);
+}
+
+if (passiveModeSelect) {
+    passiveModeSelect.addEventListener('change', () => {
+        const mode = passiveModeSelect.value;
+        const label = document.querySelector('label[for="passiveValueInput"]');
+        if (label) {
+            if (mode === 'pot') {
+                label.textContent = 'Pot Size (£)';
+                passiveValueInput.placeholder = 'e.g. 1000000';
+                passiveValueInput.value = '1000000';
+            } else if (mode === 'gross') {
+                label.textContent = 'Target Pre-Tax (£)';
+                passiveValueInput.placeholder = 'e.g. 50000';
+                passiveValueInput.value = '50000';
+            } else if (mode === 'net') {
+                label.textContent = 'Target Post-Tax (£)';
+                passiveValueInput.placeholder = 'e.g. 40000';
+                passiveValueInput.value = '40000';
+            }
+        }
+        processPassiveInput();
+    });
+}
+
+if (passiveValueInput) {
+    passiveValueInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') processPassiveInput();
+    });
+}
+if (passiveRateInput) {
+    passiveRateInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') processPassiveInput();
+    });
+}
 
 // Initialise after everything is loaded
 window.addEventListener('load', () => {
