@@ -1,0 +1,27 @@
+{
+    "name": "AI Face Tool",
+    "short_name": "Face Tool",
+    "icons": [
+        {
+            "src": "favicon-light.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "favicon-dark.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "apple-touch-icon.png",
+            "sizes": "180x180",
+            "type": "image/png"
+        }
+    ],
+    "theme_color": "#111115",
+    "background_color": "#111115",
+    "display": "standalone",
+    "start_url": "index.html"
+}

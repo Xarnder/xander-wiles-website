@@ -206,7 +206,6 @@ getRedirectResult(auth)
         // Do not alert on redirect error unless requested, as it might just be an expired nonce or back-button navigation issue
     });
 
-
 logoutBtn.onclick = () => {
     showConfirmModal(
         "Logout?",
@@ -215,6 +214,18 @@ logoutBtn.onclick = () => {
         'ph-sign-out'
     );
 };
+
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) {
+        console.log("[DEBUG] Hiding Loading Overlay");
+        overlay.classList.add('hidden');
+        // Optional: remove from DOM after transition
+        setTimeout(() => {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }, 600);
+    }
+}
 
 onAuthStateChanged(auth, (user) => {
     setCurrentUser(user);
@@ -236,7 +247,7 @@ onAuthStateChanged(auth, (user) => {
         stopAutomationTimer();
         cleanupListeners();
         dateReset();
-        // Splash logic removed
+        hideLoadingOverlay();
     }
 });
 
@@ -468,6 +479,9 @@ function setupFirestoreListeners(uid) {
         if (!document.getElementById('search-modal-overlay').classList.contains('hidden')) {
             UI.performSearch(document.getElementById('search-input').value);
         }
+
+        // Hide loader after tasks are fetched (usually the last and most important data)
+        setTimeout(hideLoadingOverlay, 500);
     }, (error) => API.handleSyncError(error)));
 }
 

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Face Cropper</title>
+    <title>AI Face Tool</title>
 
     <!-- Theme-aware SVG icons (modern browsers) -->
     <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
@@ -52,11 +52,26 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 </head>
 
-<body>
+    <!-- Global SVG Definitions (Gradients) -->
+    <svg width="0" height="0" style="position: absolute;">
+        <defs>
+            <linearGradient id="loaderGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#FF56A1;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#FF9350;stop-opacity:1" />
+            </linearGradient>
+        </defs>
+    </svg>
 
     <div id="loadingOverlay" class="loading-overlay" style="display: none;">
         <div class="loader-content">
-            <div class="spinner"></div>
+            <svg class="premium-loader" viewBox="0 0 100 150">
+                <g>
+                    <path d="M 50,100 A 50,50 0 0 1 50,0"/>
+                </g>
+                <g>
+                    <path d="M 50,75 A 50,50 0 0 0 50,-25"/>
+                </g>
+            </svg>
             <p>Downloading AI models... (this only happens once)</p>
         </div>
     </div>
@@ -68,13 +83,21 @@
     <div class="dashboard-layout">
         <aside class="sidebar">
             <header class="tool-header">
-                <h1>Face Cropper</h1>
+                <h1>Face Tool</h1>
                 <p class="privacy-notice">
                     🔒 All processing is done locally on your device. Your photos are completely private and never uploaded to any server.
                 </p>
             </header>
 
             <div class="sidebar-scroll-area">
+                <div class="setting-group">
+                    <label>Media Type</label>
+                    <div class="media-type-toggle">
+                        <button class="media-btn active" data-media="image" title="Process Images">Image</button>
+                        <button class="media-btn" data-media="video" title="Process Videos">Video</button>
+                    </div>
+                </div>
+
                 <!-- Drop Zone Area (Now Scrollable) -->
                 <div id="dropZone" class="drop-zone">
                     <div class="input-actions">
@@ -99,11 +122,11 @@
                 <div class="setting-group">
                     <label>Tool Mode</label>
                     <div class="mode-toggle">
-                        <button class="mode-btn active" data-mode="crop" title="Crop Mode">
+                        <button class="mode-btn" data-mode="crop" title="Crop Mode">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.13 1L6 16a2 2 0 0 0 2 2h15"></path><path d="M1 6.13L16 6a2 2 0 0 1 2 2v15"></path></svg>
                             <span>Crop</span>
                         </button>
-                        <button class="mode-btn" data-mode="censor" title="Censor Mode">
+                        <button class="mode-btn active" data-mode="censor" title="Censor Mode">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="12" cy="12" r="3"></circle></svg>
                             <span>Censor</span>
                         </button>
@@ -127,25 +150,25 @@
                 </div>
 
                 <!-- Mode Options Panels -->
-                <div class="setting-group" id="censorOptionsPanel" style="display: none;">
+                <div class="setting-group" id="censorOptionsPanel" style="display: block;">
                     <label>Censor Style</label>
                     <div class="control-sub-group">
                         <div class="censor-type-toggle">
-                            <button class="type-btn active" data-type="solid">Solid</button>
-                            <button class="type-btn" data-type="blur">Blur</button>
+                            <button class="type-btn" data-type="solid">Solid</button>
+                            <button class="type-btn active" data-type="blur">Blur</button>
                             <button class="type-btn" data-type="emoji">Emoji</button>
                         </div>
                         <div class="censor-shape-toggle">
-                            <button class="shape-btn active" data-shape="rect">Rect</button>
-                            <button class="shape-btn" data-shape="circle">Circle</button>
+                            <button class="shape-btn" data-shape="rect">Rect</button>
+                            <button class="shape-btn active" data-shape="circle">Circle</button>
                         </div>
-                        <div id="solidOptions" class="sub-setting">
+                        <div id="solidOptions" class="sub-setting" style="display: none;">
                             <div class="color-picker-wrapper">
                                 <input type="color" id="censorColor" value="#000000">
                                 <span id="colorHex">#000000</span>
                             </div>
                         </div>
-                        <div id="blurOptions" class="sub-setting" style="display: none;">
+                        <div id="blurOptions" class="sub-setting" style="display: block;">
                             <label>Blur Radius <button class="reset-slider" data-target="blurStrength" data-default="20">⟳</button></label>
                             <input type="range" id="blurStrength" min="5" max="100" value="20">
                             <div class="sub-label"><span id="blurStrengthVal">20</span>px</div>
@@ -351,6 +374,17 @@
                         <input type="checkbox" id="excludeNoFace">
                         <label for="excludeNoFace">Skip no-face images</label>
                     </div>
+                    <div class="checkbox-group compact-checkbox">
+                        <input type="checkbox" id="fastMode">
+                        <label for="fastMode" title="Skips updating the gallery during video processing for maximum speed">Fast Mode (Skip live render)</label>
+                    </div>
+                    <div class="sub-setting-row" id="updateFrequencyRow" style="margin-top: 8px;">
+                        <label style="font-size: 0.75rem;">Update Preview Every</label>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <input type="number" id="updateFrequency" value="25" min="5" step="5" style="width: 55px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: white; padding: 3px 5px; border-radius: 4px; font-size: 0.75rem;">
+                            <span style="font-size: 0.7rem; color: var(--text-muted);">frames</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="sidebar-actions">
@@ -366,13 +400,26 @@
                 <!-- Preview Card -->
                 <section id="previewCard" class="card main-preview" style="display: none;">
                     <div class="card-header">
-                        <h3>Live Preview</h3>
+                        <div class="header-title-group">
+                            <h3>Live Preview</h3>
+                            <svg id="headerLoader" class="premium-loader mini" viewBox="0 0 100 150" style="display: none;">
+                                <g><path d="M 50,100 A 50,50 0 0 1 50,0"/></g>
+                                <g><path d="M 50,75 A 50,50 0 0 0 50,-25"/></g>
+                            </svg>
+                        </div>
                         <span class="preview-hint">Real-time adjustments visible here</span>
                     </div>
                     <div class="preview-box">
                         <canvas id="previewCanvas"></canvas>
                         <div id="previewLoader" class="loader-overlay" style="display: none;">
-                            <div class="spinner"></div>
+                            <svg class="premium-loader" viewBox="0 0 100 150">
+                                <g>
+                                    <path d="M 50,100 A 1,1 0 0 1 50,0"/>
+                                </g>
+                                <g>
+                                    <path d="M 50,75 A 1,1 0 0 0 50,-25"/>
+                                </g>
+                            </svg>
                             <p>Detecting...</p>
                         </div>
                     </div>
@@ -390,6 +437,17 @@
             </div>
 
             <div id="statusArea" class="status-line">AI Models Ready</div>
+
+            <div id="videoProgressWrapper" class="video-progress-wrapper" style="display: none;">
+                <div class="progress-info">
+                    <span id="videoProgressPercentage">0%</span>
+                    <span id="videoProgressETA">ETA: --:--</span>
+                </div>
+                <div class="progress-container">
+                    <div id="videoProgressBar" class="progress-bar glow"></div>
+                </div>
+                <div id="videoProgressText" class="status-text-tiny">Processing video frames...</div>
+            </div>
             
             <div class="gallery-section">
                 <div class="section-header">

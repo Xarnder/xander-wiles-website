@@ -75,6 +75,7 @@
                         <button id="cancel-select-header-btn" class="btn secondary-btn hidden"
                             style="padding: 8px 15px; border-color:var(--danger); color:var(--danger);">Cancel</button>
                         <button id="stats-btn" class="btn secondary-btn" style="padding: 8px 15px;">Stats</button>
+                        <button id="rank-mode-btn" class="btn secondary-btn" style="padding: 8px 15px;">Rank Mode</button>
                         <button id="add-btn" class="btn primary-btn">+ Add Person</button>
                         <button id="logout-btn" class="btn secondary-btn"
                             style="border-color:var(--danger); color:var(--danger)">Logout</button>
@@ -95,12 +96,22 @@
             </div>
 
             <!-- Search / Filter -->
-            <div class="search-bar" style="display:flex; gap:10px; margin-bottom: 20px;">
-                <input type="text" id="search-input" placeholder="Search friends..." style="flex:1; margin-bottom:0;">
+            <div class="search-bar" style="display:flex; gap:10px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="position:relative; flex:1; min-width: 200px;">
+                    <input type="text" id="search-input" placeholder="Search friends..." style="width:100%; margin-bottom:0; padding-right: 40px;">
+                    <button id="clear-search-btn" class="hidden" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem; padding:5px;">&times;</button>
+                </div>
                 <select id="filter-category"
                     style="padding:12px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:10px; color:white; min-width:150px;">
                     <option value="">All Categories</option>
                 </select>
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <select id="ranking-filter-select"
+                        style="padding:12px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:10px; color:white; min-width:150px;">
+                        <option value="">No Ranking Filter</option>
+                    </select>
+                    <button id="manage-filters-btn" class="btn secondary-btn icon-btn" style="padding: 8px 12px; height: 100%; border-radius: 10px;" title="Manage Ranking Filters">⚙️</button>
+                </div>
                 <select id="sort-select"
                     style="padding:12px; border-radius:10px; border:1px solid var(--glass-border); background:var(--glass-bg); color:white; min-width:140px;">
                     <option value="status">Status (Default)</option>
@@ -123,16 +134,56 @@
                     <label for="grid-size-slider"
                         style="color:var(--text-muted); font-size: 0.9rem; white-space: nowrap;">Grid Size:</label>
                     <input type="range" id="grid-size-slider" min="100" max="400" value="280" step="10"
-                        style="flex:1; accent-color: var(--primary);">
+                        style="flex:1;">
                 </div>
             </div>
 
             <!-- Grid -->
-            <div id="friends-grid" class="friends-grid">
-                <!-- Javascript fills this -->
-                <div class="loader">Loading...</div>
+            <div id="friends-grid-container" style="position:relative;">
+                <div id="friends-grid" class="friends-grid">
+                    <!-- Javascript fills this -->
+                    <div class="loader">Loading...</div>
+                </div>
+                <div id="empty-state" class="hidden" style="text-align:center; padding:60px 20px; background:var(--glass-bg); border-radius:var(--radius); border:1px dashed var(--glass-border); margin-top:20px;">
+                    <div style="font-size:3rem; margin-bottom:20px;">👥</div>
+                    <h3>No connections found</h3>
+                    <p style="color:var(--text-muted); margin-bottom:20px;">Try adjusting your filters or add someone new.</p>
+                    <button class="btn primary-btn" onclick="document.getElementById('add-btn').click()">+ Add Person</button>
+                </div>
             </div>
 
+        </section>
+
+        <!-- Ranking View (Hidden by default) -->
+        <section id="ranking-view" class="hidden" style="height: calc(100vh - 100px); display: flex; flex-direction: column;">
+            <header class="app-header" style="margin-bottom: 10px; padding: 15px;">
+                <div class="header-left">
+                    <h2>Ranking Mode</h2>
+                    <span id="active-ranking-filter-name" style="font-size: 1.1rem; color: var(--primary); margin-left: 15px; font-weight: bold;">Filter Name</span>
+                </div>
+                <div class="header-right">
+                    <button id="manage-tiers-btn" class="btn secondary-btn" style="padding: 8px 15px;">Manage Tiers</button>
+                    <button id="exit-ranking-btn" class="btn secondary-btn" style="padding: 8px 15px; border-color: var(--danger); color: var(--danger);">Exit</button>
+                    <button id="save-ranking-btn" class="btn primary-btn" style="padding: 8px 15px;">Save Rankings</button>
+                </div>
+            </header>
+
+            <div class="ranking-layout" style="display: flex; gap: 20px; flex: 1; min-height: 0; overflow: hidden;">
+                <!-- Unranked Pool -->
+                <div class="unranked-pool glass-card" style="width: 300px; display: flex; flex-direction: column; overflow: hidden; padding: 15px;">
+                    <h3 style="margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">Unranked</h3>
+                    <div id="unranked-container" class="tier-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 50px;">
+                        <!-- Cards go here -->
+                    </div>
+                </div>
+
+                <!-- Tiers List -->
+                <div class="tiers-list" style="flex: 1; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 10px;">
+                    <div id="tiers-container" style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- Tiers go here -->
+                    </div>
+                </div>
+            </div>
         </section>
     </main>
 
@@ -140,13 +191,20 @@
     <div id="selection-toolbar" class="selection-toolbar hidden">
         <div class="selection-info">
             <span id="selection-count">0 Selected</span>
+            <div style="display:flex; gap:5px;">
+                <button id="select-all-btn" class="btn secondary-btn" style="padding: 5px 10px; font-size: 0.8rem;">All</button>
+                <button id="deselect-all-btn" class="btn secondary-btn" style="padding: 5px 10px; font-size: 0.8rem;">None</button>
+            </div>
             <button id="cancel-selection" class="btn secondary-btn">Cancel</button>
         </div>
         <div class="selection-actions">
+            <button id="bulk-today-btn" class="btn secondary-btn" style="color:var(--success); border-color:rgba(16,185,129,0.3); margin-right:5px;">Met Today</button>
+            <button id="bulk-category-btn" class="btn secondary-btn" style="margin-right:5px;">Category</button>
+            <button id="rank-selected-btn" class="btn secondary-btn" style="margin-right:5px;">Rank</button>
             <button id="delete-selected-btn" class="btn secondary-btn"
-                style="color:var(--danger); border-color:var(--danger); margin-right:10px;">Delete Selected</button>
-            <button id="export-grid-img" class="btn primary-btn">Export Image</button>
-            <button id="export-grid-pdf" class="btn primary-btn">Export PDF</button>
+                style="color:var(--danger); border-color:var(--danger); margin-right:5px;">Delete</button>
+            <button id="export-grid-img" class="btn primary-btn">Image</button>
+            <button id="export-grid-pdf" class="btn primary-btn">PDF</button>
         </div>
     </div>
 
@@ -316,6 +374,16 @@
                 <button id="export-zip-html" class="btn primary-btn full-width">Export Offline Website (ZIP +
                     Viewer)</button>
             </div>
+            </div>
+            <div id="export-progress-container" class="hidden" style="margin-top:20px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:0.8rem;">
+                    <span id="export-progress-label">Progress</span>
+                    <span id="export-progress-percent">0%</span>
+                </div>
+                <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden;">
+                    <div id="export-progress-bar" style="width:0%; height:100%; background:var(--primary); transition:width 0.3s ease;"></div>
+                </div>
+            </div>
             <div id="export-status"
                 style="margin-top:10px; font-size:0.9rem; color:var(--text-main); text-align:center;"></div>
         </div>
@@ -402,9 +470,39 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
     <!-- Firebase SDKs & Logic -->
     <script type="module" src="script.js"></script>
+
+    <!-- Custom Notification Toast -->
+    <div id="notification-toast" class="toast hidden">
+        <span id="notification-msg">Message goes here</span>
+    </div>
+
+    <!-- Generic Confirmation Modal -->
+    <div id="confirm-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 400px; text-align: center;">
+            <h3 id="confirm-title">Confirm Action</h3>
+            <p id="confirm-msg" style="color:var(--text-muted); margin: 20px 0;">Are you sure?</p>
+            <div class="modal-actions" style="display:flex; gap:10px; justify-content:center;">
+                <button id="confirm-cancel-btn" class="btn secondary-btn">Cancel</button>
+                <button id="confirm-ok-btn" class="btn primary-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Selection Modal (Replacing prompt) -->
+    <div id="filter-select-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 450px;">
+            <span id="close-filter-select" class="close" style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h3>Select Ranking Filter</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom: 20px;">Choose a filter to use for ranking.</p>
+            <div id="filter-options-list" style="display:flex; flex-direction:column; gap:10px;">
+                <!-- Filter options injected here -->
+            </div>
+        </div>
+    </div>
 
     <!-- Stats Modal -->
     <div id="stats-modal" class="modal hidden">
@@ -417,6 +515,65 @@
             </div>
         </div>
     </div>
+
+    <!-- Manage Ranking Filters Modal -->
+    <div id="manage-filters-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 500px;">
+            <span id="close-manage-filters" class="close" style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h3>Manage Ranking Filters</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom: 15px;">Create or edit your ranking categories.</p>
+            
+            <div style="display:flex; gap:10px; margin-bottom: 20px;">
+                <input type="text" id="new-filter-name" placeholder="New filter name..." style="flex:1;">
+                <button id="create-filter-btn" class="btn primary-btn">Create</button>
+            </div>
+
+            <div id="filters-list" style="display:flex; flex-direction:column; gap:10px; max-height: 400px; overflow-y: auto;">
+                <!-- Filter items injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Tiers Modal -->
+    <div id="manage-tiers-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 500px;">
+            <span id="close-manage-tiers" class="close" style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h3>Manage Tiers</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom: 15px;">Add, rename, or reorder tiers for the current filter.</p>
+            
+            <div style="display:flex; gap:10px; margin-bottom: 20px;">
+                <input type="text" id="new-tier-name" placeholder="New tier name..." style="flex:1;">
+                <button id="create-tier-btn" class="btn primary-btn">Add Tier</button>
+            </div>
+
+            <div id="tiers-edit-list" style="display:flex; flex-direction:column; gap:10px; max-height: 400px; overflow-y: auto;">
+                <!-- Tier items injected here -->
+            </div>
+        </div>
+    </div>
+    <!-- Bulk Change Category Modal -->
+    <div id="bulk-category-modal" class="modal hidden">
+        <div class="glass-card modal-content" style="max-width: 400px;">
+            <span id="close-bulk-category" class="close" style="position:absolute; top:15px; right:20px; font-size:28px; cursor:pointer;">&times;</span>
+            <h3>Change Category</h3>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom: 20px;">Update category for <span id="bulk-cat-count">0</span> people.</p>
+            
+            <div class="input-group">
+                <label>New Category</label>
+                <input type="text" id="bulk-inp-category" list="category-list" placeholder="e.g. Work, Family">
+            </div>
+
+            <div class="modal-actions" style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
+                <button id="cancel-bulk-category" class="btn secondary-btn">Cancel</button>
+                <button id="confirm-bulk-category" class="btn primary-btn">Update All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scroll to Top Button -->
+    <button id="scroll-to-top" class="hidden" title="Scroll to Top" style="position:fixed; bottom:100px; right:30px; width:50px; height:50px; border-radius:50%; background:var(--primary); color:white; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1.5rem; box-shadow:0 5px 15px rgba(0,0,0,0.3); z-index:900; transition:all 0.3s ease;">
+        ↑
+    </button>
 </body>
 
 </html>

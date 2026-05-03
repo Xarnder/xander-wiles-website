@@ -12,22 +12,22 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <!-- Custom Stylesheet -->
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="/pages/replace_region/style.css" />
     <link rel="stylesheet" href="/assets/css/style.css">
 
 
     <!-- Theme-aware SVG icons (modern browsers) -->
-    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
-    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
-    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="/pages/replace_region/favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="/pages/replace_region/favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="/pages/replace_region/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
 
     <!-- Fallback PNG icons -->
-    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/pages/replace_region/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/pages/replace_region/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/pages/replace_region/favicon-16x16.png">
 
     <!-- Other essential links -->
-    <link rel="manifest" href="site.webmanifest">
+    <link rel="manifest" href="/pages/replace_region/site.webmanifest">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
 </head>
@@ -344,6 +344,27 @@
                             </div>
                             <input type="range" id="lightness-slider" min="0" max="200" value="100" step="1" />
                         </div>
+                        <div class="control-group">
+                            <div class="label-row">
+                                <label for="black-level-slider">Black Level: <span id="black-level-value">0</span></label>
+                                <button class="reset-btn" data-target="black-level-slider" data-default="0" title="Reset">↺</button>
+                            </div>
+                            <input type="range" id="black-level-slider" min="0" max="100" value="0" step="1" />
+                        </div>
+                        <div class="control-group">
+                            <div class="label-row">
+                                <label for="highlight-level-slider">Highlight Level: <span id="highlight-level-value">100</span></label>
+                                <button class="reset-btn" data-target="highlight-level-slider" data-default="100" title="Reset">↺</button>
+                            </div>
+                            <input type="range" id="highlight-level-slider" min="0" max="100" value="100" step="1" />
+                        </div>
+                        <div class="control-group">
+                            <label>Lightness Curve</label>
+                            <div class="curve-container">
+                                <canvas id="curve-canvas" width="200" height="200"></canvas>
+                                <button id="reset-curve-btn" class="reset-btn mini-reset" title="Reset Curve">↺</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="controls-bar" style="margin-top: 10px;">
@@ -400,8 +421,22 @@
         </div>
     </div>
 
+    <!-- SVG Filter for Curves -->
+    <svg style="position: absolute; width: 0; height: 0;" width="0" height="0" version="1.1" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <filter id="custom-curves" color-interpolation-filters="sRGB">
+                <feComponentTransfer>
+                    <feFuncR type="table" tableValues="0 1" id="curveR"/>
+                    <feFuncG type="table" tableValues="0 1" id="curveG"/>
+                    <feFuncB type="table" tableValues="0 1" id="curveB"/>
+                </feComponentTransfer>
+                <!-- Hue and Saturation are handled by CSS filters or can be added here if needed -->
+            </filter>
+        </defs>
+    </svg>
+
     <script src="/assets/js/image-transfer.js"></script>
-    <script src="script.js"></script>
+    <script src="/pages/replace_region/script.js"></script>
     <script src="/assets/js/nav-loader.js"></script>
 
 </body>

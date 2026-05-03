@@ -1301,13 +1301,43 @@ async function processVideo(file, batchIndex) {
     const width = video.videoWidth;
     const height = video.videoHeight;
     
+
+    
+    const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
+    const isFastMode = fastModeInput ? fastModeInput.checked : false;
+
+    // Determine Output Dimensions
+    let outputWidth = width;
+    let outputHeight = height;
+    const isCroppedOutput = (currentMode === 'crop' || currentMode === 'feature');
+    
+    if (isCroppedOutput) {
+        let targetAR = 1;
+        if (currentMode === 'crop') {
+            const rw = parseFloat(ratioWidthInput.value) || 1;
+            const rh = parseFloat(ratioHeightInput.value) || 1;
+            targetAR = useOriginalRatioInput.checked ? (width / height) : (rw / rh);
+        } else {
+            // Feature Mode Ratio
+            targetAR = (parseFloat(featureWideWInput.value) || 1) / (parseFloat(featureWideHInput.value) || 1);
+        }
+        outputHeight = Math.min(height, 720);
+        outputWidth = Math.round(outputHeight * targetAR);
+        
+        // Ensure even dimensions for H.264
+        if (outputWidth % 2 !== 0) outputWidth++;
+        if (outputHeight % 2 !== 0) outputHeight++;
+        
+        log(`Output resolution: ${outputWidth}x${outputHeight} (Cropped Mode)`, "info");
+    }
+
     // Output setup
     let muxer = new Mp4Muxer.Muxer({
         target: new Mp4Muxer.ArrayBufferTarget(),
         video: {
             codec: 'avc',
-            width: width,
-            height: height
+            width: outputWidth,
+            height: outputHeight
         },
         fastStart: 'in-memory'
     });
@@ -1318,9 +1348,9 @@ async function processVideo(file, batchIndex) {
     });
     
     videoEncoder.configure({
-        codec: 'avc1.4D4034', // H.264 Main Profile, Level 5.2 (Supports 4K and high resolutions)
-        width: width,
-        height: height,
+        codec: 'avc1.4D4034', 
+        width: outputWidth,
+        height: outputHeight,
         bitrate: 5_000_000,
         framerate: fps
     });
@@ -1329,19 +1359,24 @@ async function processVideo(file, batchIndex) {
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    
-    const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
-    const isFastMode = fastModeInput ? fastModeInput.checked : false;
+
+    // For cropped output, we need a separate canvas to compose the final frame
+    const outputCanvas = document.createElement('canvas');
+    outputCanvas.width = outputWidth;
+    outputCanvas.height = outputHeight;
+    const oCtx = outputCanvas.getContext('2d');
     
     // UI Progress
     if (videoProgressWrapper) videoProgressWrapper.style.display = 'flex';
     if (videoProgressPercentage) videoProgressPercentage.textContent = '0%';
     if (videoProgressETA) videoProgressETA.textContent = 'ETA: --:--';
     const previewTitle = previewCard ? previewCard.querySelector('h3') : null;
+    const headerLoader = document.getElementById('headerLoader');
     let oldPreviewTitle = "";
     if (previewTitle) {
         oldPreviewTitle = previewTitle.innerText;
         previewTitle.innerText = "Processing Video...";
+        if (headerLoader) headerLoader.style.display = 'block';
     }
     
     // PHASE 1: Detection Pass
@@ -1356,22 +1391,49 @@ async function processVideo(file, batchIndex) {
         video.currentTime = time;
         await new Promise(r => video.onseeked = r);
         
-        // Draw to canvas for detection
         ctx.drawImage(video, 0, 0, width, height);
         
-        // Use face-api to detect
-        const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
-        const detections = await faceapi.detectAllFaces(canvas);
-        const currentBoxes = processAll ? detections.map(d => d.box) : (detections.length > 0 ? [getLargestFace(detections).box] : []);
+        // In feature mode, we need landmarks to define the crop area
+        let detections;
+        if (currentMode === 'feature') {
+            detections = await faceapi.detectAllFaces(canvas).withFaceLandmarks();
+        } else {
+            detections = await faceapi.detectAllFaces(canvas);
+        }
+
+        const currentBoxes = [];
+        if (detections && detections.length > 0) {
+            const faces = processAll ? detections : [getLargestFace(detections)];
+            for (const d of faces) {
+                if (!d) continue;
+                if (currentMode === 'feature') {
+                    const landmarks = d.landmarks;
+                    const points = [];
+                    if (cropEyesInput.checked) points.push(...landmarks.getLeftEye(), ...landmarks.getRightEye());
+                    if (cropNoseInput.checked) points.push(...landmarks.getNose());
+                    if (cropLipsInput.checked) points.push(...landmarks.getMouth());
+                    if (cropEyebrowsInput.checked) points.push(...landmarks.getLeftEyeBrow(), ...landmarks.getRightEyeBrow());
+                    
+                    if (points.length > 0) {
+                        // Calculate specific feature box
+                        let targetAR = (parseFloat(featureWideWInput.value) || 1) / (parseFloat(featureWideHInput.value) || 1);
+                        const fb = calculateFeatureBox(points, featurePadding, width, height, targetAR);
+                        currentBoxes.push(fb);
+                    } else {
+                        currentBoxes.push(d.detection.box); // Fallback to face box
+                    }
+                } else {
+                    currentBoxes.push(d.box || d.detection.box);
+                }
+            }
+        }
         
-        // Simple Tracker (Centroid/Proximity)
+        // Tracker
         for (const box of currentBoxes) {
             let bestTrack = null;
-            let minDist = 150; // Threshold (pixels)
-            
+            let minDist = 150;
             for (const track of tracks) {
                 const last = track[track.length - 1];
-                // Match if disappeared within last 15 frames
                 if (i - last.f <= 15) {
                     const dist = Math.sqrt(Math.pow((last.box.x + last.box.width/2) - (box.x + box.width/2), 2) + 
                                          Math.pow((last.box.y + last.box.height/2) - (box.y + box.height/2), 2));
@@ -1381,12 +1443,8 @@ async function processVideo(file, batchIndex) {
                     }
                 }
             }
-            
-            if (bestTrack) {
-                bestTrack.push({ f: i, box });
-            } else {
-                tracks.push([{ f: i, box }]);
-            }
+            if (bestTrack) bestTrack.push({ f: i, box });
+            else tracks.push([{ f: i, box }]);
         }
         
         // Update live preview during detection phase
@@ -1406,43 +1464,26 @@ async function processVideo(file, batchIndex) {
             }
         }
         
-        // Progress for Phase 1 (0% to 50%)
         const progress = (i + 1) / totalFrames;
-        const totalProgress = progress * 0.5;
-        const percent = Math.round(totalProgress * 100);
-        
+        const percent = Math.round(progress * 50);
         if (videoProgressBar) videoProgressBar.style.width = `${percent}%`;
         if (videoProgressPercentage) videoProgressPercentage.textContent = `${percent}%`;
-        
-        if (i > 5) {
-            const elapsed = Date.now() - detectStartTime;
-            const estimatedTotal = elapsed / progress;
-            const remaining = (estimatedTotal - elapsed) + (estimatedTotal * 0.2); // Add estimate for phase 2
-            
-            const remainingSec = Math.ceil(remaining / 1000);
-            const m = Math.floor(remainingSec / 60);
-            const s = remainingSec % 60;
-            if (videoProgressETA) videoProgressETA.textContent = `ETA: ${m}:${s.toString().padStart(2, '0')}`;
-        }
         if (videoProgressText) videoProgressText.textContent = `Analyzing motion: frame ${i + 1}/${totalFrames}`;
     }
 
     if (isBatchAborted) return;
 
-    // MULTI-TRACK INTERPOLATION LOGIC
     log(`Calculating smooth tracking paths for ${tracks.length} faces...`, "info");
     const interpolatedTracks = tracks.map(track => {
         const fullTrack = new Array(totalFrames).fill(null);
         for (const pt of track) fullTrack[pt.f] = pt.box;
         
-        // Fill Gaps
         for (let i = track[0].f; i < track[track.length - 1].f; i++) {
             if (fullTrack[i] === null) {
                 let prevIdx = -1;
                 for (let j = i - 1; j >= 0; j--) { if (fullTrack[j]) { prevIdx = j; break; } }
                 let nextIdx = -1;
                 for (let j = i + 1; j < fullTrack.length; j++) { if (fullTrack[j]) { nextIdx = j; break; } }
-                
                 if (prevIdx !== -1 && nextIdx !== -1) {
                     const prev = fullTrack[prevIdx];
                     const next = fullTrack[nextIdx];
@@ -1456,21 +1497,12 @@ async function processVideo(file, batchIndex) {
                 }
             }
         }
-        
-        // Persistence (End of clip)
         const lastKnownIdx = track[track.length - 1].f;
         const lastBox = fullTrack[lastKnownIdx];
-        for (let i = lastKnownIdx + 1; i < totalFrames; i++) {
-            fullTrack[i] = { ...lastBox };
-        }
-        
-        // Persistence (Start of clip) - optional but helps stability
+        for (let i = lastKnownIdx + 1; i < totalFrames; i++) fullTrack[i] = { ...lastBox };
         const firstKnownIdx = track[0].f;
         const firstBox = fullTrack[firstKnownIdx];
-        for (let i = 0; i < firstKnownIdx; i++) {
-            fullTrack[i] = { ...firstBox };
-        }
-
+        for (let i = 0; i < firstKnownIdx; i++) fullTrack[i] = { ...firstBox };
         return fullTrack;
     });
 
@@ -1481,48 +1513,63 @@ async function processVideo(file, batchIndex) {
     
     for (let i = 0; i < totalFrames; i++) {
         if (isBatchAborted) break;
-        
         const time = i / fps;
         video.currentTime = time;
         await new Promise(r => video.onseeked = r);
         
-        // Draw raw frame
         ctx.drawImage(video, 0, 0, width, height);
-        
-        // Apply overlays for ALL active tracks
-        for (const fullTrack of interpolatedTracks) {
-            const faceBox = fullTrack[i];
+
+        if (isCroppedOutput) {
+            // For cropped/feature mode, we focus on the largest track or first track
+            const track = interpolatedTracks[0];
+            const faceBox = track ? track[i] : null;
             if (faceBox) {
-                const rect = calculateCropRect(canvas, faceBox);
+                // Determine crop area in source
+                const targetAR = outputWidth / outputHeight;
+                const rect = (currentMode === 'feature') ? faceBox : calculateCropRect(canvas, faceBox);
                 
-                if (currentMode === 'censor') {
-                    drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
-                        mode: 'censor',
-                        type: currentCensorType,
-                        shape: currentCensorShape,
-                        color: censorColor,
-                        blur: blurStrength,
-                        emoji: censorEmoji
-                    }, canvas);
-                } else if (currentMode === 'frame') {
-                    drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
-                        mode: 'frame',
-                        shape: currentFrameShape,
-                        color: frameColor,
-                        thickness: frameThickness
-                    }, canvas);
-                } else if (currentMode === 'crop') {
-                    ctx.fillStyle = 'black';
-                    ctx.fillRect(0, 0, width, rect.y);
-                    ctx.fillRect(0, rect.y + rect.height, width, height - (rect.y + rect.height));
-                    ctx.fillRect(0, rect.y, rect.x, rect.height);
-                    ctx.fillRect(rect.x + rect.width, rect.y, width - (rect.x + rect.width), rect.height);
+                // Final adjustment to ensure AR matches outputExactly
+                let sx = rect.x, sy = rect.y, sw = rect.width, sh = rect.height;
+                const currentAR = sw / sh;
+                if (currentAR > targetAR) {
+                    const newSh = sw / targetAR;
+                    sy -= (newSh - sh) / 2;
+                    sh = newSh;
+                } else {
+                    const newSw = sh * targetAR;
+                    sx -= (newSw - sw) / 2;
+                    sw = newSw;
+                }
+                
+                oCtx.fillStyle = 'black';
+                oCtx.fillRect(0, 0, outputWidth, outputHeight);
+                oCtx.drawImage(video, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight);
+            } else {
+                oCtx.fillStyle = 'black';
+                oCtx.fillRect(0, 0, outputWidth, outputHeight);
+            }
+        } else {
+            // Normal Full-Size Rendering (Censor/Frame)
+            for (const fullTrack of interpolatedTracks) {
+                const faceBox = fullTrack[i];
+                if (faceBox) {
+                    const rect = calculateCropRect(canvas, faceBox);
+                    if (currentMode === 'censor') {
+                        drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                            mode: 'censor', type: currentCensorType, shape: currentCensorShape,
+                            color: censorColor, blur: blurStrength, emoji: censorEmoji
+                        }, canvas);
+                    } else if (currentMode === 'frame') {
+                        drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                            mode: 'frame', shape: currentFrameShape, color: frameColor, thickness: frameThickness
+                        }, canvas);
+                    }
                 }
             }
         }
         
-        // Encode frame
-        const frame = new VideoFrame(canvas, { timestamp: time * 1_000_000 });
+        const finalCanvas = isCroppedOutput ? outputCanvas : canvas;
+        const frame = new VideoFrame(finalCanvas, { timestamp: time * 1_000_000 });
         try {
             if (videoEncoder.state === 'configured') {
                 videoEncoder.encode(frame, { keyFrame: i % fps === 0 });
@@ -1531,27 +1578,21 @@ async function processVideo(file, batchIndex) {
             frame.close();
         }
 
-        // Update live previews
         const freq = updateFrequencyInput ? parseInt(updateFrequencyInput.value) || 25 : 25;
         if (!isFastMode && i % freq === 0) {
-            // Ensure loader is hidden during live update
             if (previewLoader) previewLoader.style.display = 'none';
-
-            // Update Main Preview Area (Center)
             if (previewCard) previewCard.style.display = 'block';
             if (previewCanvas) {
                 const pCtx = previewCanvas.getContext('2d');
                 if (pCtx) {
-                    if (previewCanvas.width !== canvas.width || previewCanvas.height !== canvas.height) {
-                        previewCanvas.width = canvas.width;
-                        previewCanvas.height = canvas.height;
+                    if (previewCanvas.width !== finalCanvas.width || previewCanvas.height !== finalCanvas.height) {
+                        previewCanvas.width = finalCanvas.width;
+                        previewCanvas.height = finalCanvas.height;
                     }
-                    pCtx.drawImage(canvas, 0, 0);
+                    pCtx.drawImage(finalCanvas, 0, 0);
                 }
             }
-
-            // Update Gallery Thumbnail
-            const thumbUrl = canvas.toDataURL('image/jpeg', 0.7);
+            const thumbUrl = finalCanvas.toDataURL('image/jpeg', 0.7);
             if (!videoGalleryCard) {
                 videoGalleryCard = displayResult(thumbUrl, false, true);
                 if (gallery) gallery.insertBefore(videoGalleryCard, gallery.firstChild);
@@ -1560,60 +1601,36 @@ async function processVideo(file, batchIndex) {
             }
         }
         
-        // Progress for Phase 2 (50% to 100%)
         const progress = (i + 1) / totalFrames;
         const totalProgress = 0.5 + (progress * 0.5);
         const percent = Math.round(totalProgress * 100);
-        
         if (videoProgressBar) videoProgressBar.style.width = `${percent}%`;
         if (videoProgressPercentage) videoProgressPercentage.textContent = `${percent}%`;
-        
-        if (i > 5) {
-            const elapsed = Date.now() - renderStartTime;
-            const estimatedRemaining = (elapsed / progress) - elapsed;
-            const remainingSec = Math.ceil(estimatedRemaining / 1000);
-            const m = Math.floor(remainingSec / 60);
-            const s = remainingSec % 60;
-            if (videoProgressETA) videoProgressETA.textContent = `ETA: ${m}:${s.toString().padStart(2, '0')}`;
-        }
         if (videoProgressText) videoProgressText.textContent = `Rendering video: frame ${i + 1}/${totalFrames}`;
     }
     
-    if (videoEncoder.state === 'configured') {
-        await videoEncoder.flush();
-    }
-    if (videoEncoder.state !== 'closed') {
-        videoEncoder.close();
-    }
+    if (videoEncoder.state === 'configured') await videoEncoder.flush();
+    if (videoEncoder.state !== 'closed') videoEncoder.close();
     muxer.finalize();
     URL.revokeObjectURL(videoUrl);
     
     if (videoProgressWrapper) videoProgressWrapper.style.display = 'none';
-    if (previewTitle && oldPreviewTitle) previewTitle.innerText = oldPreviewTitle;
+    if (previewTitle && oldPreviewTitle) {
+        previewTitle.innerText = oldPreviewTitle;
+        if (headerLoader) headerLoader.style.display = 'none';
+    }
     
     if (!isBatchAborted) {
         const buffer = muxer.target.buffer;
         const blob = new Blob([buffer], { type: 'video/mp4' });
         const videoResultUrl = URL.createObjectURL(blob);
-        
-        // Extension should be .mp4
         const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'video').replace(/\.[^/.]+$/, "") + ".mp4";
-
         processedBlobs.push({
-            name: finalFileName,
-            blob: blob,
-            isError: false,
-            originalFile: file,
-            outputWidth: width,
-            outputHeight: height,
-            mode: 'video'
+            name: finalFileName, blob: blob, isError: false, originalFile: file,
+            outputWidth: outputWidth, outputHeight: outputHeight, mode: 'video'
         });
-
-        if (videoGalleryCard) {
-            displayResult(videoResultUrl, false, true, videoGalleryCard);
-        } else {
-            displayResult(videoResultUrl, false, true);
-        }
+        if (videoGalleryCard) displayResult(videoResultUrl, false, true, videoGalleryCard);
+        else displayResult(videoResultUrl, false, true);
     }
 }
 async function processImage(file, batchIndex) {

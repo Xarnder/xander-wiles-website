@@ -29,6 +29,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const setupBtn = document.getElementById('setup-btn');
   const directoryUploadInput = document.getElementById('directory-upload');
   const uploadArea = document.getElementById('upload-area-dynamic');
+  const addImageBtn = document.getElementById('add-image-btn');
+  const resetToolBtn = document.getElementById('reset-tool-btn');
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
   const comparisonContainer = document.getElementById('comparison-container');
   
   // Selects the links ONLY from the tool's navigation bar
@@ -138,12 +141,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- SETUP UI ---
-  const setupUI = () => {
-    numImages = parseInt(imageCountInput.value);
-    imagesData = Array(numImages).fill(null);
+  const setupUI = (preserveData = false) => {
+    const requestedNum = parseInt(imageCountInput.value);
+    
+    if (preserveData) {
+      // imagesData should already be manipulated by addImage/removeImage
+      numImages = imagesData.length;
+      imageCountInput.value = numImages;
+    } else {
+      numImages = requestedNum;
+      imagesData = Array(numImages).fill(null);
+    }
 
     [uploadArea, splitViewContainer, magnifySourceContainer, magnifyPreviewContainer, fadeContainer].forEach(el => el.innerHTML = '');
-    comparisonContainer.classList.add('hidden');
+    
+    if (!imagesData.some(Boolean)) {
+      comparisonContainer.classList.add('hidden');
+    } else {
+      comparisonContainer.classList.remove('hidden');
+    }
 
     // upload rows
     for (let i = 0; i < numImages; i++) {
@@ -152,22 +168,43 @@ document.addEventListener('DOMContentLoaded', () => {
       box.innerHTML = `
         <label for="img-upload-${i}">Image ${i + 1}</label>
         <input type="file" id="img-upload-${i}" data-index="${i}" accept="image/*,.heic,.heif">
+        <button class="remove-img-btn" data-index="${i}" title="Remove this image">&times;</button>
       `;
       uploadArea.appendChild(box);
       document.getElementById(`img-upload-${i}`).addEventListener('change', handleIndividualImageUpload);
+      
+      // Drag & Drop for individual box
+      box.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('drag-over'); });
+      box.addEventListener('dragleave', () => box.classList.remove('drag-over'));
+      box.addEventListener('drop', (e) => {
+        e.preventDefault();
+        box.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file && VALID_IMG_REGEX.test(file.name)) processAndLoadImage(file, i);
+      });
+
+      box.querySelector('.remove-img-btn').addEventListener('click', (e) => {
+        removeImage(parseInt(e.target.dataset.index));
+      });
+
+      if (imagesData[i]) {
+        const label = box.querySelector('label');
+        label.textContent = `✓ ${imagesData[i].filename.substring(0, 10)}...`;
+        label.classList.add('uploaded');
+      }
     }
 
     // magnify base + loupe
     magnifySourceContainer.innerHTML = `
-      <img id="magnify-img-base" src="${ph.upload1}" alt="Source Image">
+      <img id="magnify-img-base" src="${imagesData[0] ? imagesData[0].src : ph.upload1}" alt="Source Image">
       <div class="magnify-loupe" id="magnify-loupe"></div>
     `;
 
     // fade stack
     fadeContainer.innerHTML = `
-      <img id="fade-sizer" src="${ph.base}">
-      <img id="fade-layer-1" src="${ph.selectBase}">
-      <img id="fade-layer-2" src="${ph.selectOverlay}">
+      <img id="fade-sizer" src="${imagesData[0] ? imagesData[0].src : ph.base}">
+      <img id="fade-layer-1" src="${imagesData[0] ? imagesData[0].src : ph.selectBase}">
+      <img id="fade-layer-2" src="${imagesData[1] ? imagesData[1].src : ph.selectOverlay}">
     `;
 
     // blend modes
@@ -200,18 +237,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // split & magnify preview stripes
     for (let i = 0; i < numImages; i++) {
       const isBase = i === 0;
+      const data = imagesData[i];
+      const currentSrc = data ? data.src : ph.image(i);
+
       const splitWrapper = document.createElement('div');
       splitWrapper.className = isBase ? 'img-wrapper-dynamic base-image' : 'img-wrapper-dynamic';
       splitWrapper.id = `split-wrapper-${i}`;
       splitWrapper.style.zIndex = i + 1;
-      splitWrapper.innerHTML = `<img id="split-img-${i}" src="${ph.image(i)}" alt="Image ${i + 1}">`;
+      splitWrapper.innerHTML = `<img id="split-img-${i}" src="${currentSrc}" alt="Image ${i + 1}">`;
       splitViewContainer.appendChild(splitWrapper);
 
       const magnifyWrapper = document.createElement('div');
       magnifyWrapper.className = 'img-wrapper-dynamic';
       magnifyWrapper.id = `magnify-wrapper-${i}`;
       magnifyWrapper.style.zIndex = i + 1;
-      magnifyWrapper.style.backgroundImage = `url(${ph.image(i)})`;
+      magnifyWrapper.style.backgroundImage = `url(${currentSrc})`;
       magnifyPreviewContainer.appendChild(magnifyWrapper);
 
       if (!isBase) {
@@ -244,6 +284,32 @@ document.addEventListener('DOMContentLoaded', () => {
     resetSliders('split');
     resetSliders('magnify');
     initSliders();
+
+    const loadedCount = imagesData.filter(Boolean).length;
+    if (loadedCount >= 2) {
+      updateFadeSelectors();
+      updateHeatmapSelectors();
+      checkForAspectRatioMismatch();
+      updateExportPreview();
+    }
+  };
+
+  const addImage = () => {
+    if (numImages >= 5) {
+      showErrorPopup("Limit Reached", "You can compare a maximum of 5 images.");
+      return;
+    }
+    imagesData.push(null);
+    setupUI(true);
+  };
+
+  const removeImage = (index) => {
+    if (numImages <= 2) {
+      showErrorPopup("Minimum Reached", "You must have at least 2 image slots.");
+      return;
+    }
+    imagesData.splice(index, 1);
+    setupUI(true);
   };
 
   const checkTransferImages = async () => {
@@ -284,6 +350,46 @@ document.addEventListener('DOMContentLoaded', () => {
     imageCountInput.value = imageFiles.length;
     setupUI();
     imageFiles.forEach((file, index) => processAndLoadImage(file, index));
+  };
+
+  const handleGlobalDrop = (e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(f => VALID_IMG_REGEX.test(f.name));
+    if (files.length === 0) return;
+
+    if (files.length > 1) {
+      // If multiple files dropped, treat like directory
+      imageCountInput.value = Math.min(files.length, 5);
+      setupUI();
+      files.slice(0, 5).forEach((file, index) => processAndLoadImage(file, index));
+    } else {
+      // Single file: find first empty slot or add new slot
+      let targetIndex = imagesData.findIndex(d => d === null);
+      if (targetIndex === -1) {
+        if (numImages < 5) {
+          addImage();
+          targetIndex = numImages - 1;
+        } else {
+          targetIndex = 0; // Overwrite first
+        }
+      }
+      processAndLoadImage(files[0], targetIndex);
+    }
+  };
+
+  const handlePaste = (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (const item of items) {
+      if (item.type.indexOf("image") !== -1) {
+        const file = item.getAsFile();
+        let targetIndex = imagesData.findIndex(d => d === null);
+        if (targetIndex === -1) {
+          if (numImages < 5) { addImage(); targetIndex = numImages - 1; }
+          else targetIndex = 0;
+        }
+        processAndLoadImage(file, targetIndex);
+      }
+    }
   };
 
   const handleIndividualImageUpload = (event) => {
@@ -526,6 +632,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const handleMagnifyWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.2 : 0.2;
+    let newZoom = parseFloat(zoomLevelSlider.value) + delta;
+    newZoom = Math.max(1.5, Math.min(10, newZoom));
+    zoomLevelSlider.value = newZoom;
+    zoomValueSpan.textContent = newZoom.toFixed(1);
+    zoomLevelSlider.dispatchEvent(new Event('input'));
+  };
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      comparisonContainer.requestFullscreen().catch(err => {
+        showErrorPopup("Fullscreen Error", "Could not enter fullscreen mode.");
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
   // --- FADE LOGIC ---
   const updateFadeSelectors = () => {
     fadeSelect1.innerHTML = '';
@@ -759,8 +885,20 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // --- EVENT LISTENERS & INITIALIZATION ---
-  setupBtn.addEventListener('click', setupUI);
+  setupBtn.addEventListener('click', () => setupUI(false));
+  addImageBtn.addEventListener('click', addImage);
+  resetToolBtn.addEventListener('click', () => {
+    imageCountInput.value = 2;
+    setupUI(false);
+  });
+  fullscreenBtn.addEventListener('click', toggleFullscreen);
   directoryUploadInput.addEventListener('change', handleDirectoryUpload);
+
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', handleGlobalDrop);
+  window.addEventListener('paste', handlePaste);
+
+  magnifySourceContainer.addEventListener('wheel', handleMagnifyWheel, { passive: false });
 
   // ===== FIX: REMOVED the entire conflicting navToggle click listener =====
   // navToggle.addEventListener('click', () => { ... });
@@ -776,11 +914,26 @@ document.addEventListener('DOMContentLoaded', () => {
       e.target.classList.add('active');
 
       // Show the correct view based on the clicked link
-      views.forEach(view => view.classList.toggle('hidden', view.id !== targetView));
+      views.forEach(view => {
+        const isActive = view.id === targetView;
+        if (isActive) {
+          view.classList.remove('hidden');
+          // Delay adding 'active' class so 'display: block' takes effect before 'opacity' starts
+          setTimeout(() => view.classList.add('active'), 50);
+        } else {
+          view.classList.remove('active');
+          view.classList.add('hidden');
+        }
+      });
 
-      // Refresh the export preview if that tab is selected
-      if (targetView === 'export-view' && imagesData.some(Boolean)) {
-        updateExportPreview();
+      // Refresh previews for specific views when selected
+      if (imagesData.some(Boolean)) {
+        if (targetView === 'export-view') updateExportPreview();
+        if (targetView === 'fade-view') {
+          updateFadeImages();
+          const layer2 = document.getElementById('fade-layer-2');
+          if (layer2) layer2.style.opacity = fadeLevelSlider.value;
+        }
       }
     });
   });

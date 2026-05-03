@@ -9,17 +9,31 @@
     --glass-border: rgba(255, 255, 255, 0.08);
 }
 
+html {
+    background-color: var(--bg-dark);
+}
+
 /* Apply the gradient to the body so it covers the entire viewport including the header area */
 body {
     margin: 0;
     padding: 0;
     background: radial-gradient(circle at top right, var(--bg-mid), var(--bg-dark));
+    background-color: var(--bg-dark); /* Fallback */
     background-attachment: fixed; /* Keep background steady during scroll */
     min-height: 100vh;
     color: var(--text-main);
     font-family: 'Inter', sans-serif;
     position: relative;
     overflow-x: hidden;
+}
+
+/* Fix for mobile/tablet where background-attachment: fixed is buggy */
+@media (max-width: 1024px) {
+    body {
+        background-attachment: scroll;
+        background: var(--bg-dark); /* Use solid color on mobile if gradient causes issues */
+        background: radial-gradient(circle at top right, var(--bg-mid), var(--bg-dark));
+    }
 }
 
 /* Cinematic Grain Background Effect - DISABLED as requested */

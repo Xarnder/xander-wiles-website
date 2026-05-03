@@ -1,7 +1,21 @@
+// Shim for process.env in browser (for local dev without build)
+if (typeof process === 'undefined') {
+    window.process = {
+        env: {
+            PUBLIC_SOCIAL_FIREBASE_API_KEY: "AIzaSyC2wLw45JmXYov0lYOpMMZf3IYavURMwNc",
+            PUBLIC_SOCIAL_FIREBASE_AUTH_DOMAIN: "social-network-b6579.firebaseapp.com",
+            PUBLIC_SOCIAL_FIREBASE_PROJECT_ID: "social-network-b6579",
+            PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: "social-network-b6579.firebasestorage.app",
+            PUBLIC_SOCIAL_FIREBASE_MESSAGING_SENDER_ID: "686831441900",
+            PUBLIC_SOCIAL_FIREBASE_APP_ID: "1:686831441900:web:28d02d913ce6382e58d2c9"
+        }
+    };
+}
+
 // Import Firebase SDKs from CDN
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, deleteDoc, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, where, onSnapshot, doc, updateDoc, deleteDoc, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL, listAll, getMetadata } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // --- PASTE YOUR FIREBASE CONFIG HERE ---
@@ -38,6 +52,14 @@ let tempUndoData = null; // Store old date for undo
 let isSelectionMode = false;
 let selectedFriendIds = new Set();
 
+// Ranking State
+let allRankingFilters = [];
+let currentDashboardFilterId = ""; // Filter selected in normal mode
+let activeRankingFilter = null; // Filter currently being edited in Ranking Mode
+let tempTierAssignments = {}; // { tierId: [personId, personId] }
+let sortableInstances = []; // To destroy when exiting
+let scrollTimeout = null;
+
 // DOM Elements
 const views = {
     login: document.getElementById('login-view'),
@@ -49,6 +71,23 @@ const friendsGrid = document.getElementById('friends-grid');
 const searchInput = document.getElementById('search-input');
 const filterCategory = document.getElementById('filter-category');
 const statusMsg = document.getElementById('status-msg');
+const clearSearchBtn = document.getElementById('clear-search-btn');
+const emptyState = document.getElementById('empty-state');
+const scrollToTopBtn = document.getElementById('scroll-to-top');
+
+// Selection Toolbar Elements
+const selectAllBtn = document.getElementById('select-all-btn');
+const deselectAllBtn = document.getElementById('deselect-all-btn');
+const bulkTodayBtn = document.getElementById('bulk-today-btn');
+const bulkCategoryBtn = document.getElementById('bulk-category-btn');
+
+// Bulk Modal Elements
+const bulkCategoryModal = document.getElementById('bulk-category-modal');
+const closeBulkCategory = document.getElementById('close-bulk-category');
+const cancelBulkCategory = document.getElementById('cancel-bulk-category');
+const confirmBulkCategory = document.getElementById('confirm-bulk-category');
+const bulkInpCategory = document.getElementById('bulk-inp-category');
+const bulkCatCount = document.getElementById('bulk-cat-count');
 
 // --- AUTHENTICATION ---
 document.getElementById('google-login-btn').addEventListener('click', async () => {
@@ -71,11 +110,58 @@ onAuthStateChanged(auth, (user) => {
         views.dashboard.classList.remove('hidden');
         document.getElementById('user-name').textContent = user.displayName;
         loadFriends();
+        loadRankingFilters();
         updateStorageStats(); // Initial load
     } else {
         console.log("User logged out");
         views.login.classList.remove('hidden');
         views.dashboard.classList.add('hidden');
+    }
+});
+
+// --- KEYBOARD SHORTCUTS ---
+window.addEventListener('keydown', (e) => {
+    // Don't trigger if user is typing in an input or textarea
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+        if (e.key === 'Escape') {
+            e.target.blur();
+        }
+        return;
+    }
+
+    switch (e.key.toLowerCase()) {
+        case '/':
+            e.preventDefault();
+            searchInput.focus();
+            break;
+        case 'escape':
+            // Close all modals
+            closeModal();
+            if (exportModal) exportModal.classList.add('hidden');
+            if (statsModal) statsModal.classList.add('hidden');
+            if (bulkCategoryModal) bulkCategoryModal.classList.add('hidden');
+            if (imageViewerModal) imageViewerModal.classList.add('hidden');
+            
+            // Exit selection mode if active
+            if (isSelectionMode) toggleSelectionMode(false);
+            break;
+        case 'a':
+            if (!isSelectionMode && addBtn) {
+                e.preventDefault();
+                addBtn.click();
+            }
+            break;
+        case 'm':
+            e.preventDefault();
+            toggleSelectionMode(!isSelectionMode);
+            break;
+        case 's':
+            e.preventDefault();
+            if (statsBtn) statsBtn.click();
+            break;
+        case 'g':
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            break;
     }
 });
 
@@ -427,6 +513,12 @@ function renderCard(data) {
         ? `<span class="category-badge" style="background-color:${data.categoryColor || '#4f46e5'}">${data.category}</span>`
         : '';
 
+    let tierBadgeHTML = '';
+    if (currentDashboardFilterId && data.rankings && data.rankings[currentDashboardFilterId]) {
+        const rank = data.rankings[currentDashboardFilterId];
+        tierBadgeHTML = `<div class="tier-badge" style="background-color: var(--primary);" title="Ranked ${rank.tierName} in ${rank.filterName}">${rank.tierName.substring(0, 2)}</div>`;
+    }
+
     const card = document.createElement('div');
     card.className = 'glass-card friend-card';
     if (isSelectionMode) card.classList.add('selecting');
@@ -439,6 +531,7 @@ function renderCard(data) {
     const selectionHTML = isSelectionMode ? `<div class="selection-checkbox"></div>` : '';
 
     card.innerHTML = `
+        ${tierBadgeHTML}
         ${selectionHTML}
         <img src="${data.photoURL}" class="card-img" alt="${data.name}" loading="lazy" style="${isSelectionMode ? '' : 'cursor:zoom-in'}" ${!isSelectionMode ? `onclick="openImageViewer('${data.photoURL}', '${data.name.replace(/'/g, "\\'")}')"` : ''}>
         <div class="card-info">
@@ -459,26 +552,43 @@ function renderCard(data) {
         </div>
         <div class="card-actions" style="${isSelectionMode ? 'visibility:hidden' : ''}">
             <!-- New Today Button -->
-            <button class="btn secondary-btn today-btn" style="color:var(--success); border-color:rgba(16,185,129,0.3)">Met Today</button>
-            <button class="btn secondary-btn edit-btn">Edit</button>
-            <button class="btn secondary-btn delete-btn" style="color:var(--danger);border-color:rgba(239,68,68,0.3)">Delete</button>
+            <button class="btn secondary-btn action-today" style="color:var(--success); border-color:rgba(16,185,129,0.3)">Met Today</button>
+            <button class="btn secondary-btn action-edit">Edit</button>
+            <button class="btn secondary-btn action-delete" style="color:var(--danger);border-color:rgba(239,68,68,0.3)">Delete</button>
         </div>
     `;
 
-    // Event Listeners for buttons
-    if (!isSelectionMode) {
-        card.querySelector('.today-btn').addEventListener('click', (e) => { e.stopPropagation(); markToday(data.id, data.lastContact); });
-        card.querySelector('.delete-btn').addEventListener('click', (e) => { e.stopPropagation(); deletePerson(data.id); });
-        card.querySelector('.edit-btn').addEventListener('click', (e) => { e.stopPropagation(); openEdit(data); });
-    }
-
-    // Card Selection Click
-    if (isSelectionMode) {
-        card.addEventListener('click', () => toggleCardSelection(data.id));
-    }
+    // No individual listeners anymore! Event delegation handles it.
 
     friendsGrid.appendChild(card);
 }
+
+// Event Delegation for Grid Actions
+friendsGrid.addEventListener('click', (e) => {
+    const card = e.target.closest('.friend-card');
+    if (!card) return;
+
+    const id = card.dataset.id;
+    const friend = allFriends.find(f => f.id === id);
+    if (!friend) return;
+
+    if (isSelectionMode) {
+        toggleCardSelection(id);
+        return;
+    }
+
+    // Button Actions
+    if (e.target.closest('.action-today')) {
+        e.stopPropagation();
+        markToday(id, friend.lastContact);
+    } else if (e.target.closest('.action-edit')) {
+        e.stopPropagation();
+        openEdit(friend);
+    } else if (e.target.closest('.action-delete')) {
+        e.stopPropagation();
+        deletePerson(id);
+    }
+});
 
 // --- Quick Actions ---
 const undoToast = document.getElementById('undo-toast');
@@ -618,7 +728,7 @@ document.getElementById('confirm-delete').addEventListener('click', async () => 
         deleteModal.classList.add('hidden');
     } catch (e) {
         console.error("Delete Error", e);
-        alert("Error deleting: " + e.message);
+        showToast("Error deleting: " + e.message, "error");
     } finally {
         btn.innerText = originalText;
         btn.disabled = false;
@@ -870,11 +980,29 @@ function filterGrid() {
 
     // Re-render
     friendsGrid.innerHTML = '';
-    if (filtered.length === 0) {
-        friendsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#666">No matches found.</p>';
+    
+    // Show/Hide Clear Search Button
+    if (clearSearchBtn) {
+        if (textVal.length > 0) clearSearchBtn.classList.remove('hidden');
+        else clearSearchBtn.classList.add('hidden');
     }
 
-    filtered.forEach(friend => renderCard(friend));
+    if (filtered.length === 0) {
+        if (emptyState) emptyState.classList.remove('hidden');
+        else friendsGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#666">No matches found.</p>';
+    } else {
+        if (emptyState) emptyState.classList.add('hidden');
+        filtered.forEach(friend => renderCard(friend));
+    }
+}
+
+// Clear Search Logic
+if (clearSearchBtn) {
+    clearSearchBtn.onclick = () => {
+        searchInput.value = '';
+        filterGrid();
+        searchInput.focus();
+    };
 }
 
 searchInput.addEventListener('input', filterGrid);
@@ -1012,7 +1140,7 @@ document.getElementById('export-json').addEventListener('click', () => {
 
 document.getElementById('export-csv').addEventListener('click', () => {
     if (allFriends.length === 0) {
-        alert("No data to export.");
+        showToast("No data to export.", "error");
         return;
     }
 
@@ -1064,9 +1192,21 @@ async function prepareZipImages(zip, statusEl) {
     let count = 0;
     const total = allFriends.length;
 
+    const progressContainer = document.getElementById('export-progress-container');
+    const progressBar = document.getElementById('export-progress-bar');
+    const progressPercent = document.getElementById('export-progress-percent');
+    const progressLabel = document.getElementById('export-progress-label');
+
+    if (progressContainer) progressContainer.classList.remove('hidden');
+
     for (const friend of allFriends) {
         count++;
+        const percent = Math.round((count / total) * 100);
+        
         if (statusEl) statusEl.innerText = `Processing image ${count}/${total}...`;
+        if (progressBar) progressBar.style.width = `${percent}%`;
+        if (progressPercent) progressPercent.innerText = `${percent}%`;
+        if (progressLabel) progressLabel.innerText = `Downloading images (${count}/${total})`;
 
         // Skip default/placeholder if you want, or download them too.
         // UI Avatars might work if fetch is allowed.
@@ -1085,6 +1225,8 @@ async function prepareZipImages(zip, statusEl) {
             }
         }
     }
+
+    if (progressLabel) progressLabel.innerText = "Finalizing package...";
     return idToPath;
 }
 
@@ -1126,6 +1268,9 @@ document.getElementById('export-zip-csv').addEventListener('click', async () => 
 
         statusEl.innerText = "";
         exportModal.classList.add('hidden');
+        if (document.getElementById('export-progress-container')) {
+            document.getElementById('export-progress-container').classList.add('hidden');
+        }
     } catch (err) {
         console.error(err);
         statusEl.innerText = "Error exporting ZIP.";
@@ -1246,8 +1391,8 @@ function toggleSelectionMode(active) {
         document.getElementById('mobile-menu-btn').classList.remove('hidden');
     }
 
-    // Re-render cards to show/hide checkboxes & update click behavior
-    loadFriends();
+    // Performance Optimization: Don't reload from Firebase, just re-render local data
+    filterGrid(); 
 }
 
 
@@ -1274,6 +1419,99 @@ function updateSelectionCount() {
     selectionCount.innerText = `${selectedFriendIds.size} Selected`;
 }
 
+// Bulk Selection Actions
+if (selectAllBtn) {
+    selectAllBtn.onclick = () => {
+        // Only select those currently visible (filtered)
+        const currentFiltered = allFriends.filter(friend => {
+            const textVal = searchInput.value.toLowerCase();
+            const catVal = filterCategory.value;
+            const text = (friend.name || '').toLowerCase() + ' ' + (friend.notes || '').toLowerCase() + ' ' + (friend.met || '').toLowerCase();
+            const matchesText = text.includes(textVal);
+            const matchesCategory = catVal === "" || (friend.category || "") === catVal;
+            return matchesText && matchesCategory;
+        });
+
+        currentFiltered.forEach(f => selectedFriendIds.add(f.id));
+        updateSelectionCount();
+        filterGrid(); // Re-render to show selection
+    };
+}
+
+if (deselectAllBtn) {
+    deselectAllBtn.onclick = () => {
+        selectedFriendIds.clear();
+        updateSelectionCount();
+        filterGrid();
+    };
+}
+
+// Bulk Functional Actions
+if (bulkTodayBtn) {
+    bulkTodayBtn.onclick = async () => {
+        if (selectedFriendIds.size === 0) return;
+        
+        const count = selectedFriendIds.size;
+        const confirmMsg = `Mark ${count} people as contacted today?`;
+        
+        if (confirm(confirmMsg)) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const batch = writeBatch(db);
+            
+            selectedFriendIds.forEach(id => {
+                const docRef = doc(db, "friends", id);
+                batch.update(docRef, { 
+                    lastContact: todayStr,
+                    updatedAt: new Date()
+                });
+            });
+
+            await batch.commit();
+            showToast(`Updated ${count} connections`, "success");
+            toggleSelectionMode(false);
+        }
+    };
+}
+
+if (bulkCategoryBtn) {
+    bulkCategoryBtn.onclick = () => {
+        if (selectedFriendIds.size === 0) return;
+        bulkCatCount.innerText = selectedFriendIds.size;
+        bulkCategoryModal.classList.remove('hidden');
+    };
+}
+
+// Bulk Category Modal Logic
+if (closeBulkCategory) closeBulkCategory.onclick = () => bulkCategoryModal.classList.add('hidden');
+if (cancelBulkCategory) cancelBulkCategory.onclick = () => bulkCategoryModal.classList.add('hidden');
+
+if (confirmBulkCategory) {
+    confirmBulkCategory.onclick = async () => {
+        const newCat = bulkInpCategory.value.trim();
+        if (!newCat) {
+            showToast("Please enter a category", "error");
+            return;
+        }
+
+        const count = selectedFriendIds.size;
+        const batch = writeBatch(db);
+        
+        selectedFriendIds.forEach(id => {
+            const docRef = doc(db, "friends", id);
+            batch.update(docRef, { 
+                category: newCat,
+                updatedAt: new Date()
+            });
+        });
+
+        await batch.commit();
+        showToast(`Moved ${count} people to ${newCat}`, "success");
+        bulkCategoryModal.classList.add('hidden');
+        bulkInpCategory.value = '';
+        toggleSelectionMode(false);
+    };
+}
+
 // --- Grid Export Logic ---
 document.getElementById('export-grid-img').addEventListener('click', () => generateGridExport('image'));
 document.getElementById('export-grid-pdf').addEventListener('click', () => generateGridExport('pdf'));
@@ -1295,7 +1533,7 @@ if (selectionActions && !document.getElementById('export-print')) {
 
 async function generateGridExport(type) {
     if (selectedFriendIds.size === 0) {
-        alert("Please select at least one person.");
+        showToast("Please select at least one person.", "error");
         return;
     }
 
@@ -1482,7 +1720,7 @@ async function generateGridExport(type) {
 
     } catch (err) {
         console.error("Export Failed", err);
-        alert("Export failed. See console.");
+        showToast("Export failed. See console.", "error");
     } finally {
         // Optional: clear staging
         stagingGrid.innerHTML = '';
@@ -1609,7 +1847,7 @@ if (cancelImportBtn) {
 if (confirmImportBtn) {
     confirmImportBtn.addEventListener('click', async () => {
         if (currentImportData.length === 0) {
-            alert("No data to import.");
+            showToast("No data to import.", "error");
             return;
         }
 
@@ -1644,7 +1882,7 @@ if (confirmImportBtn) {
 
         } catch (error) {
             console.error("Import Error:", error);
-            alert("Error importing contacts: " + error.message);
+            showToast("Error importing contacts: " + error.message, "error");
             btn.disabled = false;
             btn.innerText = "Confirm Import";
         }
@@ -1653,7 +1891,7 @@ if (confirmImportBtn) {
 
 function parseCSV(file) {
     if (typeof Papa === 'undefined') {
-        alert("CSV Parser not loaded. Please refresh.");
+        showToast("CSV Parser not loaded. Please refresh.", "error");
         return;
     }
 
@@ -1663,7 +1901,7 @@ function parseCSV(file) {
         complete: (results) => {
             const data = results.data;
             if (data.length === 0) {
-                alert("CSV is empty.");
+                showToast("CSV is empty.", "error");
                 return;
             }
 
@@ -1672,7 +1910,7 @@ function parseCSV(file) {
             const hasKey = (key) => Object.keys(firstRow).some(k => k.trim() === key);
 
             if (!hasKey("Forename") || !hasKey("Surname")) {
-                alert("Error: CSV must have 'Forename' and 'Surname' columns.");
+                showToast("Error: CSV must have 'Forename' and 'Surname' columns.", "error");
                 return;
             }
 
@@ -1714,7 +1952,7 @@ function parseCSV(file) {
             });
 
             if (currentImportData.length === 0) {
-                alert("No valid rows found to import.");
+                showToast("No valid rows found to import.", "error");
                 return;
             }
 
@@ -1723,7 +1961,7 @@ function parseCSV(file) {
         },
         error: (err) => {
             console.error("CSV Parse Error:", err);
-            alert("Failed to parse CSV file.");
+            showToast("Failed to parse CSV file.", "error");
         }
     });
 }
@@ -1876,7 +2114,7 @@ async function performBulkDelete() {
 
     } catch (error) {
         console.error("Bulk Delete Error:", error);
-        alert("Failed to delete some contacts: " + error.message);
+        showToast("Failed to delete some contacts: " + error.message, "error");
         slideDeleteModal.classList.add('hidden');
     } finally {
         // Reset slider
@@ -1886,3 +2124,582 @@ async function performBulkDelete() {
         sliderThumb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>';
     }
 }
+
+// =========================================================================
+// TIER RANKING SYSTEM
+// =========================================================================
+
+// --- FireStore Filter Loading ---
+function loadRankingFilters() {
+    if (!currentUser) return;
+    const q = query(collection(db, "rankingFilters"), where("userId", "==", currentUser.uid));
+    onSnapshot(q, (snapshot) => {
+        allRankingFilters = [];
+        snapshot.forEach(doc => allRankingFilters.push({ id: doc.id, ...doc.data() }));
+        // Sort by date client-side to avoid needing a Firestore index
+        allRankingFilters.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        updateRankingFilterDropdowns();
+        if (typeof renderFiltersList === 'function') renderFiltersList();
+    }, (err) => console.error("Error loading ranking filters:", err));
+}
+
+function updateRankingFilterDropdowns() {
+    const dashboardSelect = document.getElementById('ranking-filter-select');
+    if (!dashboardSelect) return;
+    
+    // Store current selection if possible
+    const currentVal = dashboardSelect.value;
+    
+    dashboardSelect.innerHTML = '<option value="">No Ranking Filter</option>';
+    allRankingFilters.forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        opt.textContent = f.name;
+        dashboardSelect.appendChild(opt);
+    });
+    
+    if (allRankingFilters.find(f => f.id === currentVal)) {
+        dashboardSelect.value = currentVal;
+    } else {
+        currentDashboardFilterId = "";
+    }
+    if (typeof filterGrid === 'function') filterGrid(); // Re-render grid
+}
+
+document.getElementById('ranking-filter-select')?.addEventListener('change', (e) => {
+    currentDashboardFilterId = e.target.value;
+    if (typeof filterGrid === 'function') filterGrid(); 
+});
+
+// --- Modal Management ---
+const manageFiltersModal = document.getElementById('manage-filters-modal');
+document.getElementById('manage-filters-btn')?.addEventListener('click', () => {
+    renderFiltersList();
+    manageFiltersModal.classList.remove('hidden');
+});
+document.getElementById('close-manage-filters')?.addEventListener('click', () => manageFiltersModal.classList.add('hidden'));
+
+const manageTiersModal = document.getElementById('manage-tiers-modal');
+document.getElementById('manage-tiers-btn')?.addEventListener('click', () => {
+    renderTiersEditList();
+    manageTiersModal.classList.remove('hidden');
+});
+document.getElementById('close-manage-tiers')?.addEventListener('click', () => manageTiersModal.classList.add('hidden'));
+
+// --- Filter CRUD ---
+document.getElementById('create-filter-btn')?.addEventListener('click', async () => {
+    const nameInput = document.getElementById('new-filter-name');
+    const name = nameInput.value.trim();
+    if (!name) return;
+    
+    const newFilter = {
+        userId: currentUser.uid,
+        name: name,
+        tiers: [
+            { id: "tier-s", name: "S", order: 0 },
+            { id: "tier-a", name: "A", order: 1 },
+            { id: "tier-b", name: "B", order: 2 },
+            { id: "tier-c", name: "C", order: 3 },
+            { id: "tier-d", name: "D", order: 4 }
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date()
+    };
+    
+    nameInput.value = '';
+    const btn = document.getElementById('create-filter-btn');
+    btn.disabled = true;
+    try {
+        await addDoc(collection(db, "rankingFilters"), newFilter);
+    } catch(e) {
+        console.error("Error creating filter", e);
+    }
+    btn.disabled = false;
+});
+
+function renderFiltersList() {
+    const list = document.getElementById('filters-list');
+    list.innerHTML = '';
+    
+    if (allRankingFilters.length === 0) {
+        list.innerHTML = '<p style="color:var(--text-muted); text-align:center;">No filters created yet.</p>';
+        return;
+    }
+    
+    allRankingFilters.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'filter-item';
+        item.innerHTML = `
+            <span>${f.name}</span>
+            <div class="filter-item-actions">
+                <button class="btn secondary-btn" style="padding:4px 8px; font-size:0.8rem; border-color:var(--danger); color:var(--danger);" onclick="deleteRankingFilter('${f.id}')">Delete</button>
+            </div>
+        `;
+        list.appendChild(item);
+    });
+}
+
+window.deleteRankingFilter = async (id) => {
+    // Close the management modal first as requested
+    const manageFiltersModal = document.getElementById('manage-filters-modal');
+    if (manageFiltersModal) manageFiltersModal.classList.add('hidden');
+
+    showConfirm("Delete Filter", "Are you sure? This won't remove the rank data from people, but the filter will be gone.", async () => {
+        try {
+            await deleteDoc(doc(db, "rankingFilters", id));
+            if (activeRankingFilter && activeRankingFilter.id === id) {
+                exitRankingMode();
+            }
+            showToast("Filter deleted");
+        } catch(e) { 
+            console.error(e); 
+            showToast("Error deleting filter", "error");
+        }
+    });
+};
+
+// --- Ranking Mode Entry ---
+document.getElementById('rank-mode-btn')?.addEventListener('click', () => {
+    enterRankingMode();
+});
+
+document.getElementById('rank-selected-btn')?.addEventListener('click', () => {
+    enterRankingMode(Array.from(selectedFriendIds));
+});
+
+function enterRankingMode(specificIds = null) {
+    if (allRankingFilters.length === 0) {
+        showToast("Please create a ranking filter first!", "error");
+        manageFiltersModal.classList.remove('hidden');
+        return;
+    }
+    
+    // Choose active filter
+    if (currentDashboardFilterId) {
+        const filterToUse = allRankingFilters.find(f => f.id === currentDashboardFilterId);
+        if (filterToUse) {
+            startRankingWithFilter(filterToUse, specificIds);
+            return;
+        }
+    }
+    
+    // If multiple filters exist and none selected, show selector
+    if (allRankingFilters.length > 1) {
+        showFilterSelector((filterToUse) => {
+            startRankingWithFilter(filterToUse, specificIds);
+        });
+    } else {
+        // Just use the only one
+        startRankingWithFilter(allRankingFilters[0], specificIds);
+    }
+}
+
+function startRankingWithFilter(filterToUse, specificIds) {
+    activeRankingFilter = filterToUse;
+    document.getElementById('active-ranking-filter-name').innerText = activeRankingFilter.name;
+    
+    // Determine people to rank
+    let peopleToRank = [];
+    if (specificIds && specificIds.length > 0) {
+        peopleToRank = allFriends.filter(f => specificIds.includes(f.id));
+    } else {
+        peopleToRank = [...allFriends];
+    }
+    
+    // Initialize tempTierAssignments
+    tempTierAssignments = { "unranked": [] };
+    activeRankingFilter.tiers.forEach(t => tempTierAssignments[t.id] = []);
+    
+    // Populate assignments based on existing friend data
+    peopleToRank.forEach(person => {
+        let assignedTierId = "unranked";
+        if (person.rankings && person.rankings[activeRankingFilter.id]) {
+            const savedTierId = person.rankings[activeRankingFilter.id].tierId;
+            // Verify tier still exists
+            if (activeRankingFilter.tiers.find(t => t.id === savedTierId)) {
+                assignedTierId = savedTierId;
+            }
+        }
+        tempTierAssignments[assignedTierId].push(person);
+    });
+    
+    // Switch views
+    document.getElementById('dashboard-view').classList.add('hidden');
+    document.getElementById('ranking-view').classList.remove('hidden');
+    
+    if (isSelectionMode) toggleSelectionMode(false);
+    
+    renderRankingLayout();
+}
+
+document.getElementById('exit-ranking-btn')?.addEventListener('click', () => {
+    showConfirm("Exit Ranking", "Are you sure you want to exit? Any unsaved changes will be lost.", () => {
+        exitRankingMode();
+    });
+});
+
+function exitRankingMode() {
+    activeRankingFilter = null;
+    tempTierAssignments = {};
+    
+    // Destroy SortableJS instances
+    sortableInstances.forEach(inst => inst.destroy());
+    sortableInstances = [];
+    
+    document.getElementById('ranking-view').classList.add('hidden');
+    document.getElementById('dashboard-view').classList.remove('hidden');
+    if (typeof filterGrid === 'function') filterGrid();
+}
+
+// --- Ranking Layout & Drag and Drop ---
+function renderRankingLayout() {
+    // Clear old instances
+    sortableInstances.forEach(inst => inst.destroy());
+    sortableInstances = [];
+    
+    const unrankedContainer = document.getElementById('unranked-container');
+    const tiersContainer = document.getElementById('tiers-container');
+    
+    unrankedContainer.innerHTML = '';
+    tiersContainer.innerHTML = '';
+    
+    // Sort tiers
+    const sortedTiers = [...activeRankingFilter.tiers].sort((a,b) => a.order - b.order);
+    
+    // Render Tiers
+    sortedTiers.forEach(tier => {
+        const row = document.createElement('div');
+        row.className = 'tier-row';
+        row.innerHTML = `
+            <div class="tier-label">${tier.name}</div>
+            <div id="tier-list-${tier.id}" class="tier-container" data-tier-id="${tier.id}"></div>
+        `;
+        tiersContainer.appendChild(row);
+        
+        const listEl = document.getElementById(`tier-list-${tier.id}`);
+        // Populate existing people in this tier
+        if (tempTierAssignments[tier.id]) {
+            tempTierAssignments[tier.id].forEach(person => {
+                listEl.appendChild(createRankingCard(person));
+            });
+        }
+        
+        // Init Sortable
+        sortableInstances.push(new Sortable(listEl, {
+            group: 'ranking',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            dragClass: 'sortable-drag',
+            onEnd: handleDragEnd
+        }));
+    });
+    
+    // Render Unranked
+    if (tempTierAssignments["unranked"]) {
+        tempTierAssignments["unranked"].forEach(person => {
+            unrankedContainer.appendChild(createRankingCard(person));
+        });
+    }
+    
+    sortableInstances.push(new Sortable(unrankedContainer, {
+        group: 'ranking',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        dragClass: 'sortable-drag',
+        onEnd: handleDragEnd
+    }));
+    
+    // Set unranked container data attr for drop handling
+    unrankedContainer.dataset.tierId = "unranked";
+}
+
+function createRankingCard(person) {
+    const card = document.createElement('div');
+    card.className = 'ranking-card';
+    card.dataset.personId = person.id;
+    card.innerHTML = `
+        <img src="${person.photoURL}" class="ranking-card-img" alt="${person.name}">
+        <div class="ranking-card-name">${person.firstName || person.name.split(' ')[0]}</div>
+    `;
+    return card;
+}
+
+function handleDragEnd(evt) {
+    const itemEl = evt.item; 
+    const toEl = evt.to;
+    const fromEl = evt.from;
+    
+    const personId = itemEl.dataset.personId;
+    const toTierId = toEl.dataset.tierId;
+    const fromTierId = fromEl.dataset.tierId;
+    
+    if (fromTierId !== toTierId) {
+        // Find person object in tempTierAssignments
+        const personObjIndex = tempTierAssignments[fromTierId].findIndex(p => p.id === personId);
+        if (personObjIndex > -1) {
+            const personObj = tempTierAssignments[fromTierId].splice(personObjIndex, 1)[0];
+            tempTierAssignments[toTierId].push(personObj); 
+        }
+    }
+}
+
+// --- Save Rankings ---
+document.getElementById('save-ranking-btn')?.addEventListener('click', async () => {
+    if (!activeRankingFilter) return;
+    
+    const btn = document.getElementById('save-ranking-btn');
+    btn.disabled = true;
+    btn.innerText = "Saving...";
+    
+    try {
+        const batch = writeBatch(db);
+        let updatesCount = 0;
+        
+        const tierElements = document.querySelectorAll('.tier-container');
+        tierElements.forEach(container => {
+            const tierId = container.dataset.tierId;
+            if (tierId === "unranked") return; 
+            
+            const tierDef = activeRankingFilter.tiers.find(t => t.id === tierId);
+            if (!tierDef) return;
+            
+            const cards = container.querySelectorAll('.ranking-card');
+            cards.forEach((card, index) => {
+                const personId = card.dataset.personId;
+                const personRef = doc(db, "friends", personId);
+                
+                const rankingData = {
+                    filterId: activeRankingFilter.id,
+                    filterName: activeRankingFilter.name,
+                    tierId: tierDef.id,
+                    tierName: tierDef.name,
+                    tierIndex: index,
+                    updatedAt: new Date().toISOString()
+                };
+                
+                const updateObj = {};
+                updateObj[`rankings.${activeRankingFilter.id}`] = rankingData;
+                
+                batch.update(personRef, updateObj);
+                updatesCount++;
+            });
+        });
+        
+        // Clear rankings for those moved to Unranked
+        const unrankedCards = document.getElementById('unranked-container').querySelectorAll('.ranking-card');
+        unrankedCards.forEach(card => {
+            const personId = card.dataset.personId;
+            const personRef = doc(db, "friends", personId);
+            
+            const updateObj = {};
+            updateObj[`rankings.${activeRankingFilter.id}`] = null; // Set to null instead of deleting field
+            
+            batch.update(personRef, updateObj);
+            updatesCount++;
+        });
+        
+        if (updatesCount > 0) {
+            await batch.commit();
+        }
+        
+        showToast("Rankings saved successfully!");
+        exitRankingMode();
+        
+    } catch(e) {
+        console.error("Error saving rankings:", e);
+        showToast("Error saving: " + e.message, "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Save Rankings";
+    }
+});
+
+// --- Tiers Management ---
+function renderTiersEditList() {
+    const list = document.getElementById('tiers-edit-list');
+    list.innerHTML = '';
+    
+    if (!activeRankingFilter) return;
+    
+    const sortedTiers = [...activeRankingFilter.tiers].sort((a,b) => a.order - b.order);
+    
+    sortedTiers.forEach(tier => {
+        const item = document.createElement('div');
+        item.className = 'tier-edit-item';
+        item.innerHTML = `
+            <input type="text" value="${tier.name}" class="tier-name-input" data-id="${tier.id}" style="flex:1; padding:8px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); border-radius:5px; color:white;">
+            <button class="btn secondary-btn" style="padding:4px 8px; font-size:0.8rem; color:var(--danger); border-color:var(--danger);" onclick="deleteTier('${tier.id}')">Delete</button>
+        `;
+        list.appendChild(item);
+    });
+    
+    let saveBtn = document.getElementById('save-tiers-changes-btn');
+    if (!saveBtn) {
+        saveBtn = document.createElement('button');
+        saveBtn.id = 'save-tiers-changes-btn';
+        saveBtn.className = 'btn primary-btn full-width';
+        saveBtn.innerText = 'Save Tier Changes';
+        saveBtn.style.marginTop = '15px';
+        list.parentElement.appendChild(saveBtn);
+        
+        saveBtn.addEventListener('click', async () => {
+            await saveTierChanges();
+        });
+    }
+}
+
+document.getElementById('create-tier-btn')?.addEventListener('click', () => {
+    if (!activeRankingFilter) return;
+    const nameInput = document.getElementById('new-tier-name');
+    const name = nameInput.value.trim();
+    if (!name) return;
+    
+    const newTier = {
+        id: "tier-" + Date.now(),
+        name: name,
+        order: activeRankingFilter.tiers.length
+    };
+    
+    activeRankingFilter.tiers.push(newTier);
+    nameInput.value = '';
+    renderTiersEditList();
+});
+
+window.deleteTier = (tierId) => {
+    if (!activeRankingFilter) return;
+    activeRankingFilter.tiers = activeRankingFilter.tiers.filter(t => t.id !== tierId);
+    renderTiersEditList();
+};
+
+async function saveTierChanges() {
+    if (!activeRankingFilter) return;
+    
+    const inputs = document.querySelectorAll('.tier-name-input');
+    inputs.forEach((input, index) => {
+        const id = input.dataset.id;
+        const tier = activeRankingFilter.tiers.find(t => t.id === id);
+        if (tier) {
+            tier.name = input.value.trim() || tier.name;
+            tier.order = index; 
+        }
+    });
+    
+    try {
+        await updateDoc(doc(db, "rankingFilters", activeRankingFilter.id), {
+            tiers: activeRankingFilter.tiers,
+            updatedAt: new Date()
+        });
+        showToast("Tiers updated!");
+        renderRankingLayout(); 
+        manageTiersModal.classList.add('hidden');
+    } catch(e) {
+        console.error(e);
+        showToast("Failed to update tiers", "error");
+    }
+}
+
+// --- Custom Popup System ---
+function showToast(msg, type = 'success') {
+    const toast = document.getElementById('notification-toast');
+    const msgEl = document.getElementById('notification-msg');
+    if (!toast || !msgEl) return;
+    
+    msgEl.innerText = msg;
+    toast.className = `toast ${type}`;
+    toast.classList.remove('hidden');
+    
+    setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 3000);
+}
+
+function showConfirm(title, msg, onConfirm) {
+    const modal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-title');
+    const msgEl = document.getElementById('confirm-msg');
+    const okBtn = document.getElementById('confirm-ok-btn');
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    
+    if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) return;
+    
+    titleEl.innerText = title;
+    msgEl.innerText = msg;
+    modal.classList.remove('hidden');
+    
+    const handleOk = () => {
+        modal.classList.add('hidden');
+        onConfirm();
+        cleanup();
+    };
+    
+    const handleCancel = () => {
+        modal.classList.add('hidden');
+        cleanup();
+    };
+    
+    const cleanup = () => {
+        okBtn.removeEventListener('click', handleOk);
+        cancelBtn.removeEventListener('click', handleCancel);
+    };
+    
+    okBtn.addEventListener('click', handleOk, { once: true });
+    cancelBtn.addEventListener('click', handleCancel, { once: true });
+}
+
+function showFilterSelector(onSelect) {
+    const modal = document.getElementById('filter-select-modal');
+    const list = document.getElementById('filter-options-list');
+    const closeBtn = document.getElementById('close-filter-select');
+    
+    if (!modal || !list || !closeBtn) return;
+    
+    list.innerHTML = '';
+    allRankingFilters.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'filter-option-item';
+        item.innerHTML = `
+            <div>
+                <h4>${f.name}</h4>
+                <div style="font-size:0.8rem; color:var(--text-muted);">${f.tiers.length} Tiers</div>
+            </div>
+            <span class="arrow">→</span>
+        `;
+        item.onclick = () => {
+            modal.classList.add('hidden');
+            onSelect(f);
+        };
+        list.appendChild(item);
+    });
+    
+    closeBtn.onclick = () => modal.classList.add('hidden');
+    modal.classList.remove('hidden');
+}
+
+// Scroll to Top Logic
+window.addEventListener('scroll', () => {
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+    
+    scrollTimeout = setTimeout(() => {
+        if (window.scrollY > 300) {
+            scrollToTopBtn.classList.add('show');
+            scrollToTopBtn.classList.remove('hidden');
+        } else {
+            scrollToTopBtn.classList.remove('show');
+            scrollToTopBtn.classList.add('hidden');
+        }
+    }, 100);
+});
+
+if (scrollToTopBtn) {
+    scrollToTopBtn.onclick = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+}
+
+// Ensure modals can be closed via X button if not already covered
+document.querySelectorAll('.close').forEach(btn => {
+    btn.onclick = () => {
+        const modal = btn.closest('.modal');
+        if (modal) modal.classList.add('hidden');
+    };
+});

@@ -59,6 +59,27 @@
 </head>
 
 <body>
+    <!-- PERSISTENT SVG DEFS -->
+    <svg width="0" height="0" style="position: absolute; pointer-events: none;">
+        <defs>
+            <linearGradient id="loader-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#FF56A1" />
+                <stop offset="100%" stop-color="#FF9350" />
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loading-overlay">
+        <svg viewBox="0 0 100 100" class="premium-loader">
+            <g>
+                <path d="M 50,100 A 1,1 0 0 1 50,0" />
+            </g>
+            <g>
+                <path d="M 50,75 A 1,1 0 0 0 50,-25" />
+            </g>
+        </svg>
+    </div>
 
     <!-- iOS Status Bar Black Background -->
     <!-- Physically paints black behind the notch/status bar on iOS Safari -->
@@ -73,6 +94,17 @@
                 alt="G">
             Login with Google
         </button>
+        <!-- Login screen mini-loader -->
+        <div class="login-loader">
+            <svg viewBox="0 0 100 100" class="premium-loader">
+                <g>
+                    <path d="M 50,100 A 1,1 0 0 1 50,0" />
+                </g>
+                <g>
+                    <path d="M 50,75 A 1,1 0 0 0 50,-25" />
+                </g>
+            </svg>
+        </div>
     </div>
 
     <!-- GLOBAL HEADER PLACEHOLDER -->
@@ -836,7 +868,7 @@
 
     <!-- VERSION INDICATOR -->
     <div id="app-version" class="app-version">
-        v1.36 <!-- UPDATE THIS ON EVERY CHANGE -->
+        v1.37 <!-- UPDATE THIS ON EVERY CHANGE -->
     </div>
 
     <!-- BOARD MANAGER MODAL -->

@@ -42,10 +42,10 @@
             <p>No personal data is collected or stored. Everything is processed locally in your browser.</p>
         </header>
 
-        <!-- Input Section -->
-        <div class="card input-card">
+        <!-- Standard Input Section -->
+        <div class="card input-card" id="standardInputCard">
             <div class="input-row">
-                <div class="input-group">
+                <div class="input-group" id="standardIncomeGroup">
                     <label for="incomeInput">Annual Income (£)</label>
                     <div class="input-wrapper">
                         <input type="number" id="incomeInput" placeholder="e.g. 45000" value="30000" min="0">
@@ -68,6 +68,42 @@
                     </div>
                 </div>
 
+                <div class="input-group" id="passiveIncomeTypeGroup" style="display: none; max-width: 160px;">
+                    <label for="passiveIncomeTypeSelect">Income Type</label>
+                    <div class="input-wrapper">
+                        <select id="passiveIncomeTypeSelect">
+                            <option value="paye" selected>Salary (PAYE)</option>
+                            <option value="dividends">Dividends</option>
+                            <option value="cgt">Capital Gains</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group" id="passiveGoalGroup" style="display: none;">
+                    <label for="passiveModeSelect">Goal</label>
+                    <div class="input-wrapper">
+                        <select id="passiveModeSelect">
+                            <option value="pot">From Pot Size</option>
+                            <option value="gross">Target Pre-Tax</option>
+                            <option value="net" selected>Target Post-Tax</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group" id="passiveValueGroup" style="display: none;">
+                    <label for="passiveValueInput">Target (£)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="passiveValueInput" placeholder="e.g. 40000" value="40000" min="0">
+                    </div>
+                </div>
+
+                <div class="input-group" id="passiveRateGroup" style="display: none; max-width: 120px;">
+                    <label for="passiveRateInput">Rate (%)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="passiveRateInput" placeholder="4" value="4" min="0" step="0.1">
+                    </div>
+                </div>
+
                 <div class="input-group" style="flex: 0;">
                     <label>&nbsp;</label>
                     <div class="input-wrapper">
@@ -86,11 +122,54 @@
                         <span class="toggle-label">Red Bottom</span>
                     </div>
                 </div>
+
+                <div class="toggle-group">
+                    <label>Passive Income Mode</label>
+                    <div class="toggle-wrapper" style="border-color: var(--accent);">
+                        <span class="toggle-label">Off</span>
+                        <label class="switch">
+                            <input type="checkbox" id="passiveModeToggle">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-label">On</span>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Summary Section -->
-        <div class="card summary-card">
+        <!-- Passive Summary Section -->
+        <div class="card summary-card" id="passiveSummaryCard" style="display: none;">
+            <div class="stat highlight" style="grid-column: span 2;">
+                <h3 style="font-size: 1.1rem;">Required Pot Size</h3>
+                <p id="passivePotDisplay" style="font-size: 2.2rem; color: var(--accent);">£0</p>
+            </div>
+            <div class="stat">
+                <h3>Gross Withdrawal</h3>
+                <p id="passiveGrossDisplay">£0</p>
+            </div>
+            <div class="stat">
+                <h3>Total Tax & NI</h3>
+                <p id="passiveTaxDisplay" style="color: var(--highlight-red);">£0</p>
+            </div>
+            <div class="stat highlight">
+                <h3>Net Income</h3>
+                <p id="passiveNetDisplay">£0</p>
+            </div>
+        </div>
+
+        <!-- Passive Graph Section -->
+        <div class="card graph-card" id="passiveGraphCard" style="display: none;">
+            <h3>Investment Pot vs Net Income</h3>
+            <p class="formula-desc">Visualizes how much Net Income you get based on the Pot Size at your selected withdrawal rate.</p>
+            <div class="chart-container">
+                <canvas id="passiveChart"></canvas>
+            </div>
+        </div>
+
+
+
+        <!-- Standard Summary Section -->
+        <div class="card summary-card" id="standardSummaryCard">
             <div class="stat">
                 <h3>Total Deductions</h3>
                 <p id="totalTaxDisplay">£0</p>
@@ -106,20 +185,20 @@
         </div>
 
         <!-- Breakdown Card -->
-        <div class="card breakdown-card">
+        <div class="card breakdown-card" id="standardBreakdownCard">
             <h3>Deductions Breakdown</h3>
             <div id="breakdownList"></div>
         </div>
 
         <!-- Formula Card -->
-        <div class="card formula-card">
+        <div class="card formula-card" id="standardFormulaCard">
             <h3>Take Home Equation</h3>
             <p class="formula-desc">Multipliers applied to each chunk of income (after Tax & NI):</p>
             <div id="formulaDisplay" class="formula-box"></div>
         </div>
 
         <!-- Main Graph Section -->
-        <div class="card graph-card">
+        <div class="card graph-card" id="standardGraphCard1">
             <div class="chart-header">
                 <h3>Income Visualization</h3>
                 <div class="export-buttons">
@@ -139,13 +218,31 @@
         </div>
 
         <!-- Comparison Line Graph -->
-        <div class="card graph-card">
+        <div class="card graph-card" id="standardGraphCard2">
             <h3>Take Home Pay Curve</h3>
             <p class="formula-desc">See how take-home pay grows (or slows down) as you earn more.</p>
             <div class="chart-container">
                 <canvas id="comparisonChart"></canvas>
             </div>
         </div>
+
+        <!-- Understanding Your Results Section -->
+        <div class="card explanation-card" id="explanationCard">
+            <h3>Understanding Your Results</h3>
+            
+            <h4>Salary (PAYE)</h4>
+            <p>This is standard income from an employer. It is subject to both Income Tax (20%, 40%, 45%) and National Insurance (NI). Because it is classified as 'earned labor,' it carries the highest overall tax burden.</p>
+            
+            <h4>Dividends</h4>
+            <p>Dividends are cash rewards paid to company shareholders out of company profits. Because the company has already paid Corporation Tax on these profits, the government taxes your dividend income at a much lower rate (8.75%, 33.75%, 39.35%) to prevent 'double taxation.' Furthermore, dividends are exempt from National Insurance. You also get a strict £500 tax-free Dividend Allowance.</p>
+            
+            <h4>Capital Gains</h4>
+            <p>This is the profit you make when you sell an asset (like stocks or property) that has increased in value. You get a £3,000 Annual Exempt Amount (tax-free profit). The remaining profit is taxed at 18% (Basic) or 24% (Higher) for standard assets. Like dividends, Capital Gains are exempt from National Insurance.</p>
+            
+            <h4>Marginal vs. Average Rate</h4>
+            <p>Your <strong>Average Rate</strong> is simply your total tax bill divided by your total income. Your <strong>Marginal Rate</strong> is the amount of tax you will pay on the very <em>next</em> £1 you earn. Watching your Marginal Rate is crucial for tax planning, as crossing a new threshold (like the £50,270 higher rate limit) makes your next £1 significantly less valuable.</p>
+        </div>
+
     </div>
 
     <script src="script.js"></script>
