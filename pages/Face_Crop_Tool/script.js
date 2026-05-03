@@ -1,6 +1,7 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+import * as Mp4Muxer from 'https://cdn.jsdelivr.net/npm/mp4-muxer/+esm';
 
-// Note: Transformers.js is kept for potential future tasks, 
+// Note: Transformers.js is kept for potential future tasks,
 // but Magic Mode now uses raw ONNX for stability.
 
 // Configuration
@@ -10,9 +11,9 @@ let processedBlobs = [];
 let loadedFiles = []; // Store files for deferred processing
 let firstImageCache = null; // Cache for the first image
 let firstFaceBox = null; // Cache for the detected face box
-let currentMode = 'crop'; // 'crop' or 'censor'
-let currentCensorType = 'solid'; // 'solid' or 'blur'
-let currentCensorShape = 'rect'; // 'rect' or 'circle'
+let currentMode = 'censor'; 
+let currentCensorType = 'blur';
+let currentCensorShape = 'circle';
 let censorColor = '#000000';
 let censorEmoji = '🕶️';
 let blurStrength = 20;
@@ -71,6 +72,9 @@ const previewLoader = document.getElementById('previewLoader');
 const verticalPosInput = document.getElementById('verticalPosInput');
 const verticalPosVal = document.getElementById('verticalPosVal');
 const processAllFacesInput = document.getElementById('processAllFaces');
+const fastModeInput = document.getElementById('fastMode');
+const updateFrequencyInput = document.getElementById('updateFrequency');
+const updateFrequencyRow = document.getElementById('updateFrequencyRow');
 const presetBtns = document.querySelectorAll('.preset-btn');
 const modeBtns = document.querySelectorAll('.mode-btn');
 
@@ -81,10 +85,28 @@ const clearLogsBtn = document.getElementById('clearLogs');
 const toggleConsoleBtn = document.getElementById('toggleConsole');
 const closeConsoleBtn = document.getElementById('closeConsole');
 
+// Video Mode Elements
+let isVideoMode = false;
+const mediaTypeBtns = document.querySelectorAll('.media-type-toggle .media-btn');
+const videoProgressWrapper = document.getElementById('videoProgressWrapper');
+const videoProgressBar = document.getElementById('videoProgressBar');
+const videoProgressPercentage = document.getElementById('videoProgressPercentage');
+const videoProgressETA = document.getElementById('videoProgressETA');
+const videoProgressText = document.getElementById('videoProgressText');
+
 // Advanced Censor Elements
 const censorOptionsPanel = document.getElementById('censorOptionsPanel');
 const typeBtns = document.querySelectorAll('.type-btn');
 const shapeBtns = document.querySelectorAll('.shape-btn');
+
+if (fastModeInput) {
+    fastModeInput.addEventListener('change', () => {
+        if (updateFrequencyRow) {
+            updateFrequencyRow.style.opacity = fastModeInput.checked ? '0.4' : '1';
+            updateFrequencyRow.style.pointerEvents = fastModeInput.checked ? 'none' : 'auto';
+        }
+    });
+}
 const solidOptions = document.getElementById('solidOptions');
 const blurOptions = document.getElementById('blurOptions');
 const emojiOptions = document.getElementById('emojiOptions');
@@ -582,6 +604,59 @@ presetBtns.forEach(btn => {
     });
 });
 
+mediaTypeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (btn.classList.contains('active')) return;
+        
+        mediaTypeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        isVideoMode = btn.dataset.media === 'video';
+        log(`Switched to ${isVideoMode ? 'Video' : 'Image'} processing mode.`);
+
+        // Update file inputs
+        if (imageInput) imageInput.accept = isVideoMode ? "video/mp4,video/quicktime" : "image/*";
+        if (fileInput) fileInput.accept = isVideoMode ? "video/mp4,video/quicktime" : "image/*";
+
+        const fileUploadLabel = document.querySelector('label[for="fileInput"]');
+        if (fileUploadLabel) {
+            fileUploadLabel.innerHTML = isVideoMode ? 
+                `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg> Videos` : 
+                `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg> Photos`;
+        }
+
+        // Handle Mode Buttons
+        modeBtns.forEach(modeBtn => {
+            const mode = modeBtn.dataset.mode;
+            if (mode === 'magic' || mode === 'replace') {
+                if (isVideoMode) {
+                    modeBtn.classList.add('disabled');
+                    modeBtn.disabled = true;
+                    // If currently on a disabled mode, switch to crop
+                    if (currentMode === mode) {
+                        const cropBtn = Array.from(modeBtns).find(b => b.dataset.mode === 'crop');
+                        if (cropBtn) cropBtn.click();
+                    }
+                } else {
+                    modeBtn.classList.remove('disabled');
+                    modeBtn.disabled = false;
+                }
+            }
+        });
+        
+        // Clear loaded files if switching modes
+        if (loadedFiles.length > 0) {
+            loadedFiles = [];
+            updateCounter();
+            log("Media type changed, cleared existing loaded files.");
+            if (previewCanvas) {
+                const ctx = previewCanvas.getContext('2d');
+                ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            }
+        }
+    });
+});
+
 modeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         modeBtns.forEach(b => b.classList.remove('active'));
@@ -1061,11 +1136,11 @@ async function handleNewFiles(fileList) {
     }
 
     const newFiles = Array.from(fileList);
-    const validExtensions = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    const validExtensions = isVideoMode ? ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'] : ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
     const validFiles = newFiles.filter(file => validExtensions.includes(file.type));
 
     if (validFiles.length === 0) {
-        if (loadedFiles.length === 0) alert("No valid images found.");
+        if (loadedFiles.length === 0) alert(`No valid ${isVideoMode ? 'videos' : 'images'} found.`);
         return;
     }
 
@@ -1076,7 +1151,7 @@ async function handleNewFiles(fileList) {
     // If we want to allow "Process" to run on the WHOLE batch:
     downloadBtn.disabled = true;
     processBtn.disabled = false;
-    processBtn.innerText = `Process ${loadedFiles.length} Images`;
+    processBtn.innerText = `Process ${loadedFiles.length} ${isVideoMode ? 'Videos' : 'Images'}`;
 
     updateCounter();
 
@@ -1087,12 +1162,12 @@ async function handleNewFiles(fileList) {
         // Scanning validFiles is enough if we just want A preview.
         await setupPreview(validFiles);
     } else {
-        log(`${validFiles.length} images added. Total: ${loadedFiles.length}`);
+        log(`${validFiles.length} ${isVideoMode ? 'videos' : 'images'} added. Total: ${loadedFiles.length}`);
     }
 }
 
 function updateCounter() {
-    imageCounter.textContent = `${loadedFiles.length} images ready`;
+    imageCounter.textContent = `${loadedFiles.length} ${isVideoMode ? 'videos' : 'images'} ready`;
 }
 
 processBtn.addEventListener('click', async () => {
@@ -1115,12 +1190,14 @@ processBtn.addEventListener('click', async () => {
     // Force space for scrolling (simulating ~3 rows) so valid scroll target exists
     gallery.style.minHeight = '800px';
 
-    // Smooth scroll to the gallery area where results will appear
-    setTimeout(() => {
-        gallery.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+    // Smooth scroll to the gallery area where results will appear (only for images)
+    if (!isVideoMode) {
+        setTimeout(() => {
+            gallery.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+    }
 
-    log(`Starting batch processing for ${loadedFiles.length} images...`, "info");
+    log(`Starting batch processing for ${loadedFiles.length} ${isVideoMode ? 'videos' : 'images'}...`, "info");
     
     // Pre-initialize AI if in magic mode to avoid per-image overlay interruptions
     if (currentMode === 'magic') {
@@ -1143,9 +1220,13 @@ processBtn.addEventListener('click', async () => {
         }
 
         const file = loadedFiles[i];
-        log(`Processing Image [${i + 1}/${loadedFiles.length}]: ${file.name}`, "info");
+        log(`Processing ${isVideoMode ? 'Video' : 'Image'} [${i + 1}/${loadedFiles.length}]: ${file.name}`, "info");
         try {
-            await processImage(file, i + 1); // Pass 1-based batch index
+            if (isVideoMode) {
+                await processVideo(file, i + 1);
+            } else {
+                await processImage(file, i + 1); // Pass 1-based batch index
+            }
             log(`Successfully processed: ${file.name}`, "success");
         } catch (err) {
             log(`Execution Error [${file.name}]: ${err.message}`, "error");
@@ -1191,6 +1272,350 @@ processBtn.addEventListener('click', async () => {
 });
 
 // 3. Core Logic for Batch
+async function processVideo(file, batchIndex) {
+    if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') {
+        throw new Error("Browser doesn't support WebCodecs (VideoEncoder). Please use Chrome, Edge, or Safari 16.4+.");
+    }
+    log(`Initializing video processing for ${file.name}...`, "info");
+    
+    // Create video element
+    const videoUrl = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.src = videoUrl;
+    video.muted = true;
+    video.playsInline = true;
+    
+    await new Promise((resolve, reject) => {
+        video.onloadeddata = resolve;
+        video.onerror = reject;
+        video.load();
+    });
+
+    const fps = 30; // standard fallback
+    const duration = video.duration || 0;
+    if (duration === 0) throw new Error("Invalid video duration");
+    
+    const totalFrames = Math.ceil(duration * fps);
+    log(`Video loaded. ${totalFrames} frames to process at ${fps}fps.`, "info");
+    
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    
+    // Output setup
+    let muxer = new Mp4Muxer.Muxer({
+        target: new Mp4Muxer.ArrayBufferTarget(),
+        video: {
+            codec: 'avc',
+            width: width,
+            height: height
+        },
+        fastStart: 'in-memory'
+    });
+    
+    let videoEncoder = new VideoEncoder({
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        error: e => console.error(e)
+    });
+    
+    videoEncoder.configure({
+        codec: 'avc1.4D4034', // H.264 Main Profile, Level 5.2 (Supports 4K and high resolutions)
+        width: width,
+        height: height,
+        bitrate: 5_000_000,
+        framerate: fps
+    });
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
+    const isFastMode = fastModeInput ? fastModeInput.checked : false;
+    
+    // UI Progress
+    if (videoProgressWrapper) videoProgressWrapper.style.display = 'flex';
+    if (videoProgressPercentage) videoProgressPercentage.textContent = '0%';
+    if (videoProgressETA) videoProgressETA.textContent = 'ETA: --:--';
+    const previewTitle = previewCard ? previewCard.querySelector('h3') : null;
+    let oldPreviewTitle = "";
+    if (previewTitle) {
+        oldPreviewTitle = previewTitle.innerText;
+        previewTitle.innerText = "Processing Video...";
+    }
+    
+    // PHASE 1: Detection Pass
+    log(`Phase 1/2: Analyzing face movement...`, "info");
+    const tracks = []; // Array of arrays: [ {f: frameIdx, box: box}, ... ]
+    let detectStartTime = Date.now();
+    
+    for (let i = 0; i < totalFrames; i++) {
+        if (isBatchAborted) break;
+        
+        const time = i / fps;
+        video.currentTime = time;
+        await new Promise(r => video.onseeked = r);
+        
+        // Draw to canvas for detection
+        ctx.drawImage(video, 0, 0, width, height);
+        
+        // Use face-api to detect
+        const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
+        const detections = await faceapi.detectAllFaces(canvas);
+        const currentBoxes = processAll ? detections.map(d => d.box) : (detections.length > 0 ? [getLargestFace(detections).box] : []);
+        
+        // Simple Tracker (Centroid/Proximity)
+        for (const box of currentBoxes) {
+            let bestTrack = null;
+            let minDist = 150; // Threshold (pixels)
+            
+            for (const track of tracks) {
+                const last = track[track.length - 1];
+                // Match if disappeared within last 15 frames
+                if (i - last.f <= 15) {
+                    const dist = Math.sqrt(Math.pow((last.box.x + last.box.width/2) - (box.x + box.width/2), 2) + 
+                                         Math.pow((last.box.y + last.box.height/2) - (box.y + box.height/2), 2));
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestTrack = track;
+                    }
+                }
+            }
+            
+            if (bestTrack) {
+                bestTrack.push({ f: i, box });
+            } else {
+                tracks.push([{ f: i, box }]);
+            }
+        }
+        
+        // Update live preview during detection phase
+        const freq = updateFrequencyInput ? parseInt(updateFrequencyInput.value) || 25 : 25;
+        if (!isFastMode && i % freq === 0) {
+            if (previewCard) previewCard.style.display = 'block';
+            if (previewLoader) previewLoader.style.display = 'none';
+            if (previewCanvas) {
+                const pCtx = previewCanvas.getContext('2d');
+                if (pCtx) {
+                    if (previewCanvas.width !== canvas.width || previewCanvas.height !== canvas.height) {
+                        previewCanvas.width = canvas.width;
+                        previewCanvas.height = canvas.height;
+                    }
+                    pCtx.drawImage(canvas, 0, 0);
+                }
+            }
+        }
+        
+        // Progress for Phase 1 (0% to 50%)
+        const progress = (i + 1) / totalFrames;
+        const totalProgress = progress * 0.5;
+        const percent = Math.round(totalProgress * 100);
+        
+        if (videoProgressBar) videoProgressBar.style.width = `${percent}%`;
+        if (videoProgressPercentage) videoProgressPercentage.textContent = `${percent}%`;
+        
+        if (i > 5) {
+            const elapsed = Date.now() - detectStartTime;
+            const estimatedTotal = elapsed / progress;
+            const remaining = (estimatedTotal - elapsed) + (estimatedTotal * 0.2); // Add estimate for phase 2
+            
+            const remainingSec = Math.ceil(remaining / 1000);
+            const m = Math.floor(remainingSec / 60);
+            const s = remainingSec % 60;
+            if (videoProgressETA) videoProgressETA.textContent = `ETA: ${m}:${s.toString().padStart(2, '0')}`;
+        }
+        if (videoProgressText) videoProgressText.textContent = `Analyzing motion: frame ${i + 1}/${totalFrames}`;
+    }
+
+    if (isBatchAborted) return;
+
+    // MULTI-TRACK INTERPOLATION LOGIC
+    log(`Calculating smooth tracking paths for ${tracks.length} faces...`, "info");
+    const interpolatedTracks = tracks.map(track => {
+        const fullTrack = new Array(totalFrames).fill(null);
+        for (const pt of track) fullTrack[pt.f] = pt.box;
+        
+        // Fill Gaps
+        for (let i = track[0].f; i < track[track.length - 1].f; i++) {
+            if (fullTrack[i] === null) {
+                let prevIdx = -1;
+                for (let j = i - 1; j >= 0; j--) { if (fullTrack[j]) { prevIdx = j; break; } }
+                let nextIdx = -1;
+                for (let j = i + 1; j < fullTrack.length; j++) { if (fullTrack[j]) { nextIdx = j; break; } }
+                
+                if (prevIdx !== -1 && nextIdx !== -1) {
+                    const prev = fullTrack[prevIdx];
+                    const next = fullTrack[nextIdx];
+                    const factor = (i - prevIdx) / (nextIdx - prevIdx);
+                    fullTrack[i] = {
+                        x: prev.x + (next.x - prev.x) * factor,
+                        y: prev.y + (next.y - prev.y) * factor,
+                        width: prev.width + (next.width - prev.width) * factor,
+                        height: prev.height + (next.height - prev.height) * factor
+                    };
+                }
+            }
+        }
+        
+        // Persistence (End of clip)
+        const lastKnownIdx = track[track.length - 1].f;
+        const lastBox = fullTrack[lastKnownIdx];
+        for (let i = lastKnownIdx + 1; i < totalFrames; i++) {
+            fullTrack[i] = { ...lastBox };
+        }
+        
+        // Persistence (Start of clip) - optional but helps stability
+        const firstKnownIdx = track[0].f;
+        const firstBox = fullTrack[firstKnownIdx];
+        for (let i = 0; i < firstKnownIdx; i++) {
+            fullTrack[i] = { ...firstBox };
+        }
+
+        return fullTrack;
+    });
+
+    // PHASE 2: Rendering & Encoding Pass
+    log(`Phase 2/2: Applying Censor & Encoding...`, "info");
+    let renderStartTime = Date.now();
+    let videoGalleryCard = null;
+    
+    for (let i = 0; i < totalFrames; i++) {
+        if (isBatchAborted) break;
+        
+        const time = i / fps;
+        video.currentTime = time;
+        await new Promise(r => video.onseeked = r);
+        
+        // Draw raw frame
+        ctx.drawImage(video, 0, 0, width, height);
+        
+        // Apply overlays for ALL active tracks
+        for (const fullTrack of interpolatedTracks) {
+            const faceBox = fullTrack[i];
+            if (faceBox) {
+                const rect = calculateCropRect(canvas, faceBox);
+                
+                if (currentMode === 'censor') {
+                    drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                        mode: 'censor',
+                        type: currentCensorType,
+                        shape: currentCensorShape,
+                        color: censorColor,
+                        blur: blurStrength,
+                        emoji: censorEmoji
+                    }, canvas);
+                } else if (currentMode === 'frame') {
+                    drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                        mode: 'frame',
+                        shape: currentFrameShape,
+                        color: frameColor,
+                        thickness: frameThickness
+                    }, canvas);
+                } else if (currentMode === 'crop') {
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(0, 0, width, rect.y);
+                    ctx.fillRect(0, rect.y + rect.height, width, height - (rect.y + rect.height));
+                    ctx.fillRect(0, rect.y, rect.x, rect.height);
+                    ctx.fillRect(rect.x + rect.width, rect.y, width - (rect.x + rect.width), rect.height);
+                }
+            }
+        }
+        
+        // Encode frame
+        const frame = new VideoFrame(canvas, { timestamp: time * 1_000_000 });
+        try {
+            if (videoEncoder.state === 'configured') {
+                videoEncoder.encode(frame, { keyFrame: i % fps === 0 });
+            }
+        } finally {
+            frame.close();
+        }
+
+        // Update live previews
+        const freq = updateFrequencyInput ? parseInt(updateFrequencyInput.value) || 25 : 25;
+        if (!isFastMode && i % freq === 0) {
+            // Ensure loader is hidden during live update
+            if (previewLoader) previewLoader.style.display = 'none';
+
+            // Update Main Preview Area (Center)
+            if (previewCard) previewCard.style.display = 'block';
+            if (previewCanvas) {
+                const pCtx = previewCanvas.getContext('2d');
+                if (pCtx) {
+                    if (previewCanvas.width !== canvas.width || previewCanvas.height !== canvas.height) {
+                        previewCanvas.width = canvas.width;
+                        previewCanvas.height = canvas.height;
+                    }
+                    pCtx.drawImage(canvas, 0, 0);
+                }
+            }
+
+            // Update Gallery Thumbnail
+            const thumbUrl = canvas.toDataURL('image/jpeg', 0.7);
+            if (!videoGalleryCard) {
+                videoGalleryCard = displayResult(thumbUrl, false, true);
+                if (gallery) gallery.insertBefore(videoGalleryCard, gallery.firstChild);
+            } else {
+                displayResult(thumbUrl, false, true, videoGalleryCard);
+            }
+        }
+        
+        // Progress for Phase 2 (50% to 100%)
+        const progress = (i + 1) / totalFrames;
+        const totalProgress = 0.5 + (progress * 0.5);
+        const percent = Math.round(totalProgress * 100);
+        
+        if (videoProgressBar) videoProgressBar.style.width = `${percent}%`;
+        if (videoProgressPercentage) videoProgressPercentage.textContent = `${percent}%`;
+        
+        if (i > 5) {
+            const elapsed = Date.now() - renderStartTime;
+            const estimatedRemaining = (elapsed / progress) - elapsed;
+            const remainingSec = Math.ceil(estimatedRemaining / 1000);
+            const m = Math.floor(remainingSec / 60);
+            const s = remainingSec % 60;
+            if (videoProgressETA) videoProgressETA.textContent = `ETA: ${m}:${s.toString().padStart(2, '0')}`;
+        }
+        if (videoProgressText) videoProgressText.textContent = `Rendering video: frame ${i + 1}/${totalFrames}`;
+    }
+    
+    if (videoEncoder.state === 'configured') {
+        await videoEncoder.flush();
+    }
+    if (videoEncoder.state !== 'closed') {
+        videoEncoder.close();
+    }
+    muxer.finalize();
+    URL.revokeObjectURL(videoUrl);
+    
+    if (videoProgressWrapper) videoProgressWrapper.style.display = 'none';
+    if (previewTitle && oldPreviewTitle) previewTitle.innerText = oldPreviewTitle;
+    
+    if (!isBatchAborted) {
+        const buffer = muxer.target.buffer;
+        const blob = new Blob([buffer], { type: 'video/mp4' });
+        const videoResultUrl = URL.createObjectURL(blob);
+        
+        // Extension should be .mp4
+        const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'video').replace(/\.[^/.]+$/, "") + ".mp4";
+
+        processedBlobs.push({
+            name: finalFileName,
+            blob: blob,
+            isError: false,
+            originalFile: file,
+            outputWidth: width,
+            outputHeight: height,
+            mode: 'video'
+        });
+
+        if (videoGalleryCard) {
+            displayResult(videoResultUrl, false, true, videoGalleryCard);
+        } else {
+            displayResult(videoResultUrl, false, true);
+        }
+    }
+}
 async function processImage(file, batchIndex) {
     let img;
     try {
@@ -1519,6 +1944,68 @@ async function processImage(file, batchIndex) {
 // 4. Preview Logic (Optimized)
 // 4. Preview Logic (Optimized)
 async function setupPreview(filesToScan = loadedFiles) {
+    if (isVideoMode) {
+        log("Searching video for a preview frame with a face...");
+        previewCard.style.display = 'block';
+        if (previewLoader) previewLoader.style.display = 'flex';
+        
+        for (const file of filesToScan) {
+            try {
+                const videoUrl = URL.createObjectURL(file);
+                const video = document.createElement('video');
+                video.src = videoUrl;
+                video.muted = true;
+                
+                await new Promise((resolve, reject) => {
+                    video.onloadeddata = resolve;
+                    video.onerror = reject;
+                    video.load();
+                });
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                
+                // Scan every 0.5 seconds for a face to be fast
+                const duration = video.duration;
+                for (let t = 0; t < duration; t += 0.5) {
+                    video.currentTime = t;
+                    await new Promise(r => video.onseeked = r);
+                    ctx.drawImage(video, 0, 0);
+                    
+                    const detections = await faceapi.detectAllFaces(canvas);
+                    if (detections && detections.length > 0) {
+                        // Found it!
+                        const img = new Image();
+                        img.src = canvas.toDataURL();
+                        await new Promise(r => img.onload = r);
+                        
+                        firstImageCache = img;
+                        firstFaceBox = getLargestFace(detections).box;
+                        
+                        const title = previewCard.querySelector('h3');
+                        if (title) title.innerText = `Preview (Video: ${file.name})`;
+                        
+                        updatePreviewCanvas();
+                        log(`Found preview frame at ${t.toFixed(1)}s in ${file.name}.`);
+                        
+                        URL.revokeObjectURL(videoUrl);
+                        if (previewLoader) previewLoader.style.display = 'none';
+                        return;
+                    }
+                }
+                URL.revokeObjectURL(videoUrl);
+            } catch (err) {
+                console.warn("Video preview scan failed for", file.name, err);
+            }
+        }
+        
+        log("No faces detected in the video for preview.", "warning");
+        if (previewLoader) previewLoader.style.display = 'none';
+        return;
+    }
+    
     log("Searching for a valid preview image...");
 
     // Show preview card with loader immediately
@@ -1825,23 +2312,71 @@ document.addEventListener('keydown', (e) => {
 
 
 // 6. UI Helpers
-function displayResult(dataUrl, isError = false) {
-    const div = document.createElement('div');
-    div.className = 'image-card';
+function displayResult(dataUrl, isError = false, isVideo = false, existingDiv = null) {
+    const div = existingDiv || document.createElement('div');
+    if (!existingDiv) {
+        div.className = 'image-card';
+    } else {
+        div.innerHTML = ''; // Clear for update
+    }
+    
     if (isError) {
         div.classList.add('error-border');
     }
-    const img = document.createElement('img');
-    img.src = dataUrl;
-    const index = processedBlobs.length - 1;
     
-    // Add Click to Open Lightbox
-    img.onclick = (e) => {
-        e.stopPropagation();
-        openLightbox(index);
-    };
-    img.style.cursor = "pointer";
-    div.appendChild(img);
+    const index = processedBlobs.length - 1;
+
+    if (isVideo && dataUrl.startsWith('blob:')) {
+        // Playable Video
+        const videoContainer = document.createElement('div');
+        videoContainer.className = 'video-result-container';
+        videoContainer.style.position = 'relative';
+        videoContainer.style.width = '100%';
+        videoContainer.style.height = '100%';
+        videoContainer.style.display = 'flex';
+        videoContainer.style.alignItems = 'center';
+        videoContainer.style.justifyContent = 'center';
+        videoContainer.style.overflow = 'hidden';
+
+        const video = document.createElement('video');
+        video.src = dataUrl;
+        video.controls = true;
+        video.muted = true;
+        video.style.maxWidth = '100%';
+        video.style.maxHeight = '100%';
+        video.style.borderRadius = '8px';
+        videoContainer.appendChild(video);
+        div.appendChild(videoContainer);
+    } else {
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        
+        // Only add lightbox if it's not a live updating card (no index yet or already added)
+        if (index >= 0) {
+            img.onclick = (e) => {
+                e.stopPropagation();
+                openLightbox(index);
+            };
+            img.style.cursor = "pointer";
+        }
+        
+        div.appendChild(img);
+
+        if (isVideo) {
+            const videoIcon = document.createElement('div');
+            videoIcon.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+            videoIcon.style.position = 'absolute';
+            videoIcon.style.top = '50%';
+            videoIcon.style.left = '50%';
+            videoIcon.style.transform = 'translate(-50%, -50%)';
+            videoIcon.style.background = 'rgba(0,0,0,0.6)';
+            videoIcon.style.borderRadius = '50%';
+            videoIcon.style.padding = '8px';
+            videoIcon.style.pointerEvents = 'none';
+            videoIcon.style.display = 'flex';
+            div.appendChild(videoIcon);
+        }
+    }
 
     // Edit Button
     const editBtn = document.createElement('button');
@@ -1854,7 +2389,10 @@ function displayResult(dataUrl, isError = false) {
     };
     div.appendChild(editBtn);
 
-    gallery.appendChild(div);
+    if (!existingDiv) {
+        gallery.insertBefore(div, gallery.firstChild);
+    }
+    return div;
 }
 
 function createErrorCard(msg) {

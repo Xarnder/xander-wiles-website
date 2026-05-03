@@ -410,7 +410,39 @@ select:focus {
     font-weight: 600;
 }
 
-/* Mode Toggle Styling */
+/* Mode & Media Toggle Styling */
+.media-type-toggle {
+    display: flex;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 6px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+}
+
+.media-btn {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.media-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+}
+
+.media-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
 .mode-toggle {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -443,6 +475,12 @@ select:focus {
 
 .mode-btn svg {
     flex-shrink: 0;
+}
+
+.mode-btn.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 select {
@@ -797,7 +835,58 @@ select option {
     background: none;
 }
 
-/* Button Styling */
+/* Video Progress Wrapper */
+.video-progress-wrapper {
+    margin-top: 20px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--text-main);
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+#videoProgressETA {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.progress-container {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), #64b5f6);
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 10px;
+}
+
+.progress-bar.glow {
+    box-shadow: 0 0 15px rgba(74, 158, 255, 0.3);
+}
+
+.status-text-tiny {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-align: center;
+}
 .btn-primary {
     background-color: var(--accent);
     color: white;
