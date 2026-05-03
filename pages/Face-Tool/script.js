@@ -1593,6 +1593,9 @@ async function processVideo(file, batchIndex) {
                 }
             }
             const thumbUrl = finalCanvas.toDataURL('image/jpeg', 0.7);
+            const gallerySection = document.querySelector('.gallery-section');
+            if (gallerySection) gallerySection.style.display = 'block';
+
             if (!videoGalleryCard) {
                 videoGalleryCard = displayResult(thumbUrl, false, true);
                 if (gallery) gallery.insertBefore(videoGalleryCard, gallery.firstChild);
@@ -1624,6 +1627,9 @@ async function processVideo(file, batchIndex) {
         const buffer = muxer.target.buffer;
         const blob = new Blob([buffer], { type: 'video/mp4' });
         const videoResultUrl = URL.createObjectURL(blob);
+        const gallerySection = document.querySelector('.gallery-section');
+        if (gallerySection) gallerySection.style.display = 'block';
+
         const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'video').replace(/\.[^/.]+$/, "") + ".mp4";
         processedBlobs.push({
             name: finalFileName, blob: blob, isError: false, originalFile: file,
@@ -1691,6 +1697,8 @@ async function processImage(file, batchIndex) {
                         blurStrength: blurStrength,
                         censorEmoji: censorEmoji
                     });
+                    const gallerySection = document.querySelector('.gallery-section');
+                    if (gallerySection) gallerySection.style.display = 'block';
                     displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
                 }
                 resolve();
@@ -1738,6 +1746,8 @@ async function processImage(file, batchIndex) {
                         frameColor: frameColor,
                         frameThickness: frameThickness
                     });
+                    const gallerySection = document.querySelector('.gallery-section');
+                    if (gallerySection) gallerySection.style.display = 'block';
                     displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
                 }
                 resolve();
@@ -1776,6 +1786,8 @@ async function processImage(file, batchIndex) {
                         outputHeight: img.height,
                         mode: 'magic'
                     });
+                    const gallerySection = document.querySelector('.gallery-section');
+                    if (gallerySection) gallerySection.style.display = 'block';
                     displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
                 }
                 resolve();
@@ -1830,6 +1842,8 @@ async function processImage(file, batchIndex) {
                         outputHeight: img.height,
                         mode: 'replace'
                     });
+                    const gallerySection = document.querySelector('.gallery-section');
+                    if (gallerySection) gallerySection.style.display = 'block';
                     displayResult(URL.createObjectURL(blob), (!detections || detections.length === 0));
                 }
                 resolve();
@@ -2005,6 +2019,9 @@ async function setupPreview(filesToScan = loadedFiles) {
                         if (title) title.innerText = `Preview (Video: ${file.name})`;
                         
                         updatePreviewCanvas();
+                        const skeleton = document.getElementById('previewSkeleton');
+                        if (skeleton) skeleton.style.display = 'none';
+
                         log(`Found preview frame at ${t.toFixed(1)}s in ${file.name}.`);
                         
                         URL.revokeObjectURL(videoUrl);
@@ -2056,6 +2073,9 @@ async function setupPreview(filesToScan = loadedFiles) {
                 if (title) title.innerText = `Preview (${file.name})`;
 
                 updatePreviewCanvas();
+                const skeleton = document.getElementById('previewSkeleton');
+                if (skeleton) skeleton.style.display = 'none';
+
                 log(`Preview ready using ${file.name}. Adjust padding or Start Processing.`);
 
                 // Hide loader
