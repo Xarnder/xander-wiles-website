@@ -38,12 +38,18 @@
 
         <header>
             <h1>UK Tax Visualiser</h1>
-            <p>Visualise your take-home pay as an area graph.</p>
+            <p>Visualise your take-home pay or your investment growth.</p>
             <p>No personal data is collected or stored. Everything is processed locally in your browser.</p>
         </header>
 
-        <!-- Standard Input Section -->
-        <div class="card input-card" id="standardInputCard">
+        <nav class="mode-selector">
+            <button class="mode-tab active" id="taxModeBtn">Tax Visualiser</button>
+            <button class="mode-tab" id="interestModeBtn">Compound Interest</button>
+        </nav>
+
+        <div id="taxView">
+            <!-- Standard Input Section -->
+            <div class="card input-card" id="standardInputCard">
             <div class="input-row">
                 <div class="input-group" id="standardIncomeGroup">
                     <label for="incomeInput">Annual Income (£)</label>
@@ -242,6 +248,98 @@
             <h4>Marginal vs. Average Rate</h4>
             <p>Your <strong>Average Rate</strong> is simply your total tax bill divided by your total income. Your <strong>Marginal Rate</strong> is the amount of tax you will pay on the very <em>next</em> £1 you earn. Watching your Marginal Rate is crucial for tax planning, as crossing a new threshold (like the £50,270 higher rate limit) makes your next £1 significantly less valuable.</p>
         </div>
+
+    </div> <!-- End taxView -->
+
+    <div id="interestView" style="display: none;">
+        <!-- Interest Input Section -->
+        <div class="card input-card">
+            <div class="input-row">
+                <div class="input-group">
+                    <label for="initialDeposit">Initial Deposit (£)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="initialDeposit" placeholder="e.g. 10000.00" value="10000" min="0" step="0.01">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="annualContribution">Annual Contribution (£)</label>
+                    <div class="input-wrapper" style="opacity: 0.5;">
+                        <input type="number" id="annualContribution" placeholder="e.g. 1200.00" value="1200" min="0" step="0.01" disabled>
+                    </div>
+                </div>
+
+                <div class="toggle-group">
+                    <label>Regular Contributions</label>
+                    <div class="toggle-wrapper" style="border-color: var(--accent);">
+                        <span class="toggle-label">Off</span>
+                        <label class="switch">
+                            <input type="checkbox" id="contributionToggle">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-label">On</span>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="interestRate">Interest Rate (%)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="interestRate" placeholder="e.g. 7" value="7" min="0" step="0.1">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="investmentTerm">Investment Term (Years)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="investmentTerm" placeholder="e.g. 10" value="20" min="1" max="100">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interest Summary Section -->
+        <div class="card summary-card">
+            <div class="stat highlight">
+                <h3>Final Balance</h3>
+                <p id="finalBalanceDisplay">£0</p>
+            </div>
+            <div class="stat">
+                <h3>Total Contributions</h3>
+                <p id="totalContributionsDisplay">£0</p>
+            </div>
+            <div class="stat">
+                <h3>Total Interest Earned</h3>
+                <p id="totalInterestDisplay" style="color: var(--accent);">£0</p>
+            </div>
+        </div>
+
+        <!-- Interest Graph Section -->
+        <div class="card graph-card">
+            <div class="chart-header">
+                <h3>Growth Over Time</h3>
+            </div>
+            <div class="chart-container">
+                <canvas id="interestChart"></canvas>
+            </div>
+            <div class="legend-custom">
+                <div><span class="dot green"></span> Contributions</div>
+                <div><span class="dot blue" style="background-color: var(--accent);"></span> Interest</div>
+                <div><span class="dot white" style="background-color: #f8fafc; border: 1px dashed #94a3b8;"></span> Multiplier (x)</div>
+            </div>
+        </div>
+
+        <!-- Interest Explanation Section -->
+        <div class="card explanation-card">
+            <h3>How Compound Interest Works</h3>
+            <p>Compound interest is the interest on a loan or deposit calculated based on both the initial principal and the accumulated interest from previous periods.</p>
+            <h4>The Formula</h4>
+            <p>This calculator uses an iterative annual compounding formula that accounts for contributions made at the end of each year:</p>
+            <div class="formula-box">
+                Balance<sub>Year n</sub> = Balance<sub>Year n-1</sub> × (1 + r) + Contribution
+            </div>
+            <p>Where <em>r</em> is the annual interest rate. Over long periods, the "Interest" component begins to grow exponentially, eventually overtaking the total contributions.</p>
+        </div>
+    </div> <!-- End interestView -->
 
     </div>
 

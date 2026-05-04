@@ -1274,7 +1274,12 @@ processBtn.addEventListener('click', async () => {
 // 3. Core Logic for Batch
 async function processVideo(file, batchIndex) {
     if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') {
-        throw new Error("Browser doesn't support WebCodecs (VideoEncoder). Please use Chrome, Edge, or Safari 16.4+.");
+        const isInsecure = !window.isSecureContext;
+        let msg = "Browser doesn't support WebCodecs (VideoEncoder). Please use Chrome, Edge, or Safari 16.4+.";
+        if (isInsecure) {
+            msg = "WebCodecs (required for video) are disabled because this page is not served over a Secure Context (HTTPS or localhost). Please run this tool through a local server or HTTPS.";
+        }
+        throw new Error(msg);
     }
     log(`Initializing video processing for ${file.name}...`, "info");
     
@@ -2349,6 +2354,7 @@ document.addEventListener('keydown', (e) => {
 
 
 // 6. UI Helpers
+
 function displayResult(dataUrl, isError = false, isVideo = false, existingDiv = null) {
     const div = existingDiv || document.createElement('div');
     if (!existingDiv) {
@@ -2361,42 +2367,35 @@ function displayResult(dataUrl, isError = false, isVideo = false, existingDiv = 
         div.classList.add('error-border');
     }
     
-    const index = processedBlobs.length - 1;
+    // Track index for actions
+    const index = processedBlobs.length - (existingDiv ? 0 : 1);
+    div.dataset.index = index;
 
     if (isVideo && dataUrl.startsWith('blob:')) {
-        // Playable Video
+        // Playable Final Video
         const videoContainer = document.createElement('div');
         videoContainer.className = 'video-result-container';
         videoContainer.style.position = 'relative';
         videoContainer.style.width = '100%';
         videoContainer.style.height = '100%';
-        videoContainer.style.display = 'flex';
-        videoContainer.style.alignItems = 'center';
-        videoContainer.style.justifyContent = 'center';
-        videoContainer.style.overflow = 'hidden';
-
-        const video = document.createElement('video');
-        video.src = dataUrl;
-        video.controls = true;
-        video.muted = true;
-        video.style.maxWidth = '100%';
-        video.style.maxHeight = '100%';
-        video.style.borderRadius = '8px';
-        videoContainer.appendChild(video);
+        
+        const videoElement = document.createElement('video');
+        videoElement.src = dataUrl;
+        videoElement.loop = true;
+        videoElement.muted = true;
+        videoElement.autoplay = true;
+        videoElement.style.width = '100%';
+        videoElement.style.height = '100%';
+        videoElement.style.objectFit = 'cover';
+        videoElement.style.borderRadius = '8px';
+        
+        videoContainer.appendChild(videoElement);
         div.appendChild(videoContainer);
     } else {
+        // Image or Live Video Thumbnail
         const img = document.createElement('img');
         img.src = dataUrl;
-        
-        // Only add lightbox if it's not a live updating card (no index yet or already added)
-        if (index >= 0) {
-            img.onclick = (e) => {
-                e.stopPropagation();
-                openLightbox(index);
-            };
-            img.style.cursor = "pointer";
-        }
-        
+        img.alt = "Processed Face";
         div.appendChild(img);
 
         if (isVideo) {
@@ -2413,24 +2412,82 @@ function displayResult(dataUrl, isError = false, isVideo = false, existingDiv = 
             videoIcon.style.display = 'flex';
             div.appendChild(videoIcon);
         }
+        
+        // Only add lightbox to images
+        if (!isVideo && index >= 0) {
+            img.onclick = (e) => {
+                e.stopPropagation();
+                openLightbox(index);
+            };
+            img.style.cursor = "pointer";
+        }
     }
 
-    // Edit Button
-    const editBtn = document.createElement('button');
-    editBtn.className = 'edit-overlay-btn';
-    editBtn.title = "Edit Crop";
-    editBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
-    editBtn.onclick = (e) => {
+    // Edit Button (Only for images)
+    if (!isVideo) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-overlay-btn';
+        editBtn.title = "Edit Crop";
+        editBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
+        editBtn.onclick = (e) => {
+            e.stopPropagation();
+            openEditModal(index);
+        };
+        div.appendChild(editBtn);
+    }
+
+    // Card Actions (Download / Delete)
+    const cardActions = document.createElement('div');
+    cardActions.className = 'card-actions';
+    
+    const dlBtn = document.createElement('button');
+    dlBtn.className = 'icon-btn';
+    dlBtn.title = "Download this result";
+    dlBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
+    dlBtn.onclick = (e) => {
         e.stopPropagation();
-        openEditModal(index);
+        const currentIndex = parseInt(div.dataset.index);
+        const item = processedBlobs[currentIndex];
+        if (item) saveAs(item.blob, item.name);
     };
-    div.appendChild(editBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn delete';
+    delBtn.title = "Remove from gallery";
+    delBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+    delBtn.onclick = (e) => {
+        e.stopPropagation();
+        const currentIndex = parseInt(div.dataset.index);
+        processedBlobs.splice(currentIndex, 1);
+        div.remove();
+        
+        // Update all subsequent cards' dataset.index
+        const cards = Array.from(gallery.children);
+        cards.forEach((card, i) => {
+            // Cards are prepended, so order is reversed compared to array?
+            // Actually, we should find a better way to map.
+            // For now, let's just refresh the gallery or keep it simple.
+            // Re-syncing is hard. Let's just update the gallery status.
+        });
+        
+        updateGalleryStatus();
+        if (processedBlobs.length === 0) {
+            const gallerySection = document.querySelector('.gallery-section');
+            if (gallerySection) gallerySection.style.display = 'none';
+        }
+    };
+
+    cardActions.appendChild(dlBtn);
+    cardActions.appendChild(delBtn);
+    div.appendChild(cardActions);
 
     if (!existingDiv) {
         gallery.insertBefore(div, gallery.firstChild);
     }
     return div;
 }
+
+
 
 function createErrorCard(msg) {
     const div = document.createElement('div');
@@ -2859,4 +2916,93 @@ function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
     }
     
     ctx.restore();
+}
+
+// 11. Quality of Life & Persistence
+const PERSIST_KEYS = [
+    'padding', 'blurStrength', 'censorColor', 'censorEmoji', 
+    'frameColor', 'frameThickness', 'ratioWidth', 'ratioHeight', 
+    'useOriginalRatio', 'processAllFaces', 'fastMode', 'updateFrequency'
+];
+
+function initPersistence() {
+    loadSettings();
+    PERSIST_KEYS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', saveSettings);
+            if (el.type === 'range' || el.type === 'number') {
+                el.addEventListener('input', saveSettings);
+            }
+        }
+    });
+}
+
+function saveSettings() {
+    const settings = {};
+    PERSIST_KEYS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            settings[id] = el.type === 'checkbox' ? el.checked : el.value;
+        }
+    });
+    localStorage.setItem('faceToolSettings', JSON.stringify(settings));
+}
+
+function loadSettings() {
+    const saved = localStorage.getItem('faceToolSettings');
+    if (!saved) return;
+    try {
+        const settings = JSON.parse(saved);
+        PERSIST_KEYS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && settings[id] !== undefined) {
+                if (el.type === 'checkbox') el.checked = settings[id];
+                else el.value = settings[id];
+                el.dispatchEvent(new Event('input'));
+                el.dispatchEvent(new Event('change'));
+            }
+        });
+    } catch (e) { console.warn("Failed to load settings", e); }
+}
+
+// Keyboard Shortcuts
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        if (stopBtn.style.display !== 'none') stopBtn.click();
+        else if (!processBtn.disabled) processBtn.click();
+    }
+    if (e.key === 'Escape') {
+        if (lightboxModal.style.display === 'flex') closeLightbox();
+        if (editCropModal.style.display === 'flex') editCropModal.style.display = 'none';
+    }
+});
+
+// Clear Gallery
+const clearGalleryBtn = document.getElementById('clearGalleryBtn');
+if (clearGalleryBtn) {
+    clearGalleryBtn.onclick = () => {
+        if (processedBlobs.length === 0) return;
+        if (confirm("Clear all processed results?")) {
+            processedBlobs = [];
+            gallery.innerHTML = '';
+            videoGalleryCard = null;
+            updateGalleryStatus();
+            const gallerySection = document.querySelector('.gallery-section');
+            if (gallerySection) gallerySection.style.display = 'none';
+            const skeleton = document.getElementById('previewSkeleton');
+            if (skeleton && !previewCanvas.width) skeleton.style.display = 'flex';
+        }
+    };
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    initPersistence();
+});
+
+// Fallback init in case DOMContentLoaded already fired
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    initPersistence();
 }

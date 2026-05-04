@@ -58,10 +58,26 @@ const passiveModeSelect = document.getElementById('passiveModeSelect');
 const passiveValueInput = document.getElementById('passiveValueInput');
 const passiveRateInput = document.getElementById('passiveRateInput');
 
-const passivePotDisplay = document.getElementById('passivePotDisplay');
-const passiveGrossDisplay = document.getElementById('passiveGrossDisplay');
-const passiveTaxDisplay = document.getElementById('passiveTaxDisplay');
 const passiveNetDisplay = document.getElementById('passiveNetDisplay');
+
+// --- Interest Calculator Elements ---
+const taxModeBtn = document.getElementById('taxModeBtn');
+const interestModeBtn = document.getElementById('interestModeBtn');
+const taxView = document.getElementById('taxView');
+const interestView = document.getElementById('interestView');
+
+const initialDepositInput = document.getElementById('initialDeposit');
+const annualContributionInput = document.getElementById('annualContribution');
+const interestRateInput = document.getElementById('interestRate');
+const investmentTermInput = document.getElementById('investmentTerm');
+const contributionToggle = document.getElementById('contributionToggle');
+
+const finalBalanceDisplay = document.getElementById('finalBalanceDisplay');
+const totalContributionsDisplay = document.getElementById('totalContributionsDisplay');
+const totalInterestDisplay = document.getElementById('totalInterestDisplay');
+
+const ctxInterest = document.getElementById('interestChart') ? document.getElementById('interestChart').getContext('2d') : null;
+let interestChart = null;
 
 // New toggle elements (created later)
 let rateModeToggle = null;   // Average vs Marginal
@@ -76,11 +92,12 @@ let taxChart = null;
 let comparisonChart = null;
 let passiveChart = null;
 
-const formatCurrency = (amount) => {
+const formatCurrency = (amount, decimals = 0) => {
     return new Intl.NumberFormat('en-GB', {
         style: 'currency',
         currency: 'GBP',
-        maximumFractionDigits: 0
+        maximumFractionDigits: decimals,
+        minimumFractionDigits: decimals
     }).format(amount);
 };
 
@@ -1173,6 +1190,180 @@ function updatePassiveChart(currentPotSize, ratePct, type = 'paye') {
     });
 }
 
+// --- Interest Calculator Logic ---
+function switchMode(mode) {
+    if (mode === 'tax') {
+        taxView.style.display = 'flex';
+        interestView.style.display = 'none';
+        taxModeBtn.classList.add('active');
+        interestModeBtn.classList.remove('active');
+        processInput();
+    } else {
+        taxView.style.display = 'none';
+        interestView.style.display = 'flex';
+        taxModeBtn.classList.remove('active');
+        interestModeBtn.classList.add('active');
+        updateInterestCalculator();
+    }
+}
+
+function calculateCompoundInterest(P, PMT, r, t) {
+    const data = [];
+    let currentBalance = P;
+    let totalContributions = P;
+    let totalInterest = 0;
+
+    data.push({
+        year: 0,
+        principal: P,
+        interest: 0,
+        balance: P
+    });
+
+    for (let year = 1; year <= t; year++) {
+        const interestForYear = currentBalance * r;
+        totalInterest += interestForYear;
+        currentBalance += interestForYear + PMT;
+        totalContributions += PMT;
+
+        data.push({
+            year: year,
+            principal: totalContributions,
+            interest: totalInterest,
+            balance: currentBalance,
+            multiplier: P > 0 ? currentBalance / P : 0
+        });
+    }
+
+    return {
+        data,
+        finalBalance: currentBalance,
+        totalContributions,
+        totalInterest
+    };
+}
+
+function updateInterestCalculator() {
+    const P = parseFloat(initialDepositInput.value) || 0;
+    const contributionEnabled = contributionToggle && contributionToggle.checked;
+    const PMT = contributionEnabled ? (parseFloat(annualContributionInput.value) || 0) : 0;
+    const r = (parseFloat(interestRateInput.value) || 0) / 100;
+    const t = parseInt(investmentTermInput.value) || 0;
+
+    if (t <= 0) return;
+
+    const result = calculateCompoundInterest(P, PMT, r, t);
+
+    finalBalanceDisplay.textContent = formatCurrency(result.finalBalance, 2);
+    totalContributionsDisplay.textContent = formatCurrency(result.totalContributions, 2);
+    totalInterestDisplay.textContent = formatCurrency(result.totalInterest, 2);
+
+    updateInterestChart(result.data);
+}
+
+function updateInterestChart(data) {
+    if (!ctxInterest) return;
+
+    const labels = data.map(d => d.year);
+    const principalData = data.map(d => d.principal);
+    const interestData = data.map(d => d.interest);
+    const multiplierData = data.map(d => d.multiplier || 1);
+
+    if (interestChart) interestChart.destroy();
+
+    const blueGradient = ctxInterest.createLinearGradient(0, 0, 0, 400);
+    blueGradient.addColorStop(0, 'rgba(56, 189, 248, 0.7)');
+    blueGradient.addColorStop(1, 'rgba(56, 189, 248, 0.1)');
+
+    const greenGradient = ctxInterest.createLinearGradient(0, 0, 0, 400);
+    greenGradient.addColorStop(0, 'rgba(74, 222, 128, 0.7)');
+    greenGradient.addColorStop(1, 'rgba(74, 222, 128, 0.1)');
+
+    interestChart = new Chart(ctxInterest, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Contributions',
+                    data: principalData,
+                    backgroundColor: greenGradient,
+                    borderColor: '#4ade80',
+                    borderWidth: 1,
+                    stack: 'Stack 0',
+                    yAxisID: 'y',
+                },
+                {
+                    label: 'Interest',
+                    data: interestData,
+                    backgroundColor: blueGradient,
+                    borderColor: '#38bdf8',
+                    borderWidth: 1,
+                    stack: 'Stack 0',
+                    yAxisID: 'y',
+                },
+                {
+                    label: 'Multiplier',
+                    data: multiplierData,
+                    type: 'line',
+                    borderColor: '#f8fafc',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    pointRadius: 3,
+                    pointBackgroundColor: '#f8fafc',
+                    yAxisID: 'y1',
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: { display: true, text: 'Years', color: '#94a3b8' },
+                    ticks: { color: '#cbd5e1' },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                y: {
+                    stacked: true,
+                    title: { display: true, text: 'Balance (£)', color: '#94a3b8' },
+                    ticks: { color: '#cbd5e1' },
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    beginAtZero: true
+                },
+                y1: {
+                    position: 'right',
+                    title: { display: true, text: 'Growth Multiplier (x)', color: '#94a3b8' },
+                    ticks: { 
+                        color: '#cbd5e1',
+                        callback: (value) => value.toFixed(1) + 'x'
+                    },
+                    grid: { display: false },
+                    beginAtZero: false
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: (ctxTooltip) => {
+                            const label = ctxTooltip.dataset.label || '';
+                            const value = ctxTooltip.parsed.y;
+                            if (label === 'Multiplier') {
+                                return `${label}: ${value.toFixed(2)}x`;
+                            }
+                            return `${label}: ${formatCurrency(value, 2)}`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 // Event Listeners
 document.getElementById('btnDownloadPNG').addEventListener('click', () =>
     downloadChart('png')
@@ -1279,6 +1470,28 @@ if (passiveRateInput) {
         if (e.key === 'Enter') processPassiveInput();
     });
 }
+
+// Interest Mode Event Listeners
+if (taxModeBtn) taxModeBtn.addEventListener('click', () => switchMode('tax'));
+if (interestModeBtn) interestModeBtn.addEventListener('click', () => switchMode('interest'));
+
+if (contributionToggle) {
+    contributionToggle.addEventListener('change', () => {
+        const isEnabled = contributionToggle.checked;
+        annualContributionInput.disabled = !isEnabled;
+        annualContributionInput.parentElement.style.opacity = isEnabled ? '1' : '0.5';
+        updateInterestCalculator();
+    });
+}
+
+[initialDepositInput, annualContributionInput, interestRateInput, investmentTermInput].forEach(input => {
+    if (input) {
+        input.addEventListener('input', updateInterestCalculator);
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') updateInterestCalculator();
+        });
+    }
+});
 
 // Initialise after everything is loaded
 window.addEventListener('load', () => {

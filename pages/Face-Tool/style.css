@@ -1096,32 +1096,106 @@ select option {
     transform: scale(1.05);
 }
 
-.edit-overlay-btn {
+.action-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    margin-top: 10px;
+}
+
+.action-row button {
+    flex: 1;
+}
+
+.btn-outline {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-outline:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.card-actions {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    background: rgba(0, 0, 0, 0.6);
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateY(10px);
+    z-index: 10;
+}
+
+.image-card:hover .card-actions {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.icon-btn {
+    background: rgba(15, 15, 20, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
-    border: none;
-    border-radius: 50%;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.icon-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    transform: scale(1.1);
+}
+
+.icon-btn.delete:hover {
+    background: #ff5252;
+    border-color: #ff5252;
+}
+
+.edit-overlay-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(15, 15, 20, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    padding: 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     opacity: 0;
-    transition: opacity 0.2s, background 0.2s;
-    z-index: 5;
-    padding: 0;
+    transform: translateY(-10px);
+    z-index: 10;
 }
 
 .image-card:hover .edit-overlay-btn {
     opacity: 1;
+    transform: translateY(0);
 }
 
 .edit-overlay-btn:hover {
     background: var(--accent);
+    border-color: var(--accent);
+    transform: scale(1.1);
 }
 
 .error-card {
