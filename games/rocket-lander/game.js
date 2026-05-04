@@ -28,6 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const labelMulti = document.getElementById('label-multi');
     const instructionP1 = document.getElementById('instruction-p1');
     const instructionP2 = document.getElementById('instruction-p2');
+    const hardModeToggle = document.getElementById('hard-mode-toggle');
+    const fuelInput = document.getElementById('fuel-input');
 
     // --- Touch Control Elements ---
     const touchControlsContainer = document.getElementById('touch-controls-container');
@@ -59,6 +61,11 @@ document.addEventListener('DOMContentLoaded', () => {
         MAX_PAD_WIDTH_PERCENT: 0.20, 
     };
     const HIGH_SCORE_KEY = 'rocketLanderHighScore';
+    const FUEL_KEY = 'rocketLanderInitialFuel';
+
+    // Load saved fuel
+    const savedFuel = localStorage.getItem(FUEL_KEY);
+    if (savedFuel) fuelInput.value = savedFuel;
 
     // --- Starfield ---
     let stars = [];
@@ -80,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let state = {};
     let keysPressed = {};
     let gameLoopId = null;
+    let lastTime = 0;
     let restartTimer = null;
     let spaceRestartEnabled = false;
     let isMultiplayer = false;
@@ -166,10 +174,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const padWidth = minPadWidth + Math.random() * Math.max(0, (maxPadWidth - minPadWidth));
         const padX = Math.random() * (canvas.width - padWidth);
 
-        state = { landingPadX: padX, landingPadWidth: padWidth, isGameOver: false, winner: null, winnerDeclared: false, planets: [], players: [] };
+        const initialFuel = parseFloat(fuelInput.value) || settings.initialCoal;
+        localStorage.setItem(FUEL_KEY, initialFuel);
+
+        state = { 
+            landingPadX: padX, 
+            landingPadWidth: padWidth, 
+            isGameOver: false, 
+            winner: null, 
+            winnerDeclared: false, 
+            planets: [], 
+            players: [],
+            isHardMode: hardModeToggle.checked,
+            ufos: [],
+            nextUfoSpawn: Date.now() + 3000
+        };
 
         const createPlayer = (name, startX, controls, finColor, noseColor) => ({
-            name: name || "Anonymous", height: settings.initialHeight, speed: 0, coal: settings.initialCoal,
+            name: name || "Anonymous", height: settings.initialHeight, speed: 0, coal: initialFuel,
             x: startX, speedX: 0, isThrusting: false, isThrustingLeft: false, isThrustingRight: false,
             isLanded: false, isCrashed: false, fuelWarningShown: false,
             isExploding: false, explosionRadius: 0, finalExplosionRadius: 0, explosionAlpha: 1,
@@ -254,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (gameLoopId) cancelAnimationFrame(gameLoopId);
+        lastTime = 0;
         gameLoopId = requestAnimationFrame(gameLoop);
 
         const hSpeedRule = `Max H-Speed: <strong>${settings.maxHSpeedForSafeLanding} m/s</strong>.`;
@@ -294,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.players.forEach(p => { if (p !== player) p.coal = 0; });
                 showEndGameMessage(`Winner: ${player.name}!`, `${player.name} landed safely! The other pilot is now in a freefall...`, 'success', player);
             } else {
-                crashPlayer(player);
+                crashPlayer(player, canvas.height - 10);
                 if (state.players.every(p => p.isCrashed)) {
                     state.winnerDeclared = true;
                     thrustSound.pause();
@@ -314,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isNewHighScore) scoreMessage += " A new high score!";
                 showEndGameMessage(`Congratulations, ${player.name}!`, scoreMessage, 'success', player);
             } else {
-                crashPlayer(player);
+                crashPlayer(player, canvas.height - 10);
                 let crashReason = !landedOnPad ? "You missed the landing pad."
                                 : !isSafeVSpeed ? `You crashed at ${player.speed.toFixed(1)} m/s vertically.`
                                 : !isSafeHSpeed ? `You skidded across the pad at ${player.speedX.toFixed(1)} m/s horizontally.`
@@ -324,12 +347,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function crashPlayer(player) {
+    function crashPlayer(player, y) {
         if (player.isCrashed || player.isLanded) return;
         crashSound.currentTime = 0; crashSound.play();
         player.isCrashed = true;
         player.isExploding = true;
         player.explosionAlpha = 1;
+        player.explosionY = y !== undefined ? y : (canvas.height - 10);
         player.finalExplosionRadius = canvas.height * 0.1 + player.coal * 1.5 + player.speed * 2;
     }
 
@@ -359,15 +383,19 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => { messageArea.classList.add('visible'); }, isMultiplayer ? 2000 : 500);
     }
 
-    function gameLoop() {
+    function gameLoop(timestamp) {
         if (!state.players) return;
+        
+        if (!lastTime) lastTime = timestamp;
+        const dt = Math.min((timestamp - lastTime) / 16.666, 4); // Normalize to 60fps (16.666ms per frame). Cap at 4x to prevent physics glitches.
+        lastTime = timestamp;
         
         state.players.forEach(player => {
             if (player.isExploding && player.explosionAlpha > 0) {
-                if (player.explosionRadius < player.finalExplosionRadius) player.explosionRadius += 2;
-                else player.explosionAlpha -= 0.02;
+                if (player.explosionRadius < player.finalExplosionRadius) player.explosionRadius += 2 * dt;
+                else player.explosionAlpha -= 0.02 * dt;
             }
-            if (player.isLanding && player.landingShockwaveWidth < player.finalShockwaveWidth) player.landingShockwaveWidth += 25;
+            if (player.isLanding && player.landingShockwaveWidth < player.finalShockwaveWidth) player.landingShockwaveWidth += 25 * dt;
         });
 
         if (!state.isGameOver) {
@@ -391,12 +419,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                if (player.isThrusting) { player.speed -= settings.THRUST_POWER; player.coal -= settings.FUEL_CONSUMPTION_RATE; }
-                player.speed += settings.GRAVITY_PULL;
-                player.height -= player.speed;
-                if (player.isThrustingLeft) { player.speedX -= settings.THRUST_POWER_X; player.coal -= settings.FUEL_CONSUMPTION_RATE_X; }
-                if (player.isThrustingRight) { player.speedX += settings.THRUST_POWER_X; player.coal -= settings.FUEL_CONSUMPTION_RATE_X; }
-                player.x += player.speedX;
+                if (player.isThrusting) { player.speed -= settings.THRUST_POWER * dt; player.coal -= settings.FUEL_CONSUMPTION_RATE * dt; }
+                player.speed += settings.GRAVITY_PULL * dt;
+                player.height -= player.speed * dt;
+                if (player.isThrustingLeft) { player.speedX -= settings.THRUST_POWER_X * dt; player.coal -= settings.FUEL_CONSUMPTION_RATE_X * dt; }
+                if (player.isThrustingRight) { player.speedX += settings.THRUST_POWER_X * dt; player.coal -= settings.FUEL_CONSUMPTION_RATE_X * dt; }
+                player.x += player.speedX * dt;
                 const rocketH = canvas.height * 0.12, finW = rocketH * (12 / 65), bodyW = rocketH * (22 / 65), rocketWidth = bodyW + finW * 2;
                 if (player.x < rocketWidth / 2) { player.x = rocketWidth / 2; player.speedX = 0; }
                 if (player.x > canvas.width - rocketWidth / 2) { player.x = canvas.width - rocketWidth / 2; player.speedX = 0; }
@@ -407,11 +435,63 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (!anyThrusting && !thrustSound.paused) thrustSound.pause();
         }
         
-        if (isMultiplayer && !state.isGameOver && state.players.every(p => p.isLanded || p.isCrashed)) {
-            state.isGameOver = true;
+        // UFO Logic
+        if (state.isHardMode && !state.isGameOver) {
+            const now = Date.now();
+            if (now > state.nextUfoSpawn && state.ufos.length < 3) {
+                const fromLeft = Math.random() > 0.5;
+                state.ufos.push({
+                    x: fromLeft ? -70 : canvas.width + 70,
+                    y: canvas.height * 0.15 + Math.random() * (canvas.height * 0.5),
+                    speed: (fromLeft ? 1 : -1) * (1.5 + Math.random() * 2),
+                    width: 60,
+                    height: 25
+                });
+                state.nextUfoSpawn = now + 2000 + Math.random() * 4000;
+            }
+
+            state.ufos = state.ufos.filter(ufo => {
+                ufo.x += ufo.speed * dt;
+                
+                // Collision check with all players for THIS ufo
+                state.players.forEach(player => {
+                    if (player.isLanded || player.isCrashed) return;
+                    
+                    const rocketH = canvas.height * 0.12;
+                    const bodyW = rocketH * (22 / 65), finW = rocketH * (12 / 65);
+                    const rocketWidth = bodyW + finW * 2;
+                    const groundY = canvas.height - 10;
+                    const skyH = groundY - rocketH;
+                    const rocketBaseY = groundY - (player.height / settings.initialHeight * skyH);
+                    const rocketTopY = rocketBaseY - rocketH;
+                    
+                    const ufoLeft = ufo.x - ufo.width / 2;
+                    const ufoRight = ufo.x + ufo.width / 2;
+                    const ufoTop = ufo.y - ufo.height / 2;
+                    const ufoBottom = ufo.y + ufo.height / 2;
+
+                    const rocketLeft = player.x - rocketWidth / 2;
+                    const rocketRight = player.x + rocketWidth / 2;
+
+                    if (rocketRight > ufoLeft && rocketLeft < ufoRight && rocketBaseY > ufoTop && rocketTopY < ufoBottom) {
+                        crashPlayer(player, (rocketBaseY + rocketTopY) / 2);
+                        if (isMultiplayer) {
+                            if (state.players.every(p => p.isCrashed)) {
+                                state.winnerDeclared = true;
+                                showEndGameMessage(`Alien Abduction?`, `Both pilots collided with UFOs!`, 'crash', player);
+                            }
+                        } else {
+                            state.isGameOver = true;
+                            showEndGameMessage(`UFO Collision!`, `You were taken out by an unidentified flying object.`, 'crash', player);
+                        }
+                    }
+                });
+
+                return ufo.x > -100 && ufo.x < canvas.width + 100;
+            });
         }
 
-        stars.forEach(star => { star.phase += 0.03; star.alpha = Math.abs(Math.sin(star.phase)) * 0.8 + 0.2; });
+        stars.forEach(star => { star.phase += 0.03 * dt; star.alpha = Math.abs(Math.sin(star.phase)) * 0.8 + 0.2; });
         updateHUD();
         draw();
         gameLoopId = requestAnimationFrame(gameLoop);
@@ -462,6 +542,86 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.fillStyle = "rgb(161, 161, 170)"; ctx.fillRect(0, groundY, canvas.width, 10);
         ctx.fillStyle = "#f59e0b"; ctx.fillRect(state.landingPadX, groundY, state.landingPadWidth, 5);
         ctx.strokeStyle = "black"; ctx.lineWidth = 1; ctx.strokeRect(state.landingPadX, groundY, state.landingPadWidth, 5);
+        
+        // --- Draw Flags at the ends of the landing pad ---
+        const flagPoleHeight = 35;
+        const flagWidth = 20;
+        const flagHeight = 15;
+        const windPhase = Date.now() * 0.005;
+        const windWave = Math.sin(windPhase) * 4;
+
+        // Left Flag
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(state.landingPadX, groundY);
+        ctx.lineTo(state.landingPadX, groundY - flagPoleHeight);
+        ctx.stroke();
+
+        ctx.fillStyle = "#ef4444"; // Bright Red
+        ctx.beginPath();
+        ctx.moveTo(state.landingPadX, groundY - flagPoleHeight);
+        ctx.lineTo(state.landingPadX + flagWidth + windWave, groundY - flagPoleHeight + flagHeight / 2);
+        ctx.lineTo(state.landingPadX, groundY - flagPoleHeight + flagHeight);
+        ctx.closePath();
+        ctx.fill();
+
+        // Right Flag
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(state.landingPadX + state.landingPadWidth, groundY);
+        ctx.lineTo(state.landingPadX + state.landingPadWidth, groundY - flagPoleHeight);
+        ctx.stroke();
+
+        ctx.fillStyle = "#ef4444"; // Bright Red
+        ctx.beginPath();
+        ctx.moveTo(state.landingPadX + state.landingPadWidth, groundY - flagPoleHeight);
+        ctx.lineTo(state.landingPadX + state.landingPadWidth - flagWidth - windWave, groundY - flagPoleHeight + flagHeight / 2);
+        ctx.lineTo(state.landingPadX + state.landingPadWidth, groundY - flagPoleHeight + flagHeight);
+        ctx.closePath();
+        ctx.fill();
+
+        // --- Draw UFOs if active ---
+        if (state.ufos && state.ufos.length > 0) {
+            state.ufos.forEach(ufo => {
+                const { x, y, width, height } = ufo;
+                ctx.save();
+                // Saucer body
+                const saucerGrad = ctx.createLinearGradient(x, y - height / 2, x, y + height / 2);
+                saucerGrad.addColorStop(0, '#94a3b8');
+                saucerGrad.addColorStop(0.5, '#475569');
+                saucerGrad.addColorStop(1, '#1e293b');
+                ctx.fillStyle = saucerGrad;
+                ctx.beginPath();
+                ctx.ellipse(x, y, width / 2, height / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.stroke();
+
+                // Glass dome
+                ctx.fillStyle = 'rgba(6, 182, 212, 0.6)';
+                ctx.beginPath();
+                ctx.ellipse(x, y - height / 4, width / 4, height / 2, 0, Math.PI, 2 * Math.PI);
+                ctx.fill();
+
+                // Glowing lights
+                const lightCount = 5;
+                const time = Date.now() * 0.01;
+                for (let i = 0; i < lightCount; i++) {
+                    const angle = (i / lightCount) * Math.PI * 2 + time;
+                    const lx = x + Math.cos(angle) * (width / 2.5);
+                    const ly = y + Math.sin(angle) * (height / 6);
+                    const alpha = 0.5 + Math.sin(time + i) * 0.5;
+                    ctx.fillStyle = `rgba(245, 158, 11, ${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(lx, ly, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            });
+        }
+
         ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
         ctx.fillRect(state.landingPadX + 4, groundY, 8, 5);
         ctx.fillRect(state.landingPadX + state.landingPadWidth - 12, groundY, 8, 5);
@@ -486,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (player.isExploding && player.explosionAlpha > 0) {
                 ctx.fillStyle = `rgba(245, 158, 11, ${player.explosionAlpha})`; 
-                ctx.beginPath(); ctx.arc(rocketX, groundY, player.explosionRadius, Math.PI, 2 * Math.PI); ctx.fill();
+                ctx.beginPath(); ctx.arc(rocketX, player.explosionY, player.explosionRadius, 0, 2 * Math.PI); ctx.fill();
             } else if (!player.isExploding) {
                 ctx.fillStyle = player.finColor;
                 ctx.beginPath(); ctx.moveTo(rocketX - bodyW / 2, bodyBottomY - finH); ctx.lineTo(rocketX - bodyW / 2 - finW, bodyBottomY); ctx.lineTo(rocketX - bodyW / 2, bodyBottomY); ctx.closePath(); ctx.fill();

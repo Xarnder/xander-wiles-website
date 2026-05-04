@@ -38,8 +38,10 @@ header h1 { font-size: 1.75rem; }
 #start-screen h2 { font-size: 2rem; }
 #start-screen p { color: var(--text-secondary); }
 #start-screen .start-input-group { width: 100%; max-width: 300px; }
-#name-input, #name-input-p2 { width: 100%; padding: 0.75rem 1rem; background: var(--bg-secondary); border: 1px solid var(--glass-border); border-radius: var(--radius-md); color: var(--text-primary); font-size: 1rem; text-align: center; }
-#name-input:focus, #name-input-p2:focus { outline: none; border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.3); }
+#name-input, #name-input-p2, #fuel-input { width: 100%; padding: 0.75rem 1rem; background: var(--bg-secondary); border: 1px solid var(--glass-border); border-radius: var(--radius-md); color: var(--text-primary); font-size: 1rem; text-align: center; }
+#name-input:focus, #name-input-p2:focus, #fuel-input:focus { outline: none; border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.3); }
+#fuel-input { width: 100px; padding: 0.5rem; }
+.fuel-group { margin-top: 1rem; }
 .high-score-text { font-size: 0.9rem; color: var(--text-muted); margin-top: 1rem; }
 .player-toggle { display: flex; align-items: center; gap: 1rem; margin: 0.5rem 0; }
 .toggle-label { font-size: 0.9rem; color: var(--text-muted); cursor: pointer; transition: color 0.3s ease; }

@@ -4,7 +4,7 @@ import { Outlet, Link, useNavigate, useLocation, useParams } from 'react-router-
 import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, PenTool } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, documentId } from 'firebase/firestore';
+import { collection, query, where, getDocs, documentId, onSnapshot } from 'firebase/firestore';
 import DirectoryImporter from './DirectoryImporter';
 import DataRepair from './DataRepair';
 import BackupOptions from './BackupOptions';
@@ -19,58 +19,69 @@ export default function Layout() {
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isQuickWriting, setIsQuickWriting] = useState(false);
+    const [recentEntries, setRecentEntries] = useState({});
 
-    async function handleQuickWrite() {
-        if (!currentUser || isQuickWriting) return;
-        
-        try {
-            setIsQuickWriting(true);
-            const today = new Date();
-            const datesToCheck = [];
-            for (let i = 0; i < 7; i++) {
-                datesToCheck.push(format(subDays(today, i), 'yyyy-MM-dd'));
-            }
+    // Keep a real-time listener for the last 7 days to make "Quick Write" instantaneous
+    useEffect(() => {
+        if (!currentUser) {
+            setRecentEntries({});
+            return;
+        }
 
-            // Fetch entries for the last 7 days to check for gaps
-            const q = query(
-                collection(db, 'users', currentUser.uid, 'entries'),
-                where(documentId(), '>=', datesToCheck[6]),
-                where(documentId(), '<=', datesToCheck[0])
-            );
+        const today = new Date();
+        const weekAgo = subDays(today, 7);
+        const startId = format(weekAgo, 'yyyy-MM-dd');
+        const endId = format(today, 'yyyy-MM-dd');
 
-            const snapshot = await getDocs(q);
+        const q = query(
+            collection(db, 'users', currentUser.uid, 'entries'),
+            where(documentId(), '>=', startId),
+            where(documentId(), '<=', endId)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
             const entries = {};
             snapshot.forEach(doc => {
                 entries[doc.id] = doc.data();
             });
+            setRecentEntries(entries);
+        }, (err) => {
+            console.error("Error listening to recent entries:", err);
+        });
 
-            // Find the oldest date with no content within the last week
-            let targetDate = datesToCheck[0]; // Default to today
-            
-            // Check from oldest (last item in datesToCheck) to newest (today)
-            for (let i = datesToCheck.length - 1; i >= 0; i--) {
-                const dateStr = datesToCheck[i];
-                const entry = entries[dateStr];
-                const hasContent = entry && (
-                    (entry.content && entry.content.trim().length > 0) || 
-                    (entry.images && entry.images.length > 0) || 
-                    (entry.title && entry.title.trim().length > 0)
-                );
-                
-                if (!hasContent) {
-                    targetDate = dateStr;
-                    break; // Found the oldest gap
-                }
-            }
+        return () => unsubscribe();
+    }, [currentUser]);
 
-            navigate(`/entry/${targetDate}`);
-        } catch (err) {
-            console.error("Quick write error:", err);
-            // Fallback to today on error
-            navigate(`/entry/${format(new Date(), 'yyyy-MM-dd')}`);
-        } finally {
-            setIsQuickWriting(false);
+    function handleQuickWrite() {
+        if (!currentUser) return;
+        
+        // Find the dates for the last 7 days
+        const today = new Date();
+        const datesToCheck = [];
+        for (let i = 0; i < 7; i++) {
+            datesToCheck.push(format(subDays(today, i), 'yyyy-MM-dd'));
         }
+
+        // Find the oldest date with no content within the last week
+        let targetDate = datesToCheck[0]; // Default to today
+        
+        // Check from oldest (last item in datesToCheck) to newest (today)
+        for (let i = datesToCheck.length - 1; i >= 0; i--) {
+            const dateStr = datesToCheck[i];
+            const entry = recentEntries[dateStr];
+            const hasContent = entry && (
+                (entry.content && entry.content.trim().length > 0) || 
+                (entry.images && entry.images.length > 0) || 
+                (entry.title && entry.title.trim().length > 0)
+            );
+            
+            if (!hasContent) {
+                targetDate = dateStr;
+                break; // Found the oldest gap
+            }
+        }
+
+        navigate(`/entry/${targetDate}`);
     }
 
     async function handleLogout() {

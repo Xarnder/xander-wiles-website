@@ -7,6 +7,43 @@
     --highlight-green: #4ade80;
     --highlight-red: #f87171;
     --highlight-orange: #fb923c;
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+.mode-selector {
+    display: flex;
+    gap: 10px;
+    background: var(--glass-bg);
+    padding: 6px;
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+    margin-bottom: 10px;
+    align-self: center;
+}
+
+.mode-tab {
+    padding: 10px 20px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: 0.3s;
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 0.95rem;
+    border: none;
+    background: transparent;
+    height: auto;
+    min-height: unset;
+}
+
+.mode-tab:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-tab.active {
+    background: var(--accent);
+    color: #0f172a;
 }
 
 * {
@@ -43,7 +80,13 @@ body {
     max-width: 900px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 35px;
+}
+
+#taxView, #interestView {
+    display: flex;
+    flex-direction: column;
+    gap: 35px;
 }
 
 header {

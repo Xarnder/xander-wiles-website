@@ -51,6 +51,17 @@
                     </label>
                     <label for="player-mode-toggle" class="toggle-label" id="label-multi">Multiplayer</label>
                 </div>
+                <div class="player-toggle">
+                    <label class="toggle-label active">Hard Mode</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="hard-mode-toggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="player-toggle fuel-group">
+                    <label for="fuel-input" class="toggle-label active">Initial Fuel (kg):</label>
+                    <input type="number" id="fuel-input" value="100" min="10" max="1000">
+                </div>
                 <div class="start-input-group" id="player2-input-container">
                      <input type="text" id="name-input-p2" placeholder="Player 2 Name">
                 </div>
