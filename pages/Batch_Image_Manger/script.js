@@ -152,6 +152,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const cropFinishBtn = document.getElementById('crop-finish-btn');
     const cropInterfaceContainer = document.getElementById('crop-interface-container');
 
+    const LOADER_HTML = `
+<svg class="loader-svg" width="80" height="120" viewBox="0 -30 100 160" xmlns="http://www.w3.org/2000/svg">
+  <g>
+    <path d="M 50,100 A 50,50 0 0 1 50,0"/>
+  </g>
+  <g>
+    <path d="M 50,75 A 50,50 0 0 0 50,-25"/>
+  </g>
+</svg>`;
+
     // --- State ---
     let imageFiles = [];
     let originalImageFiles = []; // [NEW] Keep originals for re-cropping
@@ -374,6 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startPdfConversionBtn.disabled = true;
         skipPdfBtn.classList.add('hidden');
         pdfProgressContainer.classList.remove('hidden');
+        showStatus(pdfProgressStatus, "Preparing conversion...", false, true);
 
         let totalPagesConverted = 0;
 
@@ -422,6 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pdfProgressBar.style.width = '100%';
             pdfProgressPercent.textContent = '100%';
             pdfProgressStatus.textContent = "Conversion Complete!";
+            showStatus(pdfProgressStatus, "Conversion Complete!", false, false);
 
             setTimeout(() => {
                 pdfConversionPopup.classList.add('hidden');
@@ -646,7 +658,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         exportBtn.disabled = true;
         exportBtn.textContent = 'Processing...';
-        showStatus(exportStatus, `Processing ${imageFiles.length} images...`, false);
+        showStatus(exportStatus, `Processing ${imageFiles.length} images...`, false, true);
 
         // Show Progress Bar
         // Re-using the grid progress container for the main export to provide feedback
@@ -764,10 +776,28 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (e.key === 'ArrowRight') { e.preventDefault(); navigateNext(); }
     }
 
-    function showStatus(element, message, isError = false) {
+    function showStatus(element, message, isError = false, showLoader = false) {
+        console.log(`DEBUG: showStatus called for ${element.id}, showLoader: ${showLoader}`);
         element.textContent = message;
         element.style.color = isError ? 'var(--accent-orange)' : 'var(--text-secondary)';
         element.classList.remove('hidden');
+
+        // Remove any existing loader
+        const existingLoader = element.parentElement.querySelector('.loader-container');
+        if (existingLoader) {
+            console.log("DEBUG: Removing existing loader");
+            existingLoader.remove();
+        }
+
+        if (showLoader) {
+            console.log("DEBUG: Creating new loader");
+            const loaderDiv = document.createElement('div');
+            loaderDiv.className = 'loader-container';
+            loaderDiv.style.position = 'relative';
+            loaderDiv.style.zIndex = '100';
+            loaderDiv.innerHTML = LOADER_HTML;
+            element.parentElement.insertBefore(loaderDiv, element);
+        }
     }
 
     // --- Grid Feature ---
@@ -1130,7 +1160,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleGenerateGrid() {
         generateGridBtn.disabled = true; generateGridBtn.textContent = 'Generating...';
-        showStatus(gridStatus, 'Preparing Grid...', false);
+        showStatus(gridStatus, 'Preparing Grid...', false, true);
 
         // Show Progress Bar
         gridProgressContainer.classList.remove('hidden');
@@ -1248,7 +1278,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 link.href = URL.createObjectURL(blob);
                 link.download = `grid_${source.replace(/\s/g, '_')}.png`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                showStatus(gridStatus, `Downloaded!`, false);
+                showStatus(gridStatus, `Downloaded!`, false, false);
                 // Hide progress bar after short delay
                 setTimeout(() => { gridProgressContainer.classList.add('hidden'); }, 2000);
             }, 'image/png');
@@ -1318,7 +1348,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         downscaleGenerateBtn.disabled = true;
         downscaleGenerateBtn.textContent = 'Processing...';
-        showStatus(downscaleStatus, `Starting batch process...`, false);
+        showStatus(downscaleStatus, `Starting batch process...`, false, true);
         downscaleErrorMessage.textContent = '';
 
         const zip = new JSZip();
@@ -1401,7 +1431,7 @@ document.addEventListener('DOMContentLoaded', () => {
             link.href = URL.createObjectURL(zipBlob);
             link.download = 'batch_converted_images.zip';
             document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            showStatus(downscaleStatus, `Download Started!`, false);
+            showStatus(downscaleStatus, `Download Started!`, false, false);
 
         } catch (error) {
             console.error('DEBUG: Downscale Error', error);

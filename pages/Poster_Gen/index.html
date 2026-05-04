@@ -2,9 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Dynamic Poster Generator</title>
     
+    <!-- Mobile App Overrides -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+
     <!-- YOUR GLOBAL NAV STYLES -->
     <link rel="stylesheet" href="/assets/css/style.css">
     
@@ -25,6 +30,50 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
+    <!-- PERSISTENT SVG DEFS -->
+    <svg width="0" height="0" style="position: absolute; pointer-events: none;">
+        <defs>
+            <linearGradient id="loader-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#FF56A1" />
+                <stop offset="100%" stop-color="#FF9350" />
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loading-overlay">
+        <svg viewBox="0 0 100 100" class="premium-loader">
+            <g>
+                <path d="M 50,100 A 1,1 0 0 1 50,0" />
+            </g>
+            <g>
+                <path d="M 50,75 A 1,1 0 0 0 50,-25" />
+            </g>
+        </svg>
+    </div>
+
+    <!-- iOS Status Bar Black Background -->
+    <div id="ios-status-bar-bg"></div>
+
+    <!-- LOGIN OVERLAY -->
+    <div id="login-overlay" class="hidden">
+        <a href="/" class="logo" style="font-size: 2.5rem; margin-bottom: 2rem;">POSTER<span class="logo-highlight">GEN</span></a>
+        <button id="google-login-btn">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" height="24" alt="G">
+            Login with Google
+        </button>
+        <!-- Login screen mini-loader -->
+        <div class="login-loader">
+            <svg viewBox="0 0 100 100" class="premium-loader">
+                <g>
+                    <path d="M 50,100 A 1,1 0 0 1 50,0" />
+                </g>
+                <g>
+                    <path d="M 50,75 A 1,1 0 0 0 50,-25" />
+                </g>
+            </svg>
+        </div>
+    </div>
 
     <div id="main-nav-placeholder"></div> 
     <script src="/assets/js/nav-loader.js"></script>
