@@ -1867,7 +1867,8 @@ async function processImage(file, batchIndex) {
                 shape: currentCensorShape,
                 color: censorColor,
                 blur: blurStrength,
-                emoji: censorEmoji
+                emoji: censorEmoji,
+                edge: currentCensorEdge
             }, img);
         }
 
@@ -1888,7 +1889,8 @@ async function processImage(file, batchIndex) {
                         censorShape: currentCensorShape,
                         censorColor: censorColor,
                         blurStrength: blurStrength,
-                        censorEmoji: censorEmoji
+                        censorEmoji: censorEmoji,
+                        censorEdge: currentCensorEdge
                     });
                     const gallerySection = document.querySelector('.gallery-section');
                     if (gallerySection) gallerySection.style.display = 'block';
@@ -2312,7 +2314,8 @@ async function updatePreviewCanvas() {
                 shape: currentCensorShape,
                 color: censorColor,
                 blur: blurStrength,
-                emoji: censorEmoji
+                emoji: censorEmoji,
+                edge: currentCensorEdge
             }, firstImageCache);
         }
     } else if (currentMode === 'frame') {
@@ -2877,7 +2880,8 @@ if (saveCropBtn) {
                     blur: data.blurStrength || blurStrength,
                     emoji: data.censorEmoji || censorEmoji,
                     thickness: data.frameThickness || frameThickness,
-                    shape: data.censorShape || data.frameShape || currentCensorShape || currentFrameShape
+                    shape: data.censorShape || data.frameShape || currentCensorShape || currentFrameShape,
+                    edge: data.censorEdge || currentCensorEdge
                 }, img);
                 
                 const newUrl = fullCanvas.toDataURL('image/jpeg', 0.95);
@@ -3105,9 +3109,9 @@ function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
                 mctx.fill();
                 mctx.restore();
             } else {
-                const blurAmount = Math.min(width, height) * 0.15;
+                const blurAmount = Math.min(width, height) * 0.1;
                 mctx.fillStyle = 'white';
-                const pad = blurAmount * 1.5;
+                const pad = blurAmount;
                 mctx.fillRect(pad, pad, width - pad * 2, height - pad * 2);
                 
                 const blurCanvas = document.createElement('canvas');
