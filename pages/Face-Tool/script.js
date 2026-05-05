@@ -14,6 +14,7 @@ let firstFaceBox = null; // Cache for the detected face box
 let currentMode = 'censor'; 
 let currentCensorType = 'blur';
 let currentCensorShape = 'circle';
+let currentCensorEdge = 'soft';
 let censorColor = '#000000';
 let censorEmoji = '🕶️';
 let blurStrength = 20;
@@ -895,6 +896,16 @@ censorEmojiInput.addEventListener('input', (e) => {
     if (firstImageCache && firstFaceBox) updatePreviewCanvas();
 });
 
+
+edgeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        edgeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentCensorEdge = btn.dataset.edge;
+        if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+    });
+});
+
 shapeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         shapeBtns.forEach(b => b.classList.remove('active'));
@@ -1738,7 +1749,7 @@ async function processVideo(file, batchIndex) {
                     const rect = calculateCropRect(canvas, faceBox);
                     if (currentMode === 'censor') {
                         drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
-                            mode: 'censor', type: currentCensorType, shape: currentCensorShape,
+                            mode: 'censor', type: currentCensorType, shape: currentCensorShape, edge: currentCensorEdge,
                             color: censorColor, blur: blurStrength, emoji: censorEmoji
                         }, canvas);
                     } else if (currentMode === 'frame') {
@@ -3054,44 +3065,97 @@ function drawReplacement(ctx, x, y, width, height, feather, hslShift = null) {
 
 // 10. New Drawing Helper
 function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
-    const { mode, type, shape, color, blur, thickness } = options;
+    const { mode, type, shape, color, blur, thickness, edge } = options;
     
     ctx.save();
-    ctx.beginPath();
     
+    const path = new Path2D();
     if (shape === 'circle') {
         const centerX = x + width / 2;
         const centerY = y + height / 2;
         const radiusX = width / 2;
         const radiusY = height / 2;
-        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+        path.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
     } else {
-        ctx.rect(x, y, width, height);
+        path.rect(x, y, width, height);
     }
-    
+
     if (mode === 'frame') {
         ctx.strokeStyle = color;
         ctx.lineWidth = thickness || 5;
-        ctx.stroke();
+        ctx.stroke(path);
     } else {
-        ctx.clip();
-        
-        if (type === 'blur') {
-            ctx.filter = `blur(${blur}px)`;
-            ctx.drawImage(sourceImg, 0, 0);
-        } else if (type === 'emoji') {
-            const emojiToDraw = options.emoji || '🕶️';
-            const fontSize = Math.min(width, height) * 0.9;
-            ctx.font = `${fontSize}px serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(emojiToDraw, x + width / 2, y + height / 2);
+        if (edge === 'soft' && (type === 'solid' || type === 'blur')) {
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = width;
+            maskCanvas.height = height;
+            const mctx = maskCanvas.getContext('2d');
+            
+            if (shape === 'circle') {
+                mctx.save();
+                mctx.translate(width/2, height/2);
+                mctx.scale(width/height, 1);
+                const grad = mctx.createRadialGradient(0, 0, 0, 0, 0, height/2);
+                grad.addColorStop(0, 'rgba(255,255,255,1)');
+                grad.addColorStop(0.6, 'rgba(255,255,255,1)');
+                grad.addColorStop(1, 'rgba(255,255,255,0)');
+                mctx.fillStyle = grad;
+                mctx.beginPath();
+                mctx.arc(0, 0, height/2, 0, Math.PI * 2);
+                mctx.fill();
+                mctx.restore();
+            } else {
+                const blurAmount = Math.min(width, height) * 0.15;
+                mctx.fillStyle = 'white';
+                const pad = blurAmount * 1.5;
+                mctx.fillRect(pad, pad, width - pad * 2, height - pad * 2);
+                
+                const blurCanvas = document.createElement('canvas');
+                blurCanvas.width = width;
+                blurCanvas.height = height;
+                const bctx = blurCanvas.getContext('2d');
+                bctx.filter = `blur(${blurAmount}px)`;
+                bctx.drawImage(maskCanvas, 0, 0);
+                
+                mctx.clearRect(0, 0, width, height);
+                mctx.drawImage(blurCanvas, 0, 0);
+            }
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const tctx = tempCanvas.getContext('2d');
+            
+            if (type === 'blur') {
+                tctx.filter = `blur(${blur}px)`;
+                tctx.drawImage(sourceImg, -x, -y);
+                tctx.filter = 'none';
+            } else {
+                tctx.fillStyle = color;
+                tctx.fillRect(0, 0, width, height);
+            }
+            
+            tctx.globalCompositeOperation = 'destination-in';
+            tctx.drawImage(maskCanvas, 0, 0);
+            ctx.drawImage(tempCanvas, x, y);
         } else {
-            ctx.fillStyle = color;
-            ctx.fill();
+            ctx.clip(path);
+            if (type === 'blur') {
+                ctx.filter = `blur(${blur}px)`;
+                ctx.drawImage(sourceImg, 0, 0);
+            } else if (type === 'emoji') {
+                const emojiToDraw = options.emoji || '🕶️';
+                const fontSize = Math.min(width, height) * 0.9;
+                ctx.font = `${fontSize}px serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(emojiToDraw, x + width / 2, y + height / 2);
+            } else {
+                ctx.fillStyle = color;
+                ctx.fill(path);
+            }
         }
     }
-    
     ctx.restore();
 }
 
@@ -3099,7 +3163,8 @@ function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
 const PERSIST_KEYS = [
     'padding', 'blurStrength', 'censorColor', 'censorEmoji', 
     'frameColor', 'frameThickness', 'ratioWidth', 'ratioHeight', 
-    'useOriginalRatio', 'processAllFaces', 'fastMode', 'updateFrequency'
+    'useOriginalRatio', 'processAllFaces', 'fastMode', 'updateFrequency',
+    'currentCensorType', 'currentCensorShape', 'currentCensorEdge'
 ];
 
 function initPersistence() {
