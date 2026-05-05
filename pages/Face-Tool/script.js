@@ -76,6 +76,8 @@ const processAllFacesInput = document.getElementById('processAllFaces');
 const fastModeInput = document.getElementById('fastMode');
 const updateFrequencyInput = document.getElementById('updateFrequency');
 const updateFrequencyRow = document.getElementById('updateFrequencyRow');
+const faceApiOnlyInput = document.getElementById('faceApiOnly');
+const faceApiOnlyRow = document.getElementById('faceApiOnlyRow');
 const presetBtns = document.querySelectorAll('.preset-btn');
 const modeBtns = document.querySelectorAll('.mode-btn');
 
@@ -435,6 +437,11 @@ async function getDetections(source, withLandmarks = false, thorough = false) {
     }
     const faceapiResults = await faceapi.detectAllFaces(source);
     detections = faceapiResults.map(d => ({ box: d.box }));
+
+    if (faceApiOnlyInput && faceApiOnlyInput.checked) {
+        lastFaceCount = detections.length;
+        return detections;
+    }
     const shouldTryFallbacks = thorough || detections.length === 0 || (lastFaceCount > 0 && detections.length < lastFaceCount);
     if (shouldTryFallbacks) {
         if (!mpModelsLoaded) await initMediaPipe();
@@ -794,6 +801,7 @@ mediaTypeBtns.forEach(btn => {
         // Update file inputs
         if (imageInput) imageInput.accept = isVideoMode ? "video/mp4,video/quicktime" : "image/*";
         if (fileInput) fileInput.accept = isVideoMode ? "video/mp4,video/quicktime" : "image/*";
+        if (faceApiOnlyRow) faceApiOnlyRow.style.display = isVideoMode ? 'block' : 'none';
 
         const fileUploadLabel = document.querySelector('label[for="fileInput"]');
         if (fileUploadLabel) {
@@ -3069,6 +3077,7 @@ function drawReplacement(ctx, x, y, width, height, feather, hslShift = null) {
 
 // 10. New Drawing Helper
 function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0.1 || height <= 0.1) return;
     const { mode, type, shape, color, blur, thickness, edge } = options;
     
     ctx.save();
@@ -3167,7 +3176,7 @@ function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
 const PERSIST_KEYS = [
     'padding', 'blurStrength', 'censorColor', 'censorEmoji', 
     'frameColor', 'frameThickness', 'ratioWidth', 'ratioHeight', 
-    'useOriginalRatio', 'processAllFaces', 'fastMode', 'updateFrequency',
+    'useOriginalRatio', 'processAllFaces', 'fastMode', 'updateFrequency', 'faceApiOnly',
     'currentCensorType', 'currentCensorShape', 'currentCensorEdge'
 ];
 
