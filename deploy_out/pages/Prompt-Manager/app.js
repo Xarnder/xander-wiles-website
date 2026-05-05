@@ -76,6 +76,7 @@ const dynamicBlocksContainer = document.getElementById('dynamic-blocks-container
 const addTextBlockBtn = document.getElementById('add-text-block-btn');
 const addCodeBlockBtn = document.getElementById('add-code-block-btn');
 const addRememberBlockBtn = document.getElementById('add-remember-block-btn');
+const loginLoader = document.getElementById('login-loader-container');
 
 // Filter & Search DOM Elements
 const searchInput = document.getElementById('search-prompts');
@@ -190,12 +191,29 @@ const provider = new GoogleAuthProvider();
 loginBtn.addEventListener('click', async () => {
     try {
         console.log("Attempting Google Login...");
+        loginBtn.classList.add('hidden');
+        loginLoader.classList.remove('hidden');
         await signInWithPopup(auth, provider);
         console.log("✅ Login successful");
     } catch (error) {
         console.error("❌ Login failed:", error.message);
+        loginBtn.classList.remove('hidden');
+        loginLoader.classList.add('hidden');
     }
 });
+
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) {
+        console.log("[DEBUG] Hiding Loading Overlay");
+        overlay.classList.add('hidden');
+        document.body.classList.remove('loading');
+        // Optional: remove from DOM after transition
+        setTimeout(() => {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }, 1000);
+    }
+}
 
 // Mobile Menu Toggle Logic
 const toggleMobileMenu = (show) => {
@@ -803,6 +821,8 @@ onAuthStateChanged(auth, (user) => {
         console.log(`👤 User logged in: ${user.displayName}`);
         authSection.classList.add('hidden');
         appSection.classList.remove('hidden');
+        loginBtn.classList.remove('hidden');
+        loginLoader.classList.add('hidden');
 
         userName.textContent = user.displayName;
         userPfp.src = user.photoURL;
@@ -813,6 +833,9 @@ onAuthStateChanged(auth, (user) => {
         console.log("👤 User is signed out.");
         authSection.classList.remove('hidden');
         appSection.classList.add('hidden');
+        loginBtn.classList.remove('hidden');
+        loginLoader.classList.add('hidden');
+        hideLoadingOverlay();
     }
 });
 
@@ -909,8 +932,10 @@ function loadPrompts() {
         loadModeSpecificCategories();
         applyFilters();
         console.log("✅ Data sync complete.");
+        setTimeout(hideLoadingOverlay, 500);
     }, (error) => {
         console.error("❌ Error fetching prompts: ", error);
+        hideLoadingOverlay();
     });
 }
 

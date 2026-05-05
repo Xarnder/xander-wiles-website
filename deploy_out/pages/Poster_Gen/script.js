@@ -23,6 +23,8 @@ const posterTitle = document.getElementById('poster-title');
 const debugLog = document.getElementById('debug-log');
 const renderedOverlay = document.getElementById('rendered-overlay');
 const renderedImg = document.getElementById('rendered-img');
+const loadingOverlay = document.getElementById('loading-overlay');
+const loginOverlay = document.getElementById('login-overlay');
 
 // Controls
 const uiThemeToggle = document.getElementById('uiThemeToggle');
@@ -57,6 +59,11 @@ function init() {
     if(autoRenderToggle.checked) {
         setTimeout(triggerAutoRender, 800);
     }
+
+    // Hide loading screen after a small delay for smooth transition
+    setTimeout(() => {
+        if (loadingOverlay) loadingOverlay.classList.add('hidden');
+    }, 500);
 }
 
 /* --- Core Logic --- */

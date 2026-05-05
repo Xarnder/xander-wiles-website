@@ -37,6 +37,13 @@
     <!-- Library: Face-API.js -->
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     
+    <!-- Library: MediaPipe Tasks Vision -->
+    <script type="module">
+        import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
+        window.FaceDetector = FaceDetector;
+        window.FilesetResolver = FilesetResolver;
+    </script>
+
     <!-- Library: Cropper.js for manual cropping -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
@@ -166,6 +173,10 @@
                         <div class="censor-shape-toggle">
                             <button class="shape-btn" data-shape="rect">Rect</button>
                             <button class="shape-btn active" data-shape="circle">Circle</button>
+                        </div>
+                        <div class="censor-edge-toggle">
+                            <button class="edge-btn" data-edge="hard">Hard Edge</button>
+                            <button class="edge-btn active" data-edge="soft">Soft Edge</button>
                         </div>
                         <div id="solidOptions" class="sub-setting" style="display: none;">
                             <div class="color-picker-wrapper">

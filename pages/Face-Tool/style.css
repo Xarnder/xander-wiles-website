@@ -450,7 +450,7 @@ select:focus {
     border: 1px solid var(--border);
 }
 
-.media-btn {
+.media-btn, .tracking-btn {
     flex: 1;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border);
@@ -462,12 +462,12 @@ select:focus {
     transition: all 0.2s;
 }
 
-.media-btn:hover {
+.media-btn:hover, .tracking-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-main);
 }
 
-.media-btn.active {
+.media-btn.active, .tracking-btn.active {
     background: var(--accent);
     color: white;
     border-color: var(--accent);
@@ -648,6 +648,34 @@ select option {
 }
 
 .shape-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+.censor-edge-toggle {
+    display: flex;
+    gap: 8px;
+}
+
+.edge-btn {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.edge-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+}
+
+.edge-btn.active {
     background: var(--accent);
     color: white;
     border-color: var(--accent);

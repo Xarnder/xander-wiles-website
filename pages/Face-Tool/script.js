@@ -98,6 +98,7 @@ const videoProgressText = document.getElementById('videoProgressText');
 const censorOptionsPanel = document.getElementById('censorOptionsPanel');
 const typeBtns = document.querySelectorAll('.type-btn');
 const shapeBtns = document.querySelectorAll('.shape-btn');
+const edgeBtns = document.querySelectorAll('.edge-btn');
 
 if (fastModeInput) {
     fastModeInput.addEventListener('change', () => {
@@ -294,6 +295,181 @@ function log(message, type = 'info') {
 }
 
 // 1. Initialize AI Models
+
+let faceDetectorMP = null;
+let mpModelsLoaded = false;
+let yoloFaceSession = null;
+let yoloFaceLoading = false;
+let yoloFaceDisabled = false;
+let lastFaceCount = 0;
+
+async function initYOLOFace() {
+    if (yoloFaceSession) return true;
+    if (yoloFaceLoading || yoloFaceDisabled) return false;
+    yoloFaceLoading = true;
+    try {
+        log("Initializing YOLOv8-Face (Deep Tracking)...");
+        const modelUrl = "./models/model.onnx";
+        yoloFaceSession = await ort.InferenceSession.create(modelUrl, {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all'
+        });
+        log("YOLOv8-Face Model Ready.", "success");
+        yoloFaceLoading = false;
+        return true;
+    } catch (e) {
+        log("Notice: Fallback YOLO model could not be loaded. Deep tracking will be skipped.", "warning");
+        console.warn("YOLOv8-Face load failed:", e);
+        yoloFaceDisabled = true;
+        yoloFaceLoading = false;
+        return false;
+    }
+}
+
+async function detectYOLOFace(source) {
+    if (yoloFaceDisabled) return [];
+    if (!yoloFaceSession) {
+        const ok = await initYOLOFace();
+        if (!ok) return [];
+    }
+    const width = 640;
+    const height = 640;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(source, 0, 0, width, height);
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const input = new Float32Array(width * height * 3);
+    for (let i = 0; i < width * height; i++) {
+        input[i] = imageData.data[i * 4] / 255.0; 
+        input[i + width * height] = imageData.data[i * 4 + 1] / 255.0;
+        input[i + 2 * width * height] = imageData.data[i * 4 + 2] / 255.0;
+    }
+    const tensor = new ort.Tensor('float32', input, [1, 3, width, height]);
+    const output = await yoloFaceSession.run({ images: tensor });
+    const outputData = output[yoloFaceSession.outputNames[0]].data;
+    const boxes = [];
+    const confThreshold = 0.45;
+    const numQueries = 8400; 
+    for (let i = 0; i < numQueries; i++) {
+        const score = outputData[4 * numQueries + i];
+        if (score > confThreshold) {
+            const cx = outputData[0 * numQueries + i];
+            const cy = outputData[1 * numQueries + i];
+            const w = outputData[2 * numQueries + i];
+            const h = outputData[3 * numQueries + i];
+            const l = cx - w / 2;
+            const t = cy - h / 2;
+            const srcW = source.width || source.videoWidth || source.canvas?.width || 1;
+            const srcH = source.height || source.videoHeight || source.canvas?.height || 1;
+            boxes.push({
+                box: {
+                    x: (l / width) * srcW,
+                    y: (t / height) * srcH,
+                    width: (w / width) * srcW,
+                    height: (h / height) * srcH
+                },
+                score: score
+            });
+        }
+    }
+    return nms(boxes, 0.45);
+}
+
+function nms(boxes, iouThreshold) {
+    const sorted = boxes.sort((a, b) => b.score - a.score);
+    const keep = [];
+    const disabled = new Array(sorted.length).fill(false);
+    for (let i = 0; i < sorted.length; i++) {
+        if (disabled[i]) continue;
+        keep.push(sorted[i]);
+        for (let j = i + 1; j < sorted.length; j++) {
+            if (disabled[j]) continue;
+            if (iou(sorted[i].box, sorted[j].box) > iouThreshold) {
+                disabled[j] = true;
+            }
+        }
+    }
+    return keep;
+}
+
+function iou(boxA, boxB) {
+    const xA = Math.max(boxA.x, boxB.x);
+    const yA = Math.max(boxA.y, boxB.y);
+    const xB = Math.min(boxA.x + boxA.width, boxB.x + boxB.width);
+    const yB = Math.min(boxA.y + boxA.height, boxB.y + boxB.height);
+    const interArea = Math.max(0, xB - xA) * Math.max(0, yB - yA);
+    const areaA = boxA.width * boxA.height;
+    const areaB = boxB.width * boxB.height;
+    return interArea / (areaA + areaB - interArea);
+}
+
+async function initMediaPipe() {
+    if (mpModelsLoaded) return true;
+    try {
+        log("Initializing MediaPipe (Robust Tracking)...");
+        const vision = await window.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+        faceDetectorMP = await window.FaceDetector.createFromOptions(vision, {
+            baseOptions: {
+                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+                delegate: "GPU"
+            },
+            runningMode: "IMAGE"
+        });
+        mpModelsLoaded = true;
+        log("MediaPipe Models Ready.", "success");
+        return true;
+    } catch (e) {
+        log("Error loading MediaPipe models: " + e.message, "error");
+        console.error(e);
+        return false;
+    }
+}
+
+async function getDetections(source, withLandmarks = false, thorough = false) {
+    let detections = [];
+    if (withLandmarks) {
+        return await faceapi.detectAllFaces(source).withFaceLandmarks();
+    }
+    const faceapiResults = await faceapi.detectAllFaces(source);
+    detections = faceapiResults.map(d => ({ box: d.box }));
+    const shouldTryFallbacks = thorough || detections.length === 0 || (lastFaceCount > 0 && detections.length < lastFaceCount);
+    if (shouldTryFallbacks) {
+        if (!mpModelsLoaded) await initMediaPipe();
+        let mpResult;
+        try {
+            if (source.tagName && source.tagName.toUpperCase() === 'VIDEO') {
+                mpResult = faceDetectorMP.detectForVideo(source, performance.now());
+            } else {
+                mpResult = faceDetectorMP.detect(source);
+            }
+        } catch(e) {}
+        if (mpResult && mpResult.detections && mpResult.detections.length > 0) {
+            const mpDetections = mpResult.detections.map(d => {
+                const box = {
+                    x: parseFloat(d.boundingBox.originX),
+                    y: parseFloat(d.boundingBox.originY),
+                    width: parseFloat(d.boundingBox.width),
+                    height: parseFloat(d.boundingBox.height)
+                };
+                if (box.width <= 1.0 && box.height <= 1.0) {
+                    const w = source.width || source.videoWidth || source.canvas?.width || 1;
+                    const h = source.height || source.videoHeight || source.canvas?.height || 1;
+                    box.x *= w; box.width *= w; box.y *= h; box.height *= h;
+                }
+                return { box };
+            });
+            if (mpDetections.length > detections.length) detections = mpDetections;
+        }
+    }
+    if (thorough || detections.length === 0 || (lastFaceCount > 0 && detections.length < lastFaceCount)) {
+        const yoloDetections = await detectYOLOFace(source);
+        if (yoloDetections.length > detections.length) detections = yoloDetections;
+    }
+    lastFaceCount = detections.length;
+    return detections;
+}
 async function loadModels() {
     try {
         log("Loading Detection Models...");
@@ -798,7 +974,7 @@ if (replacementFileInput) {
             const img = await faceapi.bufferToImage(file);
             replacementFaceImageCache = img;
 
-            const detections = await faceapi.detectAllFaces(img);
+            const detections = await getDetections(img, false, true);
             
             if (detections && detections.length > 0) {
                 const largest = detections.sort((a,b) => (b.box.width * b.box.height) - (a.box.width * a.box.height))[0];
@@ -1400,10 +1576,11 @@ async function processVideo(file, batchIndex) {
         
         // In feature mode, we need landmarks to define the crop area
         let detections;
+        const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
         if (currentMode === 'feature') {
             detections = await faceapi.detectAllFaces(canvas).withFaceLandmarks();
         } else {
-            detections = await faceapi.detectAllFaces(canvas);
+            detections = await getDetections(canvas, false, processAll);
         }
 
         const currentBoxes = [];
@@ -1653,8 +1830,8 @@ async function processImage(file, batchIndex) {
         return;
     }
 
-    const detections = await faceapi.detectAllFaces(img);
     const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
+    const detections = await getDetections(img, false, processAll);
 
     if (currentMode === 'censor') {
         const canvas = document.createElement('canvas');
@@ -2010,7 +2187,7 @@ async function setupPreview(filesToScan = loadedFiles) {
                     await new Promise(r => video.onseeked = r);
                     ctx.drawImage(video, 0, 0);
                     
-                    const detections = await faceapi.detectAllFaces(canvas);
+                    const detections = await getDetections(canvas, false, true);
                     if (detections && detections.length > 0) {
                         // Found it!
                         const img = new Image();
@@ -2060,7 +2237,7 @@ async function setupPreview(filesToScan = loadedFiles) {
     for (const file of filesToScan) {
         try {
             const img = await faceapi.bufferToImage(file);
-            const detections = await faceapi.detectAllFaces(img);
+            const detections = await getDetections(img, false, true);
 
             if (detections && detections.length > 0) {
                 // Found a face!
@@ -2099,8 +2276,8 @@ async function setupPreview(filesToScan = loadedFiles) {
 async function updatePreviewCanvas() {
     if (!firstImageCache || !firstFaceBox) return;
 
-    const detections = await faceapi.detectAllFaces(firstImageCache);
     const multi = processAllFacesInput ? processAllFacesInput.checked : false;
+    const detections = await getDetections(firstImageCache, false, multi);
 
     const ctx = previewCanvas.getContext('2d');
 
