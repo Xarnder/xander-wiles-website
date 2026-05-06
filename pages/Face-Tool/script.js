@@ -18,6 +18,7 @@ let currentCensorEdge = 'soft';
 let censorColor = '#000000';
 let censorEmoji = '🕶️';
 let blurStrength = 20;
+let pixelateScale = 10;
 
 // Frame Settings
 let currentFrameShape = 'rect';
@@ -118,6 +119,9 @@ const censorColorInput = document.getElementById('censorColor');
 const colorHexDisplay = document.getElementById('colorHex');
 const blurStrengthInput = document.getElementById('blurStrength');
 const blurStrengthVal = document.getElementById('blurStrengthVal');
+const pixelateOptions = document.getElementById('pixelateOptions');
+const pixelateScaleInput = document.getElementById('pixelateScale');
+const pixelateScaleVal = document.getElementById('pixelateScaleVal');
 const censorEmojiInput = document.getElementById('censorEmoji');
 
 // Frame Elements
@@ -431,52 +435,103 @@ async function initMediaPipe() {
 }
 
 async function getDetections(source, withLandmarks = false, thorough = false) {
-    let detections = [];
-    if (withLandmarks) {
-        return await faceapi.detectAllFaces(source).withFaceLandmarks();
+    let allDetections = [];
+    
+    // 1. Run Face-API (Always)
+    try {
+        if (withLandmarks) {
+            const results = await faceapi.detectAllFaces(source).withFaceLandmarks();
+            allDetections.push(...results.map(d => ({
+                box: d.detection.box,
+                landmarks: d.landmarks,
+                detection: d.detection,
+                source: 'faceapi'
+            })));
+        } else {
+            const results = await faceapi.detectAllFaces(source);
+            allDetections.push(...results.map(d => ({
+                box: d.box,
+                detection: d,
+                source: 'faceapi'
+            })));
+        }
+    } catch (e) {
+        console.warn("Face-API error:", e);
     }
-    const faceapiResults = await faceapi.detectAllFaces(source);
-    detections = faceapiResults.map(d => ({ box: d.box }));
 
     if (faceApiOnlyInput && faceApiOnlyInput.checked) {
-        lastFaceCount = detections.length;
-        return detections;
+        lastFaceCount = allDetections.length;
+        return allDetections;
     }
-    const shouldTryFallbacks = thorough || detections.length === 0 || (lastFaceCount > 0 && detections.length < lastFaceCount);
-    if (shouldTryFallbacks) {
+
+    // 2. Run Robust Fallbacks if needed or if thorough
+    const needsMore = thorough || allDetections.length === 0;
+    if (needsMore) {
+        // Run MediaPipe
         if (!mpModelsLoaded) await initMediaPipe();
-        let mpResult;
         try {
+            let mpResult;
             if (source.tagName && source.tagName.toUpperCase() === 'VIDEO') {
                 mpResult = faceDetectorMP.detectForVideo(source, performance.now());
             } else {
                 mpResult = faceDetectorMP.detect(source);
             }
+            
+            if (mpResult && mpResult.detections) {
+                mpResult.detections.forEach(d => {
+                    const box = {
+                        x: parseFloat(d.boundingBox.originX),
+                        y: parseFloat(d.boundingBox.originY),
+                        width: parseFloat(d.boundingBox.width),
+                        height: parseFloat(d.boundingBox.height)
+                    };
+                    if (box.width <= 1.0 && box.height <= 1.0) {
+                        const w = source.width || source.videoWidth || source.canvas?.width || 1;
+                        const h = source.height || source.videoHeight || source.canvas?.height || 1;
+                        box.x *= w; box.width *= w; box.y *= h; box.height *= h;
+                    }
+                    allDetections.push({ box, source: 'mediapipe' });
+                });
+            }
         } catch(e) {}
-        if (mpResult && mpResult.detections && mpResult.detections.length > 0) {
-            const mpDetections = mpResult.detections.map(d => {
-                const box = {
-                    x: parseFloat(d.boundingBox.originX),
-                    y: parseFloat(d.boundingBox.originY),
-                    width: parseFloat(d.boundingBox.width),
-                    height: parseFloat(d.boundingBox.height)
-                };
-                if (box.width <= 1.0 && box.height <= 1.0) {
-                    const w = source.width || source.videoWidth || source.canvas?.width || 1;
-                    const h = source.height || source.videoHeight || source.canvas?.height || 1;
-                    box.x *= w; box.width *= w; box.y *= h; box.height *= h;
+
+        // Run YOLO
+        try {
+            const yoloResults = await detectYOLOFace(source);
+            allDetections.push(...yoloResults.map(box => ({ box, source: 'yolo' })));
+        } catch (e) {}
+    }
+
+    // 3. Merge Results using IOU (Remove duplicates)
+    if (allDetections.length <= 1) {
+        lastFaceCount = allDetections.length;
+        return allDetections;
+    }
+
+    // Sort by box area descending (prefer larger detections/higher confidence models implicitly)
+    allDetections.sort((a, b) => (b.box.width * b.box.height) - (a.box.width * a.box.height));
+
+    const merged = [];
+    for (const det of allDetections) {
+        let isDuplicate = false;
+        for (const existing of merged) {
+            if (iou(det.box, existing.box) > 0.5) {
+                isDuplicate = true;
+                // If the new one has landmarks and existing doesn't, upgrade it
+                if (det.landmarks && !existing.landmarks) {
+                    existing.landmarks = det.landmarks;
+                    existing.detection = det.detection;
                 }
-                return { box };
-            });
-            if (mpDetections.length > detections.length) detections = mpDetections;
+                break;
+            }
+        }
+        if (!isDuplicate) {
+            merged.push(det);
         }
     }
-    if (thorough || detections.length === 0 || (lastFaceCount > 0 && detections.length < lastFaceCount)) {
-        const yoloDetections = await detectYOLOFace(source);
-        if (yoloDetections.length > detections.length) detections = yoloDetections;
-    }
-    lastFaceCount = detections.length;
-    return detections;
+
+    lastFaceCount = merged.length;
+    return merged;
 }
 async function loadModels() {
     try {
@@ -893,6 +948,7 @@ typeBtns.forEach(btn => {
         
         solidOptions.style.display = currentCensorType === 'solid' ? 'block' : 'none';
         blurOptions.style.display = currentCensorType === 'blur' ? 'block' : 'none';
+        pixelateOptions.style.display = currentCensorType === 'pixelate' ? 'block' : 'none';
         emojiOptions.style.display = currentCensorType === 'emoji' ? 'block' : 'none';
         
         if (firstImageCache && firstFaceBox) updatePreviewCanvas();
@@ -936,6 +992,12 @@ censorColorInput.addEventListener('input', (e) => {
 blurStrengthInput.addEventListener('input', (e) => {
     blurStrength = parseInt(e.target.value);
     if (blurStrengthVal) blurStrengthVal.textContent = blurStrength;
+    if (firstImageCache && firstFaceBox) updatePreviewCanvas();
+});
+
+pixelateScaleInput.addEventListener('input', (e) => {
+    pixelateScale = parseInt(e.target.value);
+    if (pixelateScaleVal) pixelateScaleVal.textContent = pixelateScale;
     if (firstImageCache && firstFaceBox) updatePreviewCanvas();
 });
 
@@ -1468,13 +1530,20 @@ processBtn.addEventListener('click', async () => {
 
 // 3. Core Logic for Batch
 async function processVideo(file, batchIndex) {
-    if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') {
+    const supportsWebCodecs = typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined';
+    
+    if (!supportsWebCodecs) {
         const isInsecure = !window.isSecureContext;
-        let msg = "Browser doesn't support WebCodecs (VideoEncoder). Please use Chrome, Edge, or Safari 16.4+.";
+        let msg = "WebCodecs are unavailable.";
         if (isInsecure) {
-            msg = "WebCodecs (required for video) are disabled because this page is not served over a Secure Context (HTTPS or localhost). Please run this tool through a local server or HTTPS.";
+            msg = "WebCodecs (required for video) are disabled because this page is not served over a Secure Context (HTTPS or localhost).";
         }
-        throw new Error(msg);
+        
+        log("Fallback: Video encoding unavailable. Offering frame export...", "warning");
+        if (confirm(`${msg}\n\nWould you like to process the video and export it as a ZIP of JPEG frames instead?`)) {
+            return await processVideoAsFrames(file, batchIndex);
+        }
+        throw new Error(msg + " Fallback declined.");
     }
     log(`Initializing video processing for ${file.name}...`, "info");
     
@@ -1509,7 +1578,7 @@ async function processVideo(file, batchIndex) {
     // Determine Output Dimensions
     let outputWidth = width;
     let outputHeight = height;
-    const isCroppedOutput = (currentMode === 'crop' || currentMode === 'feature');
+    const isCroppedOutput = (currentMode === 'crop' || currentMode === 'feature' || currentMode === 'vertical');
     
     if (isCroppedOutput) {
         let targetAR = 1;
@@ -1517,6 +1586,11 @@ async function processVideo(file, batchIndex) {
             const rw = parseFloat(ratioWidthInput.value) || 1;
             const rh = parseFloat(ratioHeightInput.value) || 1;
             targetAR = useOriginalRatioInput.checked ? (width / height) : (rw / rh);
+        } else if (currentMode === 'vertical') {
+            const originalAR = width / height;
+            // If landscape (e.g. 16:9), target is portrait (9:16)
+            // If already portrait, keep it.
+            targetAR = (originalAR > 1) ? (1 / originalAR) : originalAR;
         } else {
             // Feature Mode Ratio
             targetAR = (parseFloat(featureWideWInput.value) || 1) / (parseFloat(featureWideHInput.value) || 1);
@@ -1593,14 +1667,9 @@ async function processVideo(file, batchIndex) {
         
         ctx.drawImage(video, 0, 0, width, height);
         
-        // In feature mode, we need landmarks to define the crop area
-        let detections;
+        // Use the robust detection pipeline for all modes
         const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
-        if (currentMode === 'feature') {
-            detections = await faceapi.detectAllFaces(canvas).withFaceLandmarks();
-        } else {
-            detections = await getDetections(canvas, false, processAll);
-        }
+        let detections = await getDetections(canvas, (currentMode === 'feature'), processAll);
 
         const currentBoxes = [];
         if (detections && detections.length > 0) {
@@ -1635,7 +1704,7 @@ async function processVideo(file, batchIndex) {
             let minDist = 150;
             for (const track of tracks) {
                 const last = track[track.length - 1];
-                if (i - last.f <= 15) {
+                if (i - last.f <= 60) { // Increased gap tolerance to 2 seconds (60 frames)
                     const dist = Math.sqrt(Math.pow((last.box.x + last.box.width/2) - (box.x + box.width/2), 2) + 
                                          Math.pow((last.box.y + last.box.height/2) - (box.y + box.height/2), 2));
                     if (dist < minDist) {
@@ -1746,8 +1815,9 @@ async function processVideo(file, batchIndex) {
                 oCtx.fillRect(0, 0, outputWidth, outputHeight);
                 oCtx.drawImage(video, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight);
             } else {
-                oCtx.fillStyle = 'black';
-                oCtx.fillRect(0, 0, outputWidth, outputHeight);
+                // Fallback to center crop instead of black
+                const rect = calculateCropRect(canvas, null);
+                oCtx.drawImage(video, rect.x, rect.y, rect.width, rect.height, 0, 0, outputWidth, outputHeight);
             }
         } else {
             // Normal Full-Size Rendering (Censor/Frame)
@@ -1758,11 +1828,12 @@ async function processVideo(file, batchIndex) {
                     if (currentMode === 'censor') {
                         drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
                             mode: 'censor', type: currentCensorType, shape: currentCensorShape, edge: currentCensorEdge,
-                            color: censorColor, blur: blurStrength, emoji: censorEmoji
-                        }, canvas);
+                            color: censorColor, blur: blurStrength, pixelateScale: pixelateScale, emoji: censorEmoji
+                        }, video);
                     } else if (currentMode === 'frame') {
                         drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
-                            mode: 'frame', shape: currentFrameShape, color: frameColor, thickness: frameThickness
+                            mode: 'frame', shape: currentFrameShape, color: frameColor, thickness: frameThickness,
+                            pixelateScale: pixelateScale 
                         }, canvas);
                     }
                 }
@@ -1840,6 +1911,154 @@ async function processVideo(file, batchIndex) {
         else displayResult(videoResultUrl, false, true);
     }
 }
+
+async function processVideoAsFrames(file, batchIndex) {
+    log(`Initializing Frame Export fallback for ${file.name}...`, "info");
+    const videoUrl = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.src = videoUrl;
+    video.muted = true;
+    
+    await new Promise((resolve, reject) => {
+        video.onloadeddata = resolve;
+        video.onerror = reject;
+        video.load();
+    });
+
+    const fps = 30; 
+    const duration = video.duration || 0;
+    const totalFrames = Math.ceil(duration * fps);
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    
+    // Use the same output dimensions logic as processVideo
+    let outputWidth = width;
+    let outputHeight = height;
+    const isCroppedOutput = (currentMode === 'crop' || currentMode === 'feature' || currentMode === 'vertical');
+    
+    if (isCroppedOutput) {
+        let targetAR = 1;
+        if (currentMode === 'crop') {
+            const rw = parseFloat(ratioWidthInput.value) || 1;
+            const rh = parseFloat(ratioHeightInput.value) || 1;
+            targetAR = useOriginalRatioInput.checked ? (width / height) : (rw / rh);
+        } else if (currentMode === 'vertical') {
+            const originalAR = width / height;
+            targetAR = (originalAR > 1) ? (1 / originalAR) : originalAR;
+        } else {
+            targetAR = (parseFloat(featureWideWInput.value) || 1) / (parseFloat(featureWideHInput.value) || 1);
+        }
+        outputHeight = Math.min(height, 720);
+        outputWidth = Math.round(outputHeight * targetAR);
+        if (outputWidth % 2 !== 0) outputWidth++;
+        if (outputHeight % 2 !== 0) outputHeight++;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    const outputCanvas = document.createElement('canvas');
+    outputCanvas.width = outputWidth;
+    outputCanvas.height = outputHeight;
+    const oCtx = outputCanvas.getContext('2d');
+
+    const zip = new JSZip();
+    const folderName = file.name.replace(/\.[^/.]+$/, "") + "_frames";
+    const frameFolder = zip.folder(folderName);
+
+    // UI Progress
+    if (videoProgressWrapper) videoProgressWrapper.style.display = 'flex';
+    
+    // We'll do a single pass to be efficient
+    log(`Phase 1/1: Processing & Capturing Frames...`, "info");
+    
+    for (let i = 0; i < totalFrames; i++) {
+        if (isBatchAborted) break;
+        
+        const time = i / fps;
+        video.currentTime = time;
+        await new Promise(r => video.onseeked = r);
+        
+        ctx.drawImage(video, 0, 0, width, height);
+        
+        // Detection
+        const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
+        let detections = await getDetections(canvas, (currentMode === 'feature'), processAll);
+        
+        if (isCroppedOutput) {
+            const faceBox = (detections && detections.length > 0) ? (processAll ? detections[0].box : getLargestFace(detections).box) : null;
+            const rect = calculateCropRect(canvas, faceBox); // calculateCropRect now handles null by returning center crop
+            
+            const targetAR = outputWidth / outputHeight;
+            let sx = rect.x, sy = rect.y, sw = rect.width, sh = rect.height;
+            const currentAR = sw / sh;
+            if (currentAR > targetAR) {
+                const newSh = sw / targetAR;
+                sy -= (newSh - sh) / 2;
+                sh = newSh;
+            } else {
+                const newSw = sh * targetAR;
+                sx -= (newSw - sw) / 2;
+                sw = newSw;
+            }
+            oCtx.fillStyle = 'black';
+            oCtx.fillRect(0, 0, outputWidth, outputHeight);
+            oCtx.drawImage(video, sx, sy, sw, sh, 0, 0, outputWidth, outputHeight);
+        } else {
+            // Apply overlays to the main canvas
+            if (detections && detections.length > 0) {
+                const faces = processAll ? detections : [getLargestFace(detections)];
+                for (const d of faces) {
+                    if (!d) continue;
+                    const rect = calculateCropRect(canvas, d.box || d.detection.box);
+                    if (currentMode === 'censor') {
+                        drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                            mode: 'censor', type: currentCensorType, shape: currentCensorShape, edge: currentCensorEdge,
+                            color: censorColor, blur: blurStrength, pixelateScale: pixelateScale, emoji: censorEmoji
+                        }, video);
+                    } else if (currentMode === 'frame') {
+                        drawOverlay(ctx, rect.x, rect.y, rect.width, rect.height, {
+                            mode: 'frame', shape: currentFrameShape, color: frameColor, thickness: frameThickness,
+                            pixelateScale: pixelateScale 
+                        }, canvas);
+                    }
+                }
+            }
+        }
+
+        const finalCanvas = isCroppedOutput ? outputCanvas : canvas;
+        const frameData = finalCanvas.toDataURL('image/jpeg', 0.9);
+        const base64Data = frameData.replace(/^data:image\/jpeg;base64,/, "");
+        frameFolder.file(`frame_${String(i).padStart(5, '0')}.jpg`, base64Data, { base64: true });
+
+        // Progress Update
+        const progress = (i + 1) / totalFrames;
+        const percent = Math.round(progress * 100);
+        if (videoProgressBar) videoProgressBar.style.width = `${percent}%`;
+        if (videoProgressPercentage) videoProgressPercentage.textContent = `${percent}%`;
+        if (videoProgressText) videoProgressText.textContent = `Capturing frames: ${i + 1}/${totalFrames}`;
+    }
+
+    if (!isBatchAborted) {
+        log("Packaging frames into ZIP...", "info");
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const zipUrl = URL.createObjectURL(zipBlob);
+        
+        const finalFileName = file.name.replace(/\.[^/.]+$/, "") + "_processed_frames.zip";
+        processedBlobs.push({
+            name: finalFileName, blob: zipBlob, isError: false, originalFile: file,
+            outputWidth: outputWidth, outputHeight: outputHeight, mode: 'video-frames'
+        });
+        
+        displayResult(zipUrl, false, true);
+        log(`✅ Frame export complete: ${finalFileName}`, "success");
+    }
+
+    if (videoProgressWrapper) videoProgressWrapper.style.display = 'none';
+    URL.revokeObjectURL(videoUrl);
+}
 async function processImage(file, batchIndex) {
     let img;
     try {
@@ -1863,7 +2082,8 @@ async function processImage(file, batchIndex) {
         if (!detections || detections.length === 0) {
             facesToCensor = [null]; // Fallback to full image
         } else {
-            facesToCensor = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+            const largest = getLargestFace(detections);
+            facesToCensor = processAll ? detections.map(d => d.box) : (largest ? [largest.box] : []);
         }
 
         for (let i = 0; i < facesToCensor.length; i++) {
@@ -1875,6 +2095,7 @@ async function processImage(file, batchIndex) {
                 shape: currentCensorShape,
                 color: censorColor,
                 blur: blurStrength,
+                pixelateScale: pixelateScale,
                 emoji: censorEmoji,
                 edge: currentCensorEdge
             }, img);
@@ -1918,7 +2139,8 @@ async function processImage(file, batchIndex) {
         if (!detections || detections.length === 0) {
             facesToFrame = [null];
         } else {
-            facesToFrame = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+            const largest = getLargestFace(detections);
+            facesToFrame = processAll ? detections.map(d => d.box) : (largest ? [largest.box] : []);
         }
 
         for (let i = 0; i < facesToFrame.length; i++) {
@@ -1928,7 +2150,8 @@ async function processImage(file, batchIndex) {
                 mode: 'frame',
                 shape: currentFrameShape,
                 color: frameColor,
-                thickness: frameThickness
+                thickness: frameThickness,
+                pixelateScale: pixelateScale
             }, img);
         }
 
@@ -1961,7 +2184,8 @@ async function processImage(file, batchIndex) {
         if (!detections || detections.length === 0) {
             facesToMagic = [null];
         } else {
-            facesToMagic = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+            const largest = getLargestFace(detections);
+            facesToMagic = processAll ? detections.map(d => d.box) : (largest ? [largest.box] : []);
         }
 
         log(`Batch Magic: Processing ${facesToMagic.length} face area(s) for ${file.name}`, "magic");
@@ -2007,7 +2231,8 @@ async function processImage(file, batchIndex) {
         if (!detections || detections.length === 0) {
             facesToReplace = [null];
         } else {
-            facesToReplace = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+            const largest = getLargestFace(detections);
+            facesToReplace = processAll ? detections.map(d => d.box) : (largest ? [largest.box] : []);
         }
 
         for (let i = 0; i < facesToReplace.length; i++) {
@@ -2053,7 +2278,7 @@ async function processImage(file, batchIndex) {
             }, 'image/jpeg', 0.95);
         });
     } else if (currentMode === 'feature') {
-        const detections = await faceapi.detectAllFaces(img).withFaceLandmarks();
+        const detections = await getDetections(img, true, processAll);
         const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
 
         if (!detections || detections.length === 0) {
@@ -2062,7 +2287,8 @@ async function processImage(file, batchIndex) {
             return;
         }
 
-        const facesToProcess = processAll ? detections : [detections.sort((a,b) => (b.detection.box.width * b.detection.box.height) - (a.detection.box.width * a.detection.box.height))[0]];
+        const largest = getLargestFace(detections);
+        const facesToProcess = processAll ? detections : (largest ? [largest] : []);
 
         for (let i = 0; i < facesToProcess.length; i++) {
             const landmarks = facesToProcess[i].landmarks;
@@ -2135,7 +2361,8 @@ async function processImage(file, batchIndex) {
         if (!detections || detections.length === 0) {
             facesToCrop = [null];
         } else {
-            facesToCrop = processAll ? detections.map(d => d.box) : [getLargestFace(detections).box];
+            const largest = getLargestFace(detections);
+            facesToCrop = processAll ? detections.map(d => d.box) : (largest ? [largest.box] : []);
         }
 
         for (let i = 0; i < facesToCrop.length; i++) {
@@ -2150,7 +2377,7 @@ async function processImage(file, batchIndex) {
             await new Promise((resolve) => {
                 canvas.toBlob((blob) => {
                     if (blob) {
-                        const finalFileName = generateOutputName(file.name, i, facesToCrop.length, batchIndex, 'cropped');
+                        const finalFileName = generateOutputName(file.name, i, facesToCrop.length, batchIndex, currentMode === 'vertical' ? 'vertical' : 'cropped');
                         processedBlobs.push({
                             name: finalFileName,
                             blob: blob,
@@ -2162,8 +2389,8 @@ async function processImage(file, batchIndex) {
                             cropHeight: rect.height,
                             cropX: rect.x,
                             cropY: rect.y,
-                            mode: 'crop',
-                            targetRatio: useOriginalRatioInput.checked ? NaN : ((parseFloat(ratioWidthInput.value)||1)/(parseFloat(ratioHeightInput.value)||1))
+                            mode: currentMode,
+                            targetRatio: (currentMode === 'vertical') ? NaN : (useOriginalRatioInput.checked ? NaN : ((parseFloat(ratioWidthInput.value)||1)/(parseFloat(ratioHeightInput.value)||1)))
                         });
                         displayResult(URL.createObjectURL(blob), rect.isError);
                     }
@@ -2311,7 +2538,8 @@ async function updatePreviewCanvas() {
         if (!detections || detections.length === 0) {
             facesToCensor = [null];
         } else {
-            facesToCensor = multi ? detections.map(d => d.box) : [getLargestFace(detections).box];
+            const largest = getLargestFace(detections);
+            facesToCensor = multi ? detections.map(d => d.box) : (largest ? [largest.box] : []);
         }
 
         for (const faceBox of facesToCensor) {
@@ -2322,6 +2550,7 @@ async function updatePreviewCanvas() {
                 shape: currentCensorShape,
                 color: censorColor,
                 blur: blurStrength,
+                pixelateScale: pixelateScale,
                 emoji: censorEmoji,
                 edge: currentCensorEdge
             }, firstImageCache);
@@ -2335,7 +2564,8 @@ async function updatePreviewCanvas() {
         if (!detections || detections.length === 0) {
             facesToFrame = [null];
         } else {
-            facesToFrame = multi ? detections.map(d => d.box) : [getLargestFace(detections).box];
+            const largest = getLargestFace(detections);
+            facesToFrame = multi ? detections.map(d => d.box) : (largest ? [largest.box] : []);
         }
 
         for (const faceBox of facesToFrame) {
@@ -2344,7 +2574,8 @@ async function updatePreviewCanvas() {
                 mode: 'frame',
                 shape: currentFrameShape,
                 color: frameColor,
-                thickness: frameThickness
+                thickness: frameThickness,
+                pixelateScale: pixelateScale
             }, firstImageCache);
         }
     } else if (currentMode === 'magic') {
@@ -2712,7 +2943,7 @@ downloadBtn.addEventListener('click', () => {
     });
 
     if (count === 0) {
-        alert(`No valid ${currentMode === 'censor' ? 'censored' : 'cropped'} images to download!`);
+        alert(`No valid ${currentMode} results to download!`);
         return;
     }
 
@@ -2721,7 +2952,7 @@ downloadBtn.addEventListener('click', () => {
     zip.generateAsync({ type: "blob" })
         .then(function (content) {
             // Use FileSaver.js for better cross-browser/mobile support
-            saveAs(content, `${currentMode === 'censor' ? 'censored' : 'cropped'}_faces.zip`);
+            saveAs(content, `${currentMode}_results.zip`);
             log("Download started.");
         });
 });
@@ -2886,6 +3117,7 @@ if (saveCropBtn) {
                     type: data.censorType,
                     color: data.censorColor || data.frameColor || censorColor,
                     blur: data.blurStrength || blurStrength,
+                    pixelateScale: data.pixelateScale || pixelateScale,
                     emoji: data.censorEmoji || censorEmoji,
                     thickness: data.frameThickness || frameThickness,
                     shape: data.censorShape || data.frameShape || currentCensorShape || currentFrameShape,
@@ -2937,21 +3169,59 @@ function updateGalleryLayout() {
 
 // Final Initialization
 loadModels();
+
+// Secure Context Warning
+if (!window.isSecureContext) {
+    log("⚠️ Note: You are running in an insecure context (file:// or http://). Video mode will use Frame Export (ZIP) instead of MP4 encoding.", "warning");
+    log("To enable full MP4 video encoding, run this tool through a local server (e.g. 'python3 -m http.server').", "info");
+}
 log("System initialized. AI Detection Models loaded.", "success");
 log("Ready for image processing. Select mode to continue.", "info");
 
 // 9. Processing Helpers
 function getLargestFace(detections) {
     if (!detections || detections.length === 0) return null;
-    return detections.sort((a, b) => {
-        const areaA = a.box.width * a.box.height;
-        const areaB = b.box.width * b.box.height;
-        return areaB - areaA;
-    })[0];
+    return detections.reduce((largest, current) => {
+        const cBox = current.box || (current.detection ? current.detection.box : null);
+        const lBox = largest.box || (largest.detection ? largest.detection.box : null);
+        if (!cBox) return largest;
+        if (!lBox) return current;
+        return (cBox.width * cBox.height > lBox.width * lBox.height) ? current : largest;
+    }, detections[0]);
 }
 
 function calculateCropRect(img, faceBox) {
-    if (!faceBox) return { x: 0, y: 0, width: img.width, height: img.height, isError: true };
+    if (!faceBox) {
+        // Fallback: Center Crop with correct aspect ratio
+        let targetRatio;
+        if (currentMode === 'vertical') {
+            const originalRatio = img.width / img.height;
+            targetRatio = (originalRatio > 1) ? (1 / originalRatio) : originalRatio;
+        } else if (useOriginalRatioInput.checked) {
+            targetRatio = img.width / img.height;
+        } else {
+            const rW = parseFloat(ratioWidthInput.value) || 1;
+            const rH = parseFloat(ratioHeightInput.value) || 1;
+            targetRatio = rW / rH;
+        }
+
+        let width, height;
+        if ((img.width / img.height) > targetRatio) {
+            height = img.height;
+            width = height * targetRatio;
+        } else {
+            width = img.width;
+            height = width / targetRatio;
+        }
+
+        return { 
+            x: (img.width - width) / 2, 
+            y: (img.height - height) / 2, 
+            width: width, 
+            height: height, 
+            isError: true 
+        };
+    }
 
     // Calculate Padding
     const paddingPercent = parseInt(paddingInput.value) / 100;
@@ -2966,7 +3236,11 @@ function calculateCropRect(img, faceBox) {
 
     // Aspect Ratio Adjustment
     let targetRatio;
-    if (useOriginalRatioInput.checked) {
+    if (currentMode === 'vertical') {
+        const originalRatio = img.width / img.height;
+        // If landscape (e.g. 16:9), target is portrait (9:16)
+        targetRatio = (originalRatio > 1) ? (1 / originalRatio) : originalRatio;
+    } else if (useOriginalRatioInput.checked) {
         targetRatio = img.width / img.height;
     } else {
         const rW = parseFloat(ratioWidthInput.value) || 1;
@@ -3078,7 +3352,8 @@ function drawReplacement(ctx, x, y, width, height, feather, hslShift = null) {
 // 10. New Drawing Helper
 function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0.1 || height <= 0.1) return;
-    const { mode, type, shape, color, blur, thickness, edge } = options;
+    const { mode, type, shape, color, blur, thickness, edge, pixelateScale: optPixelateScale } = options;
+    const scale = optPixelateScale || pixelateScale || 10;
     
     ctx.save();
     
@@ -3098,7 +3373,7 @@ function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
         ctx.lineWidth = thickness || 5;
         ctx.stroke(path);
     } else {
-        if (edge === 'soft' && (type === 'solid' || type === 'blur')) {
+        if (edge === 'soft' && (type === 'solid' || type === 'blur' || type === 'pixelate')) {
             const maskCanvas = document.createElement('canvas');
             maskCanvas.width = width;
             maskCanvas.height = height;
@@ -3143,6 +3418,17 @@ function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
                 tctx.filter = `blur(${blur}px)`;
                 tctx.drawImage(sourceImg, -x, -y);
                 tctx.filter = 'none';
+            } else if (type === 'pixelate') {
+                const sw = Math.max(1, Math.floor(width / scale));
+                const sh = Math.max(1, Math.floor(height / scale));
+                const pCanvas = document.createElement('canvas');
+                pCanvas.width = sw;
+                pCanvas.height = sh;
+                const pCtx = pCanvas.getContext('2d');
+                pCtx.drawImage(sourceImg, x, y, width, height, 0, 0, sw, sh);
+                tctx.imageSmoothingEnabled = false;
+                tctx.drawImage(pCanvas, 0, 0, sw, sh, 0, 0, width, height);
+                tctx.imageSmoothingEnabled = true;
             } else {
                 tctx.fillStyle = color;
                 tctx.fillRect(0, 0, width, height);
@@ -3156,6 +3442,17 @@ function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
             if (type === 'blur') {
                 ctx.filter = `blur(${blur}px)`;
                 ctx.drawImage(sourceImg, 0, 0);
+            } else if (type === 'pixelate') {
+                const sw = Math.max(1, Math.floor(width / scale));
+                const sh = Math.max(1, Math.floor(height / scale));
+                const pCanvas = document.createElement('canvas');
+                pCanvas.width = sw;
+                pCanvas.height = sh;
+                const pCtx = pCanvas.getContext('2d');
+                pCtx.drawImage(sourceImg, x, y, width, height, 0, 0, sw, sh);
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(pCanvas, 0, 0, sw, sh, x, y, width, height);
+                ctx.imageSmoothingEnabled = true;
             } else if (type === 'emoji') {
                 const emojiToDraw = options.emoji || '🕶️';
                 const fontSize = Math.min(width, height) * 0.9;
@@ -3174,7 +3471,7 @@ function drawOverlay(ctx, x, y, width, height, options, sourceImg) {
 
 // 11. Quality of Life & Persistence
 const PERSIST_KEYS = [
-    'padding', 'blurStrength', 'censorColor', 'censorEmoji', 
+    'padding', 'blurStrength', 'pixelateScale', 'censorColor', 'censorEmoji', 
     'frameColor', 'frameThickness', 'ratioWidth', 'ratioHeight', 
     'useOriginalRatio', 'processAllFaces', 'fastMode', 'updateFrequency', 'faceApiOnly',
     'currentCensorType', 'currentCensorShape', 'currentCensorEdge'
