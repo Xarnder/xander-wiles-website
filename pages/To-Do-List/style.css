@@ -2656,13 +2656,18 @@ input:checked+.slider-small:before {
             font-size: 0.75rem !important;
         }
 
-        /* Float Multi-Edit Bar above the floating header */
+        /* Float Multi-Edit Bar closer to the floating header */
         .floating-action-bar {
-            bottom: calc(230px + env(safe-area-inset-bottom, 0px)) !important;
+            bottom: calc(175px + env(safe-area-inset-bottom, 0px)) !important;
             z-index: 9100 !important;
             padding: 10px 20px !important;
             width: 90% !important;
             max-width: 400px !important;
+        }
+
+        /* Dynamically shrink lists when multi-edit is active to stay above the pill */
+        body.multi-edit-active .board-container {
+            padding-bottom: 250px !important;
         }
 
         /* Hide the redundant board title input on mobile only */
@@ -2691,12 +2696,12 @@ input:checked+.slider-small:before {
         }
 
         .app-version {
-            bottom: calc(210px + env(safe-area-inset-bottom, 0px)) !important;
+            bottom: calc(155px + env(safe-area-inset-bottom, 0px)) !important;
             z-index: 9001 !important;
         }
 
         .toast {
-            bottom: calc(280px + env(safe-area-inset-bottom, 0px)) !important;
+            bottom: calc(260px + env(safe-area-inset-bottom, 0px)) !important;
             z-index: 10001 !important;
         }
     }
