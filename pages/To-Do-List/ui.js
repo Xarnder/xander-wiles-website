@@ -1411,6 +1411,78 @@ export function selectAllInList(listId) {
     updateMultiFloatingBar();
 }
 
+export function openQuickMoveModal() {
+    const modal = document.getElementById('quick-move-modal-overlay');
+    const container = document.getElementById('quick-move-list-container');
+    const bar = document.getElementById('multi-edit-floating-bar');
+    if (!modal || !container) return;
+
+    if (bar) bar.classList.add('hidden'); // Hide the pill
+    container.innerHTML = '';
+
+    const boards = state.appData.boards;
+    const rawLists = state.appData.rawLists || [];
+    const listMap = new Map(rawLists.map(l => [l.id, l]));
+    const assignedListIds = new Set();
+
+    // Sort boards, current first
+    const sortedBoards = [...state.appData.boards].sort((a, b) => {
+        if (a.id === state.appData.currentBoardId) return -1;
+        if (b.id === state.appData.currentBoardId) return 1;
+        return 0;
+    });
+
+    sortedBoards.forEach(board => {
+        if (board.listOrder && board.listOrder.length > 0) {
+            const header = document.createElement('div');
+            header.className = 'quick-move-board-header';
+            header.textContent = board.title;
+            container.appendChild(header);
+
+            board.listOrder.forEach(lid => {
+                const list = listMap.get(lid);
+                if (list) {
+                    const btn = document.createElement('button');
+                    btn.className = 'quick-move-item';
+                    btn.innerHTML = `<span>${escapeHtml(list.title)}</span> <i class="ph ph-caret-right"></i>`;
+                    btn.onclick = () => {
+                        window.handleQuickMoveAction(list.id);
+                    };
+                    container.appendChild(btn);
+                    assignedListIds.add(lid);
+                }
+            });
+        }
+    });
+
+    // Unassigned
+    const orphans = rawLists.filter(l => !assignedListIds.has(l.id));
+    if (orphans.length > 0) {
+        const header = document.createElement('div');
+        header.className = 'quick-move-board-header';
+        header.textContent = "Unassigned Lists";
+        container.appendChild(header);
+
+        orphans.forEach(list => {
+            const btn = document.createElement('button');
+            btn.className = 'quick-move-item';
+            btn.innerHTML = `<span>${escapeHtml(list.title)}</span> <i class="ph ph-caret-right"></i>`;
+            btn.onclick = () => {
+                window.handleQuickMoveAction(list.id);
+            };
+            container.appendChild(btn);
+        });
+    }
+
+    modal.classList.remove('hidden');
+}
+
+export function closeQuickMoveModal() {
+    const modal = document.getElementById('quick-move-modal-overlay');
+    if (modal) modal.classList.add('hidden');
+    updateMultiFloatingBar(); // Restore the pill if still in multi-mode
+}
+
 export function enableSortables(enable) {
     const isCustomSort = state.appData.settings.sortMode === 'custom';
     const isDragEnabled = state.appData.settings.dragEnabled;

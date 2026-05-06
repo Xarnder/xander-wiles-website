@@ -725,24 +725,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const multiMoveSelect = document.getElementById('multi-move-select');
     document.getElementById('multi-edit-action-btn').onclick = () => {
         // Open Modal
+        const bar = document.getElementById('multi-edit-floating-bar');
+        if (bar) bar.classList.add('hidden');
         UI.renderGroupedListSelect(multiMoveSelect, true);
         multiEditModal.classList.remove('hidden');
     };
-    document.getElementById('multi-edit-close-modal-btn').onclick = () => multiEditModal.classList.add('hidden');
-    document.getElementById('multi-close-btn').onclick = () => multiEditModal.classList.add('hidden');
+    document.getElementById('multi-edit-close-modal-btn').onclick = () => {
+        multiEditModal.classList.add('hidden');
+        UI.updateMultiFloatingBar();
+    };
+    document.getElementById('multi-close-btn').onclick = () => {
+        multiEditModal.classList.add('hidden');
+        UI.updateMultiFloatingBar();
+    };
+
+    // Quick Move Actions
+    document.getElementById('multi-move-quick-btn').onclick = UI.openQuickMoveModal;
+    document.getElementById('quick-move-close-modal-btn').onclick = UI.closeQuickMoveModal;
+    document.getElementById('quick-move-cancel-btn').onclick = UI.closeQuickMoveModal;
 
     // Multi Color
     document.getElementById('multi-glow-color-options').addEventListener('click', (e) => {
         const btn = e.target.closest('.color-btn');
         if (!btn) return;
         const color = btn.dataset.color;
+        multiEditModal.classList.add('hidden'); // Close immediately
         const batch = writeBatch(db);
         state.selectedTaskIds.forEach(id => {
             batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), { glowColor: color });
         });
         batch.commit().then(() => {
             Utils.showToast(`Updated color for ${state.selectedTaskIds.size} tasks`);
-            multiEditModal.classList.add('hidden');
         }).catch(e => API.handleSyncError(e));
     });
 
@@ -770,15 +783,16 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // Multi Move/Link
-    document.getElementById('multi-link-btn').onclick = () => handleBatchMoveCopy('copy');
-    document.getElementById('multi-move-btn').onclick = () => handleBatchMoveCopy('move');
+    document.getElementById('multi-link-btn').onclick = () => handleBatchMoveCopy('copy', multiMoveSelect, multiEditModal);
+    document.getElementById('multi-move-btn').onclick = () => handleBatchMoveCopy('move', multiMoveSelect, multiEditModal);
 
-    async function handleBatchMoveCopy(mode) {
-        const targetListId = multiMoveSelect.value;
+    async function handleBatchMoveCopy(mode, selectEl, modalEl, directTargetId = null) {
+        const targetListId = directTargetId || (selectEl ? selectEl.value : null);
         if (!targetListId) {
             alert("Please select a destination.");
             return;
         }
+        if (modalEl) modalEl.classList.add('hidden'); // Close immediately
         let finalTargetId = targetListId;
         const batch = writeBatch(db);
 
@@ -819,14 +833,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         await batch.commit().then(() => {
-            Utils.showToast(mode === 'move' ? 'Tasks moved successfully' : 'Tasks linked successfully');
-            multiEditModal.classList.add('hidden');
+            Utils.showToast(mode === 'move' ? 'Items moved successfully' : 'Items linked successfully');
             state.selectedTaskIds.clear();
             UI.updateMultiFloatingBar();
             state.multiEditMode = false;
             UI.toggleMultiEditUI();
         }).catch(e => API.handleSyncError(e));
     }
+
+    window.handleQuickMoveAction = (targetListId) => {
+        handleBatchMoveCopy('move', null, document.getElementById('quick-move-modal-overlay'), targetListId);
+    };
 
     // Modal Edit Save
     document.getElementById('modal-save-btn').onclick = () => {

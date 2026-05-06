@@ -140,24 +140,18 @@
     <!-- APP CONTAINER -->
     <div class="app-wrapper">
         <header class="app-header glass-panel">
-            <div class="header-left">
-                <input type="text" id="project-title-input" class="project-title-input" value="Story Manager"
-                    placeholder="Project Name">
-                <div id="board-toggle-container" class="control-item"></div>
-                <span id="total-task-count" class="total-count-badge"></span>
+            <!-- Row 1: Board Management & Stats -->
+            <div class="header-row header-row-1">
+                <div class="header-left">
+                    <input type="text" id="project-title-input" class="project-title-input" value="Story Manager"
+                        placeholder="Project Name">
+                    <div id="board-toggle-container"></div>
+                    <span id="total-task-count" class="total-count-badge"></span>
+                </div>
             </div>
 
-            <div class="header-controls">
-                <!-- Search Button -->
-                <button id="search-btn" class="icon-btn-large control-item" title="Search Ideas">
-                    <i class="ph ph-magnifying-glass"></i>
-                </button>
-
-                <!-- Search Lists Button -->
-                <button id="search-list-btn" class="icon-btn-large control-item" title="Search Lists">
-                    <i class="ph ph-list-magnifying-glass"></i>
-                </button>
-
+            <!-- Row 2: Configuration & Toggles -->
+            <div class="header-row header-row-2">
                 <div class="sort-container control-item">
                     <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
                     <select id="sort-select" class="glass-select">
@@ -174,16 +168,28 @@
                     <button id="mode-copy-btn" class="mode-btn">Copy</button>
                 </div>
 
-                <button id="multi-edit-btn" class="btn secondary control-item" title="Toggle Multi-Edit Mode">
-                    <i class="ph ph-checks"></i> Multi
-                </button>
-
                 <button id="compact-view-btn" class="icon-btn-large control-item active" title="Toggle Compact View">
                     <i class="ph ph-arrows-out-simple"></i>
                 </button>
+            </div>
 
-                <button id="add-list-btn" class="btn primary control-item">+ List</button>
-                <button id="options-btn" class="btn secondary control-item">Options</button>
+            <!-- Row 3: Primary Actions -->
+            <div class="header-row header-row-3">
+                <div class="action-group">
+                    <button id="search-btn" class="icon-btn-large" title="Search Ideas">
+                        <i class="ph ph-magnifying-glass"></i>
+                    </button>
+                    <button id="search-list-btn" class="icon-btn-large" title="Search Lists">
+                        <i class="ph ph-list-magnifying-glass"></i>
+                    </button>
+                </div>
+
+                <button id="multi-edit-btn" class="btn secondary" title="Toggle Multi-Edit Mode">
+                    <i class="ph ph-checks"></i> Multi
+                </button>
+
+                <button id="add-list-btn" class="btn primary">+ List</button>
+                <button id="options-btn" class="btn secondary">Options</button>
             </div>
         </header>
 
@@ -555,11 +561,33 @@
         </div>
     </div>
 
+    <!-- QUICK MOVE MODAL -->
+    <div id="quick-move-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header-row">
+                <h2>Move Selected Items</h2>
+                <button id="quick-move-close-modal-btn" class="icon-btn-large">&times;</button>
+            </div>
+            <div class="manual-move-section">
+                <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:15px;">
+                    Select a destination list to move items to.
+                </p>
+                <div id="quick-move-list-container" class="quick-move-list" style="max-height: 50vh; overflow-y: auto;">
+                    <!-- Lists will be injected here as buttons -->
+                </div>
+            </div>
+            <div class="modal-actions-bar" style="margin-top: 15px; justify-content: flex-end;">
+                <button id="quick-move-cancel-btn" class="btn secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Floating Action Button for Multi Edit -->
     <div id="multi-edit-floating-bar" class="floating-action-bar hidden">
         <span id="multi-selected-count">0 Selected</span>
         <div class="floating-bar-buttons">
             <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
+            <button id="multi-move-quick-btn" class="btn primary">Move</button>
             <button id="multi-delete-forever-btn" class="btn danger hidden" style="display: none;"><i
                     class="ph ph-trash"></i> Delete Forever</button>
         </div>

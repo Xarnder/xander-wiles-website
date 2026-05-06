@@ -1023,9 +1023,21 @@ body {
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 20px;
     z-index: 10;
     flex-shrink: 0;
+}
+
+.header-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.action-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
 }
 
 .header-left {
@@ -2336,6 +2348,67 @@ input:checked+.slider-small:before {
     animation: floatUp 0.3s ease-out;
 }
 
+.floating-bar-buttons {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+/* Quick Move List Styles */
+.quick-move-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 5px;
+}
+
+.quick-move-board-header {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--accent-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    padding-left: 5px;
+    opacity: 0.8;
+}
+
+.quick-move-board-header:first-child {
+    margin-top: 0;
+}
+
+.quick-move-item {
+    width: 100%;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    padding: 12px 16px;
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.quick-move-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(4px);
+    border-color: var(--accent-blue);
+}
+
+.quick-move-item:active {
+    transform: scale(0.98);
+}
+
+.quick-move-item i {
+    opacity: 0.5;
+    font-size: 1.1rem;
+}
+
 
 
 .color-btn {
@@ -2523,62 +2596,119 @@ input:checked+.slider-small:before {
         scroll-snap-align: center;
     }
 
-    /* Slim Mobile Compact Header */
-    @media (max-width: 450px) {
+       /* Floating Bottom Header for Slim Mobile (Phone App Style) */
+    @media (max-width: 500px) {
         .app-header {
-            margin: 5px 10px;
-            padding: 8px 10px;
-            gap: 5px;
+            position: fixed !important;
+            top: auto !important;
+            bottom: calc(15px + env(safe-area-inset-bottom, 0px)) !important;
+            left: 10px !important;
+            right: 10px !important;
+            margin: 0 !important;
+            padding: 15px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 12px !important;
+            z-index: 9000 !important;
+            border-radius: 30px !important;
+            background: var(--dropdown-bg-glass) !important;
+            border: 1px solid var(--glass-border) !important;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6) !important;
+            backdrop-filter: blur(25px) !important;
+            -webkit-backdrop-filter: blur(25px) !important;
+            width: auto !important;
+        }
+
+        .header-row {
+            display: flex !important;
+            width: 100% !important;
+            justify-content: center !important;
+            align-items: center !important;
+            gap: 10px !important;
+        }
+
+        /* Adjust main container to fill more height */
+        .board-container {
+            padding-bottom: 170px !important;
+            height: 100% !important;
+            align-items: stretch !important;
+        }
+
+        .list-column {
+            height: 100% !important;
+            max-height: none !important;
+        }
+
+        /* Move Sync Indicator to the top */
+        .sync-indicator {
+            top: calc(10px + env(safe-area-inset-top, 0px)) !important;
+            bottom: auto !important;
+            left: 50% !important;
+            right: auto !important;
+            transform: translateX(-50%) !important;
+            z-index: 9500 !important;
+        }
+
+        .sync-pill {
+            padding: 4px 12px !important;
+            font-size: 0.75rem !important;
+        }
+
+        /* Float Multi-Edit Bar above the floating header */
+        .floating-action-bar {
+            bottom: calc(230px + env(safe-area-inset-bottom, 0px)) !important;
+            z-index: 9100 !important;
+            padding: 10px 20px !important;
+            width: 90% !important;
+            max-width: 400px !important;
+        }
+
+        /* Hide the redundant board title input on mobile only */
+        .project-title-input {
+            display: none !important;
         }
 
         .header-left {
-            gap: 8px;
-        }
-
-        .project-title-input {
-            font-size: 1.1rem;
-            max-width: 150px;
-        }
-
-        .header-controls {
-            gap: 4px;
-        }
-
-        .btn {
-            padding: 6px 10px;
-            font-size: 0.75rem;
-            border-radius: 6px;
-        }
-
-        .icon-btn-large {
-            font-size: 1.2rem;
-            padding: 4px;
-        }
-
-        .toggle-group {
-            padding: 2px;
-            gap: 1px;
-        }
-
-        .toggle-group .label {
-            display: none;
-        }
-
-        .mode-btn {
-            padding: 3px 6px;
-            font-size: 0.7rem;
-        }
-
-        .glass-select {
-            padding: 4px;
-            font-size: 0.75rem;
+            width: auto !important;
+            justify-content: center !important;
         }
 
         .total-count-badge {
-            font-size: 0.75rem;
-            padding: 2px 6px;
+            font-size: 0.7rem !important;
+        }
+
+        .btn {
+            white-space: nowrap !important;
+            padding: 8px 12px !important;
+            font-size: 0.75rem !important;
+        }
+
+        .icon-btn-large {
+            font-size: 1.2rem !important;
+            flex-shrink: 0 !important;
+        }
+
+        .app-version {
+            bottom: calc(210px + env(safe-area-inset-bottom, 0px)) !important;
+            z-index: 9001 !important;
+        }
+
+        .toast {
+            bottom: calc(280px + env(safe-area-inset-bottom, 0px)) !important;
+            z-index: 10001 !important;
         }
     }
+}
+
+.header-row-1 {
+    flex: 1;
+}
+
+.header-row-2,
+.header-row-3 {
+    flex-shrink: 0;
 }
 
 .hidden {
