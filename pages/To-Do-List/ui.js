@@ -1004,68 +1004,89 @@ export function updateSyncUI() {
     const now = Date.now();
     const diff = Math.floor((now - state.lastSyncTime) / 1000);
     const dot = document.getElementById('sync-dot');
+    const optionsDot = document.getElementById('options-sync-dot');
+    const optionsText = document.getElementById('options-sync-status-text');
+    const syncConsole = document.getElementById('sync-console');
 
     let timeStr = 'Synced';
     if (!dot) return;
 
     // Reset classes
     dot.className = 'sync-dot';
+    if (optionsDot) optionsDot.className = 'sync-dot';
+
+    let shouldShow = false;
 
     // ERROR STATE
     if (state.lastSyncError) {
-        dot.classList.add('offline');
+        const errorClass = 'offline';
+        dot.classList.add(errorClass);
+        if (optionsDot) optionsDot.classList.add(errorClass);
+
         let errMsg = "Sync Error";
         if (state.lastSyncError.code === 'resource-exhausted') errMsg = "Quota Exceeded";
         else if (state.lastSyncError.code === 'permission-denied') errMsg = "Permission Denied";
         else if (state.lastSyncError.code === 'unavailable') errMsg = "Network Issue";
 
-        syncStatusText.innerText = errMsg;
-        return;
-    }
+        timeStr = errMsg;
+        shouldShow = true;
+    } else if (!navigator.onLine) {
+        const offlineClass = 'offline';
+        dot.classList.add(offlineClass);
+        if (optionsDot) optionsDot.classList.add(offlineClass);
 
-    if (!navigator.onLine) {
         if (state.hasPendingWrites) {
-            dot.classList.add('offline'); // You might want a different color for "Offline with Changes"
-            // For now, let's say offline with changes is 'syncing' style or a new 'warning' style if we had one.
-            // But requirement was "Offline (Changes Queued)".
-            // Let's modify CSS for a new class if needed, or re-use existing.
-            // Let's assume 'offline' means red, maybe we want Orange.
             dot.style.backgroundColor = 'var(--accent-orange)';
+            if (optionsDot) optionsDot.style.backgroundColor = 'var(--accent-orange)';
             timeStr = 'Offline (Changes Queued)';
         } else {
-            dot.classList.add('offline');
+            dot.style.backgroundColor = '';
+            if (optionsDot) optionsDot.style.backgroundColor = '';
             timeStr = 'Offline';
-            dot.style.backgroundColor = ''; // Reset inline style
         }
+        shouldShow = true;
     } else {
         // ONLINE
-        dot.style.backgroundColor = ''; // Reset inline
+        dot.style.backgroundColor = '';
+        if (optionsDot) optionsDot.style.backgroundColor = '';
 
         if (state.hasPendingWrites) {
             dot.classList.add('syncing');
+            if (optionsDot) optionsDot.classList.add('syncing');
             timeStr = 'Syncing...';
+            shouldShow = true;
         } else {
+            dot.classList.add('online');
+            if (optionsDot) optionsDot.classList.add('online');
+
             if (diff < 5) {
-                dot.classList.add('online');
                 timeStr = 'Synced';
-            } else if (diff < 60) {
-                dot.classList.add('online');
+                shouldShow = true;
+            } else if (diff < 10) {
                 timeStr = 'Synced ' + diff + 's ago';
+                shouldShow = true;
             } else {
-                dot.classList.add('syncing'); // Idle but old sync? No, kept original logic for "old sync" maybe?
-                // Actually original logic:
-                // if (navigator.onLine) { dot.classList.add('syncing'); timeStr = ...m ago }
-                // That seems to imply "Active but not synced recently".
-                // I will improve this: If no pending writes, and online, it is Synced.
-                // The time diff is just informational.
-                dot.classList.add('online');
                 timeStr = diff < 60 ? 'Synced ' + diff + 's ago' : 'Synced ' + Math.floor(diff / 60) + 'm ago';
+                shouldShow = false; // Hide after 10s
             }
         }
     }
 
+    // Update Floating Pill
     if (syncStatusText) syncStatusText.innerText = timeStr;
+    if (syncConsole) {
+        if (shouldShow) {
+            syncConsole.classList.remove('sync-indicator-hidden');
+            syncConsole.classList.remove('hidden'); // Ensure base hidden is off if it was there
+        } else {
+            syncConsole.classList.add('sync-indicator-hidden');
+        }
+    }
+
+    // Update Options Menu Info
+    if (optionsText) optionsText.innerText = timeStr;
 }
+
 
 // --- DRAG END HANDLER ---
 

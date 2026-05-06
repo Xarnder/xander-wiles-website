@@ -2807,8 +2807,28 @@ input:checked+.slider-small:before {
     bottom: 20px;
     right: 20px;
     z-index: 1000;
-    transition: opacity 0.3s;
+    transition: opacity 0.5s ease, transform 0.5s ease;
 }
+
+.sync-indicator.sync-indicator-hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px);
+}
+
+.sync-info-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 15px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.sync-info-menu-item .sync-dot {
+    flex-shrink: 0;
+}
+
 
 .sync-pill {
     display: flex;
