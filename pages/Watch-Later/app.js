@@ -271,7 +271,7 @@ const confirmMessage = document.getElementById('confirm-message');
 const confirmYesBtn = document.getElementById('confirm-yes-btn');
 const confirmNoBtn = document.getElementById('confirm-no-btn');
 
-function showConfirm(title, message, onConfirm) {
+function showConfirm(title, message, onConfirm, onCancel) {
     confirmTitle.innerText = title;
     confirmMessage.innerText = message;
     confirmModal.classList.remove('hidden');
@@ -282,6 +282,7 @@ function showConfirm(title, message, onConfirm) {
     };
     
     confirmNoBtn.onclick = () => {
+        if (onCancel) onCancel();
         confirmModal.classList.add('hidden');
     };
 }
@@ -312,13 +313,16 @@ deleteEntryBtn.addEventListener('click', () => {
 });
 
 window.deleteEntry = async (id) => {
+    editModal.classList.add('hidden');
     showConfirm("Delete Entry?", "Are you sure you want to remove this movie/show from your list?", async () => {
         try {
             await deleteDoc(doc(db, "watches", id));
-            editModal.classList.add('hidden');
         } catch (e) {
             console.error("Delete error:", e);
         }
+    }, () => {
+        // If they cancel, show the edit modal again
+        editModal.classList.remove('hidden');
     });
 };
 
