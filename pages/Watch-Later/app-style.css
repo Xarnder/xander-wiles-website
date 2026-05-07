@@ -790,3 +790,18 @@ input[type="file"]::-webkit-file-upload-button {
         flex-shrink: 0;
     }
 }
+
+/* iOS Standalone Mode Optimization */
+@media (display-mode: standalone) {
+    #main-nav-placeholder {
+        display: none !important;
+    }
+
+    body {
+        padding-top: env(safe-area-inset-top);
+    }
+
+    .app-container {
+        padding-top: 10px; /* Small extra buffer below status bar */
+    }
+}
