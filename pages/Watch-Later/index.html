@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watch Later</title>
+
+    <!-- Favicon Links -->
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="app-style.css">
+
+    <!-- External Libraries (SortableJS for Drag & Drop) -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+
+<body>
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <div class="app-container">
+        <header class="app-header">
+            <h1>Watch Later</h1>
+            <div id="auth-section">
+                <button id="login-btn">Login with Google</button>
+                <div id="user-info" class="hidden">
+                    <span id="user-name"></span>
+                    <button id="edit-tiers-btn" style="background:rgba(255,255,255,0.1); border:none; margin-right:5px;">Tiers</button>
+                    <button id="edit-people-btn" style="background:rgba(255,255,255,0.1); border:none; margin-right:10px;">People</button>
+                    <button id="logout-btn">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="mode-container hidden" id="mode-selector">
+            <div class="mode-toggle">
+                <button class="mode-btn" data-mode="edit">Edit</button>
+                <button class="mode-btn" data-mode="organize">Organize</button>
+                <button class="mode-btn active" data-mode="watch">Watch</button>
+                <button class="mode-btn" data-mode="select">Select</button>
+            </div>
+        </div>
+
+        <!-- Batch Actions Bar -->
+        <div id="batch-actions-bar" class="batch-bar hidden">
+            <span id="selection-count">0 selected</span>
+            <div class="batch-btns">
+                <button id="batch-move-btn">Move</button>
+                <button id="batch-people-btn">Edit People</button>
+                <button id="batch-cancel-btn" style="background:none; border:1px solid rgba(255,255,255,0.2);">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Batch Move Modal -->
+        <div id="batch-move-modal" class="modal-overlay hidden">
+            <div class="modal-content glass-card">
+                <h3>Move Selected to...</h3>
+                <div id="batch-move-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;"></div>
+                <button class="close-modal-btn" style="margin-top: 15px; width: 100%;">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Batch People Modal -->
+        <div id="batch-people-modal" class="modal-overlay hidden">
+            <div class="modal-content glass-card">
+                <h3>Batch Edit People</h3>
+                <p style="font-size: 10px; color: #aaa; margin-bottom: 10px;">This will ADD selected people to all selected items.</p>
+                <div id="batch-people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button id="save-batch-people-btn" style="flex: 2; background: #3b82f6;">Apply to All</button>
+                    <button class="close-modal-btn" style="flex: 1;">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tier Manager Section -->
+        <section id="tier-manager" class="glass-card hidden">
+            <div class="input-header">
+                <h3>Manage Tiers</h3>
+                <button id="close-manager-btn" style="background:none; border:none; color:#aaa;">Close</button>
+            </div>
+            <div id="tier-edit-list"></div>
+            <button id="add-tier-btn" style="width:100%; margin-top:10px; background:#10b981;">+ Add New Tier</button>
+        </section>
+
+        <!-- People Manager Section -->
+        <section id="people-manager" class="glass-card hidden">
+            <div class="input-header">
+                <h3>Manage People</h3>
+                <button id="close-people-btn" style="background:none; border:none; color:#aaa;">Close</button>
+            </div>
+            <div id="people-edit-list"></div>
+            <button id="add-person-btn" style="width:100%; margin-top:10px; background:#10b981;">+ Add New Person</button>
+        </section>
+
+        <section id="input-section" class="glass-card hidden">
+            <!-- ... existing batch/single toggle ... -->
+            <div class="input-header">
+                <span id="mode-label">Add Single Link</span>
+                <a href="#" id="toggle-batch" style="font-size: 10px; color: #3b82f6; text-decoration: none;">Switch to Batch Mode</a>
+            </div>
+            <div id="single-input-row" class="input-row">
+                <input type="text" id="trailer-link" placeholder="Paste Trailer URL (YouTube)...">
+                <select id="type-toggle">
+                    <option value="movie">Movie</option>
+                    <option value="tv">TV Show</option>
+                </select>
+            </div>
+            <div id="batch-input-row" class="input-row hidden">
+                <textarea id="batch-links" placeholder="Paste multiple YouTube links here (one per line)..." rows="4"></textarea>
+            </div>
+            <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                <div style="font-size: 12px; color: #aaa;">Watch with:</div>
+                <div id="people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    <!-- People pills will be rendered here -->
+                </div>
+                <select id="initial-tier-select" style="width: 100%;"></select>
+            </div>
+            <button id="add-btn">Add to List</button>
+            <div id="batch-progress" class="hidden" style="margin-top: 10px; font-size: 12px; color: #aaa; text-align: center;"></div>
+        </section>
+
+        <main id="tier-container" class="hidden">
+            <!-- Tiers will be rendered here dynamically -->
+        </main>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="edit-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card">
+            <div class="input-header">
+                <h3>Edit Entry</h3>
+                <button id="close-edit-modal" style="background:none; border:none; color:#aaa;">Close</button>
+            </div>
+            <div class="input-row">
+                <input type="text" id="edit-title" placeholder="Title">
+            </div>
+            <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                <div style="font-size: 12px; color: #aaa;">Watched with:</div>
+                <div id="edit-people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+            </div>
+            <div style="margin-top: 15px;">
+                <a id="edit-youtube-link" href="#" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 12px;">Open in YouTube ↗</a>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="save-edit-btn" style="flex: 2; background: #3b82f6;">Save Changes</button>
+                <button id="delete-entry-btn" style="flex: 1; background: #ef4444;">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>

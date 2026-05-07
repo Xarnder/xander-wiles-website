@@ -1,0 +1,358 @@
+:root {
+    --glass: rgba(255, 255, 255, 0.1);
+    --border: rgba(255, 255, 255, 0.2);
+    --text: #ffffff;
+    --bg: #0f0f12;
+}
+
+.mode-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.mode-toggle {
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 4px;
+    display: flex;
+    gap: 4px;
+    backdrop-filter: blur(10px);
+}
+
+.mode-btn {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: 0.3s;
+}
+
+.mode-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-btn.active {
+    background: #3b82f6;
+    color: white;
+    box-shadow: 0 2px 10px rgba(59, 130, 246, 0.4);
+}
+
+/* Mode-Specific Cursors */
+body.mode-edit .media-card { cursor: pointer; }
+body.mode-organize .media-card { cursor: grab; }
+body.mode-watch .media-card { cursor: pointer; }
+body.mode-select .media-card { cursor: cell; }
+
+.batch-bar {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 15, 18, 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50px;
+    padding: 10px 25px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    z-index: 900;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translate(-50%, 100px); opacity: 0; }
+    to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.batch-btns {
+    display: flex;
+    gap: 10px;
+}
+
+.batch-btns button {
+    padding: 8px 16px;
+    font-size: 12px;
+    border-radius: 20px;
+}
+
+.media-card.selected {
+    outline: 3px solid #3b82f6;
+    outline-offset: -3px;
+    transform: scale(1.02);
+}
+
+.media-card.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: #3b82f6;
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+}
+
+.app-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.glass-card {
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.input-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+#mode-label {
+    font-size: 14px;
+    font-weight: bold;
+    opacity: 0.8;
+}
+
+input,
+select,
+textarea,
+button {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    outline: none;
+}
+
+textarea {
+    flex: 1;
+    width: 100%;
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+}
+
+input {
+    flex: 1;
+}
+
+button {
+    cursor: pointer;
+    background: #3b82f6;
+    font-weight: bold;
+    transition: 0.3s;
+}
+
+button:hover {
+    opacity: 0.8;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Tier Styles */
+.tier {
+    display: flex;
+    background: rgba(255, 255, 255, 0.03);
+    margin-bottom: 10px;
+    border-radius: 12px;
+    min-height: 120px;
+    overflow: hidden;
+}
+
+.tier-label {
+    width: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: bold;
+    color: #000;
+    text-align: center;
+    padding: 10px;
+}
+
+.person-pill {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: 0.2s;
+    user-select: none;
+}
+
+.person-pill:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.person-pill.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+.tier-edit-row, .people-edit-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 8px;
+    align-items: center;
+}
+
+.tier-edit-row input[type="text"], .people-edit-row input[type="text"] {
+    flex: 1;
+}
+
+.tier-edit-row input[type="color"] {
+    width: 40px;
+    height: 40px;
+    padding: 2px;
+    border: none;
+    cursor: pointer;
+}
+
+.tier-list {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    padding: 10px;
+    gap: 10px;
+    min-height: 100px;
+}
+
+/* Card Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    width: 90%;
+    max-width: 400px;
+    padding: 25px;
+}
+
+.media-card {
+    width: 140px;
+    background: var(--glass);
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: grab;
+    position: relative;
+    font-size: 12px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.media-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.media-card img {
+    width: 100%;
+    aspect-ratio: 16/9;
+    object-fit: cover;
+}
+
+.card-info {
+    padding: 8px;
+}
+
+.card-title {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #fff;
+}
+
+.badge {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    pointer-events: none;
+}
+
+.delete-btn {
+    background: none;
+    border: none;
+    color: #ff4d4d;
+    padding: 4px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    transition: background 0.2s;
+    border-radius: 0 0 10px 10px;
+}
+
+.delete-btn:hover {
+    background: rgba(255, 77, 77, 0.1);
+    opacity: 1;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .tier {
+        flex-direction: column;
+    }
+
+    .tier-label {
+        width: 100%;
+        height: 40px;
+    }
+
+    .input-row {
+        flex-direction: column;
+    }
+}
