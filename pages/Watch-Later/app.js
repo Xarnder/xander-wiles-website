@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // --- REPLACE THIS WITH YOUR FIREBASE CONFIG ---
@@ -17,6 +17,26 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
+
+// Set persistence to Local to ensure PWA and Safari keep the user logged in across sessions
+setPersistence(auth, browserLocalPersistence)
+    .then(() => {
+        console.log("Auth Persistence set to local");
+    })
+    .catch((error) => {
+        console.error("Auth Persistence Error:", error);
+    });
+
+// Check for redirect result on page load (in case fallback was used)
+getRedirectResult(auth)
+    .then((result) => {
+        if (result) {
+            console.log("Redirect Login Success:", result.user.displayName);
+        }
+    })
+    .catch((error) => {
+        console.error("Redirect Login Error:", error);
+    });
 
 // DOM Elements
 const loginBtn = document.getElementById('login-btn');
@@ -362,7 +382,25 @@ window.deletePerson = async (personId) => {
 
 // Auth Logic
 loginBtn.addEventListener('click', () => {
-    signInWithPopup(auth, provider).catch(err => console.error("Login Failed:", err));
+    // In iOS Safari standalone mode (PWA), popups are often blocked or problematic.
+    // We try popup first, and fallback to redirect if blocked.
+    signInWithPopup(auth, provider)
+        .then((result) => {
+            console.log("Popup Login Success:", result.user.displayName);
+        })
+        .catch((error) => {
+            console.warn("Popup Login Error or Blocked:", error);
+            // Fallback to redirect if popup is blocked or fails
+            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                console.log("Falling back to redirect login...");
+                signInWithRedirect(auth, provider).catch(redirectErr => {
+                    console.error("Redirect Fallback Error:", redirectErr);
+                    alert(`Login Failed: ${redirectErr.message}`);
+                });
+            } else {
+                console.error("Login Error:", error);
+            }
+        });
 });
 
 logoutBtn.addEventListener('click', () => signOut(auth));

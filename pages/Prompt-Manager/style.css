@@ -1454,6 +1454,15 @@ select:focus {
     box-shadow: 0 15px 45px rgba(255, 215, 0, 0.25) !important;
 }
 
+.newly-added-card {
+    border: 4px solid #ffd700 !important;
+    box-shadow: 0 8px 32px 0 rgba(255, 215, 0, 0.2) !important;
+}
+
+.newly-added-card:hover {
+    box-shadow: 0 15px 45px rgba(255, 215, 0, 0.35) !important;
+}
+
 /* --- Metadata Section --- */
 .modal-metadata {
     margin: 15px 0;
