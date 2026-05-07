@@ -382,25 +382,37 @@ window.deletePerson = async (personId) => {
 
 // Auth Logic
 loginBtn.addEventListener('click', () => {
-    // In iOS Safari standalone mode (PWA), popups are often blocked or problematic.
-    // We try popup first, and fallback to redirect if blocked.
-    signInWithPopup(auth, provider)
-        .then((result) => {
-            console.log("Popup Login Success:", result.user.displayName);
-        })
-        .catch((error) => {
-            console.warn("Popup Login Error or Blocked:", error);
-            // Fallback to redirect if popup is blocked or fails
-            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-                console.log("Falling back to redirect login...");
-                signInWithRedirect(auth, provider).catch(redirectErr => {
-                    console.error("Redirect Fallback Error:", redirectErr);
-                    alert(`Login Failed: ${redirectErr.message}`);
-                });
-            } else {
-                console.error("Login Error:", error);
-            }
+    const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    console.log("Login Clicked. Standalone:", isStandalone);
+
+    if (isStandalone) {
+        // In iOS Safari standalone mode, popups often hang or fail silently.
+        // Force redirect immediately.
+        console.log("Standalone mode detected: using Redirect");
+        signInWithRedirect(auth, provider).catch(err => {
+            console.error("Standalone Redirect Error:", err);
+            alert("Login Failed: " + err.message);
         });
+    } else {
+        // Normal browser: try popup first, with fallback
+        signInWithPopup(auth, provider)
+            .then((result) => {
+                console.log("Popup Login Success:", result.user.displayName);
+            })
+            .catch((error) => {
+                console.warn("Popup Login Error or Blocked:", error);
+                // Fallback to redirect if popup is blocked or fails
+                if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                    console.log("Falling back to redirect login...");
+                    signInWithRedirect(auth, provider).catch(redirectErr => {
+                        console.error("Redirect Fallback Error:", redirectErr);
+                        alert(`Login Failed: ${redirectErr.message}`);
+                    });
+                } else {
+                    alert("Login Error: " + error.message);
+                }
+            });
+    }
 });
 
 logoutBtn.addEventListener('click', () => signOut(auth));
