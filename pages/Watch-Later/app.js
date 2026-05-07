@@ -60,6 +60,8 @@ const editPeopleTogglesContainer = document.getElementById('edit-people-toggles'
 const editYoutubeLink = document.getElementById('edit-youtube-link');
 const saveEditBtn = document.getElementById('save-edit-btn');
 const deleteEntryBtn = document.getElementById('delete-entry-btn');
+const editTypeSelect = document.getElementById('edit-type-select');
+const batchTypeSelect = document.getElementById('batch-type-select');
 
 let currentUser = null;
 let isBatchMode = false;
@@ -71,6 +73,10 @@ let editingItemPeople = new Set(); // Track people for the item being edited
 let appMode = 'watch'; // edit, organize, watch, select
 let sortables = []; // Store SortableJS instances
 let selectedCardIds = new Set(); // Track selected cards for multi-select
+
+let cachedWatches = []; // Store raw watch data
+let typeFilter = 'all'; // all, movie, tv
+let peopleFilters = new Set(); // Set of person names
 
 // Mode Toggle Logic
 toggleBatchBtn.addEventListener('click', (e) => {
@@ -128,8 +134,48 @@ modeBtns.forEach(btn => {
         }
         
         updateSortableState();
+        
+        // Show/hide filter bar based on mode
+        const filterBar = document.getElementById('filter-bar');
+        if (appMode === 'watch' || appMode === 'edit') {
+            filterBar.classList.remove('hidden');
+        } else {
+            filterBar.classList.add('hidden');
+        }
     });
 });
+
+// Filter Bar Logic
+const typeFilterPills = document.querySelectorAll('#type-filter-pills .filter-pill');
+const peopleFilterPillsContainer = document.getElementById('people-filter-pills');
+
+typeFilterPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+        typeFilterPills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        typeFilter = pill.dataset.type;
+        renderAllCards();
+    });
+});
+
+function renderFilterPeople() {
+    peopleFilterPillsContainer.innerHTML = "";
+    userPeople.forEach(person => {
+        const pill = document.createElement('button');
+        pill.className = `filter-pill ${peopleFilters.has(person.name) ? 'active' : ''}`;
+        pill.innerText = person.name;
+        pill.onclick = () => {
+            if (peopleFilters.has(person.name)) {
+                peopleFilters.delete(person.name);
+            } else {
+                peopleFilters.add(person.name);
+            }
+            renderFilterPeople();
+            renderAllCards();
+        };
+        peopleFilterPillsContainer.appendChild(pill);
+    });
+}
 
 function updateSortableState() {
     sortables.forEach(s => {
@@ -172,6 +218,7 @@ window.executeBatchMove = async (tierId) => {
 
 batchPeopleBtn.addEventListener('click', () => {
     renderBatchPeopleToggles();
+    if (batchTypeSelect) batchTypeSelect.value = 'no-change';
     batchPeopleModal.classList.remove('hidden');
 });
 
@@ -196,10 +243,14 @@ function renderBatchPeopleToggles() {
 
 saveBatchPeopleBtn.addEventListener('click', async () => {
     const peopleStr = Array.from(batchSelectedPeople).join(', ');
+    const newType = batchTypeSelect.value;
+    
     for (const id of selectedCardIds) {
-        // For simplicity, we just add them. In a real app we might merge.
-        // We'll replace for now to follow the user request "add or remove" (replacement is easier for multi-edit)
-        await updateDoc(doc(db, "watches", id), { watchWith: peopleStr });
+        const updates = { watchWith: peopleStr };
+        if (newType !== 'no-change') {
+            updates.type = newType;
+        }
+        await updateDoc(doc(db, "watches", id), updates);
     }
     batchPeopleModal.classList.add('hidden');
     batchSelectedPeople.clear();
@@ -213,6 +264,28 @@ document.querySelectorAll('.close-modal-btn').forEach(btn => {
     });
 });
 
+// Confirmation Modal Logic
+const confirmModal = document.getElementById('confirm-modal');
+const confirmTitle = document.getElementById('confirm-title');
+const confirmMessage = document.getElementById('confirm-message');
+const confirmYesBtn = document.getElementById('confirm-yes-btn');
+const confirmNoBtn = document.getElementById('confirm-no-btn');
+
+function showConfirm(title, message, onConfirm) {
+    confirmTitle.innerText = title;
+    confirmMessage.innerText = message;
+    confirmModal.classList.remove('hidden');
+    
+    confirmYesBtn.onclick = () => {
+        onConfirm();
+        confirmModal.classList.add('hidden');
+    };
+    
+    confirmNoBtn.onclick = () => {
+        confirmModal.classList.add('hidden');
+    };
+}
+
 // Edit Modal Logic
 closeEditModalBtn.addEventListener('click', () => editModal.classList.add('hidden'));
 
@@ -220,11 +293,13 @@ saveEditBtn.addEventListener('click', async () => {
     if (!editingItemId) return;
     const newTitle = editTitleInput.value;
     const newPeople = Array.from(editingItemPeople).join(', ');
+    const newType = editTypeSelect.value;
     
     try {
         await updateDoc(doc(db, "watches", editingItemId), {
             movieTitle: newTitle,
-            watchWith: newPeople
+            watchWith: newPeople,
+            type: newType
         });
         editModal.classList.add('hidden');
     } catch (err) {
@@ -232,17 +307,54 @@ saveEditBtn.addEventListener('click', async () => {
     }
 });
 
-deleteEntryBtn.addEventListener('click', async () => {
-    if (!editingItemId) return;
-    if (confirm("Delete this entry?")) {
-        try {
-            await deleteDoc(doc(db, "watches", editingItemId));
-            editModal.classList.add('hidden');
-        } catch (err) {
-            console.error("Delete Error:", err);
-        }
-    }
+deleteEntryBtn.addEventListener('click', () => {
+    if (editingItemId) deleteEntry(editingItemId);
 });
+
+window.deleteEntry = async (id) => {
+    showConfirm("Delete Entry?", "Are you sure you want to remove this movie/show from your list?", async () => {
+        try {
+            await deleteDoc(doc(db, "watches", id));
+            editModal.classList.add('hidden');
+        } catch (e) {
+            console.error("Delete error:", e);
+        }
+    });
+};
+
+// Delete Tier
+window.deleteTier = async (tierId) => {
+    showConfirm("Delete Tier?", "This will remove the tier and move its items to the fallback tier. Continue?", async () => {
+        try {
+            const itemsToMigrate = query(collection(db, "watches"), where("tier", "==", tierId));
+            const snapshot = await getDocs(itemsToMigrate);
+            
+            // Find a fallback tier (first one that isn't this one)
+            const fallbackTier = userTiers.find(t => t.id !== tierId) || {id: 'default'};
+            
+            const batch = writeBatch(db);
+            snapshot.forEach(itemDoc => {
+                batch.update(itemDoc.ref, { tier: fallbackTier.id });
+            });
+            
+            await batch.commit();
+            await deleteDoc(doc(db, "tiers", tierId));
+        } catch (e) {
+            console.error("Error deleting tier:", e);
+        }
+    });
+};
+
+// Delete Person
+window.deletePerson = async (personId) => {
+    showConfirm("Remove Person?", "Are you sure you want to remove this person from your manager?", async () => {
+        try {
+            await deleteDoc(doc(db, "people", personId));
+        } catch (e) {
+            console.error("Error deleting person:", e);
+        }
+    });
+};
 
 // Auth Logic
 loginBtn.addEventListener('click', () => {
@@ -261,6 +373,7 @@ onAuthStateChanged(auth, async (user) => {
         inputSection.classList.remove('hidden');
         tierContainer.classList.remove('hidden');
         modeSelector.classList.remove('hidden');
+        document.getElementById('filter-bar').classList.remove('hidden');
         document.body.classList.add('mode-watch');
         await initializeTiers();
         await initializePeople();
@@ -273,6 +386,7 @@ onAuthStateChanged(auth, async (user) => {
         inputSection.classList.add('hidden');
         tierContainer.classList.add('hidden');
         modeSelector.classList.add('hidden');
+        document.getElementById('filter-bar').classList.add('hidden');
         document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select');
     }
 });
@@ -446,17 +560,40 @@ function loadData() {
         
         renderPeopleToggles();
         renderPeopleManager();
+        renderFilterPeople();
     });
 
     // Sync Watches
     const watchesQ = query(collection(db, "watches"), where("uid", "==", currentUser.uid));
     onSnapshot(watchesQ, (watchSnapshot) => {
-        // Clear all tier lists
-        document.querySelectorAll('.tier-list').forEach(l => l.innerHTML = "");
-        
+        cachedWatches = [];
         watchSnapshot.forEach((doc) => {
-            renderCard(doc.id, doc.data());
+            cachedWatches.push({ id: doc.id, ...doc.data() });
         });
+        renderAllCards();
+    });
+}
+
+function renderAllCards() {
+    // Clear all tier lists
+    document.querySelectorAll('.tier-list').forEach(l => l.innerHTML = "");
+    
+    const filtered = cachedWatches.filter(watch => {
+        // Type filter
+        if (typeFilter !== 'all' && watch.type !== typeFilter) return false;
+        
+        // People filter (ANY match)
+        if (peopleFilters.size > 0) {
+            const watchPeople = watch.watchWith ? watch.watchWith.split(', ').filter(s => s) : [];
+            const hasMatch = Array.from(peopleFilters).some(p => watchPeople.includes(p));
+            if (!hasMatch) return false;
+        }
+        
+        return true;
+    });
+    
+    filtered.forEach(watch => {
+        renderCard(watch.id, watch);
     });
 }
 
@@ -489,7 +626,7 @@ function renderTierManager() {
         row.innerHTML = `
             <input type="text" value="${tier.name}" onchange="updateTier('${tier.id}', {name: this.value})">
             <input type="color" value="${tier.color || '#cccccc'}" onchange="updateTier('${tier.id}', {color: this.value})">
-            <button onclick="deleteTier('${tier.id}')" style="background:#ef4444; padding:8px;">&times;</button>
+            <button class="delete-btn" onclick="deleteTier('${tier.id}')">&times;</button>
         `;
         tierEditList.appendChild(row);
     });
@@ -508,7 +645,7 @@ function renderPeopleManager() {
         row.className = 'people-edit-row';
         row.innerHTML = `
             <input type="text" value="${person.name}" onchange="updatePerson('${person.id}', this.value)">
-            <button onclick="deletePerson('${person.id}')" style="background:#ef4444; padding:8px;">&times;</button>
+            <button class="delete-btn" onclick="deletePerson('${person.id}')">&times;</button>
         `;
         peopleEditList.appendChild(row);
     });
@@ -577,11 +714,6 @@ window.updatePerson = async (id, newName) => {
     await updateDoc(doc(db, "people", id), { name: newName });
 };
 
-window.deletePerson = async (id) => {
-    if (confirm("Remove this person?")) {
-        await deleteDoc(doc(db, "people", id));
-    }
-};
 
 addPersonBtn.addEventListener('click', async () => {
     const name = prompt("Person's Name:");
@@ -596,22 +728,6 @@ window.updateTier = async (id, data) => {
     await updateDoc(doc(db, "tiers", id), data);
 };
 
-window.deleteTier = async (id) => {
-    if (userTiers.length <= 1) return alert("You need at least one tier!");
-    if (confirm("Delete this tier? Movies will move to the bottom tier.")) {
-        const targetTierId = userTiers.find(t => t.id !== id).id; // Fallback to any other tier
-        // Move items
-        const q = query(collection(db, "watches"), where("tier", "==", id));
-        // Note: In a real app we'd do a batch, but for simplicity:
-        onSnapshot(q, (snap) => {
-            snap.forEach(async (d) => {
-                await updateDoc(doc(db, "watches", d.id), { tier: targetTierId });
-            });
-        }, { once: true });
-        
-        await deleteDoc(doc(db, "tiers", id));
-    }
-};
 
 addTierBtn.addEventListener('click', async () => {
     const name = prompt("Tier Name:", "New Tier");
@@ -671,6 +787,7 @@ function openEditModal(id, data) {
     editingItemId = id;
     editTitleInput.value = data.movieTitle || "";
     editYoutubeLink.href = data.url;
+    if (editTypeSelect) editTypeSelect.value = data.type || 'movie';
     
     // Parse existing people
     editingItemPeople = new Set(data.watchWith ? data.watchWith.split(', ').filter(s => s) : []);

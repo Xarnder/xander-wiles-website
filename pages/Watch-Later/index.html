@@ -20,12 +20,20 @@
     <!-- Stylesheets -->
     <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="stylesheet" href="app-style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
 
     <!-- External Libraries (SortableJS for Drag & Drop) -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
 
 <body>
+    <div class="bg-glow">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
     <div id="main-nav-placeholder"></div>
     <script src="/assets/js/nav-loader.js"></script>
 
@@ -36,8 +44,8 @@
                 <button id="login-btn">Login with Google</button>
                 <div id="user-info" class="hidden">
                     <span id="user-name"></span>
-                    <button id="edit-tiers-btn" style="background:rgba(255,255,255,0.1); border:none; margin-right:5px;">Tiers</button>
-                    <button id="edit-people-btn" style="background:rgba(255,255,255,0.1); border:none; margin-right:10px;">People</button>
+                    <button id="edit-tiers-btn">Tiers</button>
+                    <button id="edit-people-btn">People</button>
                     <button id="logout-btn">Logout</button>
                 </div>
             </div>
@@ -52,13 +60,29 @@
             </div>
         </div>
 
+        <div id="filter-bar" class="filter-bar hidden">
+            <div class="filter-group">
+                <div class="filter-pills" id="type-filter-pills">
+                    <button class="filter-pill active" data-type="all">All</button>
+                    <button class="filter-pill" data-type="movie">Movies</button>
+                    <button class="filter-pill" data-type="tv">TV Shows</button>
+                </div>
+            </div>
+            <div class="filter-group">
+                <div class="filter-pills" id="people-filter-pills">
+                    <!-- Dynamic people pills -->
+                </div>
+            </div>
+        </div>
+
         <!-- Batch Actions Bar -->
         <div id="batch-actions-bar" class="batch-bar hidden">
             <span id="selection-count">0 selected</span>
             <div class="batch-btns">
                 <button id="batch-move-btn">Move</button>
-                <button id="batch-people-btn">Edit People</button>
-                <button id="batch-cancel-btn" style="background:none; border:1px solid rgba(255,255,255,0.2);">Cancel</button>
+                <button id="batch-people-btn">Edit</button>
+                <button id="batch-cancel-btn"
+                    style="background:none; border:1px solid rgba(255,255,255,0.2);">Cancel</button>
             </div>
         </div>
 
@@ -66,7 +90,8 @@
         <div id="batch-move-modal" class="modal-overlay hidden">
             <div class="modal-content glass-card">
                 <h3>Move Selected to...</h3>
-                <div id="batch-move-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;"></div>
+                <div id="batch-move-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+                </div>
                 <button class="close-modal-btn" style="margin-top: 15px; width: 100%;">Cancel</button>
             </div>
         </div>
@@ -75,11 +100,33 @@
         <div id="batch-people-modal" class="modal-overlay hidden">
             <div class="modal-content glass-card">
                 <h3>Batch Edit People</h3>
-                <p style="font-size: 10px; color: #aaa; margin-bottom: 10px;">This will ADD selected people to all selected items.</p>
+                <p style="font-size: 10px; color: #aaa; margin-bottom: 10px;">This will ADD selected people to all
+                    selected items.</p>
                 <div id="batch-people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+                <div style="margin-top: 15px;">
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Change Type:</div>
+                    <select id="batch-type-select" style="width: 100%;">
+                        <option value="no-change">-- No Change --</option>
+                        <option value="movie">Movie</option>
+                        <option value="tv">TV Show</option>
+                    </select>
+                </div>
                 <div style="margin-top: 20px; display: flex; gap: 10px;">
                     <button id="save-batch-people-btn" style="flex: 2; background: #3b82f6;">Apply to All</button>
                     <button class="close-modal-btn" style="flex: 1;">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Confirmation Modal -->
+        <div id="confirm-modal" class="modal-overlay hidden">
+            <div class="modal-content glass-card confirm-card">
+                <div class="confirm-icon">!</div>
+                <h3 id="confirm-title">Confirm Action</h3>
+                <p id="confirm-message"></p>
+                <div class="confirm-btns">
+                    <button id="confirm-yes-btn">Delete</button>
+                    <button id="confirm-no-btn">Cancel</button>
                 </div>
             </div>
         </div>
@@ -101,14 +148,15 @@
                 <button id="close-people-btn" style="background:none; border:none; color:#aaa;">Close</button>
             </div>
             <div id="people-edit-list"></div>
-            <button id="add-person-btn" style="width:100%; margin-top:10px; background:#10b981;">+ Add New Person</button>
+            <button id="add-person-btn" style="width:100%; margin-top:10px; background:#10b981;">+ Add New
+                Person</button>
         </section>
 
         <section id="input-section" class="glass-card hidden">
             <!-- ... existing batch/single toggle ... -->
             <div class="input-header">
                 <span id="mode-label">Add Single Link</span>
-                <a href="#" id="toggle-batch" style="font-size: 10px; color: #3b82f6; text-decoration: none;">Switch to Batch Mode</a>
+                <a href="#" id="toggle-batch">Switch to Batch Mode</a>
             </div>
             <div id="single-input-row" class="input-row">
                 <input type="text" id="trailer-link" placeholder="Paste Trailer URL (YouTube)...">
@@ -118,7 +166,8 @@
                 </select>
             </div>
             <div id="batch-input-row" class="input-row hidden">
-                <textarea id="batch-links" placeholder="Paste multiple YouTube links here (one per line)..." rows="4"></textarea>
+                <textarea id="batch-links" placeholder="Paste multiple YouTube links here (one per line)..."
+                    rows="4"></textarea>
             </div>
             <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
                 <div style="font-size: 12px; color: #aaa;">Watch with:</div>
@@ -128,7 +177,8 @@
                 <select id="initial-tier-select" style="width: 100%;"></select>
             </div>
             <button id="add-btn">Add to List</button>
-            <div id="batch-progress" class="hidden" style="margin-top: 10px; font-size: 12px; color: #aaa; text-align: center;"></div>
+            <div id="batch-progress" class="hidden"
+                style="margin-top: 10px; font-size: 12px; color: #aaa; text-align: center;"></div>
         </section>
 
         <main id="tier-container" class="hidden">
@@ -141,21 +191,26 @@
         <div class="modal-content glass-card">
             <div class="input-header">
                 <h3>Edit Entry</h3>
-                <button id="close-edit-modal" style="background:none; border:none; color:#aaa;">Close</button>
+                <button id="close-edit-modal">Close</button>
             </div>
             <div class="input-row">
                 <input type="text" id="edit-title" placeholder="Title">
+                <select id="edit-type-select" style="max-width: 120px;">
+                    <option value="movie">Movie</option>
+                    <option value="tv">TV Show</option>
+                </select>
             </div>
             <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
                 <div style="font-size: 12px; color: #aaa;">Watched with:</div>
                 <div id="edit-people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
             </div>
             <div style="margin-top: 15px;">
-                <a id="edit-youtube-link" href="#" target="_blank" style="color: #3b82f6; text-decoration: none; font-size: 12px;">Open in YouTube ↗</a>
+                <a id="edit-youtube-link" href="#" target="_blank"
+                    style="color: #3b82f6; text-decoration: none; font-size: 12px;">Open in YouTube ↗</a>
             </div>
             <div style="margin-top: 20px; display: flex; gap: 10px;">
-                <button id="save-edit-btn" style="flex: 2; background: #3b82f6;">Save Changes</button>
-                <button id="delete-entry-btn" style="flex: 1; background: #ef4444;">Delete</button>
+                <button id="save-edit-btn" style="flex: 2;">Save Changes</button>
+                <button id="delete-entry-btn" style="flex: 1;">Delete</button>
             </div>
         </div>
     </div>
