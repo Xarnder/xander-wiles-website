@@ -63,6 +63,7 @@ window.handleAddTask = function (e, listId) {
     });
 };
 window.archiveTask = (taskId) => {
+    if (state.expandedTaskId === taskId) state.expandedTaskId = null;
     API.archiveTask(taskId).then(() => {
         Utils.showToast(`${getTerm(true, true)} archived.`, "success");
     });
@@ -97,6 +98,10 @@ window.toggleTaskComplete = function (taskId, isChecked) {
                     API.archiveTask(taskId);
                 }
             }, 1000);
+        } else if (isChecked && !state.appData.settings.autoArchive) {
+            // If auto-archive is off, expand the task so the user can quickly archive it manually
+            state.expandedTaskId = taskId;
+            UI.renderBoard();
         }
     });
 };
@@ -641,6 +646,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const optionsModal = document.getElementById('options-modal-overlay');
     document.getElementById('options-btn').onclick = () => {
         UI.renderDefaultBoardSelect();
+        // Set correct drag mode active state
+        const cutBtn = document.getElementById('mode-cut-btn');
+        const copyBtn = document.getElementById('mode-copy-btn');
+        if (cutBtn && copyBtn) {
+            cutBtn.classList.toggle('active', state.dragMode === 'move');
+            copyBtn.classList.toggle('active', state.dragMode === 'copy');
+        }
         optionsModal.classList.remove('hidden');
     };
     

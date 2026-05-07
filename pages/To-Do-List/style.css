@@ -464,14 +464,12 @@
 [data-theme="fancy"] .task-card {
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-        box-shadow 0.3s ease,
+    transition: box-shadow 0.3s ease,
         border-color 0.3s ease,
         background 0.3s ease;
 }
 
 [data-theme="fancy"] .task-card:hover {
-    transform: translateY(-3px);
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(129, 140, 248, 0.3);
     box-shadow: 0 8px 25px rgba(99, 102, 241, 0.15), 0 0 15px rgba(99, 102, 241, 0.08);
@@ -527,7 +525,6 @@
 }
 
 [data-theme="fancy"] .btn.primary:hover {
-    transform: translateY(-2px);
     box-shadow: 0 0 35px rgba(129, 140, 248, 0.6),
         0 0 15px rgba(129, 140, 248, 0.4),
         inset 0 0 15px rgba(255, 255, 255, 0.35);
@@ -560,7 +557,6 @@
 
 [data-theme="fancy"] .btn.secondary:hover,
 [data-theme="fancy"] #modal-add-image-btn:hover {
-    transform: translateY(-2px);
     background: rgba(255, 255, 255, 0.15);
     border-color: rgba(129, 140, 248, 0.35);
 }
@@ -572,7 +568,6 @@
 }
 
 [data-theme="fancy"] .btn.danger:hover {
-    transform: translateY(-2px);
     box-shadow: 0 0 35px rgba(248, 113, 113, 0.55),
         inset 0 0 15px rgba(255, 255, 255, 0.2);
 }
@@ -587,7 +582,6 @@
 }
 
 [data-theme="fancy"] .menu-action-item:hover {
-    transform: translateY(-2px);
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(129, 140, 248, 0.3);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2),
@@ -923,7 +917,7 @@
 }
 
 [data-theme="fancy"] .color-btn:hover {
-    transform: scale(1.2) translateY(-2px);
+    transform: scale(1.2);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3),
         0 0 10px rgba(129, 140, 248, 0.2);
     border-color: rgba(129, 140, 248, 0.3);
@@ -1215,6 +1209,11 @@ body {
     gap: 2px;
 }
 
+.toggle-group .switch-small {
+    margin-right: 6px;
+    margin-left: 2px;
+}
+
 [data-theme="light"] .toggle-group {
     background: rgba(0, 0, 0, 0.05);
     border: 1px solid var(--glass-border);
@@ -1363,7 +1362,6 @@ body {
 #board-list-container .board-item:hover {
     background: rgba(255, 255, 255, 0.1);
     border-color: var(--accent-blue);
-    transform: translateY(-2px);
 }
 
 #board-list-container .board-item.active {

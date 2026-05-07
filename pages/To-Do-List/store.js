@@ -36,6 +36,7 @@ export const state = {
     // Multi-Edit State
     multiEditMode: false,
     selectedTaskIds: new Set(),
+    expandedTaskId: null,
     listSearchTerm: "",
 
     // Search State
@@ -73,6 +74,7 @@ export function resetState() {
         currentBoardId: null
     };
     state.selectedTaskIds.clear();
+    state.expandedTaskId = null;
 }
 
 export function cleanupListeners() {

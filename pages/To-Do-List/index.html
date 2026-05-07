@@ -136,10 +136,12 @@
                     </select>
                 </div>
 
-                <div class="toggle-group control-item" title="Drag Mode">
+                <div class="toggle-group control-item" title="Enable Dragging">
                     <span class="label">Drag:</span>
-                    <button id="mode-cut-btn" class="mode-btn active">Cut</button>
-                    <button id="mode-copy-btn" class="mode-btn">Copy</button>
+                    <label class="switch-small">
+                        <input type="checkbox" id="drag-tasks-toggle">
+                        <span class="slider-small round"></span>
+                    </label>
                 </div>
 
                 <button id="compact-view-btn" class="icon-btn-large control-item active" title="Toggle Compact View">
@@ -212,13 +214,13 @@
                 </button>
 
                 <hr class="dropdown-divider">
-                <label class="dropdown-item-toggle">
-                    <span>Enable Drag Tasks</span>
-                    <div class="switch-small">
-                        <input type="checkbox" id="drag-tasks-toggle">
-                        <span class="slider-small round"></span>
+                <div class="dropdown-item-toggle" style="cursor: default;">
+                    <span>Drag Mode</span>
+                    <div class="toggle-group" style="background: rgba(0,0,0,0.2); padding: 2px; border-radius: 8px; display: flex;">
+                        <button id="mode-cut-btn" class="mode-btn active" style="padding: 4px 10px; font-size: 0.8rem;">Cut</button>
+                        <button id="mode-copy-btn" class="mode-btn" style="padding: 4px 10px; font-size: 0.8rem;">Copy</button>
                     </div>
-                </label>
+                </div>
                 <label class="dropdown-item-toggle">
                     <span>Show Task Numbers</span>
                     <div class="switch-small">

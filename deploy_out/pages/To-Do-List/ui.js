@@ -87,7 +87,12 @@ export function renderBoard() {
     let selectionStart = 0;
     let selectionEnd = 0;
 
-    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+    const isTextInput = activeEl && (
+        (activeEl.tagName === 'INPUT' && ['text', 'search', 'url', 'email', 'password', 'number'].includes(activeEl.type)) ||
+        activeEl.tagName === 'TEXTAREA'
+    );
+
+    if (isTextInput) {
         focusedValue = activeEl.value;
         selectionStart = activeEl.selectionStart;
         selectionEnd = activeEl.selectionEnd;
@@ -193,18 +198,22 @@ export function renderBoard() {
     if (activeEl && activeEl.id) {
         const newEl = document.getElementById(activeEl.id);
         if (newEl) {
-            newEl.value = focusedValue;
-            newEl.focus();
-            if (newEl.setSelectionRange) newEl.setSelectionRange(selectionStart, selectionEnd);
+            if (isTextInput) {
+                newEl.value = focusedValue;
+                newEl.focus();
+                if (newEl.setSelectionRange) newEl.setSelectionRange(selectionStart, selectionEnd);
+            } else {
+                newEl.focus();
+            }
         }
-    } else if (focusedListId) {
+    } else if (focusedListId && isTextInput) {
         const listCol = document.querySelector(`.list-column[data-list-id="${focusedListId}"]`);
         if (listCol) {
             const input = listCol.querySelector('.add-task-input');
             if (input) {
                 input.value = focusedValue;
                 input.focus();
-                input.setSelectionRange(selectionStart, selectionEnd);
+                if (input.setSelectionRange) input.setSelectionRange(selectionStart, selectionEnd);
                 // Also trigger oninput logic to enable submit button
                 if (input.nextElementSibling && input.nextElementSibling.tagName === 'BUTTON') {
                     input.nextElementSibling.disabled = !input.value.trim();
@@ -848,6 +857,7 @@ export function createTaskElement(task, sourceListId, number) {
     if (isLinked) classes += ' linked-task';
     if (state.selectedTaskIds.has(task.id)) classes += ' selected';
     if (task.lastAutoMovedAt && (Date.now() - task.lastAutoMovedAt) <= 24 * 60 * 60 * 1000) classes += ' auto-moved-recently';
+    if (state.expandedTaskId === task.id) classes += ' show-actions';
 
     el.className = classes;
     el.dataset.taskId = task.id;
@@ -944,9 +954,15 @@ export function createTaskElement(task, sourceListId, number) {
     el.addEventListener('click', () => {
         if (task.archived) return;
 
-        const wasShowing = el.classList.contains('show-actions');
+        const wasShowing = (state.expandedTaskId === task.id);
 
-        // Close all other open actions
+        if (wasShowing) {
+            state.expandedTaskId = null;
+        } else {
+            state.expandedTaskId = task.id;
+        }
+
+        // Close all other open actions (UI only for immediate feedback, renderBoard will clean up)
         document.querySelectorAll('.task-card.show-actions').forEach(card => {
             if (card !== el) card.classList.remove('show-actions');
         });
