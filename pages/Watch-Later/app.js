@@ -39,8 +39,7 @@ getRedirectResult(auth)
     });
 
 // DOM Elements
-const loginPopupBtn = document.getElementById('login-popup-btn');
-const loginRedirectBtn = document.getElementById('login-redirect-btn');
+const googleLoginBtn = document.getElementById('google-login-btn');
 const loginContainer = document.getElementById('login-container');
 const logoutBtn = document.getElementById('logout-btn');
 const inputSection = document.getElementById('input-section');
@@ -384,27 +383,29 @@ window.deletePerson = async (personId) => {
 };
 
 // Auth Logic
-if (loginPopupBtn) loginPopupBtn.addEventListener('click', (e) => {
+if (googleLoginBtn) googleLoginBtn.addEventListener('click', (e) => {
     e.preventDefault();
-    console.log("Login (Popup) Clicked - Explicitly calling signInWithPopup");
+    console.log("Login Button Clicked");
+    
+    // In iOS/Safari Safari, popups are often blocked, especially in PWA mode.
+    // Try popup first. If it fails with a popup-blocked error, cleanly fallback to redirect.
     signInWithPopup(auth, provider)
         .then((result) => {
             console.log("Popup Login Success:", result.user.displayName);
         })
         .catch((error) => {
-            console.error("Popup Login Error:", error);
-            // If it failed, don't fallback to redirect here - the user has a separate button for that now.
-            alert("Popup Login Failed: " + error.message);
+            console.warn("Popup Login Error or Blocked:", error);
+            // Fallback to redirect if popup is blocked or fails
+            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                console.log("Falling back to redirect login...");
+                signInWithRedirect(auth, provider).catch(redirectErr => {
+                    console.error("Redirect Fallback Error:", redirectErr);
+                    alert(`Login Failed: ${redirectErr.message}`);
+                });
+            } else {
+                alert(`Login Error: ${error.message}`);
+            }
         });
-});
-
-if (loginRedirectBtn) loginRedirectBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    console.log("Login (Redirect) Clicked - Explicitly calling signInWithRedirect");
-    signInWithRedirect(auth, provider).catch(err => {
-        console.error("Redirect Login Error:", err);
-        alert("Redirect Login Failed: " + err.message);
-    });
 });
 
 logoutBtn.addEventListener('click', () => signOut(auth));
