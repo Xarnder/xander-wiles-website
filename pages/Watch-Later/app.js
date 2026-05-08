@@ -112,9 +112,11 @@ const saveEditBtn = document.getElementById('save-edit-btn');
 const deleteEntryBtn = document.getElementById('delete-entry-btn');
 const editTypeSelect = document.getElementById('edit-type-select');
 const editStatusSelect = document.getElementById('edit-status-select');
-const batchTypeSelect = document.getElementById('batch-type-select');
 const batchStatusSelect = document.getElementById('batch-status-select');
 const statusToggle = document.getElementById('status-toggle');
+const genreInput = document.getElementById('genre-input');
+const editGenreInput = document.getElementById('edit-genre-input');
+const genreDatalist = document.getElementById('genre-list');
 
 // Quick Sort Elements
 const quickSortBtn = document.getElementById('quick-sort-btn');
@@ -122,6 +124,7 @@ const quickSortTierModal = document.getElementById('quick-sort-tier-modal');
 const quickSortTierList = document.getElementById('quick-sort-tier-list');
 const prevQuickSortBtn = document.getElementById('prev-quick-sort-btn');
 const nextQuickSortBtn = document.getElementById('next-quick-sort-btn');
+const enableShortcutsToggle = document.getElementById('enable-shortcuts-toggle');
 
 let currentUser = null;
 let isBatchMode = false;
@@ -145,6 +148,7 @@ let cachedWatches = []; // Store raw watch data
 let typeFilter = 'all'; // all, movie, tv
 let watchStatusFilter = 'all'; // all, first-watch, rewatch
 let peopleFilters = new Set(); // Set of person names
+let genreFilters = new Set(); // Set of genre names
 let searchQuery = ""; // Track search query
 
 // Mode Toggle Logic
@@ -218,6 +222,13 @@ modeBtns.forEach(btn => {
 // Filter Bar Logic
 const typeFilterPills = document.querySelectorAll('#type-filter-pills .filter-pill');
 const peopleFilterPillsContainer = document.getElementById('people-filter-pills');
+const genreFilterPillsContainer = document.getElementById('genre-filter-pills');
+const openRenameGenreModalBtn = document.getElementById('open-rename-genre-modal-btn');
+const renameGenreModal = document.getElementById('rename-genre-modal');
+const renameGenreSelect = document.getElementById('rename-genre-select');
+const renameGenreNewNameInput = document.getElementById('rename-genre-new-name');
+const confirmRenameGenreBtn = document.getElementById('confirm-rename-genre-btn');
+const closeRenameGenreModalBtn = document.getElementById('close-rename-genre-modal-btn');
 
 typeFilterPills.forEach(pill => {
     pill.addEventListener('click', () => {
@@ -284,6 +295,104 @@ function renderFilterPeople() {
         };
         peopleFilterPillsContainer.appendChild(pill);
     });
+}
+
+function renderFilterGenres() {
+    if (!genreFilterPillsContainer) return;
+    genreFilterPillsContainer.innerHTML = "";
+    
+    // Get unique genres from cachedWatches
+    const genres = new Set();
+    cachedWatches.forEach(w => {
+        if (w.genre) genres.add(w.genre.trim());
+    });
+    
+    const sortedGenres = Array.from(genres).sort();
+    
+    sortedGenres.forEach(genre => {
+        const pill = document.createElement('button');
+        pill.className = `filter-pill ${genreFilters.has(genre) ? 'active' : ''}`;
+        pill.innerText = genre;
+        pill.onclick = () => {
+            if (genreFilters.has(genre)) {
+                genreFilters.delete(genre);
+            } else {
+                genreFilters.add(genre);
+            }
+            renderFilterGenres();
+            renderAllCards();
+        };
+        genreFilterPillsContainer.appendChild(pill);
+    });
+}
+
+if (openRenameGenreModalBtn) {
+    openRenameGenreModalBtn.addEventListener('click', () => {
+        // Get unique genres
+        const genres = new Set();
+        cachedWatches.forEach(w => {
+            if (w.genre) genres.add(w.genre.trim());
+        });
+        
+        if (genres.size === 0) return alert("No genres found to rename.");
+        
+        const sortedGenres = Array.from(genres).sort();
+        renameGenreSelect.innerHTML = sortedGenres.map(g => `<option value="${g}">${g}</option>`).join('');
+        renameGenreNewNameInput.value = sortedGenres[0];
+        renameGenreModal.classList.remove('hidden');
+    });
+}
+
+if (closeRenameGenreModalBtn) {
+    closeRenameGenreModalBtn.addEventListener('click', () => {
+        renameGenreModal.classList.add('hidden');
+    });
+}
+
+if (confirmRenameGenreBtn) {
+    confirmRenameGenreBtn.addEventListener('click', async () => {
+        const oldName = renameGenreSelect.value;
+        const newName = renameGenreNewNameInput.value.trim();
+        
+        if (!newName || newName === oldName) {
+            renameGenreModal.classList.add('hidden');
+            return;
+        }
+        
+        const itemsToUpdate = cachedWatches.filter(w => w.genre && w.genre.trim() === oldName);
+        
+        try {
+            confirmRenameGenreBtn.disabled = true;
+            confirmRenameGenreBtn.innerText = "Updating...";
+            
+            const promises = itemsToUpdate.map(item => 
+                updateDoc(doc(db, "watches", item.id), { genre: newName })
+            );
+            await Promise.all(promises);
+            
+            renameGenreModal.classList.add('hidden');
+            showSuccess(`Renamed ${itemsToUpdate.length} items`);
+        } catch (err) {
+            console.error("Rename Genre Error:", err);
+            alert("Error renaming items.");
+        } finally {
+            confirmRenameGenreBtn.disabled = false;
+            confirmRenameGenreBtn.innerText = "Rename All";
+        }
+    });
+}
+
+function showSuccess(message) {
+    const overlay = document.getElementById('success-overlay');
+    const msgEl = document.getElementById('success-msg');
+    if (!overlay || !msgEl) return;
+    
+    msgEl.innerText = message;
+    overlay.classList.remove('hidden');
+    
+    setTimeout(() => {
+        overlay.classList.add('hidden');
+    }, 3000);
 }
 
 function updateSortableState() {
@@ -464,13 +573,15 @@ async function saveCurrentQuickSortItem() {
     const newPeople = Array.from(editingItemPeople).join(', ');
     const newType = editTypeSelect.value;
     const newStatus = editStatusSelect.value;
+    const newGenre = editGenreInput.value;
     
     try {
         await updateDoc(doc(db, "watches", editingItemId), {
             movieTitle: newTitle,
             watchWith: newPeople,
             type: newType,
-            watchStatus: newStatus
+            watchStatus: newStatus,
+            genre: newGenre
         });
         console.log("Quick Sort: Item saved");
     } catch (err) {
@@ -510,6 +621,7 @@ async function moveCurrentToTier(tierId) {
     const newPeople = Array.from(editingItemPeople).join(', ');
     const newType = editTypeSelect.value;
     const newStatus = editStatusSelect.value;
+    const newGenre = editGenreInput.value;
     
     try {
         await updateDoc(doc(db, "watches", editingItemId), {
@@ -517,7 +629,8 @@ async function moveCurrentToTier(tierId) {
             watchWith: newPeople,
             type: newType,
             watchStatus: newStatus,
-            tier: tierId
+            tier: tierId,
+            genre: newGenre
         });
         console.log(`Quick Sort: Item moved to tier ${tierId} and saved`);
         
@@ -542,13 +655,15 @@ saveEditBtn.addEventListener('click', async () => {
     const newPeople = Array.from(editingItemPeople).join(', ');
     const newType = editTypeSelect.value;
     const newStatus = editStatusSelect.value;
+    const newGenre = editGenreInput.value;
     
     try {
         await updateDoc(doc(db, "watches", editingItemId), {
             movieTitle: newTitle,
             watchWith: newPeople,
             type: newType,
-            watchStatus: newStatus
+            watchStatus: newStatus,
+            genre: newGenre
         });
         editModal.classList.add('hidden');
     } catch (err) {
@@ -561,15 +676,31 @@ deleteEntryBtn.addEventListener('click', () => {
 });
 
 window.deleteEntry = async (id) => {
+    const wasInQuickSort = isQuickSortMode;
     editModal.classList.add('hidden');
+    
     showConfirm("Delete Entry?", "Are you sure you want to remove this movie/show from your list?", async () => {
         try {
             await deleteDoc(doc(db, "watches", id));
+            
+            // If we were in Quick Sort, continue to next item
+            if (wasInQuickSort) {
+                isQuickSortMode = true; // Ensure state is preserved
+                quickSortIndex++;
+                if (quickSortIndex < quickSortItems.length) {
+                    const nextItem = quickSortItems[quickSortIndex];
+                    openEditModal(nextItem.id, nextItem);
+                } else {
+                    isQuickSortMode = false;
+                    alert("Finished Quick Sort for this tier!");
+                }
+            }
         } catch (e) {
             console.error("Delete error:", e);
         }
     }, () => {
         // If they cancel, show the edit modal again
+        if (wasInQuickSort) isQuickSortMode = true;
         editModal.classList.remove('hidden');
     });
 };
@@ -598,15 +729,80 @@ window.deleteTier = async (tierId) => {
 };
 
 // Delete Person
-window.deletePerson = async (personId) => {
-    showConfirm("Remove Person?", "Are you sure you want to remove this person from your manager?", async () => {
+window.deletePerson = async (id) => {
+    showConfirm("Delete Person?", "This will remove them from your people list. Continue?", async () => {
         try {
-            await deleteDoc(doc(db, "people", personId));
+            await deleteDoc(doc(db, "people", id));
+            showSuccess("Person removed");
         } catch (e) {
-            console.error("Error deleting person:", e);
+            console.error("Delete error:", e);
         }
     });
 };
+
+// Edit Person (Rename)
+const renamePersonModal = document.getElementById('rename-person-modal');
+const renamePersonOldNameInput = document.getElementById('rename-person-old-name');
+const renamePersonNewNameInput = document.getElementById('rename-person-new-name');
+const confirmRenamePersonBtn = document.getElementById('confirm-rename-person-btn');
+const closeRenamePersonModalBtn = document.getElementById('close-rename-person-modal-btn');
+
+let currentRenamingPersonId = null;
+
+window.editPerson = async (oldName, personId) => {
+    currentRenamingPersonId = personId;
+    renamePersonOldNameInput.value = oldName;
+    renamePersonNewNameInput.value = oldName;
+    renamePersonModal.classList.remove('hidden');
+    setTimeout(() => renamePersonNewNameInput.focus(), 100);
+};
+
+if (closeRenamePersonModalBtn) {
+    closeRenamePersonModalBtn.addEventListener('click', () => {
+        renamePersonModal.classList.add('hidden');
+    });
+}
+
+if (confirmRenamePersonBtn) {
+    confirmRenamePersonBtn.addEventListener('click', async () => {
+        const oldName = renamePersonOldNameInput.value;
+        const newName = renamePersonNewNameInput.value.trim();
+        
+        if (!newName || newName === oldName || !currentRenamingPersonId) {
+            renamePersonModal.classList.add('hidden');
+            return;
+        }
+        
+        try {
+            confirmRenamePersonBtn.disabled = true;
+            confirmRenamePersonBtn.innerText = "Updating...";
+            
+            // 1. Update person document
+            await updateDoc(doc(db, "people", currentRenamingPersonId), {
+                name: newName
+            });
+            
+            // 2. Update all watches that mention this person
+            const itemsToUpdate = cachedWatches.filter(w => w.watchWith && w.watchWith.includes(oldName));
+            const promises = itemsToUpdate.map(item => {
+                const updatedPeople = item.watchWith.split(', ')
+                    .map(p => p.trim() === oldName ? newName : p)
+                    .join(', ');
+                return updateDoc(doc(db, "watches", item.id), { watchWith: updatedPeople });
+            });
+            await Promise.all(promises);
+            
+            renamePersonModal.classList.add('hidden');
+            showSuccess(`Renamed to ${newName}`);
+        } catch (err) {
+            console.error("Rename Person Error:", err);
+            alert("Error renaming person.");
+        } finally {
+            confirmRenamePersonBtn.disabled = false;
+            confirmRenamePersonBtn.innerText = "Update Everywhere";
+        }
+    });
+}
 
 if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     e.preventDefault();
@@ -877,11 +1073,13 @@ async function proceedWithSingleAdd(url) {
         movieTitle: cleanedTitle,
         type: typeToggle.value,
         watchStatus: statusToggle.value,
+        genre: genreInput.value,
         watchWith: Array.from(selectedPeople).join(', '),
         tier: initialTierSelect.value || (userTiers.length > 0 ? userTiers[userTiers.length - 1].id : 'default')
     });
 
     trailerInput.value = "";
+    genreInput.value = "";
     selectedPeople.clear();
     renderPeopleToggles();
     addBtn.disabled = false;
@@ -1026,10 +1224,22 @@ function loadData() {
         watchSnapshot.forEach((doc) => {
             cachedWatches.push({ id: doc.id, ...doc.data() });
         });
+        updateGenreDatalist();
         renderAllCards();
     }, (err) => {
         console.error("[Firestore] Watches listener error:", err);
     });
+}
+
+function updateGenreDatalist() {
+    if (!genreDatalist) return;
+    const genres = new Set();
+    cachedWatches.forEach(w => {
+        if (w.genre) genres.add(w.genre.trim());
+    });
+    
+    const sortedGenres = Array.from(genres).sort();
+    genreDatalist.innerHTML = sortedGenres.map(g => `<option value="${g}">`).join('');
 }
 
 function renderAllCards() {
@@ -1050,6 +1260,11 @@ function renderAllCards() {
             if (!hasMatch) return false;
         }
         
+        // Genre filter (ANY match)
+        if (genreFilters.size > 0) {
+            if (!watch.genre || !genreFilters.has(watch.genre.trim())) return false;
+        }
+        
         // Search filter
         if (searchQuery && !watch.movieTitle.toLowerCase().includes(searchQuery)) {
             return false;
@@ -1062,8 +1277,11 @@ function renderAllCards() {
         renderCard(watch.id, watch);
     });
 
+    // Update genre pills to match selection state
+    renderFilterGenres();
+
     // Update Tier Labels with Counts
-    const isFiltered = typeFilter !== 'all' || watchStatusFilter !== 'all' || peopleFilters.size > 0 || searchQuery !== "";
+    const isFiltered = typeFilter !== 'all' || watchStatusFilter !== 'all' || peopleFilters.size > 0 || genreFilters.size > 0 || searchQuery !== "";
     
     userTiers.forEach(tier => {
         const totalInTier = cachedWatches.filter(w => w.tier === tier.id).length;
@@ -1315,7 +1533,10 @@ function renderCard(id, data) {
                 <h4 class="card-title" style="flex: 1;">${displayTitle}</h4>
                 <span style="font-size: 9px; opacity: 0.5; white-space: nowrap; margin-top: 2px;">${timeAgo(data.timestamp)}</span>
             </div>
-            <p style="margin:0; font-size:10px; color:#aaa;">${data.watchWith ? 'With: ' + data.watchWith : 'Solo'}</p>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 4px;">
+                <p style="margin:0; font-size:10px; color:#aaa;">${data.watchWith ? 'With: ' + data.watchWith : 'Solo'}</p>
+                <span class="card-genre">${data.genre || ''}</span>
+            </div>
         </div>
         <div class="card-actions">
             <button class="action-btn copy-link-btn" title="Copy Link" onclick="event.stopPropagation(); copyToClipboard('${data.url}')">
@@ -1372,6 +1593,11 @@ function openEditModal(id, data) {
     editingItemId = id;
     editTitleInput.value = data.movieTitle || "";
     editYoutubeLink.href = data.url;
+    if (editGenreInput) editGenreInput.value = data.genre || "";
+    
+    const editThumb = document.getElementById('edit-thumb');
+    if (editThumb) editThumb.src = data.thumb || "";
+    
     if (editTypeSelect) editTypeSelect.value = data.type || 'movie';
     if (editStatusSelect) editStatusSelect.value = data.watchStatus || 'first-watch';
     
@@ -1498,22 +1724,19 @@ window.addEventListener('keydown', (e) => {
     
     // 4. Quick Sort Navigation Arrows
     if (isQuickSortMode && !editModal.classList.contains('hidden')) {
-        const isTextInput = document.activeElement === editTitleInput;
+        const isTextInput = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
         const isSelect = document.activeElement.tagName === 'SELECT';
+        const shortcutsEnabled = enableShortcutsToggle ? enableShortcutsToggle.checked : true;
         
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-            // Navigate if:
-            // - Not in a text input (Right/Down both work)
-            // - In a text input but using Down (Right moves cursor)
-            // - Not in a select (Down changes value in select)
-            const shouldNavigate = (!isTextInput && !isSelect) || (isTextInput && e.key === 'ArrowDown');
+            const shouldNavigate = (!isTextInput && !isSelect) || (document.activeElement === editTitleInput && e.key === 'ArrowDown') || (document.activeElement === editGenreInput && e.key === 'ArrowDown');
             
             if (shouldNavigate) {
                 e.preventDefault();
                 saveAndNavigate(1);
             }
         } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-            const shouldNavigate = (!isTextInput && !isSelect) || (isTextInput && e.key === 'ArrowUp');
+            const shouldNavigate = (!isTextInput && !isSelect) || (document.activeElement === editTitleInput && e.key === 'ArrowUp') || (document.activeElement === editGenreInput && e.key === 'ArrowUp');
             
             if (shouldNavigate) {
                 e.preventDefault();
@@ -1522,7 +1745,7 @@ window.addEventListener('keydown', (e) => {
         }
         
         // 5. Tier Shortcuts (q, w, e, r...)
-        if (!isTextInput && !isSelect) {
+        if (shortcutsEnabled && !isTextInput && !isSelect) {
             const key = e.key.toLowerCase();
             const keyIndex = QUICK_SORT_TIER_KEYS.indexOf(key);
             if (keyIndex !== -1 && keyIndex < userTiers.length) {
