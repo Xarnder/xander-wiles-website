@@ -110,7 +110,10 @@ const editYoutubeLink = document.getElementById('edit-youtube-link');
 const saveEditBtn = document.getElementById('save-edit-btn');
 const deleteEntryBtn = document.getElementById('delete-entry-btn');
 const editTypeSelect = document.getElementById('edit-type-select');
+const editStatusSelect = document.getElementById('edit-status-select');
 const batchTypeSelect = document.getElementById('batch-type-select');
+const batchStatusSelect = document.getElementById('batch-status-select');
+const statusToggle = document.getElementById('status-toggle');
 
 let currentUser = null;
 let isBatchMode = false;
@@ -126,6 +129,7 @@ let selectedCardIds = new Set(); // Track selected cards for multi-select
 
 let cachedWatches = []; // Store raw watch data
 let typeFilter = 'all'; // all, movie, tv
+let watchStatusFilter = 'all'; // all, first-watch, rewatch
 let peopleFilters = new Set(); // Set of person names
 
 // Mode Toggle Logic
@@ -161,6 +165,7 @@ const batchBar = document.getElementById('batch-actions-bar');
 const selectionCount = document.getElementById('selection-count');
 const batchMoveBtn = document.getElementById('batch-move-btn');
 const batchPeopleBtn = document.getElementById('batch-people-btn');
+const batchDeleteBtn = document.getElementById('batch-delete-btn');
 const batchCancelBtn = document.getElementById('batch-cancel-btn');
 
 const batchMoveModal = document.getElementById('batch-move-modal');
@@ -204,6 +209,16 @@ typeFilterPills.forEach(pill => {
         typeFilterPills.forEach(p => p.classList.remove('active'));
         pill.classList.add('active');
         typeFilter = pill.dataset.type;
+        renderAllCards();
+    });
+});
+
+const statusFilterPills = document.querySelectorAll('#status-filter-pills .filter-pill');
+statusFilterPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+        statusFilterPills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        watchStatusFilter = pill.dataset.status;
         renderAllCards();
     });
 });
@@ -273,6 +288,28 @@ batchPeopleBtn.addEventListener('click', () => {
     batchPeopleModal.classList.remove('hidden');
 });
 
+batchDeleteBtn.addEventListener('click', () => {
+    if (selectedCardIds.size === 0) return;
+    
+    showConfirm(
+        "Batch Delete?", 
+        `Are you sure you want to delete ${selectedCardIds.size} selected items? This action cannot be undone.`, 
+        async () => {
+            try {
+                const batch = writeBatch(db);
+                selectedCardIds.forEach(id => {
+                    batch.delete(doc(db, "watches", id));
+                });
+                await batch.commit();
+                clearSelection();
+            } catch (err) {
+                console.error("Batch Delete Error:", err);
+                alert("Failed to delete some items.");
+            }
+        }
+    );
+});
+
 let batchSelectedPeople = new Set();
 function renderBatchPeopleToggles() {
     batchPeopleToggles.innerHTML = "";
@@ -295,16 +332,21 @@ function renderBatchPeopleToggles() {
 saveBatchPeopleBtn.addEventListener('click', async () => {
     const peopleStr = Array.from(batchSelectedPeople).join(', ');
     const newType = batchTypeSelect.value;
+    const newStatus = batchStatusSelect.value;
     
     for (const id of selectedCardIds) {
         const updates = { watchWith: peopleStr };
         if (newType !== 'no-change') {
             updates.type = newType;
         }
+        if (newStatus !== 'no-change') {
+            updates.watchStatus = newStatus;
+        }
         await updateDoc(doc(db, "watches", id), updates);
     }
     batchPeopleModal.classList.add('hidden');
     batchSelectedPeople.clear();
+    if (batchStatusSelect) batchStatusSelect.value = 'no-change';
     clearSelection();
 });
 
@@ -346,12 +388,14 @@ saveEditBtn.addEventListener('click', async () => {
     const newTitle = editTitleInput.value;
     const newPeople = Array.from(editingItemPeople).join(', ');
     const newType = editTypeSelect.value;
+    const newStatus = editStatusSelect.value;
     
     try {
         await updateDoc(doc(db, "watches", editingItemId), {
             movieTitle: newTitle,
             watchWith: newPeople,
-            type: newType
+            type: newType,
+            watchStatus: newStatus
         });
         editModal.classList.add('hidden');
     } catch (err) {
@@ -568,6 +612,7 @@ async function handleSingleAdd() {
         thumb: getThumbnail(url),
         movieTitle: cleanedTitle,
         type: typeToggle.value,
+        watchStatus: statusToggle.value,
         watchWith: Array.from(selectedPeople).join(', '),
         tier: initialTierSelect.value || (userTiers.length > 0 ? userTiers[userTiers.length - 1].id : 'default')
     });
@@ -607,6 +652,7 @@ async function handleBatchAdd() {
             thumb: `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
             movieTitle: cleanedTitle,
             type: 'movie', // Default for batch
+            watchStatus: statusToggle.value,
             watchWith: Array.from(selectedPeople).join(', '),
             tier: initialTierSelect.value || (userTiers.length > 0 ? userTiers[userTiers.length - 1].id : 'default')
         });
@@ -691,6 +737,9 @@ function renderAllCards() {
     const filtered = cachedWatches.filter(watch => {
         // Type filter
         if (typeFilter !== 'all' && watch.type !== typeFilter) return false;
+        
+        // Watch Status filter
+        if (watchStatusFilter !== 'all' && (watch.watchStatus || 'first-watch') !== watchStatusFilter) return false;
         
         // People filter (ANY match)
         if (peopleFilters.size > 0) {
@@ -863,6 +912,9 @@ function renderCard(id, data) {
     card.innerHTML = `
         <img src="${data.thumb}" alt="thumbnail">
         <span class="badge">${data.type.toUpperCase()}</span>
+        ${data.watchStatus === 'rewatch' 
+            ? '<span class="badge rewatch-badge">REWATCH</span>' 
+            : '<span class="badge first-watch-badge">FIRST WATCH</span>'}
         <div class="card-info">
             <h4 class="card-title">${displayTitle}</h4>
             <p style="margin:0; font-size:10px; color:#aaa;">${data.watchWith ? 'With: ' + data.watchWith : 'Solo'}</p>
@@ -898,6 +950,7 @@ function openEditModal(id, data) {
     editTitleInput.value = data.movieTitle || "";
     editYoutubeLink.href = data.url;
     if (editTypeSelect) editTypeSelect.value = data.type || 'movie';
+    if (editStatusSelect) editStatusSelect.value = data.watchStatus || 'first-watch';
     
     // Parse existing people
     editingItemPeople = new Set(data.watchWith ? data.watchWith.split(', ').filter(s => s) : []);

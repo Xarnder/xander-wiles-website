@@ -183,7 +183,7 @@ button {
     color: white;
 }
 
-#logout-btn:hover, #delete-entry-btn:hover, .delete-btn:hover {
+#logout-btn:hover, #delete-entry-btn:hover, .delete-btn:hover, #batch-delete-btn:hover {
     background: rgba(239, 68, 68, 0.8);
     color: white;
     box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
@@ -388,6 +388,20 @@ input[type="text"]:focus, textarea:focus, select:focus {
     font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
+}
+
+.rewatch-badge {
+    left: auto;
+    right: 8px;
+    background: var(--neon-purple);
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+}
+
+.first-watch-badge {
+    left: auto;
+    right: 8px;
+    background: var(--accent);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
 }
 
 .card-info {
