@@ -240,6 +240,14 @@ button {
     background: rgba(255, 255, 255, 0.02);
     border-radius: var(--radius);
     border: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+#search-input {
+    min-width: 200px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 10px 16px !important;
 }
 
 .filter-group {
@@ -337,6 +345,15 @@ input[type="text"]:focus, textarea:focus, select:focus {
     justify-content: center;
     text-align: center;
     word-break: break-word;
+    transition: var(--transition);
+}
+
+.mode-reorder-tiers .tier-label {
+    cursor: grab;
+}
+
+.mode-reorder-tiers .tier-label:active {
+    cursor: grabbing;
 }
 
 .tier-list {
@@ -445,6 +462,64 @@ input[type="text"]:focus, textarea:focus, select:focus {
     font-size: 12px;
     font-weight: 800;
     z-index: 10;
+}
+
+/* Card Quick Actions */
+.card-actions {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+    padding: 10px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: var(--transition);
+    pointer-events: none;
+}
+
+.media-card:hover .card-actions {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.action-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--glass-heavy);
+    backdrop-filter: blur(4px);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    transition: var(--transition);
+    padding: 0;
+}
+
+.action-btn:hover {
+    background: var(--accent);
+    transform: scale(1.1);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* Empty States */
+.empty-state {
+    width: 100%;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    font-style: italic;
+    background: rgba(255, 255, 255, 0.01);
+    border-radius: var(--radius);
+    border: 1px dashed rgba(255, 255, 255, 0.05);
 }
 
 /* --- People Pills --- */
@@ -631,11 +706,22 @@ input[type="text"]:focus, textarea:focus, select:focus {
 .modal-content {
     width: 90%;
     max-width: 440px;
+    max-height: 90vh;
+    overflow-y: auto;
     animation: zoomIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     background: rgba(25, 25, 30, 0.95);
     padding: 30px;
     border-radius: var(--radius);
     border: 1px solid var(--border);
+}
+
+.modal-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 10px;
 }
 
 @keyframes zoomIn {
@@ -811,18 +897,53 @@ input[type="file"]::-webkit-file-upload-button {
         flex-direction: column;
     }
 
-    /* Modal input rows with delete buttons MUST stay horizontal */
-    .modal-content .input-row, .tier-edit-row, .people-edit-row {
+    /* Modal input rows with multiple controls stack on mobile */
+    .modal-content .input-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .modal-content .input-row select {
+        max-width: none !important;
+        width: 100%;
+    }
+
+    /* Tier/People edit rows keep horizontal layout but with better gap handling */
+    .tier-edit-row, .people-edit-row {
         flex-direction: row !important;
         display: flex !important;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         width: 100%;
         margin-bottom: 10px;
     }
 
-    .modal-content .input-row input, .tier-edit-row input, .people-edit-row input {
-        flex: 1;
+    .modal-content {
+        padding: 20px;
+        width: 95%;
+    }
+
+    .modal-content h3 {
+        font-size: 1.2rem;
+    }
+
+    .confirm-card {
+        padding: 30px 20px;
+    }
+
+    /* Stack buttons in modals on mobile */
+    .modal-content div[style*="display: flex"] {
+        flex-direction: column !important;
+        gap: 10px !important;
+    }
+
+    /* Except for specific horizontal rows that should stay horizontal */
+    .tier-edit-row, .people-edit-row, .confirm-btns, .duplicate-btns, .batch-btns {
+        flex-direction: row !important;
+    }
+
+    .modal-content button {
+        width: 100%;
     }
 
     .mode-btn {

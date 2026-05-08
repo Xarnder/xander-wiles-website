@@ -91,6 +91,7 @@ const tierManagerSection = document.getElementById('tier-manager');
 const closeManagerBtn = document.getElementById('close-manager-btn');
 const tierEditList = document.getElementById('tier-edit-list');
 const addTierBtn = document.getElementById('add-tier-btn');
+const autoColorBtn = document.getElementById('auto-color-btn');
 const initialTierSelect = document.getElementById('initial-tier-select');
 
 // People Management Elements
@@ -125,12 +126,14 @@ let editingItemPeople = new Set(); // Track people for the item being edited
 let appMode = 'watch'; // edit, organize, watch, select
 
 let sortables = []; // Store SortableJS instances
+let tierSortable = null; // Store SortableJS instance for tiers
 let selectedCardIds = new Set(); // Track selected cards for multi-select
 
 let cachedWatches = []; // Store raw watch data
 let typeFilter = 'all'; // all, movie, tv
 let watchStatusFilter = 'all'; // all, first-watch, rewatch
 let peopleFilters = new Set(); // Set of person names
+let searchQuery = ""; // Track search query
 
 // Mode Toggle Logic
 toggleBatchBtn.addEventListener('click', (e) => {
@@ -181,7 +184,7 @@ modeBtns.forEach(btn => {
         appMode = btn.dataset.mode;
         
         // Update body class for cursors
-        document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select');
+        document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select', 'mode-reorder-tiers');
         document.body.classList.add(`mode-${appMode}`);
         
         if (appMode !== 'select') {
@@ -223,6 +226,35 @@ statusFilterPills.forEach(pill => {
     });
 });
 
+const searchInput = document.getElementById('search-input');
+if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value.toLowerCase();
+        renderAllCards();
+    });
+}
+
+const selectAllBtn = document.getElementById('batch-select-all-btn');
+const deselectAllBtn = document.getElementById('batch-deselect-all-btn');
+
+if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', () => {
+        const visibleCards = document.querySelectorAll('.media-card');
+        visibleCards.forEach(card => {
+            const id = card.dataset.id;
+            selectedCardIds.add(id);
+            card.classList.add('selected');
+        });
+        updateBatchBar();
+    });
+}
+
+if (deselectAllBtn) {
+    deselectAllBtn.addEventListener('click', () => {
+        clearSelection();
+    });
+}
+
 function renderFilterPeople() {
     peopleFilterPillsContainer.innerHTML = "";
     userPeople.forEach(person => {
@@ -246,6 +278,10 @@ function updateSortableState() {
     sortables.forEach(s => {
         s.option("disabled", appMode !== 'organize');
     });
+    
+    if (tierSortable) {
+        tierSortable.option("disabled", appMode !== 'reorder-tiers');
+    }
 }
 
 function clearSelection() {
@@ -649,6 +685,41 @@ function getContrastColor(hexColor) {
     return brightness > 128 ? '#000000' : '#ffffff';
 }
 
+// Helper: Format time ago
+function timeAgo(timestamp) {
+    if (!timestamp) return "";
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + "y";
+    
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + "mo";
+    
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + "d";
+    
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + "h";
+    
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + "m";
+    
+    return "now";
+}
+
+// Helper: HSL to Hex
+function hslToHex(h, s, l) {
+    l /= 100;
+    const a = s * Math.min(l, 1 - l) / 100;
+    const f = n => {
+        const k = (n + h / 30) % 12;
+        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+        return Math.round(255 * color).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+}
+
 // Add Item(s)
 addBtn.addEventListener('click', async () => {
     if (isBatchMode) {
@@ -698,6 +769,9 @@ async function proceedWithSingleAdd(url) {
     renderPeopleToggles();
     addBtn.disabled = false;
     addBtn.innerText = "Add to List";
+    
+    // Auto-focus back to input
+    trailerInput.focus();
 }
 
 async function handleBatchAdd() {
@@ -859,11 +933,27 @@ function renderAllCards() {
             if (!hasMatch) return false;
         }
         
+        // Search filter
+        if (searchQuery && !watch.movieTitle.toLowerCase().includes(searchQuery)) {
+            return false;
+        }
+        
         return true;
     });
     
     filtered.forEach(watch => {
         renderCard(watch.id, watch);
+    });
+
+    // Handle Empty States
+    userTiers.forEach(tier => {
+        const list = document.getElementById(`list-${tier.id}`);
+        if (list && list.children.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.innerText = searchQuery ? 'No matches found in this tier' : 'No items in this tier';
+            list.appendChild(empty);
+        }
     });
 }
 
@@ -889,6 +979,34 @@ function renderTiers() {
         
         // Init Sortable for this new list
         initSortable(tierDiv.querySelector('.tier-list'));
+    });
+    
+    initTierSortable();
+}
+
+function initTierSortable() {
+    if (tierSortable) tierSortable.destroy();
+    
+    tierSortable = new Sortable(tierContainer, {
+        animation: 150,
+        handle: '.tier-label', // Allow dragging by the label
+        disabled: appMode !== 'reorder-tiers',
+        onEnd: async () => {
+            const tiers = Array.from(tierContainer.querySelectorAll('.tier'));
+            const batch = writeBatch(db);
+            
+            tiers.forEach((el, index) => {
+                const id = el.dataset.tier;
+                batch.update(doc(db, "tiers", id), { order: index });
+            });
+            
+            try {
+                await batch.commit();
+                console.log("Tier order updated");
+            } catch (err) {
+                console.error("Tier Order Sync Error:", err);
+            }
+        }
     });
 }
 
@@ -1008,6 +1126,24 @@ addTierBtn.addEventListener('click', async () => {
     });
 });
 
+if (autoColorBtn) autoColorBtn.addEventListener('click', async () => {
+    if (userTiers.length === 0) return;
+    
+    const batch = writeBatch(db);
+    userTiers.forEach((tier, index) => {
+        const hue = (index / userTiers.length) * 360;
+        const hex = hslToHex(hue, 70, 60); // 70% saturation, 60% lightness for vibrant colors
+        batch.update(doc(db, "tiers", tier.id), { color: hex });
+    });
+    
+    try {
+        await batch.commit();
+        console.log("Tier colors updated to spectrum");
+    } catch (err) {
+        console.error("Auto Color Sync Error:", err);
+    }
+});
+
 function renderCard(id, data) {
     let list = document.getElementById(`list-${data.tier}`);
     
@@ -1033,8 +1169,27 @@ function renderCard(id, data) {
                 ? '<span class="badge new-episodes-badge">NEW EPS</span>'
                 : '<span class="badge first-watch-badge">FIRST WATCH</span>'}
         <div class="card-info">
-            <h4 class="card-title">${displayTitle}</h4>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 5px;">
+                <h4 class="card-title" style="flex: 1;">${displayTitle}</h4>
+                <span style="font-size: 9px; opacity: 0.5; white-space: nowrap; margin-top: 2px;">${timeAgo(data.timestamp)}</span>
+            </div>
             <p style="margin:0; font-size:10px; color:#aaa;">${data.watchWith ? 'With: ' + data.watchWith : 'Solo'}</p>
+        </div>
+        <div class="card-actions">
+            <button class="action-btn copy-link-btn" title="Copy Link" onclick="event.stopPropagation(); copyToClipboard('${data.url}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </button>
+            <button class="action-btn delete-card-btn" title="Quick Delete" onclick="event.stopPropagation(); deleteEntry('${id}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+            </button>
         </div>
     `;
     
@@ -1054,13 +1209,22 @@ function renderCard(id, data) {
         if (appMode === 'watch') {
             window.open(data.url, '_blank');
         } else {
-            // Edit Mode
+            // Edit Mode or others
             openEditModal(id, data);
         }
     };
     
     list.appendChild(card);
 }
+
+window.copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+        // Optional: toast or visual feedback
+        console.log("Copied to clipboard");
+    }).catch(err => {
+        console.error("Failed to copy:", err);
+    });
+};
 
 function openEditModal(id, data) {
     editingItemId = id;
@@ -1069,11 +1233,23 @@ function openEditModal(id, data) {
     if (editTypeSelect) editTypeSelect.value = data.type || 'movie';
     if (editStatusSelect) editStatusSelect.value = data.watchStatus || 'first-watch';
     
+    // Date Added display
+    const dateAddedEl = document.getElementById('edit-date-added');
+    if (dateAddedEl && data.timestamp) {
+        const date = new Date(data.timestamp);
+        dateAddedEl.innerText = `Added on: ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    } else if (dateAddedEl) {
+        dateAddedEl.innerText = "Added on: Unknown";
+    }
+    
     // Parse existing people
     editingItemPeople = new Set(data.watchWith ? data.watchWith.split(', ').filter(s => s) : []);
     renderEditPeopleToggles();
     
     editModal.classList.remove('hidden');
+    
+    // Focus title input
+    setTimeout(() => editTitleInput.focus(), 100);
 }
 
 function renderEditPeopleToggles() {
@@ -1116,3 +1292,33 @@ function initSortable(el) {
     });
     sortables.push(s);
 }
+
+// Global Keyboard Shortcuts
+window.addEventListener('keydown', (e) => {
+    // 1. ESC to close modals
+    if (e.key === 'Escape') {
+        const openModals = document.querySelectorAll('.modal-overlay:not(.hidden)');
+        openModals.forEach(m => m.classList.add('hidden'));
+        
+        // Also close managers
+        if (tierManagerSection) tierManagerSection.classList.add('hidden');
+        if (peopleManagerSection) peopleManagerSection.classList.add('hidden');
+    }
+    
+    // 2. / or Cmd/Ctrl + F to focus search
+    if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key === 'f')) {
+        if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+            e.preventDefault();
+            if (searchInput) searchInput.focus();
+        }
+    }
+    
+    // 3. Enter in Add section or Modals
+    if (e.key === 'Enter') {
+        if (document.activeElement === trailerInput) {
+            addBtn.click();
+        } else if (document.activeElement === editTitleInput) {
+            saveEditBtn.click();
+        }
+    }
+});

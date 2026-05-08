@@ -100,6 +100,7 @@
                 <button class="mode-btn" data-mode="organize">Organize</button>
                 <button class="mode-btn active" data-mode="watch">Watch</button>
                 <button class="mode-btn" data-mode="select">Select</button>
+                <button class="mode-btn" data-mode="reorder-tiers">Reorder Tiers</button>
             </div>
         </div>
 
@@ -124,17 +125,23 @@
                     <!-- Dynamic people pills -->
                 </div>
             </div>
+            <div class="filter-group" style="flex: 1; justify-content: flex-end;">
+                <input type="text" id="search-input" placeholder="Search titles..." style="padding: 8px 16px; font-size: 13px; margin: 0; width: 100%; max-width: 300px;">
+            </div>
         </div>
 
         <!-- Batch Actions Bar -->
         <div id="batch-actions-bar" class="batch-bar hidden">
             <span id="selection-count">0 selected</span>
             <div class="batch-btns">
+                <button id="batch-select-all-btn" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);">Select All</button>
+                <button id="batch-deselect-all-btn" style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2);">Clear</button>
+                <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
                 <button id="batch-move-btn">Move</button>
                 <button id="batch-people-btn">Edit</button>
                 <button id="batch-delete-btn" style="background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #fecaca;">Delete</button>
                 <button id="batch-cancel-btn"
-                    style="background:none; border:1px solid rgba(255,255,255,0.2);">Cancel</button>
+                    style="background:none; border:1px solid rgba(255,255,255,0.2);">Done</button>
             </div>
         </div>
 
@@ -220,6 +227,7 @@
             </div>
             <div id="tier-edit-list"></div>
             <button id="add-tier-btn" style="width:100%; margin-top:10px; background:#10b981;">+ Add New Tier</button>
+            <button id="auto-color-btn" style="width:100%; margin-top:10px; background:linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff); border: 1px solid rgba(255,255,255,0.2); text-shadow: 0 1px 3px rgba(0,0,0,0.5);">Auto Spectrum Colors</button>
         </section>
 
         <!-- People Manager Section -->
@@ -277,6 +285,7 @@
         <div class="modal-content glass-card">
             <div class="input-header">
                 <h3>Edit Entry</h3>
+                <div id="edit-date-added" style="font-size: 10px; color: #aaa; margin-top: -10px; margin-bottom: 15px;">Added on: --</div>
                 <button id="close-edit-modal">Close</button>
             </div>
             <div class="input-row">
