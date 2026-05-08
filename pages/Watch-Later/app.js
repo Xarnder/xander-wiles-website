@@ -27,20 +27,46 @@ setPersistence(auth, browserLocalPersistence)
         console.error("Auth Persistence Error:", error);
     });
 
-// Detect iOS standalone (home screen) PWA mode
+// Debug Console Handler
+function debugLog(msg, type = 'info') {
+    console.log(`[AuthDebug] ${msg}`);
+    const debugWindow = document.getElementById('login-debug');
+    const debugLogs = document.getElementById('debug-logs');
+    if (debugWindow && debugLogs) {
+        debugWindow.style.display = 'block';
+        const logEntry = document.createElement('div');
+        logEntry.style.marginBottom = '2px';
+        logEntry.style.color = type === 'error' ? '#f55' : (type === 'warn' ? '#fb0' : '#0f0');
+        logEntry.innerHTML = `<span style="color: #666;">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
+        debugLogs.appendChild(logEntry);
+        debugWindow.scrollTop = debugWindow.scrollHeight;
+    }
+}
+
+// Detect iOS standalone (home screen) PWA mode and Mobile devices
 const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-console.log("[Auth] Standalone mode detected:", isStandalone);
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+debugLog(`Standalone: ${isStandalone}`);
+debugLog(`isIOS: ${isIOS}`);
+debugLog(`isMobile: ${isMobile}`);
+debugLog(`UA: ${navigator.userAgent.substring(0, 50)}...`);
 
 // Check for redirect result or Email Link sign-in on page load
 async function handlePendingAuth() {
     // 1. Handle Google Redirect Result
+    debugLog("Checking for redirect result...");
     try {
         const result = await getRedirectResult(auth);
         if (result) {
-            console.log("[Auth] Redirect Login Success:", result.user.displayName);
+            debugLog(`Redirect Login Success: ${result.user.displayName}`);
+        } else {
+            debugLog("No pending redirect result found.");
         }
     } catch (error) {
-        console.warn("[Auth] Redirect result error (may be harmless in standalone):", error.code, error.message);
+        debugLog(`Redirect Result Error: ${error.code}`, 'error');
+        console.warn("[Auth] Redirect result error:", error.code, error.message);
     }
 
     // 2. Handle Email Link Sign-in
@@ -426,29 +452,38 @@ const sendLinkBtn = document.getElementById('send-link-btn');
 
 if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     e.preventDefault();
-    console.log("[Auth] Google Login Button Clicked");
+    debugLog("Google Login Button Clicked");
+    
     const originalText = googleLoginBtn.innerText;
-    googleLoginBtn.innerText = isStandalone ? "Redirecting..." : "Logging in...";
+    // Force redirect on Mobile/iOS as popups are often blocked or fail in PWA context
+    const useRedirect = isStandalone || isIOS || isMobile;
+    
+    googleLoginBtn.innerText = useRedirect ? "Redirecting..." : "Logging in...";
     googleLoginBtn.disabled = true;
+    
     // Show mini-loader
     const loginLoader = document.querySelector('.login-loader');
     if (loginLoader) loginLoader.classList.remove('hidden');
+    
+    debugLog(`Using ${useRedirect ? 'REDIRECT' : 'POPUP'} flow...`);
+    
     try {
-        if (isStandalone) {
+        if (useRedirect) {
             await signInWithRedirect(auth, provider);
         } else {
             const result = await signInWithPopup(auth, provider);
-            console.log("[Auth] Popup Login Success:", result.user.displayName);
+            debugLog(`Popup Login Success: ${result.user.displayName}`);
         }
     } catch (error) {
-        console.error("[Auth] Google Login Error:", error);
+        debugLog(`Login Error: ${error.code} - ${error.message}`, 'error');
         alert(`Login Failed: ${error.message}`);
     } finally {
-        googleLoginBtn.innerText = originalText;
-        googleLoginBtn.disabled = false;
-        // Hide mini-loader
-        const loginLoader = document.querySelector('.login-loader');
-        if (loginLoader) loginLoader.classList.add('hidden');
+        // Only reset UI if we didn't redirect away
+        if (!useRedirect) {
+            googleLoginBtn.innerText = originalText;
+            googleLoginBtn.disabled = false;
+            if (loginLoader) loginLoader.classList.add('hidden');
+        }
     }
 });
 
@@ -481,7 +516,7 @@ logoutBtn.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
     try {
-        console.log("[Auth] Observer fired. User state:", user ? `LOGGED_IN (${user.email})` : "LOGGED_OUT");
+        debugLog(`Auth state change: ${user ? 'Logged In (' + user.email + ')' : 'Logged Out'}`);
         if (user) {
             currentUser = user;
             
