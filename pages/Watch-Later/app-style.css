@@ -813,6 +813,8 @@ input[type="file"]::-webkit-file-upload-button {
 
     #login-debug {
         display: block !important;
+        position: relative !important;
+        z-index: 999999 !important;
     }
 }
 
