@@ -569,7 +569,7 @@ async function handleSingleAdd() {
         movieTitle: cleanedTitle,
         type: typeToggle.value,
         watchWith: Array.from(selectedPeople).join(', '),
-        tier: initialTierSelect.value || userTiers[userTiers.length - 1]?.id || 'C'
+        tier: initialTierSelect.value || (userTiers.length > 0 ? userTiers[userTiers.length - 1].id : 'default')
     });
 
     trailerInput.value = "";
@@ -608,7 +608,7 @@ async function handleBatchAdd() {
             movieTitle: cleanedTitle,
             type: 'movie', // Default for batch
             watchWith: Array.from(selectedPeople).join(', '),
-            tier: initialTierSelect.value || userTiers[userTiers.length - 1]?.id || 'C'
+            tier: initialTierSelect.value || (userTiers.length > 0 ? userTiers[userTiers.length - 1].id : 'default')
         });
     }
 
@@ -625,7 +625,7 @@ async function handleBatchAdd() {
 async function saveItem(data) {
     const newItem = {
         uid: currentUser.uid,
-        tier: data.tier || 'C',
+        tier: data.tier || (userTiers.length > 0 ? userTiers[0].id : 'default'),
         timestamp: Date.now(),
         ...data
     };
@@ -652,6 +652,7 @@ function loadData() {
         renderTiers();
         renderTierManager();
         updateTierSelect();
+        renderAllCards(); // RE-RENDER CARDS when tiers change (fix for disappearing cards on rename)
     }, (err) => {
         console.error("[Firestore] Tiers listener error:", err);
     });
@@ -844,8 +845,14 @@ addTierBtn.addEventListener('click', async () => {
 });
 
 function renderCard(id, data) {
-    const list = document.getElementById(`list-${data.tier}`);
-    if (!list) return; // Tier might have been deleted or not loaded yet
+    let list = document.getElementById(`list-${data.tier}`);
+    
+    // Fallback: If the assigned tier list doesn't exist, put it in the first available tier
+    if (!list && userTiers.length > 0) {
+        list = document.getElementById(`list-${userTiers[0].id}`);
+    }
+    
+    if (!list) return; // Tier might not be loaded yet or no tiers exist
     
     const card = document.createElement('div');
     card.className = `media-card ${selectedCardIds.has(id) ? 'selected' : ''}`;
