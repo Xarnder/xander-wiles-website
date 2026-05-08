@@ -223,9 +223,10 @@ function updateBatchBar() {
 // Batch Actions
 batchCancelBtn.addEventListener('click', clearSelection);
 
-batchMoveBtn.addEventListener('click', () => {
+batchMoveBtn.addEventListener('click', (e) => {
+    e.preventDefault();
     batchMoveList.innerHTML = userTiers.map(t => `
-        <button onclick="executeBatchMove('${t.id}')" style="background:rgba(255,255,255,0.1); border:1px solid var(--border);">${t.name}</button>
+        <button type="button" onclick="executeBatchMove('${t.id}')" style="background:rgba(255,255,255,0.1); border:1px solid var(--border);">${t.name}</button>
     `).join('');
     batchMoveModal.classList.remove('hidden');
 });
@@ -383,18 +384,23 @@ window.deletePerson = async (personId) => {
 };
 
 // Auth Logic
-if (loginPopupBtn) loginPopupBtn.addEventListener('click', () => {
-    console.log("Login (Popup) Clicked");
+if (loginPopupBtn) loginPopupBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    console.log("Login (Popup) Clicked - Explicitly calling signInWithPopup");
     signInWithPopup(auth, provider)
-        .then((result) => console.log("Popup Login Success:", result.user.displayName))
+        .then((result) => {
+            console.log("Popup Login Success:", result.user.displayName);
+        })
         .catch((error) => {
             console.error("Popup Login Error:", error);
+            // If it failed, don't fallback to redirect here - the user has a separate button for that now.
             alert("Popup Login Failed: " + error.message);
         });
 });
 
-if (loginRedirectBtn) loginRedirectBtn.addEventListener('click', () => {
-    console.log("Login (Redirect) Clicked");
+if (loginRedirectBtn) loginRedirectBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    console.log("Login (Redirect) Clicked - Explicitly calling signInWithRedirect");
     signInWithRedirect(auth, provider).catch(err => {
         console.error("Redirect Login Error:", err);
         alert("Redirect Login Failed: " + err.message);
