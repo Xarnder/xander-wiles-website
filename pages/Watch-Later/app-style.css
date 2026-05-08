@@ -811,3 +811,144 @@ input[type="file"]::-webkit-file-upload-button {
         padding-top: 10px; /* Small extra buffer below status bar */
     }
 }
+
+/* --- LOGIN OVERLAY (Synced with To-Do List) --- */
+#login-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #050508 100%);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    box-sizing: border-box;
+}
+
+#login-overlay h1 {
+    font-size: 3.5rem;
+    margin: 0;
+    text-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 800;
+}
+
+#google-login-btn {
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    padding: 14px 28px;
+    border-radius: 30px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    box-shadow: 0 0 25px rgba(59, 130, 246, 0.3);
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease, background 0.3s ease;
+    animation: fancyGlowPulse 3s infinite alternate;
+}
+
+#google-login-btn:hover {
+    transform: scale(1.05) translateY(-2px);
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 40px rgba(59, 130, 246, 0.5);
+}
+
+@keyframes fancyGlowPulse {
+    from {
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.25);
+    }
+    to {
+        box-shadow: 0 0 35px rgba(59, 130, 246, 0.5);
+    }
+}
+
+/* --- PREMIUM LOADER (Synced with To-Do List) --- */
+:root {
+    --loader-duration: 2s;
+    --loader-path-length: 157px;
+}
+
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999999;
+    transition: opacity 0.5s ease, visibility 0.5s;
+}
+
+.premium-loader {
+    overflow: visible;
+    width: 100px;
+    height: 150px;
+}
+
+.premium-loader g {
+    animation: loader-slide var(--loader-duration) linear infinite;
+}
+
+.premium-loader g:nth-child(2) {
+    animation-delay: calc(var(--loader-duration) / 4);
+}
+
+.premium-loader g:nth-child(2) path {
+    animation-delay: calc(var(--loader-duration) / 4);
+    stroke-dasharray: 0px calc(var(--loader-path-length) + 1px);
+    stroke-dashoffset: 1px;
+}
+
+.premium-loader path {
+    stroke: url(#loader-gradient);
+    stroke-width: 20px;
+    stroke-linecap: round;
+    fill: none;
+    stroke-dasharray: 0 var(--loader-path-length);
+    stroke-dashoffset: 0;
+    animation: loader-escalade var(--loader-duration) cubic-bezier(0.8, 0, 0.2, 1) infinite;
+}
+
+.login-loader {
+    margin-top: 40px;
+    display: flex;
+    justify-content: center;
+    opacity: 0.8;
+}
+
+.login-loader .premium-loader {
+    width: 60px;
+    height: 90px;
+}
+
+@keyframes loader-slide {
+    0% { transform: translateY(-50px); }
+    100% { transform: translateY(50px); }
+}
+
+@keyframes loader-escalade {
+    0% {
+        stroke-dasharray: 0 var(--loader-path-length);
+        stroke-dashoffset: 0;
+    }
+    50% {
+        stroke-dasharray: var(--loader-path-length) var(--loader-path-length);
+        stroke-dashoffset: 0;
+    }
+    100% {
+        stroke-dasharray: var(--loader-path-length) var(--loader-path-length);
+        stroke-dashoffset: calc(-1 * (var(--loader-path-length) - 1px));
+    }
+}

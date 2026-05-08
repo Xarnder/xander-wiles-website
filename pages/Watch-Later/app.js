@@ -62,9 +62,20 @@ async function handlePendingAuth() {
 
 handlePendingAuth();
 
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) {
+        console.log("[DEBUG] Hiding Loading Overlay");
+        overlay.classList.add('hidden');
+        setTimeout(() => {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }, 600);
+    }
+}
+
 // DOM Elements
 const googleLoginBtn = document.getElementById('google-login-btn');
-const loginContainer = document.getElementById('login-container');
+const loginOverlay = document.getElementById('login-overlay');
 const logoutBtn = document.getElementById('logout-btn');
 const inputSection = document.getElementById('input-section');
 const tierContainer = document.getElementById('tier-container');
@@ -419,6 +430,9 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     const originalText = googleLoginBtn.innerText;
     googleLoginBtn.innerText = isStandalone ? "Redirecting..." : "Logging in...";
     googleLoginBtn.disabled = true;
+    // Show mini-loader
+    const loginLoader = document.querySelector('.login-loader');
+    if (loginLoader) loginLoader.classList.remove('hidden');
     try {
         if (isStandalone) {
             await signInWithRedirect(auth, provider);
@@ -432,6 +446,9 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     } finally {
         googleLoginBtn.innerText = originalText;
         googleLoginBtn.disabled = false;
+        // Hide mini-loader
+        const loginLoader = document.querySelector('.login-loader');
+        if (loginLoader) loginLoader.classList.add('hidden');
     }
 });
 
@@ -469,7 +486,7 @@ onAuthStateChanged(auth, async (user) => {
             currentUser = user;
             
             // Immediate UI Transition
-            if (loginContainer) loginContainer.classList.add('hidden');
+            if (loginOverlay) loginOverlay.classList.add('hidden');
             const userInfo = document.getElementById('user-info');
             const userName = document.getElementById('user-name');
             const filterBar = document.getElementById('filter-bar');
@@ -488,15 +505,17 @@ onAuthStateChanged(auth, async (user) => {
             await initializeTiers().catch(e => console.error("[Auth] Tiers Init Error:", e));
             await initializePeople().catch(e => console.error("[Auth] People Init Error:", e));
             loadData();
+            setTimeout(hideLoadingOverlay, 1000);
         } else {
             currentUser = null;
-            if (loginContainer) loginContainer.classList.remove('hidden');
+            if (loginOverlay) loginOverlay.classList.remove('hidden');
             if (document.getElementById('user-info')) document.getElementById('user-info').classList.add('hidden');
             if (inputSection) inputSection.classList.add('hidden');
             if (tierContainer) tierContainer.classList.add('hidden');
             if (modeSelector) modeSelector.classList.add('hidden');
             if (document.getElementById('filter-bar')) document.getElementById('filter-bar').classList.add('hidden');
             document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select');
+            hideLoadingOverlay();
         }
     } catch (err) {
         console.error("[Auth] Critical error in onAuthStateChanged:", err);
