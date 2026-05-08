@@ -176,6 +176,14 @@ if (closeManagerBtn) closeManagerBtn.addEventListener('click', () => tierManager
 if (editPeopleBtn) editPeopleBtn.addEventListener('click', () => peopleManagerSection.classList.toggle('hidden'));
 if (closePeopleBtn) closePeopleBtn.addEventListener('click', () => peopleManagerSection.classList.add('hidden'));
 
+// Input Section Expand/Collapse Toggle
+const toggleInputExpandBtn = document.getElementById('toggle-input-expand');
+if (toggleInputExpandBtn) {
+    toggleInputExpandBtn.addEventListener('click', () => {
+        inputSection.classList.toggle('collapsed');
+    });
+}
+
 // Mode Selector Logic
 
 const modeBtns = document.querySelectorAll('.mode-btn');
@@ -334,7 +342,7 @@ if (openRenameGenreModalBtn) {
             if (w.genre) genres.add(w.genre.trim());
         });
         
-        if (genres.size === 0) return alert("No genres found to rename.");
+        if (genres.size === 0) return showAlert("Rename Genre", "No genres found to rename.");
         
         const sortedGenres = Array.from(genres).sort();
         renameGenreSelect.innerHTML = sortedGenres.map(g => `<option value="${g}">${g}</option>`).join('');
@@ -393,6 +401,51 @@ function showSuccess(message) {
     setTimeout(() => {
         overlay.classList.add('hidden');
     }, 3000);
+}
+
+function showPrompt(title, defaultValue = "", placeholder = "") {
+    if (!promptModal) return prompt(title, defaultValue); // Fallback
+    promptTitleEl.innerText = title;
+    promptInputEl.value = defaultValue;
+    promptInputEl.placeholder = placeholder;
+    promptModal.classList.remove('hidden');
+    setTimeout(() => promptInputEl.focus(), 100);
+    
+    return new Promise(resolve => {
+        promptConfirmBtn.onclick = () => {
+            promptModal.classList.add('hidden');
+            resolve(promptInputEl.value);
+        };
+        promptCancelBtn.onclick = () => {
+            promptModal.classList.add('hidden');
+            resolve(null);
+        };
+        // Also allow Enter key
+        promptInputEl.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                promptModal.classList.add('hidden');
+                resolve(promptInputEl.value);
+            }
+            if (e.key === 'Escape') {
+                promptModal.classList.add('hidden');
+                resolve(null);
+            }
+        };
+    });
+}
+
+function showAlert(title, message) {
+    if (!alertModal) return alert(message); // Fallback
+    alertTitleEl.innerText = title;
+    alertMsgEl.innerText = message;
+    alertModal.classList.remove('hidden');
+    
+    return new Promise(resolve => {
+        alertOkBtn.onclick = () => {
+            alertModal.classList.remove('hidden');
+            resolve();
+        };
+    });
 }
 
 function updateSortableState() {
@@ -461,7 +514,7 @@ batchDeleteBtn.addEventListener('click', () => {
                 clearSelection();
             } catch (err) {
                 console.error("Batch Delete Error:", err);
-                alert("Failed to delete some items.");
+                showAlert("Error", "Failed to delete some items.");
             }
         }
     );
@@ -520,6 +573,15 @@ const confirmTitle = document.getElementById('confirm-title');
 const confirmMessage = document.getElementById('confirm-message');
 const confirmYesBtn = document.getElementById('confirm-yes-btn');
 const confirmNoBtn = document.getElementById('confirm-no-btn');
+const alertModal = document.getElementById('alert-modal');
+const alertTitleEl = document.getElementById('alert-title');
+const alertMsgEl = document.getElementById('alert-msg');
+const alertOkBtn = document.getElementById('alert-ok-btn');
+const promptModal = document.getElementById('prompt-modal');
+const promptTitleEl = document.getElementById('prompt-title');
+const promptInputEl = document.getElementById('prompt-input');
+const promptConfirmBtn = document.getElementById('prompt-confirm-btn');
+const promptCancelBtn = document.getElementById('prompt-cancel-btn');
 
 function showConfirm(title, message, onConfirm, onCancel) {
     confirmTitle.innerText = title;
@@ -558,7 +620,7 @@ window.startQuickSort = (tierId) => {
     quickSortItems = cachedWatches.filter(w => w.tier === tierId);
     
     if (quickSortItems.length === 0) {
-        alert("No items in this tier to sort!");
+        showAlert("Quick Sort", "No items in this tier to sort!");
         return;
     }
     
@@ -596,11 +658,11 @@ async function saveAndNavigate(direction) {
     
     if (quickSortIndex < 0) {
         quickSortIndex = 0;
-        alert("This is the first item.");
+        showAlert("Quick Sort", "This is the first item.");
     } else if (quickSortIndex >= quickSortItems.length) {
         isQuickSortMode = false;
         editModal.classList.add('hidden');
-        alert("Finished Quick Sort for this tier!");
+        showAlert("Quick Sort", "Finished Quick Sort for this tier!");
     } else {
         const nextItem = quickSortItems[quickSortIndex];
         openEditModal(nextItem.id, nextItem);
@@ -639,7 +701,7 @@ async function moveCurrentToTier(tierId) {
         if (quickSortIndex >= quickSortItems.length) {
             isQuickSortMode = false;
             editModal.classList.add('hidden');
-            alert("Finished Quick Sort for this tier!");
+            showAlert("Quick Sort", "Finished Quick Sort for this tier!");
         } else {
             const nextItem = quickSortItems[quickSortIndex];
             openEditModal(nextItem.id, nextItem);
@@ -692,7 +754,7 @@ window.deleteEntry = async (id) => {
                     openEditModal(nextItem.id, nextItem);
                 } else {
                     isQuickSortMode = false;
-                    alert("Finished Quick Sort for this tier!");
+                    showAlert("Quick Sort", "Finished Quick Sort for this tier!");
                 }
             }
         } catch (e) {
@@ -796,7 +858,7 @@ if (confirmRenamePersonBtn) {
             showSuccess(`Renamed to ${newName}`);
         } catch (err) {
             console.error("Rename Person Error:", err);
-            alert("Error renaming person.");
+            showAlert("Error", "Error renaming person.");
         } finally {
             confirmRenamePersonBtn.disabled = false;
             confirmRenamePersonBtn.innerText = "Update Everywhere";
@@ -828,7 +890,7 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
             const result = await signInWithPopup(auth, provider);
         }
     } catch (error) {
-        alert(`Login Failed: ${error.message}`);
+        showAlert("Login Failed", error.message);
     } finally {
         // Only reset UI if we didn't redirect away
         if (!useRedirect) {
@@ -871,7 +933,7 @@ onAuthStateChanged(auth, async (user) => {
             loadData();
         } else {
             currentUser = null;
-            if (loginOverlay) loginOverlay.classList.remove('hidden');
+            if (loginOverlay) loginOverlay.classList.add('hidden');
             if (document.getElementById('user-info')) document.getElementById('user-info').classList.add('hidden');
             if (inputSection) inputSection.classList.add('hidden');
             if (tierContainer) tierContainer.classList.add('hidden');
@@ -1044,7 +1106,7 @@ addBtn.addEventListener('click', async () => {
 
 async function handleSingleAdd() {
     const url = trailerInput.value;
-    if (!url) return alert("Paste a link first!");
+    if (!url) return showAlert("Input Required", "Paste a link first!");
 
     const existing = findDuplicate(url);
     if (existing) {
@@ -1091,14 +1153,14 @@ async function proceedWithSingleAdd(url) {
 
 async function handleBatchAdd() {
     const text = batchLinksArea.value;
-    if (!text) return alert("Paste some links first!");
+    if (!text) return showAlert("Input Required", "Paste some links first!");
 
     // Regex to find YouTube Video IDs
     const regex = /(?:v=|\/)([0-9A-Za-z_-]{11})/g;
     const matches = [...text.matchAll(regex)];
     const videoIds = [...new Set(matches.map(m => m[1]))];
 
-    if (videoIds.length === 0) return alert("No valid YouTube links found!");
+    if (videoIds.length === 0) return showAlert("Error", "No valid YouTube links found!");
 
     const duplicates = [];
     const uniqueVideoIds = [];
@@ -1456,35 +1518,45 @@ window.updatePerson = async (id, newName) => {
     await updateDoc(doc(db, "people", id), { name: newName });
 };
 
+addTierBtn.addEventListener('click', async () => {
+    if (userTiers.length >= 24) {
+        showAlert("Limit Reached", "Maximum limit of 24 tiers reached. Please delete a tier to add a new one.");
+        return;
+    }
+    const name = await showPrompt("New Tier", "", "Enter tier name...");
+    if (!name) return;
+
+    try {
+        await addDoc(collection(db, "tiers"), {
+            uid: currentUser.uid,
+            name: name,
+            order: userTiers.length,
+            color: '#1e1e24'
+        });
+        showSuccess("Tier created");
+    } catch (e) {
+        console.error("Error adding tier:", e);
+    }
+});
 
 addPersonBtn.addEventListener('click', async () => {
-    const name = prompt("Person's Name:");
+    const name = await showPrompt("New Person", "", "Enter person's name...");
     if (!name) return;
-    await addDoc(collection(db, "people"), {
-        uid: currentUser.uid,
-        name: name
-    });
+
+    try {
+        await addDoc(collection(db, "people"), {
+            uid: currentUser.uid,
+            name: name
+        });
+        showSuccess("Person added");
+    } catch (e) {
+        console.error("Error adding person:", e);
+    }
 });
 
 window.updateTier = async (id, data) => {
     await updateDoc(doc(db, "tiers", id), data);
 };
-
-
-addTierBtn.addEventListener('click', async () => {
-    if (userTiers.length >= 24) {
-        alert("Maximum limit of 24 tiers reached. Please delete a tier to add a new one.");
-        return;
-    }
-    const name = prompt("Tier Name:", "New Tier");
-    if (!name) return;
-    await addDoc(collection(db, "tiers"), {
-        uid: currentUser.uid,
-        name: name,
-        color: '#cccccc',
-        order: userTiers.length > 0 ? Math.max(...userTiers.map(t => t.order)) + 1 : 0
-    });
-});
 
 if (autoColorBtn) autoColorBtn.addEventListener('click', async () => {
     if (userTiers.length === 0) return;

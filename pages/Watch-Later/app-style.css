@@ -316,6 +316,67 @@ button {
 }
 
 /* --- Input Rows --- */
+#input-section {
+    overflow: hidden;
+}
+
+#input-section.collapsed .collapsible-content {
+    max-height: 0;
+    margin-top: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+#input-section:not(.collapsed) .collapsible-content {
+    max-height: 1000px; /* High enough to contain content */
+    margin-top: 16px;
+    opacity: 1;
+}
+
+.collapsible-content {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#input-section.collapsed #toggle-input-expand svg {
+    transform: rotate(0deg);
+}
+
+#input-section:not(.collapsed) #toggle-input-expand svg {
+    transform: rotate(180deg);
+}
+
+#input-section:not(.collapsed) #toggle-input-expand {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+#input-section.collapsed #toggle-batch {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#toggle-batch {
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+#toggle-batch:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    transform: translateY(-1px);
+}
+
 .input-row {
     display: flex;
     gap: 12px;

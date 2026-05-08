@@ -88,7 +88,6 @@
                 <div id="user-info" class="hidden">
                     <span id="user-name"></span>
                     <button id="edit-tiers-btn">Tiers</button>
-                    <button id="edit-people-btn">People</button>
                     <button id="quick-sort-btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border-color: rgba(245, 158, 11, 0.4); color: white;">Quick Sort</button>
                     <button id="logout-btn">Logout</button>
                 </div>
@@ -104,6 +103,50 @@
                 <button class="mode-btn" data-mode="reorder-tiers">Reorder Tiers</button>
             </div>
         </div>
+
+        <section id="input-section" class="glass-card hidden collapsed">
+            <div class="input-header">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span id="mode-label">Add Single Link</span>
+                    <button id="toggle-input-expand" class="icon-btn" title="Toggle Add Card" style="padding: 4px; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-dim); transition: var(--transition);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="collapsible-content">
+                <div id="single-input-row" class="input-row">
+                    <input type="text" id="trailer-link" placeholder="Paste Trailer URL (YouTube)...">
+                    <select id="type-toggle">
+                        <option value="movie">Movie</option>
+                        <option value="tv">TV Show</option>
+                    </select>
+                    <select id="status-toggle" style="max-width: 130px;">
+                        <option value="first-watch">First Watch</option>
+                        <option value="rewatch">Rewatch</option>
+                        <option value="new-episodes">New Episodes Coming</option>
+                    </select>
+                    <input type="text" id="genre-input" list="genre-list" placeholder="Genre..." style="max-width: 120px;">
+                </div>
+                <div id="batch-input-row" class="input-row hidden">
+                    <textarea id="batch-links" placeholder="Paste multiple YouTube links here (one per line)..."
+                        rows="4"></textarea>
+                </div>
+                <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
+                    <div style="font-size: 12px; color: #aaa;">Watch with:</div>
+                    <div id="people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <!-- People pills will be rendered here -->
+                    </div>
+                    <select id="initial-tier-select" style="width: 100%;"></select>
+                </div>
+                <button id="add-btn">Add to List</button>
+                <div id="batch-progress" class="hidden"
+                    style="margin-top: 10px; font-size: 12px; color: #aaa; text-align: center;"></div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+                    <a href="#" id="toggle-batch">Switch to Batch Mode</a>
+                </div>
+            </div>
+        </section>
 
         <div id="filter-bar" class="filter-bar hidden">
             <div class="filter-group">
@@ -122,8 +165,13 @@
                 </div>
             </div>
             <div class="filter-group">
-                <div class="filter-pills" id="people-filter-pills">
-                    <!-- Dynamic people pills -->
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="filter-pills" id="people-filter-pills">
+                        <!-- Dynamic people pills -->
+                    </div>
+                    <button id="edit-people-btn" class="icon-btn" title="Manage People" style="padding: 4px; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-dim);">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    </button>
                 </div>
             </div>
             <div class="filter-group">
@@ -260,14 +308,39 @@
         </div>
 
         <!-- Confirmation Modal -->
-        <div id="confirm-modal" class="modal-overlay hidden">
-            <div class="modal-content glass-card confirm-card">
-                <div class="confirm-icon">!</div>
-                <h3 id="confirm-title">Confirm Action</h3>
-                <p id="confirm-message"></p>
-                <div class="confirm-btns">
-                    <button id="confirm-yes-btn">Delete</button>
-                    <button id="confirm-no-btn">Cancel</button>
+        <div id="confirm-modal" class="modal hidden">
+            <div class="modal-content" style="max-width: 400px; text-align: center;">
+                <h3 id="confirm-title" style="margin-bottom: 10px;">Confirm</h3>
+                <p id="confirm-msg" style="color: var(--text-dim); margin-bottom: 25px; line-height: 1.5;"></p>
+                <div style="display: flex; gap: 12px; justify-content: center;">
+                    <button id="confirm-yes-btn" class="primary-btn" style="flex: 1;">Yes, Proceed</button>
+                    <button id="confirm-no-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Modal -->
+        <div id="alert-modal" class="modal hidden">
+            <div class="modal-content" style="max-width: 400px; text-align: center;">
+                <div style="margin-bottom: 15px; color: var(--accent);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 48px; height: 48px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+                <h3 id="alert-title" style="margin-bottom: 10px;">Notice</h3>
+                <p id="alert-msg" style="color: var(--text-dim); margin-bottom: 25px; line-height: 1.5;"></p>
+                <button id="alert-ok-btn" class="primary-btn" style="width: 100%;">Got it!</button>
+            </div>
+        </div>
+
+        <!-- Prompt Modal -->
+        <div id="prompt-modal" class="modal hidden">
+            <div class="modal-content" style="max-width: 400px;">
+                <h3 id="prompt-title">Enter Value</h3>
+                <div style="margin: 20px 0;">
+                    <input type="text" id="prompt-input" style="width: 100%;" placeholder="Type here...">
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button id="prompt-confirm-btn" class="primary-btn" style="flex: 1;">Confirm</button>
+                    <button id="prompt-cancel-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
                 </div>
             </div>
         </div>
@@ -310,41 +383,6 @@
             <div id="people-edit-list"></div>
             <button id="add-person-btn" style="width:100%; margin-top:10px; background:#10b981;">+ Add New
                 Person</button>
-        </section>
-
-        <section id="input-section" class="glass-card hidden">
-            <!-- ... existing batch/single toggle ... -->
-            <div class="input-header">
-                <span id="mode-label">Add Single Link</span>
-                <a href="#" id="toggle-batch">Switch to Batch Mode</a>
-            </div>
-            <div id="single-input-row" class="input-row">
-                <input type="text" id="trailer-link" placeholder="Paste Trailer URL (YouTube)...">
-                <select id="type-toggle">
-                    <option value="movie">Movie</option>
-                    <option value="tv">TV Show</option>
-                </select>
-                <select id="status-toggle" style="max-width: 130px;">
-                    <option value="first-watch">First Watch</option>
-                    <option value="rewatch">Rewatch</option>
-                    <option value="new-episodes">New Episodes Coming</option>
-                </select>
-                <input type="text" id="genre-input" list="genre-list" placeholder="Genre..." style="max-width: 120px;">
-            </div>
-            <div id="batch-input-row" class="input-row hidden">
-                <textarea id="batch-links" placeholder="Paste multiple YouTube links here (one per line)..."
-                    rows="4"></textarea>
-            </div>
-            <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
-                <div style="font-size: 12px; color: #aaa;">Watch with:</div>
-                <div id="people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;">
-                    <!-- People pills will be rendered here -->
-                </div>
-                <select id="initial-tier-select" style="width: 100%;"></select>
-            </div>
-            <button id="add-btn">Add to List</button>
-            <div id="batch-progress" class="hidden"
-                style="margin-top: 10px; font-size: 12px; color: #aaa; text-align: center;"></div>
         </section>
 
         <main id="tier-container" class="hidden">
