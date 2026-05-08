@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // --- REPLACE THIS WITH YOUR FIREBASE CONFIG ---
@@ -413,22 +413,26 @@ const sendLinkBtn = document.getElementById('send-link-btn');
 
 // Google Login handler is initialized below
 
-// Google Login (Redirect Only)
-if (googleLoginBtn) googleLoginBtn.addEventListener('click', (e) => {
+if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     e.preventDefault();
-    console.log("[Auth] Redirect Login Button Clicked");
-    
-    // Visual Feedback
+    console.log("[Auth] Google Login Button Clicked");
     const originalText = googleLoginBtn.innerText;
-    googleLoginBtn.innerText = "Redirecting...";
+    googleLoginBtn.innerText = isStandalone ? "Redirecting..." : "Logging in...";
     googleLoginBtn.disabled = true;
-
-    signInWithRedirect(auth, provider).catch(error => {
-        console.error("[Auth] Redirect Login Error:", error);
-        alert(`Redirect Login Failed: ${error.message}`);
+    try {
+        if (isStandalone) {
+            await signInWithRedirect(auth, provider);
+        } else {
+            const result = await signInWithPopup(auth, provider);
+            console.log("[Auth] Popup Login Success:", result.user.displayName);
+        }
+    } catch (error) {
+        console.error("[Auth] Google Login Error:", error);
+        alert(`Login Failed: ${error.message}`);
+    } finally {
         googleLoginBtn.innerText = originalText;
         googleLoginBtn.disabled = false;
-    });
+    }
 });
 
 // Email Link Login
