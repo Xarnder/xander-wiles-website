@@ -27,15 +27,20 @@ setPersistence(auth, browserLocalPersistence)
         console.error("Auth Persistence Error:", error);
     });
 
-// Check for redirect result on page load (in case fallback was used)
+// Check for redirect result on page load (critical for standalone PWA mode)
 getRedirectResult(auth)
     .then((result) => {
         if (result) {
-            console.log("Redirect Login Success:", result.user.displayName);
+            console.log("[Auth] Redirect Login Success:", result.user.displayName);
+        } else {
+            console.log("[Auth] No redirect result (normal if user didn't just redirect-login)");
         }
     })
     .catch((error) => {
-        console.error("Redirect Login Error:", error);
+        // In standalone mode, redirect errors are common due to context switching.
+        // The onAuthStateChanged listener below is the real safety net — Firebase's
+        // local persistence will restore the session even if getRedirectResult fails.
+        console.warn("[Auth] Redirect result error (may be harmless in standalone):", error.code, error.message);
     });
 
 // DOM Elements
@@ -382,30 +387,44 @@ window.deletePerson = async (personId) => {
     });
 };
 
+// Detect iOS standalone (home screen) PWA mode
+const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+console.log("[Auth] Standalone mode:", isStandalone);
+
 // Auth Logic
 if (googleLoginBtn) googleLoginBtn.addEventListener('click', (e) => {
     e.preventDefault();
-    console.log("Login Button Clicked");
+    console.log("[Auth] Login Button Clicked | Standalone:", isStandalone);
     
-    // In iOS/Safari Safari, popups are often blocked, especially in PWA mode.
-    // Try popup first. If it fails with a popup-blocked error, cleanly fallback to redirect.
-    signInWithPopup(auth, provider)
-        .then((result) => {
-            console.log("Popup Login Success:", result.user.displayName);
-        })
-        .catch((error) => {
-            console.warn("Popup Login Error or Blocked:", error);
-            // Fallback to redirect if popup is blocked or fails
-            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-                console.log("Falling back to redirect login...");
-                signInWithRedirect(auth, provider).catch(redirectErr => {
-                    console.error("Redirect Fallback Error:", redirectErr);
-                    alert(`Login Failed: ${redirectErr.message}`);
-                });
-            } else {
-                alert(`Login Error: ${error.message}`);
-            }
+    if (isStandalone) {
+        // In iOS standalone PWA mode, popups silently fail — they either open
+        // in Safari (outside PWA context, losing the callback) or die without
+        // throwing a catchable error code. Skip popup entirely and go straight
+        // to redirect which keeps the auth flow within the standalone container.
+        console.log("[Auth] Standalone detected — using signInWithRedirect directly");
+        signInWithRedirect(auth, provider).catch(redirectErr => {
+            console.error("[Auth] Redirect Login Error:", redirectErr);
+            alert(`Login Failed: ${redirectErr.message}`);
         });
+    } else {
+        // Normal browser: try popup first, fallback to redirect on block
+        signInWithPopup(auth, provider)
+            .then((result) => {
+                console.log("[Auth] Popup Login Success:", result.user.displayName);
+            })
+            .catch((error) => {
+                console.warn("[Auth] Popup Login Error or Blocked:", error);
+                if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                    console.log("[Auth] Falling back to redirect login...");
+                    signInWithRedirect(auth, provider).catch(redirectErr => {
+                        console.error("[Auth] Redirect Fallback Error:", redirectErr);
+                        alert(`Login Failed: ${redirectErr.message}`);
+                    });
+                } else {
+                    alert(`Login Error: ${error.message}`);
+                }
+            });
+    }
 });
 
 logoutBtn.addEventListener('click', () => signOut(auth));
