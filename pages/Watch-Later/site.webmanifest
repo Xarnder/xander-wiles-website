@@ -18,5 +18,5 @@
     "display": "standalone",
     "scope": "/pages/Watch-Later/",
     "id": "/pages/Watch-Later/",
-    "start_url": "/pages/Watch-Later/index.html"
+    "start_url": "./index.html"
 }
