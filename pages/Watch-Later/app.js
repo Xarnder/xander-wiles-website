@@ -116,6 +116,13 @@ const batchTypeSelect = document.getElementById('batch-type-select');
 const batchStatusSelect = document.getElementById('batch-status-select');
 const statusToggle = document.getElementById('status-toggle');
 
+// Quick Sort Elements
+const quickSortBtn = document.getElementById('quick-sort-btn');
+const quickSortTierModal = document.getElementById('quick-sort-tier-modal');
+const quickSortTierList = document.getElementById('quick-sort-tier-list');
+const prevQuickSortBtn = document.getElementById('prev-quick-sort-btn');
+const nextQuickSortBtn = document.getElementById('next-quick-sort-btn');
+
 let currentUser = null;
 let isBatchMode = false;
 let userTiers = []; // Store current tiers
@@ -124,6 +131,11 @@ let selectedPeople = new Set(); // Track currently selected people in UI
 let editingItemId = null; // Track which item is being edited
 let editingItemPeople = new Set(); // Track people for the item being edited
 let appMode = 'watch'; // edit, organize, watch, select
+
+let isQuickSortMode = false;
+let quickSortItems = [];
+let quickSortIndex = -1;
+const QUICK_SORT_TIER_KEYS = "qwertyuiopasdfghjklzxcvbnm";
 
 let sortables = []; // Store SortableJS instances
 let tierSortable = null; // Store SortableJS instance for tiers
@@ -417,7 +429,112 @@ function showConfirm(title, message, onConfirm, onCancel) {
 }
 
 // Edit Modal Logic
-closeEditModalBtn.addEventListener('click', () => editModal.classList.add('hidden'));
+closeEditModalBtn.addEventListener('click', () => {
+    editModal.classList.add('hidden');
+    isQuickSortMode = false;
+});
+
+// Quick Sort Logic
+if (quickSortBtn) {
+    quickSortBtn.addEventListener('click', () => {
+        quickSortTierList.innerHTML = userTiers.map(t => `
+            <button type="button" onclick="startQuickSort('${t.id}')" style="background:${t.color || 'var(--glass)'}; color:${getContrastColor(t.color || '#cccccc')}; border:1px solid var(--border); width: 100%;">${t.name}</button>
+        `).join('');
+        quickSortTierModal.classList.remove('hidden');
+    });
+}
+
+window.startQuickSort = (tierId) => {
+    quickSortTierModal.classList.add('hidden');
+    quickSortItems = cachedWatches.filter(w => w.tier === tierId);
+    
+    if (quickSortItems.length === 0) {
+        alert("No items in this tier to sort!");
+        return;
+    }
+    
+    isQuickSortMode = true;
+    quickSortIndex = 0;
+    openEditModal(quickSortItems[quickSortIndex].id, quickSortItems[quickSortIndex]);
+};
+
+async function saveCurrentQuickSortItem() {
+    if (!editingItemId) return;
+    const newTitle = editTitleInput.value;
+    const newPeople = Array.from(editingItemPeople).join(', ');
+    const newType = editTypeSelect.value;
+    const newStatus = editStatusSelect.value;
+    
+    try {
+        await updateDoc(doc(db, "watches", editingItemId), {
+            movieTitle: newTitle,
+            watchWith: newPeople,
+            type: newType,
+            watchStatus: newStatus
+        });
+        console.log("Quick Sort: Item saved");
+    } catch (err) {
+        console.error("Quick Sort Save Error:", err);
+    }
+}
+
+async function saveAndNavigate(direction) {
+    await saveCurrentQuickSortItem();
+    
+    quickSortIndex += direction;
+    
+    if (quickSortIndex < 0) {
+        quickSortIndex = 0;
+        alert("This is the first item.");
+    } else if (quickSortIndex >= quickSortItems.length) {
+        isQuickSortMode = false;
+        editModal.classList.add('hidden');
+        alert("Finished Quick Sort for this tier!");
+    } else {
+        const nextItem = quickSortItems[quickSortIndex];
+        openEditModal(nextItem.id, nextItem);
+    }
+}
+
+if (prevQuickSortBtn) {
+    prevQuickSortBtn.addEventListener('click', () => saveAndNavigate(-1));
+}
+
+if (nextQuickSortBtn) {
+    nextQuickSortBtn.addEventListener('click', () => saveAndNavigate(1));
+}
+
+async function moveCurrentToTier(tierId) {
+    if (!editingItemId) return;
+    const newTitle = editTitleInput.value;
+    const newPeople = Array.from(editingItemPeople).join(', ');
+    const newType = editTypeSelect.value;
+    const newStatus = editStatusSelect.value;
+    
+    try {
+        await updateDoc(doc(db, "watches", editingItemId), {
+            movieTitle: newTitle,
+            watchWith: newPeople,
+            type: newType,
+            watchStatus: newStatus,
+            tier: tierId
+        });
+        console.log(`Quick Sort: Item moved to tier ${tierId} and saved`);
+        
+        // Move to next
+        quickSortIndex++;
+        if (quickSortIndex >= quickSortItems.length) {
+            isQuickSortMode = false;
+            editModal.classList.add('hidden');
+            alert("Finished Quick Sort for this tier!");
+        } else {
+            const nextItem = quickSortItems[quickSortIndex];
+            openEditModal(nextItem.id, nextItem);
+        }
+    } catch (err) {
+        console.error("Quick Sort Move Error:", err);
+    }
+}
 
 saveEditBtn.addEventListener('click', async () => {
     if (!editingItemId) return;
@@ -1137,6 +1254,10 @@ window.updateTier = async (id, data) => {
 
 
 addTierBtn.addEventListener('click', async () => {
+    if (userTiers.length >= 24) {
+        alert("Maximum limit of 24 tiers reached. Please delete a tier to add a new one.");
+        return;
+    }
     const name = prompt("Tier Name:", "New Tier");
     if (!name) return;
     await addDoc(collection(db, "tiers"), {
@@ -1269,8 +1390,40 @@ function openEditModal(id, data) {
     
     editModal.classList.remove('hidden');
     
-    // Focus title input
-    setTimeout(() => editTitleInput.focus(), 100);
+    // Quick Sort Navigation visibility
+    if (isQuickSortMode) {
+        prevQuickSortBtn.classList.remove('hidden');
+        nextQuickSortBtn.classList.remove('hidden');
+        
+        // Key Guide
+        const keyGuide = document.getElementById('quick-sort-key-guide');
+        const keyGuideList = document.getElementById('key-guide-list');
+        if (keyGuide && keyGuideList) {
+            keyGuide.classList.remove('hidden');
+            keyGuideList.innerHTML = userTiers.map((t, i) => `
+                <div class="key-hint">
+                    <span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-family: monospace; border: 1px solid var(--border);">${QUICK_SORT_TIER_KEYS[i].toUpperCase()}</span>
+                    <span style="color: ${t.color || '#fff'}; margin-left: 4px;">${t.name}</span>
+                </div>
+            `).join('');
+        }
+        
+        // Update title to show progress
+        const titleEl = editModal.querySelector('h3');
+        if (titleEl) titleEl.innerText = `Quick Sort (${quickSortIndex + 1}/${quickSortItems.length})`;
+    } else {
+        prevQuickSortBtn.classList.add('hidden');
+        nextQuickSortBtn.classList.add('hidden');
+        const keyGuide = document.getElementById('quick-sort-key-guide');
+        if (keyGuide) keyGuide.classList.add('hidden');
+        const titleEl = editModal.querySelector('h3');
+        if (titleEl) titleEl.innerText = `Edit Entry`;
+    }
+    
+    // Focus title input if not in Quick Sort mode
+    if (!isQuickSortMode) {
+        setTimeout(() => editTitleInput.focus(), 100);
+    }
 }
 
 function renderEditPeopleToggles() {
@@ -1340,6 +1493,42 @@ window.addEventListener('keydown', (e) => {
             addBtn.click();
         } else if (document.activeElement === editTitleInput) {
             saveEditBtn.click();
+        }
+    }
+    
+    // 4. Quick Sort Navigation Arrows
+    if (isQuickSortMode && !editModal.classList.contains('hidden')) {
+        const isTextInput = document.activeElement === editTitleInput;
+        const isSelect = document.activeElement.tagName === 'SELECT';
+        
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            // Navigate if:
+            // - Not in a text input (Right/Down both work)
+            // - In a text input but using Down (Right moves cursor)
+            // - Not in a select (Down changes value in select)
+            const shouldNavigate = (!isTextInput && !isSelect) || (isTextInput && e.key === 'ArrowDown');
+            
+            if (shouldNavigate) {
+                e.preventDefault();
+                saveAndNavigate(1);
+            }
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            const shouldNavigate = (!isTextInput && !isSelect) || (isTextInput && e.key === 'ArrowUp');
+            
+            if (shouldNavigate) {
+                e.preventDefault();
+                saveAndNavigate(-1);
+            }
+        }
+        
+        // 5. Tier Shortcuts (q, w, e, r...)
+        if (!isTextInput && !isSelect) {
+            const key = e.key.toLowerCase();
+            const keyIndex = QUICK_SORT_TIER_KEYS.indexOf(key);
+            if (keyIndex !== -1 && keyIndex < userTiers.length) {
+                e.preventDefault();
+                moveCurrentToTier(userTiers[keyIndex].id);
+            }
         }
     }
 });

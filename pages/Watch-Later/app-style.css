@@ -194,9 +194,39 @@ button {
     border: 1px solid var(--border);
 }
 
-#edit-tiers-btn:hover, #edit-people-btn:hover {
+#edit-tiers-btn:hover, #edit-people-btn:hover, #quick-sort-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     transform: translateY(-2px);
+}
+
+.nav-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--glass);
+    border: 1px solid var(--border);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: var(--transition);
+}
+
+.nav-btn:hover {
+    background: var(--glass-heavy);
+    transform: scale(1.1);
+    border-color: var(--accent);
+    box-shadow: 0 0 15px var(--accent-glow);
+}
+
+.nav-btn:active {
+    transform: scale(0.95);
+}
+
+.nav-btn svg {
+    width: 24px;
+    height: 24px;
 }
 
 /* --- Mode Selector --- */
@@ -712,9 +742,9 @@ input[type="text"]:focus, textarea:focus, select:focus {
 }
 
 .modal-content {
-    width: 90%;
-    max-width: 440px;
-    max-height: 90vh;
+    width: 95%;
+    max-width: 700px;
+    max-height: 95vh;
     overflow-y: auto;
     animation: zoomIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     background: rgba(25, 25, 30, 0.95);
@@ -954,7 +984,7 @@ input[type="file"]::-webkit-file-upload-button {
     }
 
     /* Keep header buttons smaller but horizontal */
-    #edit-tiers-btn, #edit-people-btn, #logout-btn {
+    #edit-tiers-btn, #edit-people-btn, #quick-sort-btn, #logout-btn {
         padding: 8px 12px;
         font-size: 12px;
     }
@@ -1045,7 +1075,7 @@ input[type="file"]::-webkit-file-upload-button {
     }
 
     /* Except for specific horizontal rows that should stay horizontal */
-    .tier-edit-row, .people-edit-row, .confirm-btns, .duplicate-btns, .batch-btns {
+    .tier-edit-row, .people-edit-row, .confirm-btns, .duplicate-btns, .batch-btns, .modal-nav-row {
         flex-direction: row !important;
     }
 

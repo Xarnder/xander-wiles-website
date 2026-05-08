@@ -89,6 +89,7 @@
                     <span id="user-name"></span>
                     <button id="edit-tiers-btn">Tiers</button>
                     <button id="edit-people-btn">People</button>
+                    <button id="quick-sort-btn" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border-color: rgba(245, 158, 11, 0.4); color: white;">Quick Sort</button>
                     <button id="logout-btn">Logout</button>
                 </div>
             </div>
@@ -142,6 +143,16 @@
                 <button id="batch-delete-btn" style="background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #fecaca;">Delete</button>
                 <button id="batch-cancel-btn"
                     style="background:none; border:1px solid rgba(255,255,255,0.2);">Done</button>
+            </div>
+        </div>
+
+        <!-- Quick Sort Tier Modal -->
+        <div id="quick-sort-tier-modal" class="modal-overlay hidden">
+            <div class="modal-content glass-card">
+                <h3>Quick Sort: Select Tier</h3>
+                <p style="font-size: 12px; color: #aaa; margin-bottom: 15px;">One-by-one editing for all items in the selected tier.</p>
+                <div id="quick-sort-tier-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+                <button class="close-modal-btn" style="margin-top: 15px; width: 100%;">Cancel</button>
             </div>
         </div>
 
@@ -306,6 +317,11 @@
                 <div style="font-size: 12px; color: #aaa;">Watched with:</div>
                 <div id="edit-people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
             </div>
+            <!-- Quick Sort Key Guide -->
+            <div id="quick-sort-key-guide" class="hidden" style="margin-top: 15px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px;">
+                <div style="font-size: 10px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Tier Shortcuts</div>
+                <div id="key-guide-list" style="display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px;"></div>
+            </div>
             <div style="margin-top: 15px;">
                 <a id="edit-youtube-link" href="#" target="_blank" class="youtube-btn">
                     <svg viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
@@ -314,9 +330,19 @@
                     Watch on YouTube
                 </a>
             </div>
-            <div style="margin-top: 20px; display: flex; gap: 10px;">
+            <div class="modal-nav-row" style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
+                <button id="prev-quick-sort-btn" class="nav-btn hidden" title="Previous (Arrow Left)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
                 <button id="save-edit-btn" style="flex: 2;">Save Changes</button>
                 <button id="delete-entry-btn" style="flex: 1;">Delete</button>
+                <button id="next-quick-sort-btn" class="nav-btn hidden" title="Next (Arrow Right)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 20px; height: 20px;">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </button>
             </div>
         </div>
     </div>    <script>
