@@ -39,7 +39,9 @@ getRedirectResult(auth)
     });
 
 // DOM Elements
-const loginBtn = document.getElementById('login-btn');
+const loginPopupBtn = document.getElementById('login-popup-btn');
+const loginRedirectBtn = document.getElementById('login-redirect-btn');
+const loginContainer = document.getElementById('login-container');
 const logoutBtn = document.getElementById('logout-btn');
 const inputSection = document.getElementById('input-section');
 const tierContainer = document.getElementById('tier-container');
@@ -381,26 +383,22 @@ window.deletePerson = async (personId) => {
 };
 
 // Auth Logic
-loginBtn.addEventListener('click', () => {
-    console.log("Login Clicked. Attempting popup...");
-    // Try popup first, with fallback
+if (loginPopupBtn) loginPopupBtn.addEventListener('click', () => {
+    console.log("Login (Popup) Clicked");
     signInWithPopup(auth, provider)
-        .then((result) => {
-            console.log("Popup Login Success:", result.user.displayName);
-        })
+        .then((result) => console.log("Popup Login Success:", result.user.displayName))
         .catch((error) => {
-            console.warn("Popup Login Error or Blocked:", error);
-            // Fallback to redirect if popup is blocked or fails
-            if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-                console.log("Falling back to redirect login...");
-                signInWithRedirect(auth, provider).catch(redirectErr => {
-                    console.error("Redirect Fallback Error:", redirectErr);
-                    alert(`Login Failed: ${redirectErr.message}`);
-                });
-            } else {
-                alert("Login Error: " + error.message);
-            }
+            console.error("Popup Login Error:", error);
+            alert("Popup Login Failed: " + error.message);
         });
+});
+
+if (loginRedirectBtn) loginRedirectBtn.addEventListener('click', () => {
+    console.log("Login (Redirect) Clicked");
+    signInWithRedirect(auth, provider).catch(err => {
+        console.error("Redirect Login Error:", err);
+        alert("Redirect Login Failed: " + err.message);
+    });
 });
 
 logoutBtn.addEventListener('click', () => signOut(auth));
@@ -409,7 +407,7 @@ onAuthStateChanged(auth, async (user) => {
     if (user) {
         console.log("User logged in:", user.email);
         currentUser = user;
-        loginBtn.classList.add('hidden');
+        if (loginContainer) loginContainer.classList.add('hidden');
         document.getElementById('user-info').classList.remove('hidden');
         document.getElementById('user-name').innerText = user.displayName;
         inputSection.classList.remove('hidden');
@@ -423,7 +421,7 @@ onAuthStateChanged(auth, async (user) => {
     } else {
         console.log("User logged out");
         currentUser = null;
-        loginBtn.classList.remove('hidden');
+        if (loginContainer) loginContainer.classList.remove('hidden');
         document.getElementById('user-info').classList.add('hidden');
         inputSection.classList.add('hidden');
         tierContainer.classList.add('hidden');

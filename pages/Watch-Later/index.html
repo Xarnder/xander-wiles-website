@@ -44,7 +44,10 @@
         <header class="app-header">
             <h1>Watch Later</h1>
             <div id="auth-section">
-                <button id="login-btn">Login with Google</button>
+                <div id="login-container" style="display: flex; gap: 10px;">
+                    <button id="login-popup-btn">Login (Popup)</button>
+                    <button id="login-redirect-btn" style="background: rgba(255,255,255,0.1); border: 1px solid var(--border);">Login (Redirect)</button>
+                </div>
                 <div id="user-info" class="hidden">
                     <span id="user-name"></span>
                     <button id="edit-tiers-btn">Tiers</button>
