@@ -44,7 +44,8 @@ getRedirectResult(auth)
     });
 
 // DOM Elements
-const googleLoginBtn = document.getElementById('google-login-btn');
+const googleLoginPopupBtn = document.getElementById('google-login-popup-btn');
+const googleLoginRedirectBtn = document.getElementById('google-login-redirect-btn');
 const loginContainer = document.getElementById('login-container');
 const logoutBtn = document.getElementById('logout-btn');
 const inputSection = document.getElementById('input-section');
@@ -389,42 +390,30 @@ window.deletePerson = async (personId) => {
 
 // Detect iOS standalone (home screen) PWA mode
 const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-console.log("[Auth] Standalone mode:", isStandalone);
+console.log("[Auth] Standalone mode detected:", isStandalone);
 
-// Auth Logic
-if (googleLoginBtn) googleLoginBtn.addEventListener('click', (e) => {
+// Google Login (Popup)
+if (googleLoginPopupBtn) googleLoginPopupBtn.addEventListener('click', (e) => {
     e.preventDefault();
-    console.log("[Auth] Login Button Clicked | Standalone:", isStandalone);
-    
-    if (isStandalone) {
-        // In iOS standalone PWA mode, popups silently fail — they either open
-        // in Safari (outside PWA context, losing the callback) or die without
-        // throwing a catchable error code. Skip popup entirely and go straight
-        // to redirect which keeps the auth flow within the standalone container.
-        console.log("[Auth] Standalone detected — using signInWithRedirect directly");
-        signInWithRedirect(auth, provider).catch(redirectErr => {
-            console.error("[Auth] Redirect Login Error:", redirectErr);
-            alert(`Login Failed: ${redirectErr.message}`);
+    console.log("[Auth] Popup Login Button Clicked");
+    signInWithPopup(auth, provider)
+        .then((result) => {
+            console.log("[Auth] Popup Login Success:", result.user.displayName);
+        })
+        .catch((error) => {
+            console.error("[Auth] Popup Login Error:", error);
+            alert(`Popup Login Failed: ${error.message}\n(This often fails in iOS Standalone mode)`);
         });
-    } else {
-        // Normal browser: try popup first, fallback to redirect on block
-        signInWithPopup(auth, provider)
-            .then((result) => {
-                console.log("[Auth] Popup Login Success:", result.user.displayName);
-            })
-            .catch((error) => {
-                console.warn("[Auth] Popup Login Error or Blocked:", error);
-                if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
-                    console.log("[Auth] Falling back to redirect login...");
-                    signInWithRedirect(auth, provider).catch(redirectErr => {
-                        console.error("[Auth] Redirect Fallback Error:", redirectErr);
-                        alert(`Login Failed: ${redirectErr.message}`);
-                    });
-                } else {
-                    alert(`Login Error: ${error.message}`);
-                }
-            });
-    }
+});
+
+// Google Login (Redirect)
+if (googleLoginRedirectBtn) googleLoginRedirectBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    console.log("[Auth] Redirect Login Button Clicked");
+    signInWithRedirect(auth, provider).catch(error => {
+        console.error("[Auth] Redirect Login Error:", error);
+        alert(`Redirect Login Failed: ${error.message}`);
+    });
 });
 
 logoutBtn.addEventListener('click', () => signOut(auth));

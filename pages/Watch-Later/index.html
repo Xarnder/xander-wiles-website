@@ -44,8 +44,9 @@
         <header class="app-header">
             <h1>Watch Later</h1>
             <div id="auth-section">
-                <div id="login-container" style="display: flex; gap: 10px;">
-                    <button type="button" id="google-login-btn">Login with Google</button>
+                <div id="login-container" style="display: flex; flex-direction: column; gap: 10px;">
+                    <button type="button" id="google-login-popup-btn">Login with Google (Popup)</button>
+                    <button type="button" id="google-login-redirect-btn">Login with Google (Redirect)</button>
                 </div>
                 <div id="user-info" class="hidden">
                     <span id="user-name"></span>
