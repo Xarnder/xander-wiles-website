@@ -104,6 +104,16 @@ async function handlePendingAuth() {
 
 handlePendingAuth();
 
+// Failsafe: Hide the loading screen after 3.5 seconds in case Firebase Auth hangs
+setTimeout(() => {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) {
+        console.warn("[Auth] Firebase took too long. Force hiding loader.");
+        hideLoadingOverlay();
+    }
+}, 3500);
+
+
 function hideLoadingOverlay() {
     const overlay = document.getElementById('loading-overlay');
     if (overlay && !overlay.classList.contains('hidden')) {
@@ -115,14 +125,7 @@ function hideLoadingOverlay() {
     }
 }
 
-// Safety timeout: Always hide overlay after 8 seconds
-setTimeout(() => {
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay && !overlay.classList.contains('hidden')) {
-        debugLog("Safety timeout: Forcing overlay hide", 'warn');
-        hideLoadingOverlay();
-    }
-}, 8000);
+
 
 // DOM Elements
 const googleLoginBtn = document.getElementById('google-login-btn');
@@ -480,8 +483,8 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     debugLog("Google Login Button Clicked");
     
     const originalText = googleLoginBtn.innerText;
-    // Force redirect on Mobile/iOS as popups are often blocked or fail in PWA context
-    const useRedirect = isStandalone || isIOS || isMobile;
+    // DO NOT use redirect in Standalone/PWA mode, it breaks the Firebase auth state
+    const useRedirect = isMobile && !isStandalone && !isIOS;
     
     googleLoginBtn.innerText = useRedirect ? "Redirecting..." : "Logging in...";
     googleLoginBtn.disabled = true;
