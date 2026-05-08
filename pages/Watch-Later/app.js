@@ -236,6 +236,7 @@ const renameGenreModal = document.getElementById('rename-genre-modal');
 const renameGenreSelect = document.getElementById('rename-genre-select');
 const renameGenreNewNameInput = document.getElementById('rename-genre-new-name');
 const confirmRenameGenreBtn = document.getElementById('confirm-rename-genre-btn');
+const deleteGenreBtn = document.getElementById('delete-genre-btn');
 const closeRenameGenreModalBtn = document.getElementById('close-rename-genre-modal-btn');
 
 typeFilterPills.forEach(pill => {
@@ -390,6 +391,35 @@ if (confirmRenameGenreBtn) {
     });
 }
 
+if (deleteGenreBtn) {
+    deleteGenreBtn.addEventListener('click', () => {
+        const genreName = renameGenreSelect.value;
+        if (!genreName) return;
+        
+        showConfirm("Delete Genre?", `This will remove the genre "${genreName}" from ALL entries. Are you sure?`, async () => {
+            const itemsToUpdate = cachedWatches.filter(w => w.genre && w.genre.trim() === genreName);
+            try {
+                deleteGenreBtn.disabled = true;
+                deleteGenreBtn.innerText = "Deleting...";
+                
+                const promises = itemsToUpdate.map(item => 
+                    updateDoc(doc(db, "watches", item.id), { genre: "" })
+                );
+                await Promise.all(promises);
+                
+                renameGenreModal.classList.add('hidden');
+                showSuccess(`Cleared genre for ${itemsToUpdate.length} items`);
+            } catch (err) {
+                console.error("Delete Genre Error:", err);
+                showAlert("Error", "Error clearing genre.");
+            } finally {
+                deleteGenreBtn.disabled = false;
+                deleteGenreBtn.innerText = "Delete";
+            }
+        });
+    });
+}
+
 function showSuccess(message) {
     const overlay = document.getElementById('success-overlay');
     const msgEl = document.getElementById('success-msg');
@@ -442,7 +472,7 @@ function showAlert(title, message) {
     
     return new Promise(resolve => {
         alertOkBtn.onclick = () => {
-            alertModal.classList.remove('hidden');
+            alertModal.classList.add('hidden');
             resolve();
         };
     });
@@ -570,7 +600,7 @@ document.querySelectorAll('.close-modal-btn').forEach(btn => {
 // Confirmation Modal Logic
 const confirmModal = document.getElementById('confirm-modal');
 const confirmTitle = document.getElementById('confirm-title');
-const confirmMessage = document.getElementById('confirm-message');
+const confirmMessage = document.getElementById('confirm-msg');
 const confirmYesBtn = document.getElementById('confirm-yes-btn');
 const confirmNoBtn = document.getElementById('confirm-no-btn');
 const alertModal = document.getElementById('alert-modal');
@@ -645,6 +675,20 @@ async function saveCurrentQuickSortItem() {
             watchStatus: newStatus,
             genre: newGenre
         });
+        
+        // Update local cache immediately to ensure navigation finds up-to-date data
+        const localIdx = cachedWatches.findIndex(w => w.id === editingItemId);
+        if (localIdx !== -1) {
+            cachedWatches[localIdx] = { 
+                ...cachedWatches[localIdx], 
+                movieTitle: newTitle, 
+                watchWith: newPeople, 
+                type: newType, 
+                watchStatus: newStatus, 
+                genre: newGenre 
+            };
+        }
+        
         console.log("Quick Sort: Item saved");
     } catch (err) {
         console.error("Quick Sort Save Error:", err);
@@ -664,8 +708,10 @@ async function saveAndNavigate(direction) {
         editModal.classList.add('hidden');
         showAlert("Quick Sort", "Finished Quick Sort for this tier!");
     } else {
-        const nextItem = quickSortItems[quickSortIndex];
-        openEditModal(nextItem.id, nextItem);
+        const itemRef = quickSortItems[quickSortIndex];
+        // Fetch latest data from cache to avoid overwriting with stale data when navigating back/forth
+        const latestData = cachedWatches.find(w => w.id === itemRef.id) || itemRef;
+        openEditModal(itemRef.id, latestData);
     }
 }
 
@@ -933,7 +979,7 @@ onAuthStateChanged(auth, async (user) => {
             loadData();
         } else {
             currentUser = null;
-            if (loginOverlay) loginOverlay.classList.add('hidden');
+            if (loginOverlay) loginOverlay.classList.remove('hidden');
             if (document.getElementById('user-info')) document.getElementById('user-info').classList.add('hidden');
             if (inputSection) inputSection.classList.add('hidden');
             if (tierContainer) tierContainer.classList.add('hidden');
@@ -1629,6 +1675,7 @@ function renderCard(id, data) {
     `;
     
     card.onclick = (e) => {
+        if (e.target.closest('.card-actions')) return;
         if (appMode === 'organize') return;
         if (appMode === 'select') {
             if (selectedCardIds.has(id)) {
@@ -1789,7 +1836,11 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         if (document.activeElement === trailerInput) {
             addBtn.click();
-        } else if (document.activeElement === editTitleInput) {
+        } else if (isQuickSortMode && !editModal.classList.contains('hidden')) {
+            // In Quick Sort, Enter should save and go to next
+            e.preventDefault();
+            saveAndNavigate(1);
+        } else if (document.activeElement === editTitleInput || document.activeElement === editGenreInput) {
             saveEditBtn.click();
         }
     }
@@ -1801,14 +1852,19 @@ window.addEventListener('keydown', (e) => {
         const shortcutsEnabled = enableShortcutsToggle ? enableShortcutsToggle.checked : true;
         
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-            const shouldNavigate = (!isTextInput && !isSelect) || (document.activeElement === editTitleInput && e.key === 'ArrowDown') || (document.activeElement === editGenreInput && e.key === 'ArrowDown');
+            // Allow navigation from Title or Genre input if using ArrowDown, or ArrowRight if not at end of text (but simplified: just allow it if user wants it)
+            const shouldNavigate = (!isTextInput && !isSelect) || 
+                                 (document.activeElement === editTitleInput && (e.key === 'ArrowDown' || e.key === 'ArrowRight')) || 
+                                 (document.activeElement === editGenreInput && (e.key === 'ArrowDown' || e.key === 'ArrowRight'));
             
             if (shouldNavigate) {
                 e.preventDefault();
                 saveAndNavigate(1);
             }
         } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-            const shouldNavigate = (!isTextInput && !isSelect) || (document.activeElement === editTitleInput && e.key === 'ArrowUp') || (document.activeElement === editGenreInput && e.key === 'ArrowUp');
+            const shouldNavigate = (!isTextInput && !isSelect) || 
+                                 (document.activeElement === editTitleInput && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) || 
+                                 (document.activeElement === editGenreInput && (e.key === 'ArrowUp' || e.key === 'ArrowLeft'));
             
             if (shouldNavigate) {
                 e.preventDefault();

@@ -185,55 +185,6 @@
                 </div>
             </div>
 
-            <!-- Rename Genre Modal -->
-            <div id="rename-genre-modal" class="modal hidden">
-                <div class="modal-content" style="max-width: 400px;">
-                    <h3>Rename Genre</h3>
-                    <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 15px;">
-                        <div>
-                            <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Select Genre:</div>
-                            <select id="rename-genre-select" style="width: 100%;"></select>
-                        </div>
-                        <div>
-                            <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">New Name:</div>
-                            <input type="text" id="rename-genre-new-name" placeholder="Enter new name...">
-                        </div>
-                        <div style="display: flex; gap: 10px; margin-top: 10px;">
-                            <button id="confirm-rename-genre-btn" class="primary-btn" style="flex: 1;">Rename All</button>
-                            <button id="close-rename-genre-modal-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- Rename Person Modal -->
-            <div id="rename-person-modal" class="modal hidden">
-                <div class="modal-content" style="max-width: 400px;">
-                    <h3>Rename Person</h3>
-                    <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 15px;">
-                        <div>
-                            <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Current Name:</div>
-                            <input type="text" id="rename-person-old-name" disabled style="opacity: 0.6; cursor: not-allowed;">
-                        </div>
-                        <div>
-                            <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">New Name:</div>
-                            <input type="text" id="rename-person-new-name" placeholder="Enter new name...">
-                        </div>
-                        <div style="display: flex; gap: 10px; margin-top: 10px;">
-                            <button id="confirm-rename-person-btn" class="primary-btn" style="flex: 1;">Update Everywhere</button>
-                            <button id="close-rename-person-modal-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Success Overlay -->
-            <div id="success-overlay" class="hidden" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; background: var(--accent); color: white; padding: 12px 24px; border-radius: 30px; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.4); animation: slideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span id="success-msg">Success!</span>
-                </div>
-            </div>
-
             <div class="filter-group" style="flex: 1; justify-content: flex-end;">
                 <input type="text" id="search-input" placeholder="Search titles..." style="padding: 8px 16px; font-size: 13px; margin: 0; width: 100%; max-width: 300px;">
             </div>
@@ -251,115 +202,6 @@
                 <button id="batch-delete-btn" style="background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #fecaca;">Delete</button>
                 <button id="batch-cancel-btn"
                     style="background:none; border:1px solid rgba(255,255,255,0.2);">Done</button>
-            </div>
-        </div>
-
-        <!-- Quick Sort Tier Modal -->
-        <div id="quick-sort-tier-modal" class="modal-overlay hidden">
-            <div class="modal-content glass-card">
-                <h3>Quick Sort: Select Tier</h3>
-                <p style="font-size: 12px; color: #aaa; margin-bottom: 15px;">One-by-one editing for all items in the selected tier.</p>
-                <div id="quick-sort-tier-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
-                <button class="close-modal-btn" style="margin-top: 15px; width: 100%;">Cancel</button>
-            </div>
-        </div>
-
-        <!-- Batch Move Modal -->
-        <div id="batch-move-modal" class="modal-overlay hidden">
-            <div class="modal-content glass-card">
-                <h3>Move Selected to...</h3>
-                <div id="batch-move-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
-                </div>
-                <button class="close-modal-btn" style="margin-top: 15px; width: 100%;">Cancel</button>
-            </div>
-        </div>
-
-        <!-- Batch People Modal -->
-        <div id="batch-people-modal" class="modal-overlay hidden">
-            <div class="modal-content glass-card">
-                <h3>Batch Edit People</h3>
-                <p style="font-size: 10px; color: #aaa; margin-bottom: 10px;">This will ADD selected people to all
-                    selected items.</p>
-                <div id="batch-people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
-                <div style="margin-top: 15px; display: flex; gap: 10px;">
-                    <div style="flex: 1;">
-                        <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Change Type:</div>
-                        <select id="batch-type-select" style="width: 100%;">
-                            <option value="no-change">-- No Change --</option>
-                            <option value="movie">Movie</option>
-                            <option value="tv">TV Show</option>
-                        </select>
-                    </div>
-                    <div style="flex: 1;">
-                        <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Change Status:</div>
-                        <select id="batch-status-select" style="width: 100%;">
-                            <option value="no-change">-- No Change --</option>
-                            <option value="first-watch">First Watch</option>
-                            <option value="rewatch">Rewatch</option>
-                            <option value="new-episodes">New Episodes Coming</option>
-                        </select>
-                    </div>
-                </div>
-                <div style="margin-top: 20px; display: flex; gap: 10px;">
-                    <button id="save-batch-people-btn" style="flex: 2; background: #3b82f6;">Apply to All</button>
-                    <button class="close-modal-btn" style="flex: 1;">Cancel</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Confirmation Modal -->
-        <div id="confirm-modal" class="modal hidden">
-            <div class="modal-content" style="max-width: 400px; text-align: center;">
-                <h3 id="confirm-title" style="margin-bottom: 10px;">Confirm</h3>
-                <p id="confirm-msg" style="color: var(--text-dim); margin-bottom: 25px; line-height: 1.5;"></p>
-                <div style="display: flex; gap: 12px; justify-content: center;">
-                    <button id="confirm-yes-btn" class="primary-btn" style="flex: 1;">Yes, Proceed</button>
-                    <button id="confirm-no-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Alert Modal -->
-        <div id="alert-modal" class="modal hidden">
-            <div class="modal-content" style="max-width: 400px; text-align: center;">
-                <div style="margin-bottom: 15px; color: var(--accent);">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 48px; height: 48px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                </div>
-                <h3 id="alert-title" style="margin-bottom: 10px;">Notice</h3>
-                <p id="alert-msg" style="color: var(--text-dim); margin-bottom: 25px; line-height: 1.5;"></p>
-                <button id="alert-ok-btn" class="primary-btn" style="width: 100%;">Got it!</button>
-            </div>
-        </div>
-
-        <!-- Prompt Modal -->
-        <div id="prompt-modal" class="modal hidden">
-            <div class="modal-content" style="max-width: 400px;">
-                <h3 id="prompt-title">Enter Value</h3>
-                <div style="margin: 20px 0;">
-                    <input type="text" id="prompt-input" style="width: 100%;" placeholder="Type here...">
-                </div>
-                <div style="display: flex; gap: 10px;">
-                    <button id="prompt-confirm-btn" class="primary-btn" style="flex: 1;">Confirm</button>
-                    <button id="prompt-cancel-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Duplicate Detection Modal -->
-        <div id="duplicate-modal" class="modal-overlay hidden">
-            <div class="modal-content glass-card duplicate-card">
-                <div class="duplicate-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 30px; height: 30px;">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                </div>
-                <h3 id="duplicate-title">Duplicate Detected</h3>
-                <p id="duplicate-message">This link has already been added to your list.</p>
-                <div class="duplicate-btns">
-                    <button id="duplicate-anyway-btn">Add Anyway</button>
-                    <button id="duplicate-skip-btn">Skip</button>
-                </div>
             </div>
         </div>
 
@@ -388,6 +230,168 @@
         <main id="tier-container" class="hidden">
             <!-- Tiers will be rendered here dynamically -->
         </main>
+    </div>
+
+    <!-- Modals (Placed at the end of body for best overlay behavior) -->
+
+    <!-- Rename Genre Modal -->
+    <div id="rename-genre-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Rename Genre</h3>
+            <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 15px;">
+                <div>
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Select Genre:</div>
+                    <select id="rename-genre-select" style="width: 100%;"></select>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">New Name:</div>
+                    <input type="text" id="rename-genre-new-name" placeholder="Enter new name...">
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button id="confirm-rename-genre-btn" class="primary-btn" style="flex: 2;">Rename All</button>
+                    <button id="delete-genre-btn" class="secondary-btn" style="flex: 1; background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.2);">Delete</button>
+                    <button id="close-rename-genre-modal-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Person Modal -->
+    <div id="rename-person-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Rename Person</h3>
+            <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 15px;">
+                <div>
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Current Name:</div>
+                    <input type="text" id="rename-person-old-name" disabled style="opacity: 0.6; cursor: not-allowed;">
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">New Name:</div>
+                    <input type="text" id="rename-person-new-name" placeholder="Enter new name...">
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button id="confirm-rename-person-btn" class="primary-btn" style="flex: 1;">Update Everywhere</button>
+                    <button id="close-rename-person-modal-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Overlay -->
+    <div id="success-overlay" class="hidden" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 12000; background: var(--accent); color: white; padding: 12px 24px; border-radius: 30px; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.4); animation: slideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width: 18px; height: 18px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span id="success-msg">Success!</span>
+        </div>
+    </div>
+
+    <!-- Quick Sort Tier Modal -->
+    <div id="quick-sort-tier-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card">
+            <h3>Quick Sort: Select Tier</h3>
+            <p style="font-size: 12px; color: #aaa; margin-bottom: 15px;">One-by-one editing for all items in the selected tier.</p>
+            <div id="quick-sort-tier-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            <button class="close-modal-btn" style="margin-top: 15px; width: 100%;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Batch Move Modal -->
+    <div id="batch-move-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card">
+            <h3>Move Selected to...</h3>
+            <div id="batch-move-list" style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
+            </div>
+            <button class="close-modal-btn" style="margin-top: 15px; width: 100%;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Batch People Modal -->
+    <div id="batch-people-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card">
+            <h3>Batch Edit People</h3>
+            <p style="font-size: 10px; color: #aaa; margin-bottom: 10px;">This will ADD selected people to all
+                selected items.</p>
+            <div id="batch-people-toggles" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
+            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Change Type:</div>
+                    <select id="batch-type-select" style="width: 100%;">
+                        <option value="no-change">-- No Change --</option>
+                        <option value="movie">Movie</option>
+                        <option value="tv">TV Show</option>
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-size: 12px; color: #aaa; margin-bottom: 5px;">Change Status:</div>
+                    <select id="batch-status-select" style="width: 100%;">
+                        <option value="no-change">-- No Change --</option>
+                        <option value="first-watch">First Watch</option>
+                        <option value="rewatch">Rewatch</option>
+                        <option value="new-episodes">New Episodes Coming</option>
+                    </select>
+                </div>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="save-batch-people-btn" style="flex: 2; background: #3b82f6;">Apply to All</button>
+                <button class="close-modal-btn" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <h3 id="confirm-title" style="margin-bottom: 10px;">Confirm</h3>
+            <p id="confirm-msg" style="color: var(--text-dim); margin-bottom: 25px; line-height: 1.5;"></p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button id="confirm-yes-btn" class="primary-btn" style="flex: 1;">Yes, Proceed</button>
+                <button id="confirm-no-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Modal -->
+    <div id="alert-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <div style="margin-bottom: 15px; color: var(--accent);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 48px; height: 48px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+            <h3 id="alert-title" style="margin-bottom: 10px;">Notice</h3>
+            <p id="alert-msg" style="color: var(--text-dim); margin-bottom: 25px; line-height: 1.5;"></p>
+            <button id="alert-ok-btn" class="primary-btn" style="width: 100%;">Got it!</button>
+        </div>
+    </div>
+
+    <!-- Prompt Modal -->
+    <div id="prompt-modal" class="modal hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3 id="prompt-title">Enter Value</h3>
+            <div style="margin: 20px 0;">
+                <input type="text" id="prompt-input" style="width: 100%;" placeholder="Type here...">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="prompt-confirm-btn" class="primary-btn" style="flex: 1;">Confirm</button>
+                <button id="prompt-cancel-btn" class="secondary-btn" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Duplicate Detection Modal -->
+    <div id="duplicate-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-card duplicate-card">
+            <div class="duplicate-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 30px; height: 30px;">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </div>
+            <h3 id="duplicate-title">Duplicate Detected</h3>
+            <p id="duplicate-message">This link has already been added to your list.</p>
+            <div class="duplicate-btns">
+                <button id="duplicate-anyway-btn">Add Anyway</button>
+                <button id="duplicate-skip-btn">Skip</button>
+            </div>
+        </div>
     </div>
 
     <!-- Edit Modal -->
@@ -457,7 +461,9 @@
                 </button>
             </div>
         </div>
-    </div>    <datalist id="genre-list"></datalist>
+    </div>
+
+    <datalist id="genre-list"></datalist>
 
     <script>
         // Environment Detection
