@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // --- REPLACE THIS WITH YOUR FIREBASE CONFIG ---
@@ -63,8 +63,7 @@ async function handlePendingAuth() {
 handlePendingAuth();
 
 // DOM Elements
-const googleLoginPopupBtn = document.getElementById('google-login-popup-btn');
-const googleLoginRedirectBtn = document.getElementById('google-login-redirect-btn');
+const googleLoginBtn = document.getElementById('google-login-btn');
 const loginContainer = document.getElementById('login-container');
 const logoutBtn = document.getElementById('logout-btn');
 const inputSection = document.getElementById('input-section');
@@ -412,45 +411,23 @@ const loginMsg = document.getElementById('login-msg');
 const emailInput = document.getElementById('email-input');
 const sendLinkBtn = document.getElementById('send-link-btn');
 
-// Configure UI for Standalone vs Browser
-if (isStandalone) {
-    if (googleLoginPopupBtn) googleLoginPopupBtn.classList.add('hidden');
-    if (googleLoginRedirectBtn) googleLoginRedirectBtn.classList.remove('hidden');
-} else {
-    // In browser, popup is usually better, but keep both for choice if desired
-    // or just show popup
-    // if (googleLoginRedirectBtn) googleLoginRedirectBtn.classList.add('hidden');
-}
+// Google Login handler is initialized below
 
-// Google Login (Popup)
-if (googleLoginPopupBtn) googleLoginPopupBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    console.log("[Auth] Popup Login Button Clicked");
-    signInWithPopup(auth, provider)
-        .then((result) => {
-            console.log("[Auth] Popup Login Success:", result.user.displayName);
-        })
-        .catch((error) => {
-            console.error("[Auth] Popup Login Error:", error);
-            alert(`Popup Login Failed: ${error.message}\n(This often fails in iOS Standalone mode)`);
-        });
-});
-
-// Google Login (Redirect)
-if (googleLoginRedirectBtn) googleLoginRedirectBtn.addEventListener('click', (e) => {
+// Google Login (Redirect Only)
+if (googleLoginBtn) googleLoginBtn.addEventListener('click', (e) => {
     e.preventDefault();
     console.log("[Auth] Redirect Login Button Clicked");
     
     // Visual Feedback
-    const originalText = googleLoginRedirectBtn.innerText;
-    googleLoginRedirectBtn.innerText = "Redirecting...";
-    googleLoginRedirectBtn.disabled = true;
+    const originalText = googleLoginBtn.innerText;
+    googleLoginBtn.innerText = "Redirecting...";
+    googleLoginBtn.disabled = true;
 
     signInWithRedirect(auth, provider).catch(error => {
         console.error("[Auth] Redirect Login Error:", error);
         alert(`Redirect Login Failed: ${error.message}`);
-        googleLoginRedirectBtn.innerText = originalText;
-        googleLoginRedirectBtn.disabled = false;
+        googleLoginBtn.innerText = originalText;
+        googleLoginBtn.disabled = false;
     });
 });
 
