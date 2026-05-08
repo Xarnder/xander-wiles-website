@@ -945,6 +945,27 @@ function renderAllCards() {
         renderCard(watch.id, watch);
     });
 
+    // Update Tier Labels with Counts
+    const isFiltered = typeFilter !== 'all' || watchStatusFilter !== 'all' || peopleFilters.size > 0 || searchQuery !== "";
+    
+    userTiers.forEach(tier => {
+        const totalInTier = cachedWatches.filter(w => w.tier === tier.id).length;
+        const filteredInTier = filtered.filter(w => w.tier === tier.id).length;
+        
+        const tierDiv = document.querySelector(`.tier[data-tier="${tier.id}"]`);
+        if (tierDiv) {
+            const label = tierDiv.querySelector('.tier-label');
+            if (label) {
+                // Keep the tier name but add the count
+                const countText = isFiltered ? `${filteredInTier}/${totalInTier}` : `${totalInTier}`;
+                label.innerHTML = `
+                    <span class="tier-name">${tier.name}</span>
+                    <span class="tier-count">(${countText})</span>
+                `;
+            }
+        }
+    });
+
     // Handle Empty States
     userTiers.forEach(tier => {
         const list = document.getElementById(`list-${tier.id}`);
