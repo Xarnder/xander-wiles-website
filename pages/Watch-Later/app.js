@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // --- REPLACE THIS WITH YOUR FIREBASE CONFIG ---
 const firebaseConfig = {
@@ -27,21 +27,40 @@ setPersistence(auth, browserLocalPersistence)
         console.error("Auth Persistence Error:", error);
     });
 
-// Check for redirect result on page load (critical for standalone PWA mode)
-getRedirectResult(auth)
-    .then((result) => {
+// Detect iOS standalone (home screen) PWA mode
+const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+console.log("[Auth] Standalone mode detected:", isStandalone);
+
+// Check for redirect result or Email Link sign-in on page load
+async function handlePendingAuth() {
+    // 1. Handle Google Redirect Result
+    try {
+        const result = await getRedirectResult(auth);
         if (result) {
             console.log("[Auth] Redirect Login Success:", result.user.displayName);
-        } else {
-            console.log("[Auth] No redirect result (normal if user didn't just redirect-login)");
         }
-    })
-    .catch((error) => {
-        // In standalone mode, redirect errors are common due to context switching.
-        // The onAuthStateChanged listener below is the real safety net — Firebase's
-        // local persistence will restore the session even if getRedirectResult fails.
+    } catch (error) {
         console.warn("[Auth] Redirect result error (may be harmless in standalone):", error.code, error.message);
-    });
+    }
+
+    // 2. Handle Email Link Sign-in
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+        let email = window.localStorage.getItem('emailForSignIn');
+        if (!email) {
+            email = window.prompt('Please provide your email for confirmation');
+        }
+        try {
+            const result = await signInWithEmailLink(auth, email, window.location.href);
+            window.localStorage.removeItem('emailForSignIn');
+            console.log("[Auth] Email Link Login Success:", result.user.email);
+        } catch (error) {
+            console.error("[Auth] Email Link Error:", error);
+            alert("Login link failed or expired. Please try again.");
+        }
+    }
+}
+
+handlePendingAuth();
 
 // DOM Elements
 const googleLoginPopupBtn = document.getElementById('google-login-popup-btn');
@@ -388,9 +407,20 @@ window.deletePerson = async (personId) => {
     });
 };
 
-// Detect iOS standalone (home screen) PWA mode
-const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-console.log("[Auth] Standalone mode detected:", isStandalone);
+// Login Elements
+const loginMsg = document.getElementById('login-msg');
+const emailInput = document.getElementById('email-input');
+const sendLinkBtn = document.getElementById('send-link-btn');
+
+// Configure UI for Standalone vs Browser
+if (isStandalone) {
+    if (googleLoginPopupBtn) googleLoginPopupBtn.classList.add('hidden');
+    if (googleLoginRedirectBtn) googleLoginRedirectBtn.classList.remove('hidden');
+} else {
+    // In browser, popup is usually better, but keep both for choice if desired
+    // or just show popup
+    // if (googleLoginRedirectBtn) googleLoginRedirectBtn.classList.add('hidden');
+}
 
 // Google Login (Popup)
 if (googleLoginPopupBtn) googleLoginPopupBtn.addEventListener('click', (e) => {
@@ -410,39 +440,85 @@ if (googleLoginPopupBtn) googleLoginPopupBtn.addEventListener('click', (e) => {
 if (googleLoginRedirectBtn) googleLoginRedirectBtn.addEventListener('click', (e) => {
     e.preventDefault();
     console.log("[Auth] Redirect Login Button Clicked");
+    
+    // Visual Feedback
+    const originalText = googleLoginRedirectBtn.innerText;
+    googleLoginRedirectBtn.innerText = "Redirecting...";
+    googleLoginRedirectBtn.disabled = true;
+
     signInWithRedirect(auth, provider).catch(error => {
         console.error("[Auth] Redirect Login Error:", error);
         alert(`Redirect Login Failed: ${error.message}`);
+        googleLoginRedirectBtn.innerText = originalText;
+        googleLoginRedirectBtn.disabled = false;
     });
+});
+
+// Email Link Login
+if (sendLinkBtn) sendLinkBtn.addEventListener('click', async () => {
+    const email = emailInput.value;
+    if (!email) return alert("Please enter your email.");
+
+    const actionCodeSettings = {
+        url: window.location.href,
+        handleCodeInApp: true,
+    };
+
+    try {
+        await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+        window.localStorage.setItem('emailForSignIn', email);
+        sendLinkBtn.innerText = "Link Sent!";
+        sendLinkBtn.disabled = true;
+        if (loginMsg) {
+            loginMsg.innerText = "Check your inbox for the login link!";
+            loginMsg.classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error("[Auth] Email Link Send Error:", error);
+        alert("Error sending link: " + error.message);
+    }
 });
 
 logoutBtn.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        console.log("User logged in:", user.email);
-        currentUser = user;
-        if (loginContainer) loginContainer.classList.add('hidden');
-        document.getElementById('user-info').classList.remove('hidden');
-        document.getElementById('user-name').innerText = user.displayName;
-        inputSection.classList.remove('hidden');
-        tierContainer.classList.remove('hidden');
-        modeSelector.classList.remove('hidden');
-        document.getElementById('filter-bar').classList.remove('hidden');
-        document.body.classList.add('mode-watch');
-        await initializeTiers();
-        await initializePeople();
-        loadData();
-    } else {
-        console.log("User logged out");
-        currentUser = null;
-        if (loginContainer) loginContainer.classList.remove('hidden');
-        document.getElementById('user-info').classList.add('hidden');
-        inputSection.classList.add('hidden');
-        tierContainer.classList.add('hidden');
-        modeSelector.classList.add('hidden');
-        document.getElementById('filter-bar').classList.add('hidden');
-        document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select');
+    try {
+        console.log("[Auth] Observer fired. User state:", user ? `LOGGED_IN (${user.email})` : "LOGGED_OUT");
+        if (user) {
+            currentUser = user;
+            
+            // Immediate UI Transition
+            if (loginContainer) loginContainer.classList.add('hidden');
+            const userInfo = document.getElementById('user-info');
+            const userName = document.getElementById('user-name');
+            const filterBar = document.getElementById('filter-bar');
+            
+            if (userInfo) userInfo.classList.remove('hidden');
+            if (userName) userName.innerText = user.displayName || user.email || "User";
+            if (inputSection) inputSection.classList.remove('hidden');
+            if (tierContainer) tierContainer.classList.remove('hidden');
+            if (modeSelector) modeSelector.classList.remove('hidden');
+            if (filterBar) filterBar.classList.remove('hidden');
+            document.body.classList.add('mode-watch');
+            
+            console.log("[Auth] UI transition complete, loading data...");
+            
+            // Data Initialization (in background to avoid blocking UI)
+            await initializeTiers().catch(e => console.error("[Auth] Tiers Init Error:", e));
+            await initializePeople().catch(e => console.error("[Auth] People Init Error:", e));
+            loadData();
+        } else {
+            currentUser = null;
+            if (loginContainer) loginContainer.classList.remove('hidden');
+            if (document.getElementById('user-info')) document.getElementById('user-info').classList.add('hidden');
+            if (inputSection) inputSection.classList.add('hidden');
+            if (tierContainer) tierContainer.classList.add('hidden');
+            if (modeSelector) modeSelector.classList.add('hidden');
+            if (document.getElementById('filter-bar')) document.getElementById('filter-bar').classList.add('hidden');
+            document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select');
+        }
+    } catch (err) {
+        console.error("[Auth] Critical error in onAuthStateChanged:", err);
     }
 });
 
@@ -730,39 +806,33 @@ function renderPeopleToggles() {
 
 async function initializeTiers() {
     const q = query(collection(db, "tiers"), where("uid", "==", currentUser.uid));
-    return new Promise((resolve) => {
-        onSnapshot(q, async (snap) => {
-            if (snap.empty) {
-                console.log("Initializing default tiers...");
-                const defaults = [
-                    { name: 'S', color: '#ff7f7f', order: 0 },
-                    { name: 'A', color: '#ffbf7f', order: 1 },
-                    { name: 'B', color: '#ffff7f', order: 2 },
-                    { name: 'C', color: '#7fff7f', order: 3 }
-                ];
-                for (const t of defaults) {
-                    await addDoc(collection(db, "tiers"), { ...t, uid: currentUser.uid });
-                }
-            }
-            resolve();
-        }, { once: true });
-    });
+    const snap = await getDocs(q);
+    
+    if (snap.empty) {
+        console.log("[Init] Initializing default tiers...");
+        const defaults = [
+            { name: 'S', color: '#ff7f7f', order: 0 },
+            { name: 'A', color: '#ffbf7f', order: 1 },
+            { name: 'B', color: '#ffff7f', order: 2 },
+            { name: 'C', color: '#7fff7f', order: 3 }
+        ];
+        for (const t of defaults) {
+            await addDoc(collection(db, "tiers"), { ...t, uid: currentUser.uid });
+        }
+    }
 }
 
 async function initializePeople() {
     const q = query(collection(db, "people"), where("uid", "==", currentUser.uid));
-    return new Promise((resolve) => {
-        onSnapshot(q, async (snap) => {
-            if (snap.empty) {
-                console.log("Initializing default people...");
-                const defaults = ["Sarah", "Dad", "Mom"];
-                for (const name of defaults) {
-                    await addDoc(collection(db, "people"), { name, uid: currentUser.uid });
-                }
-            }
-            resolve();
-        }, { once: true });
-    });
+    const snap = await getDocs(q);
+    
+    if (snap.empty) {
+        console.log("[Init] Initializing default people...");
+        const defaults = ["Sarah", "Dad", "Mom"];
+        for (const name of defaults) {
+            await addDoc(collection(db, "people"), { name, uid: currentUser.uid });
+        }
+    }
 }
 
 window.updatePerson = async (id, newName) => {

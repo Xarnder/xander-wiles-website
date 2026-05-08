@@ -16,7 +16,7 @@
     "theme_color": "#111115",
     "background_color": "#111115",
     "display": "standalone",
-    "scope": "/",
+    "scope": "/pages/Watch-Later/",
     "id": "/pages/Watch-Later/",
     "start_url": "/pages/Watch-Later/index.html"
 }
