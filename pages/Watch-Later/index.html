@@ -55,6 +55,17 @@
         </svg>
     </div>
 
+    <script>
+        // Inline safety timeout in case app.js fails to load or execute
+        setTimeout(function () {
+            var overlay = document.getElementById('loading-overlay');
+            if (overlay && !overlay.classList.contains('hidden')) {
+                console.warn("Inline safety timeout: Hiding loading overlay");
+                overlay.classList.add('hidden');
+            }
+        }, 10000);
+    </script>
+
     <!-- LOGIN OVERLAY -->
     <div id="login-overlay">
         <h1>Watch Later</h1>

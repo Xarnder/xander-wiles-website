@@ -27,6 +27,20 @@ setPersistence(auth, browserLocalPersistence)
         console.error("Auth Persistence Error:", error);
     });
 
+// GLOBAL ERROR HANDLER
+window.onerror = function(msg, url, line, col, error) {
+    const errorMsg = `Error: ${msg} at ${line}:${col}`;
+    if (typeof debugLog === 'function') {
+        debugLog(errorMsg, 'error');
+    } else {
+        console.error(errorMsg);
+    }
+    // If we hit a critical error, try to show the app anyway
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.classList.add('hidden');
+    return false;
+};
+
 // Debug Console Handler
 function debugLog(msg, type = 'info') {
     console.log(`[AuthDebug] ${msg}`);
@@ -52,6 +66,7 @@ debugLog(`Standalone: ${isStandalone}`);
 debugLog(`isIOS: ${isIOS}`);
 debugLog(`isMobile: ${isMobile}`);
 debugLog(`UA: ${navigator.userAgent.substring(0, 50)}...`);
+debugLog("App initialization started...");
 
 // Check for redirect result or Email Link sign-in on page load
 async function handlePendingAuth() {
@@ -84,6 +99,7 @@ async function handlePendingAuth() {
             alert("Login link failed or expired. Please try again.");
         }
     }
+    debugLog("handlePendingAuth finished.");
 }
 
 handlePendingAuth();
@@ -91,13 +107,22 @@ handlePendingAuth();
 function hideLoadingOverlay() {
     const overlay = document.getElementById('loading-overlay');
     if (overlay && !overlay.classList.contains('hidden')) {
-        console.log("[DEBUG] Hiding Loading Overlay");
+        debugLog("Hiding Loading Overlay");
         overlay.classList.add('hidden');
         setTimeout(() => {
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
         }, 600);
     }
 }
+
+// Safety timeout: Always hide overlay after 8 seconds
+setTimeout(() => {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) {
+        debugLog("Safety timeout: Forcing overlay hide", 'warn');
+        hideLoadingOverlay();
+    }
+}, 8000);
 
 // DOM Elements
 const googleLoginBtn = document.getElementById('google-login-btn');
