@@ -1,7 +1,6 @@
-window.debugLog("app.js module loading started");
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRedirectResult, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, where, doc, updateDoc, deleteDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // --- REPLACE THIS WITH YOUR FIREBASE CONFIG ---
 const firebaseConfig = {
@@ -30,13 +29,7 @@ setPersistence(auth, browserLocalPersistence)
 
 // GLOBAL ERROR HANDLER
 window.onerror = function(msg, url, line, col, error) {
-    const errorMsg = `Error: ${msg} at ${line}:${col}`;
-    if (typeof window.debugLog === 'function') {
-        window.debugLog(errorMsg, 'error');
-    } else {
-        console.error(errorMsg);
-    }
-
+    console.error(`Error: ${msg} at ${line}:${col}`);
     return false;
 };
 
@@ -48,41 +41,19 @@ const isStandalone = window.isStandalone;
 const isIOS = window.isIOS;
 const isMobile = window.isMobile;
 
-window.debugLog("App initialization started...");
 
 
-// Check for redirect result or Email Link sign-in on page load
+
+// Check for redirect result on page load
 async function handlePendingAuth() {
-    // 1. Handle Google Redirect Result
-    window.debugLog("Checking for redirect result...");
     try {
         const result = await getRedirectResult(auth);
         if (result) {
-            window.debugLog(`Redirect Login Success: ${result.user.displayName}`);
-        } else {
-            window.debugLog("No pending redirect result found.");
+            console.log("[Auth] Redirect Login Success:", result.user.displayName);
         }
     } catch (error) {
-        window.debugLog(`Redirect Result Error: ${error.code}`, 'error');
         console.warn("[Auth] Redirect result error:", error.code, error.message);
     }
-
-    // 2. Handle Email Link Sign-in
-    if (isSignInWithEmailLink(auth, window.location.href)) {
-        let email = window.localStorage.getItem('emailForSignIn');
-        if (!email) {
-            email = window.prompt('Please provide your email for confirmation');
-        }
-        try {
-            const result = await signInWithEmailLink(auth, email, window.location.href);
-            window.localStorage.removeItem('emailForSignIn');
-            console.log("[Auth] Email Link Login Success:", result.user.email);
-        } catch (error) {
-            console.error("[Auth] Email Link Error:", error);
-            alert("Login link failed or expired. Please try again.");
-        }
-    }
-    window.debugLog("handlePendingAuth finished.");
 }
 
 handlePendingAuth();
@@ -104,6 +75,7 @@ const trailerInput = document.getElementById('trailer-link');
 const typeToggle = document.getElementById('type-toggle');
 const watchWithInput = document.getElementById('watch-with');
 const addBtn = document.getElementById('add-btn');
+const modeSelector = document.getElementById('mode-selector');
 
 // Batch Elements
 const toggleBatchBtn = document.getElementById('toggle-batch');
@@ -148,6 +120,7 @@ let selectedPeople = new Set(); // Track currently selected people in UI
 let editingItemId = null; // Track which item is being edited
 let editingItemPeople = new Set(); // Track people for the item being edited
 let appMode = 'watch'; // edit, organize, watch, select
+
 let sortables = []; // Store SortableJS instances
 let selectedCardIds = new Set(); // Track selected cards for multi-select
 
@@ -181,7 +154,7 @@ if (editPeopleBtn) editPeopleBtn.addEventListener('click', () => peopleManagerSe
 if (closePeopleBtn) closePeopleBtn.addEventListener('click', () => peopleManagerSection.classList.add('hidden'));
 
 // Mode Selector Logic
-const modeSelector = document.getElementById('mode-selector');
+
 const modeBtns = document.querySelectorAll('.mode-btn');
 
 const batchBar = document.getElementById('batch-actions-bar');
@@ -438,16 +411,9 @@ window.deletePerson = async (personId) => {
     });
 };
 
-// Login Elements
-const loginMsg = document.getElementById('login-msg');
-const emailInput = document.getElementById('email-input');
-const sendLinkBtn = document.getElementById('send-link-btn');
-
-// Google Login handler is initialized below
-
 if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     e.preventDefault();
-    window.debugLog("Google Login Button Clicked");
+
     
     const originalText = googleLoginBtn.innerText;
     // DO NOT use redirect in Standalone/PWA mode, it breaks the Firebase auth state
@@ -460,17 +426,15 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     const loginLoader = document.querySelector('.login-loader');
     if (loginLoader) loginLoader.classList.remove('hidden');
     
-    window.debugLog(`Using ${useRedirect ? 'REDIRECT' : 'POPUP'} flow...`);
+
     
     try {
         if (useRedirect) {
             await signInWithRedirect(auth, provider);
         } else {
             const result = await signInWithPopup(auth, provider);
-            window.debugLog(`Popup Login Success: ${result.user.displayName}`);
         }
     } catch (error) {
-        window.debugLog(`Login Error: ${error.code} - ${error.message}`, 'error');
         alert(`Login Failed: ${error.message}`);
     } finally {
         // Only reset UI if we didn't redirect away
@@ -482,36 +446,13 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     }
 });
 
-// Email Link Login
-if (sendLinkBtn) sendLinkBtn.addEventListener('click', async () => {
-    const email = emailInput.value;
-    if (!email) return alert("Please enter your email.");
 
-    const actionCodeSettings = {
-        url: window.location.href,
-        handleCodeInApp: true,
-    };
-
-    try {
-        await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-        window.localStorage.setItem('emailForSignIn', email);
-        sendLinkBtn.innerText = "Link Sent!";
-        sendLinkBtn.disabled = true;
-        if (loginMsg) {
-            loginMsg.innerText = "Check your inbox for the login link!";
-            loginMsg.classList.remove('hidden');
-        }
-    } catch (error) {
-        console.error("[Auth] Email Link Send Error:", error);
-        alert("Error sending link: " + error.message);
-    }
-});
 
 logoutBtn.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
     try {
-        window.debugLog(`Auth state change: ${user ? 'Logged In (' + user.email + ')' : 'Logged Out'}`);
+        console.log(`[Auth] State change: ${user ? 'Logged In' : 'Logged Out'}`);
         if (user) {
             currentUser = user;
             
@@ -699,6 +640,8 @@ async function saveItem(data) {
 
 // Load & Sync Data
 function loadData() {
+    if (!currentUser) return;
+
     // Sync Tiers
     const tiersQ = query(collection(db, "tiers"), where("uid", "==", currentUser.uid));
     onSnapshot(tiersQ, (snapshot) => {
@@ -709,6 +652,8 @@ function loadData() {
         renderTiers();
         renderTierManager();
         updateTierSelect();
+    }, (err) => {
+        console.error("[Firestore] Tiers listener error:", err);
     });
 
     // Sync People
@@ -721,6 +666,8 @@ function loadData() {
         renderPeopleToggles();
         renderPeopleManager();
         renderFilterPeople();
+    }, (err) => {
+        console.error("[Firestore] People listener error:", err);
     });
 
     // Sync Watches
@@ -731,6 +678,8 @@ function loadData() {
             cachedWatches.push({ id: doc.id, ...doc.data() });
         });
         renderAllCards();
+    }, (err) => {
+        console.error("[Firestore] Watches listener error:", err);
     });
 }
 

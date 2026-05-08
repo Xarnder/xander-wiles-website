@@ -811,11 +811,7 @@ input[type="file"]::-webkit-file-upload-button {
         padding-top: 10px; /* Small extra buffer below status bar */
     }
 
-    #login-debug {
-        display: block !important;
-        position: relative !important;
-        z-index: 999999 !important;
-    }
+
 }
 
 /* --- LOGIN OVERLAY (Synced with To-Do List) --- */

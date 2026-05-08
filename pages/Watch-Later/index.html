@@ -50,29 +50,13 @@
     <!-- LOGIN OVERLAY -->
     <div id="login-overlay">
         <h1>Watch Later</h1>
-        <button id="google-login-btn" onclick="console.log('Btn click'); if(window.debugLog) window.debugLog('Google Button Pressed (Inline)')">
+        <button id="google-login-btn">
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" height="24"
                 alt="G">
             Login with Google
         </button>
 
-        <div class="divider"
-            style="display: flex; align-items: center; gap: 10px; color: #666; font-size: 12px; width: 200px;">
-            <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.1);"></span>
-            OR
-            <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.1);"></span>
-        </div>
 
-        <div id="email-link-auth"
-            style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 280px;">
-            <input type="email" id="email-input" placeholder="Enter email for login link..."
-                style="width: 100%; text-align: center;">
-            <button type="button" id="send-link-btn"
-                style="background: var(--accent); color: white; width: 100%; border-radius: 24px; padding: 12px;">Send
-                Login Link</button>
-            <p id="login-msg" class="hidden"
-                style="font-size: 12px; color: var(--accent); text-align: center; margin: 0;"></p>
-        </div>
 
         <!-- Login screen mini-loader -->
         <div class="login-loader hidden">
@@ -86,13 +70,7 @@
             </svg>
         </div>
 
-        <!-- DEBUG WINDOW -->
-        <div id="login-debug"
-            style="margin-top: 30px; width: 90%; max-width: 400px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; font-family: monospace; font-size: 10px; color: #0f0; overflow-y: auto; max-height: 150px; display: none;">
-            <div style="color: #aaa; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 3px;">Auth Debug
-                Console</div>
-            <div id="debug-logs"></div>
-        </div>
+
     </div>
 
     <div class="bg-glow">
@@ -278,39 +256,11 @@
                 <button id="delete-entry-btn" style="flex: 1;">Delete</button>
             </div>
         </div>
-    </div>
-
-    <script>
-        // Global Debug Utility
-        window.debugLog = function(msg, type = 'info') {
-            console.log(`[AuthDebug] ${msg}`);
-            const debugWindow = document.getElementById('login-debug');
-            const debugLogs = document.getElementById('debug-logs');
-            if (debugWindow && debugLogs) {
-                debugWindow.style.display = 'block';
-                const logEntry = document.createElement('div');
-                logEntry.style.marginBottom = '2px';
-                logEntry.style.color = type === 'error' ? '#f55' : (type === 'warn' ? '#fb0' : '#0f0');
-                logEntry.innerHTML = `<span style="color: #666;">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
-                debugLogs.appendChild(logEntry);
-                debugWindow.scrollTop = debugWindow.scrollHeight;
-            }
-        };
-
-        // Global Error Catcher
-        window.onerror = function(msg, url, line, col, error) {
-            window.debugLog(`Global Error: ${msg} at ${line}:${col}`, 'error');
-            return false;
-        };
-
+    </div>    <script>
         // Environment Detection
         window.isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
         window.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
         window.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        window.debugLog("System Initialized (Bottom Script)");
-        window.debugLog("Standalone: " + window.isStandalone);
-        window.debugLog("Waiting for modules...");
     </script>
 
     <!-- Firebase SDKs -->
