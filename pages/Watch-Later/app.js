@@ -547,6 +547,44 @@ function getThumbnail(url) {
     }
 }
 
+// Helper: Extract YouTube Video ID
+function getVideoId(url) {
+    if (!url) return null;
+    const regex = /(?:v=|\/)([0-9A-Za-z_-]{11})/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
+}
+
+// Check for duplicates
+function findDuplicate(url) {
+    const id = getVideoId(url);
+    if (!id) return null;
+    return cachedWatches.find(w => getVideoId(w.url) === id);
+}
+
+// Duplicate Prompt Logic
+const duplicateModal = document.getElementById('duplicate-modal');
+const duplicateTitle = document.getElementById('duplicate-title');
+const duplicateMessage = document.getElementById('duplicate-message');
+const duplicateAnywayBtn = document.getElementById('duplicate-anyway-btn');
+const duplicateSkipBtn = document.getElementById('duplicate-skip-btn');
+
+function showDuplicatePrompt(title, message, onAnyway, onSkip) {
+    duplicateTitle.innerText = title;
+    duplicateMessage.innerText = message;
+    duplicateModal.classList.remove('hidden');
+    
+    duplicateAnywayBtn.onclick = () => {
+        onAnyway();
+        duplicateModal.classList.add('hidden');
+    };
+    
+    duplicateSkipBtn.onclick = () => {
+        if (onSkip) onSkip();
+        duplicateModal.classList.add('hidden');
+    };
+}
+
 // Fetch Video Title from YouTube
 async function getVideoData(url) {
     try {
@@ -588,6 +626,29 @@ function cleanTitle(title) {
     return cleaned || title;
 }
 
+// Helper: Get contrast color (black/white) based on background hex
+function getContrastColor(hexColor) {
+    if (!hexColor) return '#ffffff';
+    // Remove # if present
+    const hex = hexColor.replace('#', '');
+    
+    // Handle short hex (e.g. #333)
+    let r, g, b;
+    if (hex.length === 3) {
+        r = parseInt(hex.charAt(0) + hex.charAt(0), 16);
+        g = parseInt(hex.charAt(1) + hex.charAt(1), 16);
+        b = parseInt(hex.charAt(2) + hex.charAt(2), 16);
+    } else {
+        r = parseInt(hex.substr(0, 2), 16);
+        g = parseInt(hex.substr(2, 2), 16);
+        b = parseInt(hex.substr(4, 2), 16);
+    }
+    
+    // Calculate brightness using the YIQ formula
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness > 128 ? '#000000' : '#ffffff';
+}
+
 // Add Item(s)
 addBtn.addEventListener('click', async () => {
     if (isBatchMode) {
@@ -601,6 +662,21 @@ async function handleSingleAdd() {
     const url = trailerInput.value;
     if (!url) return alert("Paste a link first!");
 
+    const existing = findDuplicate(url);
+    if (existing) {
+        showDuplicatePrompt(
+            "Duplicate Detected",
+            `"${existing.movieTitle}" is already in your list. Would you like to add it anyway?`,
+            () => proceedWithSingleAdd(url),
+            () => { trailerInput.value = ""; }
+        );
+        return;
+    }
+
+    await proceedWithSingleAdd(url);
+}
+
+async function proceedWithSingleAdd(url) {
     addBtn.disabled = true;
     addBtn.innerText = "Fetching Title...";
 
@@ -629,12 +705,47 @@ async function handleBatchAdd() {
     if (!text) return alert("Paste some links first!");
 
     // Regex to find YouTube Video IDs
-    const regex = /(?:v=|\/)([0-9A-Za-z_-]{11}).*/g;
+    const regex = /(?:v=|\/)([0-9A-Za-z_-]{11})/g;
     const matches = [...text.matchAll(regex)];
     const videoIds = [...new Set(matches.map(m => m[1]))];
 
     if (videoIds.length === 0) return alert("No valid YouTube links found!");
 
+    const duplicates = [];
+    const uniqueVideoIds = [];
+
+    videoIds.forEach(id => {
+        const url = `https://www.youtube.com/watch?v=${id}`;
+        if (findDuplicate(url)) {
+            duplicates.push(id);
+        } else {
+            uniqueVideoIds.push(id);
+        }
+    });
+
+    if (duplicates.length > 0) {
+        showDuplicatePrompt(
+            "Duplicates Detected",
+            `${duplicates.length} of these links are already in your list. Would you like to add them anyway?`,
+            () => proceedWithBatchAdd(videoIds), // Add ALL
+            () => {
+                if (uniqueVideoIds.length > 0) {
+                    proceedWithBatchAdd(uniqueVideoIds); // Add only unique
+                } else {
+                    batchLinksArea.value = "";
+                    batchProgress.innerText = "All items skipped (duplicates).";
+                    batchProgress.classList.remove('hidden');
+                    setTimeout(() => batchProgress.classList.add('hidden'), 5000);
+                }
+            }
+        );
+        return;
+    }
+
+    await proceedWithBatchAdd(uniqueVideoIds);
+}
+
+async function proceedWithBatchAdd(videoIds) {
     addBtn.disabled = true;
     batchProgress.classList.remove('hidden');
     
@@ -766,8 +877,12 @@ function renderTiers() {
         const tierDiv = document.createElement('div');
         tierDiv.className = 'tier';
         tierDiv.dataset.tier = tier.id;
+        
+        const bgColor = tier.color || '#cccccc';
+        const textColor = getContrastColor(bgColor);
+        
         tierDiv.innerHTML = `
-            <div class="tier-label" style="background:${tier.color || '#ccc'}">${tier.name}</div>
+            <div class="tier-label" style="background:${bgColor}; color:${textColor};">${tier.name}</div>
             <div class="tier-list" id="list-${tier.id}"></div>
         `;
         tierContainer.appendChild(tierDiv);
@@ -914,7 +1029,9 @@ function renderCard(id, data) {
         <span class="badge">${data.type.toUpperCase()}</span>
         ${data.watchStatus === 'rewatch' 
             ? '<span class="badge rewatch-badge">REWATCH</span>' 
-            : '<span class="badge first-watch-badge">FIRST WATCH</span>'}
+            : data.watchStatus === 'new-episodes'
+                ? '<span class="badge new-episodes-badge">NEW EPS</span>'
+                : '<span class="badge first-watch-badge">FIRST WATCH</span>'}
         <div class="card-info">
             <h4 class="card-title">${displayTitle}</h4>
             <p style="margin:0; font-size:10px; color:#aaa;">${data.watchWith ? 'With: ' + data.watchWith : 'Solo'}</p>

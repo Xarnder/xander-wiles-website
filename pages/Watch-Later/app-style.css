@@ -404,6 +404,13 @@ input[type="text"]:focus, textarea:focus, select:focus {
     box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
 }
 
+.new-episodes-badge {
+    left: auto;
+    right: 8px;
+    background: #f59e0b; /* Amber/Orange */
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+}
+
 .card-info {
     padding: 10px;
 }
@@ -564,6 +571,55 @@ input[type="text"]:focus, textarea:focus, select:focus {
 }
 
 #confirm-no-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.duplicate-card {
+    max-width: 380px;
+    text-align: center;
+    padding: 40px 30px;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    box-shadow: 0 0 50px rgba(59, 130, 246, 0.1);
+}
+
+.duplicate-icon {
+    width: 60px;
+    height: 60px;
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px auto;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+}
+
+.duplicate-btns {
+    display: flex;
+    gap: 12px;
+    margin-top: 30px;
+}
+
+.duplicate-btns button {
+    flex: 1;
+}
+
+#duplicate-anyway-btn {
+    background: var(--accent);
+}
+
+#duplicate-anyway-btn:hover {
+    box-shadow: 0 0 25px var(--accent-glow);
+}
+
+#duplicate-skip-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+}
+
+#duplicate-skip-btn:hover {
     background: rgba(255, 255, 255, 0.1);
 }
 

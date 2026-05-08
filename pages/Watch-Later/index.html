@@ -116,6 +116,7 @@
                     <button class="filter-pill active" data-status="all">All Status</button>
                     <button class="filter-pill" data-status="first-watch">First Watch</button>
                     <button class="filter-pill" data-status="rewatch">Rewatch</button>
+                    <button class="filter-pill" data-status="new-episodes">New Episodes</button>
                 </div>
             </div>
             <div class="filter-group">
@@ -169,6 +170,7 @@
                             <option value="no-change">-- No Change --</option>
                             <option value="first-watch">First Watch</option>
                             <option value="rewatch">Rewatch</option>
+                            <option value="new-episodes">New Episodes Coming</option>
                         </select>
                     </div>
                 </div>
@@ -188,6 +190,24 @@
                 <div class="confirm-btns">
                     <button id="confirm-yes-btn">Delete</button>
                     <button id="confirm-no-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Duplicate Detection Modal -->
+        <div id="duplicate-modal" class="modal-overlay hidden">
+            <div class="modal-content glass-card duplicate-card">
+                <div class="duplicate-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 30px; height: 30px;">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                </div>
+                <h3 id="duplicate-title">Duplicate Detected</h3>
+                <p id="duplicate-message">This link has already been added to your list.</p>
+                <div class="duplicate-btns">
+                    <button id="duplicate-anyway-btn">Add Anyway</button>
+                    <button id="duplicate-skip-btn">Skip</button>
                 </div>
             </div>
         </div>
@@ -228,6 +248,7 @@
                 <select id="status-toggle" style="max-width: 130px;">
                     <option value="first-watch">First Watch</option>
                     <option value="rewatch">Rewatch</option>
+                    <option value="new-episodes">New Episodes Coming</option>
                 </select>
             </div>
             <div id="batch-input-row" class="input-row hidden">
@@ -267,6 +288,7 @@
                 <select id="edit-status-select" style="max-width: 120px;">
                     <option value="first-watch">First Watch</option>
                     <option value="rewatch">Rewatch</option>
+                    <option value="new-episodes">New Episodes Coming</option>
                 </select>
             </div>
             <div class="input-row" style="flex-direction: column; align-items: stretch; gap: 10px;">
