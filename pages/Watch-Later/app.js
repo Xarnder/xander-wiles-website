@@ -30,57 +30,39 @@ setPersistence(auth, browserLocalPersistence)
 // GLOBAL ERROR HANDLER
 window.onerror = function(msg, url, line, col, error) {
     const errorMsg = `Error: ${msg} at ${line}:${col}`;
-    if (typeof debugLog === 'function') {
-        debugLog(errorMsg, 'error');
+    if (typeof window.debugLog === 'function') {
+        window.debugLog(errorMsg, 'error');
     } else {
         console.error(errorMsg);
     }
-    // If we hit a critical error, try to show the app anyway
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay) overlay.classList.add('hidden');
+
     return false;
 };
 
-// Debug Console Handler
-function debugLog(msg, type = 'info') {
-    console.log(`[AuthDebug] ${msg}`);
-    const debugWindow = document.getElementById('login-debug');
-    const debugLogs = document.getElementById('debug-logs');
-    if (debugWindow && debugLogs) {
-        debugWindow.style.display = 'block';
-        const logEntry = document.createElement('div');
-        logEntry.style.marginBottom = '2px';
-        logEntry.style.color = type === 'error' ? '#f55' : (type === 'warn' ? '#fb0' : '#0f0');
-        logEntry.innerHTML = `<span style="color: #666;">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
-        debugLogs.appendChild(logEntry);
-        debugWindow.scrollTop = debugWindow.scrollHeight;
-    }
-}
 
-// Detect iOS standalone (home screen) PWA mode and Mobile devices
-const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-debugLog(`Standalone: ${isStandalone}`);
-debugLog(`isIOS: ${isIOS}`);
-debugLog(`isMobile: ${isMobile}`);
-debugLog(`UA: ${navigator.userAgent.substring(0, 50)}...`);
-debugLog("App initialization started...");
+
+// Environment constants from window (set in index.html)
+const isStandalone = window.isStandalone;
+const isIOS = window.isIOS;
+const isMobile = window.isMobile;
+
+window.debugLog("App initialization started...");
+
 
 // Check for redirect result or Email Link sign-in on page load
 async function handlePendingAuth() {
     // 1. Handle Google Redirect Result
-    debugLog("Checking for redirect result...");
+    window.debugLog("Checking for redirect result...");
     try {
         const result = await getRedirectResult(auth);
         if (result) {
-            debugLog(`Redirect Login Success: ${result.user.displayName}`);
+            window.debugLog(`Redirect Login Success: ${result.user.displayName}`);
         } else {
-            debugLog("No pending redirect result found.");
+            window.debugLog("No pending redirect result found.");
         }
     } catch (error) {
-        debugLog(`Redirect Result Error: ${error.code}`, 'error');
+        window.debugLog(`Redirect Result Error: ${error.code}`, 'error');
         console.warn("[Auth] Redirect result error:", error.code, error.message);
     }
 
@@ -99,31 +81,15 @@ async function handlePendingAuth() {
             alert("Login link failed or expired. Please try again.");
         }
     }
-    debugLog("handlePendingAuth finished.");
+    window.debugLog("handlePendingAuth finished.");
 }
 
 handlePendingAuth();
 
-// Failsafe: Hide the loading screen after 3.5 seconds in case Firebase Auth hangs
-setTimeout(() => {
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay && !overlay.classList.contains('hidden')) {
-        console.warn("[Auth] Firebase took too long. Force hiding loader.");
-        hideLoadingOverlay();
-    }
-}, 3500);
 
 
-function hideLoadingOverlay() {
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay && !overlay.classList.contains('hidden')) {
-        debugLog("Hiding Loading Overlay");
-        overlay.classList.add('hidden');
-        setTimeout(() => {
-            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-        }, 600);
-    }
-}
+
+
 
 
 
@@ -480,7 +446,7 @@ const sendLinkBtn = document.getElementById('send-link-btn');
 
 if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     e.preventDefault();
-    debugLog("Google Login Button Clicked");
+    window.debugLog("Google Login Button Clicked");
     
     const originalText = googleLoginBtn.innerText;
     // DO NOT use redirect in Standalone/PWA mode, it breaks the Firebase auth state
@@ -493,17 +459,17 @@ if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     const loginLoader = document.querySelector('.login-loader');
     if (loginLoader) loginLoader.classList.remove('hidden');
     
-    debugLog(`Using ${useRedirect ? 'REDIRECT' : 'POPUP'} flow...`);
+    window.debugLog(`Using ${useRedirect ? 'REDIRECT' : 'POPUP'} flow...`);
     
     try {
         if (useRedirect) {
             await signInWithRedirect(auth, provider);
         } else {
             const result = await signInWithPopup(auth, provider);
-            debugLog(`Popup Login Success: ${result.user.displayName}`);
+            window.debugLog(`Popup Login Success: ${result.user.displayName}`);
         }
     } catch (error) {
-        debugLog(`Login Error: ${error.code} - ${error.message}`, 'error');
+        window.debugLog(`Login Error: ${error.code} - ${error.message}`, 'error');
         alert(`Login Failed: ${error.message}`);
     } finally {
         // Only reset UI if we didn't redirect away
@@ -544,7 +510,7 @@ logoutBtn.addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
     try {
-        debugLog(`Auth state change: ${user ? 'Logged In (' + user.email + ')' : 'Logged Out'}`);
+        window.debugLog(`Auth state change: ${user ? 'Logged In (' + user.email + ')' : 'Logged Out'}`);
         if (user) {
             currentUser = user;
             
@@ -568,7 +534,6 @@ onAuthStateChanged(auth, async (user) => {
             await initializeTiers().catch(e => console.error("[Auth] Tiers Init Error:", e));
             await initializePeople().catch(e => console.error("[Auth] People Init Error:", e));
             loadData();
-            setTimeout(hideLoadingOverlay, 1000);
         } else {
             currentUser = null;
             if (loginOverlay) loginOverlay.classList.remove('hidden');
@@ -578,7 +543,7 @@ onAuthStateChanged(auth, async (user) => {
             if (modeSelector) modeSelector.classList.add('hidden');
             if (document.getElementById('filter-bar')) document.getElementById('filter-bar').classList.add('hidden');
             document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select');
-            hideLoadingOverlay();
+
         }
     } catch (err) {
         console.error("[Auth] Critical error in onAuthStateChanged:", err);
