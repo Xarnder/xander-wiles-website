@@ -28,7 +28,7 @@ setPersistence(auth, browserLocalPersistence)
     });
 
 // GLOBAL ERROR HANDLER
-window.onerror = function(msg, url, line, col, error) {
+window.onerror = function (msg, url, line, col, error) {
     console.error(`Error: ${msg} at ${line}:${col}`);
     return false;
 };
@@ -119,6 +119,8 @@ const statusToggle = document.getElementById('status-toggle');
 const genreInput = document.getElementById('genre-input');
 const editGenreInput = document.getElementById('edit-genre-input');
 const genreDatalist = document.getElementById('genre-list');
+const editImdbScore = document.getElementById('edit-imdb-score');
+const editRtScore = document.getElementById('edit-rt-score');
 
 // Quick Sort Elements
 const quickSortBtn = document.getElementById('quick-sort-btn');
@@ -127,7 +129,67 @@ const quickSortTierList = document.getElementById('quick-sort-tier-list');
 const prevQuickSortBtn = document.getElementById('prev-quick-sort-btn');
 const nextQuickSortBtn = document.getElementById('next-quick-sort-btn');
 const enableShortcutsToggle = document.getElementById('enable-shortcuts-toggle');
+const backfillScoresBtn = document.getElementById('backfill-scores-btn');
+const fixTitlesBtn = document.getElementById('fix-titles-btn');
 
+// Debug Console Elements
+const debugConsole = document.getElementById('debug-console');
+const debugHeader = document.getElementById('debug-header');
+const debugLog = document.getElementById('debug-log');
+
+if (debugHeader) {
+    debugHeader.addEventListener('click', () => {
+        debugConsole.classList.toggle('collapsed');
+    });
+}
+
+// Settings Elements
+const openSettingsBtn = document.getElementById('open-settings-btn');
+const settingsModal = document.getElementById('settings-modal');
+const closeSettingsModalBtn = document.getElementById('close-settings-modal');
+const debugMenuToggle = document.getElementById('debug-menu-toggle');
+
+if (openSettingsBtn) {
+    openSettingsBtn.addEventListener('click', () => {
+        settingsModal.classList.remove('hidden');
+    });
+}
+
+if (closeSettingsModalBtn) {
+    closeSettingsModalBtn.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+    });
+}
+
+if (debugMenuToggle) {
+    // Check local storage for initial state
+    const isDebugEnabled = localStorage.getItem('watchLater_debugEnabled') === 'true';
+    debugMenuToggle.checked = isDebugEnabled;
+    if (isDebugEnabled && debugConsole) {
+        debugConsole.classList.remove('hidden');
+    }
+    
+    debugMenuToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            if (debugConsole) debugConsole.classList.remove('hidden');
+            localStorage.setItem('watchLater_debugEnabled', 'true');
+        } else {
+            if (debugConsole) debugConsole.classList.add('hidden');
+            localStorage.setItem('watchLater_debugEnabled', 'false');
+        }
+    });
+}
+
+function logDebug(message, isError = false) {
+    if (!debugLog) return;
+    const entry = document.createElement('div');
+    entry.className = `debug-entry ${isError ? 'error' : ''}`;
+    
+    const time = new Date().toLocaleTimeString();
+    entry.innerText = `[${time}] ${message}`;
+    
+    debugLog.prepend(entry);
+}
 let currentUser = null;
 let isBatchMode = false;
 let userTiers = []; // Store current tiers
@@ -138,6 +200,7 @@ let editingItemPeople = new Set(); // Track people for the item being edited
 let appMode = 'watch'; // edit, organize, watch, select
 
 let isQuickSortMode = false;
+let isTitleFixMode = false;
 let quickSortItems = [];
 let quickSortIndex = -1;
 const QUICK_SORT_TIER_KEYS = "qwertyuiopasdfghjklzxcvbnm";
@@ -209,17 +272,17 @@ modeBtns.forEach(btn => {
         modeBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         appMode = btn.dataset.mode;
-        
+
         // Update body class for cursors
         document.body.classList.remove('mode-edit', 'mode-organize', 'mode-watch', 'mode-select', 'mode-reorder-tiers');
         document.body.classList.add(`mode-${appMode}`);
-        
+
         if (appMode !== 'select') {
             clearSelection();
         }
-        
+
         updateSortableState();
-        
+
         // Show/hide filter bar based on mode
         const filterBar = document.getElementById('filter-bar');
         if (appMode === 'watch' || appMode === 'edit') {
@@ -322,15 +385,15 @@ function renderFilterPeople() {
 function renderFilterGenres() {
     if (!genreFilterPillsContainer) return;
     genreFilterPillsContainer.innerHTML = "";
-    
+
     // Get unique genres from cachedWatches
     const genres = new Set();
     cachedWatches.forEach(w => {
         if (w.genre) genres.add(w.genre.trim());
     });
-    
+
     const sortedGenres = Array.from(genres).sort();
-    
+
     sortedGenres.forEach(genre => {
         const pill = document.createElement('button');
         pill.className = `filter-pill ${genreFilters.has(genre) ? 'active' : ''}`;
@@ -355,9 +418,9 @@ if (openRenameGenreModalBtn) {
         cachedWatches.forEach(w => {
             if (w.genre) genres.add(w.genre.trim());
         });
-        
+
         if (genres.size === 0) return showAlert("Rename Genre", "No genres found to rename.");
-        
+
         const sortedGenres = Array.from(genres).sort();
         renameGenreSelect.innerHTML = sortedGenres.map(g => `<option value="${g}">${g}</option>`).join('');
         renameGenreNewNameInput.value = sortedGenres[0];
@@ -375,23 +438,23 @@ if (confirmRenameGenreBtn) {
     confirmRenameGenreBtn.addEventListener('click', async () => {
         const oldName = renameGenreSelect.value;
         const newName = renameGenreNewNameInput.value.trim();
-        
+
         if (!newName || newName === oldName) {
             renameGenreModal.classList.add('hidden');
             return;
         }
-        
+
         const itemsToUpdate = cachedWatches.filter(w => w.genre && w.genre.trim() === oldName);
-        
+
         try {
             confirmRenameGenreBtn.disabled = true;
             confirmRenameGenreBtn.innerText = "Updating...";
-            
-            const promises = itemsToUpdate.map(item => 
+
+            const promises = itemsToUpdate.map(item =>
                 updateDoc(doc(db, "watches", item.id), { genre: newName })
             );
             await Promise.all(promises);
-            
+
             renameGenreModal.classList.add('hidden');
             showSuccess(`Renamed ${itemsToUpdate.length} items`);
         } catch (err) {
@@ -408,18 +471,18 @@ if (deleteGenreBtn) {
     deleteGenreBtn.addEventListener('click', () => {
         const genreName = renameGenreSelect.value;
         if (!genreName) return;
-        
+
         showConfirm("Delete Genre?", `This will remove the genre "${genreName}" from ALL entries. Are you sure?`, async () => {
             const itemsToUpdate = cachedWatches.filter(w => w.genre && w.genre.trim() === genreName);
             try {
                 deleteGenreBtn.disabled = true;
                 deleteGenreBtn.innerText = "Deleting...";
-                
-                const promises = itemsToUpdate.map(item => 
+
+                const promises = itemsToUpdate.map(item =>
                     updateDoc(doc(db, "watches", item.id), { genre: "" })
                 );
                 await Promise.all(promises);
-                
+
                 renameGenreModal.classList.add('hidden');
                 showSuccess(`Cleared genre for ${itemsToUpdate.length} items`);
             } catch (err) {
@@ -437,10 +500,10 @@ function showSuccess(message) {
     const overlay = document.getElementById('success-overlay');
     const msgEl = document.getElementById('success-msg');
     if (!overlay || !msgEl) return;
-    
+
     msgEl.innerText = message;
     overlay.classList.remove('hidden');
-    
+
     setTimeout(() => {
         overlay.classList.add('hidden');
     }, 3000);
@@ -453,7 +516,7 @@ function showPrompt(title, defaultValue = "", placeholder = "") {
     promptInputEl.placeholder = placeholder;
     promptModal.classList.remove('hidden');
     setTimeout(() => promptInputEl.focus(), 100);
-    
+
     return new Promise(resolve => {
         promptConfirmBtn.onclick = () => {
             promptModal.classList.add('hidden');
@@ -482,7 +545,7 @@ function showAlert(title, message) {
     alertTitleEl.innerText = title;
     alertMsgEl.innerText = message;
     alertModal.classList.remove('hidden');
-    
+
     return new Promise(resolve => {
         alertOkBtn.onclick = () => {
             alertModal.classList.add('hidden');
@@ -495,7 +558,7 @@ function updateSortableState() {
     sortables.forEach(s => {
         s.option("disabled", appMode !== 'organize');
     });
-    
+
     if (tierSortable) {
         tierSortable.option("disabled", appMode !== 'reorder-tiers');
     }
@@ -543,10 +606,10 @@ batchPeopleBtn.addEventListener('click', () => {
 
 batchDeleteBtn.addEventListener('click', () => {
     if (selectedCardIds.size === 0) return;
-    
+
     showConfirm(
-        "Batch Delete?", 
-        `Are you sure you want to delete ${selectedCardIds.size} selected items? This action cannot be undone.`, 
+        "Batch Delete?",
+        `Are you sure you want to delete ${selectedCardIds.size} selected items? This action cannot be undone.`,
         async () => {
             try {
                 const batch = writeBatch(db);
@@ -586,7 +649,7 @@ saveBatchPeopleBtn.addEventListener('click', async () => {
     const peopleStr = Array.from(batchSelectedPeople).join(', ');
     const newType = batchTypeSelect.value;
     const newStatus = batchStatusSelect.value;
-    
+
     for (const id of selectedCardIds) {
         const updates = { watchWith: peopleStr };
         if (newType !== 'no-change') {
@@ -630,12 +693,12 @@ function showConfirm(title, message, onConfirm, onCancel) {
     confirmTitle.innerText = title;
     confirmMessage.innerText = message;
     confirmModal.classList.remove('hidden');
-    
+
     confirmYesBtn.onclick = () => {
         onConfirm();
         confirmModal.classList.add('hidden');
     };
-    
+
     confirmNoBtn.onclick = () => {
         if (onCancel) onCancel();
         confirmModal.classList.add('hidden');
@@ -646,6 +709,7 @@ function showConfirm(title, message, onConfirm, onCancel) {
 closeEditModalBtn.addEventListener('click', () => {
     editModal.classList.add('hidden');
     isQuickSortMode = false;
+    isTitleFixMode = false;
 });
 
 // Quick Sort Logic
@@ -661,13 +725,14 @@ if (quickSortBtn) {
 window.startQuickSort = (tierId) => {
     quickSortTierModal.classList.add('hidden');
     quickSortItems = cachedWatches.filter(w => w.tier === tierId);
-    
+
     if (quickSortItems.length === 0) {
         showAlert("Quick Sort", "No items in this tier to sort!");
         return;
     }
-    
+
     isQuickSortMode = true;
+    isTitleFixMode = false;
     quickSortIndex = 0;
     openEditModal(quickSortItems[quickSortIndex].id, quickSortItems[quickSortIndex]);
 };
@@ -679,26 +744,40 @@ async function saveCurrentQuickSortItem() {
     const newType = editTypeSelect.value;
     const newStatus = editStatusSelect.value;
     const newGenre = editGenreInput.value;
-    
+    let newImdbScore = editImdbScore ? editImdbScore.value : "N/A";
+    let newRtScore = editRtScore ? editRtScore.value : "N/A";
+
     try {
+        if (isTitleFixMode) {
+            logDebug(`Title Fix Mode: Fetching updated OMDb scores for "${newTitle}"...`);
+            const scores = await getMovieScores(newTitle);
+            newImdbScore = scores.imdbScore;
+            newRtScore = scores.rtScore;
+            // Optionally update thumb if found and old one was missing, but keeping simple for now
+        }
+
         await updateDoc(doc(db, "watches", editingItemId), {
             movieTitle: newTitle,
             watchWith: newPeople,
             type: newType,
             watchStatus: newStatus,
-            genre: newGenre
+            genre: newGenre,
+            imdbScore: newImdbScore,
+            rtScore: newRtScore
         });
-        
+
         // Update local cache immediately to ensure navigation finds up-to-date data
         const localIdx = cachedWatches.findIndex(w => w.id === editingItemId);
         if (localIdx !== -1) {
-            cachedWatches[localIdx] = { 
-                ...cachedWatches[localIdx], 
-                movieTitle: newTitle, 
-                watchWith: newPeople, 
-                type: newType, 
-                watchStatus: newStatus, 
-                genre: newGenre 
+            cachedWatches[localIdx] = {
+                ...cachedWatches[localIdx],
+                movieTitle: newTitle,
+                watchWith: newPeople,
+                type: newType,
+                watchStatus: newStatus,
+                genre: newGenre,
+                imdbScore: newImdbScore,
+                rtScore: newRtScore
             };
         }
         
@@ -710,9 +789,9 @@ async function saveCurrentQuickSortItem() {
 
 async function saveAndNavigate(direction) {
     await saveCurrentQuickSortItem();
-    
+
     quickSortIndex += direction;
-    
+
     if (quickSortIndex < 0) {
         quickSortIndex = 0;
         showAlert("Quick Sort", "This is the first item.");
@@ -743,7 +822,9 @@ async function moveCurrentToTier(tierId) {
     const newType = editTypeSelect.value;
     const newStatus = editStatusSelect.value;
     const newGenre = editGenreInput.value;
-    
+    const newImdbScore = editImdbScore ? editImdbScore.value : "N/A";
+    const newRtScore = editRtScore ? editRtScore.value : "N/A";
+
     try {
         await updateDoc(doc(db, "watches", editingItemId), {
             movieTitle: newTitle,
@@ -751,10 +832,12 @@ async function moveCurrentToTier(tierId) {
             type: newType,
             watchStatus: newStatus,
             tier: tierId,
-            genre: newGenre
+            genre: newGenre,
+            imdbScore: newImdbScore,
+            rtScore: newRtScore
         });
         console.log(`Quick Sort: Item moved to tier ${tierId} and saved`);
-        
+
         // Move to next
         quickSortIndex++;
         if (quickSortIndex >= quickSortItems.length) {
@@ -777,10 +860,12 @@ saveEditBtn.addEventListener('click', async () => {
     const newType = editTypeSelect.value;
     const newStatus = editStatusSelect.value;
     const newGenre = editGenreInput.value;
+    const newImdbScore = editImdbScore ? editImdbScore.value : "N/A";
+    const newRtScore = editRtScore ? editRtScore.value : "N/A";
     const isWatched = document.getElementById('edit-watched-toggle').checked;
     const item = cachedWatches.find(w => w.id === editingItemId);
     const wasWatched = item ? !!item.watched : false;
-    
+
     try {
         const updates = {
             movieTitle: newTitle,
@@ -788,6 +873,8 @@ saveEditBtn.addEventListener('click', async () => {
             type: newType,
             watchStatus: newStatus,
             genre: newGenre,
+            imdbScore: newImdbScore,
+            rtScore: newRtScore,
             watched: isWatched
         };
 
@@ -811,11 +898,11 @@ deleteEntryBtn.addEventListener('click', () => {
 window.deleteEntry = async (id) => {
     const wasInQuickSort = isQuickSortMode;
     editModal.classList.add('hidden');
-    
+
     showConfirm("Delete Entry?", "Are you sure you want to remove this movie/show from your list?", async () => {
         try {
             await deleteDoc(doc(db, "watches", id));
-            
+
             // If we were in Quick Sort, continue to next item
             if (wasInQuickSort) {
                 isQuickSortMode = true; // Ensure state is preserved
@@ -844,15 +931,15 @@ window.deleteTier = async (tierId) => {
         try {
             const itemsToMigrate = query(collection(db, "watches"), where("tier", "==", tierId));
             const snapshot = await getDocs(itemsToMigrate);
-            
+
             // Find a fallback tier (first one that isn't this one)
-            const fallbackTier = userTiers.find(t => t.id !== tierId) || {id: 'default'};
-            
+            const fallbackTier = userTiers.find(t => t.id !== tierId) || { id: 'default' };
+
             const batch = writeBatch(db);
             snapshot.forEach(itemDoc => {
                 batch.update(itemDoc.ref, { tier: fallbackTier.id });
             });
-            
+
             await batch.commit();
             await deleteDoc(doc(db, "tiers", tierId));
         } catch (e) {
@@ -900,21 +987,21 @@ if (confirmRenamePersonBtn) {
     confirmRenamePersonBtn.addEventListener('click', async () => {
         const oldName = renamePersonOldNameInput.value;
         const newName = renamePersonNewNameInput.value.trim();
-        
+
         if (!newName || newName === oldName || !currentRenamingPersonId) {
             renamePersonModal.classList.add('hidden');
             return;
         }
-        
+
         try {
             confirmRenamePersonBtn.disabled = true;
             confirmRenamePersonBtn.innerText = "Updating...";
-            
+
             // 1. Update person document
             await updateDoc(doc(db, "people", currentRenamingPersonId), {
                 name: newName
             });
-            
+
             // 2. Update all watches that mention this person
             const itemsToUpdate = cachedWatches.filter(w => w.watchWith && w.watchWith.includes(oldName));
             const promises = itemsToUpdate.map(item => {
@@ -924,7 +1011,7 @@ if (confirmRenamePersonBtn) {
                 return updateDoc(doc(db, "watches", item.id), { watchWith: updatedPeople });
             });
             await Promise.all(promises);
-            
+
             renamePersonModal.classList.add('hidden');
             showSuccess(`Renamed to ${newName}`);
         } catch (err) {
@@ -940,20 +1027,20 @@ if (confirmRenamePersonBtn) {
 if (googleLoginBtn) googleLoginBtn.addEventListener('click', async (e) => {
     e.preventDefault();
 
-    
+
     const originalText = googleLoginBtn.innerText;
     // DO NOT use redirect in Standalone/PWA mode, it breaks the Firebase auth state
     const useRedirect = isMobile && !isStandalone && !isIOS;
-    
+
     googleLoginBtn.innerText = useRedirect ? "Redirecting..." : "Logging in...";
     googleLoginBtn.disabled = true;
-    
+
     // Show mini-loader
     const loginLoader = document.querySelector('.login-loader');
     if (loginLoader) loginLoader.classList.remove('hidden');
-    
 
-    
+
+
     try {
         if (useRedirect) {
             await signInWithRedirect(auth, provider);
@@ -981,13 +1068,13 @@ onAuthStateChanged(auth, async (user) => {
         console.log(`[Auth] State change: ${user ? 'Logged In' : 'Logged Out'}`);
         if (user) {
             currentUser = user;
-            
+
             // Immediate UI Transition
             if (loginOverlay) loginOverlay.classList.add('hidden');
             const userInfo = document.getElementById('user-info');
             const userName = document.getElementById('user-name');
             const filterBar = document.getElementById('filter-bar');
-            
+
             if (userInfo) userInfo.classList.remove('hidden');
             if (userName) userName.innerText = user.displayName || user.email || "User";
             if (inputSection) inputSection.classList.remove('hidden');
@@ -995,9 +1082,9 @@ onAuthStateChanged(auth, async (user) => {
             if (modeSelector) modeSelector.classList.remove('hidden');
             if (filterBar) filterBar.classList.remove('hidden');
             document.body.classList.add('mode-watch');
-            
+
             console.log("[Auth] UI transition complete, loading data...");
-            
+
             // Data Initialization (in background to avoid blocking UI)
             await initializeTiers().catch(e => console.error("[Auth] Tiers Init Error:", e));
             await initializePeople().catch(e => console.error("[Auth] People Init Error:", e));
@@ -1055,12 +1142,12 @@ function showDuplicatePrompt(title, message, onAnyway, onSkip) {
     duplicateTitle.innerText = title;
     duplicateMessage.innerText = message;
     duplicateModal.classList.remove('hidden');
-    
+
     duplicateAnywayBtn.onclick = () => {
         onAnyway();
         duplicateModal.classList.add('hidden');
     };
-    
+
     duplicateSkipBtn.onclick = () => {
         if (onSkip) onSkip();
         duplicateModal.classList.add('hidden');
@@ -1083,29 +1170,57 @@ async function getVideoData(url) {
 // Clean Title: Remove marketing words
 function cleanTitle(title) {
     if (!title) return "Untitled Movie";
-    
+
     // Remove content in brackets and parentheses first (often contains "Official Trailer" etc)
     let cleaned = title.replace(/[\[\(].*?[\]\)]/g, '');
-    
+
     // Keywords to remove (case-insensitive)
     const keywords = [
-        'official', 'trailer', 'teaser', 'teaser trailer', 'main trailer', 
-        'final trailer', 'movie', 'film', '4k', 'hd', '1080p', 
+        'official', 'trailer', 'teaser', 'teaser trailer', 'main trailer',
+        'final trailer', 'movie', 'film', '4k', 'hd', '1080p',
         'special announcement', 'clip', 'exclusive', 'new', 'premiere'
     ];
-    
+
     keywords.forEach(word => {
         const regex = new RegExp(`\\b${word}\\b`, 'gi');
         cleaned = cleaned.replace(regex, '');
     });
-    
+
     // Remove common separators
-    cleaned = cleaned.replace(/[\|\-:]/g, ' '); 
-    
+    cleaned = cleaned.replace(/[\|\-:]/g, ' ');
+
     // Collapse whitespace and trim
     cleaned = cleaned.replace(/\s+/g, ' ').trim();
-    
+
     return cleaned || title;
+}
+
+function aggressiveCleanTitle(title) {
+    if (!title) return "";
+    let cleaned = title;
+    
+    // Remove "In Theaters [Date]" or "Releasing [Date]"
+    cleaned = cleaned.replace(/in theaters.*?(\d{4}|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b)/gi, '');
+    cleaned = cleaned.replace(/releasing.*?(\d{4}|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b)/gi, '');
+    cleaned = cleaned.replace(/\bNetflix\b/gi, '');
+    cleaned = cleaned.replace(/\bAmazon Prime Video\b/gi, '');
+    cleaned = cleaned.replace(/\bDisney\b/gi, '');
+    
+    // Remove dates like "May 22, 2026" or "28June2019"
+    cleaned = cleaned.replace(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*)?(?:\d{4})?\b/gi, '');
+    cleaned = cleaned.replace(/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*(?:\s+\d{4})?\b/gi, '');
+    cleaned = cleaned.replace(/\b\d{1,2}(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\d{4}\b/gi, '');
+
+    // Remove standalone years
+    cleaned = cleaned.replace(/\b(19|20)\d{2}\b/g, '');
+
+    // Collapse whitespace
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+    // Clean any trailing non-word characters (like hyphens or colons)
+    cleaned = cleaned.replace(/[^a-zA-Z0-9]+$/, '');
+
+    return cleaned;
 }
 
 // Helper: Get contrast color (black/white) based on background hex
@@ -1113,7 +1228,7 @@ function getContrastColor(hexColor) {
     if (!hexColor) return '#ffffff';
     // Remove # if present
     const hex = hexColor.replace('#', '');
-    
+
     // Handle short hex (e.g. #333)
     let r, g, b;
     if (hex.length === 3) {
@@ -1125,7 +1240,7 @@ function getContrastColor(hexColor) {
         g = parseInt(hex.substr(2, 2), 16);
         b = parseInt(hex.substr(4, 2), 16);
     }
-    
+
     // Calculate brightness using the YIQ formula
     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
     return brightness > 128 ? '#000000' : '#ffffff';
@@ -1135,22 +1250,22 @@ function getContrastColor(hexColor) {
 function timeAgo(timestamp) {
     if (!timestamp) return "";
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
-    
+
     let interval = seconds / 31536000;
     if (interval > 1) return Math.floor(interval) + "y";
-    
+
     interval = seconds / 2592000;
     if (interval > 1) return Math.floor(interval) + "mo";
-    
+
     interval = seconds / 86400;
     if (interval > 1) return Math.floor(interval) + "d";
-    
+
     interval = seconds / 3600;
     if (interval > 1) return Math.floor(interval) + "h";
-    
+
     interval = seconds / 60;
     if (interval > 1) return Math.floor(interval) + "m";
-    
+
     return "now";
 }
 
@@ -1180,7 +1295,7 @@ function showProgress(status, percent = null) {
     if (!progressSection) return;
     progressSection.classList.remove('hidden');
     progressStatus.innerText = status;
-    
+
     if (percent === null) {
         progressBar.classList.add('indeterminate');
         progressBar.style.width = '100%';
@@ -1213,6 +1328,103 @@ async function handleSingleAdd() {
     await proceedWithSingleAdd(url);
 }
 
+async function getMovieScores(title) {
+    try {
+        const apiKey = "6fda8b50";
+        logDebug(`Fetching OMDb scores for: "${title}" using key: ${apiKey}`);
+        const response = await fetch(`https://www.omdbapi.com/?t=${encodeURIComponent(title)}&apikey=${apiKey}`);
+        const data = await response.json();
+        
+        logDebug(`OMDb Response: ${JSON.stringify(data)}`, data.Response === "False");
+
+        if (data.Response === "True") {
+            let rtScore = "N/A";
+            if (data.Ratings) {
+                const rtRating = data.Ratings.find(r => r.Source === "Rotten Tomatoes");
+                if (rtRating) rtScore = rtRating.Value;
+            }
+            return {
+                imdbScore: data.imdbRating && data.imdbRating !== "N/A" ? data.imdbRating : "N/A",
+                rtScore: rtScore,
+                omdbPoster: data.Poster && data.Poster !== "N/A" ? data.Poster : null
+            };
+        }
+    } catch (err) {
+        logDebug(`OMDb Fetch Error: ${err.message}`, true);
+        console.error("OMDb API Error:", err);
+    }
+    return { imdbScore: "N/A", rtScore: "N/A", omdbPoster: null };
+}
+
+if (backfillScoresBtn) {
+    backfillScoresBtn.addEventListener('click', async () => {
+        showConfirm("Backfill Scores?", "This will fetch scores from OMDb for all existing items that don't have them yet. It might take a minute.", async () => {
+            const itemsToUpdate = cachedWatches.filter(w => !w.imdbScore && !w.rtScore);
+            if (itemsToUpdate.length === 0) {
+                showAlert("Done", "All items already have scores!");
+                return;
+            }
+            showProgress("Backfilling Scores...", 0);
+            let count = 0;
+            let successCount = 0;
+            let failCount = 0;
+
+            // Expand debug console so they can watch
+            if (debugConsole && debugConsole.classList.contains('collapsed')) {
+                debugConsole.classList.remove('collapsed');
+            }
+
+            for (const item of itemsToUpdate) {
+                count++;
+                const percent = Math.round((count / itemsToUpdate.length) * 100);
+                showProgress(`Fetching ${count}/${itemsToUpdate.length}: ${item.movieTitle}...`, percent);
+                
+                const scores = await getMovieScores(item.movieTitle);
+                
+                if (scores.imdbScore === "N/A" && scores.rtScore === "N/A") {
+                    failCount++;
+                } else {
+                    successCount++;
+                }
+                
+                // Update Firestore
+                await updateDoc(doc(db, "watches", item.id), {
+                    imdbScore: scores.imdbScore,
+                    rtScore: scores.rtScore,
+                    thumb: scores.omdbPoster ? scores.omdbPoster : item.thumb
+                });
+
+                // Update cache directly to avoid flash
+                item.imdbScore = scores.imdbScore;
+                item.rtScore = scores.rtScore;
+                if (scores.omdbPoster) item.thumb = scores.omdbPoster;
+
+                // Small delay to prevent OMDb API rate limits
+                await new Promise(r => setTimeout(r, 200));
+            }
+            hideProgress();
+            renderAllCards(); // Re-render to show badges
+            showSuccess(`Backfilled ${count} items! (${successCount} succeeded, ${failCount} failed)`);
+        });
+    });
+}
+
+if (fixTitlesBtn) {
+    fixTitlesBtn.addEventListener('click', () => {
+        quickSortItems = cachedWatches.filter(w => !w.imdbScore || w.imdbScore === "N/A");
+        
+        if (quickSortItems.length === 0) {
+            showAlert("Fix Titles", "All items already have valid OMDb scores!");
+            return;
+        }
+        
+        isQuickSortMode = true;
+        isTitleFixMode = true;
+        quickSortIndex = 0;
+        openEditModal(quickSortItems[quickSortIndex].id, quickSortItems[quickSortIndex]);
+    });
+}
+
 async function proceedWithSingleAdd(url) {
     addBtn.disabled = true;
     addBtn.innerText = "Processing...";
@@ -1221,13 +1433,18 @@ async function proceedWithSingleAdd(url) {
     const rawTitle = await getVideoData(url);
     const cleanedTitle = cleanTitle(rawTitle);
 
+    showProgress("Fetching OMDb Scores...");
+    const scores = await getMovieScores(cleanedTitle);
+
     await saveItem({
         url,
-        thumb: getThumbnail(url),
+        thumb: scores.omdbPoster ? scores.omdbPoster : getThumbnail(url),
         movieTitle: cleanedTitle,
         type: typeToggle.value,
         watchStatus: statusToggle.value,
         genre: genreInput.value,
+        imdbScore: scores.imdbScore,
+        rtScore: scores.rtScore,
         watchWith: Array.from(selectedPeople).join(', '),
         tier: initialTierSelect.value || (userTiers.length > 0 ? userTiers[userTiers.length - 1].id : 'default')
     });
@@ -1239,7 +1456,7 @@ async function proceedWithSingleAdd(url) {
     addBtn.disabled = false;
     addBtn.innerText = "Add to List";
     hideProgress();
-    
+
     // Auto-focus back to input
     trailerInput.focus();
 }
@@ -1290,35 +1507,43 @@ async function handleBatchAdd() {
 async function proceedWithBatchAdd(videoIds) {
     addBtn.disabled = true;
     showProgress("Starting batch import...", 0);
-    
+
     let count = 0;
     for (const id of videoIds) {
         count++;
         const percent = Math.round((count / videoIds.length) * 100);
         showProgress(`Processing ${count} / ${videoIds.length}...`, percent);
-        
+
         const url = `https://www.youtube.com/watch?v=${id}`;
         const rawTitle = await getVideoData(url);
         const cleanedTitle = cleanTitle(rawTitle);
 
+        showProgress(`Fetching OMDb Scores for ${cleanedTitle}...`, percent);
+        const scores = await getMovieScores(cleanedTitle);
+
         await saveItem({
             url,
-            thumb: `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
+            thumb: scores.omdbPoster ? scores.omdbPoster : `https://img.youtube.com/vi/${id}/mqdefault.jpg`,
             movieTitle: cleanedTitle,
             type: 'movie', // Default for batch
             watchStatus: statusToggle.value,
+            imdbScore: scores.imdbScore,
+            rtScore: scores.rtScore,
             watchWith: Array.from(selectedPeople).join(', '),
             tier: initialTierSelect.value || (userTiers.length > 0 ? userTiers[userTiers.length - 1].id : 'default')
         });
+
+        // Small delay to prevent OMDb API rate limits
+        await new Promise(r => setTimeout(r, 200));
     }
 
     batchLinksArea.value = "";
     selectedPeople.clear();
     renderPeopleToggles();
-    
+
     showSuccess(`Successfully added ${videoIds.length} items!`);
     hideProgress();
-    
+
     addBtn.disabled = false;
     addBtn.innerText = "Add to List";
 }
@@ -1349,7 +1574,7 @@ function loadData() {
         userTiers = [];
         snapshot.forEach(doc => userTiers.push({ id: doc.id, ...doc.data() }));
         userTiers.sort((a, b) => a.order - b.order);
-        
+
         renderTiers();
         renderTierManager();
         updateTierSelect();
@@ -1364,7 +1589,7 @@ function loadData() {
         userPeople = [];
         snapshot.forEach(doc => userPeople.push({ id: doc.id, ...doc.data() }));
         userPeople.sort((a, b) => a.name.localeCompare(b.name));
-        
+
         renderPeopleToggles();
         renderPeopleManager();
         renderFilterPeople();
@@ -1392,7 +1617,7 @@ function updateGenreDatalist() {
     cachedWatches.forEach(w => {
         if (w.genre) genres.add(w.genre.trim());
     });
-    
+
     const sortedGenres = Array.from(genres).sort();
     genreDatalist.innerHTML = sortedGenres.map(g => `<option value="${g}">`).join('');
 }
@@ -1400,40 +1625,40 @@ function updateGenreDatalist() {
 function renderAllCards() {
     // Clear all tier lists
     document.querySelectorAll('.tier-list').forEach(l => l.innerHTML = "");
-    
+
     const filtered = cachedWatches.filter(watch => {
         // Type filter
         if (typeFilter !== 'all' && watch.type !== typeFilter) return false;
-        
+
         // Watch Status filter
         if (watchStatusFilter !== 'all' && (watch.watchStatus || 'first-watch') !== watchStatusFilter) return false;
-        
+
         // People filter (ANY match)
         if (peopleFilters.size > 0) {
             const watchPeople = watch.watchWith ? watch.watchWith.split(', ').filter(s => s) : [];
             const hasMatch = Array.from(peopleFilters).some(p => watchPeople.includes(p));
             if (!hasMatch) return false;
         }
-        
+
         // Genre filter (ANY match)
         if (genreFilters.size > 0) {
             if (!watch.genre || !genreFilters.has(watch.genre.trim())) return false;
         }
-        
+
         // Search filter
         if (searchQuery && !watch.movieTitle.toLowerCase().includes(searchQuery)) {
             return false;
         }
-        
+
         // Watched filter
         if (watchedFilter !== 'all') {
             const isWatched = watchedFilter === 'true';
             if (!!watch.watched !== isWatched) return false;
         }
-        
+
         return true;
     });
-    
+
     // Sort items: Put recently watched at the top if we are in "Watched" view
     if (watchedFilter === 'true') {
         filtered.sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0));
@@ -1441,7 +1666,7 @@ function renderAllCards() {
         // Default: Sort by timestamp (newest first)
         filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }
-    
+
     filtered.forEach(watch => {
         renderCard(watch.id, watch);
     });
@@ -1451,11 +1676,11 @@ function renderAllCards() {
 
     // Update Tier Labels with Counts
     const isFiltered = typeFilter !== 'all' || watchStatusFilter !== 'all' || peopleFilters.size > 0 || genreFilters.size > 0 || searchQuery !== "";
-    
+
     userTiers.forEach(tier => {
         const totalInTier = cachedWatches.filter(w => w.tier === tier.id).length;
         const filteredInTier = filtered.filter(w => w.tier === tier.id).length;
-        
+
         const tierDiv = document.querySelector(`.tier[data-tier="${tier.id}"]`);
         if (tierDiv) {
             const label = tierDiv.querySelector('.tier-label');
@@ -1496,32 +1721,32 @@ function renderTiers() {
     // Destroy old sortables
     sortables.forEach(s => s.destroy());
     sortables = [];
-    
+
     tierContainer.innerHTML = "";
     userTiers.forEach(tier => {
         const tierDiv = document.createElement('div');
         tierDiv.className = 'tier';
         tierDiv.dataset.tier = tier.id;
-        
+
         const bgColor = tier.color || '#cccccc';
         const textColor = getContrastColor(bgColor);
-        
+
         tierDiv.innerHTML = `
             <div class="tier-label" style="background:${bgColor}; color:${textColor};">${tier.name}</div>
             <div class="tier-list" id="list-${tier.id}"></div>
         `;
         tierContainer.appendChild(tierDiv);
-        
+
         // Init Sortable for this new list
         initSortable(tierDiv.querySelector('.tier-list'));
     });
-    
+
     initTierSortable();
 }
 
 function initTierSortable() {
     if (tierSortable) tierSortable.destroy();
-    
+
     tierSortable = new Sortable(tierContainer, {
         animation: 150,
         handle: '.tier-label', // Allow dragging by the label
@@ -1529,12 +1754,12 @@ function initTierSortable() {
         onEnd: async () => {
             const tiers = Array.from(tierContainer.querySelectorAll('.tier'));
             const batch = writeBatch(db);
-            
+
             tiers.forEach((el, index) => {
                 const id = el.dataset.tier;
                 batch.update(doc(db, "tiers", id), { order: index });
             });
-            
+
             try {
                 await batch.commit();
                 console.log("Tier order updated");
@@ -1562,7 +1787,7 @@ function renderTierManager() {
 function updateTierSelect() {
     initialTierSelect.innerHTML = userTiers.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
     // Select last one by default (usually C)
-    if (userTiers.length > 0) initialTierSelect.value = userTiers[userTiers.length-1].id;
+    if (userTiers.length > 0) initialTierSelect.value = userTiers[userTiers.length - 1].id;
 }
 
 function renderPeopleManager() {
@@ -1594,7 +1819,7 @@ function renderPeopleToggles() {
         };
         peopleTogglesContainer.appendChild(pill);
     });
-    
+
     if (userPeople.length === 0) {
         peopleTogglesContainer.innerHTML = `<div style="font-size:10px; color:#666;">No people added yet. Click "People" to add.</div>`;
     }
@@ -1603,7 +1828,7 @@ function renderPeopleToggles() {
 async function initializeTiers() {
     const q = query(collection(db, "tiers"), where("uid", "==", currentUser.uid));
     const snap = await getDocs(q);
-    
+
     if (snap.empty) {
         console.log("[Init] Initializing default tiers...");
         const defaults = [
@@ -1621,7 +1846,7 @@ async function initializeTiers() {
 async function initializePeople() {
     const q = query(collection(db, "people"), where("uid", "==", currentUser.uid));
     const snap = await getDocs(q);
-    
+
     if (snap.empty) {
         console.log("[Init] Initializing default people...");
         const defaults = ["Sarah", "Dad", "Mom"];
@@ -1677,14 +1902,14 @@ window.updateTier = async (id, data) => {
 
 if (autoColorBtn) autoColorBtn.addEventListener('click', async () => {
     if (userTiers.length === 0) return;
-    
+
     const batch = writeBatch(db);
     userTiers.forEach((tier, index) => {
         const hue = (index / userTiers.length) * 360;
         const hex = hslToHex(hue, 70, 60); // 70% saturation, 60% lightness for vibrant colors
         batch.update(doc(db, "tiers", tier.id), { color: hex });
     });
-    
+
     try {
         await batch.commit();
         console.log("Tier colors updated to spectrum");
@@ -1695,27 +1920,29 @@ if (autoColorBtn) autoColorBtn.addEventListener('click', async () => {
 
 function renderCard(id, data) {
     let list = document.getElementById(`list-${data.tier}`);
-    
+
     // Fallback: If the assigned tier list doesn't exist, put it in the first available tier
     if (!list && userTiers.length > 0) {
         list = document.getElementById(`list-${userTiers[0].id}`);
     }
-    
+
     if (!list) return; // Tier might not be loaded yet or no tiers exist
-    
+
     const card = document.createElement('div');
     card.className = `media-card ${selectedCardIds.has(id) ? 'selected' : ''}`;
     card.dataset.id = id;
-    
+
     const displayTitle = data.movieTitle || 'Movie';
-    
+
     card.innerHTML = `
         <img src="${data.thumb}" alt="thumbnail">
         ${data.watched && data.watchedAt ? `<span class="watched-at-tag">Watched ${timeAgo(data.watchedAt)} ago</span>` : ''}
         <span class="badge">${data.type.toUpperCase()}</span>
+        ${data.imdbScore && data.imdbScore !== 'N/A' ? `<span class="badge imdb-badge">IMDb ${data.imdbScore}</span>` : ''}
+        ${data.rtScore && data.rtScore !== 'N/A' ? `<span class="badge rt-badge">🍅 ${data.rtScore}</span>` : ''}
         ${data.watched ? '<span class="badge watched-badge">WATCHED</span>' : ''}
-        ${data.watchStatus === 'rewatch' 
-            ? '<span class="badge rewatch-badge">REWATCH</span>' 
+        ${data.watchStatus === 'rewatch'
+            ? '<span class="badge rewatch-badge">REWATCH</span>'
             : data.watchStatus === 'new-episodes'
                 ? '<span class="badge new-episodes-badge">NEW EPS</span>'
                 : '<span class="badge first-watch-badge">FIRST WATCH</span>'}
@@ -1752,7 +1979,7 @@ function renderCard(id, data) {
             </button>
         </div>
     `;
-    
+
     card.onclick = (e) => {
         if (e.target.closest('.card-actions')) return;
         if (appMode === 'organize') return;
@@ -1774,7 +2001,7 @@ function renderCard(id, data) {
             openEditModal(id, data);
         }
     };
-    
+
     list.appendChild(card);
 }
 
@@ -1790,7 +2017,7 @@ window.copyToClipboard = (text) => {
 window.markAsWatched = async (id) => {
     const item = cachedWatches.find(w => w.id === id);
     if (!item) return;
-    
+
     try {
         const newWatched = !item.watched;
         const updates = { watched: newWatched };
@@ -1808,51 +2035,59 @@ window.markAsWatched = async (id) => {
 
 function openEditModal(id, data) {
     editingItemId = id;
-    editTitleInput.value = data.movieTitle || "";
+    let displayTitle = data.movieTitle || "";
+    
+    if (isTitleFixMode) {
+        displayTitle = aggressiveCleanTitle(displayTitle);
+    }
+    
+    editTitleInput.value = displayTitle;
     editYoutubeLink.href = data.url;
     if (editGenreInput) editGenreInput.value = data.genre || "";
-    
+    if (editImdbScore) editImdbScore.value = data.imdbScore && data.imdbScore !== "N/A" ? data.imdbScore : "";
+    if (editRtScore) editRtScore.value = data.rtScore && data.rtScore !== "N/A" ? data.rtScore : "";
+
     const watchedToggle = document.getElementById('edit-watched-toggle');
     if (watchedToggle) watchedToggle.checked = !!data.watched;
-    
+
     const editThumb = document.getElementById('edit-thumb');
     if (editThumb) editThumb.src = data.thumb || "";
-    
+
     if (editTypeSelect) editTypeSelect.value = data.type || 'movie';
     if (editStatusSelect) editStatusSelect.value = data.watchStatus || 'first-watch';
-    
+
     // Date Added display
     const dateAddedEl = document.getElementById('edit-date-added');
     if (dateAddedEl && data.timestamp) {
         const date = new Date(data.timestamp);
-        dateAddedEl.innerText = `Added on: ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        dateAddedEl.innerText = `Added on: ${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     } else if (dateAddedEl) {
         dateAddedEl.innerText = "Added on: Unknown";
     }
-    
+
     // Date Watched display
     const dateWatchedEl = document.getElementById('edit-date-watched');
     if (dateWatchedEl) {
         if (data.watched && data.watchedAt) {
             const date = new Date(data.watchedAt);
-            dateWatchedEl.innerText = `Watched on: ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+            dateWatchedEl.innerText = `Watched on: ${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
             dateWatchedEl.classList.remove('hidden');
         } else {
             dateWatchedEl.classList.add('hidden');
         }
     }
-    
+
     // Parse existing people
     editingItemPeople = new Set(data.watchWith ? data.watchWith.split(', ').filter(s => s) : []);
     renderEditPeopleToggles();
-    
+
     editModal.classList.remove('hidden');
-    
+
     // Quick Sort Navigation visibility
     if (isQuickSortMode) {
         prevQuickSortBtn.classList.remove('hidden');
         nextQuickSortBtn.classList.remove('hidden');
-        
+
         // Key Guide
         const keyGuide = document.getElementById('quick-sort-key-guide');
         const keyGuideList = document.getElementById('key-guide-list');
@@ -1865,7 +2100,7 @@ function openEditModal(id, data) {
                 </div>
             `).join('');
         }
-        
+
         // Update title to show progress
         const titleEl = editModal.querySelector('h3');
         if (titleEl) titleEl.innerText = `Quick Sort (${quickSortIndex + 1}/${quickSortItems.length})`;
@@ -1877,7 +2112,7 @@ function openEditModal(id, data) {
         const titleEl = editModal.querySelector('h3');
         if (titleEl) titleEl.innerText = `Edit Entry`;
     }
-    
+
     // Focus title input if not in Quick Sort mode
     if (!isQuickSortMode) {
         setTimeout(() => editTitleInput.focus(), 100);
@@ -1925,18 +2160,23 @@ function initSortable(el) {
     sortables.push(s);
 }
 
+
+
 // Global Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
     // 1. ESC to close modals
     if (e.key === 'Escape') {
         const openModals = document.querySelectorAll('.modal-overlay:not(.hidden)');
         openModals.forEach(m => m.classList.add('hidden'));
-        
+
         // Also close managers
         if (tierManagerSection) tierManagerSection.classList.add('hidden');
         if (peopleManagerSection) peopleManagerSection.classList.add('hidden');
+        
+        isQuickSortMode = false;
+        isTitleFixMode = false;
     }
-    
+
     // 2. / or Cmd/Ctrl + F to focus search
     if (e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key === 'f')) {
         if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
@@ -1944,7 +2184,7 @@ window.addEventListener('keydown', (e) => {
             if (searchInput) searchInput.focus();
         }
     }
-    
+
     // 3. Enter in Add section or Modals
     if (e.key === 'Enter') {
         if (document.activeElement === trailerInput) {
@@ -1957,34 +2197,34 @@ window.addEventListener('keydown', (e) => {
             saveEditBtn.click();
         }
     }
-    
+
     // 4. Quick Sort Navigation Arrows
     if (isQuickSortMode && !editModal.classList.contains('hidden')) {
         const isTextInput = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
         const isSelect = document.activeElement.tagName === 'SELECT';
         const shortcutsEnabled = enableShortcutsToggle ? enableShortcutsToggle.checked : true;
-        
+
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             // Allow navigation from Title or Genre input if using ArrowDown, or ArrowRight if not at end of text (but simplified: just allow it if user wants it)
-            const shouldNavigate = (!isTextInput && !isSelect) || 
-                                 (document.activeElement === editTitleInput && (e.key === 'ArrowDown' || e.key === 'ArrowRight')) || 
-                                 (document.activeElement === editGenreInput && (e.key === 'ArrowDown' || e.key === 'ArrowRight'));
-            
+            const shouldNavigate = (!isTextInput && !isSelect) ||
+                (document.activeElement === editTitleInput && (e.key === 'ArrowDown' || e.key === 'ArrowRight')) ||
+                (document.activeElement === editGenreInput && (e.key === 'ArrowDown' || e.key === 'ArrowRight'));
+
             if (shouldNavigate) {
                 e.preventDefault();
                 saveAndNavigate(1);
             }
         } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-            const shouldNavigate = (!isTextInput && !isSelect) || 
-                                 (document.activeElement === editTitleInput && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) || 
-                                 (document.activeElement === editGenreInput && (e.key === 'ArrowUp' || e.key === 'ArrowLeft'));
-            
+            const shouldNavigate = (!isTextInput && !isSelect) ||
+                (document.activeElement === editTitleInput && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) ||
+                (document.activeElement === editGenreInput && (e.key === 'ArrowUp' || e.key === 'ArrowLeft'));
+
             if (shouldNavigate) {
                 e.preventDefault();
                 saveAndNavigate(-1);
             }
         }
-        
+
         // 5. Tier Shortcuts (q, w, e, r...)
         if (shortcutsEnabled && !isTextInput && !isSelect) {
             const key = e.key.toLowerCase();
