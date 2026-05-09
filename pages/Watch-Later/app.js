@@ -83,7 +83,9 @@ const modeLabel = document.getElementById('mode-label');
 const singleInputRow = document.getElementById('single-input-row');
 const batchInputRow = document.getElementById('batch-input-row');
 const batchLinksArea = document.getElementById('batch-links');
-const batchProgress = document.getElementById('batch-progress');
+const progressSection = document.getElementById('progress-section');
+const progressBar = document.getElementById('progress-bar');
+const progressStatus = document.getElementById('progress-status');
 
 // Tier Management Elements
 const editTiersBtn = document.getElementById('edit-tiers-btn');
@@ -149,6 +151,7 @@ let typeFilter = 'all'; // all, movie, tv
 let watchStatusFilter = 'all'; // all, first-watch, rewatch
 let peopleFilters = new Set(); // Set of person names
 let genreFilters = new Set(); // Set of genre names
+let watchedFilter = 'false'; // 'false', 'true', 'all'
 let searchQuery = ""; // Track search query
 
 // Mode Toggle Logic
@@ -265,6 +268,16 @@ if (searchInput) {
         renderAllCards();
     });
 }
+
+const watchedFilterPills = document.querySelectorAll('#watched-filter-pills .filter-pill');
+watchedFilterPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+        watchedFilterPills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        watchedFilter = pill.dataset.watched;
+        renderAllCards();
+    });
+});
 
 const selectAllBtn = document.getElementById('batch-select-all-btn');
 const deselectAllBtn = document.getElementById('batch-deselect-all-btn');
@@ -764,15 +777,27 @@ saveEditBtn.addEventListener('click', async () => {
     const newType = editTypeSelect.value;
     const newStatus = editStatusSelect.value;
     const newGenre = editGenreInput.value;
+    const isWatched = document.getElementById('edit-watched-toggle').checked;
+    const item = cachedWatches.find(w => w.id === editingItemId);
+    const wasWatched = item ? !!item.watched : false;
     
     try {
-        await updateDoc(doc(db, "watches", editingItemId), {
+        const updates = {
             movieTitle: newTitle,
             watchWith: newPeople,
             type: newType,
             watchStatus: newStatus,
-            genre: newGenre
-        });
+            genre: newGenre,
+            watched: isWatched
+        };
+
+        if (isWatched && !wasWatched) {
+            updates.watchedAt = Date.now();
+        } else if (!isWatched) {
+            updates.watchedAt = null;
+        }
+
+        await updateDoc(doc(db, "watches", editingItemId), updates);
         editModal.classList.add('hidden');
     } catch (err) {
         console.error("Save Edit Error:", err);
@@ -1150,6 +1175,26 @@ addBtn.addEventListener('click', async () => {
     }
 });
 
+// Progress Helpers
+function showProgress(status, percent = null) {
+    if (!progressSection) return;
+    progressSection.classList.remove('hidden');
+    progressStatus.innerText = status;
+    
+    if (percent === null) {
+        progressBar.classList.add('indeterminate');
+        progressBar.style.width = '100%';
+    } else {
+        progressBar.classList.remove('indeterminate');
+        progressBar.style.width = `${percent}%`;
+    }
+}
+
+function hideProgress() {
+    if (!progressSection) return;
+    progressSection.classList.add('hidden');
+}
+
 async function handleSingleAdd() {
     const url = trailerInput.value;
     if (!url) return showAlert("Input Required", "Paste a link first!");
@@ -1170,7 +1215,8 @@ async function handleSingleAdd() {
 
 async function proceedWithSingleAdd(url) {
     addBtn.disabled = true;
-    addBtn.innerText = "Fetching Title...";
+    addBtn.innerText = "Processing...";
+    showProgress("Extracting Video Title...");
 
     const rawTitle = await getVideoData(url);
     const cleanedTitle = cleanTitle(rawTitle);
@@ -1192,6 +1238,7 @@ async function proceedWithSingleAdd(url) {
     renderPeopleToggles();
     addBtn.disabled = false;
     addBtn.innerText = "Add to List";
+    hideProgress();
     
     // Auto-focus back to input
     trailerInput.focus();
@@ -1230,9 +1277,7 @@ async function handleBatchAdd() {
                     proceedWithBatchAdd(uniqueVideoIds); // Add only unique
                 } else {
                     batchLinksArea.value = "";
-                    batchProgress.innerText = "All items skipped (duplicates).";
-                    batchProgress.classList.remove('hidden');
-                    setTimeout(() => batchProgress.classList.add('hidden'), 5000);
+                    showSuccess("No new items added.");
                 }
             }
         );
@@ -1244,12 +1289,13 @@ async function handleBatchAdd() {
 
 async function proceedWithBatchAdd(videoIds) {
     addBtn.disabled = true;
-    batchProgress.classList.remove('hidden');
+    showProgress("Starting batch import...", 0);
     
     let count = 0;
     for (const id of videoIds) {
         count++;
-        batchProgress.innerText = `Processing ${count} / ${videoIds.length}...`;
+        const percent = Math.round((count / videoIds.length) * 100);
+        showProgress(`Processing ${count} / ${videoIds.length}...`, percent);
         
         const url = `https://www.youtube.com/watch?v=${id}`;
         const rawTitle = await getVideoData(url);
@@ -1269,8 +1315,9 @@ async function proceedWithBatchAdd(videoIds) {
     batchLinksArea.value = "";
     selectedPeople.clear();
     renderPeopleToggles();
-    batchProgress.innerText = `Successfully added ${videoIds.length} items!`;
-    setTimeout(() => batchProgress.classList.add('hidden'), 5000);
+    
+    showSuccess(`Successfully added ${videoIds.length} items!`);
+    hideProgress();
     
     addBtn.disabled = false;
     addBtn.innerText = "Add to List";
@@ -1378,8 +1425,22 @@ function renderAllCards() {
             return false;
         }
         
+        // Watched filter
+        if (watchedFilter !== 'all') {
+            const isWatched = watchedFilter === 'true';
+            if (!!watch.watched !== isWatched) return false;
+        }
+        
         return true;
     });
+    
+    // Sort items: Put recently watched at the top if we are in "Watched" view
+    if (watchedFilter === 'true') {
+        filtered.sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0));
+    } else {
+        // Default: Sort by timestamp (newest first)
+        filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    }
     
     filtered.forEach(watch => {
         renderCard(watch.id, watch);
@@ -1419,6 +1480,16 @@ function renderAllCards() {
             list.appendChild(empty);
         }
     });
+
+    // Update global count stats
+    const totalCountEl = document.getElementById('total-count');
+    if (totalCountEl) {
+        if (isFiltered) {
+            totalCountEl.innerText = `Showing ${filtered.length} of ${cachedWatches.length} items`;
+        } else {
+            totalCountEl.innerText = `Total: ${cachedWatches.length} items`;
+        }
+    }
 }
 
 function renderTiers() {
@@ -1640,7 +1711,9 @@ function renderCard(id, data) {
     
     card.innerHTML = `
         <img src="${data.thumb}" alt="thumbnail">
+        ${data.watched && data.watchedAt ? `<span class="watched-at-tag">Watched ${timeAgo(data.watchedAt)} ago</span>` : ''}
         <span class="badge">${data.type.toUpperCase()}</span>
+        ${data.watched ? '<span class="badge watched-badge">WATCHED</span>' : ''}
         ${data.watchStatus === 'rewatch' 
             ? '<span class="badge rewatch-badge">REWATCH</span>' 
             : data.watchStatus === 'new-episodes'
@@ -1661,6 +1734,12 @@ function renderCard(id, data) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </button>
+            <button class="action-btn mark-watched-btn" title="${data.watched ? 'Mark Unwatched' : 'Mark as Watched'}" onclick="event.stopPropagation(); markAsWatched('${id}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
                 </svg>
             </button>
             <button class="action-btn delete-card-btn" title="Quick Delete" onclick="event.stopPropagation(); deleteEntry('${id}')">
@@ -1708,11 +1787,33 @@ window.copyToClipboard = (text) => {
     });
 };
 
+window.markAsWatched = async (id) => {
+    const item = cachedWatches.find(w => w.id === id);
+    if (!item) return;
+    
+    try {
+        const newWatched = !item.watched;
+        const updates = { watched: newWatched };
+        if (newWatched) {
+            updates.watchedAt = Date.now();
+        } else {
+            updates.watchedAt = null;
+        }
+        await updateDoc(doc(db, "watches", id), updates);
+        showSuccess(newWatched ? "Marked as Watched" : "Marked Unwatched");
+    } catch (err) {
+        console.error("Mark Watched Error:", err);
+    }
+};
+
 function openEditModal(id, data) {
     editingItemId = id;
     editTitleInput.value = data.movieTitle || "";
     editYoutubeLink.href = data.url;
     if (editGenreInput) editGenreInput.value = data.genre || "";
+    
+    const watchedToggle = document.getElementById('edit-watched-toggle');
+    if (watchedToggle) watchedToggle.checked = !!data.watched;
     
     const editThumb = document.getElementById('edit-thumb');
     if (editThumb) editThumb.src = data.thumb || "";
@@ -1727,6 +1828,18 @@ function openEditModal(id, data) {
         dateAddedEl.innerText = `Added on: ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
     } else if (dateAddedEl) {
         dateAddedEl.innerText = "Added on: Unknown";
+    }
+    
+    // Date Watched display
+    const dateWatchedEl = document.getElementById('edit-date-watched');
+    if (dateWatchedEl) {
+        if (data.watched && data.watchedAt) {
+            const date = new Date(data.watchedAt);
+            dateWatchedEl.innerText = `Watched on: ${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+            dateWatchedEl.classList.remove('hidden');
+        } else {
+            dateWatchedEl.classList.add('hidden');
+        }
     }
     
     // Parse existing people
