@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Local Speech File Renamer</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Global website-wide header stylesheet -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+
+    <!-- Page-specific stylesheet -->
+    <link rel="stylesheet" href="page.css">
+</head>
+
+<body>
+    <div id="main-nav-placeholder"></div>
+
+    <main class="app-shell">
+        <section class="hero glass-card">
+            <div>
+                <p class="eyebrow">Local ONNX speech-to-text</p>
+                <h1>Process audio/video files with local AI</h1>
+                <p class="subtext">
+                    Select a folder of short MP4, WAV, MP3, M4A, WebM or OGG files.
+                    The app transcribes each file locally in your browser to rename files or extract full speech to text.
+                </p>
+            </div>
+
+            <div class="status-pill" id="browserStatus">Checking browser support…</div>
+        </section>
+
+        <section class="controls-grid">
+            <div class="glass-card panel">
+                <h2>1. Choose files</h2>
+                <p>
+                    Best option: select a folder. Chrome/Edge can write renamed copies back to disk.
+                </p>
+
+                <div class="button-row">
+                    <button id="pickFolderBtn" class="primary-button">Choose folder</button>
+                    <button id="pickFileBtn" class="secondary-button">Choose single file</button>
+                    <label class="secondary-button file-label">
+                        Fallback picker
+                        <input id="fileInput" type="file" multiple
+                            accept="audio/*,video/*,.mp4,.m4a,.mp3,.wav,.webm,.ogg,.aac" />
+                    </label>
+                </div>
+
+                <div class="small-note">
+                    Fallback file picker can read files, but usually cannot write renamed files automatically.
+                </div>
+            </div>
+
+            <div class="glass-card panel">
+                <h2>2. Options</h2>
+
+                <div class="mode-selector">
+                    <label class="mode-option">
+                        <input type="radio" name="toolMode" value="rename" checked>
+                        <div class="mode-card">
+                            <span class="mode-title">Rename Files</span>
+                            <span class="mode-desc">Use first few words as filename</span>
+                        </div>
+                    </label>
+                    <label class="mode-option">
+                        <input type="radio" name="toolMode" value="extract">
+                        <div class="mode-card">
+                            <span class="mode-title">Extract Speech</span>
+                            <span class="mode-desc">Save full transcript to .txt</span>
+                        </div>
+                    </label>
+                </div>
+
+                <div id="folderOptionsGroup">
+                    <label class="option-row">
+                        <input id="includeSubfolders" type="checkbox" checked>
+                        <span>Include subfolders</span>
+                    </label>
+                </div>
+
+                <div id="renameOptionsGroup">
+                    <label class="option-row">
+                        <input id="deleteOriginals" type="checkbox">
+                        <span>Delete originals after renaming</span>
+                    </label>
+
+                    <label class="field-label" for="wordCount">Words in filename</label>
+                    <input id="wordCount" type="number" min="1" max="10" value="4">
+                </div>
+
+                <label class="option-row">
+                    <input id="useWebGPU" type="checkbox">
+                    <span>Try WebGPU acceleration</span>
+                </label>
+
+                <label class="field-label" for="modelSelect">Model quality</label>
+                <select id="modelSelect">
+                    <option value="Xenova/whisper-tiny.en" selected>Whisper tiny (Fastest)</option>
+                    <option value="Xenova/whisper-base.en">Whisper base (Accurate)</option>
+                    <option value="Xenova/whisper-small.en">Whisper small (Slow, best)</option>
+                </select>
+            </div>
+        </section>
+
+        <section class="glass-card action-panel">
+            <div>
+                <h2>3. Run</h2>
+                <p id="selectionSummary">No folder selected yet.</p>
+            </div>
+
+            <div class="button-row">
+                <button id="startBtn" class="primary-button" disabled>Start transcribing</button>
+                <button id="clearBtn" class="secondary-button">Clear</button>
+            </div>
+        </section>
+
+        <section class="glass-card progress-panel">
+            <div class="progress-header">
+                <div>
+                    <h2>Progress</h2>
+                    <p id="currentTask">Idle.</p>
+                </div>
+                <div id="progressText">0 / 0</div>
+            </div>
+
+            <div class="progress-track">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+        </section>
+
+        <section class="glass-card results-panel">
+            <h2>Results</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Original</th>
+                            <th>Detected speech</th>
+                            <th>New filename</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                        <tr>
+                            <td colspan="4" class="empty-cell">Results will appear here.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="/assets/js/nav-loader.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>
