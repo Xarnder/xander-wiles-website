@@ -123,7 +123,7 @@ body {
 .app-container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 15px;
 }
 
 .app-header {
@@ -635,8 +635,8 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
 }
 
 #input-section.collapsed {
-    padding-top: 5px !important;
-    padding-bottom: 5px !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
 }
 
 #input-section.collapsed .collapsible-content {
@@ -1423,7 +1423,7 @@ input[type="file"]::-webkit-file-upload-button {
         flex-direction: column;
         gap: 15px;
         text-align: center;
-        margin-bottom: 20px;
+        margin-bottom: 2px;
     }
 
     .app-header h1 {
@@ -1580,13 +1580,13 @@ input[type="file"]::-webkit-file-upload-button {
     /* Extra Slim Mobile Mode (Phones < 480px) */
     @media (max-width: 480px) {
         :root {
-            --app-margin: 12px;
+            --app-margin: 4px;
             --header-padding: 5px;
             --card-padding: 12px;
             --filter-bar-padding: 8px 12px;
             --filter-group-padding: 6px 0;
-            --input-padding: 10px 12px;
-            --card-gap: 8px;
+            --input-padding: 2px 2px;
+            --card-gap: 2px;
             --tier-gap: 12px;
         }
 
@@ -1623,6 +1623,29 @@ input[type="file"]::-webkit-file-upload-button {
             width: 12px;
             height: 12px;
         }
+
+        .app-header {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            text-align: left;
+            margin-bottom: 5px;
+        }
+
+        .app-header h1 {
+            font-size: 1.5rem;
+            margin: 0;
+        }
+
+        #edit-tiers-btn,
+        #quick-sort-btn {
+            display: none !important;
+        }
+
+        #auth-section, #user-info {
+            width: auto;
+            margin: 0;
+        }
     }
 
     @media (max-width: 400px) {
@@ -1637,16 +1660,25 @@ input[type="file"]::-webkit-file-upload-button {
             --tier-gap: 10px;
         }
 
+        .app-header {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+        }
+
         .app-header h1 {
-            font-size: 1.6rem;
+            font-size: 1.4rem;
+            margin: 0;
         }
 
         #edit-tiers-btn,
-        #quick-sort-btn,
-        #logout-btn,
+        #quick-sort-btn {
+            display: none !important;
+        }
+
         #open-settings-btn {
-            padding: 6px 10px;
-            font-size: 10px;
+            padding: 6px 12px;
+            font-size: 11px;
             min-width: 0;
         }
 
@@ -1678,7 +1710,7 @@ input[type="file"]::-webkit-file-upload-button {
         }
 
         .filter-bar {
-            padding: 10px 12px;
+            padding: 5px 10px;
             gap: 0;
         }
     }
@@ -1752,7 +1784,7 @@ input:checked+.slider:before {
     }
 
     .app-container {
-        padding-top: 10px;
+        padding-top: 5px;
         /* Small extra buffer below status bar */
     }
 
@@ -2215,6 +2247,20 @@ input:checked+.slider:before {
     border-color: rgba(139, 92, 246, 0.3) !important;
     color: white !important;
     box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2);
+}
+
+.quick-sort-btn-alt {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
+    color: white !important;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
+}
+
+.tiers-btn {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    border-color: rgba(16, 185, 129, 0.3) !important;
+    color: white !important;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.2);
 }
 
 .backfill-btn:hover {

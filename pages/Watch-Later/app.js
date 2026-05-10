@@ -148,6 +148,8 @@ const openSettingsBtn = document.getElementById('open-settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettingsModalBtn = document.getElementById('close-settings-modal');
 const debugMenuToggle = document.getElementById('debug-menu-toggle');
+const editTiersBtnModal = document.getElementById('edit-tiers-btn-modal');
+const quickSortBtnModal = document.getElementById('quick-sort-btn-modal');
 
 if (openSettingsBtn) {
     openSettingsBtn.addEventListener('click', () => {
@@ -236,6 +238,12 @@ toggleBatchBtn.addEventListener('click', (e) => {
 
 // Tier Manager Toggle
 if (editTiersBtn) editTiersBtn.addEventListener('click', () => tierManagerSection.classList.toggle('hidden'));
+if (editTiersBtnModal) {
+    editTiersBtnModal.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+        tierManagerSection.classList.toggle('hidden');
+    });
+}
 if (closeManagerBtn) closeManagerBtn.addEventListener('click', () => tierManagerSection.classList.add('hidden'));
 
 // People Manager Toggle
@@ -677,8 +685,12 @@ saveBatchPeopleBtn.addEventListener('click', async () => {
 
 document.querySelectorAll('.close-modal-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-        batchMoveModal.classList.add('hidden');
-        batchPeopleModal.classList.add('hidden');
+        const modal = btn.closest('.modal-overlay');
+        if (modal) modal.classList.add('hidden');
+        
+        // Reset specific states if needed
+        isQuickSortMode = false;
+        isTitleFixMode = false;
     });
 });
 
@@ -728,6 +740,13 @@ if (quickSortBtn) {
             <button type="button" onclick="startQuickSort('${t.id}')" style="background:${t.color || 'var(--glass)'}; color:${getContrastColor(t.color || '#cccccc')}; border:1px solid var(--border); width: 100%;">${t.name}</button>
         `).join('');
         quickSortTierModal.classList.remove('hidden');
+    });
+}
+
+if (quickSortBtnModal) {
+    quickSortBtnModal.addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+        quickSortBtn.click();
     });
 }
 
