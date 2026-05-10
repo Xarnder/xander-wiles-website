@@ -1065,6 +1065,9 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
     position: relative;
     max-width: 90%;
     width: 500px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
 }
 
 .modal-content::after {
@@ -1596,6 +1599,13 @@ input[type="file"]::-webkit-file-upload-button {
         padding: 24px;
         width: 95%;
         max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-content .input-row {
+        flex-direction: column;
+        gap: 12px;
+        align-items: stretch;
     }
 
     /* Extra Slim Mobile Mode (Phones < 480px) */
