@@ -1107,19 +1107,19 @@ onAuthStateChanged(auth, async (user) => {
 
 // Helper: Extract YouTube Thumbnail
 function getThumbnail(url) {
-    try {
-        const videoId = url.split('v=')[1]?.split('&')[0] || url.split('be/')[1];
+    const videoId = getVideoId(url);
+    if (videoId) {
         return `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
-    } catch (e) {
-        console.warn("Invalid URL for thumbnail extraction");
-        return 'https://via.placeholder.com/160x90?text=No+Preview';
     }
+    console.warn("Could not extract Video ID for thumbnail:", url);
+    return 'https://via.placeholder.com/160x90?text=No+Preview';
 }
 
 // Helper: Extract YouTube Video ID
 function getVideoId(url) {
     if (!url) return null;
-    const regex = /(?:v=|\/)([0-9A-Za-z_-]{11})/;
+    // Robust regex for various YT formats: watch?v=, youtu.be/, shorts/, live/, embed/, etc.
+    const regex = /(?:v=|be\/|embed\/|shorts\/|live\/|v\/)([a-zA-Z0-9_-]{11})/;
     const match = url.match(regex);
     return match ? match[1] : null;
 }
@@ -1422,6 +1422,49 @@ if (fixTitlesBtn) {
         isTitleFixMode = true;
         quickSortIndex = 0;
         openEditModal(quickSortItems[quickSortIndex].id, quickSortItems[quickSortIndex]);
+    });
+}
+
+const fixThumbnailsBtn = document.getElementById('fix-thumbnails-btn');
+if (fixThumbnailsBtn) {
+    fixThumbnailsBtn.addEventListener('click', async () => {
+        showConfirm("Fix Thumbnails?", "This will check all items and attempt to fix missing or placeholder YouTube thumbnails. Continue?", async () => {
+            const itemsToFix = cachedWatches.filter(w => 
+                !w.thumb || 
+                w.thumb.includes('placeholder') || 
+                w.thumb.includes('undefined')
+            );
+
+            if (itemsToFix.length === 0) {
+                showAlert("Done", "All thumbnails look correct!");
+                return;
+            }
+
+            showProgress("Fixing Thumbnails...", 0);
+            let fixedCount = 0;
+
+            for (let i = 0; i < itemsToFix.length; i++) {
+                const item = itemsToFix[i];
+                const percent = Math.round(((i + 1) / itemsToFix.length) * 100);
+                showProgress(`Processing ${i + 1}/${itemsToFix.length}: ${item.movieTitle}...`, percent);
+
+                const newThumb = getThumbnail(item.url);
+                
+                // Only update if we actually got a real YouTube thumb (not placeholder)
+                if (newThumb && !newThumb.includes('placeholder')) {
+                    await updateDoc(doc(db, "watches", item.id), {
+                        thumb: newThumb
+                    });
+                    // Update cache
+                    item.thumb = newThumb;
+                    fixedCount++;
+                }
+            }
+
+            hideProgress();
+            renderAllCards();
+            showSuccess(`Successfully fixed ${fixedCount} thumbnails!`);
+        });
     });
 }
 
