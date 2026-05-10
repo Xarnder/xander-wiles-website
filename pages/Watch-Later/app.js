@@ -332,6 +332,15 @@ if (searchInput) {
     });
 }
 
+const toggleFiltersBtn = document.getElementById('toggle-filters-btn');
+const filterBar = document.getElementById('filter-bar');
+if (toggleFiltersBtn) {
+    toggleFiltersBtn.addEventListener('click', () => {
+        filterBar.classList.toggle('collapsed');
+        toggleFiltersBtn.innerText = filterBar.classList.contains('collapsed') ? 'Filters' : 'Close';
+    });
+}
+
 const watchedFilterPills = document.querySelectorAll('#watched-filter-pills .filter-pill');
 watchedFilterPills.forEach(pill => {
     pill.addEventListener('click', () => {
@@ -1751,13 +1760,17 @@ function renderAllCards() {
 
     // Update global count stats
     const totalCountEl = document.getElementById('total-count');
-    if (totalCountEl) {
-        if (isFiltered) {
-            totalCountEl.innerText = `Showing ${filtered.length} of ${cachedWatches.length} items`;
-        } else {
-            totalCountEl.innerText = `Total: ${cachedWatches.length} items`;
-        }
+    const totalCountMobileEl = document.getElementById('total-count-mobile');
+    
+    let statsText = "";
+    if (isFiltered) {
+        statsText = `Showing ${filtered.length} of ${cachedWatches.length} items`;
+    } else {
+        statsText = `Total: ${cachedWatches.length} items`;
     }
+
+    if (totalCountEl) totalCountEl.innerText = statsText;
+    if (totalCountMobileEl) totalCountMobileEl.innerText = statsText;
 }
 
 function renderTiers() {

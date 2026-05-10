@@ -86,7 +86,7 @@
             <h1>Watch Later</h1>
             <div id="auth-section">
                 <div id="user-info" class="hidden">
-                    <span id="user-name"></span>
+                    <!-- <span id="user-name"></span> -->
                     <button id="edit-tiers-btn">Tiers</button>
                     <button id="quick-sort-btn" class="quick-sort-btn">Quick Sort</button>
                     <button id="open-settings-btn" class="settings-btn">Settings</button>
@@ -156,66 +156,75 @@
             </div>
         </section>
 
-        <div id="filter-bar" class="filter-bar hidden">
-            <div class="filter-group">
-                <div class="filter-pills" id="type-filter-pills">
-                    <button class="filter-pill active" data-type="all">All Types</button>
-                    <button class="filter-pill" data-type="movie">Movies</button>
-                    <button class="filter-pill" data-type="tv">TV Shows</button>
+        <div id="filter-bar" class="filter-bar hidden collapsed">
+            <div class="filter-header-mobile">
+                <div id="filter-stats-mobile" class="filter-stats">
+                    <span id="total-count-mobile">0 items</span>
                 </div>
-            </div>
-            <div class="filter-group">
-                <div class="filter-pills" id="status-filter-pills">
-                    <button class="filter-pill active" data-status="all">All Status</button>
-                    <button class="filter-pill" data-status="first-watch">First Watch</button>
-                    <button class="filter-pill" data-status="rewatch">Rewatch</button>
-                    <button class="filter-pill" data-status="new-episodes">New Episodes</button>
-                </div>
-            </div>
-            <div class="filter-group">
-                <div class="filter-pills" id="watched-filter-pills">
-                    <button class="filter-pill active" data-watched="false">Not Watched</button>
-                    <button class="filter-pill" data-watched="true">Watched</button>
-                    <button class="filter-pill" data-watched="all">All</button>
-                </div>
-            </div>
-            <div class="filter-group">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <div class="filter-pills" id="people-filter-pills">
-                        <!-- Dynamic people pills -->
-                    </div>
-                    <button id="edit-people-btn" class="icon-btn circle-btn" title="Manage People">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div class="filter-group">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <div class="filter-pills" id="genre-filter-pills">
-                        <!-- Dynamic genre pills -->
-                    </div>
-                    <button id="open-rename-genre-modal-btn" class="icon-btn circle-btn" title="Rename a Genre">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                    </button>
-                </div>
+                <button id="toggle-filters-btn" class="secondary-btn">Filters</button>
             </div>
 
-            <div class="filter-group" style="flex: 1; justify-content: flex-end;">
-                <input type="text" id="search-input" placeholder="Search titles..."
-                    style="padding: 8px 16px; font-size: 13px; margin: 0; width: 100%; max-width: 300px;">
-            </div>
-            <div id="filter-stats" class="filter-stats">
-                <span id="total-count">0 items</span>
+            <div id="filter-groups-container" class="filter-groups-container">
+                <div class="filter-group" id="group-type">
+                    <div class="filter-pills" id="type-filter-pills">
+                        <button class="filter-pill active" data-type="all">All Types</button>
+                        <button class="filter-pill" data-type="movie">Movies</button>
+                        <button class="filter-pill" data-type="tv">TV Shows</button>
+                    </div>
+                </div>
+                <div class="filter-group" id="group-status">
+                    <div class="filter-pills" id="status-filter-pills">
+                        <button class="filter-pill active" data-status="all">All Status</button>
+                        <button class="filter-pill" data-status="first-watch">First Watch</button>
+                        <button class="filter-pill" data-status="rewatch">Rewatch</button>
+                        <button class="filter-pill" data-status="new-episodes">New Episodes</button>
+                    </div>
+                </div>
+                <div class="filter-group" id="group-watched">
+                    <div class="filter-pills" id="watched-filter-pills">
+                        <button class="filter-pill active" data-watched="false">Not Watched</button>
+                        <button class="filter-pill" data-watched="true">Watched</button>
+                        <button class="filter-pill" data-watched="all">All</button>
+                    </div>
+                </div>
+                <div class="filter-group" id="group-people">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="filter-pills" id="people-filter-pills">
+                            <!-- Dynamic people pills -->
+                        </div>
+                        <button id="edit-people-btn" class="icon-btn circle-btn" title="Manage People">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="filter-group" id="group-genre">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="filter-pills" id="genre-filter-pills">
+                            <!-- Dynamic genre pills -->
+                        </div>
+                        <button id="open-rename-genre-modal-btn" class="icon-btn circle-btn" title="Rename a Genre">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filter-group" id="group-search" style="flex: 1; justify-content: flex-end;">
+                    <input type="text" id="search-input" placeholder="Search titles..."
+                        style="padding: 8px 16px; font-size: 13px; margin: 0; width: 100%; max-width: 300px;">
+                </div>
+                <div id="filter-stats" class="filter-stats desktop-only">
+                    <span id="total-count">0 items</span>
+                </div>
             </div>
         </div>
 
@@ -575,7 +584,7 @@
     </script>
 
     <!-- Firebase SDKs -->
-    <script type="module" src="/pages/Watch-Later/app.js?v=6"></script>
+    <script type="module" src="/pages/Watch-Later/app.js?v=7"></script>
 </body>
 
 </html>
