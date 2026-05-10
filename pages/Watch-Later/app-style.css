@@ -24,8 +24,8 @@
     --header-padding: 20px;
     --card-padding: 28px;
     --filter-bar-padding: 16px 20px;
-    --filter-group-padding: 10px 0;
-    --input-padding: 16px 20px;
+    --filter-group-padding: 12px 0;
+    --input-padding: 18px 22px;
     --card-gap: 5px;
     --tier-gap: 15px;
 }
@@ -226,8 +226,13 @@ button:active {
     filter: brightness(0.9);
 }
 
-#login-btn,
-#add-btn,
+#add-btn {
+    padding: 16px 32px;
+    background: linear-gradient(135deg, var(--accent) 0%, #1d4ed8 100%);
+    border: none;
+    box-shadow: 0 4px 15px var(--accent-glow);
+    margin-top: 10px;
+}
 #save-edit-btn,
 #add-tier-btn,
 #add-person-btn,
@@ -518,6 +523,13 @@ button:active {
 }
 
 /* --- Input Rows --- */
+.input-row {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    width: 100%;
+}
+
 input[type="text"],
 textarea,
 select {
@@ -637,6 +649,13 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
 #input-section.collapsed {
     padding-top: 10px !important;
     padding-bottom: 10px !important;
+}
+
+.collapsible-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    transition: var(--transition);
 }
 
 #input-section.collapsed .collapsible-content {
@@ -1413,8 +1432,8 @@ input[type="file"]::-webkit-file-upload-button {
         --header-padding: 15px;
         --card-padding: 20px;
         --filter-bar-padding: 12px 16px;
-        --filter-group-padding: 8px 0;
-        --input-padding: 12px 16px;
+        --filter-group-padding: 10px 0;
+        --input-padding: 14px 18px;
         --card-gap: 10px;
         --tier-gap: 15px;
     }
@@ -1513,6 +1532,8 @@ input[type="file"]::-webkit-file-upload-button {
     /* Main input section stacks on mobile */
     #input-section .input-row {
         flex-direction: column;
+        gap: 12px;
+        align-items: stretch;
     }
 
     /* Filter bar adjustments */
@@ -1584,8 +1605,8 @@ input[type="file"]::-webkit-file-upload-button {
             --header-padding: 5px;
             --card-padding: 12px;
             --filter-bar-padding: 8px 12px;
-            --filter-group-padding: 6px 0;
-            --input-padding: 2px 2px;
+            --filter-group-padding: 8px 0;
+            --input-padding: 12px 16px;
             --card-gap: 2px;
             --tier-gap: 12px;
         }
@@ -2195,10 +2216,25 @@ input:checked+.slider:before {
 }
 
 .settings-group {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 18px;
+    padding: 14px 18px;
+    margin: 4px 0;
+}
+
+.switch-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.switch-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.3px;
 }
 
 .settings-actions {
