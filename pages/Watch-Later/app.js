@@ -2044,7 +2044,7 @@ function renderCard(id, data) {
                     <polyline points="22 4 12 14.01 9 11.01"></polyline>
                 </svg>
             </button>
-            <button class="action-btn edit-card-btn" title="Edit Entry" onclick="event.stopPropagation(); openEditModal('${id}', cachedWatches.find(w => w.id === '${id}'))">
+            <button class="action-btn edit-card-btn" title="Edit Entry" onclick="event.stopPropagation(); openEditModal('${id}')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -2114,7 +2114,10 @@ window.markAsWatched = async (id) => {
     }
 };
 
-function openEditModal(id, data) {
+window.openEditModal = function(id, data) {
+    if (!data) data = cachedWatches.find(w => w.id === id);
+    if (!data) return;
+
     editingItemId = id;
     let displayTitle = data.movieTitle || "";
     
