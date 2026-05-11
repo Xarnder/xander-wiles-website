@@ -118,8 +118,9 @@
             </div>
 
             <div class="collapsible-content">
-                <div id="single-input-row" class="input-row">
-                    <input type="text" id="trailer-link" placeholder="Paste Trailer URL (YouTube)...">
+                <div id="single-input-row" class="input-row" style="flex-wrap: wrap;">
+                    <input type="text" id="trailer-link" placeholder="Paste Trailer URL (YouTube)..." style="flex: 1; min-width: 250px;">
+                    <input type="text" id="movie-title-input" placeholder="Movie/TV Title (Auto-extracted)" style="flex: 1.5; min-width: 250px;">
                     <select id="type-toggle">
                         <option value="movie">Movie</option>
                         <option value="tv">TV Show</option>

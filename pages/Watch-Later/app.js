@@ -72,6 +72,7 @@ const logoutBtn = document.getElementById('logout-btn');
 const inputSection = document.getElementById('input-section');
 const tierContainer = document.getElementById('tier-container');
 const trailerInput = document.getElementById('trailer-link');
+const movieTitleInput = document.getElementById('movie-title-input');
 const typeToggle = document.getElementById('type-toggle');
 const watchWithInput = document.getElementById('watch-with');
 const addBtn = document.getElementById('add-btn');
@@ -1318,6 +1319,33 @@ addBtn.addEventListener('click', async () => {
     }
 });
 
+let lastExtractedUrl = "";
+trailerInput.addEventListener('input', async (e) => {
+    const url = e.target.value.trim();
+    if (!url || url === lastExtractedUrl) return;
+
+    // Quick check if it looks like a YouTube URL
+    const regex = /(?:v=|\/)([0-9A-Za-z_-]{11})/;
+    if (regex.test(url)) {
+        lastExtractedUrl = url;
+        await autoExtractTitle(url);
+    }
+});
+
+async function autoExtractTitle(url) {
+    if (!movieTitleInput) return;
+    movieTitleInput.value = "";
+    movieTitleInput.placeholder = "Extracting title...";
+
+    const rawTitle = await getVideoData(url);
+    if (rawTitle) {
+        const cleanedTitle = cleanTitle(rawTitle);
+        movieTitleInput.value = cleanedTitle;
+    } else {
+        movieTitleInput.placeholder = "Could not extract title. Enter manually.";
+    }
+}
+
 // Progress Helpers
 function showProgress(status, percent = null) {
     if (!progressSection) return;
@@ -1499,18 +1527,22 @@ if (fixThumbnailsBtn) {
 async function proceedWithSingleAdd(url) {
     addBtn.disabled = true;
     addBtn.innerText = "Processing...";
-    showProgress("Extracting Video Title...");
-
-    const rawTitle = await getVideoData(url);
-    const cleanedTitle = cleanTitle(rawTitle);
-
+    
+    let finalTitle = movieTitleInput.value.trim();
+    
+    if (!finalTitle) {
+        showProgress("Extracting Video Title...");
+        const rawTitle = await getVideoData(url);
+        finalTitle = cleanTitle(rawTitle);
+    }
+ 
     showProgress("Fetching OMDb Scores...");
-    const scores = await getMovieScores(cleanedTitle);
-
+    const scores = await getMovieScores(finalTitle);
+ 
     await saveItem({
         url,
         thumb: scores.omdbPoster ? scores.omdbPoster : getThumbnail(url),
-        movieTitle: cleanedTitle,
+        movieTitle: finalTitle,
         type: typeToggle.value,
         watchStatus: statusToggle.value,
         genre: genreInput.value,
@@ -1519,14 +1551,17 @@ async function proceedWithSingleAdd(url) {
         watchWith: Array.from(selectedPeople).join(', '),
         tier: initialTierSelect.value || (userTiers.length > 0 ? userTiers[userTiers.length - 1].id : 'default')
     });
-
+ 
     trailerInput.value = "";
+    movieTitleInput.value = "";
+    lastExtractedUrl = "";
     genreInput.value = "";
     selectedPeople.clear();
     renderPeopleToggles();
     addBtn.disabled = false;
     addBtn.innerText = "Add to List";
     hideProgress();
+    showSuccess(`${finalTitle} added to list!`);
 
     // Auto-focus back to input
     trailerInput.focus();
