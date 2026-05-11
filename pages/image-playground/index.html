@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Fluid particle image morphing demo using vanilla JavaScript canvas.">
+  <title>Fluid Particle Image Morph</title>
+
+  <!-- Theme-aware SVG icons (modern browsers) -->
+  <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+  <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+  <!-- Fallback PNG icons -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+  <!-- Other essential links -->
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+  <!-- Global website-wide header stylesheet -->
+  <link rel="stylesheet" href="/assets/css/style.css">
+
+  <!-- Page-specific stylesheet -->
+  <link rel="stylesheet" href="particle-morph.css">
+</head>
+
+<body>
+  <div id="main-nav-placeholder"></div>
+  <script src="/assets/js/nav-loader.js"></script>
+
+  <main class="particle-page">
+    <section class="intro-card glass-card">
+      <div class="eyebrow">Canvas / Particle Physics / Image Morph</div>
+
+      <h1>Fluid Particle Image Morph</h1>
+
+      <p class="intro-copy">
+        Upload two images. The page samples them into thousands of particles, then morphs between them with
+        fluid-like pressure, turbulence, trails, and pointer interaction.
+      </p>
+
+      <div class="upload-grid">
+        <label class="upload-card" for="imageA">
+          <input id="imageA" type="file" accept="image/*">
+          <span class="upload-label">Image A</span>
+          <span id="fileNameA" class="file-name">Choose first image</span>
+          <img id="previewA" class="preview-image" alt="Preview of image A" hidden>
+        </label>
+
+        <label class="upload-card" for="imageB">
+          <input id="imageB" type="file" accept="image/*">
+          <span class="upload-label">Image B</span>
+          <span id="fileNameB" class="file-name">Choose second image</span>
+          <img id="previewB" class="preview-image" alt="Preview of image B" hidden>
+        </label>
+      </div>
+
+      <div class="control-stack">
+        <div class="control-row">
+          <label for="particleCount">
+            Particles
+            <span id="particleCountValue">6,000</span>
+          </label>
+          <input id="particleCount" type="range" min="800" max="12000" step="200" value="6000">
+        </div>
+
+        <div class="control-row">
+          <label for="flowStrength">
+            Fluid energy
+            <span id="flowStrengthValue">1.00</span>
+          </label>
+          <input id="flowStrength" type="range" min="0" max="2" step="0.05" value="1">
+        </div>
+
+        <div class="control-row">
+          <label for="particleSize">
+            Particle size
+            <span id="particleSizeValue">3.50</span>
+          </label>
+          <input id="particleSize" type="range" min="0.5" max="10" step="0.1" value="3.5">
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button id="morphButton" class="primary-button" type="button" disabled>
+          Morph to image B
+        </button>
+
+        <button id="burstButton" class="ghost-button" type="button">
+          Fluid burst
+        </button>
+
+        <button id="resetButton" class="ghost-button" type="button">
+          Reset
+        </button>
+      </div>
+
+      <div class="status-row">
+        <div id="statusPill" class="status-pill" data-tone="neutral">
+          Upload two images to start.
+        </div>
+
+        <div id="perfText" class="perf-text">
+          Waiting
+        </div>
+      </div>
+
+      <p class="hint-text">
+        Tip: transparent PNGs create cleaner silhouettes. Photos also work, but the background becomes part of the particle field.
+      </p>
+    </section>
+
+    <section class="stage-card glass-card" aria-label="Particle morphing canvas">
+      <div class="stage-header">
+        <div>
+          <h2>Live particle field</h2>
+          <p>Drag or tap inside the canvas to disturb the particles.</p>
+        </div>
+
+        <div class="stage-badge">2D fluid-style simulation</div>
+      </div>
+
+      <div id="canvasWrap" class="canvas-wrap">
+        <canvas id="particleCanvas"></canvas>
+
+        <div id="emptyState" class="canvas-empty-state">
+          <div class="empty-orb"></div>
+          <strong>Upload image A and image B</strong>
+          <span>The particle system will appear here.</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="particle-morph.js"></script>
+</body>
+</html>

@@ -25,12 +25,24 @@ document.addEventListener('DOMContentLoaded', () => {
         brushSize: 50,
         brushSoftness: 25,
         cropFeather: 0,
+        // Settings - Mask Tool (Overlay)
         hue: 0,
         saturation: 100,
         lightness: 100,
         blackLevel: 0,
         highlightLevel: 100,
         curvePoints: [
+            { x: 0, y: 0 },
+            { x: 1, y: 1 }
+        ],
+
+        // Settings - Mask Tool (Base)
+        baseHue: 0,
+        baseSaturation: 100,
+        baseLightness: 100,
+        baseBlackLevel: 0,
+        baseHighlightLevel: 100,
+        baseCurvePoints: [
             { x: 0, y: 0 },
             { x: 1, y: 1 }
         ],
@@ -114,6 +126,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const brushSoftnessValue = document.getElementById('brush-softness-value');
     const featherValue = document.getElementById('feather-value');
 
+    const curveCanvas = document.getElementById('curve-canvas');
+    const resetCurveBtn = document.getElementById('reset-curve-btn');
+
     const hueSlider = document.getElementById('hue-slider');
     const saturationSlider = document.getElementById('saturation-slider');
     const lightnessSlider = document.getElementById('lightness-slider');
@@ -124,9 +139,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const highlightLevelSlider = document.getElementById('highlight-level-slider');
     const blackLevelValue = document.getElementById('black-level-value');
     const highlightLevelValue = document.getElementById('highlight-level-value');
+    
+    const baseHueSlider = document.getElementById('base-hue-slider');
+    const baseSaturationSlider = document.getElementById('base-saturation-slider');
+    const baseLightnessSlider = document.getElementById('base-lightness-slider');
+    const baseHueValue = document.getElementById('base-hue-value');
+    const baseSaturationValue = document.getElementById('base-saturation-value');
+    const baseLightnessValue = document.getElementById('base-lightness-value');
+    const baseBlackLevelSlider = document.getElementById('base-black-level-slider');
+    const baseHighlightLevelSlider = document.getElementById('base-highlight-level-slider');
+    const baseBlackLevelValue = document.getElementById('base-black-level-value');
+    const baseHighlightLevelValue = document.getElementById('base-highlight-level-value');
 
-    const curveCanvas = document.getElementById('curve-canvas');
-    const resetCurveBtn = document.getElementById('reset-curve-btn');
+    const baseCurveCanvas = document.getElementById('base-curve-canvas');
+    const resetBaseCurveBtn = document.getElementById('reset-base-curve-btn');
+
     const maskUploadInput = document.getElementById('mask-upload');
 
     // Custom Modal Elements
@@ -426,6 +453,21 @@ document.addEventListener('DOMContentLoaded', () => {
         composeMaskAndDraw();
     });
 
+    // Tab Switching Logic
+    document.querySelectorAll('.adj-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabId = btn.getAttribute('data-tab');
+            
+            // Update buttons
+            document.querySelectorAll('.adj-tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // Update panes
+            document.querySelectorAll('.adj-pane').forEach(p => p.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+        });
+    });
+
     hueSlider.addEventListener('input', (e) => {
         state.hue = parseInt(e.target.value, 10);
         hueValue.textContent = state.hue;
@@ -447,14 +489,47 @@ document.addEventListener('DOMContentLoaded', () => {
     blackLevelSlider.addEventListener('input', (e) => {
         state.blackLevel = parseInt(e.target.value, 10);
         blackLevelValue.textContent = state.blackLevel;
-        updateSVGFilter();
+        updateSVGFilter('overlay');
         composeMaskAndDraw();
     });
 
     highlightLevelSlider.addEventListener('input', (e) => {
         state.highlightLevel = parseInt(e.target.value, 10);
         highlightLevelValue.textContent = state.highlightLevel;
-        updateSVGFilter();
+        updateSVGFilter('overlay');
+        composeMaskAndDraw();
+    });
+
+    // Base Adjustments
+    baseHueSlider.addEventListener('input', (e) => {
+        state.baseHue = parseInt(e.target.value, 10);
+        baseHueValue.textContent = state.baseHue;
+        composeMaskAndDraw();
+    });
+
+    baseSaturationSlider.addEventListener('input', (e) => {
+        state.baseSaturation = parseInt(e.target.value, 10);
+        baseSaturationValue.textContent = state.baseSaturation;
+        composeMaskAndDraw();
+    });
+
+    baseLightnessSlider.addEventListener('input', (e) => {
+        state.baseLightness = parseInt(e.target.value, 10);
+        baseLightnessValue.textContent = state.baseLightness;
+        composeMaskAndDraw();
+    });
+
+    baseBlackLevelSlider.addEventListener('input', (e) => {
+        state.baseBlackLevel = parseInt(e.target.value, 10);
+        baseBlackLevelValue.textContent = state.baseBlackLevel;
+        updateSVGFilter('base');
+        composeMaskAndDraw();
+    });
+
+    baseHighlightLevelSlider.addEventListener('input', (e) => {
+        state.baseHighlightLevel = parseInt(e.target.value, 10);
+        baseHighlightLevelValue.textContent = state.baseHighlightLevel;
+        updateSVGFilter('base');
         composeMaskAndDraw();
     });
 
@@ -767,8 +842,41 @@ document.addEventListener('DOMContentLoaded', () => {
             state.userPaintLayer = newMask;
         }
 
-        // 5. Refresh Step 4
+        // 6. Swap Adjustments
+        const oldBaseAdj = {
+            hue: state.baseHue,
+            saturation: state.baseSaturation,
+            lightness: state.baseLightness,
+            blackLevel: state.baseBlackLevel,
+            highlightLevel: state.baseHighlightLevel,
+            curvePoints: JSON.parse(JSON.stringify(state.baseCurvePoints))
+        };
+        const oldOverlayAdj = {
+            hue: state.hue,
+            saturation: state.saturation,
+            lightness: state.lightness,
+            blackLevel: state.blackLevel,
+            highlightLevel: state.highlightLevel,
+            curvePoints: JSON.parse(JSON.stringify(state.curvePoints))
+        };
+
+        state.baseHue = oldOverlayAdj.hue;
+        state.baseSaturation = oldOverlayAdj.saturation;
+        state.baseLightness = oldOverlayAdj.lightness;
+        state.baseBlackLevel = oldOverlayAdj.blackLevel;
+        state.baseHighlightLevel = oldOverlayAdj.highlightLevel;
+        state.baseCurvePoints = oldOverlayAdj.curvePoints;
+
+        state.hue = oldBaseAdj.hue;
+        state.saturation = oldBaseAdj.saturation;
+        state.lightness = oldBaseAdj.lightness;
+        state.blackLevel = oldBaseAdj.blackLevel;
+        state.highlightLevel = oldBaseAdj.highlightLevel;
+        state.curvePoints = oldBaseAdj.curvePoints;
+
+        // 7. Refresh Step 4
         setupMasking();
+        syncAdjustmentUI();
     }
 
     function downloadMask() {
@@ -1189,6 +1297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.tempStrokeLayer.width = state.originalImage.width;
         state.tempStrokeLayer.height = state.originalImage.height;
 
+        syncAdjustmentUI();
         composeMaskAndDraw();
         attachMaskEvents();
     }
@@ -1285,7 +1394,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 1. Draw Background
         ctx.globalCompositeOperation = 'source-over';
+        ctx.save();
+        const bh = state.baseHue !== undefined ? state.baseHue : 0;
+        const bs = state.baseSaturation !== undefined ? state.baseSaturation : 100;
+        const bl = state.baseLightness !== undefined ? state.baseLightness : 100;
+        ctx.filter = `hue-rotate(${bh}deg) saturate(${bs}%) brightness(${bl}%) url(#base-curves)`;
         ctx.drawImage(state.originalImage, 0, 0);
+        ctx.restore();
 
         // 2. Get Combined Mask
         const combinedMaskCanvas = getFinalMaskCanvas();
@@ -1300,7 +1415,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const h = state.hue !== undefined ? state.hue : 0;
         const s = state.saturation !== undefined ? state.saturation : 100;
         const l = state.lightness !== undefined ? state.lightness : 100;
-        revealedEditCtx.filter = `hue-rotate(${h}deg) saturate(${s}%) brightness(${l}%) url(#custom-curves)`;
+        revealedEditCtx.filter = `hue-rotate(${h}deg) saturate(${s}%) brightness(${l}%) url(#overlay-curves)`;
         revealedEditCtx.drawImage(state.editedImage, state.cropRect.x, state.cropRect.y, state.cropRect.width, state.cropRect.height);
         revealedEditCtx.restore();
 
@@ -1432,6 +1547,38 @@ document.addEventListener('DOMContentLoaded', () => {
         composeMaskAndDraw();
     }
 
+    function syncAdjustmentUI() {
+        // Overlay sliders
+        if (hueSlider) hueSlider.value = state.hue;
+        if (hueValue) hueValue.textContent = state.hue;
+        if (saturationSlider) saturationSlider.value = state.saturation;
+        if (saturationValue) saturationValue.textContent = state.saturation;
+        if (lightnessSlider) lightnessSlider.value = state.lightness;
+        if (lightnessValue) lightnessValue.textContent = state.lightness;
+        if (blackLevelSlider) blackLevelSlider.value = state.blackLevel;
+        if (blackLevelValue) blackLevelValue.textContent = state.blackLevel;
+        if (highlightLevelSlider) highlightLevelSlider.value = state.highlightLevel;
+        if (highlightLevelValue) highlightLevelValue.textContent = state.highlightLevel;
+
+        // Base sliders
+        if (baseHueSlider) baseHueSlider.value = state.baseHue;
+        if (baseHueValue) baseHueValue.textContent = state.baseHue;
+        if (baseSaturationSlider) baseSaturationSlider.value = state.baseSaturation;
+        if (baseSaturationValue) baseSaturationValue.textContent = state.baseSaturation;
+        if (baseLightnessSlider) baseLightnessSlider.value = state.baseLightness;
+        if (baseLightnessValue) baseLightnessValue.textContent = state.baseLightness;
+        if (baseBlackLevelSlider) baseBlackLevelSlider.value = state.baseBlackLevel;
+        if (baseBlackLevelValue) baseBlackLevelValue.textContent = state.baseBlackLevel;
+        if (baseHighlightLevelSlider) baseHighlightLevelSlider.value = state.baseHighlightLevel;
+        if (baseHighlightLevelValue) baseHighlightLevelValue.textContent = state.baseHighlightLevel;
+        
+        // Curves and filters
+        drawCurve('overlay');
+        drawCurve('base');
+        updateSVGFilter('overlay');
+        updateSVGFilter('base');
+    }
+
     function updateCursorPosition(e) {
         let size, scale;
         // Check which canvas is active to determine size/scale
@@ -1499,48 +1646,62 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // --- CURVE EDITOR LOGIC ---
     let draggedPointIndex = -1;
+    let activeCurveTarget = 'overlay'; // 'overlay' or 'base'
 
-    function initCurveEditor() {
-        if (!curveCanvas) return;
+    function initCurveEditor(target = 'overlay') {
+        const canvas = target === 'base' ? baseCurveCanvas : curveCanvas;
+        const resetBtn = target === 'base' ? resetBaseCurveBtn : resetCurveBtn;
+        if (!canvas) return;
 
-        curveCanvas.addEventListener('mousedown', startDragCurve);
+        canvas.addEventListener('mousedown', (e) => startDragCurve(e, target));
         window.addEventListener('mousemove', dragCurve);
         window.addEventListener('mouseup', stopDragCurve);
 
-        curveCanvas.addEventListener('touchstart', (e) => {
+        canvas.addEventListener('touchstart', (e) => {
             if (!state.isTouchMode) return;
-            startDragCurve(e.touches[0]);
+            startDragCurve(e.touches[0], target);
         }, { passive: false });
         window.addEventListener('touchmove', (e) => {
-            if (!state.isTouchMode || draggedPointIndex === -1) return;
+            if (!state.isTouchMode || draggedPointIndex === -1 || activeCurveTarget !== target) return;
             e.preventDefault();
             dragCurve(e.touches[0]);
         }, { passive: false });
         window.addEventListener('touchend', stopDragCurve);
 
-        resetCurveBtn.addEventListener('click', () => {
-            state.curvePoints = [
-                { x: 0, y: 0 },
-                { x: 1, y: 1 }
-            ];
-            drawCurve();
-            updateSVGFilter();
+        resetBtn.addEventListener('click', () => {
+            if (target === 'base') {
+                state.baseCurvePoints = [
+                    { x: 0, y: 0 },
+                    { x: 1, y: 1 }
+                ];
+            } else {
+                state.curvePoints = [
+                    { x: 0, y: 0 },
+                    { x: 1, y: 1 }
+                ];
+            }
+            drawCurve(target);
+            updateSVGFilter(target);
             composeMaskAndDraw();
         });
 
-        drawCurve();
+        drawCurve(target);
     }
 
-    function startDragCurve(e) {
-        const rect = curveCanvas.getBoundingClientRect();
+    function startDragCurve(e, target) {
+        const canvas = target === 'base' ? baseCurveCanvas : curveCanvas;
+        const points = target === 'base' ? state.baseCurvePoints : state.curvePoints;
+        const rect = canvas.getBoundingClientRect();
         const mouseX = (e.clientX - rect.left) / rect.width;
         const mouseY = 1 - (e.clientY - rect.top) / rect.height;
+
+        activeCurveTarget = target;
 
         // Find if we are clicking near an existing point
         const threshold = 0.05;
         let foundIndex = -1;
-        for (let i = 0; i < state.curvePoints.length; i++) {
-            const p = state.curvePoints[i];
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
             const dist = Math.sqrt(Math.pow(p.x - mouseX, 2) + Math.pow(p.y - mouseY, 2));
             if (dist < threshold) {
                 foundIndex = i;
@@ -1553,17 +1714,20 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             // Add a new point
             const newPoint = { x: mouseX, y: mouseY };
-            state.curvePoints.push(newPoint);
-            state.curvePoints.sort((a, b) => a.x - b.x);
-            draggedPointIndex = state.curvePoints.indexOf(newPoint);
+            points.push(newPoint);
+            points.sort((a, b) => a.x - b.x);
+            draggedPointIndex = points.indexOf(newPoint);
         }
-        drawCurve();
+        drawCurve(target);
     }
 
     function dragCurve(e) {
         if (draggedPointIndex === -1) return;
 
-        const rect = curveCanvas.getBoundingClientRect();
+        const target = activeCurveTarget;
+        const canvas = target === 'base' ? baseCurveCanvas : curveCanvas;
+        const points = target === 'base' ? state.baseCurvePoints : state.curvePoints;
+        const rect = canvas.getBoundingClientRect();
         let mouseX = (e.clientX - rect.left) / rect.width;
         let mouseY = 1 - (e.clientY - rect.top) / rect.height;
 
@@ -1576,19 +1740,19 @@ document.addEventListener('DOMContentLoaded', () => {
         // Edge points can't change X
         if (draggedPointIndex === 0) {
             mouseX = 0;
-        } else if (draggedPointIndex === state.curvePoints.length - 1) {
+        } else if (draggedPointIndex === points.length - 1) {
             mouseX = 1;
         } else {
             // Keep X between neighbors
-            const prevX = state.curvePoints[draggedPointIndex - 1].x;
-            const nextX = state.curvePoints[draggedPointIndex + 1].x;
+            const prevX = points[draggedPointIndex - 1].x;
+            const nextX = points[draggedPointIndex + 1].x;
             mouseX = Math.max(prevX + 0.01, Math.min(nextX - 0.01, mouseX));
         }
 
-        state.curvePoints[draggedPointIndex] = { x: mouseX, y: mouseY };
+        points[draggedPointIndex] = { x: mouseX, y: mouseY };
         
-        drawCurve();
-        updateSVGFilter();
+        drawCurve(target);
+        updateSVGFilter(target);
         composeMaskAndDraw();
     }
 
@@ -1600,11 +1764,13 @@ document.addEventListener('DOMContentLoaded', () => {
         draggedPointIndex = -1;
     }
 
-    function drawCurve() {
-        if (!curveCanvas) return;
-        const ctx = curveCanvas.getContext('2d');
-        const w = curveCanvas.width;
-        const h = curveCanvas.height;
+    function drawCurve(target = 'overlay') {
+        const canvas = target === 'base' ? baseCurveCanvas : curveCanvas;
+        const points = target === 'base' ? state.baseCurvePoints : state.curvePoints;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
 
         ctx.clearRect(0, 0, w, h);
 
@@ -1624,21 +1790,21 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.strokeStyle = '#06b6d4';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(state.curvePoints[0].x * w, (1 - state.curvePoints[0].y) * h);
+        ctx.moveTo(points[0].x * w, (1 - points[0].y) * h);
         
-        for (let i = 1; i < state.curvePoints.length; i++) {
-            ctx.lineTo(state.curvePoints[i].x * w, (1 - state.curvePoints[i].y) * h);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x * w, (1 - points[i].y) * h);
         }
         ctx.stroke();
 
         // Draw points
         ctx.fillStyle = '#8b5cf6';
-        for (let i = 0; i < state.curvePoints.length; i++) {
-            const p = state.curvePoints[i];
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
             ctx.beginPath();
             ctx.arc(p.x * w, (1 - p.y) * h, 4, 0, Math.PI * 2);
             ctx.fill();
-            if (i === draggedPointIndex) {
+            if (i === draggedPointIndex && activeCurveTarget === target) {
                 ctx.strokeStyle = 'white';
                 ctx.lineWidth = 2;
                 ctx.stroke();
@@ -1646,12 +1812,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function updateSVGFilter() {
+    function updateSVGFilter(target = 'overlay') {
         // Calculate 256 values for the LUT
         const lut = new Array(256);
-        const points = state.curvePoints;
-        const black = state.blackLevel / 100;
-        const highlight = state.highlightLevel / 100;
+        const points = target === 'base' ? state.baseCurvePoints : state.curvePoints;
+        const black = (target === 'base' ? state.baseBlackLevel : state.blackLevel) / 100;
+        const highlight = (target === 'base' ? state.baseHighlightLevel : state.highlightLevel) / 100;
 
         for (let i = 0; i < 256; i++) {
             const x = i / 255;
@@ -1681,16 +1847,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const tableValues = lut.join(' ');
-        const r = document.getElementById('curveR');
-        const g = document.getElementById('curveG');
-        const b = document.getElementById('curveB');
+        const prefix = target === 'base' ? 'base' : 'overlay';
+        const r = document.getElementById(`${prefix}CurveR`);
+        const g = document.getElementById(`${prefix}CurveG`);
+        const b = document.getElementById(`${prefix}CurveB`);
         if (r) r.setAttribute('tableValues', tableValues);
         if (g) g.setAttribute('tableValues', tableValues);
         if (b) b.setAttribute('tableValues', tableValues);
     }
 
     // Call init
-    initCurveEditor();
-    updateSVGFilter();
+    initCurveEditor('overlay');
+    initCurveEditor('base');
+    updateSVGFilter('overlay');
+    updateSVGFilter('base');
 
 });

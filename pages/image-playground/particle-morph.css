@@ -1,0 +1,516 @@
+* {
+    box-sizing: border-box;
+}
+
+html {
+    min-height: 100%;
+    background: #060712;
+}
+
+body {
+    min-height: 100%;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.92);
+    font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    background:
+        radial-gradient(circle at 18% 12%, rgba(109, 92, 255, 0.34), transparent 32rem),
+        radial-gradient(circle at 82% 18%, rgba(0, 217, 255, 0.2), transparent 30rem),
+        radial-gradient(circle at 50% 90%, rgba(255, 77, 166, 0.16), transparent 34rem),
+        linear-gradient(135deg, #050714 0%, #090b18 48%, #03040a 100%);
+    overflow-x: hidden;
+}
+
+body::before {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    content: "";
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(circle at center, black, transparent 78%);
+}
+
+body::after {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    content: "";
+    background:
+        linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    opacity: 0.45;
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.particle-page {
+    width: min(1540px, 100%);
+    min-height: 100dvh;
+    margin: 0 auto;
+    padding: clamp(16px, 3vw, 34px);
+    display: grid;
+    grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+    gap: clamp(16px, 2.5vw, 28px);
+    align-items: stretch;
+}
+
+.glass-card {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.052)),
+        rgba(11, 14, 28, 0.68);
+    border-radius: 32px;
+    box-shadow:
+        0 24px 80px rgba(0, 0, 0, 0.44),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+}
+
+.intro-card {
+    padding: clamp(20px, 3vw, 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.eyebrow {
+    width: fit-content;
+    padding: 8px 12px;
+    border: 1px solid rgba(118, 204, 255, 0.26);
+    border-radius: 999px;
+    color: rgba(189, 232, 255, 0.92);
+    background: rgba(40, 161, 255, 0.11);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+    margin: 0;
+}
+
+h1 {
+    max-width: 10ch;
+    font-size: clamp(2.2rem, 5vw, 4.9rem);
+    line-height: 0.92;
+    letter-spacing: -0.08em;
+}
+
+h2 {
+    font-size: clamp(1.05rem, 2vw, 1.4rem);
+    letter-spacing: -0.035em;
+}
+
+.intro-copy {
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.65;
+    font-size: 0.98rem;
+}
+
+.upload-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.upload-card {
+    position: relative;
+    min-height: 156px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 22px;
+    background:
+        radial-gradient(circle at top left, rgba(87, 126, 255, 0.16), transparent 14rem),
+        rgba(255, 255, 255, 0.055);
+    transition:
+        transform 180ms ease,
+        border-color 180ms ease,
+        background 180ms ease;
+}
+
+.upload-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(139, 213, 255, 0.44);
+    background:
+        radial-gradient(circle at top left, rgba(87, 126, 255, 0.24), transparent 14rem),
+        rgba(255, 255, 255, 0.08);
+}
+
+.upload-card input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.upload-label {
+    position: relative;
+    z-index: 2;
+    width: fit-content;
+    padding: 7px 10px;
+    border-radius: 999px;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.12);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.file-name {
+    position: relative;
+    z-index: 2;
+    color: rgba(255, 255, 255, 0.74);
+    font-size: 0.82rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.preview-image {
+    position: absolute;
+    inset: auto 10px 10px auto;
+    width: 58px;
+    height: 58px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 16px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
+}
+
+.control-stack {
+    display: grid;
+    gap: 14px;
+}
+
+.control-row {
+    display: grid;
+    gap: 8px;
+}
+
+.control-row label {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.control-row label span {
+    color: white;
+    font-variant-numeric: tabular-nums;
+}
+
+input[type="range"] {
+    width: 100%;
+    accent-color: #84d7ff;
+}
+
+.button-row {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr 0.85fr;
+    gap: 10px;
+}
+
+.primary-button,
+.ghost-button {
+    min-height: 48px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    font-size: 0.9rem;
+    font-weight: 850;
+    transition:
+        transform 160ms ease,
+        border-color 160ms ease,
+        background 160ms ease,
+        box-shadow 160ms ease;
+}
+
+.primary-button {
+    border: 0;
+    color: #06101c;
+    background:
+        linear-gradient(135deg, #ffffff, #9de4ff 46%, #b79cff);
+    box-shadow:
+        0 14px 38px rgba(116, 208, 255, 0.26),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.primary-button:not(:disabled):hover,
+.ghost-button:not(:disabled):hover {
+    transform: translateY(-2px);
+}
+
+.ghost-button {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.88);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.ghost-button:hover {
+    border-color: rgba(157, 228, 255, 0.38);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.status-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.status-pill {
+    min-width: 0;
+    max-width: 100%;
+    padding: 9px 12px;
+    border-radius: 999px;
+    color: rgba(255, 255, 255, 0.82);
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.status-pill[data-tone="good"] {
+    color: rgba(206, 255, 225, 0.95);
+    background: rgba(26, 201, 113, 0.16);
+}
+
+.status-pill[data-tone="bad"] {
+    color: rgba(255, 216, 216, 0.96);
+    background: rgba(255, 71, 87, 0.16);
+}
+
+.status-pill[data-tone="busy"] {
+    color: rgba(213, 236, 255, 0.95);
+    background: rgba(91, 154, 255, 0.16);
+}
+
+.perf-text {
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.hint-text {
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 0.82rem;
+    line-height: 1.55;
+}
+
+.stage-card {
+    min-width: 0;
+    padding: clamp(14px, 2vw, 22px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.stage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.stage-header p {
+    margin-top: 4px;
+    color: rgba(255, 255, 255, 0.56);
+    font-size: 0.88rem;
+}
+
+.stage-badge {
+    flex: 0 0 auto;
+    padding: 8px 11px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.07);
+    font-size: 0.76rem;
+    font-weight: 800;
+}
+
+.canvas-wrap {
+    position: relative;
+    min-height: calc(100dvh - 145px);
+    overflow: hidden;
+    isolation: isolate;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 26px;
+    background:
+        radial-gradient(circle at 20% 20%, rgba(67, 108, 255, 0.16), transparent 28rem),
+        radial-gradient(circle at 80% 80%, rgba(255, 78, 178, 0.13), transparent 28rem),
+        rgba(3, 5, 13, 0.8);
+}
+
+#particleCanvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    user-select: none;
+}
+
+.canvas-empty-state {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 12px;
+    padding: 24px;
+    text-align: center;
+    pointer-events: none;
+    color: rgba(255, 255, 255, 0.75);
+    transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.canvas-empty-state strong {
+    font-size: clamp(1.1rem, 3vw, 2rem);
+    letter-spacing: -0.04em;
+}
+
+.canvas-empty-state span {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.canvas-empty-state.is-hidden {
+    opacity: 0;
+    transform: scale(0.985);
+}
+
+.empty-orb {
+    width: 86px;
+    height: 86px;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 34% 24%, white, rgba(157, 228, 255, 0.9) 18%, rgba(112, 84, 255, 0.42) 52%, transparent 72%);
+    box-shadow:
+        0 0 42px rgba(126, 214, 255, 0.46),
+        0 0 100px rgba(120, 95, 255, 0.3);
+    animation: floatOrb 3s ease-in-out infinite;
+}
+
+@keyframes floatOrb {
+
+    0%,
+    100% {
+        transform: translateY(0) scale(1);
+    }
+
+    50% {
+        transform: translateY(-8px) scale(1.04);
+    }
+}
+
+@media (max-width: 1080px) {
+    .particle-page {
+        grid-template-columns: 1fr;
+    }
+
+    .intro-card {
+        order: 1;
+    }
+
+    .stage-card {
+        order: 2;
+    }
+
+    h1 {
+        max-width: 13ch;
+    }
+
+    .canvas-wrap {
+        min-height: 62dvh;
+    }
+}
+
+@media (max-width: 640px) {
+    .particle-page {
+        padding: 12px;
+        gap: 12px;
+    }
+
+    .glass-card {
+        border-radius: 24px;
+    }
+
+    .intro-card {
+        padding: 18px;
+    }
+
+    .upload-grid,
+    .button-row {
+        grid-template-columns: 1fr;
+    }
+
+    .upload-card {
+        min-height: 118px;
+    }
+
+    .stage-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .stage-badge {
+        width: fit-content;
+    }
+
+    .canvas-wrap {
+        min-height: 58dvh;
+        border-radius: 20px;
+    }
+}
+
+@media (max-width: 390px) {
+    .particle-page {
+        padding: 8px;
+    }
+
+    .intro-card,
+    .stage-card {
+        padding: 14px;
+    }
+
+    h1 {
+        font-size: 2.05rem;
+    }
+
+    .primary-button,
+    .ghost-button {
+        min-height: 46px;
+    }
+}
