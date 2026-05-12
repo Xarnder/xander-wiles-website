@@ -85,6 +85,13 @@
                             <span class="mode-desc">Save full transcript to .txt</span>
                         </div>
                     </label>
+                    <label class="mode-option">
+                        <input type="radio" name="toolMode" value="transcribe">
+                        <div class="mode-card">
+                            <span class="mode-title">Transcribe</span>
+                            <span class="mode-desc">Full transcript with timestamps</span>
+                        </div>
+                    </label>
                 </div>
 
                 <div id="folderOptionsGroup">
@@ -144,7 +151,7 @@
             </div>
         </section>
 
-        <section class="glass-card results-panel">
+        <section class="glass-card results-panel" id="resultsPanel">
             <h2>Results</h2>
             <div class="table-wrap">
                 <table>
@@ -162,6 +169,22 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </section>
+
+        <section class="glass-card transcript-panel hidden" id="transcriptPanel">
+            <div class="transcript-panel-header">
+                <div>
+                    <h2>Transcript</h2>
+                    <p class="transcript-meta" id="transcriptMeta">Segments will appear here.</p>
+                </div>
+                <div class="transcript-actions">
+                    <button class="secondary-button" id="copyAllTranscriptBtn">Copy all text</button>
+                    <button class="secondary-button" id="downloadTranscriptBtn">Download .txt</button>
+                </div>
+            </div>
+            <div id="transcriptSegments" class="transcript-segments">
+                <div class="transcript-empty">Run the Transcribe mode to see segments here.</div>
             </div>
         </section>
     </main>

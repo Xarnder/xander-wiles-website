@@ -65,8 +65,13 @@
             </p>
             <div class="setup-options">
                 <div class="setup-directory">
-                    <label for="directory-upload" class="directory-btn">1. Upload Image Folder</label>
+                    <label for="directory-upload" class="directory-btn">1a. Upload Image Folder</label>
                     <input type="file" id="directory-upload" webkitdirectory directory multiple style="display:none;" />
+                </div>
+                <!-- PHOTO LIBRARY UPLOAD (Better for iPhone) -->
+                <div class="setup-photos">
+                    <label for="photo-upload" class="directory-btn">1b. Select Photos from Library</label>
+                    <input type="file" id="photo-upload" multiple accept="image/*" style="display:none;" />
                 </div>
                 <!-- CSV UPLOAD -->
                 <div class="setup-csv">
@@ -254,6 +259,9 @@
                     </div>
                     <p id="image-counter" class="status-message" style="margin-top: 0.5rem;"></p>
                     <canvas id="preview-canvas"></canvas>
+                    <div class="preview-actions" style="display:flex; justify-content:center; margin-top: 1rem; gap: 1rem;">
+                        <button id="download-current-btn" class="secondary-btn">Download This Image</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -362,8 +370,9 @@
                 </div>
             </div>
 
-            <div class="popup-actions">
+            <div class="popup-actions" style="flex-wrap: wrap; gap: 1rem;">
                 <button id="generate-grid-btn" class="popup-generate-btn">Download Grid (PNG)</button>
+                <button id="open-grid-tab-btn" class="secondary-btn">Open in New Tab (Mobile Fix)</button>
                 <p id="grid-status" class="status-message"></p>
             </div>
         </div>
@@ -576,6 +585,23 @@
                         <button id="crop-finish-btn" class="popup-generate-btn" style="padding: 0.5rem 1rem; border-radius: var(--radius-md);">Done</button>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Save Preview Modal (Safety Net) -->
+    <div id="save-preview-popup" class="popup-overlay hidden">
+        <div class="popup-card glass-card" style="max-width: 500px;">
+            <button class="popup-close-btn">&times;</button>
+            <h3>Save to Photos</h3>
+            <p style="text-align: center; color: var(--accent-cyan); font-weight: 600; margin-bottom: 1rem;">
+                Long-press the image below to Save
+            </p>
+            <div id="save-preview-image-container" style="width: 100%; background: #000; border-radius: var(--radius-md); overflow: hidden;">
+                <!-- Image will be injected here -->
+            </div>
+            <div class="popup-actions" style="margin-top: 1rem;">
+                <button class="secondary-btn" onclick="document.getElementById('save-preview-popup').classList.add('hidden')">Close</button>
             </div>
         </div>
     </div>

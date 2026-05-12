@@ -3,11 +3,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- DOM Elements ---
     const directoryUploadInput = document.getElementById('directory-upload');
+    const photoUploadInput = document.getElementById('photo-upload');
     const csvUploadInput = document.getElementById('csv-upload');
     const uploadSection = document.getElementById('upload-section');
     const editorSection = document.getElementById('editor-section');
     const previewCanvas = document.getElementById('preview-canvas');
     const exportBtn = document.getElementById('export-btn');
+    const downloadCurrentBtn = document.getElementById('download-current-btn');
     const uploadStatus = document.getElementById('upload-status');
     const exportStatus = document.getElementById('export-status');
     const previewCtx = previewCanvas.getContext('2d');
@@ -84,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const gridPreviewCtx = gridPreviewCanvas.getContext('2d');
     const generateGridBtn = document.getElementById('generate-grid-btn');
     const gridStatus = document.getElementById('grid-status');
+    const openGridTabBtn = document.getElementById('open-grid-tab-btn');
     const gridProgressContainer = document.getElementById('grid-progress-container');
     const gridProgressBar = document.getElementById('grid-progress-bar');
     const gridProgressText = document.getElementById('grid-progress-text');
@@ -152,6 +155,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const cropFinishBtn = document.getElementById('crop-finish-btn');
     const cropInterfaceContainer = document.getElementById('crop-interface-container');
 
+    // Save Preview Modal (iOS Safety Net)
+    const savePreviewPopup = document.getElementById('save-preview-popup');
+    const savePreviewImageContainer = document.getElementById('save-preview-image-container');
+    const closeSavePreviewBtn = savePreviewPopup.querySelector('.popup-close-btn');
+
     const LOADER_HTML = `
 <svg class="loader-svg" width="80" height="120" viewBox="0 -30 100 160" xmlns="http://www.w3.org/2000/svg">
   <g>
@@ -185,8 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners ---
     directoryUploadInput.addEventListener('change', handleDirectoryUpload);
+    photoUploadInput.addEventListener('change', handleDirectoryUpload);
     csvUploadInput.addEventListener('change', handleCSVUpload);
     exportBtn.addEventListener('click', handleExport);
+    downloadCurrentBtn.addEventListener('click', handleDownloadCurrentImage);
 
     // PDF Listeners
     startPdfConversionBtn.addEventListener('click', handlePdfConversion);
@@ -248,8 +258,8 @@ document.addEventListener('DOMContentLoaded', () => {
     gridBorderWidthInput.addEventListener('input', updateGridPreview);
     gridBorderColorInput.addEventListener('input', updateGridPreview);
     gridBgColorInput.addEventListener('input', updateGridPreview);
-
     generateGridBtn.addEventListener('click', handleGenerateGrid);
+    openGridTabBtn.addEventListener('click', handleOpenGridInTab);
 
     // Downscale Listeners
     openDownscaleModalBtn.addEventListener('click', openDownscaleModal);
@@ -279,6 +289,10 @@ document.addEventListener('DOMContentLoaded', () => {
     cropBackBtn.addEventListener('click', navigateCropPrev);
     cropSkipBtn.addEventListener('click', navigateCropNext);
     cropFinishBtn.addEventListener('click', closeCropModal);
+
+    // Save Preview Listeners
+    closeSavePreviewBtn.addEventListener('click', () => savePreviewPopup.classList.add('hidden'));
+    savePreviewPopup.addEventListener('click', (e) => { if (e.target === savePreviewPopup) savePreviewPopup.classList.add('hidden'); });
 
     cropCanvas.addEventListener('mousedown', handleCropMouseDown);
     window.addEventListener('mousemove', handleCropMouseMove);
@@ -734,6 +748,113 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function handleDownloadCurrentImage() {
+        if (imageFiles.length === 0) return;
+
+        const format = exportFormatSelect.value;
+        const quality = parseInt(mainQualitySlider.value, 10) / 100;
+        const ext = getFileExtension(format);
+        const finalName = generateFilename(currentIndex, imageTitles[currentIndex], ext);
+
+        previewCanvas.toBlob(async (blob) => {
+            if (!blob) return;
+            await safeDownload(blob, finalName);
+        }, format, quality);
+    }
+
+    async function handleOpenGridInTab() {
+        // Just use the improved handleGenerateGrid which now uses safeDownload correctly
+        handleGenerateGrid(true);
+    }
+
+    async function safeDownload(blob, filename) {
+        const ua = navigator.userAgent;
+        const isIOS = /iPhone|iPad|iPod/.test(ua);
+        const isChromeIOS = /CriOS/.test(ua);
+        const isSafariIOS = isIOS && /Safari/i.test(ua) && !isChromeIOS;
+
+        console.log(`DEBUG: safeDownload called for ${filename}. isIOS: ${isIOS}, isChromeIOS: ${isChromeIOS}`);
+
+        // 1. PRIMARY FOR iOS: Web Share API (Most robust way to save to Photos)
+        if (isIOS && navigator.share) {
+            try {
+                const file = new File([blob], filename, { type: blob.type });
+                await navigator.share({
+                    files: [file],
+                    title: filename,
+                });
+                return; // Success!
+            } catch (err) {
+                console.log("DEBUG: navigator.share failed or cancelled", err);
+                // If it's just a user cancel, we don't need to force another popup, 
+                // but if it's an error, we fall back.
+                if (err.name !== 'AbortError') {
+                    // Fall through to other methods
+                } else {
+                    return; // User cancelled
+                }
+            }
+        }
+
+        // 2. SECONDARY FOR iOS: Standard link or Data URL
+        if (isIOS) {
+            // Create a physical link to click
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+
+            if (isChromeIOS) {
+                // iOS Chrome is extremely finicky with blobs. 
+                // We'll attempt a Data URL for iOS Chrome as it's more "sticky" than Blobs.
+                const reader = new FileReader();
+                reader.onloadend = function() {
+                    const dataUrl = reader.result;
+                    // For Chrome iOS, sometimes we need to open in a new tab OR change location
+                    // We'll try changing location for the "Download" experience
+                    window.location.href = dataUrl;
+                    
+                    // If after 2 seconds we haven't left the page (some browsers block location change for data urls),
+                    // we show the safety net modal.
+                    setTimeout(() => {
+                        showSavePreviewModal(dataUrl);
+                    }, 2000);
+                };
+                reader.readAsDataURL(blob);
+            } else {
+                // iOS Safari
+                document.body.appendChild(link);
+                link.click();
+                setTimeout(() => {
+                    if (document.body.contains(link)) document.body.removeChild(link);
+                    // Long delay for revocation
+                    setTimeout(() => URL.revokeObjectURL(url), 60000);
+                }, 1000);
+            }
+            return;
+        }
+
+        // 3. Desktop: Standard Download
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function showSavePreviewModal(imageDataUrl) {
+        savePreviewImageContainer.innerHTML = '';
+        const img = new Image();
+        img.src = imageDataUrl;
+        img.style.width = '100%';
+        img.style.display = 'block';
+        savePreviewImageContainer.appendChild(img);
+        savePreviewPopup.classList.remove('hidden');
+    }
+
     function handleAddFolder() {
         const newFolderName = newFolderInput.value.trim();
         if (newFolderName && !availableFolders.includes(newFolderName)) {
@@ -1158,7 +1279,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function handleGenerateGrid() {
+    async function handleGenerateGrid(openInTab = false) {
         generateGridBtn.disabled = true; generateGridBtn.textContent = 'Generating...';
         showStatus(gridStatus, 'Preparing Grid...', false, true);
 
@@ -1273,12 +1394,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 drawTetrisBorders(finalCtx, layoutData, columns, finalWidth, finalHeight, scaleFactor, borderWidth, borderColor);
             }
 
-            finalCanvas.toBlob(blob => {
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `grid_${source.replace(/\s/g, '_')}.png`;
-                document.body.appendChild(link); link.click(); document.body.removeChild(link);
-                showStatus(gridStatus, `Downloaded!`, false, false);
+            finalCanvas.toBlob(async (blob) => {
+                if (openInTab) {
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, '_blank');
+                    showStatus(gridStatus, `Opened in New Tab!`, false, false);
+                } else {
+                    const filename = `grid_${source.replace(/\s/g, '_')}.png`;
+                    await safeDownload(blob, filename);
+                    showStatus(gridStatus, `Downloaded!`, false, false);
+                }
                 // Hide progress bar after short delay
                 setTimeout(() => { gridProgressContainer.classList.add('hidden'); }, 2000);
             }, 'image/png');

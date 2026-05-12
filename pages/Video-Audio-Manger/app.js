@@ -20,16 +20,26 @@ const els = {
     progressText: document.getElementById("progressText"),
     progressBar: document.getElementById("progressBar"),
     resultsBody: document.getElementById("resultsBody"),
+    resultsPanel: document.getElementById("resultsPanel"),
     modeInputs: document.getElementsByName("toolMode"),
     renameOptionsGroup: document.getElementById("renameOptionsGroup"),
     folderOptionsGroup: document.getElementById("folderOptionsGroup"),
-    pickFileBtn: document.getElementById("pickFileBtn")
+    pickFileBtn: document.getElementById("pickFileBtn"),
+    // Transcript panel
+    transcriptPanel: document.getElementById("transcriptPanel"),
+    transcriptSegments: document.getElementById("transcriptSegments"),
+    transcriptMeta: document.getElementById("transcriptMeta"),
+    copyAllTranscriptBtn: document.getElementById("copyAllTranscriptBtn"),
+    downloadTranscriptBtn: document.getElementById("downloadTranscriptBtn")
 };
 
 let selectedItems = [];
 let rootDirectoryHandle = null;
 let transcriber = null;
 let transcriberKey = "";
+let _transcriptAllChunks = [];   // accumulates chunks across files for Copy All / Download
+let _transcriptBlobUrls = [];    // object URLs created for audio playback - revoked on clear
+let _activeAudioElements = [];   // all Audio instances - used to pause others on seek
 
 console.log("[startup] Local Speech File Renamer loaded.");
 console.log("[startup] User agent:", navigator.userAgent);
@@ -51,18 +61,36 @@ function init() {
     els.modeInputs.forEach(input => {
         input.addEventListener("change", updateModeUI);
     });
+
+    els.copyAllTranscriptBtn.addEventListener("click", copyAllTranscript);
+    els.downloadTranscriptBtn.addEventListener("click", downloadTranscript);
+
+    // Sync panel visibility to the initially-checked radio on page load
+    updateModeUI();
 }
 
 function updateModeUI() {
     const mode = getSelectedMode();
     console.log("[ui] Mode changed to:", mode);
 
-    if (mode === "extract") {
+    const isTranscribe = mode === "transcribe";
+    const isExtractOrTranscribe = mode === "extract" || isTranscribe;
+
+    if (isExtractOrTranscribe) {
         els.renameOptionsGroup.classList.add("hidden");
         els.folderOptionsGroup.classList.add("hidden");
     } else {
         els.renameOptionsGroup.classList.remove("hidden");
         els.folderOptionsGroup.classList.remove("hidden");
+    }
+
+    // Show the dedicated transcript panel only in transcribe mode
+    if (isTranscribe) {
+        els.resultsPanel.classList.add("hidden");
+        els.transcriptPanel.classList.remove("hidden");
+    } else {
+        els.resultsPanel.classList.remove("hidden");
+        els.transcriptPanel.classList.add("hidden");
     }
 }
 
@@ -348,7 +376,8 @@ async function runBatch() {
 
     try {
         const mode = getSelectedMode();
-        const outputFolderName = mode === "rename" ? "renamed-output" : "transcriptions";
+        const outputFolderName = mode === "rename" ? "renamed-output" :
+                               mode === "transcribe" ? "transcriptions-with-timestamps" : "transcriptions";
 
         if (rootDirectoryHandle) {
             outputDirectoryHandle = await rootDirectoryHandle.getDirectoryHandle(outputFolderName, {
@@ -369,8 +398,24 @@ async function runBatch() {
             console.log(`[batch] Processing ${i + 1}/${selectedItems.length}: ${item.relativePath} (Mode: ${mode})`);
 
             try {
-                const result = await transcribeFile(asr, item.file);
-                const text = normalizeTranscript(result.text || "");
+                const returnTimestamps = mode === "transcribe";
+                const result = await transcribeFile(asr, item.file, returnTimestamps, (p) => {
+                    // p is 0-100
+                    const subPercent = p / 100;
+                    updateProgress(i, selectedItems.length, subPercent);
+                    els.currentTask.textContent = `Transcribing ${item.relativePath} (${Math.round(p)}%)`;
+                });
+                
+                let text = "";
+                let displaySpeech = "";
+
+                if (mode === "transcribe" && result.chunks) {
+                    text = formatChunks(result.chunks);
+                    displaySpeech = normalizeTranscript(result.text || "");
+                } else {
+                    text = normalizeTranscript(result.text || "");
+                    displaySpeech = text;
+                }
 
                 if (mode === "rename") {
                     const newFilename = await createUniqueFilename(outputDirectoryHandle, item.file.name, text);
@@ -404,6 +449,28 @@ async function runBatch() {
                             status: "Preview only - browser cannot write files from fallback picker"
                         }, "warn");
                     }
+                } else if (mode === "transcribe") {
+                    const txtFilename = `${getBaseName(item.file.name)}.txt`;
+                    console.log("[transcript-timestamped]", {
+                        file: item.relativePath,
+                        txtFilename
+                    });
+
+                    const savedOk = outputDirectoryHandle
+                        ? (await writeTextFile(outputDirectoryHandle, txtFilename, text), true)
+                        : false;
+
+                    if (savedOk) {
+                        console.log("[write] Saved timestamped transcription:", txtFilename);
+                    }
+
+                    addTranscriptFileBlock({
+                        filename: item.relativePath,
+                        chunks: result.chunks || [],
+                        saved: savedOk,
+                        txtFilename,
+                        file: item.file
+                    });
                 } else {
                     // Extract mode
                     const txtFilename = `${getBaseName(item.file.name)}.txt`;
@@ -458,8 +525,8 @@ async function runBatch() {
     }
 }
 
-async function transcribeFile(asr, file) {
-    console.log("[transcribe] Creating blob URL for:", file.name, file.type, file.size);
+async function transcribeFile(asr, file, returnTimestamps = false, onProgress = null) {
+    console.log("[transcribe] Creating blob URL for:", file.name, file.type, file.size, "Timestamps:", returnTimestamps);
 
     const url = URL.createObjectURL(file);
 
@@ -470,24 +537,23 @@ async function transcribeFile(asr, file) {
         console.log("[transcribe] Selected model:", modelId);
         console.log("[transcribe] English-only Whisper model:", englishOnly);
 
-        let options;
+        let options = {
+            chunk_length_s: 30,
+            stride_length_s: 5,
+            return_timestamps: returnTimestamps,
+            progress_callback: (info) => {
+                if (info.status === "progress" && onProgress) {
+                    onProgress(info.progress);
+                }
+            }
+        };
 
-        if (englishOnly) {
-            options = {
-                chunk_length_s: 30,
-                stride_length_s: 5
-            };
-
-            console.log("[transcribe] Using English-only options. Not passing task/language.");
-        } else {
-            options = {
-                chunk_length_s: 30,
-                stride_length_s: 5,
-                language: "english",
-                task: "transcribe"
-            };
-
+        if (!englishOnly) {
+            options.language = "english";
+            options.task = "transcribe";
             console.log("[transcribe] Using multilingual options with task/language.");
+        } else {
+            console.log("[transcribe] Using English-only options.");
         }
 
         const result = await asr(url, options);
@@ -671,6 +737,16 @@ function clearResults() {
       <td colspan="4" class="empty-cell">Results will appear here.</td>
     </tr>
   `;
+
+    // Pause and revoke all audio
+    _activeAudioElements.forEach(a => { try { a.pause(); } catch (_) {} });
+    _activeAudioElements = [];
+    _transcriptBlobUrls.forEach(url => URL.revokeObjectURL(url));
+    _transcriptBlobUrls = [];
+
+    // Reset the transcript panel
+    els.transcriptSegments.innerHTML = `<div class="transcript-empty">Run the Transcribe mode to see segments here.</div>`;
+    els.transcriptMeta.textContent = "Segments will appear here.";
 }
 
 function clearAll() {
@@ -678,6 +754,9 @@ function clearAll() {
 
     selectedItems = [];
     rootDirectoryHandle = null;
+    _transcriptAllChunks = [];
+    _activeAudioElements = [];
+    _transcriptBlobUrls = [];
     els.fileInput.value = "";
     els.selectionSummary.textContent = "No folder selected yet.";
     els.currentTask.textContent = "Idle.";
@@ -687,15 +766,277 @@ function clearAll() {
     clearResults();
 }
 
-function updateProgress(done, total) {
-    const percent = total ? Math.round((done / total) * 100) : 0;
+function updateProgress(done, total, subProgress = 0) {
+    const totalDone = done + subProgress;
+    const percent = total ? Math.min(100, Math.round((totalDone / total) * 100)) : 0;
 
     els.progressText.textContent = `${done} / ${total}`;
     els.progressBar.style.width = `${percent}%`;
 
-    console.log("[progress]", { done, total, percent });
+    if (percent > 0 && percent < 100) {
+        els.progressBar.classList.add("processing");
+    } else {
+        els.progressBar.classList.remove("processing");
+    }
+
+    console.log("[progress]", { done, total, subProgress, percent });
 }
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+}
+
+function formatTimestamp(seconds) {
+    if (seconds === null || seconds === undefined) return "??:??";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+
+    const mm = String(m).padStart(2, "0");
+    const ss = String(s).padStart(2, "0");
+
+    if (h > 0) {
+        const hh = String(h).padStart(2, "0");
+        return `${hh}:${mm}:${ss}`;
+    }
+    return `${mm}:${ss}`;
+}
+
+function formatChunks(chunks) {
+    if (!chunks || !chunks.length) return "";
+
+    return chunks.map(chunk => {
+        const start = formatTimestamp(chunk.timestamp[0]);
+        const end = formatTimestamp(chunk.timestamp[1]);
+        const text = chunk.text.trim();
+        return `[${start} -> ${end}] ${text}`;
+    }).join("\n");
+}
+
+// =========================================================
+// Transcript Panel UI
+// =========================================================
+
+function addTranscriptFileBlock({ filename, chunks, saved, txtFilename, file }) {
+    // Remove the empty placeholder if present
+    const empty = els.transcriptSegments.querySelector(".transcript-empty");
+    if (empty) empty.remove();
+
+    // Divider between files
+    if (els.transcriptSegments.children.length > 0) {
+        const divider = document.createElement("div");
+        divider.className = "transcript-file-divider";
+        els.transcriptSegments.appendChild(divider);
+    }
+
+    // Accumulate for copy-all / download
+    _transcriptAllChunks.push({ filename, chunks });
+    updateTranscriptMeta();
+
+    // ---- Create Audio element for playback
+    const blobUrl = URL.createObjectURL(file);
+    _transcriptBlobUrls.push(blobUrl);
+    const audio = new Audio(blobUrl);
+    audio.preload = "metadata";
+    _activeAudioElements.push(audio);
+
+    // ---- File block wrapper
+    const block = document.createElement("div");
+    block.className = "transcript-file-block";
+
+    // ---- File header
+    const header = document.createElement("div");
+    header.className = "transcript-file-header";
+
+    const icon = document.createElement("div");
+    icon.className = "transcript-file-icon";
+    icon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg>`;
+
+    const name = document.createElement("span");
+    name.className = "transcript-file-name";
+    name.textContent = filename;
+
+    const statusBadge = document.createElement("span");
+    statusBadge.className = `transcript-file-status ${saved ? "ok" : "warn"}`;
+    statusBadge.textContent = saved ? `Saved as ${txtFilename}` : "Preview only";
+
+    header.append(icon, name, statusBadge);
+    block.appendChild(header);
+
+    // ---- Mini audio player
+    block.appendChild(buildMiniPlayer(audio));
+
+    // ---- Segment list
+    if (!chunks || chunks.length === 0) {
+        const noSpeech = document.createElement("div");
+        noSpeech.className = "transcript-no-speech";
+        noSpeech.textContent = "No speech detected in this file.";
+        block.appendChild(noSpeech);
+    } else {
+        const { listEl, segmentEls } = buildSegmentList(chunks, audio);
+        block.appendChild(listEl);
+
+        // Highlight the active segment as audio plays
+        audio.addEventListener("timeupdate", () => {
+            const t = audio.currentTime;
+            segmentEls.forEach(({ el, start, end }) => {
+                const active = t >= start && (end === null || t < end);
+                el.classList.toggle("transcript-segment--active", active);
+            });
+        });
+    }
+
+    els.transcriptSegments.appendChild(block);
+}
+
+function buildMiniPlayer(audio) {
+    const PLAY_SVG  = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+    const PAUSE_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+
+    const player = document.createElement("div");
+    player.className = "transcript-mini-player";
+
+    const playBtn = document.createElement("button");
+    playBtn.className = "mini-player-btn";
+    playBtn.type = "button";
+    playBtn.title = "Play / Pause";
+    playBtn.innerHTML = PLAY_SVG;
+
+    const track = document.createElement("div");
+    track.className = "mini-player-track";
+
+    const fill = document.createElement("div");
+    fill.className = "mini-player-fill";
+    track.appendChild(fill);
+
+    const timeEl = document.createElement("span");
+    timeEl.className = "mini-player-time";
+    timeEl.textContent = "0:00";
+
+    const durEl = document.createElement("span");
+    durEl.className = "mini-player-duration";
+    durEl.textContent = "/ --:--";
+
+    player.append(playBtn, track, timeEl, durEl);
+
+    // Play / Pause toggle
+    playBtn.addEventListener("click", () => {
+        if (audio.paused) {
+            _activeAudioElements.forEach(a => { if (a !== audio) a.pause(); });
+            audio.play();
+        } else {
+            audio.pause();
+        }
+    });
+
+    audio.addEventListener("play",  () => { playBtn.innerHTML = PAUSE_SVG; });
+    audio.addEventListener("pause", () => { playBtn.innerHTML = PLAY_SVG; });
+    audio.addEventListener("ended", () => { playBtn.innerHTML = PLAY_SVG; });
+
+    audio.addEventListener("loadedmetadata", () => {
+        durEl.textContent = `/ ${formatTimestamp(audio.duration)}`;
+    });
+
+    audio.addEventListener("timeupdate", () => {
+        const pct = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+        fill.style.width = pct + "%";
+        timeEl.textContent = formatTimestamp(audio.currentTime);
+    });
+
+    // Scrub by clicking the track
+    track.addEventListener("click", e => {
+        if (!audio.duration) return;
+        const rect  = track.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        audio.currentTime = ratio * audio.duration;
+        if (audio.paused) audio.play();
+    });
+
+    return player;
+}
+
+function buildSegmentList(chunks, audio) {
+    const list = document.createElement("div");
+    list.className = "transcript-segment-list";
+    const segmentEls = [];
+
+    for (const chunk of chunks) {
+        const seg = document.createElement("div");
+        seg.className = "transcript-segment";
+
+        const startTime = chunk.timestamp[0] ?? 0;
+        const endTime   = chunk.timestamp[1];
+        const startTs   = formatTimestamp(startTime);
+        const endTs     = formatTimestamp(endTime);
+
+        // Timestamp badge — now a <button> so it's keyboard-accessible
+        const tsBadge = document.createElement("button");
+        tsBadge.type = "button";
+        tsBadge.className = "segment-timestamp";
+        tsBadge.title = `Play from ${startTs}`;
+        tsBadge.innerHTML = `
+            <svg class="ts-play-icon" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            ${startTs}<span class="segment-timestamp-arrow">→</span>${endTs}`;
+
+        tsBadge.addEventListener("click", () => {
+            // Pause every other file's audio first
+            _activeAudioElements.forEach(a => { if (a !== audio) a.pause(); });
+            audio.currentTime = startTime;
+            audio.play();
+        });
+
+        const textEl = document.createElement("span");
+        textEl.className = "segment-text";
+        textEl.textContent = chunk.text.trim();
+
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "segment-copy-btn";
+        copyBtn.title = "Copy segment";
+        copyBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+        copyBtn.addEventListener("click", () => copyToClipboard(chunk.text.trim(), copyBtn));
+
+        seg.append(tsBadge, textEl, copyBtn);
+        list.appendChild(seg);
+        segmentEls.push({ el: seg, start: startTime, end: endTime });
+    }
+
+    return { listEl: list, segmentEls };
+}
+
+function updateTranscriptMeta() {
+    const fileCount = _transcriptAllChunks.length;
+    const segCount  = _transcriptAllChunks.reduce((n, f) => n + (f.chunks?.length || 0), 0);
+    els.transcriptMeta.textContent = `${fileCount} file${fileCount !== 1 ? "s" : ""} · ${segCount} segment${segCount !== 1 ? "s" : ""}`;
+}
+
+function buildFullTranscriptText() {
+    return _transcriptAllChunks.map(({ filename, chunks }) => {
+        const header = `=== ${filename} ===`;
+        const body   = (chunks || []).map(c => {
+            const start = formatTimestamp(c.timestamp[0]);
+            const end   = formatTimestamp(c.timestamp[1]);
+            return `[${start} -> ${end}]  ${c.text.trim()}`;
+        }).join("\n");
+        return `${header}\n${body}`;
+    }).join("\n\n");
+}
+
+function copyAllTranscript() {
+    const text = buildFullTranscriptText();
+    if (!text) return;
+    copyToClipboard(text, els.copyAllTranscriptBtn);
+}
+
+function downloadTranscript() {
+    const text = buildFullTranscriptText();
+    if (!text) return;
+
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = "transcript.txt";
+    a.click();
+    URL.revokeObjectURL(url);
 }
