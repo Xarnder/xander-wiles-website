@@ -1349,6 +1349,18 @@ function updateInterestChart(data) {
                     mode: 'index',
                     intersect: false,
                     callbacks: {
+                        title: (tooltipItems) => {
+                            if (tooltipItems.length > 0) {
+                                const index = tooltipItems[0].dataIndex;
+                                const datasets = tooltipItems[0].chart.data.datasets;
+                                // Sum Contributions (0) and Interest (1)
+                                const principal = datasets[0].data[index] || 0;
+                                const interest = datasets[1].data[index] || 0;
+                                const total = principal + interest;
+                                return `Year ${tooltipItems[0].label} | Balance: ${formatCurrency(total, 2)}`;
+                            }
+                            return '';
+                        },
                         label: (ctxTooltip) => {
                             const label = ctxTooltip.dataset.label || '';
                             const value = ctxTooltip.parsed.y;
@@ -1356,6 +1368,14 @@ function updateInterestChart(data) {
                                 return `${label}: ${value.toFixed(2)}x`;
                             }
                             return `${label}: ${formatCurrency(value, 2)}`;
+                        },
+                        afterBody: (tooltipItems) => {
+                            const index = tooltipItems[0].dataIndex;
+                            const datasets = tooltipItems[0].chart.data.datasets;
+                            const principal = datasets[0].data[index] || 0;
+                            const interest = datasets[1].data[index] || 0;
+                            const total = principal + interest;
+                            return `\nTotal Balance: ${formatCurrency(total, 2)}`;
                         }
                     }
                 }
