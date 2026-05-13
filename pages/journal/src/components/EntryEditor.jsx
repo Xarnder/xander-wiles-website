@@ -36,6 +36,8 @@ export default function EntryEditor() {
     const [images, setImages] = useState([]); // Array of { url, path, size }
     const [imageToDelete, setImageToDelete] = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [uploadQueueCount, setUploadQueueCount] = useState(0);
+    const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
     const [statusMessage, setStatusMessage] = useState('');
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
@@ -386,13 +388,16 @@ export default function EntryEditor() {
         }
 
         setUploading(true);
-        setStatusMessage('Compressing & Uploading...');
+        setUploadQueueCount(files.length);
+        setCurrentUploadIndex(0);
+        setStatusMessage('Starting upload...');
 
         try {
             const newImages = [];
             const storage = getStorage();
 
             for (let i = 0; i < files.length; i++) {
+                setCurrentUploadIndex(i);
                 const file = files[i];
                 // Update status for HEIC if needed
                 if (file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic') {
@@ -433,6 +438,8 @@ export default function EntryEditor() {
         } finally {
             setUploading(false);
             setStatusMessage('');
+            setUploadQueueCount(0);
+            setCurrentUploadIndex(0);
         }
     };
 
@@ -1023,7 +1030,7 @@ export default function EntryEditor() {
 
                         {/* Image Upload Area */}
                         <div className="mb-4">
-                            {images.length > 0 && (
+                            {(images.length > 0 || uploading) && (
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
                                     {images.map((img, idx) => (
                                         <div
@@ -1066,10 +1073,39 @@ export default function EntryEditor() {
                                             )}
                                         </div>
                                     ))}
+                                    {uploading && Array.from({ length: uploadQueueCount }).map((_, idx) => (
+                                        <div
+                                            key={`uploading-${idx}`}
+                                            className="relative rounded-lg overflow-hidden border border-white/10 group aspect-square bg-black/40 flex flex-col items-center justify-center p-4"
+                                        >
+                                            <div className="absolute inset-0 bg-white/5 animate-pulse" />
+                                            <div className="relative z-10 flex flex-col items-center w-full">
+                                                {idx < currentUploadIndex ? (
+                                                    <div className="text-green-400 mb-2">
+                                                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                        </svg>
+                                                    </div>
+                                                ) : idx === currentUploadIndex ? (
+                                                    <>
+                                                        <Loader className="w-8 h-8 animate-spin text-primary mb-3" />
+                                                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-primary animate-pulse" style={{ width: '100%' }} />
+                                                        </div>
+                                                        <span className="text-[10px] text-primary/80 mt-2 text-center uppercase tracking-wider font-bold">
+                                                            {statusMessage.includes('Converting') ? 'Converting' : statusMessage.includes('Compressing') ? 'Compressing' : 'Uploading'}
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <ImageIcon className="w-8 h-8 text-white/20" />
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
 
-                            {images.length < 8 && (
+                            {images.length + (uploading ? uploadQueueCount : 0) < 8 && (
                                 <div className="relative group">
                                     <input
                                         type="file"
@@ -1078,23 +1114,17 @@ export default function EntryEditor() {
                                         onChange={handleImageUpload}
                                         className="hidden"
                                         id="image-upload"
+                                        disabled={uploading}
                                     />
                                     <label
                                         htmlFor="image-upload"
-                                        className={`flex flex-col items-center justify-center w-full ${images.length > 0 ? 'h-24' : 'h-32'} border-2 border-dashed border-white/10 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-white/5 transition-all ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        className={`flex flex-col items-center justify-center w-full ${(images.length > 0 || uploading) ? 'h-24' : 'h-32'} border-2 border-dashed border-white/10 rounded-lg transition-all ${uploading ? 'opacity-50 cursor-not-allowed bg-white/5' : 'cursor-pointer hover:border-primary/50 hover:bg-white/5'}`}
                                     >
-                                        {uploading ? (
-                                            <div className="flex flex-col items-center text-primary">
-                                                <Loader className="w-8 h-8 animate-spin mb-2" />
-                                                <span className="text-sm">{statusMessage || 'Processing...'}</span>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col items-center text-text-muted group-hover:text-white">
-                                                <ImageIcon className="w-8 h-8 mb-2" />
-                                                <span className="text-sm font-medium">Click to upload images ({images.length}/8)</span>
-                                                <span className="text-xs mt-1 text-text-muted/60">Max 200KB each (Auto-compressed)</span>
-                                            </div>
-                                        )}
+                                        <div className="flex flex-col items-center text-text-muted group-hover:text-white">
+                                            <ImageIcon className="w-8 h-8 mb-2" />
+                                            <span className="text-sm font-medium">Click to upload images ({images.length + (uploading ? uploadQueueCount : 0)}/8)</span>
+                                            <span className="text-xs mt-1 text-text-muted/60">Max 200KB each (Auto-compressed)</span>
+                                        </div>
                                     </label>
                                 </div>
                             )}

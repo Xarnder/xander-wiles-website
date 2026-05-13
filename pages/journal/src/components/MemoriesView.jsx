@@ -183,11 +183,12 @@ export default function MemoriesView() {
             {/* Content area */}
             <div className="flex-1 flex flex-col sm:flex-row">
                 {entry.imageUrl && (
-                    <div className="sm:w-32 h-32 shrink-0 bg-black/40 relative overflow-hidden border-b sm:border-b-0 sm:border-r border-white/5 group-hover:bg-black/20 transition-colors">
-                        <img
+                    <div className="sm:w-32 h-auto sm:h-32 shrink-0 bg-black/40 relative overflow-hidden border-b sm:border-b-0 sm:border-r border-white/5 group-hover:bg-black/20 transition-colors">
+                        <ImageWithSkeleton
                             src={entry.imageUrl}
                             alt="Entry visual"
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            className="w-full h-auto sm:h-full"
+                            imgClassName="w-full h-auto sm:h-full object-contain sm:object-cover group-hover:scale-105 transition-transform duration-500"
                         />
                     </div>
                 )}
