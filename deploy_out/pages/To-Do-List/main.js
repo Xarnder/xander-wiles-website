@@ -708,8 +708,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Multi Edit
     const multiEditBtn = document.getElementById('multi-edit-btn');
     multiEditBtn.onclick = () => {
-        state.multiEditMode = !state.multiEditMode;
-        UI.toggleMultiEditUI();
+        if (state.multiEditMode && state.selectedTaskIds.size > 0) {
+            showConfirmModal(
+                "Deselect Items?",
+                `Are you sure you want to deselect ${state.selectedTaskIds.size} ${state.selectedTaskIds.size === 1 ? getTerm(true) : getTerm(false)}?`,
+                () => {
+                    state.multiEditMode = false;
+                    UI.toggleMultiEditUI();
+                }
+            );
+        } else {
+            state.multiEditMode = !state.multiEditMode;
+            UI.toggleMultiEditUI();
+        }
     };
     // Global delegation for multi select
     boardContainer.addEventListener('click', (e) => {

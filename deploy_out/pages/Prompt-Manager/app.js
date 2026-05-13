@@ -1354,6 +1354,17 @@ function createPromptCard(item, searchTerm = '') {
     `;
     
     if (data.isPinned) card.classList.add('pinned-card');
+    
+    // Highlight if added within the last 24 hours
+    if (data.createdAt) {
+        const createdDate = data.createdAt.toMillis ? data.createdAt.toMillis() : new Date(data.createdAt).getTime();
+        const now = Date.now();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        
+        if (now - createdDate < oneDayMs) {
+            card.classList.add('newly-added-card');
+        }
+    }
 
     // --- Handlers ---
     

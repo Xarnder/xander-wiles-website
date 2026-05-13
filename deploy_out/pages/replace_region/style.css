@@ -634,8 +634,45 @@ input[type="color"]::-webkit-color-swatch {
     z-index: 10;
 }
 
-.mini-reset:hover {
-    transform: none !important;
-    background: var(--accent-cyan) !important;
-    color: white !important;
+/* --- Adjustment Tabs --- */
+.adjustment-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 0.5rem;
+}
+
+.adj-tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.adj-tab-btn.active {
+    color: var(--accent-cyan);
+    background: rgba(6, 182, 212, 0.1);
+}
+
+.adj-tab-btn:hover:not(.active) {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.adj-pane {
+    display: none;
+}
+
+.adj-pane.active {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }

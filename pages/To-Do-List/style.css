@@ -1184,6 +1184,69 @@ body {
     color: white;
 }
 
+.multi-select-btn {
+    background: var(--accent-blue) !important;
+    color: white !important;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5) !important;
+    padding: 0 !important;
+    width: 42px !important;
+    height: 42px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 12px !important;
+    transition: all 0.3s ease !important;
+}
+
+.multi-select-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
+.multi-select-btn:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.7) !important;
+    transform: translateY(-2px);
+}
+
+.multi-select-btn.active {
+    background: #1e40af !important; /* Darker blue */
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.9) !important;
+    transform: scale(1.05);
+}
+
+.options-btn-styled {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: white !important;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.1) !important;
+    padding: 0 !important;
+    width: 42px !important;
+    height: 42px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    transition: all 0.3s ease !important;
+}
+
+.options-btn-styled svg {
+    width: 24px;
+    height: 24px;
+}
+
+.options-btn-styled:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.2) !important;
+    transform: translateY(-2px);
+}
+
+[data-theme="light"] .options-btn-styled {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #1f2937 !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
 .icon-btn-large {
     background: none;
     border: none;

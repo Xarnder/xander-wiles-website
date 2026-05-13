@@ -321,48 +321,102 @@
                         </div>
                     </div>
 
-                    <!-- Color Match Controls (HSL) -->
-                    <div class="controls-bar" style="margin-top: 10px;">
-                        <div class="control-group">
-                            <div class="label-row">
-                                <label for="hue-slider">Hue: <span id="hue-value">0</span>&deg;</label>
-                                <button class="reset-btn" data-target="hue-slider" data-default="0" title="Reset">↺</button>
-                            </div>
-                            <input type="range" id="hue-slider" min="-180" max="180" value="0" step="1" />
+                    <!-- Image Adjustment Tabs -->
+                    <div class="controls-bar" style="margin-top: 10px; display: flex; flex-direction: column; align-items: stretch;">
+                        <div class="adjustment-tabs">
+                            <button class="adj-tab-btn active" data-tab="overlay-adj">Overlay Adjustments</button>
+                            <button class="adj-tab-btn" data-tab="base-adj">Base Adjustments</button>
                         </div>
-                        <div class="control-group">
-                            <div class="label-row">
-                                <label for="saturation-slider">Saturation: <span id="saturation-value">100</span>%</label>
-                                <button class="reset-btn" data-target="saturation-slider" data-default="100" title="Reset">↺</button>
+
+                        <!-- Overlay Adjustments Pane -->
+                        <div id="overlay-adj" class="adj-pane active">
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="hue-slider">Hue: <span id="hue-value">0</span>&deg;</label>
+                                    <button class="reset-btn" data-target="hue-slider" data-default="0" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="hue-slider" min="-180" max="180" value="0" step="1" />
                             </div>
-                            <input type="range" id="saturation-slider" min="0" max="200" value="100" step="1" />
-                        </div>
-                        <div class="control-group">
-                            <div class="label-row">
-                                <label for="lightness-slider">Lightness: <span id="lightness-value">100</span>%</label>
-                                <button class="reset-btn" data-target="lightness-slider" data-default="100" title="Reset">↺</button>
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="saturation-slider">Saturation: <span id="saturation-value">100</span>%</label>
+                                    <button class="reset-btn" data-target="saturation-slider" data-default="100" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="saturation-slider" min="0" max="200" value="100" step="1" />
                             </div>
-                            <input type="range" id="lightness-slider" min="0" max="200" value="100" step="1" />
-                        </div>
-                        <div class="control-group">
-                            <div class="label-row">
-                                <label for="black-level-slider">Black Level: <span id="black-level-value">0</span></label>
-                                <button class="reset-btn" data-target="black-level-slider" data-default="0" title="Reset">↺</button>
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="lightness-slider">Lightness: <span id="lightness-value">100</span>%</label>
+                                    <button class="reset-btn" data-target="lightness-slider" data-default="100" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="lightness-slider" min="0" max="200" value="100" step="1" />
                             </div>
-                            <input type="range" id="black-level-slider" min="0" max="100" value="0" step="1" />
-                        </div>
-                        <div class="control-group">
-                            <div class="label-row">
-                                <label for="highlight-level-slider">Highlight Level: <span id="highlight-level-value">100</span></label>
-                                <button class="reset-btn" data-target="highlight-level-slider" data-default="100" title="Reset">↺</button>
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="black-level-slider">Black Level: <span id="black-level-value">0</span></label>
+                                    <button class="reset-btn" data-target="black-level-slider" data-default="0" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="black-level-slider" min="0" max="100" value="0" step="1" />
                             </div>
-                            <input type="range" id="highlight-level-slider" min="0" max="100" value="100" step="1" />
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="highlight-level-slider">Highlight Level: <span id="highlight-level-value">100</span></label>
+                                    <button class="reset-btn" data-target="highlight-level-slider" data-default="100" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="highlight-level-slider" min="0" max="100" value="100" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <label>Lightness Curve</label>
+                                <div class="curve-container">
+                                    <canvas id="curve-canvas" width="200" height="200"></canvas>
+                                    <button id="reset-curve-btn" class="reset-btn mini-reset" title="Reset Curve">↺</button>
+                                </div>
+                            </div>
                         </div>
-                        <div class="control-group">
-                            <label>Lightness Curve</label>
-                            <div class="curve-container">
-                                <canvas id="curve-canvas" width="200" height="200"></canvas>
-                                <button id="reset-curve-btn" class="reset-btn mini-reset" title="Reset Curve">↺</button>
+
+                        <!-- Base Adjustments Pane -->
+                        <div id="base-adj" class="adj-pane">
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="base-hue-slider">Hue: <span id="base-hue-value">0</span>&deg;</label>
+                                    <button class="reset-btn" data-target="base-hue-slider" data-default="0" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="base-hue-slider" min="-180" max="180" value="0" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="base-saturation-slider">Saturation: <span id="base-saturation-value">100</span>%</label>
+                                    <button class="reset-btn" data-target="base-saturation-slider" data-default="100" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="base-saturation-slider" min="0" max="200" value="100" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="base-lightness-slider">Lightness: <span id="base-lightness-value">100</span>%</label>
+                                    <button class="reset-btn" data-target="base-lightness-slider" data-default="100" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="base-lightness-slider" min="0" max="200" value="100" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="base-black-level-slider">Black Level: <span id="base-black-level-value">0</span></label>
+                                    <button class="reset-btn" data-target="base-black-level-slider" data-default="0" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="base-black-level-slider" min="0" max="100" value="0" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <div class="label-row">
+                                    <label for="base-highlight-level-slider">Highlight Level: <span id="base-highlight-level-value">100</span></label>
+                                    <button class="reset-btn" data-target="base-highlight-level-slider" data-default="100" title="Reset">↺</button>
+                                </div>
+                                <input type="range" id="base-highlight-level-slider" min="0" max="100" value="100" step="1" />
+                            </div>
+                            <div class="control-group">
+                                <label>Base Lightness Curve</label>
+                                <div class="curve-container">
+                                    <canvas id="base-curve-canvas" width="200" height="200"></canvas>
+                                    <button id="reset-base-curve-btn" class="reset-btn mini-reset" title="Reset Curve">↺</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -424,13 +478,19 @@
     <!-- SVG Filter for Curves -->
     <svg style="position: absolute; width: 0; height: 0;" width="0" height="0" version="1.1" xmlns="http://www.w3.org/2000/svg">
         <defs>
-            <filter id="custom-curves" color-interpolation-filters="sRGB">
+            <filter id="overlay-curves" color-interpolation-filters="sRGB">
                 <feComponentTransfer>
-                    <feFuncR type="table" tableValues="0 1" id="curveR"/>
-                    <feFuncG type="table" tableValues="0 1" id="curveG"/>
-                    <feFuncB type="table" tableValues="0 1" id="curveB"/>
+                    <feFuncR type="table" tableValues="0 1" id="overlayCurveR"/>
+                    <feFuncG type="table" tableValues="0 1" id="overlayCurveG"/>
+                    <feFuncB type="table" tableValues="0 1" id="overlayCurveB"/>
                 </feComponentTransfer>
-                <!-- Hue and Saturation are handled by CSS filters or can be added here if needed -->
+            </filter>
+            <filter id="base-curves" color-interpolation-filters="sRGB">
+                <feComponentTransfer>
+                    <feFuncR type="table" tableValues="0 1" id="baseCurveR"/>
+                    <feFuncG type="table" tableValues="0 1" id="baseCurveG"/>
+                    <feFuncB type="table" tableValues="0 1" id="baseCurveB"/>
+                </feComponentTransfer>
             </filter>
         </defs>
     </svg>
