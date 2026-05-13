@@ -1,0 +1,9 @@
+{
+    "rewrites": [
+        {
+            "source": "/pages/journal/(.*)",
+            "destination": "/pages/journal/index.html"
+        }
+    ],
+    "cleanUrls": true
+}

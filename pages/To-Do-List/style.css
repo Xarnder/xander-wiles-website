@@ -132,6 +132,7 @@
     overflow: visible;
     width: 100px;
     height: 150px;
+    filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.4));
 }
 
 .premium-loader g {
@@ -149,7 +150,7 @@
 }
 
 .premium-loader path {
-    stroke: #FF56A1;
+    stroke: #FFFFFF;
     stroke: url(#loader-gradient);
     stroke-width: 20px;
     stroke-linecap: round;
