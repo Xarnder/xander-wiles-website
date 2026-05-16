@@ -147,7 +147,7 @@ import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
             new RGBELoader()
                 .setPath('assets/hdri/')
-                .load('Free Galaxies 8k.hdr', (texture) => {
+                .load('Free Galaxies 4k.hdr', (texture) => {
                     texture.mapping = THREE.EquirectangularReflectionMapping;
                     state.scene.background = texture;
                     state.scene.environment = texture;
