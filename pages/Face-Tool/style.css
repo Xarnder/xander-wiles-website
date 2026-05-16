@@ -1451,7 +1451,7 @@ select option {
 }
 
 .premium-loader g {
-    animation: loader-slide 2s linear infinite;
+    animation: loader-slide 2s linear infinite reverse;
 }
 
 .premium-loader g:nth-child(2) {
@@ -1472,7 +1472,7 @@ select option {
     fill: none;
     stroke-dasharray: 0 157px;
     stroke-dashoffset: 0;
-    animation: loader-escalade 2s cubic-bezier(0.8, 0, 0.2, 1) infinite;
+    animation: loader-escalade 2s cubic-bezier(0.8, 0, 0.2, 1) infinite reverse;
 }
 
 @keyframes loader-slide {
