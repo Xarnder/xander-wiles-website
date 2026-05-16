@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="description" content="A modern Three.js procedural 3D spline driving game.">
+    <title>Spline Rush 3D</title>
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <!-- Website-wide header stylesheet, then page-specific game stylesheet -->
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="./game.css">
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+      }
+    }
+  </script>
+    <script type="module" src="./game.js"></script>
+</head>
+
+<body>
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <main class="game-shell" aria-label="Spline Rush 3D driving game">
+        <canvas id="game-canvas" aria-label="3D driving game canvas"></canvas>
+        <div class="screen-vignette" aria-hidden="true"></div>
+
+        <section class="hud hud-top" aria-label="Game status">
+            <div class="glass-card brand-card">
+                <p class="eyebrow">Three.js procedural racing</p>
+                <h1>Spline Rush 3D</h1>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <p id="input-hint" class="mini-copy">W/A/S/D or arrows · Space brake · R reset · T restart · C camera</p>
+                    <button id="fullscreen-button" class="ui-button secondary mini-button" type="button" style="min-height: 32px; padding: 0 10px; font-size: 0.7rem; display: none;">Fullscreen</button>
+                </div>
+            </div>
+
+            <div class="glass-card stat-card">
+                <div class="stat-grid">
+                    <div>
+                        <span class="stat-label">Speed</span>
+                        <strong><span id="speed-value">0</span><small> km/h</small></strong>
+                    </div>
+                    <div>
+                        <span class="stat-label">Lap</span>
+                        <strong id="lap-value">1</strong>
+                    </div>
+                    <div>
+                        <span class="stat-label">Score</span>
+                        <strong id="score-value">0</strong>
+                    </div>
+                    <div>
+                        <span class="stat-label">Status</span>
+                        <strong id="status-value">waiting</strong>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="hud hud-bottom" aria-label="Race controls">
+            <div class="glass-card track-card">
+                <span>Seed: <strong id="seed-value">not generated</strong></span>
+                <span>Track: <strong id="track-value">press start</strong></span>
+            </div>
+            <div class="button-row">
+                <button id="new-track-button" class="ui-button secondary" type="button">New track</button>
+                <button id="restart-button" class="ui-button secondary" type="button">Restart</button>
+                <button id="reset-button" class="ui-button secondary" type="button">Reset</button>
+                <button id="camera-button" class="ui-button secondary" type="button">Camera</button>
+            </div>
+        </section>
+
+        <section id="mobile-controls" class="mobile-controls" aria-label="Touch driving controls">
+            <div class="mobile-steer">
+                <button class="touch-button" data-drive-control="left" type="button" aria-label="Steer left">←</button>
+                <button class="touch-button" data-drive-control="right" type="button"
+                    aria-label="Steer right">→</button>
+            </div>
+            <div class="mobile-pedals">
+                <button class="touch-button brake" data-drive-control="brake" type="button"
+                    aria-label="Brake or reverse">Brake</button>
+                <button class="touch-button throttle" data-drive-control="throttle" type="button"
+                    aria-label="Accelerate">Go</button>
+            </div>
+        </section>
+
+        <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+        <section id="start-overlay" class="start-overlay" aria-label="Start game">
+            <div class="glass-card start-card">
+                <p class="eyebrow">Generated after you press start</p>
+                <h2>Race a brand-new 3D spline track</h2>
+                <p>
+                    The game builds a complex closed Catmull-Rom spline, turns it into a banked 3D road,
+                    then gives you boost pads, collectible energy orbs, suspension bounce and responsive steering.
+                </p>
+
+                <label class="seed-label" for="seed-input">
+                    Optional seed
+                    <input id="seed-input" type="text" autocomplete="off" placeholder="Leave blank for a random track">
+                </label>
+
+                <button id="start-button" class="ui-button primary" type="button">Start and generate track</button>
+
+                <div class="controls-grid" aria-label="Controls summary">
+                    <span><kbd>W</kbd>/<kbd>↑</kbd> accelerate</span>
+                    <span><kbd>A</kbd><kbd>D</kbd> steer</span>
+                    <span><kbd>S</kbd>/<kbd>Space</kbd> brake</span>
+                    <span><kbd>R</kbd> reset · <kbd>T</kbd> restart</span>
+                    <span><kbd>C</kbd> camera</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <noscript>
+        <p class="noscript-message">This game needs JavaScript enabled.</p>
+    </noscript>
+</body>
+
+</html>
