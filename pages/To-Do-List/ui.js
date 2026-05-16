@@ -1388,7 +1388,7 @@ export function toggleMultiEditUI() {
         enableSortables(false);
     } else {
         multiEditBtn.classList.remove('active');
-        document.body.classList.remove('multi-edit-active');
+        document.body.classList.remove('multi-edit-active', 'multi-bar-visible');
         floatingBar.classList.add('hidden');
         state.selectedTaskIds.clear();
         document.querySelectorAll('.task-card.selected').forEach(el => el.classList.remove('selected'));
