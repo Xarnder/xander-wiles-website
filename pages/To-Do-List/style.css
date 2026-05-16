@@ -123,34 +123,33 @@
 
 .premium-loader {
     overflow: visible;
-    width: 80px;
-    height: 80px;
+    width: 100px;
+    height: 150px;
     filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.4));
 }
 
 .premium-loader g {
-    animation: loader-slide var(--loader-duration) linear infinite reverse;
+    animation: slide var(--loader-duration) linear infinite;
 }
 
 .premium-loader g:nth-child(2) {
-    animation-delay: calc(var(--loader-duration) / 4);
+    animation-delay: calc(var(--loader-duration) / -4);
 }
 
 .premium-loader g:nth-child(2) path {
-    animation-delay: calc(var(--loader-duration) / 4);
+    animation-delay: calc(var(--loader-duration) / -4);
     stroke-dasharray: 0px calc(var(--loader-path-length) + 1px);
     stroke-dashoffset: 1px;
 }
 
 .premium-loader path {
-    stroke: #FFFFFF;
     stroke: url(#loader-gradient);
     stroke-width: 20px;
     stroke-linecap: round;
     fill: none;
     stroke-dasharray: 0 var(--loader-path-length);
     stroke-dashoffset: 0;
-    animation: loader-escalade var(--loader-duration) cubic-bezier(0.8, 0, 0.2, 1) infinite reverse;
+    animation: escalade var(--loader-duration) cubic-bezier(0.8, 0, 0.2, 1) infinite;
 }
 
 /* Login Loader Specifics */
@@ -166,20 +165,20 @@
     height: 90px;
 }
 
-@keyframes loader-slide {
+@keyframes slide {
     0% {
-        transform: translateY(-50px);
+        transform: translateY(50px);
     }
 
     100% {
-        transform: translateY(50px);
+        transform: translateY(-50px);
     }
 }
 
-@keyframes loader-escalade {
+@keyframes escalade {
     0% {
-        stroke-dasharray: 0 var(--loader-path-length);
-        stroke-dashoffset: 0;
+        stroke-dasharray: var(--loader-path-length) var(--loader-path-length);
+        stroke-dashoffset: calc(-1 * (var(--loader-path-length) - 1px));
     }
 
     50% {
@@ -188,8 +187,8 @@
     }
 
     100% {
-        stroke-dasharray: var(--loader-path-length) var(--loader-path-length);
-        stroke-dashoffset: calc(-1 * (var(--loader-path-length) - 1px));
+        stroke-dasharray: 0 var(--loader-path-length);
+        stroke-dashoffset: 0;
     }
 }
 
