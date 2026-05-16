@@ -18,8 +18,8 @@
     --gradient-primary: linear-gradient(135deg, #9d4edd 0%, #00f5ff 100%);
     --radius-xl: 20px;
 
-    /* PWA Padding Adjustments */
-    --pwa-padding-top: 50px;
+    /* PWA Padding Adjustments - Default to 0, overridden for standalone/PWA */
+    --pwa-padding-top: 0px;
 
     /* Premium Loader Variables */
     --loader-duration: 2s;
@@ -168,7 +168,8 @@ a:hover {
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
-    padding: calc(1rem + env(safe-area-inset-top, 0px)) 2rem 1rem;
+    padding: 1.25rem 2rem;
+    padding-top: calc(1.25rem + env(safe-area-inset-top, 0px));
     box-sizing: border-box;
 
     /* Glass Effect (Decoupled from .glass-card) */
@@ -1116,8 +1117,8 @@ input[type="range"]:focus::-moz-range-thumb {
 
 .premium-loader {
     overflow: visible;
-    width: 100px;
-    height: 150px;
+    width: 80px;
+    height: 80px;
 }
 
 .premium-loader g {

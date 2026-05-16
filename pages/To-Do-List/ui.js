@@ -1407,6 +1407,7 @@ export function updateMultiFloatingBar() {
     
     if (count > 0) {
         floatingBar.classList.remove('hidden');
+        document.body.classList.add('multi-bar-visible');
         if (state.showArchived) {
             deleteBtn.classList.remove('hidden');
             deleteBtn.style.display = 'flex';
@@ -1420,6 +1421,7 @@ export function updateMultiFloatingBar() {
         }
     } else {
         floatingBar.classList.add('hidden');
+        document.body.classList.remove('multi-bar-visible');
     }
 }
 

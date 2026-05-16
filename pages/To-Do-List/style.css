@@ -75,17 +75,10 @@
    env(safe-area-inset-top) gives us the exact pixel height of the
    status bar on any iPhone (notched or Dynamic Island).
    =================================================================== */
+/* ios-status-bar-bg removed as it was causing layout issues on some browsers. 
+   Safe area is now handled via body padding. */
 #ios-status-bar-bg {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: env(safe-area-inset-top, 0px);
-    background: #000000;
-    z-index: 99999;
-    pointer-events: none;
-    display: none;
-    /* Add this line to hide the black box */
+    display: none !important;
 }
 
 /* app content sits below the status bar naturally via body padding-top */
@@ -130,8 +123,8 @@
 
 .premium-loader {
     overflow: visible;
-    width: 100px;
-    height: 150px;
+    width: 80px;
+    height: 80px;
     filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.4));
 }
 
@@ -1211,7 +1204,8 @@ body {
 }
 
 .multi-select-btn.active {
-    background: #1e40af !important; /* Darker blue */
+    background: #1e40af !important;
+    /* Darker blue */
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.9) !important;
     transform: scale(1.05);
 }
@@ -1526,6 +1520,7 @@ body {
     overflow-y: hidden;
     padding: 10px 20px;
     align-items: flex-start;
+    box-sizing: border-box;
 }
 
 .board-container::-webkit-scrollbar {
@@ -2402,21 +2397,22 @@ input:checked+.slider-small:before {
 
 
 .floating-action-bar {
-    position: fixed;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: relative;
+    width: 100%;
     background: var(--dropdown-bg-glass);
-    padding: 15px 25px;
-    border-radius: 50px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    padding: 12px 20px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
     border: 1px solid var(--glass-border);
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 20px;
-    z-index: 2500;
+    z-index: 100;
     backdrop-filter: blur(12px);
-    animation: floatUp 0.3s ease-out;
+    margin-top: 15px;
+    margin-bottom: 20px;
+    flex-shrink: 0;
 }
 
 .floating-bar-buttons {
@@ -2729,16 +2725,18 @@ input:checked+.slider-small:before {
 
         /* Float Multi-Edit Bar closer to the floating header */
         .floating-action-bar {
-            bottom: calc(175px + env(safe-area-inset-bottom, 0px)) !important;
+            position: relative !important;
             z-index: 9100 !important;
-            padding: 10px 20px !important;
-            width: 90% !important;
-            max-width: 400px !important;
+            width: 100% !important;
+            max-width: none !important;
+            margin-top: 10px !important;
+            /* Sit above the floating bottom header */
+            margin-bottom: calc(190px + env(safe-area-inset-bottom, 0px)) !important;
         }
 
-        /* Dynamically shrink lists when multi-edit is active to stay above the pill */
-        body.multi-edit-active .board-container {
-            padding-bottom: 250px !important;
+        /* Dynamically shrink lists when multi-edit is actually visible (tasks selected) */
+        body.multi-bar-visible .board-container {
+            padding-bottom: 20px !important;
         }
 
         /* Hide the redundant board title input on mobile only */
@@ -3116,32 +3114,28 @@ input:checked+.slider-small:before {
 }
 
 .floating-action-bar {
-    position: fixed;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: relative;
+    width: 100%;
     background: var(--dropdown-bg-glass);
-    padding: 15px 25px;
-    border-radius: 50px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    padding: 12px 20px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
     border: 1px solid var(--glass-border);
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 20px;
-    z-index: 2500;
+    z-index: 100;
     backdrop-filter: blur(12px);
-    animation: floatUp 0.3s ease-out;
-    width: max-content;
-    max-width: 90vw;
-    box-sizing: border-box;
-    justify-content: center;
+    margin-bottom: 15px;
+    flex-shrink: 0;
 }
 
 @media (max-width: 480px) {
     .floating-action-bar {
         padding: 10px 15px;
         gap: 10px;
-        width: 90%;
+        width: 100%;
         justify-content: space-between;
     }
 }

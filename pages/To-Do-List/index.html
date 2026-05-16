@@ -72,7 +72,7 @@
 
     <!-- LOADING OVERLAY -->
     <div id="loading-overlay">
-        <svg viewBox="0 0 100 100" class="premium-loader">
+        <svg viewBox="0 -25 100 125" class="premium-loader">
             <g>
                 <path d="M 50,100 A 1,1 0 0 1 50,0" />
             </g>
@@ -85,7 +85,7 @@
     <!-- iOS Status Bar Black Background -->
     <!-- Physically paints black behind the notch/status bar on iOS Safari -->
     <!-- iOS samples top pixels of <body> for "Website Tinting", this div ensures those are always black -->
-    <div id="ios-status-bar-bg"></div>
+
 
     <!-- LOGIN OVERLAY -->
     <div id="login-overlay">
@@ -97,7 +97,7 @@
         </button>
         <!-- Login screen mini-loader -->
         <div class="login-loader">
-            <svg viewBox="0 0 100 100" class="premium-loader">
+            <svg viewBox="0 -25 100 125" class="premium-loader">
                 <g>
                     <path d="M 50,100 A 1,1 0 0 1 50,0" />
                 </g>
@@ -180,9 +180,21 @@
             </div>
         </header>
 
+
         <main id="board-container" class="board-container">
             <!-- Lists injected here -->
         </main>
+
+        <!-- Multi-Edit Bar (Relocated to bottom, above tool section/header) -->
+        <div id="multi-edit-floating-bar" class="floating-action-bar hidden">
+            <span id="multi-selected-count">0 Selected</span>
+            <div class="floating-bar-buttons">
+                <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
+                <button id="multi-move-quick-btn" class="btn primary">Move</button>
+                <button id="multi-delete-forever-btn" class="btn danger hidden" style="display: none;"><i
+                        class="ph ph-trash"></i> Delete Forever</button>
+            </div>
+        </div>
     </div>
 
     <!-- Hidden File Input -->
@@ -577,16 +589,6 @@
         </div>
     </div>
 
-    <!-- Floating Action Button for Multi Edit -->
-    <div id="multi-edit-floating-bar" class="floating-action-bar hidden">
-        <span id="multi-selected-count">0 Selected</span>
-        <div class="floating-bar-buttons">
-            <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
-            <button id="multi-move-quick-btn" class="btn primary">Move</button>
-            <button id="multi-delete-forever-btn" class="btn danger hidden" style="display: none;"><i
-                    class="ph ph-trash"></i> Delete Forever</button>
-        </div>
-    </div>
 
     <!-- BULK DELETE FOREVER MODAL -->
     <div id="bulk-delete-modal-overlay" class="modal-overlay hidden">
