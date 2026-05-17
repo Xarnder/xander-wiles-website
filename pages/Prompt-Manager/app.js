@@ -77,6 +77,11 @@ const addTextBlockBtn = document.getElementById('add-text-block-btn');
 const addCodeBlockBtn = document.getElementById('add-code-block-btn');
 const addRememberBlockBtn = document.getElementById('add-remember-block-btn');
 const loginLoader = document.getElementById('login-loader-container');
+const autoArchiveSelect = document.getElementById('auto-archive-select');
+const autoArchiveDisplay = document.getElementById('auto-archive-display');
+const autoArchiveCustomInputs = document.getElementById('auto-archive-custom-inputs');
+const autoArchiveValueInput = document.getElementById('auto-archive-value');
+const autoArchiveUnitSelect = document.getElementById('auto-archive-unit');
 
 // Filter & Search DOM Elements
 const searchInput = document.getElementById('search-prompts');
@@ -349,6 +354,16 @@ openModalBtn.addEventListener('click', () => {
     updateModalUI(currentMode, false);
 
     addPromptModal.classList.remove('hidden');
+    
+    // Reset Auto-Archive
+    if (autoArchiveSelect) autoArchiveSelect.value = 'none';
+    if (autoArchiveCustomInputs) autoArchiveCustomInputs.classList.add('hidden');
+    if (autoArchiveValueInput) autoArchiveValueInput.value = 1;
+    if (autoArchiveUnitSelect) autoArchiveUnitSelect.value = 'days';
+    if (autoArchiveDisplay) {
+        autoArchiveDisplay.classList.add('hidden');
+        autoArchiveDisplay.textContent = '';
+    }
     
     // Draft restoration check
     checkAndRestoreDraft();
@@ -860,10 +875,27 @@ addPromptForm.addEventListener('submit', async (e) => {
         });
     });
 
+    // Auto-Archive Logic
+    const autoArchiveDuration = autoArchiveSelect ? autoArchiveSelect.value : 'none';
+    let autoArchiveAt = null;
+    let autoArchiveValue = null;
+    let autoArchiveUnit = null;
+    
+    if (autoArchiveDuration === 'custom') {
+        autoArchiveValue = parseInt(autoArchiveValueInput.value) || 1;
+        autoArchiveUnit = autoArchiveUnitSelect.value;
+        const now = new Date();
+        if (autoArchiveUnit === 'days') now.setDate(now.getDate() + autoArchiveValue);
+        else if (autoArchiveUnit === 'weeks') now.setDate(now.getDate() + autoArchiveValue * 7);
+        else if (autoArchiveUnit === 'months') now.setMonth(now.getMonth() + autoArchiveValue);
+        else if (autoArchiveUnit === 'years') now.setFullYear(now.getFullYear() + autoArchiveValue);
+        autoArchiveAt = now;
+    }
+
     try {
         if (isEditing && currentPromptId) {
             // Update Existing Doc
-            await updateDoc(doc(db, "prompts", currentPromptId), {
+            const updatePayload = {
                 title: title,
                 category: category,
                 categoryBgColor: categoryBgColor,
@@ -873,7 +905,17 @@ addPromptForm.addEventListener('submit', async (e) => {
                 additionalBlocks: additionalBlocks,
                 mode: currentMode,
                 lastEdited: serverTimestamp()
-            });
+            };
+            
+            // Only update autoArchive if user interacted with dropdown
+            if (autoArchiveDuration !== 'none' || !autoArchiveDisplay.classList.contains('hidden')) {
+                 updatePayload.autoArchiveDuration = autoArchiveDuration;
+                 updatePayload.autoArchiveValue = autoArchiveValue;
+                 updatePayload.autoArchiveUnit = autoArchiveUnit;
+                 updatePayload.autoArchiveAt = autoArchiveAt;
+            }
+
+            await updateDoc(doc(db, "prompts", currentPromptId), updatePayload);
             console.log("✅ Prompt updated successfully!");
         } else {
             // Add New Doc
@@ -887,7 +929,12 @@ addPromptForm.addEventListener('submit', async (e) => {
                 additionalBlocks: additionalBlocks,
                 mode: currentMode,
                 userId: auth.currentUser.uid,
-                createdAt: serverTimestamp()
+                createdAt: serverTimestamp(),
+                isArchived: false,
+                autoArchiveDuration: autoArchiveDuration,
+                autoArchiveValue: autoArchiveValue,
+                autoArchiveUnit: autoArchiveUnit,
+                autoArchiveAt: autoArchiveAt
             });
             console.log("✅ Prompt added successfully!");
         }
@@ -1139,6 +1186,16 @@ function addSectionHeader(text, icon = '') {
     promptsFeed.appendChild(header);
 }
 
+// Helper to check if prompt is archived
+function isPromptArchived(p) {
+    if (p.data.isArchived) return true;
+    if (p.data.autoArchiveAt) {
+        const timestamp = p.data.autoArchiveAt.toMillis ? p.data.autoArchiveAt.toMillis() : new Date(p.data.autoArchiveAt).getTime();
+        if (timestamp <= Date.now()) return true;
+    }
+    return false;
+}
+
 // Render the final list with sections
 function renderPrompts(prompts, searchTerm = '') {
     promptsFeed.innerHTML = '';
@@ -1151,8 +1208,12 @@ function renderPrompts(prompts, searchTerm = '') {
 
     // --- Partitioning Logic ---
     
+    // Separate archived and active prompts
+    const archivedPrompts = prompts.filter(isPromptArchived);
+    const activePrompts = prompts.filter(p => !isPromptArchived(p));
+    
     // 1. Most Recent (Top 4 used, regardless of pin status, but must have been used)
-    const recent = prompts
+    const recent = activePrompts
         .filter(p => p.data.lastUsed)
         .sort((a, b) => (b.data.lastUsed?.toMillis() || 0) - (a.data.lastUsed?.toMillis() || 0))
         .slice(0, 4);
@@ -1160,7 +1221,7 @@ function renderPrompts(prompts, searchTerm = '') {
     const recentIds = new Set(recent.map(r => r.id));
 
     // 2. Pinned (Remaining pinned items)
-    const remainingAfterRecent = prompts.filter(p => !recentIds.has(p.id));
+    const remainingAfterRecent = activePrompts.filter(p => !recentIds.has(p.id));
     const pinned = remainingAfterRecent.filter(p => p.data.isPinned);
     
     const pinnedIds = new Set(pinned.map(p => p.id));
@@ -1198,6 +1259,18 @@ function renderPrompts(prompts, searchTerm = '') {
             addSectionHeader(label);
         }
         others.forEach(item => createPromptCard(item, searchTerm));
+    }
+    
+    // Archived Section
+    if (archivedPrompts.length > 0) {
+        addSectionHeader("Archived", `
+            <svg viewBox="0 0 24 24" class="section-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                <rect x="1" y="3" width="22" height="5"></rect>
+                <line x1="10" y1="12" x2="14" y2="12"></line>
+            </svg>
+        `);
+        archivedPrompts.forEach(item => createPromptCard(item, searchTerm));
     }
 }
 
@@ -1300,6 +1373,13 @@ function createPromptCard(item, searchTerm = '') {
                 </div>
             </div>
             <div class="card-header-actions">
+                <button class="archive-btn action-btn ${isPromptArchived(item) ? 'archived' : ''}" title="${isPromptArchived(item) ? 'Unarchive' : 'Archive'}">
+                    <svg viewBox="0 0 24 24" class="archive-icon-svg" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                        <rect x="1" y="3" width="22" height="5"></rect>
+                        <line x1="10" y1="12" x2="14" y2="12"></line>
+                    </svg>
+                </button>
                 <button class="pin-btn action-btn ${isPinned ? 'pinned' : ''}" title="${isPinned ? 'Unpin' : 'Pin'}">
                     <svg viewBox="0 0 122.879 122.867" class="pin-icon-svg">
                         <path d="M83.88,0.451L122.427,39c0.603,0.601,0.603,1.585,0,2.188l-13.128,13.125 c-0.602,0.604-1.586,0.604-2.187,0l-3.732-3.73l-17.303,17.3c3.882,14.621,0.095,30.857-11.37,42.32 c-0.266,0.268-0.535,0.529-0.808,0.787c-1.004,0.955-0.843,0.949-1.813-0.021L47.597,86.48L0,122.867l36.399-47.584L11.874,50.76 c-0.978-0.98-0.896-0.826,0.066-1.837c0.24-0.251,0.485-0.503,0.734-0.753C24.137,36.707,40.376,32.917,54.996,36.8l17.301-17.3 l-3.733-3.732c-0.601-0.601-0.601-1.585,0-2.188L81.691,0.451C82.295-0.15,83.279-0.15,83.88,0.451L83.88,0.451z" fill="currentColor"/>
@@ -1320,7 +1400,7 @@ function createPromptCard(item, searchTerm = '') {
                         <path fill="currentColor" d="M6 6V2c0-1.1.9-2 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-4v4a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V8c0-1.1.9-2 2-2h4zm2 0h4a2 2 0 0 1 2 2v4h4V2H8v4zM2 8v10h10V8H2zm4 4v-2h2v2h2v2H8v2H6v-2H4v-2h2z"/>
                     </svg>
                 </button>
-                ${(!isLink) ? `
+                ${(!isLink && hasVariables) ? `
                 <button class="history-btn outline-btn action-btn" title="Input History">
                     ${historyIconSVG}
                 </button>` : ''}
@@ -1352,8 +1432,8 @@ function createPromptCard(item, searchTerm = '') {
             </div>
         </div>
     `;
-    
     if (data.isPinned) card.classList.add('pinned-card');
+    if (isPromptArchived(item)) card.classList.add('archived-card');
     
     // Highlight if added within the last 24 hours
     if (data.createdAt) {
@@ -1470,6 +1550,24 @@ function createPromptCard(item, searchTerm = '') {
             console.error("❌ Failed to toggle pin:", err);
         }
     });
+
+    // Archive Logic
+    const archiveBtn = card.querySelector('.archive-btn');
+    if (archiveBtn) {
+        archiveBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                const currentlyArchived = isPromptArchived(item);
+                await updateDoc(doc(db, "prompts", id), {
+                    isArchived: !currentlyArchived,
+                    autoArchiveAt: null, // Clear auto-archive when manually unarchived or archived
+                    autoArchiveDuration: 'none'
+                });
+            } catch (err) {
+                console.error("❌ Failed to toggle archive:", err);
+            }
+        });
+    }
 
     // History Logic
     const historyBtn = card.querySelector('.history-btn');
@@ -1697,6 +1795,48 @@ function createPromptCard(item, searchTerm = '') {
             promptCodeContainer.classList.remove('hidden');
         } else {
             promptCodeContainer.classList.add('hidden');
+        }
+        
+        // Auto-Archive setting
+        if (autoArchiveSelect) {
+            let duration = data.autoArchiveDuration || 'none';
+            let value = data.autoArchiveValue || 1;
+            let unit = data.autoArchiveUnit || 'days';
+            
+            // Backward compatibility for '1day', '1week', '1month'
+            if (duration === '1day') {
+                duration = 'custom';
+                value = 1;
+                unit = 'days';
+            } else if (duration === '1week') {
+                duration = 'custom';
+                value = 1;
+                unit = 'weeks';
+            } else if (duration === '1month') {
+                duration = 'custom';
+                value = 1;
+                unit = 'months';
+            }
+
+            autoArchiveSelect.value = duration;
+            if (duration === 'custom') {
+                if (autoArchiveValueInput) autoArchiveValueInput.value = value;
+                if (autoArchiveUnitSelect) autoArchiveUnitSelect.value = unit;
+                if (autoArchiveCustomInputs) autoArchiveCustomInputs.classList.remove('hidden');
+                
+                if (data.autoArchiveAt) {
+                    const dateObj = data.autoArchiveAt.toDate ? data.autoArchiveAt.toDate() : new Date(data.autoArchiveAt);
+                    autoArchiveDisplay.textContent = `Auto-archives on ${dateObj.toLocaleDateString()} at ${dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                    autoArchiveDisplay.classList.remove('hidden');
+                } else {
+                    autoArchiveDisplay.classList.add('hidden');
+                    autoArchiveDisplay.textContent = '';
+                }
+            } else {
+                if (autoArchiveCustomInputs) autoArchiveCustomInputs.classList.add('hidden');
+                autoArchiveDisplay.classList.add('hidden');
+                autoArchiveDisplay.textContent = '';
+            }
         }
         
         // Render Dynamic Blocks in Modal
@@ -2240,3 +2380,37 @@ window.addEventListener('keydown', (e) => {
         shortcutModal.classList.remove('hidden');
     }
 });
+
+// Dynamic Custom Auto-Archive Display Update Logic
+function updateAutoArchiveDisplay() {
+    if (!autoArchiveSelect) return;
+    const isCustom = autoArchiveSelect.value === 'custom';
+    if (!isCustom) {
+        if (autoArchiveDisplay) {
+            autoArchiveDisplay.classList.add('hidden');
+            autoArchiveDisplay.textContent = '';
+        }
+        if (autoArchiveCustomInputs) autoArchiveCustomInputs.classList.add('hidden');
+        return;
+    }
+
+    if (autoArchiveCustomInputs) autoArchiveCustomInputs.classList.remove('hidden');
+    const val = parseInt(autoArchiveValueInput?.value) || 1;
+    const unit = autoArchiveUnitSelect?.value || 'days';
+    
+    const now = new Date();
+    if (unit === 'days') now.setDate(now.getDate() + val);
+    else if (unit === 'weeks') now.setDate(now.getDate() + val * 7);
+    else if (unit === 'months') now.setMonth(now.getMonth() + val);
+    else if (unit === 'years') now.setFullYear(now.getFullYear() + val);
+    
+    if (autoArchiveDisplay) {
+        autoArchiveDisplay.textContent = `Auto-archives on ${now.toLocaleDateString()} at ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        autoArchiveDisplay.classList.remove('hidden');
+    }
+}
+
+// Attach Auto-Archive Listeners
+if (autoArchiveSelect) autoArchiveSelect.addEventListener('change', updateAutoArchiveDisplay);
+if (autoArchiveValueInput) autoArchiveValueInput.addEventListener('input', updateAutoArchiveDisplay);
+if (autoArchiveUnitSelect) autoArchiveUnitSelect.addEventListener('change', updateAutoArchiveDisplay);

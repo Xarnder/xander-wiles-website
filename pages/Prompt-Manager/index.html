@@ -191,6 +191,26 @@
                                 to Remember</button>
                         </div>
 
+                        <div class="form-group" style="margin-top: 16px; margin-bottom: 16px;">
+                            <label style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 8px; display: block;">Auto-Archive</label>
+                            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                <select id="auto-archive-select" class="glass-select" style="min-width: 120px; flex: 1; margin-bottom: 0;">
+                                    <option value="none">Never</option>
+                                    <option value="custom">After...</option>
+                                </select>
+                                <div id="auto-archive-custom-inputs" class="hidden" style="display: flex; gap: 10px; align-items: center; flex: 2; min-width: 200px;">
+                                    <input type="number" id="auto-archive-value" min="1" value="1" style="width: 80px; padding: 14px; border-radius: 12px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: white; margin-bottom: 0;" class="glass-input">
+                                    <select id="auto-archive-unit" class="glass-select" style="min-width: 120px; flex: 1; margin-bottom: 0;">
+                                        <option value="days">Days</option>
+                                        <option value="weeks">Weeks</option>
+                                        <option value="months">Months</option>
+                                        <option value="years">Years</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <p id="auto-archive-display" class="hidden" style="margin-top: 8px; font-size: 0.85rem; color: #8FBC8F;"></p>
+                        </div>
+
                         <div id="modal-metadata" class="modal-metadata hidden">
                             <p id="created-at-text"></p>
                             <p id="last-edited-text"></p>
