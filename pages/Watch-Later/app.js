@@ -1732,9 +1732,14 @@ function updateGenreDatalist() {
     genreDatalist.innerHTML = sortedGenres.map(g => `<option value="${g}">`).join('');
 }
 
+let currentRenderId = null;
+
 function renderAllCards() {
-    // Clear all tier lists
-    document.querySelectorAll('.tier-list').forEach(l => l.innerHTML = "");
+    if (currentRenderId !== null) {
+        cancelAnimationFrame(currentRenderId);
+        currentRenderId = null;
+    }
+    // Lists will be cleared at the end of rendering to prevent screen flashing
 
     const filtered = cachedWatches.filter(watch => {
         // Type filter
@@ -1797,8 +1802,13 @@ function renderAllCards() {
         }
 
         if (index < filtered.length) {
-            requestAnimationFrame(renderChunk);
+            currentRenderId = requestAnimationFrame(renderChunk);
         } else {
+            currentRenderId = null;
+
+            // Clear all tier lists right before appending to prevent screen flashing
+            document.querySelectorAll('.tier-list').forEach(l => l.innerHTML = "");
+
             // Append fragments to DOM
             userTiers.forEach(tier => {
                 const list = document.getElementById(`list-${tier.id}`);
@@ -1857,7 +1867,7 @@ function renderAllCards() {
     }
     
     // Start chunked rendering
-    requestAnimationFrame(renderChunk);
+    currentRenderId = requestAnimationFrame(renderChunk);
 }
 
 function renderTiers() {
