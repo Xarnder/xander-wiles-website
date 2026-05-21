@@ -52,11 +52,22 @@ async function init() {
         // Update header
         playlistTitle.textContent = currentPlaylist.title;
         playlistDescription.textContent = currentPlaylist.description;
-        playlistIcon.textContent = currentPlaylist.icon || '🎵';
+        
+        const icon = currentPlaylist.icon || '🎵';
+        if (isImageUrl(icon)) {
+            playlistIcon.classList.add('playlist-icon-image');
+            playlistIcon.innerHTML = `<img src="${icon}" alt="Playlist Icon">`;
+        } else {
+            playlistIcon.classList.remove('playlist-icon-image');
+            playlistIcon.textContent = icon;
+        }
         document.title = `${currentPlaylist.title} | Xander Wiles`;
 
         // Load CSV
         await loadCSV(currentPlaylist.csvPath);
+
+        // Remove loading state once successfully loaded
+        document.body.classList.remove('loading');
 
     } catch (error) {
         console.error("Initialization error:", error);
@@ -173,6 +184,12 @@ function stripEmojis(text) {
     return text.replace(/\p{Extended_Pictographic}/gu, '').trim();
 }
 
+// Helper to check if icon is an image URL
+function isImageUrl(icon) {
+    if (!icon) return false;
+    return icon.startsWith('/') || icon.startsWith('http') || /\.(png|jpg|jpeg|svg|webp|avif|gif)$/i.test(icon);
+}
+
 // 3. Render
 function renderSongs() {
     const filter = searchInput.value.toLowerCase();
@@ -257,8 +274,14 @@ async function populateSidebar(playlists, currentId) {
         item.id = `sidebar-item-${p.id}`;
         item.href = `./?id=${p.id}`;
         item.className = `sidebar-item ${p.id === currentId ? 'active' : ''}`;
+        
+        const icon = p.icon || '🎵';
+        const iconHtml = isImageUrl(icon)
+            ? `<img src="${icon}" alt="" style="width: 1em; height: 1em; object-fit: contain; vertical-align: middle;">`
+            : icon;
+
         item.innerHTML = `
-            <span class="sidebar-icon">${p.icon || '🎵'}</span>
+            <span class="sidebar-icon">${iconHtml}</span>
             <span class="sidebar-name">${p.title || 'Loading...'}</span>
         `;
         sidebarNav.appendChild(item);
@@ -310,6 +333,9 @@ function showError() {
     errorMessage.style.display = 'block';
     playlistTitle.textContent = "Error";
     playlistDescription.textContent = "Playlist missing or broken.";
+    playlistIcon.classList.remove('playlist-icon-image');
+    playlistIcon.textContent = '🎵';
+    document.body.classList.remove('loading');
 }
 
 // 4. Events

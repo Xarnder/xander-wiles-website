@@ -48,6 +48,25 @@
             <h2>1. Upload Source Image</h2>
             <p class="description">Upload a high-res <strong>PNG</strong> (to trace) or an existing <strong>SVG</strong>
                 (to recolor). Square aspect ratio works best.</p>
+            
+            <!-- Processing Mode Selector -->
+            <div class="mode-selector-wrapper" id="mode-selector-container">
+                <span class="mode-label">Processing Mode</span>
+                <div class="segmented-control">
+                    <input type="radio" name="icon-mode" id="mode-vector" value="vector" checked>
+                    <label for="mode-vector">
+                        <span class="mode-icon">📐</span>
+                        <span class="mode-text">Vector (Trace SVG)</span>
+                    </label>
+                    
+                    <input type="radio" name="icon-mode" id="mode-raster" value="raster">
+                    <label for="mode-raster">
+                        <span class="mode-icon">🖼️</span>
+                        <span class="mode-text">Direct Resize (No SVG)</span>
+                    </label>
+                </div>
+            </div>
+
             <div class="upload-area">
                 <!-- Added accept="image/svg+xml" -->
                 <input type="file" id="image-upload" accept="image/png, image/svg+xml" class="hidden">
@@ -157,58 +176,97 @@
                     </div>
 
                     <!-- Small Icons Toggle -->
-                    <div class="control-group" style="justify-content: space-between;">
-                        <label for="padding-small-icons" style="flex: 1;">Apply padding to small icons</label>
+                    <div class="toggle-row">
                         <div class="toggle-switch-wrapper">
                             <input type="checkbox" id="padding-small-icons" class="toggle-input">
                             <label for="padding-small-icons" class="toggle-label"></label>
                         </div>
+                        <label for="padding-small-icons" class="toggle-text">Apply padding to small favicon sizes (16x16, 32x32)</label>
                     </div>
 
                     <!-- Chrome Extension Toggle -->
-                    <div class="control-group" style="justify-content: space-between;">
-                        <label for="chrome-ext-toggle" style="flex: 1;">Generate Chrome extension icons</label>
+                    <div class="toggle-row">
                         <div class="toggle-switch-wrapper">
                             <input type="checkbox" id="chrome-ext-toggle" class="toggle-input">
                             <label for="chrome-ext-toggle" class="toggle-label"></label>
                         </div>
+                        <label for="chrome-ext-toggle" class="toggle-text">Generate Chrome extension icons (16px, 32px, 48px, 128px)</label>
                     </div>
 
                     <!-- Background Color Controls -->
                     <div class="divider"><span>Background Options</span></div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start;">
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem; align-items: flex-start; width: 100%;">
                         <!-- Transparent Toggle -->
-                        <div class="control-group"
-                            style="grid-template-columns: 1fr 40px; gap: 0.5rem; margin-bottom: 0;">
-                            <label for="bg-transparent-toggle" style="font-size: 0.9rem;">Transparent</label>
-                            <div class="toggle-switch-wrapper"
-                                style="transform: scale(0.8); transform-origin: right center;">
+                        <div class="toggle-row">
+                            <div class="toggle-switch-wrapper">
                                 <input type="checkbox" id="bg-transparent-toggle" class="toggle-input">
                                 <label for="bg-transparent-toggle" class="toggle-label"></label>
                             </div>
+                            <label for="bg-transparent-toggle" class="toggle-text">Transparent Background</label>
                         </div>
 
                         <!-- Apply All Toggle -->
-                        <div class="control-group" id="bg-all-group"
-                            style="grid-template-columns: 1fr 40px; gap: 0.5rem; margin-bottom: 0; opacity: 1; pointer-events: auto;">
-                            <label for="bg-apply-all" style="font-size: 0.9rem;">Apply to all</label>
-                            <div class="toggle-switch-wrapper"
-                                style="transform: scale(0.8); transform-origin: right center;">
+                        <div class="toggle-row" id="bg-all-group">
+                            <div class="toggle-switch-wrapper">
                                 <input type="checkbox" id="bg-apply-all" class="toggle-input">
                                 <label for="bg-apply-all" class="toggle-label"></label>
                             </div>
+                            <label for="bg-apply-all" class="toggle-text">Apply background color to all icon sizes (default is Apple Touch only)</label>
                         </div>
 
-                        <!-- Color Picker (Full Width below) -->
-                        <div class="control-group" id="bg-color-group"
-                            style="grid-column: 1 / -1; grid-template-columns: auto 1fr; gap: 1rem; opacity: 1; pointer-events: auto; justify-content: start;">
-                            <label for="bg-color-picker" style="font-size: 0.9rem;">Color:</label>
+                        <!-- Color Picker -->
+                        <div class="color-picker-row" id="bg-color-group">
+                            <label for="bg-color-picker">Background Color:</label>
                             <div style="display: flex; gap: 10px; align-items: center;">
                                 <input type="color" id="bg-color-picker" value="#ffffff">
                                 <span id="bg-color-code"
-                                    style="font-size: 0.9rem; color: var(--text-muted);">#ffffff</span>
+                                    style="font-family: 'SF Mono', monospace; font-size: 0.9rem; color: var(--text-muted); background: var(--bg-secondary); padding: 0.25rem 0.5rem; border-radius: 6px;">#ffffff</span>
                             </div>
+                        </div>
+
+                        <!-- Squircle Background Toggle -->
+                        <div class="toggle-row" id="squircle-group">
+                            <div class="toggle-switch-wrapper">
+                                <input type="checkbox" id="squircle-toggle" class="toggle-input">
+                                <label for="squircle-toggle" class="toggle-label"></label>
+                            </div>
+                            <label for="squircle-toggle" class="toggle-text">Shape background as Squircle</label>
+                        </div>
+                        
+                        <!-- Squircle Color Picker -->
+                        <div class="color-picker-row" id="squircle-color-group" style="opacity: 0.5; pointer-events: none;">
+                            <label for="squircle-color-picker">Squircle Color:</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="color" id="squircle-color-picker" value="#8b5cf6">
+                                <span id="squircle-color-code"
+                                    style="font-family: 'SF Mono', monospace; font-size: 0.9rem; color: var(--text-muted); background: var(--bg-secondary); padding: 0.25rem 0.5rem; border-radius: 6px;">#8b5cf6</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ICO File Options -->
+                    <div class="divider"><span>ICO File Options</span></div>
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem; align-items: flex-start; width: 100%;">
+                        <label style="font-size: 0.95rem; font-weight: 500; color: var(--text-secondary); margin: 0;">ICO Resolutions in favicon.ico:</label>
+                        <div class="resolution-selector-grid">
+                            <input type="checkbox" id="ico-size-16" value="16" class="pill-checkbox-input ico-size-checkbox" checked>
+                            <label for="ico-size-16" class="pill-checkbox-label">16x16</label>
+
+                            <input type="checkbox" id="ico-size-32" value="32" class="pill-checkbox-input ico-size-checkbox" checked>
+                            <label for="ico-size-32" class="pill-checkbox-label">32x32</label>
+
+                            <input type="checkbox" id="ico-size-48" value="48" class="pill-checkbox-input ico-size-checkbox" checked>
+                            <label for="ico-size-48" class="pill-checkbox-label">48x48</label>
+
+                            <input type="checkbox" id="ico-size-64" value="64" class="pill-checkbox-input ico-size-checkbox">
+                            <label for="ico-size-64" class="pill-checkbox-label">64x64</label>
+
+                            <input type="checkbox" id="ico-size-128" value="128" class="pill-checkbox-input ico-size-checkbox">
+                            <label for="ico-size-128" class="pill-checkbox-label">128x128</label>
+
+                            <input type="checkbox" id="ico-size-256" value="256" class="pill-checkbox-input ico-size-checkbox">
+                            <label for="ico-size-256" class="pill-checkbox-label">256x256</label>
                         </div>
                     </div>
 

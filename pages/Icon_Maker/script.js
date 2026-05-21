@@ -41,6 +41,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const bgColorGroup = document.getElementById('bg-color-group');
     const bgAllGroup = document.getElementById('bg-all-group');
 
+    // --- Squircle Elements ---
+    const squircleToggle = document.getElementById('squircle-toggle');
+    const squircleColorPicker = document.getElementById('squircle-color-picker');
+    const squircleColorCode = document.getElementById('squircle-color-code');
+    const squircleColorGroup = document.getElementById('squircle-color-group');
+
     // --- Beta Overlay Elements ---
     const overlayType = document.getElementById('overlay-type');
     const overlayControls = document.getElementById('overlay-controls');
@@ -57,15 +63,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const generateStatus = document.getElementById('generate-status');
     const resetBtn = document.getElementById('reset-btn');
 
+    // --- Mode Selector Elements ---
+    const modeSelectorContainer = document.getElementById('mode-selector-container');
+    const modeVectorInput = document.getElementById('mode-vector');
+    const modeRasterInput = document.getElementById('mode-raster');
+
     // --- State Variables ---
     let sourceFile = null;
     let isVectorMode = false;
+    let processingMode = 'vector'; // 'vector' (Trace to SVG) or 'raster' (Direct Resize)
     let sourceImageData = null; // For PNGs
     let sourceSvgText = null;   // For SVGs
 
     let lightSvgString = null;
     let darkSvgString = null;
+    let baseLightSvgString = null;
+    let baseDarkSvgString = null;
     let downloadBlob = null;
+    let generatedFiles = {};
 
     // --- Helper: Canvas for Color Parsing ---
     // This allows us to convert "black", "red", "rgba(0,0,0,1)" to readable standard formats
@@ -80,6 +95,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     bgControls.addEventListener('click', handleBgChange);
     swapBtn.addEventListener('click', handleSwapThemes);
+
+    // Mode Selector listeners
+    document.querySelectorAll('input[name="icon-mode"]').forEach(input => {
+        input.addEventListener('change', async (e) => {
+            processingMode = e.target.value;
+            await switchMode(processingMode);
+        });
+    });
 
     // Sliders only affect PNG tracing
     colorsSlider.addEventListener('input', () => handleSliderChange(colorsSlider, colorsValue));
@@ -112,6 +135,28 @@ document.addEventListener('DOMContentLoaded', () => {
     bgColorPicker.addEventListener('input', () => {
         bgColorCode.textContent = bgColorPicker.value;
         updatePaddingPreviewWrapperBg(bgColorPicker.value);
+    });
+
+    // --- Squircle Event Listeners ---
+    squircleToggle.addEventListener('change', () => {
+        const isSquircleActive = squircleToggle.checked;
+        if (isSquircleActive) {
+            squircleColorGroup.style.opacity = '1';
+            squircleColorGroup.style.pointerEvents = 'auto';
+        } else {
+            squircleColorGroup.style.opacity = '0.5';
+            squircleColorGroup.style.pointerEvents = 'none';
+        }
+        applySquircleToStateSvgs();
+        renderPreviewsInDOM();
+        updatePaddingPreview();
+    });
+
+    squircleColorPicker.addEventListener('input', () => {
+        squircleColorCode.textContent = squircleColorPicker.value;
+        applySquircleToStateSvgs();
+        renderPreviewsInDOM();
+        updatePaddingPreview();
     });
 
     // --- Overlay Event Listeners ---
@@ -169,16 +214,17 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onload = async (e) => {
             imagePreview.src = e.target.result;
             // Update padding preview source
-            imagePreview.src = e.target.result;
             paddingPreviewIcon.style.backgroundImage = `url(${e.target.result})`;
             // Force update bg to match current controls 
             // (fixes issue where re-upload might not respect current bg selection)
             const isTransparent = bgTransparentToggle.checked;
             updatePaddingPreviewWrapperBg(isTransparent ? 'transparent' : bgColorPicker.value);
-            updatePaddingPreview();
 
             if (isVectorMode) {
-                // Handle SVG Input
+                // Enforce Vector mode for SVG files
+                processingMode = 'vector';
+                modeVectorInput.checked = true;
+                modeSelectorContainer.classList.add('hidden');
                 rasterControls.classList.add('hidden'); // Hide tracing sliders
 
                 // Read content as text for manipulation
@@ -189,23 +235,68 @@ document.addEventListener('DOMContentLoaded', () => {
                     generateBtn.disabled = false;
                     await updateSvgPreviews();
                     generateBtn.classList.add('glow-animation');
+                    updatePaddingPreview();
                 };
                 textReader.readAsText(file);
 
             } else {
                 // Handle PNG Input
                 if (file.type !== 'image/png') { alert('Please upload a PNG or SVG.'); return; }
-                rasterControls.classList.remove('hidden'); // Show tracing sliders
+                
+                // Show mode selector
+                modeSelectorContainer.classList.remove('hidden');
+                processingMode = document.querySelector('input[name="icon-mode"]:checked')?.value || 'vector';
+
                 try {
                     sourceImageData = await getImageDataFromSrc(imagePreview.src);
-                    svgControlsCard.classList.remove('hidden');
+                    
+                    if (processingMode === 'vector') {
+                        rasterControls.classList.remove('hidden'); // Show tracing sliders
+                        svgControlsCard.classList.remove('hidden');
+                        await updateSvgPreviews();
+                    } else {
+                        svgControlsCard.classList.add('hidden');
+                        lightSvgString = null;
+                        darkSvgString = null;
+                        baseLightSvgString = null;
+                        baseDarkSvgString = null;
+                    }
+                    
                     generateBtn.disabled = false;
-                    await updateSvgPreviews();
                     generateBtn.classList.add('glow-animation');
+                    updatePaddingPreview();
                 } catch (error) { console.error(error); alert("Could not process image."); }
             }
         };
         reader.readAsDataURL(file);
+    }
+
+    async function switchMode(newMode) {
+        if (!sourceFile) return;
+
+        if (newMode === 'raster') {
+            svgControlsCard.classList.add('hidden');
+            lightSvgString = null;
+            darkSvgString = null;
+            baseLightSvgString = null;
+            baseDarkSvgString = null;
+            generateBtn.disabled = false;
+            generateBtn.classList.add('glow-animation');
+            updatePaddingPreview();
+        } else {
+            svgControlsCard.classList.remove('hidden');
+            if (isVectorMode) {
+                rasterControls.classList.add('hidden');
+            } else {
+                rasterControls.classList.remove('hidden');
+            }
+            generateBtn.disabled = false;
+            generateBtn.classList.add('glow-animation');
+            
+            // Re-run SVG processing
+            await updateSvgPreviews();
+            updatePaddingPreview();
+        }
     }
 
     function handleBgChange(e) {
@@ -222,13 +313,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleSwapThemes() {
-        if (!lightSvgString || !darkSvgString) return;
-        // Swap strings
-        const temp = lightSvgString;
-        lightSvgString = darkSvgString;
-        darkSvgString = temp;
+        if (!baseLightSvgString || !baseDarkSvgString) return;
+        // Swap base strings
+        const temp = baseLightSvgString;
+        baseLightSvgString = baseDarkSvgString;
+        baseDarkSvgString = temp;
+
+        // Re-apply squircle
+        applySquircleToStateSvgs();
+
         // Update DOM
         renderPreviewsInDOM();
+        updatePaddingPreview();
     }
 
     const debouncedUpdate = debounce(() => updateSvgPreviews(), 250);
@@ -245,18 +341,21 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (isVectorMode) {
                 // --- VECTOR PATH: Clean & Recoloring ---
-                lightSvgString = cleanSvg(sourceSvgText);
-                darkSvgString = generateDarkSvg(lightSvgString);
+                baseLightSvgString = cleanSvg(sourceSvgText);
+                baseDarkSvgString = generateDarkSvg(baseLightSvgString);
             } else {
                 // --- RASTER PATH: Tracing ---
                 const settings = { colors: parseInt(colorsSlider.value), detail: parseFloat(detailSlider.value), smoothing: parseInt(smoothingSlider.value) };
                 const lightPalette = await getSmartPalette(imagePreview.src, settings.colors);
 
                 // 1. Trace PNG to create Light SVG
-                lightSvgString = traceImageDataToSvg(sourceImageData, lightPalette, settings);
+                baseLightSvgString = traceImageDataToSvg(sourceImageData, lightPalette, settings);
                 // 2. Invert Traced SVG to create Dark SVG
-                darkSvgString = generateDarkSvg(lightSvgString);
+                baseDarkSvgString = generateDarkSvg(baseLightSvgString);
             }
+
+            // Apply squircle option
+            applySquircleToStateSvgs();
 
             renderPreviewsInDOM();
 
@@ -488,17 +587,90 @@ document.addEventListener('DOMContentLoaded', () => {
         return Math.sqrt(2 * rDiff * rDiff + 4 * gDiff * gDiff + 3 * bDiff * bDiff + aDiff * aDiff * 10);
     }
 
+    async function createIcoFile(pngBlobsWithSizes) {
+        const pngBuffers = await Promise.all(
+            pngBlobsWithSizes.map(async (item) => {
+                const buffer = await item.blob.arrayBuffer();
+                return {
+                    size: item.size,
+                    buffer: buffer
+                };
+            })
+        );
+
+        const numImages = pngBuffers.length;
+        const headerSize = 6;
+        const entrySize = 16;
+        
+        let currentOffset = headerSize + (numImages * entrySize);
+        const totalSize = currentOffset + pngBuffers.reduce((acc, item) => acc + item.buffer.byteLength, 0);
+        
+        const buffer = new ArrayBuffer(totalSize);
+        const view = new DataView(buffer);
+        
+        // 1. Write ICONDIR Header
+        view.setUint16(0, 0, true);         // Reserved (must be 0)
+        view.setUint16(2, 1, true);         // Type: 1 = ICO
+        view.setUint16(4, numImages, true);   // Number of images
+        
+        // 2. Write Directory Entries (ICONDIRENTRY) and Copy PNG Data
+        pngBuffers.forEach((item, i) => {
+            const entryOffset = headerSize + (i * entrySize);
+            const pngSize = item.size;
+            const pngBytes = item.buffer;
+            
+            // Width and Height: 1 byte each (0 represents 256)
+            view.setUint8(entryOffset, pngSize >= 256 ? 0 : pngSize);
+            view.setUint8(entryOffset + 1, pngSize >= 256 ? 0 : pngSize);
+            
+            // Color count (0 if >= 8bpp)
+            view.setUint8(entryOffset + 2, 0);
+            
+            // Reserved (must be 0)
+            view.setUint8(entryOffset + 3, 0);
+            
+            // Color planes
+            view.setUint16(entryOffset + 4, 1, true);
+            
+            // Bits per pixel (32 bpp for typical PNGs)
+            view.setUint16(entryOffset + 6, 32, true);
+            
+            // Size of the PNG image data (4 bytes)
+            view.setUint32(entryOffset + 8, pngBytes.byteLength, true);
+            
+            // Offset of the PNG image data from the beginning of file (4 bytes)
+            view.setUint32(entryOffset + 12, currentOffset, true);
+            
+            // Copy PNG data into the ArrayBuffer at currentOffset
+            new Uint8Array(buffer, currentOffset, pngBytes.byteLength).set(new Uint8Array(pngBytes));
+            
+            currentOffset += pngBytes.byteLength;
+        });
+        
+        return new Blob([buffer], { type: 'image/x-icon' });
+    }
+
     // --- Final Generation & Output ---
     async function handleFinalGeneration() {
         if (!sourceFile) return;
         generateBtn.classList.remove('glow-animation');
         generateBtn.disabled = true; generateBtn.textContent = 'Generating...'; resultsCard.classList.remove('hidden'); updateStatus('Processing icons...');
         try {
-            const iconSizes = [16, 32, 180, 192, 512];
+            // Collect all unique icon sizes needed
+            const baseSizes = [16, 32, 180, 192, 512];
             if (chromeExtToggle.checked) {
-                if (!iconSizes.includes(48)) iconSizes.push(48);
-                if (!iconSizes.includes(128)) iconSizes.push(128);
+                baseSizes.push(48, 128);
             }
+
+            // Get selected ICO sizes from checkboxes
+            let selectedIcoSizes = Array.from(document.querySelectorAll('.ico-size-checkbox:checked'))
+                .map(cb => parseInt(cb.value));
+            if (selectedIcoSizes.length === 0) {
+                selectedIcoSizes = [32]; // Default fallback
+            }
+
+            // Merge and de-duplicate all sizes
+            const iconSizes = Array.from(new Set([...baseSizes, ...selectedIcoSizes]));
             const imageBlobs = {};
 
             // If we are in Vector Mode, we need to rasterize the SVG to PNGs first
@@ -544,29 +716,37 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                imageBlobs[size] = await convertToSquare(compressedFile, size, paddingPercent, backgroundColor);
+                let squircleColor = squircleToggle.checked ? squircleColorPicker.value : null;
+
+                imageBlobs[size] = await convertToSquare(compressedFile, size, paddingPercent, backgroundColor, squircleColor);
             }
 
-            updateStatus('Creating ZIP file...');
-            const zip = new JSZip();
-            zip.file('apple-touch-icon.png', imageBlobs[180]);
-            zip.file('favicon-16x16.png', imageBlobs[16]);
-            zip.file('favicon-32x32.png', imageBlobs[32]);
-            zip.file('android-chrome-192x192.png', imageBlobs[192]);
-            zip.file('android-chrome-512x512.png', imageBlobs[512]);
-            zip.file('favicon.ico', imageBlobs[32]);
+            updateStatus('Preparing files...');
+            generatedFiles = {};
+
+            generatedFiles['apple-touch-icon.png'] = imageBlobs[180];
+            generatedFiles['favicon-16x16.png'] = imageBlobs[16];
+            generatedFiles['favicon-32x32.png'] = imageBlobs[32];
+            generatedFiles['android-chrome-192x192.png'] = imageBlobs[192];
+            generatedFiles['android-chrome-512x512.png'] = imageBlobs[512];
+
+            // Generate standard ICO file using selected resolutions
+            const icoBlobsWithSizes = selectedIcoSizes.map(size => ({
+                size: size,
+                blob: imageBlobs[size]
+            }));
+            const icoBlob = await createIcoFile(icoBlobsWithSizes);
+            generatedFiles['favicon.ico'] = icoBlob;
 
             // Add Chrome extension icons if toggle is on
             if (chromeExtToggle.checked) {
-                zip.file('icon16.png', imageBlobs[16]);
-                zip.file('icon32.png', imageBlobs[32]);
-                zip.file('icon48.png', imageBlobs[48]);
-                zip.file('icon128.png', imageBlobs[128]);
+                generatedFiles['icon16.png'] = imageBlobs[16];
+                generatedFiles['icon32.png'] = imageBlobs[32];
+                generatedFiles['icon48.png'] = imageBlobs[48];
+                generatedFiles['icon128.png'] = imageBlobs[128];
             }
 
             // Add the SVGs currently displayed in preview
-            // Add the SVGs currently displayed in preview
-            // Inject Beta Overlay if selected
             let finalLightSvg = lightSvgString;
             let finalDarkSvg = darkSvgString;
 
@@ -581,14 +761,59 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (finalDarkSvg) finalDarkSvg = addOverlayToSvg(finalDarkSvg, settings);
             }
 
-            if (finalLightSvg) zip.file('favicon-light.svg', finalLightSvg);
-            if (finalDarkSvg) zip.file('favicon-dark.svg', finalDarkSvg);
+            if (finalLightSvg) {
+                generatedFiles['favicon-light.svg'] = new Blob([finalLightSvg], { type: 'image/svg+xml' });
+            }
+            if (finalDarkSvg) {
+                generatedFiles['favicon-dark.svg'] = new Blob([finalDarkSvg], { type: 'image/svg+xml' });
+            }
+
+            // Generate and add site.webmanifest
+            let themeColor = '#ffffff';
+            if (!bgTransparentToggle.checked) {
+                themeColor = bgColorPicker.value;
+            }
+            const manifestJson = {
+                name: "",
+                short_name: "",
+                icons: [
+                    {
+                        src: "android-chrome-192x192.png",
+                        sizes: "192x192",
+                        type: "image/png"
+                    },
+                    {
+                        src: "android-chrome-512x512.png",
+                        sizes: "512x512",
+                        type: "image/png"
+                    }
+                ],
+                theme_color: themeColor,
+                background_color: themeColor,
+                display: "standalone"
+            };
+            generatedFiles['site.webmanifest'] = new Blob([JSON.stringify(manifestJson, null, 4)], { type: 'application/json' });
+
+            // Create ZIP from generatedFiles
+            updateStatus('Creating ZIP file...');
+            const zip = new JSZip();
+            for (const [filename, blob] of Object.entries(generatedFiles)) {
+                zip.file(filename, blob);
+            }
 
             downloadBlob = await zip.generateAsync({ type: 'blob' });
 
             updateStatus('Generating HTML code...');
             generateResultsCode(!!lightSvgString);
             updateStatus('Done! Your files are ready.');
+
+            // Auto scroll down to download zip button
+            setTimeout(() => {
+                const downloadBtnEl = document.getElementById('download-zip-btn');
+                if (downloadBtnEl) {
+                    downloadBtnEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 100);
 
         } catch (error) {
             console.error("Final generation failed:", error); updateStatus(`Error: ${error.message}`);
@@ -611,6 +836,41 @@ document.addEventListener('DOMContentLoaded', () => {
 &lt;meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"&gt;
 &lt;meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)"&gt;`;
 
+        let filesHtml = '';
+        for (const [filename, blob] of Object.entries(generatedFiles)) {
+            let iconSvg = '';
+            let iconClass = '';
+            if (filename.endsWith('.svg')) {
+                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>`;
+                iconClass = 'svg';
+            } else if (filename.endsWith('.webmanifest') || filename.endsWith('.json')) {
+                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M9 1.5V4h2.5L9 1.5zM8 4H4.5A1.5 1.5 0 0 0 3 5.5v7A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6H9a1 1 0 0 1-1-1zM1.5 2A1.5 1.5 0 0 0 0 3.5v7A1.5 1.5 0 0 0 1.5 12H2V3a2 2 0 0 1 2-2h5v-.5A1.5 1.5 0 0 0 7.5 0h-6z"/></svg>`;
+                iconClass = 'manifest';
+            } else {
+                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.002 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2V3zm1 9v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1H1.002zm14-1V3a1 1 0 0 0-1-1h-12a1 1 0 0 0-1 1v8h14z"/></svg>`;
+                iconClass = 'image';
+            }
+            
+            const sizeStr = formatBytes(blob.size);
+            
+            filesHtml += `
+                <div class="file-row">
+                    <div class="file-info">
+                        <div class="file-icon ${iconClass}">
+                            ${iconSvg}
+                        </div>
+                        <div>
+                            <div class="file-name">${filename}</div>
+                            <div class="file-size">${sizeStr}</div>
+                        </div>
+                    </div>
+                    <button class="individual-download-btn" data-filename="${filename}" title="Download ${filename}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+                    </button>
+                </div>
+            `;
+        }
+
         resultsContent.innerHTML = `
             <div class="result-box">
                 <h3>HTML Code for &lt;head&gt;</h3>
@@ -622,11 +882,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
             <div class="result-box">
-                <h3>Download Icons</h3>
-                <button id="download-zip-btn" class="download-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
-                    Download .zip
-                </button>
+                <h3>Download Options</h3>
+                <div style="display: flex; flex-direction: column; gap: 1rem; width: 100%;">
+                    <button id="download-zip-btn" class="download-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+                        Download .zip (All Files)
+                    </button>
+                    <div class="individual-downloads">
+                        <h4>Download Individual Files</h4>
+                        <div class="files-list">
+                            ${filesHtml}
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -649,6 +917,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
         }
+        const individualDownloadBtn = e.target.closest('.individual-download-btn');
+        if (individualDownloadBtn) {
+            const fileName = individualDownloadBtn.dataset.filename;
+            const blob = generatedFiles[fileName];
+            if (blob) {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        }
         const copyBtn = e.target.closest('.copy-btn');
         if (copyBtn) {
             const codeEl = document.getElementById(copyBtn.dataset.target);
@@ -660,18 +941,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Utility Functions ---
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
     function debounce(func, delay) { let timeout; return function (...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; }
     function getImageDataFromSrc(imgSrc) { return new Promise((resolve, reject) => { const img = new Image(); img.crossOrigin = "Anonymous"; img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); resolve(ctx.getImageData(0, 0, img.width, img.height)); }; img.onerror = reject; img.src = imgSrc; }); }
     function traceImageDataToSvg(imageData, palette, settings) { const options = { pal: palette, numberofcolors: palette.length, ltres: settings.detail, qtres: settings.detail, roundcoords: settings.smoothing }; let svgString = ImageTracer.imagedataToSVG(imageData, options); const viewBox = `viewBox="0 0 ${imageData.width} ${imageData.height}"`; return svgString.replace('<svg ', `<svg ${viewBox} `); }
 
-    function convertToSquare(blob, size, paddingPercent = 0, backgroundColor = null) {
+    function convertToSquare(blob, size, paddingPercent = 0, backgroundColor = null, squircleColor = null) {
         return new Promise((resolve, reject) => {
             const canvas = document.createElement('canvas');
             canvas.width = size;
             canvas.height = size;
             const ctx = canvas.getContext('2d');
 
-            if (backgroundColor) {
+            if (squircleColor) {
+                const pathString = generateSquirclePath(0, 0, size, size);
+                const path = new Path2D(pathString);
+                ctx.fillStyle = squircleColor;
+                ctx.fill(path);
+            } else if (backgroundColor) {
                 ctx.fillStyle = backgroundColor;
                 ctx.fillRect(0, 0, size, size);
             }
@@ -737,8 +1030,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const paddingPercent = val / 100;
 
         let fileToUse = sourceFile;
-        // If vector mode, we need a blob from the SVG text (using the Light version currently)
-        if (isVectorMode && lightSvgString) {
+        // If vector mode (either uploaded SVG, or PNG traced to SVG in vector mode)
+        if (processingMode === 'vector' && lightSvgString) {
             fileToUse = await svgToPngBlob(lightSvgString, 256);
         } else if (!fileToUse && sourceImageData) {
             // Should not happen as sourceFile is set on upload, but for safety
@@ -752,8 +1045,10 @@ document.addEventListener('DOMContentLoaded', () => {
             backgroundColor = bgColorPicker.value;
         }
 
+        let squircleColor = squircleToggle.checked ? squircleColorPicker.value : null;
+
         try {
-            const blob = await convertToSquare(fileToUse, previewSize, paddingPercent, backgroundColor);
+            const blob = await convertToSquare(fileToUse, previewSize, paddingPercent, backgroundColor, squircleColor);
             const url = URL.createObjectURL(blob);
             paddingPreviewIcon.style.backgroundImage = `url(${url})`;
             paddingPreviewIcon.style.backgroundSize = 'contain'; // now the image itself contains the padding/overlay
@@ -865,11 +1160,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleReset() {
         sourceFile = null;
         isVectorMode = false;
+        processingMode = 'vector';
         sourceImageData = null;
         sourceSvgText = null;
         lightSvgString = null;
         darkSvgString = null;
+        baseLightSvgString = null;
+        baseDarkSvgString = null;
         downloadBlob = null;
+        generatedFiles = {};
+
+        // Reset mode selector
+        modeSelectorContainer.classList.add('hidden');
+        modeVectorInput.checked = true;
 
         uploadInput.value = '';
         uploadLabel.classList.remove('uploaded');
@@ -899,6 +1202,21 @@ document.addEventListener('DOMContentLoaded', () => {
         overlaySizeSlider.value = 40; overlaySizeValue.textContent = '40%';
         overlayXSlider.value = 100; overlayXValue.textContent = '100%';
         overlayYSlider.value = 0; overlayYValue.textContent = '0%';
+
+        // Reset squircle controls
+        squircleToggle.checked = false;
+        squircleColorPicker.value = '#8b5cf6';
+        squircleColorCode.textContent = '#8b5cf6';
+        squircleColorGroup.style.opacity = '0.5';
+        squircleColorGroup.style.pointerEvents = 'none';
+
+        // Reset ICO resolution checkboxes
+        document.getElementById('ico-size-16').checked = true;
+        document.getElementById('ico-size-32').checked = true;
+        document.getElementById('ico-size-48').checked = true;
+        document.getElementById('ico-size-64').checked = false;
+        document.getElementById('ico-size-128').checked = false;
+        document.getElementById('ico-size-256').checked = false;
     }
 
     function updatePaddingPreviewWrapperBg(color) {
@@ -908,6 +1226,142 @@ document.addEventListener('DOMContentLoaded', () => {
             box.style.backgroundColor = (color === 'transparent') ? '#000' : color;
             // If transparent, we revert to default black or checkerboard. 
             // The CSS default for .padding-preview-box is black (#000).
+        }
+    }
+
+    // --- Squircle Logic ---
+    function generateSquirclePath(minX, minY, w, h) {
+        // Calculate dynamic corner radius and smoothing parameters
+        const cornerRadius = Math.min(w, h) * 0.2236; // iOS corner radius ratio
+        const cornerSmoothing = 0.6; // iOS corner smoothing
+
+        const roundingAndSmoothingBudget = Math.min(w, h) / 2;
+        
+        // Corner parameter math matching Figma's implementation
+        const getParams = (r) => {
+            let s = cornerSmoothing;
+            let p = (1 + s) * r;
+            
+            // Limit smoothing and p to fit budget
+            const maxCornerSmoothing = roundingAndSmoothingBudget / r - 1;
+            s = Math.min(s, maxCornerSmoothing);
+            p = Math.min(p, roundingAndSmoothingBudget);
+
+            const toRad = (deg) => deg * Math.PI / 180;
+            const arcMeasure = 90 * (1 - s);
+            const arcSectionLength = Math.sin(toRad(arcMeasure / 2)) * r * Math.sqrt(2);
+            const angleAlpha = (90 - arcMeasure) / 2;
+            const p3ToP4Distance = r * Math.tan(toRad(angleAlpha / 2));
+            const angleBeta = 45 * s;
+            const c = p3ToP4Distance * Math.cos(toRad(angleBeta));
+            const d = c * Math.tan(toRad(angleBeta));
+            const b = (p - arcSectionLength - c - d) / 3;
+            const a = 2 * b;
+
+            return { a, b, c, d, p, arcSectionLength, r };
+        };
+
+        const params = getParams(cornerRadius);
+        const { a, b, c, d, p, arcSectionLength, r } = params;
+
+        // Helper to format values to 4 decimal places
+        const f = (val) => Number(val.toFixed(4));
+
+        // SVG relative commands for each corner
+        const drawTopRight = `c ${f(a)} 0 ${f(a + b)} 0 ${f(a + b + c)} ${f(d)} a ${f(r)} ${f(r)} 0 0 1 ${f(arcSectionLength)} ${f(arcSectionLength)} c ${f(d)} ${f(c)} ${f(d)} ${f(b + c)} ${f(d)} ${f(a + b + c)}`;
+        const drawBottomRight = `c 0 ${f(a)} 0 ${f(a + b)} ${f(-d)} ${f(a + b + c)} a ${f(r)} ${f(r)} 0 0 1 ${f(-arcSectionLength)} ${f(arcSectionLength)} c ${f(-c)} ${f(d)} ${f(-(b + c))} ${f(d)} ${f(-(a + b + c))} ${f(d)}`;
+        const drawBottomLeft = `c ${f(-a)} 0 ${f(-(a + b))} 0 ${f(-(a + b + c))} ${f(-d)} a ${f(r)} ${f(r)} 0 0 1 ${f(-arcSectionLength)} ${f(-arcSectionLength)} c ${f(-d)} ${f(-c)} ${f(-d)} ${f(-(b + c))} ${f(-d)} ${f(-(a + b + c))}`;
+        const drawTopLeft = `c 0 ${f(-a)} 0 ${f(-(a + b))} ${f(d)} ${f(-(a + b + c))} a ${f(r)} ${f(r)} 0 0 1 ${f(arcSectionLength)} ${f(-arcSectionLength)} c ${f(c)} ${f(-d)} ${f(b + c)} ${f(-d)} ${f(a + b + c)} ${f(-d)}`;
+
+        return `M ${f(minX + w - p)} ${f(minY)} ` +
+               `${drawTopRight} ` +
+               `L ${f(minX + w)} ${f(minY + h - p)} ` +
+               `${drawBottomRight} ` +
+               `L ${f(minX + p)} ${f(minY + h)} ` +
+               `${drawBottomLeft} ` +
+               `L ${f(minX)} ${f(minY + p)} ` +
+               `${drawTopLeft} Z`;
+    }
+
+    function injectSquircle(svgStr, squircleColor) {
+        if (!svgStr) return svgStr;
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svgStr, "image/svg+xml");
+            const svgEl = doc.querySelector('svg');
+            if (!svgEl) return svgStr;
+
+            // Determine ViewBox / Size
+            let vb = svgEl.getAttribute('viewBox');
+            let minX = 0, minY = 0, width, height;
+
+            if (vb) {
+                const parts = vb.match(/-?[\d\.]+(?:e-?\d+)?/gi)?.map(parseFloat);
+                if (parts && parts.length >= 4) {
+                    minX = parts[0];
+                    minY = parts[1];
+                    width = parts[2];
+                    height = parts[3];
+                }
+            }
+
+            if (width === undefined || height === undefined) {
+                width = parseFloat(svgEl.getAttribute('width')) || 100;
+                height = parseFloat(svgEl.getAttribute('height')) || 100;
+                if (!vb) {
+                    svgEl.setAttribute('viewBox', `0 0 ${width} ${height}`);
+                }
+            }
+
+            // Create squircle path
+            const squirclePath = doc.createElementNS("http://www.w3.org/2000/svg", "path");
+            squirclePath.setAttribute("d", generateSquirclePath(minX, minY, width, height));
+            squirclePath.setAttribute("fill", squircleColor);
+            squirclePath.setAttribute("class", "svg-squircle-bg");
+
+            // Create group to scale original contents
+            const g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
+            const cx = minX + width / 2;
+            const cy = minY + height / 2;
+            g.setAttribute("transform", `translate(${cx}, ${cy}) scale(0.75) translate(${-cx}, ${-cy})`);
+
+            // Move non-metadata children to group
+            const children = Array.from(svgEl.childNodes);
+            children.forEach(child => {
+                if (child.nodeType === Node.ELEMENT_NODE) {
+                    const tag = child.tagName.toLowerCase();
+                    if (tag !== 'defs' && tag !== 'style' && tag !== 'metadata') {
+                        g.appendChild(child);
+                    }
+                }
+            });
+
+            // Append group to SVG
+            svgEl.appendChild(g);
+
+            // Prepend squircle path so it is in the background
+            svgEl.insertBefore(squirclePath, svgEl.firstChild);
+
+            return new XMLSerializer().serializeToString(doc);
+        } catch (e) {
+            console.error("Failed to inject squircle to SVG", e);
+            return svgStr;
+        }
+    }
+
+    function applySquircleToStateSvgs() {
+        const isSquircleActive = squircleToggle.checked;
+        const squircleColor = squircleColorPicker.value;
+
+        if (isSquircleActive && baseLightSvgString) {
+            lightSvgString = injectSquircle(baseLightSvgString, squircleColor);
+            
+            const parsed = parseColorToRgb(squircleColor);
+            const darkSquircleColor = createDarkModeColor(parsed.r, parsed.g, parsed.b, parsed.a);
+            darkSvgString = injectSquircle(baseDarkSvgString, darkSquircleColor);
+        } else {
+            lightSvgString = baseLightSvgString;
+            darkSvgString = baseDarkSvgString;
         }
     }
 });

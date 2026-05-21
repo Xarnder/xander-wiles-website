@@ -369,6 +369,7 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
             if (document.getElementById('show-site-header-toggle')) document.getElementById('show-site-header-toggle').checked = !!state.appData.settings.showSiteHeader;
+            if (document.getElementById('daily-reset-time-input')) document.getElementById('daily-reset-time-input').value = state.appData.settings.dailyResetTime || '04:00';
             if (document.getElementById('main-nav-placeholder')) {
                 document.getElementById('main-nav-placeholder').style.display = state.appData.settings.showSiteHeader ? 'block' : 'none';
             }
@@ -588,6 +589,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSettingListener('show-numbers-toggle', 'showNumbers', true);
     setupSettingListener('drag-tasks-toggle', 'dragEnabled', true);
     setupSettingListener('sort-select', 'sortMode', false);
+    setupSettingListener('daily-reset-time-input', 'dailyResetTime', false);
     setupSettingListener('fancy-speed-select', 'fancySpeed', false, (val) => {
         document.documentElement.style.setProperty('--fancy-speed-mult', val);
         return val;

@@ -976,7 +976,21 @@ export function createTaskElement(task, sourceListId, number) {
 export function updateTotalTaskCount() {
     let totalAll = 0;
     let totalBoard = 0;
+    let dailyCompleted = 0;
     const isArchivedView = state.showArchived;
+
+    // Daily completed count logic
+    const resetTimeStr = state.appData.settings.dailyResetTime || '04:00';
+    const [resetHours, resetMins] = resetTimeStr.split(':').map(Number);
+    const now = new Date();
+    const resetDate = new Date();
+    resetDate.setHours(resetHours, resetMins, 0, 0);
+
+    // If current time is before the reset time today, use yesterday's reset time
+    if (now < resetDate) {
+        resetDate.setDate(resetDate.getDate() - 1);
+    }
+    const resetTimestamp = resetDate.getTime();
 
     // Total All logic
     Object.values(state.appData.tasks).forEach(task => {
@@ -984,6 +998,10 @@ export function updateTotalTaskCount() {
             if (task.archived) totalAll++;
         } else {
             if (!task.archived) totalAll++;
+        }
+
+        if (task.completed && task.completedAt >= resetTimestamp) {
+            dailyCompleted++;
         }
     });
 
@@ -1012,6 +1030,17 @@ export function updateTotalTaskCount() {
         totalTaskCountEl.classList.remove('hidden');
     } else {
         totalTaskCountEl.classList.add('hidden');
+    }
+
+    const dailyCompletedCountEl = document.getElementById('daily-completed-count');
+    if (dailyCompletedCountEl) {
+        if (dailyCompleted > 0) {
+            dailyCompletedCountEl.innerHTML = `<i class="ph ph-check-circle" style="margin-right: 4px;"></i> ${dailyCompleted}`;
+            dailyCompletedCountEl.style.display = 'inline-flex';
+            dailyCompletedCountEl.style.alignItems = 'center';
+        } else {
+            dailyCompletedCountEl.style.display = 'none';
+        }
     }
 }
 
@@ -1388,7 +1417,7 @@ export function toggleMultiEditUI() {
         enableSortables(false);
     } else {
         multiEditBtn.classList.remove('active');
-        document.body.classList.remove('multi-edit-active');
+        document.body.classList.remove('multi-edit-active', 'multi-bar-visible');
         floatingBar.classList.add('hidden');
         state.selectedTaskIds.clear();
         document.querySelectorAll('.task-card.selected').forEach(el => el.classList.remove('selected'));
@@ -1407,6 +1436,7 @@ export function updateMultiFloatingBar() {
     
     if (count > 0) {
         floatingBar.classList.remove('hidden');
+        document.body.classList.add('multi-bar-visible');
         if (state.showArchived) {
             deleteBtn.classList.remove('hidden');
             deleteBtn.style.display = 'flex';
@@ -1420,6 +1450,7 @@ export function updateMultiFloatingBar() {
         }
     } else {
         floatingBar.classList.add('hidden');
+        document.body.classList.remove('multi-bar-visible');
     }
 }
 

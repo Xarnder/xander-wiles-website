@@ -165,11 +165,10 @@
                 <h3>Colour Pro</h3>
                 <p>A advanced colour picker tool</p>
             </a>
-            <a href="/pages/Favicon_Maker/" class="page-card glass-card">
-                <img src="/pages/Favicon_Maker/favicon-dark.svg" class="page-icon" alt="Favicon Maker Icon"
-                    loading="lazy">
-                <h3>Favicon Maker</h3>
-                <p>A tool for generating favicons from images.</p>
+            <a href="/pages/Icon_Maker/" class="page-card glass-card">
+                <img src="/pages/Icon_Maker/favicon-dark.svg" class="page-icon" alt="Favicon Maker Icon" loading="lazy">
+                <h3>Icon Maker</h3>
+                <p>A tool for generating icons from images.</p>
             </a>
             <a href="/pages/Arkonhex/" class="page-card glass-card special-social-network-card">
                 <img src="/pages/Arkonhex/favicon-dark.svg" class="page-icon" alt="Arkonhex Icon" loading="lazy">
@@ -399,11 +398,10 @@
                 <h3>Poster Maker</h3>
                 <p>A tool for creating custom posters with editable text and colors.</p>
             </a>
-            <a href="/pages/Favicon_Maker/" class="page-card glass-card">
-                <img src="/pages/Favicon_Maker/favicon-dark.svg" class="page-icon" alt="Favicon Maker Icon"
-                    loading="lazy">
-                <h3>Favicon Maker</h3>
-                <p>A tool for generating favicons from images.</p>
+            <a href="/pages/Icon_Maker/" class="page-card glass-card">
+                <img src="/pages/Icon_Maker/favicon-dark.svg" class="page-icon" alt="Icon Maker Icon" loading="lazy">
+                <h3>Icon Maker</h3>
+                <p>A tool for generating icons from images.</p>
             </a>
             <a href="/pages/Batch_Image_Manger/" class="page-card glass-card">
                 <img src="/pages/Batch_Image_Manger/favicon-dark.svg" class="page-icon" alt="Batch Image Manger Icon"
@@ -640,8 +638,15 @@
                         const card = document.createElement('a');
                         card.href = `/pages/Music_Playlists/?id=${p.id}`;
                         card.className = 'page-card glass-card';
+                        
+                        const icon = p.icon || '🎵';
+                        const isImage = icon.startsWith('/') || icon.startsWith('http') || /\.(png|jpg|jpeg|svg|webp|avif|gif)$/i.test(icon);
+                        const iconHtml = isImage
+                            ? `<img src="${icon}" class="page-icon" alt="Playlist Icon" loading="lazy" style="object-fit: contain;">`
+                            : `<span class="page-icon" style="font-size: 3rem; display: flex; align-items: center; justify-content: center;">${icon}</span>`;
+
                         card.innerHTML = `
-                            <span class="page-icon" style="font-size: 3rem; display: block; margin-bottom: 1rem;">${p.icon || '🎵'}</span>
+                            ${iconHtml}
                             <h3 class="playlist-card-title">Loading...</h3>
                             <p>${p.description}</p>
                         `;

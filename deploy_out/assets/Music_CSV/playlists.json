@@ -143,11 +143,11 @@
         "id": "akensile-soundtrack-inspiration",
         "csvPath": "/assets/Music_CSV/Akensile Soundtrack Inspiration_playlist_metadata.csv",
         "description": "A collection of songs that inspired the creation of Akensile.",
-        "theme": "#2d3748",
-        "accent": "#a0aec0",
-        "background": "#1a1c20",
-        "text": "#f7fafc",
-        "icon": "🧙‍♂️"
+        "theme": "#8a00e6",
+        "accent": "#ffffff",
+        "background": "#240046",
+        "text": "#ffffff",
+        "icon": "/assets/images/sqaure_akensile_icon.png"
     },
     {
         "id": "Hot Songs",

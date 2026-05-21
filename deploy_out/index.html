@@ -33,7 +33,7 @@
 <body class="loading">
     <!-- Premium Loading Overlay -->
     <div id="loading-overlay">
-        <svg class="premium-loader" viewBox="0 0 100 150">
+        <svg class="premium-loader" viewBox="0 -25 100 125">
             <g>
                 <path d="M 50,100 A 1,1 0 0 1 50,0" />
             </g>
@@ -123,10 +123,10 @@
                         to my journal, which recently hit over 1,000 entries!
                     </p>
                     <div class="interests-tags">
-                        <span class="tag">🚀 AI & Tech</span>
-                        <span class="tag">🎨 Art</span>
-                        <span class="tag">🎻 Cello</span>
-                        <a href="/pages/journal/" class="tag">☕ Daily Journal</a>
+                        <span class="tag">AI & Tech</span>
+                        <span class="tag">Art</span>
+                        <span class="tag">Cello</span>
+                        <a href="/pages/journal/" class="tag">Daily Journal</a>
                     </div>
                     <a href="/pages/About/" class="glow-button about-glow-button">Learn More About Me</a>
                 </div>
@@ -165,11 +165,10 @@
                 <h3>Colour Pro</h3>
                 <p>A advanced colour picker tool</p>
             </a>
-            <a href="/pages/Favicon_Maker/" class="page-card glass-card">
-                <img src="/pages/Favicon_Maker/favicon-dark.svg" class="page-icon" alt="Favicon Maker Icon"
-                    loading="lazy">
-                <h3>Favicon Maker</h3>
-                <p>A tool for generating favicons from images.</p>
+            <a href="/pages/Icon_Maker/" class="page-card glass-card">
+                <img src="/pages/Icon_Maker/favicon-dark.svg" class="page-icon" alt="Favicon Maker Icon" loading="lazy">
+                <h3>Icon Maker</h3>
+                <p>A tool for generating icons from images.</p>
             </a>
             <a href="/pages/Arkonhex/" class="page-card glass-card special-social-network-card">
                 <img src="/pages/Arkonhex/favicon-dark.svg" class="page-icon" alt="Arkonhex Icon" loading="lazy">
@@ -257,11 +256,10 @@
                 <p>A tool for managing prompts</p>
             </a>
             <a href="/pages/Watch-Later/" class="page-card glass-card special-house-design-card">
-                    <img src="/pages/Watch-Later/favicon-dark.svg" class="page-icon" alt="Watch Later Icon"
-                        loading="lazy">
-                    <h3>Watch Later</h3>
-                    <p>Save and organize movies & TV shows for later viewing.</p>
-                </a>
+                <img src="/pages/Watch-Later/favicon-dark.svg" class="page-icon" alt="Watch Later Icon" loading="lazy">
+                <h3>Watch Later</h3>
+                <p>Save and organize movies & TV shows for later viewing.</p>
+            </a>
             <a href="/pages/Work-Tracker/" class="page-card glass-card special-work-tracker-card">
                 <img src="/pages/Work-Tracker/favicon-dark.svg" class="page-icon" alt="Work Tracker Icon"
                     loading="lazy">
@@ -400,11 +398,10 @@
                 <h3>Poster Maker</h3>
                 <p>A tool for creating custom posters with editable text and colors.</p>
             </a>
-            <a href="/pages/Favicon_Maker/" class="page-card glass-card">
-                <img src="/pages/Favicon_Maker/favicon-dark.svg" class="page-icon" alt="Favicon Maker Icon"
-                    loading="lazy">
-                <h3>Favicon Maker</h3>
-                <p>A tool for generating favicons from images.</p>
+            <a href="/pages/Icon_Maker/" class="page-card glass-card">
+                <img src="/pages/Icon_Maker/favicon-dark.svg" class="page-icon" alt="Icon Maker Icon" loading="lazy">
+                <h3>Icon Maker</h3>
+                <p>A tool for generating icons from images.</p>
             </a>
             <a href="/pages/Batch_Image_Manger/" class="page-card glass-card">
                 <img src="/pages/Batch_Image_Manger/favicon-dark.svg" class="page-icon" alt="Batch Image Manger Icon"
@@ -463,9 +460,9 @@
                 <h3>Inpainting</h3>
                 <p>A tool for inpainting images.</p>
             </a>
-               <a href="/pages/Video-Audio-Manger/" class="page-card glass-card special-house-design-card">
-                <img src="/pages/Video-Audio-Manger/favicon-dark.svg" class="page-icon"
-                    alt="Video Audio Manger Icon" loading="lazy">
+            <a href="/pages/Video-Audio-Manger/" class="page-card glass-card special-house-design-card">
+                <img src="/pages/Video-Audio-Manger/favicon-dark.svg" class="page-icon" alt="Video Audio Manger Icon"
+                    loading="lazy">
                 <h3>Video Audio Manger</h3>
                 <p>Manage video and audio files with ease.</p>
             </a>
@@ -524,7 +521,7 @@
                 <h3>Voxelizer</h3>
                 <p>A tool for voxelizing 3D models.</p>
             </a>
-         
+
 
 
         </div>
@@ -641,8 +638,15 @@
                         const card = document.createElement('a');
                         card.href = `/pages/Music_Playlists/?id=${p.id}`;
                         card.className = 'page-card glass-card';
+                        
+                        const icon = p.icon || '🎵';
+                        const isImage = icon.startsWith('/') || icon.startsWith('http') || /\.(png|jpg|jpeg|svg|webp|avif|gif)$/i.test(icon);
+                        const iconHtml = isImage
+                            ? `<img src="${icon}" class="page-icon" alt="Playlist Icon" loading="lazy" style="object-fit: contain;">`
+                            : `<span class="page-icon" style="font-size: 3rem; display: flex; align-items: center; justify-content: center;">${icon}</span>`;
+
                         card.innerHTML = `
-                            <span class="page-icon" style="font-size: 3rem; display: block; margin-bottom: 1rem;">${p.icon || '🎵'}</span>
+                            ${iconHtml}
                             <h3 class="playlist-card-title">Loading...</h3>
                             <p>${p.description}</p>
                         `;
@@ -760,12 +764,23 @@
                     <p>Extract bullets from a PDF and create a hierarchy.</p>
                 </a>
                 <a href="/pages/image-playground/" class="page-card glass-card">
-                    <img src="/pages/image-playground/favicon-dark.svg" class="page-icon"
-                        alt="Image Playground Icon" loading="lazy">
+                    <img src="/pages/image-playground/favicon-dark.svg" class="page-icon" alt="Image Playground Icon"
+                        loading="lazy">
                     <h3>Image Playground</h3>
                     <p>A tool for playing with images.</p>
                 </a>
-                 
+                <a href="/pages/driving-game/" class="page-card glass-card">
+                    <img src="/pages/driving-game/favicon-dark.svg" class="page-icon" alt="Driving Game Icon"
+                        loading="lazy">
+                    <h3>Driving Game</h3>
+                    <p>A 3D driving game</p>
+                </a>
+                <a href="/pages/image-text-promt/" class="page-card glass-card">
+                    <img src="/pages/image-text-promt/favicon-dark.svg" class="page-icon" alt="Image Text Prompt Icon"
+                        loading="lazy">
+                    <h3>Image Text Prompt</h3>
+                    <p>A tool for generating text prompts for images.</p>
+                </a>
 
 
 

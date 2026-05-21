@@ -1059,9 +1059,9 @@ mark.search-highlight {
 }
 
 .edit-btn:hover {
-    background: rgba(123, 44, 191, 0.2);
-    color: white;
-    border-color: var(--glow-color);
+    background: rgba(30, 144, 255, 0.2) !important;
+    color: white !important;
+    border-color: #1e90ff !important;
 }
 
 .action-btn {
@@ -1070,7 +1070,7 @@ mark.search-highlight {
     white-space: nowrap;
 }
 
-.expand-btn, .copy-btn, .pin-btn, .edit-btn, .visit-btn, .history-btn, .duplicate-btn {
+.expand-btn, .copy-btn, .pin-btn, .edit-btn, .visit-btn, .history-btn, .duplicate-btn, .archive-btn {
     width: 36px !important;
     height: 36px !important;
     min-width: 36px !important; /* Override any min-width */
@@ -1082,7 +1082,7 @@ mark.search-highlight {
     flex-shrink: 0;
 }
 
-.copy-icon-svg, .edit-icon-svg, .shortcut-icon-svg {
+.copy-icon-svg, .edit-icon-svg, .shortcut-icon-svg, .archive-icon-svg {
     width: 18px;
     height: 18px;
     fill: currentColor;
@@ -1461,6 +1461,49 @@ select:focus {
 
 .newly-added-card:hover {
     box-shadow: 0 15px 45px rgba(255, 215, 0, 0.35) !important;
+}
+
+/* --- Archival Styles --- */
+.archived-card {
+    border: 2px solid #8FBC8F !important;
+}
+
+.archived-card h3,
+.archived-card .card-tag-container,
+.archived-card .prompt-body,
+.archived-card .variable-status-icon {
+    opacity: 0.3 !important;
+    transition: opacity 0.3s ease;
+}
+
+.archived-card:hover h3,
+.archived-card:hover .card-tag-container,
+.archived-card:hover .prompt-body,
+.archived-card:hover .variable-status-icon {
+    opacity: 0.8 !important;
+}
+
+.archive-btn {
+    display: none !important;
+    background: transparent !important;
+    border: 1px solid var(--glass-border) !important;
+    color: var(--text-muted) !important;
+}
+
+.expanded .archive-btn {
+    display: flex !important;
+}
+
+.archive-btn:hover {
+    background: rgba(143, 188, 143, 0.1) !important;
+    border-color: #8FBC8F !important;
+    color: #8FBC8F !important;
+}
+
+.archive-btn.archived {
+    background: rgba(143, 188, 143, 0.2) !important;
+    border-color: #8FBC8F !important;
+    color: #8FBC8F !important;
 }
 
 /* --- Metadata Section --- */

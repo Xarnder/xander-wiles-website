@@ -18,8 +18,8 @@
     --gradient-primary: linear-gradient(135deg, #9d4edd 0%, #00f5ff 100%);
     --radius-xl: 20px;
 
-    /* PWA Padding Adjustments */
-    --pwa-padding-top: 50px;
+    /* PWA Padding Adjustments - Default to 0, overridden for standalone/PWA */
+    --pwa-padding-top: 0px;
 
     /* Premium Loader Variables */
     --loader-duration: 2s;
@@ -168,7 +168,8 @@ a:hover {
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
-    padding: calc(1rem + env(safe-area-inset-top, 0px)) 2rem 1rem;
+    padding: 1.25rem 2rem;
+    padding-top: calc(1.25rem + env(safe-area-inset-top, 0px));
     box-sizing: border-box;
 
     /* Glass Effect (Decoupled from .glass-card) */
@@ -1117,7 +1118,7 @@ input[type="range"]:focus::-moz-range-thumb {
 .premium-loader {
     overflow: visible;
     width: 100px;
-    height: 150px;
+    height: 125px;
 }
 
 .premium-loader g {
@@ -1125,11 +1126,11 @@ input[type="range"]:focus::-moz-range-thumb {
 }
 
 .premium-loader g:nth-child(2) {
-    animation-delay: calc(var(--loader-duration) / 4);
+    animation-delay: calc(var(--loader-duration) / -4);
 }
 
 .premium-loader g:nth-child(2) path {
-    animation-delay: calc(var(--loader-duration) / 4);
+    animation-delay: calc(var(--loader-duration) / -4);
     stroke-dasharray: 0px calc(var(--loader-path-length) + 1px);
     stroke-dashoffset: 1px;
 }
@@ -1146,25 +1147,28 @@ input[type="range"]:focus::-moz-range-thumb {
 
 @keyframes loader-slide {
     0% {
-        transform: translateY(-50px);
-    }
-    100% {
         transform: translateY(50px);
+    }
+
+    100% {
+        transform: translateY(-50px);
     }
 }
 
 @keyframes loader-escalade {
     0% {
-        stroke-dasharray: 0 var(--loader-path-length);
-        stroke-dashoffset: 0;
+        stroke-dasharray: var(--loader-path-length) var(--loader-path-length);
+        stroke-dashoffset: calc(-1 * (var(--loader-path-length) - 1px));
     }
+
     50% {
         stroke-dasharray: var(--loader-path-length) var(--loader-path-length);
         stroke-dashoffset: 0;
     }
+
     100% {
-        stroke-dasharray: var(--loader-path-length) var(--loader-path-length);
-        stroke-dashoffset: calc(-1 * (var(--loader-path-length) - 1px));
+        stroke-dasharray: 0 var(--loader-path-length);
+        stroke-dashoffset: 0;
     }
 }
 
