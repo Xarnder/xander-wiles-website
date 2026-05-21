@@ -1,0 +1,7 @@
+/* Global website-wide header stylesheet placeholder.
+   Put your shared nav/header CSS here. */
+
+#main-nav-placeholder {
+    width: 100%;
+    min-height: 0;
+}

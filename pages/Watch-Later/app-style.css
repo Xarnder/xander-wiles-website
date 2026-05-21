@@ -166,8 +166,8 @@ h3 {
 /* --- Glassmorphism Cards --- */
 .glass-card {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
+
+
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: var(--card-padding);
@@ -212,7 +212,7 @@ button {
     gap: 10px;
     color: white;
     background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(8px);
+
     position: relative;
     overflow: hidden;
 }
@@ -337,7 +337,7 @@ button:active {
     height: 50px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(12px);
+
     border: 1px solid var(--border);
     color: white;
     display: flex;
@@ -377,7 +377,7 @@ button:active {
     display: flex;
     gap: 4px;
     border: 1px solid var(--border);
-    backdrop-filter: blur(10px);
+
 }
 
 .mode-btn {
@@ -406,7 +406,7 @@ button:active {
     margin-bottom: var(--app-margin);
     padding: var(--filter-bar-padding);
     background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(20px);
+
     border-radius: var(--radius);
     border: 1px solid var(--border);
     flex-wrap: wrap;
@@ -781,8 +781,8 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
 .media-card {
     width: 170px;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+
+
     border: 1px solid var(--border);
     border-radius: 16px;
     overflow: hidden;
@@ -832,7 +832,7 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
     top: 10px;
     left: 10px;
     background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(8px);
+
     padding: 4px 10px;
     border-radius: 6px;
     font-size: 10px;
@@ -946,7 +946,7 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
     height: 28px;
     border-radius: 50%;
     background: var(--glass-heavy);
-    backdrop-filter: blur(4px);
+
     border: 1px solid var(--border);
     display: flex;
     align-items: center;
@@ -1006,8 +1006,8 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
     left: 50%;
     transform: translateX(-50%);
     background: rgba(10, 10, 15, 0.4);
-    backdrop-filter: blur(32px) saturate(200%);
-    -webkit-backdrop-filter: blur(32px) saturate(200%);
+
+
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 100px;
     padding: 14px 40px;
@@ -1045,8 +1045,8 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+
+
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1056,10 +1056,10 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
 
 .modal-content {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
-    backdrop-filter: blur(32px);
-    -webkit-backdrop-filter: blur(32px);
+
+
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 24px;
+    border-radius: var(--radius);
     padding: 40px;
     box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6);
     position: relative;
@@ -1074,7 +1074,7 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: 24px;
+    border-radius: inherit;
     padding: 1px;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), transparent 40%, transparent 60%, rgba(255, 255, 255, 0.1));
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -1334,7 +1334,7 @@ input[type="range"]:focus::-webkit-slider-runnable-track {
     border-radius: 40px;
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(8px);
+
     transition: var(--transition);
     display: inline-block;
 }
@@ -2115,7 +2115,7 @@ input:checked+.slider:before {
     top: 64px;
     right: 8px;
     background: rgba(16, 185, 129, 0.9);
-    backdrop-filter: blur(4px);
+
     color: white;
     font-size: 8px;
     font-weight: 800;
@@ -2274,18 +2274,18 @@ input:checked+.slider:before {
 
 #close-settings-modal {
     color: #ef4444;
-    font-size: 28px;
+    font-size: 20px;
     background: none;
     border: none;
     cursor: pointer;
     transition: var(--transition);
-    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 32px;
     height: 32px;
     border-radius: 50%;
+    padding: 0;
 }
 
 #close-settings-modal:hover {

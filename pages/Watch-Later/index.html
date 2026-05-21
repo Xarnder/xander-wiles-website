@@ -566,6 +566,18 @@
                     </div>
                 </div>
 
+                <div class="settings-group">
+                    <div style="font-size: 11px; color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; text-align: center;">Backup & Restore</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; gap: 8px;">
+                            <button id="export-json-btn" class="secondary-btn" style="flex: 1; padding: 10px; font-size: 12px; border-radius: 10px;">Export JSON</button>
+                            <button id="export-csv-btn" class="secondary-btn" style="flex: 1; padding: 10px; font-size: 12px; border-radius: 10px;">Export CSV</button>
+                        </div>
+                        <button id="restore-btn" class="primary-btn" style="width: 100%; padding: 10px; font-size: 12px; border-radius: 10px;">Restore Backup</button>
+                        <input type="file" id="restore-file-input" accept=".json,.csv" style="display:none;">
+                    </div>
+                </div>
+
                 <button id="logout-btn" class="action-btn logout-btn">Logout</button>
             </div>
         </div>

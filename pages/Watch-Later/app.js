@@ -151,6 +151,10 @@ const closeSettingsModalBtn = document.getElementById('close-settings-modal');
 const debugMenuToggle = document.getElementById('debug-menu-toggle');
 const editTiersBtnModal = document.getElementById('edit-tiers-btn-modal');
 const quickSortBtnModal = document.getElementById('quick-sort-btn-modal');
+const exportJsonBtn = document.getElementById('export-json-btn');
+const exportCsvBtn = document.getElementById('export-csv-btn');
+const restoreBtn = document.getElementById('restore-btn');
+const restoreFileInput = document.getElementById('restore-file-input');
 
 if (openSettingsBtn) {
     openSettingsBtn.addEventListener('click', () => {
@@ -1773,58 +1777,87 @@ function renderAllCards() {
         filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }
 
-    filtered.forEach(watch => {
-        renderCard(watch.id, watch);
-    });
+    let index = 0;
+    const CHUNK_SIZE = 50;
 
-    // Update genre pills to match selection state
-    renderFilterGenres();
+    const fragments = {};
+    userTiers.forEach(tier => fragments[tier.id] = document.createDocumentFragment());
+    fragments['default'] = document.createDocumentFragment();
 
-    // Update Tier Labels with Counts
-    const isFiltered = typeFilter !== 'all' || watchStatusFilter !== 'all' || peopleFilters.size > 0 || genreFilters.size > 0 || searchQuery !== "";
-
-    userTiers.forEach(tier => {
-        const totalInTier = cachedWatches.filter(w => w.tier === tier.id).length;
-        const filteredInTier = filtered.filter(w => w.tier === tier.id).length;
-
-        const tierDiv = document.querySelector(`.tier[data-tier="${tier.id}"]`);
-        if (tierDiv) {
-            const label = tierDiv.querySelector('.tier-label');
-            if (label) {
-                // Keep the tier name but add the count
-                const countText = isFiltered ? `${filteredInTier}/${totalInTier}` : `${totalInTier}`;
-                label.innerHTML = `
-                    <span class="tier-name">${tier.name}</span>
-                    <span class="tier-count">(${countText})</span>
-                `;
+    function renderChunk() {
+        const end = Math.min(index + CHUNK_SIZE, filtered.length);
+        for (; index < end; index++) {
+            const watch = filtered[index];
+            const card = renderCard(watch.id, watch, false); // Do not append automatically
+            if (card) {
+                let tierId = watch.tier;
+                if (!fragments[tierId]) tierId = (userTiers.length > 0 ? userTiers[0].id : 'default');
+                if (fragments[tierId]) fragments[tierId].appendChild(card);
             }
         }
-    });
 
-    // Handle Empty States
-    userTiers.forEach(tier => {
-        const list = document.getElementById(`list-${tier.id}`);
-        if (list && list.children.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'empty-state';
-            empty.innerText = searchQuery ? 'No matches found in this tier' : 'No items in this tier';
-            list.appendChild(empty);
+        if (index < filtered.length) {
+            requestAnimationFrame(renderChunk);
+        } else {
+            // Append fragments to DOM
+            userTiers.forEach(tier => {
+                const list = document.getElementById(`list-${tier.id}`);
+                if (list && fragments[tier.id]) list.appendChild(fragments[tier.id]);
+            });
+
+            // Update genre pills to match selection state
+            renderFilterGenres();
+
+            // Update Tier Labels with Counts
+            const isFiltered = typeFilter !== 'all' || watchStatusFilter !== 'all' || peopleFilters.size > 0 || genreFilters.size > 0 || searchQuery !== "";
+
+            userTiers.forEach(tier => {
+                const totalInTier = cachedWatches.filter(w => w.tier === tier.id).length;
+                const filteredInTier = filtered.filter(w => w.tier === tier.id).length;
+
+                const tierDiv = document.querySelector(`.tier[data-tier="${tier.id}"]`);
+                if (tierDiv) {
+                    const label = tierDiv.querySelector('.tier-label');
+                    if (label) {
+                        // Keep the tier name but add the count
+                        const countText = isFiltered ? `${filteredInTier}/${totalInTier}` : `${totalInTier}`;
+                        label.innerHTML = `
+                            <span class="tier-name">${tier.name}</span>
+                            <span class="tier-count">(${countText})</span>
+                        `;
+                    }
+                }
+            });
+
+            // Handle Empty States
+            userTiers.forEach(tier => {
+                const list = document.getElementById(`list-${tier.id}`);
+                if (list && list.children.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty-state';
+                    empty.innerText = searchQuery ? 'No matches found in this tier' : 'No items in this tier';
+                    list.appendChild(empty);
+                }
+            });
+
+            // Update global count stats
+            const totalCountEl = document.getElementById('total-count');
+            const totalCountMobileEl = document.getElementById('total-count-mobile');
+            
+            let statsText = "";
+            if (isFiltered) {
+                statsText = `Showing ${filtered.length} of ${cachedWatches.length} items`;
+            } else {
+                statsText = `Total: ${cachedWatches.length} items`;
+            }
+
+            if (totalCountEl) totalCountEl.innerText = statsText;
+            if (totalCountMobileEl) totalCountMobileEl.innerText = statsText;
         }
-    });
-
-    // Update global count stats
-    const totalCountEl = document.getElementById('total-count');
-    const totalCountMobileEl = document.getElementById('total-count-mobile');
-    
-    let statsText = "";
-    if (isFiltered) {
-        statsText = `Showing ${filtered.length} of ${cachedWatches.length} items`;
-    } else {
-        statsText = `Total: ${cachedWatches.length} items`;
     }
-
-    if (totalCountEl) totalCountEl.innerText = statsText;
-    if (totalCountMobileEl) totalCountMobileEl.innerText = statsText;
+    
+    // Start chunked rendering
+    requestAnimationFrame(renderChunk);
 }
 
 function renderTiers() {
@@ -2028,7 +2061,7 @@ if (autoColorBtn) autoColorBtn.addEventListener('click', async () => {
     }
 });
 
-function renderCard(id, data) {
+function renderCard(id, data, autoAppend = true) {
     let list = document.getElementById(`list-${data.tier}`);
 
     // Fallback: If the assigned tier list doesn't exist, put it in the first available tier
@@ -2036,7 +2069,7 @@ function renderCard(id, data) {
         list = document.getElementById(`list-${userTiers[0].id}`);
     }
 
-    if (!list) return; // Tier might not be loaded yet or no tiers exist
+    if (!list && autoAppend) return null; // Tier might not be loaded yet or no tiers exist
 
     const card = document.createElement('div');
     card.className = `media-card ${selectedCardIds.has(id) ? 'selected' : ''}`;
@@ -2118,7 +2151,10 @@ function renderCard(id, data) {
         }
     };
 
-    list.appendChild(card);
+    if (autoAppend && list) {
+        list.appendChild(card);
+    }
+    return card;
 }
 
 window.copyToClipboard = (text) => {
@@ -2355,3 +2391,390 @@ window.addEventListener('keydown', (e) => {
         }
     }
 });
+
+// --- Backup and Restore Logic ---
+
+function downloadFile(content, fileName, contentType) {
+    const file = new Blob([content], { type: contentType });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(file);
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+function escapeCSV(str) {
+    if (str === null || str === undefined) return '';
+    const stringVal = String(str);
+    if (stringVal.includes(',') || stringVal.includes('"') || stringVal.includes('\n') || stringVal.includes('\r')) {
+        return `"${stringVal.replace(/"/g, '""')}"`;
+    }
+    return stringVal;
+}
+
+function parseCSV(text) {
+    const lines = [];
+    let row = [""];
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        if (c === '"') {
+            if (inQuotes && next === '"') {
+                row[row.length - 1] += '"';
+                i++; // Skip next quote
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (c === ',' && !inQuotes) {
+            row.push("");
+        } else if ((c === '\r' || c === '\n') && !inQuotes) {
+            if (c === '\r' && next === '\n') {
+                i++;
+            }
+            lines.push(row);
+            row = [""];
+        } else {
+            row[row.length - 1] += c;
+        }
+    }
+    if (row.length > 1 || row[0] !== "") {
+        lines.push(row);
+    }
+    return lines;
+}
+
+function exportJSON() {
+    if (!currentUser) return showAlert("Error", "You must be logged in to export data.");
+    if (cachedWatches.length === 0 && userTiers.length === 0 && userPeople.length === 0) {
+        return showAlert("Export", "No data to export.");
+    }
+
+    try {
+        const backupData = {
+            version: 1,
+            tiers: userTiers.map(t => ({ name: t.name, color: t.color, order: t.order })),
+            people: userPeople.map(p => ({ name: p.name })),
+            watches: cachedWatches.map(w => {
+                const tierObj = userTiers.find(t => t.id === w.tier);
+                return {
+                    movieTitle: w.movieTitle || "",
+                    url: w.url || "",
+                    thumb: w.thumb || "",
+                    type: w.type || "movie",
+                    watchStatus: w.watchStatus || "first-watch",
+                    genre: w.genre || "",
+                    imdbScore: w.imdbScore || "N/A",
+                    rtScore: w.rtScore || "N/A",
+                    watchWith: w.watchWith || "",
+                    watched: !!w.watched,
+                    watchedAt: w.watchedAt || null,
+                    timestamp: w.timestamp || Date.now(),
+                    tierName: tierObj ? tierObj.name : "C"
+                };
+            })
+        };
+
+        const jsonStr = JSON.stringify(backupData, null, 2);
+        downloadFile(jsonStr, "watch_later_backup.json", "application/json");
+        showSuccess("JSON backup downloaded!");
+    } catch (err) {
+        console.error("Export JSON Error:", err);
+        showAlert("Error", "Failed to export JSON: " + err.message);
+    }
+}
+
+function exportCSV() {
+    if (!currentUser) return showAlert("Error", "You must be logged in to export data.");
+    if (cachedWatches.length === 0) {
+        return showAlert("Export", "No cards to export.");
+    }
+
+    try {
+        const headers = [
+            "Title",
+            "URL",
+            "Type",
+            "Tier",
+            "Status",
+            "Genre",
+            "IMDb Score",
+            "RT Score",
+            "Watched With",
+            "Watched",
+            "Watched At",
+            "Date Added"
+        ];
+
+        const rows = cachedWatches.map(w => {
+            const tierObj = userTiers.find(t => t.id === w.tier);
+            return [
+                w.movieTitle || "",
+                w.url || "",
+                w.type || "movie",
+                tierObj ? tierObj.name : "C",
+                w.watchStatus || "first-watch",
+                w.genre || "",
+                w.imdbScore || "N/A",
+                w.rtScore || "N/A",
+                w.watchWith || "",
+                !!w.watched,
+                w.watchedAt || "",
+                w.timestamp || ""
+            ].map(escapeCSV).join(",");
+        });
+
+        const csvContent = [headers.join(",")].concat(rows).join("\n");
+        downloadFile(csvContent, "watch_later_backup.csv", "text/csv");
+        showSuccess("CSV backup downloaded!");
+    } catch (err) {
+        console.error("Export CSV Error:", err);
+        showAlert("Error", "Failed to export CSV: " + err.message);
+    }
+}
+
+async function handleFileImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+        const text = evt.target.result;
+        let importedData = null;
+
+        try {
+            if (file.name.endsWith('.json') || text.trim().startsWith('{')) {
+                importedData = JSON.parse(text);
+            } else {
+                const lines = parseCSV(text);
+                if (lines.length < 2) {
+                    return showAlert("Error", "Invalid CSV file or empty backup.");
+                }
+                
+                const headers = lines[0].map(h => h.trim().toLowerCase());
+                const colIndex = {
+                    title: headers.indexOf("title"),
+                    url: headers.indexOf("url"),
+                    type: headers.indexOf("type"),
+                    tier: headers.indexOf("tier"),
+                    status: headers.indexOf("status"),
+                    genre: headers.indexOf("genre"),
+                    imdb: headers.indexOf("imdb score"),
+                    rt: headers.indexOf("rt score"),
+                    watchedWith: headers.indexOf("watched with"),
+                    watched: headers.indexOf("watched"),
+                    watchedAt: headers.indexOf("watched at"),
+                    dateAdded: headers.indexOf("date added")
+                };
+
+                if (colIndex.url === -1 && colIndex.title === -1) {
+                    return showAlert("Error", "CSV file is missing 'URL' or 'Title' column headers.");
+                }
+
+                const watches = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const row = lines[i];
+                    if (row.length === 1 && row[0] === "") continue;
+
+                    const getVal = (idx, fallback = "") => (idx !== -1 && idx < row.length) ? row[idx].trim() : fallback;
+
+                    const title = getVal(colIndex.title, "Untitled");
+                    const url = getVal(colIndex.url, "");
+                    if (!url && (!title || title === "Untitled")) continue;
+
+                    const isWatchedStr = getVal(colIndex.watched).toLowerCase();
+                    const isWatched = isWatchedStr === 'true' || isWatchedStr === 'yes' || isWatchedStr === '1';
+
+                    const watchedAtVal = getVal(colIndex.watchedAt);
+                    const watchedAt = watchedAtVal ? Number(watchedAtVal) : (isWatched ? Date.now() : null);
+
+                    const dateAddedVal = getVal(colIndex.dateAdded);
+                    const timestamp = dateAddedVal ? Number(dateAddedVal) : Date.now();
+
+                    watches.push({
+                        movieTitle: title,
+                        url: url,
+                        type: getVal(colIndex.type, "movie"),
+                        tierName: getVal(colIndex.tier, "C"),
+                        watchStatus: getVal(colIndex.status, "first-watch"),
+                        genre: getVal(colIndex.genre, ""),
+                        imdbScore: getVal(colIndex.imdb, "N/A"),
+                        rtScore: getVal(colIndex.rt, "N/A"),
+                        watchWith: getVal(colIndex.watchedWith, ""),
+                        watched: isWatched,
+                        watchedAt: watchedAt,
+                        timestamp: timestamp
+                    });
+                }
+                importedData = { watches };
+            }
+
+            if (!importedData || !Array.isArray(importedData.watches)) {
+                return showAlert("Error", "Invalid backup file structure.");
+            }
+
+            const totalItems = importedData.watches.length;
+            showConfirm(
+                "Restore Backup?",
+                `This will restore new items from your backup file. A total of ${totalItems} items were found in the file. Proceed?`,
+                async () => {
+                    if (settingsModal) settingsModal.classList.add('hidden');
+                    await executeRestore(importedData);
+                }
+            );
+
+        } catch (err) {
+            console.error("Import Parsing Error:", err);
+            showAlert("Error", "Failed to parse file: " + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+async function executeRestore(data) {
+    showProgress("Initializing restore...", 0);
+
+    try {
+        const requiredTiers = new Set();
+        const requiredPeople = new Set();
+        const watchesToRestore = [];
+
+        const nameToTierId = {};
+        userTiers.forEach(t => {
+            nameToTierId[t.name.toLowerCase()] = t.id;
+        });
+
+        const existingPeopleNames = new Set(userPeople.map(p => p.name.toLowerCase()));
+
+        const existingUrls = new Set(cachedWatches.filter(w => w.url).map(w => w.url.trim().toLowerCase()));
+        const existingTitles = new Set(cachedWatches.filter(w => !w.url && w.movieTitle).map(w => w.movieTitle.trim().toLowerCase()));
+
+        data.watches.forEach(w => {
+            const urlKey = w.url ? w.url.trim().toLowerCase() : "";
+            const titleKey = w.movieTitle ? w.movieTitle.trim().toLowerCase() : "";
+
+            if (urlKey && existingUrls.has(urlKey)) return;
+            if (!urlKey && titleKey && existingTitles.has(titleKey)) return;
+
+            watchesToRestore.push(w);
+
+            if (w.tierName) {
+                requiredTiers.add(w.tierName.trim());
+            }
+            if (w.watchWith) {
+                w.watchWith.split(',').forEach(p => {
+                    const name = p.trim();
+                    if (name) requiredPeople.add(name);
+                });
+            }
+        });
+
+        if (Array.isArray(data.tiers)) {
+            data.tiers.forEach(t => {
+                if (t.name) requiredTiers.add(t.name.trim());
+            });
+        }
+        if (Array.isArray(data.people)) {
+            data.people.forEach(p => {
+                if (p.name) requiredPeople.add(p.name.trim());
+            });
+        }
+
+        const itemsCount = watchesToRestore.length;
+        if (itemsCount === 0) {
+            hideProgress();
+            return showAlert("Restore Complete", "All items in the backup already exist in your list. No new items were added.");
+        }
+
+        logDebug(`Restore: Found ${itemsCount} new items to add.`);
+
+        // Create missing tiers
+        let tierOrder = userTiers.length;
+        for (const tierName of requiredTiers) {
+            const key = tierName.toLowerCase();
+            if (!nameToTierId[key]) {
+                showProgress(`Creating tier: ${tierName}...`);
+                const docRef = await addDoc(collection(db, "tiers"), {
+                    uid: currentUser.uid,
+                    name: tierName,
+                    order: tierOrder++,
+                    color: '#1e1e24'
+                });
+                nameToTierId[key] = docRef.id;
+            }
+        }
+
+        // Create missing people
+        for (const personName of requiredPeople) {
+            const key = personName.toLowerCase();
+            if (!existingPeopleNames.has(key)) {
+                showProgress(`Adding person: ${personName}...`);
+                await addDoc(collection(db, "people"), {
+                    uid: currentUser.uid,
+                    name: personName
+                });
+                existingPeopleNames.add(key);
+            }
+        }
+
+        await new Promise(r => setTimeout(r, 200));
+
+        let processed = 0;
+        for (const w of watchesToRestore) {
+            processed++;
+            const percent = Math.round((processed / itemsCount) * 100);
+            showProgress(`Restoring cards: ${processed} of ${itemsCount}...`, percent);
+
+            const tierNameKey = w.tierName ? w.tierName.trim().toLowerCase() : "";
+            let resolvedTierId = nameToTierId[tierNameKey];
+            if (!resolvedTierId) {
+                resolvedTierId = userTiers.length > 0 ? userTiers[0].id : "default";
+            }
+
+            const itemDoc = {
+                uid: currentUser.uid,
+                url: w.url || "",
+                thumb: w.thumb || getThumbnail(w.url || ""),
+                movieTitle: w.movieTitle || "Untitled",
+                type: w.type || "movie",
+                watchStatus: w.watchStatus || "first-watch",
+                genre: w.genre || "",
+                imdbScore: w.imdbScore || "N/A",
+                rtScore: w.rtScore || "N/A",
+                watchWith: w.watchWith || "",
+                watched: !!w.watched,
+                watchedAt: w.watchedAt || null,
+                timestamp: w.timestamp || Date.now(),
+                tier: resolvedTierId
+            };
+
+            await addDoc(collection(db, "watches"), itemDoc);
+        }
+
+        hideProgress();
+        showSuccess(`Successfully restored ${itemsCount} items!`);
+
+    } catch (err) {
+        console.error("Execute Restore Error:", err);
+        hideProgress();
+        showAlert("Error", "Restore failed: " + err.message);
+    }
+}
+
+if (exportJsonBtn) {
+    exportJsonBtn.addEventListener('click', exportJSON);
+}
+
+if (exportCsvBtn) {
+    exportCsvBtn.addEventListener('click', exportCSV);
+}
+
+if (restoreBtn && restoreFileInput) {
+    restoreBtn.addEventListener('click', () => {
+        restoreFileInput.value = '';
+        restoreFileInput.click();
+    });
+    restoreFileInput.addEventListener('change', handleFileImport);
+}
