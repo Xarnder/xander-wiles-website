@@ -58,7 +58,11 @@ document.addEventListener('DOMContentLoaded', () => {
         showMaskOverlay: false,
         showCropGuide: false,
         hideEdit: false,
-        isTouchMode: false
+        isTouchMode: false,
+
+        // Batch Export State
+        batchBaseFiles: [],
+        batchOverlayFiles: []
     };
 
     // --- DOM SELECTORS ---
@@ -171,6 +175,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const fillMaskBtn = document.getElementById('fill-mask-btn');
     const clearMaskBtn = document.getElementById('clear-mask-btn');
+
+    // Batch Export Elements
+    const openBatchModalBtn = document.getElementById('open-batch-modal-btn');
+    const batchExportModal = document.getElementById('batch-export-modal');
+    const batchBaseUpload = document.getElementById('batch-base-upload');
+    const batchOverlayUpload = document.getElementById('batch-overlay-upload');
+    const resetBatchBaseBtn = document.getElementById('reset-batch-base-btn');
+    const resetBatchOverlayBtn = document.getElementById('reset-batch-overlay-btn');
+    const batchBaseCount = document.getElementById('batch-base-count');
+    const batchOverlayCount = document.getElementById('batch-overlay-count');
+    const batchWarningsContainer = document.getElementById('batch-warnings-container');
+    const batchProgressContainer = document.getElementById('batch-progress-container');
+    const batchProgressBar = document.getElementById('batch-progress-bar');
+    const batchProgressText = document.getElementById('batch-progress-text');
+    const batchModalCancel = document.getElementById('batch-modal-cancel');
+    const batchModalStart = document.getElementById('batch-modal-start');
 
     console.log('DEBUG: Script loaded and DOM is ready.');
 
@@ -1861,5 +1881,227 @@ document.addEventListener('DOMContentLoaded', () => {
     initCurveEditor('base');
     updateSVGFilter('overlay');
     updateSVGFilter('base');
+
+    // --- BATCH EXPORT LOGIC ---
+    if (openBatchModalBtn) {
+        openBatchModalBtn.addEventListener('click', () => {
+            batchExportModal.classList.remove('hidden');
+            checkBatchAspectRatios();
+        });
+    }
+
+    if (batchModalCancel) {
+        batchModalCancel.addEventListener('click', () => {
+            batchExportModal.classList.add('hidden');
+        });
+    }
+
+    if (batchBaseUpload) {
+        batchBaseUpload.addEventListener('change', (e) => {
+            state.batchBaseFiles = Array.from(e.target.files);
+            batchBaseCount.textContent = state.batchBaseFiles.length > 0 
+                ? `${state.batchBaseFiles.length} files selected.` 
+                : 'Using current base image.';
+            checkBatchAspectRatios();
+        });
+    }
+
+    if (batchOverlayUpload) {
+        batchOverlayUpload.addEventListener('change', (e) => {
+            state.batchOverlayFiles = Array.from(e.target.files);
+            batchOverlayCount.textContent = state.batchOverlayFiles.length > 0 
+                ? `${state.batchOverlayFiles.length} files selected.` 
+                : 'Using current overlay image.';
+            checkBatchAspectRatios();
+        });
+    }
+
+    if (resetBatchBaseBtn) {
+        resetBatchBaseBtn.addEventListener('click', () => {
+            batchBaseUpload.value = '';
+            state.batchBaseFiles = [];
+            batchBaseCount.textContent = 'Using current base image.';
+            checkBatchAspectRatios();
+        });
+    }
+
+    if (resetBatchOverlayBtn) {
+        resetBatchOverlayBtn.addEventListener('click', () => {
+            batchOverlayUpload.value = '';
+            state.batchOverlayFiles = [];
+            batchOverlayCount.textContent = 'Using current overlay image.';
+            checkBatchAspectRatios();
+        });
+    }
+
+    function checkBatchAspectRatios() {
+        if (!state.originalImage || !state.editedImage) return;
+
+        const origBaseAR = state.originalImage.width / state.originalImage.height;
+        const origOverlayAR = state.editedImage.width / state.editedImage.height;
+
+        batchWarningsContainer.innerHTML = '';
+        let hasBaseWarning = false;
+        let hasOverlayWarning = false;
+
+        const checkFiles = async (files, targetAR) => {
+            for (const file of files) {
+                const ar = await getFileAspectRatio(file);
+                if (Math.abs(ar - targetAR) > 0.05) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        const updateWarnings = () => {
+            let html = '';
+            if (hasBaseWarning) {
+                html += '<p style="color: var(--accent-purple); font-size: 0.9rem; margin-bottom: 5px;">⚠️ Some Base Images have different aspect ratios. They will be stretched to fit the original base size.</p>';
+            }
+            if (hasOverlayWarning) {
+                html += '<p style="color: var(--accent-purple); font-size: 0.9rem;">⚠️ Some Overlay Images have different aspect ratios. They will be stretched to fit the original overlay size.</p>';
+            }
+            batchWarningsContainer.innerHTML = html;
+        };
+
+        // Fire and forget checks
+        checkFiles(state.batchBaseFiles, origBaseAR).then(res => {
+            hasBaseWarning = res;
+            updateWarnings();
+        });
+        checkFiles(state.batchOverlayFiles, origOverlayAR).then(res => {
+            hasOverlayWarning = res;
+            updateWarnings();
+        });
+    }
+
+    function getFileAspectRatio(file) {
+        return new Promise((resolve) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+                resolve(img.width / img.height);
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        });
+    }
+
+    if (batchModalStart) {
+        batchModalStart.addEventListener('click', async () => {
+            const numBases = Math.max(1, state.batchBaseFiles.length);
+            const numOverlays = Math.max(1, state.batchOverlayFiles.length);
+            const total = numBases * numOverlays;
+
+            if (total > 128) {
+                const confirmProceed = confirm(`You are about to generate ${total} combinations. This might take a while and consume significant memory. Continue?`);
+                if (!confirmProceed) return;
+            }
+
+            batchModalStart.disabled = true;
+            batchProgressContainer.classList.remove('hidden');
+            batchProgressBar.value = 0;
+            batchProgressText.textContent = `0% (0 / ${total})`;
+
+            await processBatch(total);
+
+            batchModalStart.disabled = false;
+            batchProgressContainer.classList.add('hidden');
+            batchExportModal.classList.add('hidden');
+        });
+    }
+
+    function loadImageFile(file) {
+        return new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+                resolve(img);
+                URL.revokeObjectURL(url);
+            };
+            img.onerror = reject;
+            img.src = url;
+        });
+    }
+
+    async function processBatch(totalCombinations) {
+        if (typeof JSZip === 'undefined') {
+            alert("JSZip library failed to load.");
+            return;
+        }
+
+        const zip = new JSZip();
+        let count = 0;
+
+        const baseSources = state.batchBaseFiles.length > 0 ? state.batchBaseFiles : [null];
+        const overlaySources = state.batchOverlayFiles.length > 0 ? state.batchOverlayFiles : [null];
+
+        const prevShowMask = state.showMaskOverlay;
+        const prevShowGuide = state.showCropGuide;
+        state.showMaskOverlay = false;
+        state.showCropGuide = false;
+
+        const tempOrigImage = state.originalImage;
+        const tempEditedImage = state.editedImage;
+
+        for (let b = 0; b < baseSources.length; b++) {
+            let baseImg = tempOrigImage;
+            let baseName = getBaseFilename();
+            if (baseSources[b]) {
+                baseImg = await loadImageFile(baseSources[b]);
+                const stretchBase = document.createElement('canvas');
+                stretchBase.width = tempOrigImage.width;
+                stretchBase.height = tempOrigImage.height;
+                stretchBase.getContext('2d').drawImage(baseImg, 0, 0, stretchBase.width, stretchBase.height);
+                baseImg = stretchBase; 
+                
+                let dotIdx = baseSources[b].name.lastIndexOf('.');
+                baseName = dotIdx !== -1 ? baseSources[b].name.substring(0, dotIdx) : baseSources[b].name;
+            }
+            state.originalImage = baseImg;
+
+            for (let o = 0; o < overlaySources.length; o++) {
+                let overlayImg = tempEditedImage;
+                let overlayName = "overlay";
+                if (overlaySources[o]) {
+                    overlayImg = await loadImageFile(overlaySources[o]);
+                    const stretchOverlay = document.createElement('canvas');
+                    stretchOverlay.width = tempEditedImage.width;
+                    stretchOverlay.height = tempEditedImage.height;
+                    stretchOverlay.getContext('2d').drawImage(overlayImg, 0, 0, stretchOverlay.width, stretchOverlay.height);
+                    overlayImg = stretchOverlay;
+                    
+                    let dotIdx = overlaySources[o].name.lastIndexOf('.');
+                    overlayName = dotIdx !== -1 ? overlaySources[o].name.substring(0, dotIdx) : overlaySources[o].name;
+                }
+                state.editedImage = overlayImg;
+
+                composeMaskAndDraw();
+
+                const blob = await new Promise(resolve => maskCanvas.toBlob(resolve, 'image/png'));
+                
+                const filename = `${baseName}_${overlayName}.png`;
+                zip.file(filename, blob);
+
+                count++;
+                const percent = Math.round((count / totalCombinations) * 100);
+                batchProgressBar.value = percent;
+                batchProgressText.textContent = `${percent}% (${count} / ${totalCombinations})`;
+
+                await new Promise(r => setTimeout(r, 10));
+            }
+        }
+
+        state.originalImage = tempOrigImage;
+        state.editedImage = tempEditedImage;
+        state.showMaskOverlay = prevShowMask;
+        state.showCropGuide = prevShowGuide;
+        composeMaskAndDraw();
+
+        batchProgressText.textContent = `Generating Zip...`;
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        forceDownload(zipBlob, "Batch_Export.zip");
+    }
 
 });

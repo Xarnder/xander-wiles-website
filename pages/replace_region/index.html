@@ -448,9 +448,12 @@
                         <div class="btn-group" style="width: 100%;">
                             <button id="save-mask-btn" class="action-btn small-btn" style="flex: 1;">Download Mask</button>
                             <button id="send-to-compare-btn" class="action-btn small-btn" style="flex: 1; background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Compare</button>
-                            <button id="send-to-inpainting-btn" class="action-btn" style="flex: 1; background: var(--accent-cyan);">Inpaint Final</button>
+                            <button id="send-to-inpainting-btn" class="action-btn" style="flex: 1; background: var(--accent-cyan-dark); border: 1px solid var(--accent-cyan);">Inpaint Final</button>
                             <button id="save-final-btn" class="action-btn" style="flex: 2;">Download Final Image</button>
                         </div>
+                        <button id="open-batch-modal-btn" class="action-btn" style="width: 100%; margin-top: 0.5rem; background: linear-gradient(135deg, var(--accent-purple) 0%, var(--bg-secondary) 100%); border: 1px solid var(--accent-cyan);">
+                            Batch Export (Multiple Images)
+                        </button>
                     </div>
                 </div>
 
@@ -475,6 +478,49 @@
         </div>
     </div>
 
+    <!-- Batch Export Modal -->
+    <div id="batch-export-modal" class="modal-overlay hidden">
+        <div class="modal-card" style="max-width: 600px;">
+            <h3>Batch Export</h3>
+            <p>Select multiple images to batch process. Every combination of base and overlay will be generated.</p>
+            
+            <div class="batch-inputs-container">
+                <div class="batch-input-group">
+                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <label style="margin-bottom: 0;">1. Base Images (Optional)</label>
+                        <button id="reset-batch-base-btn" class="reset-btn" title="Clear Base Images">↺</button>
+                    </div>
+                    <input type="file" id="batch-base-upload" accept="image/*" multiple webkitdirectory directory />
+                    <small id="batch-base-count" style="display:block; margin-top: 5px; color: var(--text-secondary);">Using current base image.</small>
+                </div>
+                
+                <div class="batch-input-group">
+                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <label style="margin-bottom: 0;">2. Overlay Images (Optional)</label>
+                        <button id="reset-batch-overlay-btn" class="reset-btn" title="Clear Overlay Images">↺</button>
+                    </div>
+                    <input type="file" id="batch-overlay-upload" accept="image/*" multiple webkitdirectory directory />
+                    <small id="batch-overlay-count" style="display:block; margin-top: 5px; color: var(--text-secondary);">Using current overlay image.</small>
+                </div>
+            </div>
+
+            <div id="batch-warnings-container" style="margin: 1rem 0; min-height: 20px;">
+                <!-- Warnings will appear here -->
+            </div>
+
+            <div id="batch-progress-container" class="hidden" style="margin: 1.5rem 0;">
+                <label style="display:block; margin-bottom: 5px; text-align: left; font-size: 0.9rem;">Processing Progress...</label>
+                <progress id="batch-progress-bar" value="0" max="100" style="width: 100%;"></progress>
+                <small id="batch-progress-text" style="display:block; text-align: right; margin-top: 5px; color: var(--accent-cyan);">0%</small>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 1.5rem;">
+                <button id="batch-modal-cancel" class="action-btn small-btn">Cancel</button>
+                <button id="batch-modal-start" class="action-btn">Start Batch Process</button>
+            </div>
+        </div>
+    </div>
+
     <!-- SVG Filter for Curves -->
     <svg style="position: absolute; width: 0; height: 0;" width="0" height="0" version="1.1" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -495,6 +541,8 @@
         </defs>
     </svg>
 
+    <!-- JSZip Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="/assets/js/image-transfer.js"></script>
     <script src="/pages/replace_region/script.js"></script>
     <script src="/assets/js/nav-loader.js"></script>
