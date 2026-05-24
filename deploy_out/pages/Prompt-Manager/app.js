@@ -72,6 +72,8 @@ const categoryBgColor = document.getElementById('category-bg-color');
 const categoryTextColor = document.getElementById('category-text-color');
 const promptCategory = document.getElementById('prompt-category');
 const categoryError = document.getElementById('category-error');
+const categoryPreviewContainer = document.getElementById('category-preview-container');
+const categoryPreviewTag = document.getElementById('category-preview-tag');
 const dynamicBlocksContainer = document.getElementById('dynamic-blocks-container');
 const addTextBlockBtn = document.getElementById('add-text-block-btn');
 const addCodeBlockBtn = document.getElementById('add-code-block-btn');
@@ -129,6 +131,7 @@ const tokenCount = document.getElementById('token-count');
 const promptContentArea = document.getElementById('prompt-content');
 const promptCodeArea = document.getElementById('prompt-code');
 const promptCodeContainer = document.getElementById('prompt-code-container');
+const removePrimaryCodeBtn = document.getElementById('remove-primary-code-btn');
 
 // Metadata Modal Elements
 const modalMetadata = document.getElementById('modal-metadata');
@@ -367,6 +370,7 @@ openModalBtn.addEventListener('click', () => {
     
     // Draft restoration check
     checkAndRestoreDraft();
+    updateCategoryTagPreview();
 
     setTimeout(() => {
         const titleEl = document.getElementById('prompt-title');
@@ -414,8 +418,17 @@ const addDynamicBlock = (type, content = '') => {
 
     blockDiv.querySelector('.remove-block-btn').addEventListener('click', () => {
         blockDiv.remove();
+        if (!isEditing) saveDraft();
+        updateCounters();
     });
 };
+
+removePrimaryCodeBtn.addEventListener('click', () => {
+    promptCodeContainer.classList.add('hidden');
+    promptCodeArea.value = '';
+    if (!isEditing) saveDraft();
+    updateCounters();
+});
 
 addTextBlockBtn.addEventListener('click', () => addDynamicBlock('text'));
 addCodeBlockBtn.addEventListener('click', () => {
@@ -580,6 +593,43 @@ mobileCategorySelect.addEventListener('change', () => {
     applyFilters();
 });
 
+// Function to update the category tag preview in the modal
+function updateCategoryTagPreview() {
+    if (!categoryPreviewContainer || !categoryPreviewTag) return;
+
+    let categoryName = "";
+    let bg = "#0a0514";
+    let text = "#ffffff";
+
+    // Check if manual category inputs are visible
+    const isManualVisible = !manualCategoryInputs.classList.contains('hidden');
+
+    if (isManualVisible) {
+        categoryName = promptCategory.value.trim();
+        bg = categoryBgColor.value;
+        text = categoryTextColor.value;
+    } else {
+        const selected = modalCategorySelect.value;
+        if (selected) {
+            categoryName = selected;
+            if (knownCategories[selected]) {
+                bg = knownCategories[selected].bg || "#0a0514";
+                text = knownCategories[selected].text || "#ffffff";
+            }
+        }
+    }
+
+    if (categoryName) {
+        categoryPreviewTag.textContent = categoryName;
+        categoryPreviewTag.style.background = bg;
+        categoryPreviewTag.style.color = text;
+        categoryPreviewTag.style.borderColor = `${bg}55`;
+        categoryPreviewContainer.classList.remove('hidden');
+    } else {
+        categoryPreviewContainer.classList.add('hidden');
+    }
+}
+
 // Category Modal Selection Interactivity
 modalCategorySelect.addEventListener('change', () => {
     const selected = modalCategorySelect.value;
@@ -595,6 +645,7 @@ modalCategorySelect.addEventListener('change', () => {
         // Option to clear if "No Category" selected
         promptCategory.value = "";
     }
+    updateCategoryTagPreview();
 });
 
 toggleNewCategoryBtn.addEventListener('click', () => {
@@ -606,6 +657,7 @@ toggleNewCategoryBtn.addEventListener('click', () => {
         categoryError.classList.add('hidden');
         submitPromptBtn.disabled = false;
     }
+    updateCategoryTagPreview();
 });
 
 // Category Duplicate Validation
@@ -618,7 +670,13 @@ promptCategory.addEventListener('input', () => {
         categoryError.classList.add('hidden');
         submitPromptBtn.disabled = false;
     }
+    updateCategoryTagPreview();
 });
+
+categoryBgColor.addEventListener('input', updateCategoryTagPreview);
+categoryBgColor.addEventListener('change', updateCategoryTagPreview);
+categoryTextColor.addEventListener('input', updateCategoryTagPreview);
+categoryTextColor.addEventListener('change', updateCategoryTagPreview);
 
 // Real-time Counters
 const updateCounters = () => {
@@ -1741,6 +1799,7 @@ function createPromptCard(item, searchTerm = '') {
             modalDeleteBtn.classList.add('hidden');
             modalMetadata.classList.add('hidden');
             updateCounters();
+            updateCategoryTagPreview();
             addPromptModal.classList.remove('hidden');
             
             setTimeout(() => {
@@ -1787,6 +1846,7 @@ function createPromptCard(item, searchTerm = '') {
         document.getElementById('prompt-category').value = data.category || '';
         document.getElementById('category-bg-color').value = data.categoryBgColor || data.categoryColor || '#0a0514';
         document.getElementById('category-text-color').value = data.categoryTextColor || '#ffffff';
+        updateCategoryTagPreview();
         document.getElementById('prompt-content').value = data.content;
         document.getElementById('prompt-code').value = data.codeSnippet || '';
         document.getElementById('prompt-code').placeholder = itemMode === 'command' ? "Main command..." : (itemMode === 'link' ? "Optional notes..." : "Optional Code Snippets...");
@@ -2261,6 +2321,20 @@ function checkAndRestoreDraft() {
     document.getElementById('prompt-category').value = data.category;
     document.getElementById('category-bg-color').value = data.bg;
     document.getElementById('category-text-color').value = data.text;
+    
+    if (data.category) {
+        if (knownCategories[data.category]) {
+            modalCategorySelect.value = data.category;
+            manualCategoryInputs.classList.add('hidden');
+        } else {
+            modalCategorySelect.value = "";
+            manualCategoryInputs.classList.remove('hidden');
+        }
+    } else {
+        modalCategorySelect.value = "";
+        manualCategoryInputs.classList.add('hidden');
+    }
+    
     document.getElementById('prompt-content').value = data.content;
     document.getElementById('prompt-code').value = data.code;
     
@@ -2270,6 +2344,7 @@ function checkAndRestoreDraft() {
     data.blocks.forEach(b => addDynamicBlock(b.type, b.content));
     
     updateCounters();
+    updateCategoryTagPreview();
     showToast("Restored your draft.");
 }
 

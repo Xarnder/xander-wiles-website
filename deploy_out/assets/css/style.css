@@ -168,8 +168,8 @@ a:hover {
     width: 100% !important;
     max-width: none !important;
     margin: 0 !important;
-    padding: 1.25rem 2rem;
-    padding-top: calc(1.25rem + env(safe-area-inset-top, 0px));
+    padding: 0.6rem 2rem;
+    padding-top: calc(0.6rem + env(safe-area-inset-top, 0px));
     box-sizing: border-box;
 
     /* Glass Effect (Decoupled from .glass-card) */
@@ -202,15 +202,20 @@ a:hover {
 }
 
 .xw-main-nav-header .logo {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: var(--text-primary);
     text-decoration: none;
     box-shadow: none !important;
     text-shadow: none !important;
+    display: flex;
+    align-items: center;
+    padding-right: 20px;
 }
 
 .xw-main-nav-header .logo img {
+    height: 1.8rem;
+    margin-right: 12px;
     box-shadow: none !important;
     filter: none !important;
 }
@@ -221,6 +226,26 @@ a:hover {
     align-items: center;
     gap: 1.5rem;
     /* Reduced from 2rem to fit more items */
+}
+
+/* Tablet optimization to prevent header links wrapping */
+@media screen and (max-width: 1024px) {
+    .xw-main-nav-header {
+        padding: 0.6rem 1.5rem;
+        padding-top: calc(0.6rem + env(safe-area-inset-top, 0px));
+    }
+    .nav-links {
+        gap: 1rem;
+    }
+    .nav-links a {
+        font-size: 0.9rem;
+    }
+    .xw-main-nav-header .logo {
+        font-size: 1.15rem;
+    }
+    .xw-main-nav-header .logo img {
+        height: 1.6rem;
+    }
 }
 
 .nav-links a {
@@ -773,9 +798,9 @@ a:hover {
     .xw-main-nav-header {
         border-radius: 0;
         position: relative;
-        /* Lifts the header stacking context */
         z-index: 10000;
-        /* Ensures header is above the main content */
+        padding: 0.5rem 1rem;
+        padding-top: calc(0.5rem + env(safe-area-inset-top, 0px));
     }
 
     /* 1. Show the hamburger button and fix its position */
@@ -784,8 +809,8 @@ a:hover {
         align-items: center;
         justify-content: center;
         position: fixed;
-        top: calc(1.5rem + env(safe-area-inset-top, 0px));
-        right: 2rem;
+        top: calc(0.4rem + env(safe-area-inset-top, 0px));
+        right: 1.5rem;
         z-index: 10002;
         background: transparent;
         border: none;
@@ -866,7 +891,7 @@ a:hover {
         z-index: 10001;
 
         /* === FIX STARTS HERE === */
-        top: 4.5rem;
+        top: 3.5rem;
         /* Position from the top, leaving space for the close button */
         left: 50%;
         transform: translateX(-50%);
