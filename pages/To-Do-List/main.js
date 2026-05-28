@@ -1370,7 +1370,7 @@ async function triggerSingleListCSVExport(listId) {
 
     const listTasks = (list.taskIds || []).map(id => state.appData.tasks[id]).filter(Boolean);
     if (listTasks.length === 0) {
-        return Utils.showToast("List has no tasks to export");
+        return Utils.showToast(`List has no ${getTerm(false)} to export`);
     }
 
     Utils.showToast("Generating List CSV...", "info");
@@ -1392,7 +1392,7 @@ async function triggerSingleListCSVExport(listId) {
     headers[6] = "Done";
     headers[7] = "main body";
     for (let i = 1; i <= listDepth; i++) {
-        headers[7 + i] = `Sub Task Level ${i}`;
+        headers[7 + i] = `Sub ${getTerm(true, true)} Level ${i}`;
     }
 
     const rowsForList = [];
@@ -1485,7 +1485,7 @@ function generateBoardGridData(board) {
         headers[currentColumnOffset + 6] = `${list.title} Done`;
         headers[currentColumnOffset + 7] = `${list.title} - main body`;
         for (let i = 1; i <= listDepth; i++) {
-            headers[currentColumnOffset + 7 + i] = `${list.title} - Sub Task Level ${i}`;
+            headers[currentColumnOffset + 7 + i] = `${list.title} - Sub ${getTerm(true, true)} Level ${i}`;
         }
 
         const rowsForList = [];

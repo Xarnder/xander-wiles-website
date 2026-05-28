@@ -3931,3 +3931,43 @@ body.theme-story-manager .nested-idea-editor-row.selected {
 [data-theme="light"] .list-description {
     color: #6b7280;
 }
+
+/* --- FROZEN PINNED TASKS STYLING --- */
+.frozen-tasks-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px;
+    background: rgba(251, 191, 36, 0.05);
+    border: 1px dashed rgba(251, 191, 36, 0.25);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+/* Hide when empty */
+.frozen-tasks-container:empty {
+    display: none;
+}
+
+.frozen-tasks-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #f59e0b; /* Golden/Amber color */
+    margin-bottom: 4px;
+    padding-left: 2px;
+}
+
+[data-theme="light"] .frozen-tasks-container {
+    background: rgba(217, 119, 6, 0.05);
+    border: 1px dashed rgba(217, 119, 6, 0.25);
+}
+
+[data-theme="light"] .frozen-tasks-header {
+    color: #b45309;
+}

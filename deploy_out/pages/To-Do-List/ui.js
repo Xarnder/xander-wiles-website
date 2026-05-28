@@ -156,7 +156,7 @@ export function renderBoard() {
 
     // Restore Scroll Positions
     scrollMap.forEach((scrollTop, listId) => {
-        const container = document.getElementById(`container-${listId}`);
+        const container = document.getElementById(`task-list-${listId}`);
         if (container) {
             container.scrollTop = scrollTop;
         }
@@ -466,24 +466,33 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     if (isBottom) {
         listEl.innerHTML = `
             ${listHeader}
-            <div class="task-list" id="container-${list.id}"></div>
+            <div class="task-list" id="task-list-${list.id}">
+                <div class="frozen-tasks-container" id="frozen-container-${list.id}"></div>
+                <div class="normal-tasks-container" id="container-${list.id}"></div>
+            </div>
             ${addFormHtml}
         `;
     } else {
         listEl.innerHTML = `
             ${listHeader}
             ${addFormHtml}
-            <div class="task-list" id="container-${list.id}"></div>
+            <div class="task-list" id="task-list-${list.id}">
+                <div class="frozen-tasks-container" id="frozen-container-${list.id}"></div>
+                <div class="normal-tasks-container" id="container-${list.id}"></div>
+            </div>
         `;
     }
 
-    const taskListContainer = listEl.querySelector('.task-list');
+    const frozenContainer = listEl.querySelector('.frozen-tasks-container');
+    const normalContainer = listEl.querySelector('.normal-tasks-container');
     const taskIds = list.taskIds || [];
     const sortedIds = getSortedTaskIds(taskIds);
 
     let visibleCount = 0;
     let visibleIndex = 1;
     let doneCount = 0;
+    let pinnedCount = 0;
+
     sortedIds.forEach((taskId) => {
         const task = state.appData.tasks[taskId];
         if (task) {
@@ -496,7 +505,15 @@ function renderListColumn(list, isOrphan, isCustomSort) {
             }
 
             if (show) {
-                taskListContainer.appendChild(createTaskElement(task, list.id, visibleIndex));
+                const isImportant = task.text.includes('!!') || task.text.includes('!');
+                const taskEl = createTaskElement(task, list.id, visibleIndex);
+                const shouldPin = isImportant && !state.appData.settings.disableImportantPinning;
+                if (shouldPin) {
+                    frozenContainer.appendChild(taskEl);
+                    pinnedCount++;
+                } else {
+                    normalContainer.appendChild(taskEl);
+                }
                 if (task.completed) doneCount++;
                 visibleIndex++;
                 visibleCount++;
@@ -504,11 +521,18 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         }
     });
 
+    if (pinnedCount > 0) {
+        const pHeader = document.createElement('div');
+        pHeader.className = 'frozen-tasks-header';
+        pHeader.innerHTML = `<i class="ph ph-push-pin-simple-fill"></i> Pinned`;
+        frozenContainer.insertBefore(pHeader, frozenContainer.firstChild);
+    }
+
     if (visibleCount === 0) {
         const emptyMsg = document.createElement('div');
         emptyMsg.className = 'empty-list-msg';
         emptyMsg.innerHTML = `<i class="ph ph-shooting-star"></i> No ${getTerm(false)} here!`;
-        taskListContainer.appendChild(emptyMsg);
+        normalContainer.appendChild(emptyMsg);
     }
 
     const countBadge = document.createElement('span');
@@ -520,7 +544,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     boardContainer.appendChild(listEl);
 
     if (!isOrphan) {
-        const sortable = new Sortable(taskListContainer, {
+        const sortable = new Sortable(normalContainer, {
             group: {
                 name: 'shared',
                 pull: state.dragMode === 'copy' ? 'clone' : true,
@@ -538,7 +562,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         });
         state.sortableInstances.push(sortable);
     } else {
-        const sortable = new Sortable(taskListContainer, {
+        const sortable = new Sortable(normalContainer, {
             disabled: !state.appData.settings.dragEnabled,
             group: { name: 'shared', pull: true, put: false },
             animation: 150,
@@ -839,7 +863,7 @@ export function serializeNestedEditorList(container) {
 export function createTaskElement(task, sourceListId, number) {
     const el = document.createElement('div');
     const isLocked = state.appData.settings.sortMode !== 'custom';
-    const isImportant = task.text.includes('!!');
+    const isImportant = task.text.includes('!') || task.text.includes('!!');
 
     let listCount = 0;
     state.appData.rawLists.forEach(l => {
@@ -1153,16 +1177,25 @@ export function handleDragEnd(evt) {
         });
     };
 
+    const getFrozenIds = (listId) => {
+        const frozenContainer = document.getElementById(`frozen-container-${listId}`);
+        if (!frozenContainer) return [];
+        return Array.from(frozenContainer.children)
+            .filter(el => el.classList.contains('task-card'))
+            .map(el => el.dataset.taskId);
+    };
+
     const batch = writeBatch(db);
 
     if (toIdRaw !== 'orphan-archive') {
         const toContainer = document.getElementById(`container-${toIdRaw}`);
+        const frozenToIds = getFrozenIds(toIdRaw);
         const newToIds = Array.from(toContainer.children)
             .filter(el => !el.classList.contains('sortable-ghost'))
             .map(el => el.dataset.taskId);
 
         const hiddenToIds = getHiddenArchivedIds(toIdRaw);
-        const finalToIds = [...newToIds, ...hiddenToIds];
+        const finalToIds = [...frozenToIds, ...newToIds, ...hiddenToIds];
 
         batch.update(doc(db, "users", state.currentUser.uid, "lists", toIdRaw), { taskIds: finalToIds });
 
@@ -1181,20 +1214,22 @@ export function handleDragEnd(evt) {
 
     if (fromIdRaw !== 'orphan-archive' && fromIdRaw !== toIdRaw) {
         const fromContainer = document.getElementById(`container-${fromIdRaw}`);
+        const frozenFromIds = getFrozenIds(fromIdRaw);
         const newFromIds = Array.from(fromContainer.children)
             .map(el => el.dataset.taskId); // Note: Sortable already removed item from DOM if move
 
         const hiddenFromIds = getHiddenArchivedIds(fromIdRaw);
-        const finalFromIds = [...newFromIds, ...hiddenFromIds];
+        const finalFromIds = [...frozenFromIds, ...newFromIds, ...hiddenFromIds];
 
         batch.update(doc(db, "users", state.currentUser.uid, "lists", fromIdRaw), { taskIds: finalFromIds });
     }
 
     if (fromIdRaw === toIdRaw && fromIdRaw !== 'orphan-archive') {
         const container = document.getElementById(`container-${fromIdRaw}`);
+        const frozenIds = getFrozenIds(fromIdRaw);
         const newIds = Array.from(container.children).map(el => el.dataset.taskId);
         const hiddenIds = getHiddenArchivedIds(fromIdRaw);
-        const finalIds = [...newIds, ...hiddenIds];
+        const finalIds = [...frozenIds, ...newIds, ...hiddenIds];
         batch.update(doc(db, "users", state.currentUser.uid, "lists", fromIdRaw), { taskIds: finalIds });
     }
 
@@ -1457,10 +1492,10 @@ export function updateMultiFloatingBar() {
 export function selectAllInList(listId) {
     if (!state.multiEditMode) return;
 
-    const container = document.getElementById(`container-${listId}`);
-    if (!container) return;
+    const listCol = document.querySelector(`.list-column[data-list-id="${listId}"]`);
+    if (!listCol) return;
 
-    const visibleCards = Array.from(container.querySelectorAll('.task-card'));
+    const visibleCards = Array.from(listCol.querySelectorAll('.task-card'));
     if (visibleCards.length === 0) return;
 
     const allSelected = visibleCards.every(card => state.selectedTaskIds.has(card.dataset.taskId));
