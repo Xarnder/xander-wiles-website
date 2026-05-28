@@ -128,6 +128,7 @@ window.openEditListModal = UI.openEditListModal;
 window.openBoardManager = UI.openBoardManager;
 window.clearCompletedInList = API.clearCompletedInList;
 window.showConfirmModal = showConfirmModal;
+window.triggerSingleListCSVExport = triggerSingleListCSVExport;
 
 // --- BOARD MANAGEMENT EXPOSURE ---
 window.switchBoard = API.switchBoard;
@@ -369,6 +370,7 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('tasks-since-backup-display')) document.getElementById('tasks-since-backup-display').textContent = state.appData.settings.tasksSinceBackup || 0;
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
             if (document.getElementById('show-site-header-toggle')) document.getElementById('show-site-header-toggle').checked = !!state.appData.settings.showSiteHeader;
+            if (document.getElementById('disable-important-pinning-toggle')) document.getElementById('disable-important-pinning-toggle').checked = !!state.appData.settings.disableImportantPinning;
             if (document.getElementById('daily-reset-time-input')) document.getElementById('daily-reset-time-input').value = state.appData.settings.dailyResetTime || '04:00';
             if (document.getElementById('main-nav-placeholder')) {
                 document.getElementById('main-nav-placeholder').style.display = state.appData.settings.showSiteHeader ? 'block' : 'none';
@@ -629,6 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         return checked;
     });
+    setupSettingListener('disable-important-pinning-toggle', 'disableImportantPinning', true);
 
     // Drag Modes
     document.getElementById('mode-cut-btn').onclick = function () {
@@ -1361,6 +1364,88 @@ async function triggerAllBoardsCSVExport() {
     downloadCSV(csvLines.join("\n"), `${(window.APP_CONFIG?.appName || "Task-Master").replace(/\s+/g, '-')}-Full-Project-Export`);
 }
 
+async function triggerSingleListCSVExport(listId) {
+    const list = state.appData.rawLists.find(l => l.id === listId);
+    if (!list) return Utils.showToast("List not found");
+
+    const listTasks = (list.taskIds || []).map(id => state.appData.tasks[id]).filter(Boolean);
+    if (listTasks.length === 0) {
+        return Utils.showToast("List has no tasks to export");
+    }
+
+    Utils.showToast("Generating List CSV...", "info");
+
+    let listDepth = 0;
+    const findMaxDepth = (task, depth) => {
+        listDepth = Math.max(listDepth, depth);
+        if (task.nestedIdeas) task.nestedIdeas.forEach(sub => findMaxDepth(sub, depth + 1));
+    };
+    listTasks.forEach(t => findMaxDepth(t, 0));
+
+    const headers = [];
+    headers[0] = "Created";
+    headers[1] = "Last Edited";
+    headers[2] = "Important";
+    headers[3] = "Glow Effect";
+    headers[4] = "Glow Color";
+    headers[5] = "Archived";
+    headers[6] = "Done";
+    headers[7] = "main body";
+    for (let i = 1; i <= listDepth; i++) {
+        headers[7 + i] = `Sub Task Level ${i}`;
+    }
+
+    const rowsForList = [];
+    const flattenToRows = (node, depth, currentRow, rootTask) => {
+        const myRow = [...currentRow];
+        myRow[depth + 7] = node.text || "";
+        
+        if (node.nestedIdeas && node.nestedIdeas.length > 0) {
+            node.nestedIdeas.forEach(child => flattenToRows(child, depth + 1, myRow, rootTask));
+        } else {
+            myRow[0] = Utils.formatDateTime(rootTask.createdAt);
+            myRow[1] = Utils.formatDateTime(rootTask.updatedAt || rootTask.createdAt);
+            myRow[2] = (node.text || "").includes('!') ? "YES" : "NO";
+            myRow[3] = (rootTask.glowColor && rootTask.glowColor !== 'none') ? "YES" : "NO";
+            myRow[4] = rootTask.glowColor || "none";
+            myRow[5] = node.archived ? "ARCHIVED" : "ACTIVE";
+            myRow[6] = node.completed ? "DONE" : "ACTIVE";
+            rowsForList.push(myRow);
+        }
+    };
+
+    listTasks.forEach(t => flattenToRows(t, 0, new Array(listDepth + 8).fill(""), t));
+
+    const csvGrid = [];
+    rowsForList.forEach((r, idx) => {
+        if (!csvGrid[idx]) csvGrid[idx] = [];
+        for (let c = 0; c < r.length; c++) {
+            csvGrid[idx][c] = r[c];
+        }
+    });
+
+    const escapeCSV = (val) => {
+        if (!val) return '""';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+    };
+
+    const csvLines = [];
+    // Headers
+    csvLines.push(headers.map(h => escapeCSV(h)).join(","));
+
+    // Data Rows
+    csvGrid.forEach(gridRow => {
+        const row = [];
+        for (let i = 0; i < headers.length; i++) {
+            row.push(escapeCSV(gridRow[i] || ""));
+        }
+        csvLines.push(row.join(","));
+    });
+
+    downloadCSV(csvLines.join("\n"), `${list.title.replace(/\s+/g, '-')}-Export`);
+}
+
 function generateBoardGridData(board) {
     const lists = board.listOrder.map(lid => state.appData.rawLists.find(l => l.id === lid)).filter(Boolean);
     if (lists.length === 0) return null;
@@ -1372,8 +1457,15 @@ function generateBoardGridData(board) {
     lists.forEach(list => {
         const listTasks = (list.taskIds || []).map(id => state.appData.tasks[id]).filter(Boolean);
         if (listTasks.length === 0) {
-            headers[currentColumnOffset] = list.title;
-            currentColumnOffset++;
+            headers[currentColumnOffset] = `${list.title} Created`;
+            headers[currentColumnOffset + 1] = `${list.title} Last Edited`;
+            headers[currentColumnOffset + 2] = `${list.title} Important`;
+            headers[currentColumnOffset + 3] = `${list.title} Glow Effect`;
+            headers[currentColumnOffset + 4] = `${list.title} Glow Color`;
+            headers[currentColumnOffset + 5] = `${list.title} Archived`;
+            headers[currentColumnOffset + 6] = `${list.title} Done`;
+            headers[currentColumnOffset + 7] = `${list.title} - main body`;
+            currentColumnOffset += 8;
             return;
         }
 
@@ -1384,29 +1476,38 @@ function generateBoardGridData(board) {
         };
         listTasks.forEach(t => findMaxDepth(t, 0));
 
-        headers[currentColumnOffset] = list.title;
+        headers[currentColumnOffset] = `${list.title} Created`;
+        headers[currentColumnOffset + 1] = `${list.title} Last Edited`;
+        headers[currentColumnOffset + 2] = `${list.title} Important`;
+        headers[currentColumnOffset + 3] = `${list.title} Glow Effect`;
+        headers[currentColumnOffset + 4] = `${list.title} Glow Color`;
+        headers[currentColumnOffset + 5] = `${list.title} Archived`;
+        headers[currentColumnOffset + 6] = `${list.title} Done`;
+        headers[currentColumnOffset + 7] = `${list.title} - main body`;
         for (let i = 1; i <= listDepth; i++) {
-            headers[currentColumnOffset + i] = `${list.title} > Level ${i}`;
+            headers[currentColumnOffset + 7 + i] = `${list.title} - Sub Task Level ${i}`;
         }
 
         const rowsForList = [];
-        const flattenToRows = (node, depth, currentRow) => {
+        const flattenToRows = (node, depth, currentRow, rootTask) => {
             const myRow = [...currentRow];
-            
-            let statusPrefix = "";
-            if (node.archived) statusPrefix += "[ARCHIVED] ";
-            if (node.completed) statusPrefix += "[DONE] ";
-            
-            myRow[depth] = statusPrefix + (node.text || "");
+            myRow[depth + 7] = node.text || "";
             
             if (node.nestedIdeas && node.nestedIdeas.length > 0) {
-                node.nestedIdeas.forEach(child => flattenToRows(child, depth + 1, myRow));
+                node.nestedIdeas.forEach(child => flattenToRows(child, depth + 1, myRow, rootTask));
             } else {
+                myRow[0] = Utils.formatDateTime(rootTask.createdAt);
+                myRow[1] = Utils.formatDateTime(rootTask.updatedAt || rootTask.createdAt);
+                myRow[2] = (node.text || "").includes('!') ? "YES" : "NO";
+                myRow[3] = (rootTask.glowColor && rootTask.glowColor !== 'none') ? "YES" : "NO";
+                myRow[4] = rootTask.glowColor || "none";
+                myRow[5] = node.archived ? "ARCHIVED" : "ACTIVE";
+                myRow[6] = node.completed ? "DONE" : "ACTIVE";
                 rowsForList.push(myRow);
             }
         };
 
-        listTasks.forEach(t => flattenToRows(t, 0, new Array(listDepth + 1).fill("")));
+        listTasks.forEach(t => flattenToRows(t, 0, new Array(listDepth + 8).fill(""), t));
 
         rowsForList.forEach((r, idx) => {
             if (!csvGrid[idx]) csvGrid[idx] = [];
@@ -1415,7 +1516,7 @@ function generateBoardGridData(board) {
             }
         });
 
-        currentColumnOffset += (listDepth + 1);
+        currentColumnOffset += (listDepth + 8);
     });
 
     return { headers, csvGrid };
@@ -1460,7 +1561,11 @@ function downloadCSV(csvContent, baseFilename) {
     
     link.href = url;
     link.download = `${baseFilename}-${timestamp}.csv`;
+    
+    // Append to body to ensure iOS/Safari compatibility
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
     
     setTimeout(() => URL.revokeObjectURL(url), 100);
     Utils.showToast("CSV Export downloaded!", "success");

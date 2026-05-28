@@ -210,7 +210,7 @@
     --shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 0 80px rgba(99, 102, 241, 0.05);
     --dropdown-bg: rgba(10, 5, 25, 0.95);
     --dropdown-bg-glass: rgba(10, 5, 25, 0.92);
-    --input-bg: rgba(255, 255, 255, 0.04);
+    --input-bg: rgba(0, 0, 0, 0.45);
     --input-border: rgba(255, 255, 255, 0.1);
     --input-text: #e8e6f0;
     --fancy-glow-1: rgba(129, 140, 248, 0.65);
@@ -2284,8 +2284,17 @@ input:checked+.slider-small:before {
 
 #modal-task-input,
 #bulk-add-input {
-    width: 100%;
     min-height: 180px;
+}
+
+.glass-input {
+    min-height: 80px;
+}
+
+#modal-task-input,
+#bulk-add-input,
+.glass-input {
+    width: 100%;
     background: var(--input-bg);
     color: var(--input-text);
     padding: 15px;
@@ -2300,7 +2309,8 @@ input:checked+.slider-small:before {
 }
 
 #modal-task-input:focus,
-#bulk-add-input:focus {
+#bulk-add-input:focus,
+.glass-input:focus {
     outline: none;
     border-color: var(--accent-blue);
 }
@@ -3930,4 +3940,44 @@ body.theme-story-manager .nested-idea-editor-row.selected {
 
 [data-theme="light"] .list-description {
     color: #6b7280;
+}
+
+/* --- FROZEN PINNED TASKS STYLING --- */
+.frozen-tasks-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px;
+    background: rgba(251, 191, 36, 0.05);
+    border: 1px dashed rgba(251, 191, 36, 0.25);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+/* Hide when empty */
+.frozen-tasks-container:empty {
+    display: none;
+}
+
+.frozen-tasks-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #f59e0b; /* Golden/Amber color */
+    margin-bottom: 4px;
+    padding-left: 2px;
+}
+
+[data-theme="light"] .frozen-tasks-container {
+    background: rgba(217, 119, 6, 0.05);
+    border: 1px dashed rgba(217, 119, 6, 0.25);
+}
+
+[data-theme="light"] .frozen-tasks-header {
+    color: #b45309;
 }

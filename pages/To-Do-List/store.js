@@ -19,7 +19,8 @@ export const state = {
             backupFreq: 10,
             tasksSinceBackup: 0,
             addTaskLocation: 'top',
-            dailyResetTime: '04:00'
+            dailyResetTime: '04:00',
+            disableImportantPinning: false
         },
         listOrder: [],
         boards: [],
@@ -69,7 +70,7 @@ export function resetState() {
         lists: [],
         rawLists: [],
         tasks: {},
-        settings: { autoArchive: false, showNumbers: false, theme: 'dark', sortMode: 'custom', dragEnabled: null, dailyResetTime: '04:00' },
+        settings: { autoArchive: false, showNumbers: false, theme: 'dark', sortMode: 'custom', dragEnabled: null, dailyResetTime: '04:00', disableImportantPinning: false },
         listOrder: [],
         boards: [],
         currentBoardId: null
