@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Local Ringtone Trimmer</title>
+    <meta name="description" content="Trim MP4, M4R, and WAV files locally in your browser and export iPhone-ready M4R ringtones.">
+    <meta name="theme-color" content="#080a1f">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="main-nav-placeholder"></div>
+
+    <div class="orb orb-one"></div>
+    <div class="orb orb-two"></div>
+    <div class="orb orb-three"></div>
+
+    <main class="page-shell">
+        <section class="glass-panel hero-panel">
+            <div class="hero-copy">
+                <p class="eyebrow">Local audio tool</p>
+                <h1>Ringtone Trimmer</h1>
+                <p class="intro">Upload an MP4, M4R, or WAV file, set the handles, and export an iPhone-ready M4R. Processing happens in your browser.</p>
+            </div>
+            <div class="status-card">
+                <span class="status-dot"></span>
+                <span id="privacyStatus">No file leaves this device</span>
+            </div>
+        </section>
+
+        <section class="workspace">
+            <div class="glass-panel upload-panel" id="dropZone">
+                <input id="fileInput" class="file-input" type="file" accept=".mp3,.mp4,.m4r,.wav,audio/mpeg,audio/mp3,audio/mp4,audio/x-m4r,audio/wav,video/mp4">
+                <label for="fileInput" class="upload-button">
+                    <span class="upload-icon">+</span>
+                    <span>Choose audio or video</span>
+                </label>
+                <p id="fileName" class="file-name">MP3, MP4, M4R, or WAV accepted</p>
+            </div>
+
+            <div class="glass-panel editor-panel">
+                <div class="panel-head">
+                    <div>
+                        <p class="eyebrow">Trim window</p>
+                        <h2 id="durationTitle">Default iOS ringtone: 30 seconds</h2>
+                    </div>
+                    <div class="time-pill" id="trimLength">00:30</div>
+                </div>
+
+                <div class="media-shell">
+                    <audio id="audioPreview" controls></audio>
+                    <canvas id="waveCanvas" width="920" height="180" aria-hidden="true"></canvas>
+                    <div class="wave-mask wave-mask-start" id="waveMaskStart" aria-hidden="true"></div>
+                    <div class="wave-mask wave-mask-end" id="waveMaskEnd" aria-hidden="true"></div>
+                    <div class="wave-timestamps" id="waveTimestamps" aria-hidden="true"></div>
+                    <div class="empty-wave" id="emptyWave">Select a file to reveal the timeline</div>
+                </div>
+
+                <div class="range-wrap" id="rangeWrap">
+                    <div class="range-track">
+                        <div class="range-fill" id="rangeFill"></div>
+                    </div>
+                    <input id="startRange" class="range-input" type="range" min="0" max="30" value="0" step="0.01" aria-label="Trim start">
+                    <input id="endRange" class="range-input" type="range" min="0" max="30" value="30" step="0.01" aria-label="Trim end">
+                </div>
+
+                <div class="time-grid">
+                    <label>
+                        <span>Start</span>
+                        <input id="startTime" type="number" min="0" value="0" step="0.01">
+                    </label>
+                    <label>
+                        <span>End</span>
+                        <input id="endTime" type="number" min="0" value="30" step="0.01">
+                    </label>
+                    <label>
+                        <span>Max length</span>
+                        <input id="maxLength" type="number" min="1" max="40" value="30" step="1">
+                    </label>
+                </div>
+
+                <div class="actions">
+                    <button id="previewBtn" class="secondary-action" type="button" disabled>Preview trim</button>
+                    <button id="resetBtn" class="secondary-action" type="button">Reset</button>
+                    <button id="convertBtn" class="primary-action" type="button" disabled>Convert to M4R</button>
+                </div>
+            </div>
+
+            <aside class="glass-panel settings-panel">
+                <div>
+                    <p class="eyebrow">Output</p>
+                    <h2>Export settings</h2>
+                </div>
+
+                <label class="field">
+                    <span>Format</span>
+                    <select id="formatSelect">
+                        <option value="m4r" selected>M4R ringtone</option>
+                        <option value="m4a">M4A audio</option>
+                        <option value="wav">WAV audio</option>
+                    </select>
+                </label>
+
+                <label class="field">
+                    <span>File name</span>
+                    <input id="outputName" type="text" value="ringtone" placeholder="ringtone" autocomplete="off">
+                </label>
+
+                <div class="fade-panel">
+                    <div class="fade-title">
+                        <p class="eyebrow">Fade</p>
+                        <span>Previewed and exported with the trim</span>
+                    </div>
+
+                    <div class="fade-card">
+                        <label class="fade-switch">
+                            <input id="fadeInEnabled" type="checkbox">
+                            <span class="switch-ui"></span>
+                            <span>Fade in</span>
+                        </label>
+                        <div class="fade-controls">
+                            <input id="fadeInSlider" class="fade-slider" type="range" min="0.1" max="10" value="1.5" step="0.1" disabled aria-label="Fade in seconds">
+                            <label class="fade-number">
+                                <input id="fadeInDuration" type="number" min="0.1" max="10" value="1.5" step="0.1" disabled>
+                                <span>sec</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="fade-card">
+                        <label class="fade-switch">
+                            <input id="fadeOutEnabled" type="checkbox">
+                            <span class="switch-ui"></span>
+                            <span>Fade out</span>
+                        </label>
+                        <div class="fade-controls">
+                            <input id="fadeOutSlider" class="fade-slider" type="range" min="0.1" max="10" value="2" step="0.1" disabled aria-label="Fade out seconds">
+                            <label class="fade-number">
+                                <input id="fadeOutDuration" type="number" min="0.1" max="10" value="2" step="0.1" disabled>
+                                <span>sec</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="progress-box">
+                    <div class="progress-copy">
+                        <span id="progressLabel">Ready</span>
+                        <span id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div id="progressBar" class="progress-bar"></div>
+                    </div>
+                </div>
+
+                <a id="downloadLink" class="download-link" href="#" download aria-disabled="true">
+                    <span class="download-icon">↓</span>
+                    <span>Download ringtone</span>
+                </a>
+                <p id="message" class="message">The converter loads only when you export.</p>
+
+                <div class="debug-panel is-collapsed">
+                    <div class="debug-head">
+                        <span>Debug terminal</span>
+                        <div class="debug-actions">
+                            <button id="toggleDebugBtn" class="debug-button" type="button" aria-expanded="false">Show</button>
+                            <button id="copyDebugBtn" class="debug-button" type="button">Copy</button>
+                            <button id="clearDebugBtn" class="debug-button" type="button">Clear</button>
+                        </div>
+                    </div>
+                    <div id="debugBody" class="debug-body" hidden>
+                        <pre id="debugLog" class="debug-log" aria-live="polite">Waiting for a file...</pre>
+                    </div>
+                </div>
+            </aside>
+        </section>
+    </main>
+
+    <script src="/assets/js/nav-loader.js"></script>
+    <script type="module" src="script.js?v=11"></script>
+</body>
+
+</html>

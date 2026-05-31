@@ -294,6 +294,12 @@
                 <h3>WhatsApp Chat Viewer</h3>
                 <p>A Simple WhatsApp Chat Viewer</p>
             </a>
+            <a href="pages/ringtone-trimmer/" class="page-card glass-card">
+                <img src="/pages/ringtone-trimmer/favicon-dark.svg" class="page-icon" alt="Ringtone Trimmer Icon"
+                    loading="lazy">
+                <h3>Ringtone Trimmer</h3>
+                <p>A tool for trimming audio files and creating ringtones.</p>
+            </a>
             <a href="pages/Timeline_Generator/" class="page-card glass-card">
                 <img src="/pages/Timeline_Generator/favicon-dark.svg" class="page-icon" alt="Timeline Generator Icon"
                     loading="lazy">
@@ -638,7 +644,7 @@
                         const card = document.createElement('a');
                         card.href = `/pages/Music_Playlists/?id=${p.id}`;
                         card.className = 'page-card glass-card';
-                        
+
                         const icon = p.icon || '🎵';
                         const isImage = icon.startsWith('/') || icon.startsWith('http') || /\.(png|jpg|jpeg|svg|webp|avif|gif)$/i.test(icon);
                         const iconHtml = isImage
