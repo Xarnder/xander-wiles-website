@@ -3,7 +3,7 @@ import { fetchFile, toBlobURL } from "https://unpkg.com/@ffmpeg/util@0.12.1/dist
 
 const IOS_RINGTONE_SECONDS = 30;
 const MIN_GAP = 0.25;
-const ACCEPTED_EXTENSIONS = new Set(["mp3", "mp4", "m4r", "wav"]);
+const ACCEPTED_EXTENSIONS = new Set(["mp3", "mp4", "m4a", "m4r", "wav"]);
 
 const els = {
     fileInput: document.getElementById("fileInput"),
@@ -127,7 +127,7 @@ async function loadFile(file) {
 
     if (!ACCEPTED_EXTENSIONS.has(extension)) {
         logDebug(`Rejected file extension: .${extension}.`);
-        setMessage("Choose an MP3, MP4, M4R, or WAV file.", true);
+        setMessage("Choose an MP3, MP4, M4A, M4R, or WAV file.", true);
         return;
     }
 
@@ -614,7 +614,7 @@ function resetTool() {
     revokeMediaUrl();
     els.audioPreview.removeAttribute("src");
     els.audioPreview.load();
-    els.fileName.textContent = "MP3, MP4, M4R, or WAV accepted";
+    els.fileName.textContent = "MP3, MP4, M4A, M4R, or WAV accepted";
     els.outputName.value = "ringtone";
     els.fadeInEnabled.checked = false;
     els.fadeOutEnabled.checked = false;
