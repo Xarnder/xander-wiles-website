@@ -215,3 +215,42 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* --- Special Day Shockwave Animations --- */
+.animate-shockwave-1 {
+  animation: shockwave1 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+
+.animate-shockwave-2 {
+  animation: shockwave2 1.8s cubic-bezier(0.15, 0.75, 0.25, 1) forwards;
+}
+
+@keyframes shockwave1 {
+  0% {
+    width: 0px;
+    height: 0px;
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.1);
+  }
+  100% {
+    width: 250vmax;
+    height: 250vmax;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes shockwave2 {
+  0% {
+    width: 0px;
+    height: 0px;
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.1);
+  }
+  100% {
+    width: 300vmax;
+    height: 300vmax;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}

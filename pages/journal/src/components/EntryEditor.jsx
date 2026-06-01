@@ -16,6 +16,7 @@ import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
 import ConfirmModal from './ConfirmModal';
 import ImageWithSkeleton from './ImageWithSkeleton';
+import SpecialDayAnimation from './SpecialDayAnimation';
 
 export default function EntryEditor() {
     const { currentUser } = useAuth();
@@ -30,6 +31,8 @@ export default function EntryEditor() {
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [isSpecial, setIsSpecial] = useState(false);
+    const [animationActive, setAnimationActive] = useState(false);
+    const [buttonRect, setButtonRect] = useState(null);
     const [showRawHeader, setShowRawHeader] = useState(false);
 
     // Image State
@@ -834,7 +837,20 @@ export default function EntryEditor() {
                             
                             {isEditing ? (
                                 <button
-                                    onClick={() => setIsSpecial(!isSpecial)}
+                                    onClick={(e) => {
+                                        const nextIsSpecial = !isSpecial;
+                                        setIsSpecial(nextIsSpecial);
+                                        if (nextIsSpecial) {
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            setButtonRect({
+                                                x: rect.left + rect.width / 2,
+                                                y: rect.top + rect.height / 2
+                                            });
+                                            setAnimationActive(true);
+                                        } else {
+                                            setAnimationActive(false);
+                                        }
+                                    }}
                                     className={`ml-4 flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${
                                         isSpecial 
                                         ? 'bg-yellow-400 text-black border-yellow-400 font-bold shadow-lg shadow-yellow-400/20 scale-105' 
@@ -1380,6 +1396,14 @@ export default function EntryEditor() {
                         </button>
                     </div>
                 </div>,
+                document.body
+            )}
+
+            {animationActive && buttonRect && createPortal(
+                <SpecialDayAnimation
+                    buttonRect={buttonRect}
+                    onComplete={() => setAnimationActive(false)}
+                />,
                 document.body
             )}
         </div >
