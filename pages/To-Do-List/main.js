@@ -117,6 +117,7 @@ window.deleteList = (id) => {
 window.emptyOrphans = API.emptyOrphans;
 
 window.openEditModal = UI.openEditModal;
+window.summariseTask = UI.summariseTask;
 window.triggerImageUpload = UI.triggerImageUpload;
 window.openImageLightbox = UI.openImageLightbox;
 window.openBulkAddModal = UI.openBulkAddModal;
