@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { format, parseISO } from 'date-fns';
-import { Image as ImageIcon, Calendar, Star } from 'lucide-react';
+import { Image as ImageIcon, Calendar, Star, LayoutGrid, Square } from 'lucide-react';
 
 export default function ImageView() {
     const { currentUser } = useAuth();
@@ -13,6 +13,7 @@ export default function ImageView() {
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showInfo, setShowInfo] = useState(true);
+    const [mobileColumns, setMobileColumns] = useState(2);
 
     useEffect(() => {
         async function fetchImages() {
@@ -129,6 +130,13 @@ export default function ImageView() {
                 <div className="text-right flex flex-col items-end">
                     <div className="flex items-center space-x-4 mb-2">
                         <button
+                            onClick={() => setMobileColumns(prev => prev === 1 ? 2 : 1)}
+                            className="p-2 rounded-lg transition-colors md:hidden bg-white/5 text-text-muted hover:bg-white/10 hover:text-white mr-2"
+                            title={mobileColumns === 1 ? "Show 2 columns" : "Show 1 column"}
+                        >
+                            {mobileColumns === 1 ? <LayoutGrid className="w-5 h-5" /> : <Square className="w-5 h-5" />}
+                        </button>
+                        <button
                             onClick={() => setShowInfo(!showInfo)}
                             className={`p-2 rounded-lg transition-colors ${showInfo ? 'bg-primary text-white' : 'bg-white/5 text-text-muted hover:bg-white/10 hover:text-white'}`}
                             title={showInfo ? "Hide Details" : "Show Details"}
@@ -158,7 +166,7 @@ export default function ImageView() {
                                 <Calendar className="w-4 h-4 mr-2 text-primary" />
                                 {monthYear}
                             </h3>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div className={`grid ${mobileColumns === 1 ? 'grid-cols-1' : 'grid-cols-2'} md:grid-cols-3 lg:grid-cols-4 gap-4`}>
                                 {monthEntries.map((entry) => (
                                     <div
                                         key={entry.id}

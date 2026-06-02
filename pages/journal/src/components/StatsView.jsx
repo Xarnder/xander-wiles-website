@@ -373,6 +373,11 @@ export default function StatsView() {
             iterDate.setDate(iterDate.getDate() + 1);
         }
 
+        const rangeDays = { week: 7, month: 30, '6months': 180, year: 365 }[timeRange] || 30;
+        const spanDays = entries.length > 1 
+            ? Math.ceil(Math.abs(new Date(entries[entries.length - 1].id) - new Date(entries[0].id)) / (1000 * 60 * 60 * 24)) + 1
+            : rangeDays;
+
         // Top Words ... (same as before)
         const sortedWords = Object.entries(wordCounts)
             .sort(([, a], [, b]) => b - a)
@@ -387,10 +392,27 @@ export default function StatsView() {
                     tagData = { name: 'Special Day', color: '#facc15', isSpecial: true };
                 }
                 
+                const freqDays = spanDays / stats.count;
+                let freqText = '';
+                const roundedDays = Math.round(freqDays);
+                
+                if (roundedDays <= 1) {
+                    freqText = `Daily`;
+                } else if (roundedDays >= 30 && roundedDays < 365) {
+                    const mos = Math.round(roundedDays / 30);
+                    freqText = mos === 1 ? 'Monthly' : `Every ${mos} mo`;
+                } else if (roundedDays >= 365) {
+                    const yrs = Math.round(roundedDays / 365);
+                    freqText = yrs === 1 ? 'Yearly' : `Every ${yrs} yr`;
+                } else {
+                    freqText = `Every ${roundedDays} d`;
+                }
+
                 return {
                     tagId,
                     count: stats.count,
                     avgWords: Math.round(stats.totalWords / stats.count),
+                    frequency: freqText,
                     data: tagData
                 };
             })
@@ -753,9 +775,10 @@ export default function StatsView() {
                                             style={{ width: `${(item.count / stats.topTags[0].count) * 100}%` }}
                                         />
                                     </div>
-                                    <div className="flex flex-col items-end min-w-[40px]">
+                                    <div className="flex flex-col items-end min-w-[50px]">
                                         <span className="text-sm text-text-muted font-bold">{item.count}</span>
                                         <span className="text-[10px] text-text-muted/60 whitespace-nowrap">~{item.avgWords} w</span>
+                                        <span className="text-[10px] text-purple-400/80 whitespace-nowrap" title="Average Frequency">{item.frequency}</span>
                                     </div>
                                 </div>
                             </div>
