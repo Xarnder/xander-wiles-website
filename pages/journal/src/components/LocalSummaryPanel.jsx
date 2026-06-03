@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Clipboard, ListChecks, Loader, LockKeyhole, Sparkles, Tags, Terminal } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Clipboard, Cpu, FileText, ListChecks, Loader, LockKeyhole, Sparkles, Tags, Terminal, WandSparkles } from 'lucide-react';
 import { isWebGPUSupported, summariseJournalEntry } from '../lib/localSummariser';
 
 function SummaryList({ title, items }) {
@@ -31,6 +31,123 @@ function getProgressWidth(progress) {
     }
 
     return '35%';
+}
+
+function getProcessingOverview(progress) {
+    const stage = progress?.stage;
+
+    if (stage === 'loading_model') {
+        return {
+            title: 'Preparing local AI',
+            detail: 'Loading the on-device model and WebGPU shaders.'
+        };
+    }
+
+    if (stage === 'chunking') {
+        return {
+            title: 'Reading the entry',
+            detail: 'Splitting the journal text into manageable local chunks.'
+        };
+    }
+
+    if (stage === 'summarising_chunks' || stage === 'generating') {
+        return {
+            title: 'Writing the summary',
+            detail: progress?.total > 1
+                ? `Processing chunk ${progress.current || 1} of ${progress.total}.`
+                : 'Extracting events, tasks, mood, and key points.'
+        };
+    }
+
+    if (stage === 'retrying_json') {
+        return {
+            title: 'Cleaning the format',
+            detail: 'Retrying with stricter JSON instructions.'
+        };
+    }
+
+    if (stage === 'json_fallback') {
+        return {
+            title: 'Using a safe fallback',
+            detail: 'The model output was messy, so the app is preserving a conservative local summary.'
+        };
+    }
+
+    if (stage === 'combining') {
+        return {
+            title: 'Combining notes',
+            detail: 'Merging chunk summaries into one structured result.'
+        };
+    }
+
+    return {
+        title: 'Starting local summary',
+        detail: 'Your entry stays in this browser.'
+    };
+}
+
+function getStepState(progress, step) {
+    const order = ['loading_model', 'chunking', 'summarising_chunks', 'combining', 'complete'];
+    const stage = progress?.stage === 'generating' ? 'summarising_chunks' : progress?.stage;
+    const currentIndex = order.indexOf(stage);
+    const stepIndex = order.indexOf(step);
+
+    if (currentIndex === -1 || stepIndex === -1) return 'pending';
+    if (stepIndex < currentIndex) return 'done';
+    if (stepIndex === currentIndex) return 'active';
+    return 'pending';
+}
+
+function ProcessingStep({ icon, label, state }) {
+    return (
+        <div className={`flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 ${
+            state === 'done'
+                ? 'border-green-300/20 bg-green-300/10 text-green-200'
+                : state === 'active'
+                    ? 'border-secondary/30 bg-secondary/10 text-secondary'
+                    : 'border-white/10 bg-white/5 text-text-muted'
+        }`}>
+            <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
+                state === 'active' ? 'bg-secondary/20 animate-pulse' : 'bg-white/5'
+            }`}>
+                {state === 'done' ? <CheckCircle2 className="h-3.5 w-3.5" /> : icon}
+            </div>
+            <span className="truncate text-[10px] font-bold uppercase tracking-widest">{label}</span>
+        </div>
+    );
+}
+
+function SummarySkeleton() {
+    return (
+        <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-secondary">
+                <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+                Drafting summary
+            </div>
+            <div className="mt-4 space-y-3">
+                <div className="h-5 w-2/5 rounded bg-white/10 animate-pulse" />
+                <div className="space-y-2">
+                    <div className="h-3 w-full rounded bg-white/10 animate-pulse" />
+                    <div className="h-3 w-4/5 rounded bg-white/10 animate-pulse" />
+                </div>
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+                {[0, 1].map(column => (
+                    <div key={column} className="space-y-2 rounded-lg border border-white/5 bg-black/20 p-3">
+                        <div className="h-3 w-24 rounded bg-white/10 animate-pulse" />
+                        <div className="h-3 w-full rounded bg-white/10 animate-pulse" />
+                        <div className="h-3 w-5/6 rounded bg-white/10 animate-pulse" />
+                        <div className="h-3 w-3/4 rounded bg-white/10 animate-pulse" />
+                    </div>
+                ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+                <div className="h-6 w-16 rounded-full bg-white/10 animate-pulse" />
+                <div className="h-6 w-20 rounded-full bg-white/10 animate-pulse" />
+                <div className="h-6 w-14 rounded-full bg-white/10 animate-pulse" />
+            </div>
+        </div>
+    );
 }
 
 function formatDebugDetails(details) {
@@ -65,7 +182,7 @@ export default function LocalSummaryPanel({ entryText, wordCount, debugTargetId,
 
     const cleanEntryText = useMemo(() => (entryText || '').trim(), [entryText]);
     const hasEntryText = cleanEntryText.length > 0;
-    const statusMessage = progress?.message || '';
+    const processingOverview = getProcessingOverview(progress);
 
     useEffect(() => {
         setIsSupported(isWebGPUSupported());
@@ -320,20 +437,39 @@ export default function LocalSummaryPanel({ entryText, wordCount, debugTargetId,
                 )}
 
                 {isRunning && (
-                    <div className="rounded-lg border border-white/10 bg-white/5 p-3" aria-live="polite">
-                        <div className="flex items-center justify-between gap-4 text-xs text-text-secondary">
-                            <span>{statusMessage || 'Running locally...'}</span>
+                    <div className="overflow-hidden rounded-lg border border-secondary/20 bg-gradient-to-br from-secondary/10 via-white/5 to-primary/10 p-4 shadow-lg shadow-secondary/5" aria-live="polite">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="flex min-w-0 items-start gap-3">
+                                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-secondary/30 bg-black/30 text-secondary">
+                                    <WandSparkles className="h-5 w-5" />
+                                    <span className="absolute inset-0 rounded-lg border border-secondary/30 animate-ping opacity-30" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-bold text-white">{processingOverview.title}</p>
+                                    <p className="mt-1 text-xs leading-relaxed text-text-muted">{processingOverview.detail}</p>
+                                </div>
+                            </div>
+
                             {progress?.total > 0 && (
-                                <span className="shrink-0 font-mono text-text-muted">
+                                <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs font-mono text-text-muted">
                                     {progress.current}/{progress.total}
-                                </span>
+                                </div>
                             )}
                         </div>
-                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/30">
+
+                        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+                            <ProcessingStep icon={<Cpu className="h-3.5 w-3.5" />} label="Load" state={getStepState(progress, 'loading_model')} />
+                            <ProcessingStep icon={<FileText className="h-3.5 w-3.5" />} label="Read" state={getStepState(progress, 'chunking')} />
+                            <ProcessingStep icon={<Sparkles className="h-3.5 w-3.5" />} label="Draft" state={getStepState(progress, 'summarising_chunks')} />
+                            <ProcessingStep icon={<ListChecks className="h-3.5 w-3.5" />} label="Merge" state={getStepState(progress, 'combining')} />
+                        </div>
+
+                        <div className="relative mt-4 h-2 overflow-hidden rounded-full bg-black/40">
                             <div
-                                className="h-full rounded-full bg-gradient-to-r from-secondary to-primary transition-all duration-300"
+                                className="h-full rounded-full bg-gradient-to-r from-secondary via-white to-primary shadow-[0_0_18px_rgba(6,182,212,0.45)] transition-all duration-500 ease-out"
                                 style={{ width: getProgressWidth(progress) }}
                             />
+                            <div className="absolute inset-y-0 left-0 w-1/3 animate-shimmer bg-gradient-to-r from-transparent via-white/40 to-transparent" />
                         </div>
                     </div>
                 )}
@@ -387,6 +523,8 @@ export default function LocalSummaryPanel({ entryText, wordCount, debugTargetId,
                         )}
                     </div>
                 )}
+
+                {isRunning && !summary && <SummarySkeleton />}
 
                 </div>
                 {!debugTarget && debugTerminal}
