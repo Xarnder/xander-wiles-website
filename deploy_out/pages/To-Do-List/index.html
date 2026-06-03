@@ -633,6 +633,44 @@
         </div>
     </div>
 
+    <!-- AI Activity Side Panel -->
+    <div id="ai-panel-overlay" class="ai-panel-overlay hidden">
+        <aside class="ai-panel glass-panel" aria-labelledby="ai-panel-title">
+            <div class="ai-panel-header">
+                <div>
+                    <h2 id="ai-panel-title">AI Activity</h2>
+                    <p id="ai-panel-model">Local model</p>
+                </div>
+                <button id="ai-panel-close-btn" class="icon-btn-large" title="Close AI panel">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+
+            <section class="ai-panel-section">
+                <h3>Task</h3>
+                <div id="ai-panel-task-text" class="ai-task-preview"></div>
+            </section>
+
+            <section class="ai-panel-section ai-log-section">
+                <h3>Debug Log</h3>
+                <div id="ai-debug-log" class="ai-debug-log" aria-live="polite"></div>
+            </section>
+
+            <section class="ai-panel-section">
+                <h3>Output</h3>
+                <div id="ai-output" class="ai-output empty">Waiting for the model...</div>
+                <div class="ai-panel-actions">
+                    <button id="ai-revert-summary-btn" class="btn secondary" type="button">
+                        <i class="ph ph-arrow-u-up-left"></i> Revert
+                    </button>
+                    <button id="ai-redo-summary-btn" class="btn secondary" type="button">
+                        <i class="ph ph-arrow-clockwise"></i> Redo
+                    </button>
+                </div>
+            </section>
+        </aside>
+    </div>
+
     <!-- Toast -->
     <div id="toast" class="toast hidden">
         <i class="ph ph-warning"></i>
@@ -866,6 +904,15 @@
                         Move to Board
                     </button>
                 </div>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-section">
+                <h3>Export List:</h3>
+                <button id="edit-list-export-csv-btn" class="btn secondary full-width">
+                    <i class="ph ph-file-csv"></i> Export List to CSV
+                </button>
             </div>
 
             <div class="modal-divider"></div>

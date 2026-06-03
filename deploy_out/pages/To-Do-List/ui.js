@@ -2,12 +2,15 @@ import { state } from './store.js';
 import { escapeHtml, showToast, generateId, formatDateTime, getTerm, parseNestedMarkdown, isUserTyping } from './utils.js';
 import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, handleSyncError, updateDoc } from './api.js';
 import { db } from './firebase-config.js';
-import { doc, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
 
 // Global DOM Elements
 const boardContainer = document.getElementById('board-container');
 const totalTaskCountEl = document.getElementById('total-task-count');
 const syncStatusText = document.getElementById('sync-status-text');
+let aiPanelInitialized = false;
+let aiPanelTaskId = null;
 
 // --- RENDERING HELPERS ---
 
@@ -902,15 +905,6 @@ export function createTaskElement(task, sourceListId, number) {
 
     let actionsHtml = '';
     if (task.archived) {
-        // Archived Task: Click whole card to open modal
-        el.setAttribute('onclick', `window.openArchivedTaskModal('${task.id}')`);
-        el.style.cursor = 'pointer';
-
-        // Minimal actions (redundant but kept for desktop ease)
-        // Hidden in CSS maybe or kept small? User said "allows me to press any archived task", 
-        // implies the card click is the primary interaction.
-        // We will keep actionsHtml but ensuring they stop propagation.
-
         actionsHtml = `
             <button class="icon-btn copy-task-btn" title="Copy Text" onclick="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')" ontouchstart="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')"><i class="ph ph-copy"></i></button>
             <button class="icon-btn unarchive-task-btn" title="Restore" onclick="event.stopPropagation(); window.unarchiveTask('${task.id}')" ontouchstart="event.stopPropagation(); window.unarchiveTask('${task.id}')"><i class="ph ph-arrow-u-up-left"></i></button>
@@ -920,6 +914,7 @@ export function createTaskElement(task, sourceListId, number) {
         actionsHtml = `
             <button class="icon-btn copy-task-btn" title="Copy Text" onclick="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')" ontouchstart="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')"><i class="ph ph-copy"></i></button>
             <button class="icon-btn edit-task-btn" title="Edit" onclick="event.stopPropagation(); window.openEditModal('${task.id}', '${sourceListId}')"><i class="ph ph-pencil-simple"></i></button>
+            <button class="icon-btn ai-summary-btn" title="Summarise locally with ${getLocalAIModelId()}" onclick="event.stopPropagation(); window.summariseTask('${task.id}')" ontouchstart="event.preventDefault(); event.stopPropagation(); window.summariseTask('${task.id}')"><i class="ph ph-sparkle"></i></button>
             <button class="icon-btn archive-task-btn" title="Archive" onclick="event.stopPropagation(); window.archiveTask('${task.id}')"><i class="ph ph-archive"></i></button>
         `;
     }
@@ -961,22 +956,29 @@ export function createTaskElement(task, sourceListId, number) {
     let nestedHtml = task.nestedIdeas ? generateNestedIdeasHtml(task.nestedIdeas) : '';
     const hasNested = task.nestedIdeas && task.nestedIdeas.length > 0;
     const nestedIndicatorHtml = hasNested ? `<i class="ph ph-list-plus nested-indicator" title="Has sub-ideas"></i>` : '';
+    const aiModifiedIconHtml = task.aiModified ? `<i class="ph ph-sparkle ai-modified-indicator" title="Changed by local AI"></i>` : '';
+    const summaryHtml = task.summary && !task.aiModified
+        ? `<div class="task-summary"><i class="ph ph-sparkle"></i><span>${escapeHtml(task.summary)}</span></div>`
+        : '';
 
     el.innerHTML = `
-        ${checkboxHtml}
-        ${numberHtml}
+        <div class="task-top-row">
+            ${checkboxHtml}
+            ${numberHtml}
+            <div class="task-actions">${actionsHtml}</div>
+        </div>
         <div class="task-content-wrapper">
-            <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml} ${nestedIndicatorHtml}</div>
+            <div class="task-text">${aiModifiedIconHtml}${escapeHtml(task.text)} ${linkedIconHtml} ${nestedIndicatorHtml}</div>
+            ${summaryHtml}
             ${nestedHtml}
             ${recentCompletedHtml}
             ${imagesHtml}
         </div>
-        <div class="task-actions">${actionsHtml}</div>
     `;
 
     // Expand/Reveal actions logic
-    el.addEventListener('click', () => {
-        if (task.archived) return;
+    el.addEventListener('click', (event) => {
+        if (event.target.closest('.task-actions, .task-checkbox, .task-img-preview')) return;
 
         const wasShowing = (state.expandedTaskId === task.id);
 
@@ -995,6 +997,234 @@ export function createTaskElement(task, sourceListId, number) {
     });
 
     return el;
+}
+
+function initAiPanel() {
+    if (aiPanelInitialized) return;
+    aiPanelInitialized = true;
+
+    const overlay = document.getElementById('ai-panel-overlay');
+    const closeBtn = document.getElementById('ai-panel-close-btn');
+    const redoBtn = document.getElementById('ai-redo-summary-btn');
+    const revertBtn = document.getElementById('ai-revert-summary-btn');
+    if (!overlay || !closeBtn) return;
+
+    closeBtn.onclick = () => overlay.classList.add('hidden');
+    if (redoBtn) {
+        redoBtn.onclick = () => {
+            if (aiPanelTaskId) summariseTask(aiPanelTaskId, { force: true });
+        };
+    }
+    if (revertBtn) {
+        revertBtn.onclick = () => {
+            if (aiPanelTaskId) revertAiTask(aiPanelTaskId);
+        };
+    }
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) overlay.classList.add('hidden');
+    });
+}
+
+function getAiPanel() {
+    initAiPanel();
+    return {
+        overlay: document.getElementById('ai-panel-overlay'),
+        model: document.getElementById('ai-panel-model'),
+        taskText: document.getElementById('ai-panel-task-text'),
+        log: document.getElementById('ai-debug-log'),
+        output: document.getElementById('ai-output'),
+        redoBtn: document.getElementById('ai-redo-summary-btn'),
+        revertBtn: document.getElementById('ai-revert-summary-btn')
+    };
+}
+
+function addAiLog(message, type = 'info') {
+    const panel = getAiPanel();
+    if (!panel.log) return;
+
+    const row = document.createElement('div');
+    row.className = `ai-log-entry ${type}`;
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    row.innerHTML = `<span class="ai-log-time">${time}</span><span>${escapeHtml(message)}</span>`;
+    panel.log.appendChild(row);
+    panel.log.scrollTop = panel.log.scrollHeight;
+}
+
+function setAiOutput(message, stateName = '') {
+    const panel = getAiPanel();
+    if (!panel.output) return;
+
+    panel.output.textContent = message;
+    panel.output.className = `ai-output ${stateName}`.trim();
+}
+
+function setAiRedoEnabled(isEnabled) {
+    const panel = getAiPanel();
+    if (!panel.redoBtn) return;
+
+    panel.redoBtn.disabled = !isEnabled;
+}
+
+function setAiRevertVisible(isVisible) {
+    const panel = getAiPanel();
+    if (!panel.revertBtn) return;
+
+    panel.revertBtn.classList.toggle('hidden', !isVisible);
+    panel.revertBtn.disabled = !isVisible;
+}
+
+function openAiPanel(task, taskId) {
+    const panel = getAiPanel();
+    if (!panel.overlay) return;
+
+    aiPanelTaskId = taskId;
+    panel.model.textContent = getLocalAIModelId();
+    panel.taskText.textContent = task.aiRawInput || task.text || '';
+    panel.log.innerHTML = '';
+    setAiOutput('Waiting for the model...', 'empty');
+    setAiRedoEnabled(true);
+    setAiRevertVisible(Boolean(task.aiModified && task.aiRawInput));
+    panel.overlay.classList.remove('hidden');
+}
+
+function buildAiNestedIdeas(rawText, existingNestedIdeas = []) {
+    const existing = Array.isArray(existingNestedIdeas) ? existingNestedIdeas : [];
+    const withoutPriorRawInput = existing.filter(idea => !idea.aiRawInputSubtask);
+
+    return [
+        {
+            text: `Original note: ${rawText}`,
+            nestedIdeas: [],
+            aiRawInputSubtask: true,
+            tempId: `ai-original-${Date.now()}`
+        },
+        ...withoutPriorRawInput
+    ];
+}
+
+function removeAiRawInputSubtasks(existingNestedIdeas = []) {
+    if (!Array.isArray(existingNestedIdeas)) return [];
+
+    return existingNestedIdeas
+        .filter(idea => !idea.aiRawInputSubtask)
+        .map(idea => ({
+            ...idea,
+            nestedIdeas: removeAiRawInputSubtasks(idea.nestedIdeas || [])
+        }));
+}
+
+export async function revertAiTask(taskId) {
+    const task = state.appData.tasks[taskId];
+    if (!task || !state.currentUser) return;
+
+    openAiPanel(task, taskId);
+
+    if (!task.aiModified || !task.aiRawInput) {
+        addAiLog('No AI changes found to revert.', 'warning');
+        setAiOutput('This task does not have reversible AI changes.', 'warning');
+        return;
+    }
+
+    setAiRedoEnabled(false);
+    setAiRevertVisible(false);
+    addAiLog('Reverting task to original user text.');
+
+    try {
+        await updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+            text: task.aiRawInput,
+            nestedIdeas: removeAiRawInputSubtasks(task.nestedIdeas),
+            summary: deleteField(),
+            aiTitle: deleteField(),
+            aiItems: deleteField(),
+            aiPriority: deleteField(),
+            aiDueDate: deleteField(),
+            aiTags: deleteField(),
+            aiStructuredOutput: deleteField(),
+            aiModified: deleteField(),
+            aiRawInput: deleteField(),
+            summaryModel: deleteField(),
+            summaryUpdatedAt: deleteField()
+        });
+
+        setAiOutput(task.aiRawInput, 'success');
+        addAiLog('AI changes removed.', 'success');
+    } catch (error) {
+        console.error('AI revert failed:', error);
+        const message = error.message || 'Could not revert AI changes.';
+        addAiLog(message, 'error');
+        setAiOutput(message, 'warning');
+        setAiRevertVisible(true);
+    } finally {
+        setAiRedoEnabled(true);
+    }
+}
+
+export async function summariseTask(taskId, options = {}) {
+    const task = state.appData.tasks[taskId];
+    if (!task || !state.currentUser) return;
+    const force = Boolean(options.force);
+    const rawInput = task.aiRawInput || task.text;
+
+    openAiPanel(task, taskId);
+    addAiLog(force ? 'Redo requested.' : 'AI panel opened.');
+    addAiLog(`Selected model: ${getLocalAIModelId()}`);
+    addAiLog('Reading task text.');
+
+    if (task.summary && !force) {
+        addAiLog('Existing saved summary found.', 'success');
+        const savedOutput = task.aiStructuredOutput ? JSON.stringify(task.aiStructuredOutput, null, 2) : task.summary;
+        setAiOutput(savedOutput, 'success');
+        return;
+    }
+
+    if (!shouldSummarise(rawInput)) {
+        addAiLog('Task is below the summary length threshold.', 'warning');
+        setAiOutput('This task is already short enough.', 'warning');
+        return;
+    }
+
+    const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
+    const button = card?.querySelector('.ai-summary-btn');
+    if (button) {
+        button.disabled = true;
+        button.classList.add('is-loading');
+    }
+    setAiRedoEnabled(false);
+
+    try {
+        addAiLog('Checking browser support for local inference.');
+        const aiResult = await summariseTaskText(rawInput, (message) => addAiLog(message));
+        addAiLog('Structured JSON generated.');
+        setAiOutput(JSON.stringify(aiResult, null, 2), 'success');
+        addAiLog('Updating task text and preserving original note as a sub-task.');
+        await updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+            text: aiResult.summary,
+            summary: aiResult.summary,
+            aiTitle: aiResult.title,
+            aiItems: aiResult.items,
+            aiPriority: aiResult.priority,
+            aiDueDate: aiResult.due_date,
+            aiTags: aiResult.tags,
+            aiStructuredOutput: aiResult,
+            aiModified: true,
+            aiRawInput: rawInput,
+            nestedIdeas: buildAiNestedIdeas(rawInput, task.nestedIdeas),
+            summaryModel: getLocalAIModelId(),
+            summaryUpdatedAt: Date.now()
+        });
+        addAiLog('Task updated by AI.', 'success');
+    } catch (error) {
+        console.error('Local summary failed:', error);
+        const message = error.message || 'Could not summarise this task locally.';
+        addAiLog(message, 'error');
+        setAiOutput(message, 'warning');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.classList.remove('is-loading');
+        }
+        setAiRedoEnabled(true);
+    }
 }
 
 export function updateTotalTaskCount() {
@@ -1922,7 +2152,17 @@ export function openEditListModal(listId) {
     const newDelete = deleteBtn.cloneNode(true);
     deleteBtn.parentNode.replaceChild(newDelete, deleteBtn);
 
+    const exportCsvBtn = document.getElementById('edit-list-export-csv-btn');
+    const newExportCsv = exportCsvBtn.cloneNode(true);
+    exportCsvBtn.parentNode.replaceChild(newExportCsv, exportCsvBtn);
+
     // Handlers
+    newExportCsv.onclick = () => {
+        if (window.triggerSingleListCSVExport) {
+            window.triggerSingleListCSVExport(listId);
+        }
+    };
+
     newBulk.onclick = () => {
         const text = bulkInput.value;
         const items = parseNestedMarkdown(text);

@@ -1,4 +1,5 @@
-const CACHE_NAME = 'taskmaster-v1';
+const CACHE_NAME = 'taskmaster-beta-v9';
+const OWNED_CACHE_PREFIXES = ['taskmaster-beta-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -8,6 +9,8 @@ const ASSETS_TO_CACHE = [
     './store.js',
     './ui.js',
     './utils.js',
+    './local-ai.js',
+    '/assets/js/local-llm.js',
     './firebase-config.js',
     './favicon.ico',
     './favicon-light.svg',
@@ -36,7 +39,7 @@ self.addEventListener('activate', (event) => {
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames.map((cacheName) => {
-                    if (cacheName !== CACHE_NAME) {
+                    if (cacheName !== CACHE_NAME && OWNED_CACHE_PREFIXES.some(prefix => cacheName.startsWith(prefix))) {
                         console.log('[Service Worker] Deleting old cache:', cacheName);
                         return caches.delete(cacheName);
                     }

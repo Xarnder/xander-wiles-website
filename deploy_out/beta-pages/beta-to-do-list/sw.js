@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-v1';
+const CACHE_NAME = 'taskmaster-v8';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -8,6 +8,7 @@ const ASSETS_TO_CACHE = [
     './store.js',
     './ui.js',
     './utils.js',
+    './local-ai.js',
     './firebase-config.js',
     './favicon.ico',
     './favicon-light.svg',

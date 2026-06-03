@@ -17,6 +17,8 @@ import StorageStats from './StorageStats';
 import ConfirmModal from './ConfirmModal';
 import ImageWithSkeleton from './ImageWithSkeleton';
 import SpecialDayAnimation from './SpecialDayAnimation';
+import LocalSummaryPanel from './LocalSummaryPanel';
+import { LOCAL_SUMMARISER_MODEL_ID } from '../lib/localSummariser';
 
 export default function EntryEditor() {
     const { currentUser } = useAuth();
@@ -34,6 +36,7 @@ export default function EntryEditor() {
     const [animationActive, setAnimationActive] = useState(false);
     const [buttonRect, setButtonRect] = useState(null);
     const [showRawHeader, setShowRawHeader] = useState(false);
+    const [localAiSummaryRecord, setLocalAiSummaryRecord] = useState(null);
 
     // Image State
     const [images, setImages] = useState([]); // Array of { url, path, size }
@@ -307,6 +310,7 @@ export default function EntryEditor() {
                     setSelectedTags(data.tags || []);
                     setIsSpecial(data.isSpecial || false);
                     setMood(data.mood || null);
+                    setLocalAiSummaryRecord(data.aiSummary?.local || null);
                     lastSavedContent.current = data.content || '';
                     isFirstLoad.current = true;
 
@@ -339,6 +343,7 @@ export default function EntryEditor() {
                     setSelectedTags([]);
                     setIsSpecial(false);
                     setMood(null);
+                    setLocalAiSummaryRecord(null);
                     lastSavedContent.current = '';
                     isFirstLoad.current = true;
                 }
@@ -611,6 +616,36 @@ export default function EntryEditor() {
             toastError('Failed to copy to clipboard');
         }
     };
+
+    async function handleLocalSummaryGenerated(summary) {
+        if (!currentUser) return;
+
+        const generatedAtClient = new Date().toISOString();
+        const summaryRecord = {
+            summary,
+            modelId: LOCAL_SUMMARISER_MODEL_ID,
+            provider: 'local-webllm',
+            generatedAtClient,
+            sourceWordCount: wordCount,
+            sourceCharacterCount: displayContent.length,
+            version: 1
+        };
+
+        setLocalAiSummaryRecord(summaryRecord);
+
+        const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
+        await setDoc(docRef, {
+            aiSummary: {
+                local: {
+                    ...summaryRecord,
+                    generatedAt: serverTimestamp()
+                }
+            },
+            aiSummaryUpdatedAt: serverTimestamp()
+        }, { merge: true });
+
+        success('Local AI summary saved');
+    }
 
     const mdeOptions = useMemo(() => {
         return {
@@ -1044,6 +1079,13 @@ export default function EntryEditor() {
                             </div>
                         )}
 
+                        <LocalSummaryPanel
+                            entryText={displayContent}
+                            wordCount={wordCount}
+                            savedSummaryRecord={localAiSummaryRecord}
+                            onSummaryGenerated={handleLocalSummaryGenerated}
+                        />
+
                         {/* Image Upload Area */}
                         <div className="mb-4">
                             {(images.length > 0 || uploading) && (
@@ -1186,7 +1228,7 @@ export default function EntryEditor() {
                 ) : (
                     <>
                         <div className="flex-1 overflow-y-auto custom-scrollbar -mr-4 pr-4">
-                            <div className="markdown-content prose prose-invert max-w-none">
+                            <div className="max-w-none">
                                 {mood && (
                                     <div className="flex items-center gap-3 mb-8 p-3 rounded-2xl bg-white/5 border border-white/10 w-fit">
                                         <div 
@@ -1243,14 +1285,30 @@ export default function EntryEditor() {
                                     </div>
                                 </div>
 
-                                {displayContent ? (
-                                    <ReactMarkdown>{displayContent}</ReactMarkdown>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center h-[40vh] text-text-muted opacity-60">
-                                        <Edit2 className="w-12 h-12 mb-4 opacity-30" />
-                                        <p className="text-lg">This page is empty.</p>
-                                        <p className="text-sm">Click Edit to start writing.</p>
-                                    </div>
+                                {displayContent && (
+                                    <LocalSummaryPanel
+                                        entryText={displayContent}
+                                        wordCount={wordCount}
+                                        debugTargetId={`journal-ai-debug-${date}`}
+                                        savedSummaryRecord={localAiSummaryRecord}
+                                        onSummaryGenerated={handleLocalSummaryGenerated}
+                                    />
+                                )}
+
+                                <div className="markdown-content prose prose-invert max-w-none">
+                                    {displayContent ? (
+                                        <ReactMarkdown>{displayContent}</ReactMarkdown>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center h-[40vh] text-text-muted opacity-60">
+                                            <Edit2 className="w-12 h-12 mb-4 opacity-30" />
+                                            <p className="text-lg">This page is empty.</p>
+                                            <p className="text-sm">Click Edit to start writing.</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {displayContent && (
+                                    <div id={`journal-ai-debug-${date}`} className="mt-8" />
                                 )}
                             </div>
                         </div>

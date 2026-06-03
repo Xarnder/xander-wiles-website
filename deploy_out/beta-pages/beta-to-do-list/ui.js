@@ -3,11 +3,14 @@ import { escapeHtml, showToast, generateId } from './utils.js';
 import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, handleSyncError, updateDoc } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
 
 // Global DOM Elements
 const boardContainer = document.getElementById('board-container');
 const totalTaskCountEl = document.getElementById('total-task-count');
 const syncStatusText = document.getElementById('sync-status-text');
+let aiPanelInitialized = false;
+let aiPanelTaskId = null;
 
 // --- RENDERING HELPERS ---
 
@@ -297,6 +300,7 @@ export function createTaskElement(task, sourceListId, number) {
     } else {
         actionsHtml = `
             <button class="icon-btn" title="Edit" onclick="window.openEditModal('${task.id}', '${sourceListId}')"><i class="ph ph-pencil-simple"></i></button>
+            <button class="icon-btn ai-summary-btn" title="Summarise locally with ${getLocalAIModelId()}" onclick="window.summariseTask('${task.id}')"><i class="ph ph-sparkle"></i></button>
             <button class="icon-btn" title="Add Image" onclick="window.triggerImageUpload('${task.id}')"><i class="ph ph-image"></i></button>
             <button class="icon-btn" title="Archive" onclick="window.archiveTask('${task.id}')"><i class="ph ph-archive"></i></button>
         `;
@@ -304,20 +308,172 @@ export function createTaskElement(task, sourceListId, number) {
 
     let numberHtml = state.appData.settings.showNumbers ? `<span class="task-number">${number}.</span>` : '';
     let linkedIconHtml = isLinked ? `<i class="ph ph-link" style="font-size: 0.8em; margin-left: 5px; color: var(--accent-blue);" title="Linked to multiple lists"></i>` : '';
+    let summaryHtml = task.summary
+        ? `<div class="task-summary"><i class="ph ph-sparkle"></i><span>${escapeHtml(task.summary)}</span></div>`
+        : '';
 
     el.innerHTML = `
-        <input type="checkbox" class="task-checkbox" 
-            ${task.completed ? 'checked' : ''} 
-            ${task.archived ? 'disabled' : ''} 
-            onchange="window.toggleTaskComplete('${task.id}', this.checked)">
-        ${numberHtml}
+        <div class="task-top-row">
+            <input type="checkbox" class="task-checkbox" 
+                ${task.completed ? 'checked' : ''} 
+                ${task.archived ? 'disabled' : ''} 
+                onchange="window.toggleTaskComplete('${task.id}', this.checked)">
+            ${numberHtml}
+            <div class="task-actions">${actionsHtml}</div>
+        </div>
         <div class="task-content-wrapper">
             <div class="task-text">${escapeHtml(task.text)} ${linkedIconHtml}</div>
+            ${summaryHtml}
             ${imagesHtml}
         </div>
-        <div class="task-actions">${actionsHtml}</div>
     `;
+
+    el.addEventListener('click', (event) => {
+        if (event.target.closest('.task-actions, .task-checkbox, .task-img-preview')) return;
+
+        const wasShowing = el.classList.contains('show-actions');
+        document.querySelectorAll('.task-card.show-actions').forEach(card => {
+            if (card !== el) card.classList.remove('show-actions');
+        });
+        el.classList.toggle('show-actions', !wasShowing);
+    });
+
     return el;
+}
+
+function initAiPanel() {
+    if (aiPanelInitialized) return;
+    aiPanelInitialized = true;
+
+    const overlay = document.getElementById('ai-panel-overlay');
+    const closeBtn = document.getElementById('ai-panel-close-btn');
+    const redoBtn = document.getElementById('ai-redo-summary-btn');
+    if (!overlay || !closeBtn) return;
+
+    closeBtn.onclick = () => overlay.classList.add('hidden');
+    if (redoBtn) {
+        redoBtn.onclick = () => {
+            if (aiPanelTaskId) summariseTask(aiPanelTaskId, { force: true });
+        };
+    }
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) overlay.classList.add('hidden');
+    });
+}
+
+function getAiPanel() {
+    initAiPanel();
+    return {
+        overlay: document.getElementById('ai-panel-overlay'),
+        model: document.getElementById('ai-panel-model'),
+        taskText: document.getElementById('ai-panel-task-text'),
+        log: document.getElementById('ai-debug-log'),
+        output: document.getElementById('ai-output'),
+        redoBtn: document.getElementById('ai-redo-summary-btn')
+    };
+}
+
+function addAiLog(message, type = 'info') {
+    const panel = getAiPanel();
+    if (!panel.log) return;
+
+    const row = document.createElement('div');
+    row.className = `ai-log-entry ${type}`;
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    row.innerHTML = `<span class="ai-log-time">${time}</span><span>${escapeHtml(message)}</span>`;
+    panel.log.appendChild(row);
+    panel.log.scrollTop = panel.log.scrollHeight;
+}
+
+function setAiOutput(message, stateName = '') {
+    const panel = getAiPanel();
+    if (!panel.output) return;
+
+    panel.output.textContent = message;
+    panel.output.className = `ai-output ${stateName}`.trim();
+}
+
+function setAiRedoEnabled(isEnabled) {
+    const panel = getAiPanel();
+    if (!panel.redoBtn) return;
+
+    panel.redoBtn.disabled = !isEnabled;
+}
+
+function openAiPanel(task, taskId) {
+    const panel = getAiPanel();
+    if (!panel.overlay) return;
+
+    aiPanelTaskId = taskId;
+    panel.model.textContent = getLocalAIModelId();
+    panel.taskText.textContent = task.text || '';
+    panel.log.innerHTML = '';
+    setAiOutput('Waiting for the model...', 'empty');
+    setAiRedoEnabled(true);
+    panel.overlay.classList.remove('hidden');
+}
+
+export async function summariseTask(taskId, options = {}) {
+    const task = state.appData.tasks[taskId];
+    if (!task || !state.currentUser) return;
+    const force = Boolean(options.force);
+
+    openAiPanel(task, taskId);
+    addAiLog(force ? 'Redo requested.' : 'AI panel opened.');
+    addAiLog(`Selected model: ${getLocalAIModelId()}`);
+    addAiLog('Reading task text.');
+
+    if (task.summary && !force) {
+        addAiLog('Existing saved summary found.', 'success');
+        const savedOutput = task.aiStructuredOutput ? JSON.stringify(task.aiStructuredOutput, null, 2) : task.summary;
+        setAiOutput(savedOutput, 'success');
+        return;
+    }
+
+    if (!shouldSummarise(task.text)) {
+        addAiLog('Task is below the summary length threshold.', 'warning');
+        setAiOutput('This task is already short enough.', 'warning');
+        return;
+    }
+
+    const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
+    const button = card?.querySelector('.ai-summary-btn');
+    if (button) {
+        button.disabled = true;
+        button.classList.add('is-loading');
+    }
+    setAiRedoEnabled(false);
+
+    try {
+        addAiLog('Checking browser support for local inference.');
+        const aiResult = await summariseTaskText(task.text, (message) => addAiLog(message));
+        addAiLog('Structured JSON generated.');
+        setAiOutput(JSON.stringify(aiResult, null, 2), 'success');
+        addAiLog('Saving summary to the task.');
+        await updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+            summary: aiResult.summary,
+            aiTitle: aiResult.title,
+            aiItems: aiResult.items,
+            aiPriority: aiResult.priority,
+            aiDueDate: aiResult.due_date,
+            aiTags: aiResult.tags,
+            aiStructuredOutput: aiResult,
+            summaryModel: getLocalAIModelId(),
+            summaryUpdatedAt: Date.now()
+        });
+        addAiLog('Summary saved.', 'success');
+    } catch (error) {
+        console.error('Local summary failed:', error);
+        const message = error.message || 'Could not summarise this task locally.';
+        addAiLog(message, 'error');
+        setAiOutput(message, 'warning');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.classList.remove('is-loading');
+        }
+        setAiRedoEnabled(true);
+    }
 }
 
 export function updateTotalTaskCount() {
