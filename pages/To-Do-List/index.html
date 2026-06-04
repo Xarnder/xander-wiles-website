@@ -954,6 +954,28 @@
         </div>
     </div>
 
+    <!-- AUTOMATION MOVE CONFIRMATION MODAL -->
+    <div id="automation-confirm-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel automation-confirm-modal">
+            <div class="automation-confirm-icon"><i class="ph ph-arrows-left-right"></i></div>
+            <h2>Move these tasks?</h2>
+            <p id="automation-confirm-desc">
+                These tasks are being moved from one list to another.
+            </p>
+            <div id="automation-confirm-list" class="automation-confirm-list">
+                <!-- Pending automation tasks injected here -->
+            </div>
+            <div class="automation-confirm-actions">
+                <button id="automation-confirm-ok-btn" class="btn primary">
+                    <i class="ph ph-check-circle"></i> Okay, move tasks
+                </button>
+                <button id="automation-confirm-cancel-btn" class="btn secondary">
+                    Cancel - do not move
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- AUTOMATION REPORT MODAL -->
     <div id="automation-report-modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel">

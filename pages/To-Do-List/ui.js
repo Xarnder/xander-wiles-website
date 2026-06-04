@@ -2254,6 +2254,67 @@ document.getElementById('new-board-title-input').addEventListener('keypress', (e
     }
 });
 
+function renderAutomationMoveList(listContainer, movedTasksLog) {
+    listContainer.innerHTML = '';
+    movedTasksLog.forEach(log => {
+        const item = document.createElement('div');
+        item.className = 'automation-move-item';
+        item.innerHTML = `
+            <div class="automation-move-task">${escapeHtml(String(log.text || 'Unknown Task'))}</div>
+            <div class="automation-move-route">
+                <i class="ph ph-arrow-circle-right"></i>
+                <span>Moved from <strong>${escapeHtml(String(log.from || 'Unknown List'))}</strong> to <strong>${escapeHtml(String(log.to || 'Unknown List'))}</strong></span>
+            </div>
+        `;
+        listContainer.appendChild(item);
+    });
+}
+
+export function showAutomationMoveConfirmation(movedTasksLog) {
+    if (!movedTasksLog || movedTasksLog.length === 0) return Promise.resolve(false);
+
+    const modal = document.getElementById('automation-confirm-modal-overlay');
+    const listContainer = document.getElementById('automation-confirm-list');
+    const desc = document.getElementById('automation-confirm-desc');
+    const okBtn = document.getElementById('automation-confirm-ok-btn');
+    const cancelBtn = document.getElementById('automation-confirm-cancel-btn');
+    if (!modal || !listContainer || !desc || !okBtn || !cancelBtn) return Promise.resolve(false);
+
+    const taskLabel = getTerm(movedTasksLog.length === 1);
+    desc.textContent = `These ${movedTasksLog.length} ${taskLabel} are being moved from their current list to their new list.`;
+    renderAutomationMoveList(listContainer, movedTasksLog);
+
+    return new Promise(resolve => {
+        let resolved = false;
+
+        const finish = (shouldMove) => {
+            if (resolved) return;
+            resolved = true;
+            modal.classList.add('hidden');
+            okBtn.removeEventListener('click', handleOk);
+            cancelBtn.removeEventListener('click', handleCancel);
+            modal.removeEventListener('click', handleOverlayClick);
+            document.removeEventListener('keydown', handleKeydown);
+            resolve(shouldMove);
+        };
+
+        const handleOk = () => finish(true);
+        const handleCancel = () => finish(false);
+        const handleOverlayClick = (e) => {
+            if (e.target === modal) finish(false);
+        };
+        const handleKeydown = (e) => {
+            if (e.key === 'Escape') finish(false);
+        };
+
+        okBtn.addEventListener('click', handleOk);
+        cancelBtn.addEventListener('click', handleCancel);
+        modal.addEventListener('click', handleOverlayClick);
+        document.addEventListener('keydown', handleKeydown);
+        modal.classList.remove('hidden');
+    });
+}
+
 export function showAutomationReport(movedTasksLog, title = `${getTerm(false, true)} Auto-Moved`, subtitle = `The following ${getTerm(false)} were moved automatically:`) {
     if (!movedTasksLog || movedTasksLog.length === 0) return;
     if (isUserTyping()) {
@@ -2270,22 +2331,7 @@ export function showAutomationReport(movedTasksLog, title = `${getTerm(false, tr
     const p = modal.querySelector('p');
     if(p) p.textContent = subtitle;
 
-    listContainer.innerHTML = '';
-    movedTasksLog.forEach(log => {
-        const item = document.createElement('div');
-        item.style.padding = '10px';
-        item.style.marginBottom = '10px';
-        item.style.background = 'rgba(255, 255, 255, 0.05)';
-        item.style.borderRadius = '8px';
-        item.style.fontSize = '0.9rem';
-        item.innerHTML = `
-            <div style="font-weight: bold; margin-bottom: 4px;">${log.text}</div>
-            <div style="font-size: 0.8rem; color: var(--text-secondary);">
-                <i class="ph ph-arrow-circle-right" style="color: var(--accent-blue);"></i> Moved from <strong>${log.from}</strong> to <strong>${log.to}</strong>
-            </div>
-        `;
-        listContainer.appendChild(item);
-    });
+    renderAutomationMoveList(listContainer, movedTasksLog);
     
     modal.classList.remove('hidden');
 }
@@ -2300,9 +2346,9 @@ export function showRecentAutoMovedTasks() {
             const fromList = state.appData.rawLists.find(l => l.id === task.lastAutoMovedFromListId)?.title || "Unknown List";
             const toList = state.appData.rawLists.find(l => l.id === task.lastAutoMovedToListId)?.title || "Unknown List";
             recentTasks.push({
-                text: escapeHtml(task.text),
-                from: escapeHtml(fromList),
-                to: escapeHtml(toList),
+                text: task.text,
+                from: fromList,
+                to: toList,
                 timeMs: task.lastAutoMovedAt
             });
         }
