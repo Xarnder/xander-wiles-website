@@ -171,6 +171,27 @@
                                     class="currency-symbol">£</span>0.00</span>
                         </div>
                     </div>
+
+                </section>
+
+                <!-- Percentage Cut Results -->
+                <section class="card cut-stats-widget hidden" id="widget-cut-stats">
+                    <h2 class="widget-title">After Percentage Cuts</h2>
+                    <div id="percentage-cut-stats" class="cut-stats" aria-live="polite"></div>
+                </section>
+
+                <!-- Percentage Cuts -->
+                <section class="card percentage-cuts-widget" id="widget-cuts">
+                    <div class="cut-widget-header">
+                        <h2 class="widget-title" style="margin: 0;">Percentage Cuts</h2>
+                        <button id="add-percentage-cut-btn" class="btn-outline btn-small" type="button">+ Add Cut</button>
+                    </div>
+
+                    <div class="input-group cut-settings-group">
+                        <ul id="percentage-cut-list" class="sortable-list percentage-cut-list">
+                            <!-- Cut items will be injected by JS -->
+                        </ul>
+                    </div>
                 </section>
 
                 <!-- Calendar -->
@@ -385,6 +406,9 @@
             </div>
         </div>
     </main>
+
+    <!-- Widget Image Exporter -->
+    <script src="vendor/html2canvas.min.js"></script>
 
     <!-- Firebase Logic -->
     <script type="module" src="js/main.js"></script>

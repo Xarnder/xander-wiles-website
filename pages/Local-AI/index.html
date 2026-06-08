@@ -59,10 +59,6 @@
         <div class="lai-glass-card">
             <header class="lai-card-header">
                 <div class="lai-header-actions">
-                    <button id="enable-webgpu-btn" class="lai-header-btn" title="How to Enable WebGPU"
-                        style="display: none; width: auto; padding: 0 12px; font-size: 0.8rem; background: rgba(139, 92, 246, 0.1); border-color: var(--lai-accent); color: var(--lai-accent);">
-                        Enable WebGPU
-                    </button>
                     <button id="toggle-debug-btn" class="lai-header-btn" title="Toggle Download Progress / Debug">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
                             stroke-width="2">
@@ -95,57 +91,51 @@
                     <span id="status-text">Starting...</span>
                 </div>
                 <div class="lai-platform-badge" id="platform-badge">
-                    <!-- Populated by JavaScript when macOS/Apple Silicon detected -->
+                    Local only
                 </div>
-                <!-- Model selector: hidden by default, shown by JS when WebGPU available -->
-                <div class="lai-model-selector-wrapper" id="model-selector-wrapper" style="display: none;">
-                    <select id="model-selector" class="lai-select">
-                        <option value="qwen3-4b">4B (~2.5GB)</option>
-                        <option value="qwen3-8b">8B (~5GB)</option>
+                <div class="lai-runtime-selector-wrapper">
+                    <select id="runtime-selector" class="lai-select lai-runtime-select" title="Runtime">
+                        <option value="qwen-browser">Qwen Browser</option>
+                        <option value="bonsai-server">Bonsai Server</option>
                     </select>
-                </div>
-                <!-- Fallback mode indicator: shown when WebGPU not available -->
-                <div class="lai-fallback-badge" id="fallback-badge" style="display: none;">
-                    <span class="lai-fallback-icon">⚡</span>
-                    <span>CPU Mode</span>
                 </div>
             </header>
 
             <!-- PROGRESS SECTION (Visible during load) -->
             <div id="progress-panel" class="lai-progress-panel">
 
-                <!-- Stage 1: Downloading -->
+                <!-- Local runtime connection -->
                 <div id="download-stage" class="lai-stage-container">
                     <div class="lai-stage-label">
-                        <span>Downloading Weights</span>
-                        <span id="dl-percent">0%</span>
+                        <span>Local AI Runtime</span>
+                        <span id="dl-percent">Checking</span>
                     </div>
                     <div class="lai-progress-track">
-                        <div id="dl-bar" class="lai-progress-fill" style="width: 0%"></div>
+                        <div id="dl-bar" class="lai-progress-fill" style="width: 35%"></div>
                     </div>
-                    <small id="dl-filename" class="lai-file-name">Waiting to start...</small>
+                    <small id="dl-filename" class="lai-file-name">Preparing local runtime...</small>
                 </div>
 
                 <!-- Stage 2: Initializing (Hidden by default) -->
                 <div id="init-stage" class="lai-stage-container hidden">
                     <div class="lai-stage-label">
-                        <span>Initializing Device (WebGPU)</span>
+                        <span>Initializing local model</span>
                     </div>
                     <div class="lai-infinite-track">
                         <div class="lai-infinite-bar"></div>
                     </div>
-                    <small class="lai-file-name">Compiling shaders & loading engine...</small>
+                    <small class="lai-file-name">Loading model files into browser storage...</small>
                 </div>
 
                 <div class="lai-loading-controls"
                     style="margin-top: 20px; text-align: center; display: flex; gap: 10px; justify-content: center;">
-                    <button id="stop-download-btn" class="lai-header-btn"
-                        style="width: auto; padding: 8px 16px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #ef4444;">
-                        Stop Download
+                    <button id="copy-command-btn" class="lai-header-btn"
+                        style="width: auto; padding: 8px 16px; font-size: 0.8rem;">
+                        Copy Start Command
                     </button>
-                    <button id="restart-download-btn" class="lai-header-btn hidden"
+                    <button id="reconnect-btn" class="lai-header-btn"
                         style="width: auto; padding: 8px 16px; font-size: 0.8rem; background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); color: #22c55e;">
-                        Restart Download
+                        Reconnect
                     </button>
                 </div>
 
@@ -154,8 +144,7 @@
             <div id="chat-container" class="lai-chat-area">
                 <div class="lai-message lai-system">
                     <div class="lai-bubble">
-                        Welcome. The model is loading above. <br>
-                        This downloads the model once. Future reloads will be instant.
+                        Welcome. Choose Qwen Browser for server-free local chat, or Bonsai Server for the 1-bit model.
                     </div>
                 </div>
             </div>
@@ -180,26 +169,36 @@
                         </label>
                     </div>
                     <div class="lai-setting-row">
+                        <label for="runtime-selector-settings">Runtime</label>
+                        <select id="runtime-selector-settings" class="lai-select">
+                            <option value="qwen-browser">Qwen Browser (no server)</option>
+                            <option value="bonsai-server">Bonsai Server</option>
+                        </select>
+                    </div>
+                    <div class="lai-setting-row">
+                        <label for="qwen-model-selector">Qwen Model</label>
+                        <select id="qwen-model-selector" class="lai-select">
+                            <option value="qwen3-0.6b">Qwen3 0.6B (~352MB)</option>
+                            <option value="qwen3-4b">Qwen3 4B (~2.28GB)</option>
+                        </select>
+                    </div>
+                    <div class="lai-setting-row">
                         <label for="system-prompt">System Prompt</label>
                         <textarea id="system-prompt" rows="3"
                             placeholder="You are a helpful assistant.">You are a helpful assistant.</textarea>
                     </div>
                     <div class="lai-setting-row">
-                        <label>Hardware Selection</label>
-                        <button id="reset-hardware-btn" class="lai-icon-btn"
-                            style="width: auto; padding: 6px 12px; font-size: 0.8rem;">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <path d="M23 4v6h-6"></path>
-                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                            </svg>
-                            Reset Choice
-                        </button>
+                        <label for="server-url">Bonsai Server URL</label>
+                        <input id="server-url" class="lai-text-input" type="url" value="http://127.0.0.1:8080/v1">
+                    </div>
+                    <div class="lai-setting-row">
+                        <label for="model-id">Bonsai Model ID</label>
+                        <input id="model-id" class="lai-text-input" type="text" value="prism-ml/Bonsai-8B-gguf:Q1_0">
                     </div>
                     <div class="lai-setting-row lai-cache-row">
                         <div class="lai-cache-info">
-                            <label>Model Storage</label>
-                            <small id="cache-location">Browser Cache (Cache API)</small>
+                            <label>Local Settings</label>
+                            <small id="cache-location">Endpoint, model id, and chat history</small>
                         </div>
                         <button id="clear-cache-btn" class="lai-icon-btn lai-danger-btn">
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
@@ -209,7 +208,23 @@
                                     d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
                                 </path>
                             </svg>
-                            Clear Cache
+                            Clear Settings
+                        </button>
+                    </div>
+                    <div class="lai-setting-row lai-cache-row">
+                        <div class="lai-cache-info">
+                            <label>Qwen Model Cache</label>
+                            <small>Browser model files downloaded by WebLLM</small>
+                        </div>
+                        <button id="clear-qwen-cache-btn" class="lai-icon-btn lai-danger-btn">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path
+                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                </path>
+                            </svg>
+                            Clear Qwen Cache
                         </button>
                     </div>
                 </div>

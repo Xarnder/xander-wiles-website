@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { createPercentageCut, state } from './state.js';
 import { formatDuration } from './utils.js';
 
 export const DOM = {
@@ -23,6 +23,8 @@ export const DOM = {
     weeklyEarningsDisplay: document.getElementById('weekly-earnings'),
     monthlyHoursDisplay: document.getElementById('monthly-hours'),
     monthlyEarningsDisplay: document.getElementById('monthly-earnings'),
+    percentageCutStatsWidget: document.getElementById('widget-cut-stats'),
+    percentageCutStats: document.getElementById('percentage-cut-stats'),
     prevMonthBtn: document.getElementById('prev-month'),
     nextMonthBtn: document.getElementById('next-month'),
     calendarMonthYear: document.getElementById('calendar-month-year'),
@@ -44,6 +46,8 @@ export const DOM = {
     confirmOkBtn: document.getElementById('confirm-ok-btn'),
     confirmCancelBtn: document.getElementById('confirm-cancel-btn'),
     widgetOrderList: document.getElementById('widget-order-list'),
+    addPercentageCutBtn: document.getElementById('add-percentage-cut-btn'),
+    percentageCutList: document.getElementById('percentage-cut-list'),
     showTitlesToggle: document.getElementById('show-titles-toggle'),
     continueSessionToggle: document.getElementById('continue-session-toggle'),
     ganttChart: document.getElementById('gantt-chart'),
@@ -123,6 +127,124 @@ export function updateCurrencyDisplays() {
     } else {
         DOM.liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>0.00`;
     }
+}
+
+function formatMoney(amount) {
+    return `${state.currentCurrency}${amount.toFixed(2)}`;
+}
+
+function createCutStatMoneyRow(className, label, amount) {
+    const row = document.createElement('span');
+    row.className = `cut-stat-money ${className}`;
+
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+
+    const valueEl = document.createElement('strong');
+    const formattedAmount = formatMoney(amount);
+    valueEl.textContent = formattedAmount;
+    valueEl.style.setProperty('--value-chars', formattedAmount.length);
+
+    row.appendChild(labelEl);
+    row.appendChild(valueEl);
+    return row;
+}
+
+export function renderPercentageCutStats(totals) {
+    if (!DOM.percentageCutStats) return;
+
+    DOM.percentageCutStats.innerHTML = '';
+
+    if (!state.percentageCuts.length) {
+        if (DOM.percentageCutStatsWidget) {
+            DOM.percentageCutStatsWidget.classList.add('hidden');
+        }
+        return;
+    }
+
+    if (DOM.percentageCutStatsWidget) {
+        DOM.percentageCutStatsWidget.classList.remove('hidden');
+    }
+
+    let runningTotals = {
+        daily: totals.daily || 0,
+        weekly: totals.weekly || 0,
+        monthly: totals.monthly || 0
+    };
+    const originalTotals = { ...runningTotals };
+
+    state.percentageCuts.forEach((cut, index) => {
+        const beforeTotals = { ...runningTotals };
+        const sourceTotals = cut.basis === 'original' ? originalTotals : beforeTotals;
+        const deductionTotals = {
+            daily: sourceTotals.daily * (cut.percentage / 100),
+            weekly: sourceTotals.weekly * (cut.percentage / 100),
+            monthly: sourceTotals.monthly * (cut.percentage / 100)
+        };
+        runningTotals = {
+            daily: Math.max(beforeTotals.daily - deductionTotals.daily, 0),
+            weekly: Math.max(beforeTotals.weekly - deductionTotals.weekly, 0),
+            monthly: Math.max(beforeTotals.monthly - deductionTotals.monthly, 0)
+        };
+
+        const layer = document.createElement('div');
+        layer.className = 'cut-stat-layer';
+
+        const header = document.createElement('div');
+        header.className = 'cut-stat-header';
+
+        const name = document.createElement('span');
+        name.className = 'cut-stat-name';
+        name.textContent = `${index + 1}. ${cut.name}`;
+
+        const rate = document.createElement('span');
+        rate.className = 'cut-stat-rate';
+        rate.textContent = `-${cut.percentage}%`;
+
+        const basis = document.createElement('span');
+        basis.className = 'cut-stat-basis';
+        basis.textContent = cut.basis === 'original' ? 'from original' : 'from accumulated';
+
+        header.appendChild(name);
+        header.appendChild(rate);
+        header.appendChild(basis);
+
+        const grid = document.createElement('div');
+        grid.className = 'cut-stat-grid';
+
+        [
+            { label: 'Today', key: 'daily' },
+            { label: 'This Week', key: 'weekly' },
+            { label: 'This Month', key: 'monthly' }
+        ].forEach(period => {
+            const beforeAmount = beforeTotals[period.key];
+            const sourceAmount = sourceTotals[period.key];
+            const afterAmount = runningTotals[period.key];
+            const differenceAmount = beforeAmount - afterAmount;
+            const item = document.createElement('div');
+            item.className = 'cut-stat-item';
+
+            const label = document.createElement('span');
+            label.className = 'cut-stat-label';
+            label.textContent = period.label;
+
+            const before = createCutStatMoneyRow('cut-stat-before', 'Pool Before', beforeAmount);
+            const after = createCutStatMoneyRow('cut-stat-after', 'Pool After', afterAmount);
+            const source = createCutStatMoneyRow('cut-stat-source', 'Cut Base', sourceAmount);
+            const difference = createCutStatMoneyRow('cut-stat-difference', 'Cut Taken', differenceAmount);
+
+            item.appendChild(label);
+            item.appendChild(after);
+            item.appendChild(source);
+            item.appendChild(before);
+            item.appendChild(difference);
+            grid.appendChild(item);
+        });
+
+        layer.appendChild(header);
+        layer.appendChild(grid);
+        DOM.percentageCutStats.appendChild(layer);
+    });
 }
 
 export function toggleTimerUI(isRunning) {
@@ -442,6 +564,208 @@ export function applyWidgetTitles() {
     }
 }
 
+function waitForPaint() {
+    return new Promise(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+}
+
+function getWidgetExportTitle(widget) {
+    const title = widget.querySelector('.widget-title');
+    return (title ? title.textContent : widget.id || 'widget').trim() || 'widget';
+}
+
+function getWidgetExportFilename(widget, format) {
+    const safeTitle = getWidgetExportTitle(widget)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'widget';
+    const date = new Date().toISOString().slice(0, 10);
+    const extension = format === 'jpeg' ? 'jpg' : 'png';
+    return `work-tracker-${safeTitle}-${date}.${extension}`;
+}
+
+function getScrollableExportElements(widget) {
+    return [widget, ...widget.querySelectorAll('*')].filter(element => {
+        const styles = getComputedStyle(element);
+        const overflow = `${styles.overflow} ${styles.overflowX} ${styles.overflowY}`;
+        return /(auto|scroll)/.test(overflow);
+    });
+}
+
+async function prepareWidgetForExport(widget) {
+    const restoredStyles = [];
+    const restoredScrolls = [];
+    const width = Math.ceil(widget.getBoundingClientRect().width);
+    const scrollableElements = getScrollableExportElements(widget);
+
+    widget.classList.add('widget-export-capturing');
+
+    [widget, ...scrollableElements].forEach(element => {
+        restoredStyles.push([element, element.getAttribute('style')]);
+        restoredScrolls.push([element, element.scrollTop, element.scrollLeft]);
+        element.style.maxHeight = 'none';
+        element.style.overflow = 'visible';
+        element.style.overflowX = 'visible';
+        element.style.overflowY = 'visible';
+        element.scrollTop = 0;
+        element.scrollLeft = 0;
+    });
+
+    widget.style.width = `${width}px`;
+    await waitForPaint();
+    widget.style.height = `${Math.ceil(widget.scrollHeight)}px`;
+    await waitForPaint();
+
+    return () => {
+        widget.classList.remove('widget-export-capturing');
+        restoredStyles.reverse().forEach(([element, style]) => {
+            if (style === null) {
+                element.removeAttribute('style');
+            } else {
+                element.setAttribute('style', style);
+            }
+        });
+        restoredScrolls.forEach(([element, scrollTop, scrollLeft]) => {
+            element.scrollTop = scrollTop;
+            element.scrollLeft = scrollLeft;
+        });
+    };
+}
+
+let html2CanvasPromise = null;
+
+function loadHtml2Canvas() {
+    if (window.html2canvas) {
+        return Promise.resolve(window.html2canvas);
+    }
+
+    if (!html2CanvasPromise) {
+        html2CanvasPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = new URL('../vendor/html2canvas.min.js', import.meta.url).href;
+            script.onload = () => {
+                if (window.html2canvas) {
+                    resolve(window.html2canvas);
+                } else {
+                    reject(new Error('Widget image exporter did not load.'));
+                }
+            };
+            script.onerror = () => reject(new Error('Could not load widget image exporter.'));
+            document.head.appendChild(script);
+        });
+    }
+
+    return html2CanvasPromise;
+}
+
+function downloadCanvas(canvas, widget, format) {
+    const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const quality = format === 'jpeg' ? 0.92 : undefined;
+
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+            if (!blob) {
+                reject(new Error('Could not create image file.'));
+                return;
+            }
+
+            const url = URL.createObjectURL(blob);
+            if (Array.isArray(window.__widgetExportDownloads)) {
+                window.__widgetExportDownloads.push({
+                    download: getWidgetExportFilename(widget, format),
+                    hrefStartsWithBlob: url.startsWith('blob:'),
+                    size: blob.size,
+                    type: blob.type
+                });
+                URL.revokeObjectURL(url);
+                resolve();
+                return;
+            }
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = getWidgetExportFilename(widget, format);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            resolve();
+        }, mimeType, quality);
+    });
+}
+
+async function saveWidgetImage(widget, format, button) {
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Saving...';
+
+    let restoreWidget = null;
+    try {
+        const html2canvas = await loadHtml2Canvas();
+        restoreWidget = await prepareWidgetForExport(widget);
+        const rect = widget.getBoundingClientRect();
+        const scale = Math.min(window.devicePixelRatio || 1, 2);
+        const canvas = await html2canvas(widget, {
+            backgroundColor: '#070913',
+            scale,
+            useCORS: true,
+            allowTaint: false,
+            logging: false,
+            width: Math.ceil(rect.width),
+            height: Math.ceil(widget.scrollHeight),
+            windowWidth: Math.ceil(Math.max(document.documentElement.scrollWidth, rect.width)),
+            windowHeight: Math.ceil(Math.max(document.documentElement.scrollHeight, widget.scrollHeight)),
+            scrollX: -window.scrollX,
+            scrollY: -window.scrollY
+        });
+        await downloadCanvas(canvas, widget, format);
+    } catch (error) {
+        console.error('Debug: Widget image export failed', error);
+        showAlert('Export Error', 'Could not save this widget as an image. Please try again.');
+    } finally {
+        if (restoreWidget) {
+            restoreWidget();
+        }
+        button.disabled = false;
+        button.textContent = originalText;
+    }
+}
+
+function createWidgetExportFooter(widget) {
+    const footer = document.createElement('div');
+    footer.className = 'widget-export-footer';
+
+    const formatSelect = document.createElement('select');
+    formatSelect.className = 'widget-export-format';
+    formatSelect.title = 'Image format';
+    formatSelect.innerHTML = `
+        <option value="png">PNG</option>
+        <option value="jpeg">JPEG</option>
+    `;
+
+    const button = document.createElement('button');
+    button.className = 'widget-export-button btn-outline btn-small';
+    button.type = 'button';
+    button.textContent = 'Save Image';
+    button.title = `Save ${getWidgetExportTitle(widget)} as an image`;
+
+    button.addEventListener('click', () => {
+        saveWidgetImage(widget, formatSelect.value, button);
+    });
+
+    footer.appendChild(formatSelect);
+    footer.appendChild(button);
+    return footer;
+}
+
+export function setupWidgetImageExports() {
+    document.querySelectorAll('.dashboard-grid > .card[id^="widget-"]').forEach(widget => {
+        if (widget.querySelector(':scope > .widget-export-footer')) return;
+        widget.appendChild(createWidgetExportFooter(widget));
+    });
+}
+
 export function updateActiveFilterDisplay() {
     if (!DOM.activeFiltersContainer) return;
     DOM.activeFiltersContainer.innerHTML = '';
@@ -470,6 +794,9 @@ export function renderWidgetOrderList() {
     const labels = {
         'widget-timer': 'Timer & Controls',
         'widget-stats': 'Statistics',
+        'widget-cut-stats': 'After Percentage Cuts',
+        'widget-cuts': 'Percentage Cuts',
+        'widget-gantt': "Today's Timeline",
         'widget-calendar': 'Calendar',
         'widget-chart': 'Weekly Breakdown',
         'widget-history': 'History List'
@@ -506,6 +833,263 @@ export function renderWidgetOrderList() {
 
         DOM.widgetOrderList.appendChild(li);
     });
+}
+
+export function renderPercentageCutList() {
+    if (!DOM.percentageCutList) return;
+    DOM.percentageCutList.innerHTML = '';
+
+    state.percentageCuts.forEach(cut => {
+        DOM.percentageCutList.appendChild(createPercentageCutListItem(cut));
+    });
+
+    updatePercentageCutMoveButtons();
+}
+
+export function addPercentageCutListItem() {
+    if (!DOM.percentageCutList) return;
+    DOM.percentageCutList.appendChild(createPercentageCutListItem(createPercentageCut('', 0)));
+    updatePercentageCutMoveButtons();
+}
+
+export function getPercentageCutsFromWidget() {
+    if (!DOM.percentageCutList) return [];
+
+    const items = DOM.percentageCutList.querySelectorAll('.percentage-cut-item');
+    return Array.from(items)
+        .map((item, index) => {
+            const nameInput = item.querySelector('.cut-name-input');
+            const percentageInput = item.querySelector('.cut-percentage-input');
+            const basisButton = item.querySelector('.cut-basis-toggle');
+            const name = nameInput ? nameInput.value.trim() : '';
+            const percentage = percentageInput ? parseFloat(percentageInput.value) : 0;
+            const basis = basisButton && basisButton.dataset.basis === 'original' ? 'original' : 'accumulative';
+
+            return {
+                id: item.dataset.id,
+                name,
+                percentage: Number.isFinite(percentage) ? percentage : 0,
+                basis
+            };
+        })
+        .filter(cut => cut.name || cut.percentage > 0)
+        .map((cut, index) => ({
+            ...cut,
+            name: cut.name || `Cut ${index + 1}`
+        }));
+}
+
+function createPercentageCutListItem(cut) {
+    const li = document.createElement('li');
+    li.className = 'sortable-item percentage-cut-item';
+    li.draggable = true;
+    li.dataset.id = cut.id;
+
+    const handle = document.createElement('div');
+    handle.className = 'drag-handle';
+    handle.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+        </svg>
+    `;
+
+    const fields = document.createElement('div');
+    fields.className = 'percentage-cut-fields';
+
+    const nameInput = document.createElement('input');
+    nameInput.className = 'cut-name-input';
+    nameInput.type = 'text';
+    nameInput.placeholder = 'Name';
+    nameInput.value = cut.name || '';
+
+    const percentField = document.createElement('div');
+    percentField.className = 'cut-percent-field';
+
+    const percentageInput = document.createElement('input');
+    percentageInput.className = 'cut-percentage-input';
+    percentageInput.type = 'number';
+    percentageInput.min = '0';
+    percentageInput.max = '100';
+    percentageInput.step = '0.1';
+    percentageInput.placeholder = '0';
+    percentageInput.value = Number(cut.percentage) || '';
+
+    const percentSymbol = document.createElement('span');
+    percentSymbol.className = 'cut-percent-symbol';
+    percentSymbol.textContent = '%';
+
+    percentField.appendChild(percentageInput);
+    percentField.appendChild(percentSymbol);
+
+    fields.appendChild(nameInput);
+    fields.appendChild(percentField);
+
+    const basisButton = document.createElement('button');
+    basisButton.className = 'cut-basis-toggle';
+    basisButton.type = 'button';
+    setCutBasisButtonState(basisButton, cut.basis);
+
+    basisButton.addEventListener('click', () => {
+        const nextBasis = basisButton.dataset.basis === 'original' ? 'accumulative' : 'original';
+        setCutBasisButtonState(basisButton, nextBasis);
+    });
+
+    fields.appendChild(basisButton);
+
+    const actions = document.createElement('div');
+    actions.className = 'percentage-cut-actions';
+
+    actions.appendChild(createCutActionButton('up', 'Move cut up', `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+    `));
+    actions.appendChild(createCutActionButton('down', 'Move cut down', `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+    `));
+    actions.appendChild(createCutActionButton('remove', 'Remove cut', `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+    `));
+
+    actions.addEventListener('click', handlePercentageCutAction);
+
+    li.appendChild(handle);
+    li.appendChild(fields);
+    li.appendChild(actions);
+
+    li.addEventListener('dragstart', handlePercentageCutDragStart);
+    li.addEventListener('dragenter', handlePercentageCutDragEnter);
+    li.addEventListener('dragover', handlePercentageCutDragOver);
+    li.addEventListener('dragleave', handlePercentageCutDragLeave);
+    li.addEventListener('drop', handlePercentageCutDrop);
+    li.addEventListener('dragend', handlePercentageCutDragEnd);
+
+    return li;
+}
+
+function setCutBasisButtonState(button, basis = 'accumulative') {
+    const normalizedBasis = basis === 'original' ? 'original' : 'accumulative';
+    button.dataset.basis = normalizedBasis;
+    button.textContent = normalizedBasis === 'original' ? 'From Original' : 'From Accumulated';
+    button.title = normalizedBasis === 'original'
+        ? 'Calculated from the original earnings, then subtracted from the accumulated amount'
+        : 'Calculated from the accumulated amount, then subtracted from the accumulated amount';
+}
+
+function createCutActionButton(action, title, svg) {
+    const button = document.createElement('button');
+    button.className = `cut-icon-btn ${action === 'remove' ? 'cut-remove-btn' : ''}`;
+    button.type = 'button';
+    button.dataset.action = action;
+    button.title = title;
+    button.innerHTML = svg;
+    return button;
+}
+
+function handlePercentageCutAction(e) {
+    const button = e.target.closest('button[data-action]');
+    if (!button) return;
+
+    const item = button.closest('.percentage-cut-item');
+    if (!item) return;
+
+    if (button.dataset.action === 'remove') {
+        item.remove();
+    } else if (button.dataset.action === 'up' && item.previousElementSibling) {
+        DOM.percentageCutList.insertBefore(item, item.previousElementSibling);
+    } else if (button.dataset.action === 'down' && item.nextElementSibling) {
+        DOM.percentageCutList.insertBefore(item.nextElementSibling, item);
+    }
+
+    updatePercentageCutMoveButtons();
+}
+
+function updatePercentageCutMoveButtons() {
+    if (!DOM.percentageCutList) return;
+
+    const items = Array.from(DOM.percentageCutList.querySelectorAll('.percentage-cut-item'));
+    items.forEach((item, index) => {
+        const upButton = item.querySelector('button[data-action="up"]');
+        const downButton = item.querySelector('button[data-action="down"]');
+        if (upButton) upButton.disabled = index === 0;
+        if (downButton) downButton.disabled = index === items.length - 1;
+    });
+}
+
+let draggedCutItem = null;
+
+function handlePercentageCutDragStart(e) {
+    draggedCutItem = this;
+    setTimeout(() => this.classList.add('dragging'), 0);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.id);
+}
+
+function handlePercentageCutDragOver(e) {
+    if (e.preventDefault) e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handlePercentageCutDragEnter() {
+    if (this !== draggedCutItem) {
+        this.style.borderStyle = 'dashed';
+        this.style.borderColor = 'var(--accent-blue)';
+    }
+}
+
+function handlePercentageCutDragLeave() {
+    this.style.borderStyle = 'solid';
+    this.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+}
+
+function handlePercentageCutDrop(e) {
+    if (e.stopPropagation) e.stopPropagation();
+
+    this.style.borderStyle = 'solid';
+    this.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+
+    if (draggedCutItem && draggedCutItem !== this) {
+        const items = Array.from(DOM.percentageCutList.children);
+        const draggedIndex = items.indexOf(draggedCutItem);
+        const targetIndex = items.indexOf(this);
+
+        if (draggedIndex < targetIndex) {
+            this.after(draggedCutItem);
+        } else {
+            this.before(draggedCutItem);
+        }
+    }
+
+    updatePercentageCutMoveButtons();
+    return false;
+}
+
+function handlePercentageCutDragEnd() {
+    this.classList.remove('dragging');
+    draggedCutItem = null;
+
+    const items = DOM.percentageCutList.querySelectorAll('.percentage-cut-item');
+    items.forEach(item => {
+        item.style.borderStyle = 'solid';
+        item.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+    });
+
+    updatePercentageCutMoveButtons();
 }
 
 let draggedItem = null;

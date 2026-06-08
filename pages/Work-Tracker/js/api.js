@@ -1,8 +1,22 @@
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
-import { state } from './state.js';
-import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists } from './ui.js';
+import { state, updatePercentageCuts } from './state.js';
+import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList } from './ui.js';
 import { getStartOfWeekDate, formatDuration } from './utils.js';
+
+function getPercentageCutsRef() {
+    return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
+}
+
+function serializePercentageCuts(cuts) {
+    return cuts.map((cut, index) => ({
+        id: cut.id,
+        name: cut.name,
+        percentage: cut.percentage,
+        basis: cut.basis,
+        order: index
+    }));
+}
 
 export async function saveSession(durationMs, totalEarned) {
     try {
@@ -54,6 +68,74 @@ export async function deleteSession(sessionId) {
         console.error("Debug: Error deleting document: ", e);
         showAlert("Error", "There was an error deleting this session.");
     }
+}
+
+export async function savePercentageCuts(cuts, options = {}) {
+    const silent = options.silent === true;
+
+    if (!state.currentUser) {
+        if (!silent) {
+            showAlert("Not Signed In", "Please sign in before saving percentage cuts.");
+        }
+        return false;
+    }
+
+    const previousCuts = [...state.percentageCuts];
+    const sanitizedCuts = updatePercentageCuts(cuts);
+
+    try {
+        await setDoc(getPercentageCutsRef(), {
+            cuts: serializePercentageCuts(sanitizedCuts),
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        renderDashboardData();
+        console.log("Debug: Percentage cuts saved to Firebase");
+        return true;
+    } catch (e) {
+        console.error("Debug: Error saving percentage cuts: ", e);
+        updatePercentageCuts(previousCuts);
+        renderPercentageCutList();
+        renderDashboardData();
+        if (!silent) {
+            showAlert("Save Error", "Error saving percentage cuts! Please check your internet connection.");
+        }
+        return false;
+    }
+}
+
+export function loadPercentageCuts() {
+    if (!state.currentUser) return;
+
+    const settingsRef = getPercentageCutsRef();
+
+    onSnapshot(settingsRef, async (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            updatePercentageCuts(data.cuts || []);
+
+            renderPercentageCutList();
+            renderDashboardData();
+            console.log("Debug: Percentage cuts updated from Firebase");
+            return;
+        }
+
+        if (state.percentageCuts.length > 0) {
+            try {
+                await setDoc(settingsRef, {
+                    cuts: serializePercentageCuts(state.percentageCuts),
+                    updatedAt: serverTimestamp()
+                }, { merge: true });
+                console.log("Debug: Local percentage cuts migrated to Firebase");
+            } catch (e) {
+                console.error("Debug: Error migrating percentage cuts: ", e);
+            }
+        } else {
+            renderDashboardData();
+        }
+    }, (error) => {
+        console.error("Debug: Percentage cuts snapshot error", error);
+    });
 }
 
 export function renderDashboardData() {
@@ -171,6 +253,11 @@ export function renderDashboardData() {
 
     DOM.monthlyHoursDisplay.textContent = formatDuration(totalMonthlyMs);
     DOM.monthlyEarningsDisplay.textContent = `${state.currentCurrency}${totalMonthlyEarnings.toFixed(2)}`;
+    renderPercentageCutStats({
+        daily: totalDailyEarnings,
+        weekly: totalWeeklyEarnings,
+        monthly: totalMonthlyEarnings
+    });
 
     renderCalendar();
     renderChart();

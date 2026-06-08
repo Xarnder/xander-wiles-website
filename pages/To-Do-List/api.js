@@ -451,8 +451,14 @@ export async function processAutomatedLists() {
     automationConfirmationOpen = true;
 
     try {
-        const UI = await import('./ui.js');
-        const shouldMove = await UI.showAutomationMoveConfirmation(movedTasksLog);
+        const shouldConfirmMove = state.appData.settings.timeAutomationConfirm !== false;
+        let UI = null;
+        let shouldMove = true;
+
+        if (shouldConfirmMove) {
+            UI = await import('./ui.js');
+            shouldMove = await UI.showAutomationMoveConfirmation(movedTasksLog);
+        }
 
         if (!state.currentUser) return;
 
@@ -492,6 +498,7 @@ export async function processAutomatedLists() {
 
         await batch.commit();
         console.log(`[Automation] Successfully processed ${pendingMoves.length} lists.`);
+        if (!UI) UI = await import('./ui.js');
         UI.showAutomationReport(movedTasksLog);
     } catch (e) {
         handleSyncError(e);

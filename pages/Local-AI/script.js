@@ -1,38 +1,61 @@
-// REMOVED TOP LEVEL IMPORT to prevent silent failures
-// import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@latest';
-
-// === CONFIGURATION ===
-// Model options for WebGPU (macOS with WebGPU enabled)
-const WEBGPU_MODELS = {
-    'qwen3-4b': {
-        id: 'onnx-community/Qwen3-4B-ONNX',
-        name: 'Qwen 3 (4B Instruct)',
-        size: '~2.5GB',
-        description: 'Fast, balanced performance'
+// === LOCAL AI CONFIGURATION ===
+const BONSAI_MODEL_NAME = 'Bonsai 8B 1-bit';
+const DEFAULT_MODEL_ID = 'prism-ml/Bonsai-8B-gguf:Q1_0';
+const DEFAULT_BASE_URL = 'http://127.0.0.1:8080/v1';
+const DEFAULT_START_COMMAND = 'llama-server -hf prism-ml/Bonsai-8B-gguf:Q1_0 --host 127.0.0.1 --port 8080 -ngl 99';
+const QWEN_MODELS = {
+    'qwen3-0.6b': {
+        name: 'Qwen3 0.6B',
+        id: 'Qwen3-0.6B-q4f16_1-MLC',
+        size: '~352MB',
+        vram: '~1.3GB WebGPU VRAM',
+        url: 'https://huggingface.co/mlc-ai/Qwen3-0.6B-q4f16_1-MLC',
+        lib: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_84/base/Qwen3-0.6B-q4f16_1_cs1k-webgpu.wasm',
+        vramRequiredMB: 1300,
+        contextWindowSize: 4096
     },
-    'qwen3-8b': {
-        id: 'onnx-community/Qwen3-8B-ONNX',
-        name: 'Qwen 3 (8B Instruct)',
-        size: '~5GB',
-        description: 'More capable, requires more VRAM'
+    'qwen3-4b': {
+        name: 'Qwen3 4B',
+        id: 'Qwen3-4B-q4f16_1-MLC',
+        size: '~2.28GB',
+        vram: '~3.4GB WebGPU VRAM',
+        url: 'https://huggingface.co/mlc-ai/Qwen3-4B-q4f16_1-MLC',
+        lib: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_84/base/Qwen3-4B-q4f16_1_cs1k-webgpu.wasm',
+        vramRequiredMB: 3431.59,
+        contextWindowSize: 4096
     }
 };
+const DEFAULT_QWEN_MODEL_KEY = 'qwen3-0.6b';
+const RUNTIME_MODES = {
+    QWEN_BROWSER: 'qwen-browser',
+    BONSAI_SERVER: 'bonsai-server'
+};
 
-// Default WebGPU model
-const DEFAULT_WEBGPU_MODEL = 'qwen3-4b';
+const BASE_URL_KEY = 'lai-bonsai-base-url';
+const MODEL_ID_KEY = 'lai-bonsai-model-id';
+const RUNTIME_MODE_KEY = 'lai-runtime-mode';
+const RUNTIME_MODE_EXPLICIT_KEY = 'lai-runtime-mode-explicit';
+const QWEN_MODEL_KEY = 'lai-qwen-model';
+const STORAGE_KEY = 'lai-chat-history';
 
-// WASM fallback model: Qwen 2.5 1.5B (better quality, works on CPU)
-const WASM_MODEL_ID = 'onnx-community/Qwen2.5-1.5B-Instruct';
-const WASM_MODEL_NAME = 'Qwen 2.5 (1.5B Instruct)';
-const WASM_MODEL_SIZE = '~1.5GB';
-
-// Storage key for selected model
-const MODEL_SELECTION_KEY = 'lai-selected-model';
-
-let MODEL_ID = WEBGPU_MODELS[DEFAULT_WEBGPU_MODEL].id;
-let MODEL_NAME = WEBGPU_MODELS[DEFAULT_WEBGPU_MODEL].name;
-let MODEL_SIZE = WEBGPU_MODELS[DEFAULT_WEBGPU_MODEL].size;
-let env, pipeline; // Will be loaded dynamically
+let baseUrl = localStorage.getItem(BASE_URL_KEY) || DEFAULT_BASE_URL;
+let modelId = localStorage.getItem(MODEL_ID_KEY) || DEFAULT_MODEL_ID;
+let qwenModelKey = QWEN_MODELS[localStorage.getItem(QWEN_MODEL_KEY)]
+    ? localStorage.getItem(QWEN_MODEL_KEY)
+    : DEFAULT_QWEN_MODEL_KEY;
+let qwenModel = QWEN_MODELS[qwenModelKey];
+let runtimeMode = localStorage.getItem(RUNTIME_MODE_EXPLICIT_KEY) === 'true'
+    ? localStorage.getItem(RUNTIME_MODE_KEY) || RUNTIME_MODES.QWEN_BROWSER
+    : RUNTIME_MODES.QWEN_BROWSER;
+let webllm = null;
+let qwenEngine = null;
+let isLoaded = false;
+let isGenerating = false;
+let activeGenerationController = null;
+let qwenCacheTrace = [];
+let thinkingTimerInterval = null;
+let thinkingStartTime = null;
+let thinkingMessageElement = null;
 
 // === DOM ELEMENTS ===
 const statusBadge = document.getElementById('status-badge');
@@ -41,207 +64,25 @@ const chatContainer = document.getElementById('chat-container');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
 const debugLog = document.getElementById('debug-log');
-
-// Progress Elements
 const progressPanel = document.getElementById('progress-panel');
-const downloadStage = document.getElementById('download-stage');
-const initStage = document.getElementById('init-stage');
 const dlBar = document.getElementById('dl-bar');
 const dlPercent = document.getElementById('dl-percent');
 const dlFilename = document.getElementById('dl-filename');
-
-// Settings Elements
 const settingsToggle = document.getElementById('settings-toggle');
 const settingsContent = document.getElementById('settings-content');
 const thinkingModeToggle = document.getElementById('thinking-mode');
 const systemPromptInput = document.getElementById('system-prompt');
+const runtimeSelector = document.getElementById('runtime-selector');
+const runtimeSelectorSettings = document.getElementById('runtime-selector-settings');
+const qwenModelSelector = document.getElementById('qwen-model-selector');
+const serverUrlInput = document.getElementById('server-url');
+const modelIdInput = document.getElementById('model-id');
+const reconnectBtn = document.getElementById('reconnect-btn');
+const copyCommandBtn = document.getElementById('copy-command-btn');
 const clearCacheBtn = document.getElementById('clear-cache-btn');
-const cacheLocationText = document.getElementById('cache-location');
-const modelSelector = document.getElementById('model-selector');
-const resetHardwareBtn = document.getElementById('reset-hardware-btn');
-const stopDownloadBtn = document.getElementById('stop-download-btn');
-const restartDownloadBtn = document.getElementById('restart-download-btn');
-const enableWebGPUBtn = document.getElementById('enable-webgpu-btn');
+const clearQwenCacheBtn = document.getElementById('clear-qwen-cache-btn');
 const toggleDebugBtn = document.getElementById('toggle-debug-btn');
 const debugWrapper = document.querySelector('.lai-debug-wrapper');
-
-// === STATE ===
-let worker = null;
-let isGenerating = false;
-let isDownloadStopped = false;
-let isLoaded = false;
-let thinkingTimerInterval = null;
-let thinkingStartTime = null;
-let thinkingMessageElement = null;
-
-// === PLATFORM DETECTION STATE ===
-let platformInfo = {
-    isMacOS: false,
-    isAppleSilicon: false,
-    gpuName: 'Unknown',
-    chipName: null,
-    osVersion: null,
-    webGPUAvailable: false  // Track WebGPU availability for fallback
-};
-
-// === PLATFORM DETECTION FUNCTIONS ===
-function detectPlatform() {
-    const ua = navigator.userAgent;
-    const platform = navigator.platform;
-
-    // Detect macOS
-    platformInfo.isMacOS = platform.includes('Mac') ||
-        ua.includes('Macintosh') ||
-        ua.includes('Mac OS X');
-
-    // Extract macOS version if available
-    const macVersionMatch = ua.match(/Mac OS X (\d+[._]\d+[._]?\d*)/);
-    if (macVersionMatch) {
-        platformInfo.osVersion = macVersionMatch[1].replace(/_/g, '.');
-    }
-
-    // Initial Apple Silicon check from user agent (ARM-based Mac)
-    if (platformInfo.isMacOS) {
-        // Safari on Apple Silicon often reports ARM or has specific markers
-        const isARM = ua.includes('ARM') || ua.includes('arm');
-        // Modern Macs with Apple Silicon don't report x86 in certain contexts
-        const notIntel = !ua.includes('Intel');
-
-        // This is a preliminary check; GPU adapter will give us definitive info
-        if (isARM || (notIntel && platform === 'MacIntel')) {
-            // Could be Apple Silicon - WebGPU check will confirm
-        }
-    }
-
-    return platformInfo;
-}
-
-async function detectGPU() {
-    if (!navigator.gpu) {
-        log("WebGPU not available for GPU detection", 'error');
-        return null;
-    }
-
-    try {
-        const adapter = await navigator.gpu.requestAdapter();
-        if (!adapter) {
-            log("No GPU adapter available", 'error');
-            return null;
-        }
-
-        // Get adapter info - this gives us GPU name
-        const info = await adapter.requestAdapterInfo();
-        platformInfo.gpuName = info.description || info.device || 'Unknown GPU';
-
-        // Detect Apple Silicon from GPU name
-        const gpuLower = platformInfo.gpuName.toLowerCase();
-        if (gpuLower.includes('apple')) {
-            platformInfo.isAppleSilicon = true;
-
-            // Extract chip name (M1, M2, M3, M4, etc.)
-            const chipMatch = platformInfo.gpuName.match(/Apple\s+(M\d+(?:\s+(?:Pro|Max|Ultra))?)/i);
-            if (chipMatch) {
-                platformInfo.chipName = chipMatch[1];
-            }
-        }
-
-        return adapter;
-    } catch (e) {
-        log(`GPU detection failed: ${e.message}`, 'error');
-        return null;
-    }
-}
-
-function getPlatformDisplayString() {
-    let parts = [];
-
-    if (platformInfo.isMacOS) {
-        if (platformInfo.isAppleSilicon && platformInfo.chipName) {
-            parts.push(`Apple ${platformInfo.chipName}`);
-        } else if (platformInfo.isAppleSilicon) {
-            parts.push('Apple Silicon Mac');
-        } else {
-            parts.push('macOS');
-        }
-    }
-
-    if (platformInfo.gpuName && !platformInfo.gpuName.toLowerCase().includes('unknown')) {
-        // Don't duplicate if already showing Apple chip
-        if (!platformInfo.isAppleSilicon) {
-            parts.push(platformInfo.gpuName);
-        }
-    }
-
-    return parts.length > 0 ? parts.join(' • ') : null;
-}
-
-function updatePlatformBadge() {
-    const badge = document.getElementById('platform-badge');
-    if (!badge) return;
-
-    if (platformInfo.isMacOS) {
-        badge.classList.add('visible');
-
-        if (platformInfo.isAppleSilicon && platformInfo.chipName) {
-            badge.innerHTML = `
-                <svg class="lai-apple-logo" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-                </svg>
-                ${platformInfo.chipName}`;
-        } else if (platformInfo.isAppleSilicon) {
-            badge.innerHTML = `
-                <svg class="lai-apple-logo" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-                </svg>
-                Apple Silicon`;
-        } else {
-            badge.innerHTML = `
-                <svg class="lai-apple-logo" viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-                </svg>
-                macOS`;
-        }
-    }
-}
-
-// Update the header to show which model is currently loaded
-function updateModelDisplay() {
-    const headerTitle = document.getElementById('model-title');
-    const headerSubtitle = document.querySelector('.lai-subtitle');
-    const modelSelector = document.getElementById('model-selector');
-
-    if (headerTitle) {
-        // Parse the model name to extract base name and size
-        const modelParts = MODEL_NAME.split(' ');
-        const baseName = modelParts.slice(0, 2).join(' '); // e.g., "Qwen 3" or "Qwen 2.5"
-        const sizeInfo = modelParts.slice(2).join(' '); // e.g., "(4B Instruct)"
-
-        headerTitle.innerHTML = `${baseName} <span>${sizeInfo}</span>`;
-    }
-
-    // Update page title
-    document.title = `${MODEL_NAME} - Local AI Chat`;
-
-    if (headerSubtitle) {
-        const deviceMode = platformInfo.webGPUAvailable ? 'WebGPU (GPU)' : 'WASM (CPU)';
-        headerSubtitle.textContent = `Running locally in-browser • ${deviceMode}`;
-    }
-
-    // Sync dropdown selector with current model
-    if (modelSelector && platformInfo.webGPUAvailable) {
-        // Find which model key matches the current MODEL_ID
-        for (const [key, model] of Object.entries(WEBGPU_MODELS)) {
-            if (model.id === MODEL_ID) {
-                modelSelector.value = key;
-                break;
-            }
-        }
-    }
-}
-
-// === CHAT HISTORY STATE ===
-const STORAGE_KEY = 'lai-chat-history';
-let chatHistory = { chats: [], currentChatId: null };
 
 // Chat History DOM Elements
 const historySidebar = document.getElementById('history-sidebar');
@@ -251,9 +92,1141 @@ const closeSidebarBtn = document.getElementById('close-sidebar-btn');
 const newChatBtn = document.getElementById('new-chat-btn');
 const chatListContainer = document.getElementById('chat-list');
 
-// === CHAT HISTORY FUNCTIONS ===
+let chatHistory = { chats: [], currentChatId: null };
+
+// === INITIALIZATION ===
+window.addEventListener('DOMContentLoaded', () => {
+    loadChatsFromStorage();
+    initChatHistoryEvents();
+    initControls();
+    renderChatList();
+    updateModelDisplay();
+
+    const currentChat = getCurrentChat();
+    if (currentChat && currentChat.messages.length > 0) {
+        clearChatUI();
+        currentChat.messages.forEach(msg => renderMessageFromData(msg));
+    } else if (!currentChat && chatHistory.chats.length === 0) {
+        createNewChat(true);
+    }
+
+    init();
+});
+
+async function init() {
+    log('System initialize...');
+    log(`Runtime mode: ${runtimeMode}`);
+    updateModelDisplay();
+    syncRuntimeSelectors();
+    syncQwenModelSelector();
+
+    if (serverUrlInput) serverUrlInput.value = baseUrl;
+    if (modelIdInput) modelIdInput.value = modelId;
+
+    if (runtimeMode === RUNTIME_MODES.QWEN_BROWSER) {
+        await initQwenBrowser();
+        return;
+    }
+
+    log(`Local endpoint: ${baseUrl}`);
+    log(`Model: ${modelId}`);
+    updateConnectionPanel('checking');
+    updateStatus('busy', 'Connecting...');
+
+    const connected = await pingServer();
+    if (connected) {
+        finishLoading('bonsai');
+    } else {
+        showOfflineState();
+    }
+}
+
+async function initQwenBrowser() {
+    updateStatus('busy', 'Loading...');
+    updateQwenPanel('checking', 'Checking WebGPU support...');
+    isLoaded = false;
+    userInput.disabled = true;
+    sendBtn.disabled = true;
+    userInput.placeholder = 'Loading Qwen in your browser...';
+    qwenCacheTrace = [];
+    installCacheTracing();
+
+    if (!navigator.gpu) {
+        updateStatus('error', 'WebGPU needed');
+        updateQwenPanel('offline', 'WebGPU is not available in this browser.');
+        userInput.placeholder = 'WebGPU is needed for Qwen Browser mode...';
+        appendMessage(
+            'system',
+            'Qwen Browser mode needs WebGPU. Try Chrome, Edge, or Safari with WebGPU enabled, or switch to Bonsai Server mode.',
+            null,
+            null,
+            false
+        );
+        return;
+    }
+
+    try {
+        await requestPersistentStorage();
+        const diagnostics = await runQwenDiagnostics();
+        logQwenDiagnostics(diagnostics);
+
+        if (!webllm) {
+            updateQwenPanel('checking', 'Loading WebLLM runtime...');
+            webllm = await import('https://esm.run/@mlc-ai/web-llm');
+        }
+
+        if (!qwenEngine) {
+            updateQwenPanel('checking', `Downloading/loading ${qwenModel.name} ${qwenModel.size}...`);
+            qwenEngine = await webllm.CreateMLCEngine(qwenModel.id, {
+                appConfig: createQwenAppConfig(),
+                initProgressCallback: (progress) => handleQwenProgress(progress)
+            });
+        }
+
+        finishLoading('qwen');
+    } catch (err) {
+        log(`Qwen Browser load failed: ${formatError(err)}`, 'error');
+        logErrorDetails(err);
+        if (window.lastQwenDiagnostics) {
+            window.lastQwenDiagnostics.cacheTrace = summarizeCacheTrace();
+        }
+        updateStatus('error', 'Failed');
+        updateQwenPanel('offline', buildQwenFailureMessage(err), window.lastQwenDiagnostics || null);
+        userInput.placeholder = 'Qwen Browser could not load on this browser...';
+        appendMessage(
+            'system',
+            `Qwen Browser failed to load: ${buildQwenFailureMessage(err)}`,
+            null,
+            null,
+            false
+        );
+    }
+}
+
+async function runQwenDiagnostics() {
+    updateQwenPanel('checking', 'Running browser diagnostics...');
+
+    const diagnostics = {
+        model: qwenModel.id,
+        modelSize: qwenModel.size,
+        vram: qwenModel.vram,
+        userAgent: navigator.userAgent,
+        online: navigator.onLine,
+        secureContext: window.isSecureContext,
+        webGPU: await inspectWebGPU(),
+        storage: await inspectStorage(),
+        cache: await inspectCache(),
+        network: await inspectQwenNetwork()
+    };
+
+    window.lastQwenDiagnostics = diagnostics;
+    return diagnostics;
+}
+
+async function requestPersistentStorage() {
+    if (!navigator.storage?.persist) {
+        log('Persistent storage request: navigator.storage.persist unavailable.', 'info');
+        return false;
+    }
+
+    try {
+        const granted = await navigator.storage.persist();
+        log(`Persistent storage request: ${granted ? 'granted' : 'not granted'}`, granted ? 'success' : 'info');
+        return granted;
+    } catch (err) {
+        log(`Persistent storage request failed: ${formatError(err)}`, 'error');
+        return false;
+    }
+}
+
+function installCacheTracing() {
+    if (!window.Cache || Cache.prototype.__laiQwenTraceInstalled) return;
+
+    const originalAdd = Cache.prototype.add;
+    const originalAddAll = Cache.prototype.addAll;
+    const originalPut = Cache.prototype.put;
+
+    Cache.prototype.add = async function tracedCacheAdd(request) {
+        const url = getRequestUrl(request);
+        recordCacheTrace('add:start', url);
+
+        try {
+            const result = await originalAdd.call(this, request);
+            recordCacheTrace('add:ok', url);
+            return result;
+        } catch (err) {
+            recordCacheTrace('add:error', url, err);
+            throw err;
+        }
+    };
+
+    Cache.prototype.addAll = async function tracedCacheAddAll(requests) {
+        const urls = Array.from(requests || []).map(getRequestUrl);
+        recordCacheTrace('addAll:start', urls.join(', '));
+
+        try {
+            const result = await originalAddAll.call(this, requests);
+            recordCacheTrace('addAll:ok', urls.join(', '));
+            return result;
+        } catch (err) {
+            recordCacheTrace('addAll:error', urls.join(', '), err);
+            throw err;
+        }
+    };
+
+    Cache.prototype.put = async function tracedCachePut(request, response) {
+        const url = getRequestUrl(request);
+        recordCacheTrace('put:start', url);
+
+        try {
+            const result = await originalPut.call(this, request, response);
+            recordCacheTrace('put:ok', url);
+            return result;
+        } catch (err) {
+            recordCacheTrace('put:error', url, err);
+            throw err;
+        }
+    };
+
+    Cache.prototype.__laiQwenTraceInstalled = true;
+    log('Cache API tracing installed for Qwen loads.', 'success');
+}
+
+function getRequestUrl(request) {
+    if (!request) return '(empty request)';
+    if (typeof request === 'string') return request;
+    if (request.url) return request.url;
+    return String(request);
+}
+
+function recordCacheTrace(action, url, err = null) {
+    const entry = {
+        action,
+        url,
+        error: err ? formatError(err) : null,
+        time: new Date().toISOString()
+    };
+
+    qwenCacheTrace.push(entry);
+    if (qwenCacheTrace.length > 80) qwenCacheTrace.shift();
+
+    if (action.endsWith(':error')) {
+        log(`Cache trace ${action}: ${url} -> ${entry.error}`, 'error');
+    } else {
+        log(`Cache trace ${action}: ${truncateMiddle(url, 180)}`);
+    }
+}
+
+function summarizeCacheTrace() {
+    const failures = qwenCacheTrace.filter(entry => entry.action.endsWith(':error'));
+    const last = qwenCacheTrace[qwenCacheTrace.length - 1] || null;
+
+    return {
+        total: qwenCacheTrace.length,
+        last,
+        failures,
+        recent: qwenCacheTrace.slice(-10)
+    };
+}
+
+async function inspectWebGPU() {
+    const result = { available: !!navigator.gpu, adapter: null, error: null };
+    if (!navigator.gpu) return result;
+
+    try {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) {
+            result.error = 'No WebGPU adapter returned by browser.';
+            return result;
+        }
+
+        const info = typeof adapter.requestAdapterInfo === 'function'
+            ? await adapter.requestAdapterInfo().catch(() => null)
+            : null;
+
+        result.adapter = {
+            vendor: info?.vendor || 'unknown',
+            architecture: info?.architecture || 'unknown',
+            device: info?.device || 'unknown',
+            description: info?.description || 'unknown',
+            limits: {
+                maxBufferSize: adapter.limits?.maxBufferSize || null,
+                maxStorageBufferBindingSize: adapter.limits?.maxStorageBufferBindingSize || null
+            }
+        };
+    } catch (err) {
+        result.error = formatError(err);
+    }
+
+    return result;
+}
+
+async function inspectStorage() {
+    const result = { available: false, quota: null, usage: null, free: null, persisted: null, error: null };
+    if (!navigator.storage?.estimate) {
+        result.error = 'navigator.storage.estimate is unavailable.';
+        return result;
+    }
+
+    try {
+        const estimate = await navigator.storage.estimate();
+        result.available = true;
+        result.quota = estimate.quota || 0;
+        result.usage = estimate.usage || 0;
+        result.free = Math.max(0, result.quota - result.usage);
+        result.persisted = navigator.storage.persisted
+            ? await navigator.storage.persisted().catch(() => null)
+            : null;
+    } catch (err) {
+        result.error = formatError(err);
+    }
+
+    return result;
+}
+
+async function inspectCache() {
+    const result = { available: !!window.caches, writeTest: false, names: [], error: null };
+    if (!window.caches) {
+        result.error = 'Cache API is unavailable in this context.';
+        return result;
+    }
+
+    try {
+        result.names = await caches.keys();
+        const cache = await caches.open('lai-diagnostics');
+        const response = new Response('ok', {
+            headers: {
+                'Content-Type': 'text/plain',
+                'Cache-Control': 'no-store'
+            }
+        });
+        await cache.put('/pages/Local-AI/__diagnostic-cache-test__', response);
+        await cache.delete('/pages/Local-AI/__diagnostic-cache-test__');
+        result.writeTest = true;
+    } catch (err) {
+        result.error = formatError(err);
+    }
+
+    return result;
+}
+
+async function inspectQwenNetwork() {
+    const shardProbe = await inspectQwenShards();
+
+    return {
+        webllmModule: await probeUrl('https://esm.run/@mlc-ai/web-llm', 'module'),
+        modelConfig: await probeUrl(`${qwenModel.url}/resolve/main/mlc-chat-config.json`, 'model config'),
+        ndarrayCache: await probeUrl(`${qwenModel.url}/resolve/main/ndarray-cache.json`, 'ndarray cache'),
+        tokenizer: await probeUrl(`${qwenModel.url}/resolve/main/tokenizer.json`, 'tokenizer'),
+        modelLib: await probeUrl(qwenModel.lib, 'wasm model lib'),
+        shards: shardProbe
+    };
+}
+
+async function inspectQwenShards() {
+    const indexUrl = `${qwenModel.url}/resolve/main/ndarray-cache.json`;
+
+    try {
+        const response = await fetch(indexUrl, { cache: 'no-store' });
+        if (!response.ok) {
+            return {
+                ok: false,
+                label: 'model shards',
+                error: `Could not read shard index: HTTP ${response.status}`,
+                total: 0,
+                checked: 0,
+                failed: []
+            };
+        }
+
+        const index = await response.json();
+        const shardRecords = Array.isArray(index.records)
+            ? index.records.filter(record => record.dataPath)
+            : [];
+        const shardUrls = shardRecords.map(record => ({
+            label: record.dataPath,
+            url: `${qwenModel.url}/resolve/main/${record.dataPath}`,
+            declaredSize: Number(record.nbytes) || null
+        }));
+
+        const probes = [];
+        const concurrency = 4;
+        let nextIndex = 0;
+
+        async function worker() {
+            while (nextIndex < shardUrls.length) {
+                const current = shardUrls[nextIndex++];
+                const probe = await probeUrl(current.url, current.label);
+                probe.declaredSize = current.declaredSize;
+                probes.push(probe);
+            }
+        }
+
+        await Promise.all(Array.from({ length: Math.min(concurrency, shardUrls.length) }, worker));
+
+        const failed = probes.filter(probe => !probe.ok);
+        const totalBytes = shardRecords.reduce((sum, record) => sum + (Number(record.nbytes) || 0), 0);
+
+        return {
+            ok: failed.length === 0,
+            label: 'model shards',
+            total: shardUrls.length,
+            checked: probes.length,
+            failed,
+            totalBytes,
+            largest: shardRecords.reduce((largest, record) => {
+                const size = Number(record.nbytes) || 0;
+                return size > (largest?.nbytes || 0) ? record : largest;
+            }, null)
+        };
+    } catch (err) {
+        return {
+            ok: false,
+            label: 'model shards',
+            error: formatError(err),
+            total: 0,
+            checked: 0,
+            failed: []
+        };
+    }
+}
+
+async function probeUrl(url, label) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+        const response = await fetch(url, {
+            method: 'HEAD',
+            cache: 'no-store',
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        if (response.status === 405 || response.status === 403) {
+            return await probeUrlWithGet(url, label);
+        }
+
+        return {
+            label,
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText,
+            type: response.type,
+            size: Number(response.headers.get('content-length')) || null,
+            contentType: response.headers.get('content-type') || null,
+            finalUrl: response.url
+        };
+    } catch (err) {
+        clearTimeout(timeout);
+        return {
+            label,
+            ok: false,
+            error: formatError(err),
+            finalUrl: url
+        };
+    }
+}
+
+async function probeUrlWithGet(url, label) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: { Range: 'bytes=0-0' },
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        return {
+            label,
+            ok: response.ok || response.status === 206,
+            status: response.status,
+            statusText: response.statusText,
+            type: response.type,
+            size: Number(response.headers.get('content-length')) || null,
+            contentType: response.headers.get('content-type') || null,
+            finalUrl: response.url
+        };
+    } catch (err) {
+        clearTimeout(timeout);
+        return {
+            label,
+            ok: false,
+            error: formatError(err),
+            finalUrl: url
+        };
+    }
+}
+
+function createQwenAppConfig() {
+    const prebuiltConfig = webllm?.prebuiltAppConfig || {};
+    const prebuiltModels = Array.isArray(prebuiltConfig.model_list) ? prebuiltConfig.model_list : [];
+    const hasQwen = prebuiltModels.some(model => model.model_id === qwenModel.id);
+
+    return {
+        ...prebuiltConfig,
+        model_list: hasQwen
+            ? prebuiltModels
+            : [
+                ...prebuiltModels,
+                {
+                    model: qwenModel.url,
+                    model_id: qwenModel.id,
+                    model_lib: qwenModel.lib,
+                    vram_required_MB: qwenModel.vramRequiredMB,
+                    low_resource_required: true,
+                    overrides: {
+                        context_window_size: qwenModel.contextWindowSize
+                    }
+                }
+            ]
+    };
+}
+
+async function pingServer() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+
+    try {
+        const response = await fetch(`${trimBaseUrl(baseUrl)}/models`, {
+            method: 'GET',
+            signal: controller.signal
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+            throw new Error(`Server responded with HTTP ${response.status}`);
+        }
+
+        const data = await response.json().catch(() => null);
+        const names = Array.isArray(data?.data) ? data.data.map(item => item.id).filter(Boolean) : [];
+        if (names.length > 0) {
+            log(`Server models: ${names.join(', ')}`, 'success');
+        }
+
+        return true;
+    } catch (err) {
+        clearTimeout(timeout);
+        log(`Could not reach Bonsai server: ${formatError(err)}`, 'error');
+        return false;
+    }
+}
+
+function finishLoading(runtime) {
+    isLoaded = true;
+    updateStatus('ready', 'Ready');
+
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+
+    if (runtime === 'qwen') {
+        updateQwenPanel('connected', `${qwenModel.name} is ready in-browser.`);
+        userInput.placeholder = `Ask ${qwenModel.name} something...`;
+        appendMessage(
+            'system',
+            `${qwenModel.name} is ready. It runs locally in this browser with WebGPU and does not need a server.`,
+            null,
+            null,
+            false
+        );
+        return;
+    }
+
+    updateConnectionPanel('connected');
+    userInput.placeholder = `Ask ${BONSAI_MODEL_NAME} something...`;
+
+    appendMessage(
+        'system',
+        `${BONSAI_MODEL_NAME} is connected at ${baseUrl}. All chat requests stay on this local endpoint.`,
+        null,
+        null,
+        false
+    );
+}
+
+function showOfflineState() {
+    isLoaded = false;
+    updateStatus('error', 'Offline');
+    updateConnectionPanel('offline');
+    userInput.disabled = true;
+    sendBtn.disabled = true;
+    userInput.placeholder = 'Start the local Bonsai server first...';
+
+    appendMessage(
+        'system',
+        `Bonsai is not reachable yet. Start it locally with:\n\n${DEFAULT_START_COMMAND}\n\nThen press Reconnect.`,
+        null,
+        null,
+        false
+    );
+}
+
+function updateQwenPanel(state, message, diagnostics = null) {
+    if (!progressPanel) return;
+
+    if (state === 'checking') {
+        progressPanel.innerHTML = `
+            <div class="lai-local-runtime loading">
+                <div class="lai-local-runtime-main">
+                    <strong>Qwen Browser loading</strong>
+                    <span>${escapeHtml(message)}</span>
+                    <small>Model: ${qwenModel.id} (${qwenModel.size}, ${qwenModel.vram})</small>
+                </div>
+                <div class="lai-progress-track">
+                    <div id="qwen-progress-bar" class="lai-progress-fill" style="width: 8%"></div>
+                </div>
+                <small id="qwen-progress-text" class="lai-file-name">${escapeHtml(message)}</small>
+            </div>
+        `;
+        return;
+    }
+
+    const isConnected = state === 'connected';
+    const diagnosticsHtml = !isConnected && diagnostics
+        ? `<div class="lai-diagnostic-list">${buildQwenDiagnosticsHtml(diagnostics)}</div>`
+        : '';
+
+    progressPanel.innerHTML = `
+        <div class="lai-local-runtime ${isConnected ? 'connected' : 'offline'}">
+            <div class="lai-local-runtime-main">
+                <strong>${isConnected ? 'Qwen Browser ready' : 'Qwen Browser unavailable'}</strong>
+                <span>${escapeHtml(message)}</span>
+                <small>Model: ${qwenModel.id} (${qwenModel.size}, ${qwenModel.vram})</small>
+            </div>
+            ${diagnosticsHtml}
+            <div class="lai-local-runtime-actions">
+                <button id="runtime-reload-qwen-btn" class="lai-header-btn lai-runtime-btn">${isConnected ? 'Reload' : 'Try Again'}</button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('runtime-reload-qwen-btn')?.addEventListener('click', reconnect);
+}
+
+function buildQwenFailureMessage(err) {
+    const message = formatError(err);
+    const diagnostics = window.lastQwenDiagnostics;
+    const hints = [];
+
+    if (message.includes("Cache.add()")) {
+        hints.push('The browser Cache API failed while WebLLM was downloading model files.');
+    }
+
+    if (diagnostics?.storage?.free != null) {
+        const requiredBytes = qwenModelKey === 'qwen3-4b'
+            ? 5 * 1024 * 1024 * 1024
+            : 900 * 1024 * 1024;
+        if (diagnostics.storage.free < requiredBytes) {
+            hints.push(`Browser storage looks low: ${formatBytes(diagnostics.storage.free)} free.`);
+        }
+    }
+
+    const failedNetwork = diagnostics?.network
+        ? Object.entries(diagnostics.network)
+            .filter(([key, item]) => key !== 'shards' && !item.ok)
+            .map(([, item]) => item)
+        : [];
+    if (failedNetwork.length > 0) {
+        hints.push(`Network probes failed for: ${failedNetwork.map(item => item.label).join(', ')}.`);
+    }
+
+    const shardProbe = diagnostics?.network?.shards;
+    if (shardProbe && !shardProbe.ok) {
+        const failedNames = shardProbe.failed?.slice(0, 5).map(item => item.label).join(', ');
+        hints.push(failedNames
+            ? `Model shard probes failed for: ${failedNames}.`
+            : `Model shard probe failed: ${shardProbe.error || 'unknown shard error'}.`);
+    }
+
+    if (diagnostics?.cache && !diagnostics.cache.writeTest) {
+        hints.push('Cache API write test failed, so browser/site storage may be blocked.');
+    }
+
+    const cacheFailures = diagnostics?.cacheTrace?.failures || [];
+    if (cacheFailures.length > 0) {
+        const lastFailure = cacheFailures[cacheFailures.length - 1];
+        hints.push(`Failing Cache.add URL: ${lastFailure.url}.`);
+    }
+
+    return [message, ...hints].join(' ');
+}
+
+function buildQwenDiagnosticsHtml(diagnostics) {
+    const rows = [];
+    const storage = diagnostics.storage;
+    const cache = diagnostics.cache;
+    const webGPU = diagnostics.webGPU;
+    const network = diagnostics.network || {};
+
+    rows.push(diagnosticRow('Online', diagnostics.online ? 'yes' : 'no', diagnostics.online));
+    rows.push(diagnosticRow('Secure context', diagnostics.secureContext ? 'yes' : 'no', diagnostics.secureContext));
+    rows.push(diagnosticRow('WebGPU', webGPU.available ? describeWebGPU(webGPU) : webGPU.error || 'unavailable', webGPU.available && !webGPU.error));
+
+    if (storage.available) {
+        rows.push(diagnosticRow(
+            'Storage free',
+            `${formatBytes(storage.free)} free of ${formatBytes(storage.quota)} quota`,
+            storage.free > 0
+        ));
+        rows.push(diagnosticRow('Persistent storage', storage.persisted === null ? 'unknown' : storage.persisted ? 'yes' : 'no', storage.persisted !== false));
+    } else {
+        rows.push(diagnosticRow('Storage estimate', storage.error || 'unavailable', false));
+    }
+
+    rows.push(diagnosticRow('Cache API', cache.writeTest ? `write OK (${cache.names.length} cache(s))` : cache.error || 'write failed', cache.writeTest));
+
+    Object.entries(network).forEach(([key, item]) => {
+        if (key === 'shards') return;
+        const status = item.ok
+            ? `OK ${item.status || ''}${item.size ? `, ${formatBytes(item.size)}` : ''}`
+            : item.error || `HTTP ${item.status} ${item.statusText || ''}`;
+        rows.push(diagnosticRow(`Fetch ${item.label}`, status, item.ok));
+    });
+
+    if (network.shards) {
+        const shardStatus = network.shards.ok
+            ? `${network.shards.checked}/${network.shards.total} OK, total ${formatBytes(network.shards.totalBytes)}`
+            : describeShardFailure(network.shards);
+        rows.push(diagnosticRow('Fetch model shards', shardStatus, network.shards.ok));
+
+        if (network.shards.largest?.dataPath) {
+            rows.push(diagnosticRow(
+                'Largest shard',
+                `${network.shards.largest.dataPath}, ${formatBytes(network.shards.largest.nbytes)}`,
+                true
+            ));
+        }
+    }
+
+    if (diagnostics.cacheTrace) {
+        const failures = diagnostics.cacheTrace.failures || [];
+        if (failures.length > 0) {
+            const lastFailure = failures[failures.length - 1];
+            rows.push(diagnosticRow(
+                'Failed Cache.add URL',
+                `${lastFailure.url} (${lastFailure.error})`,
+                false
+            ));
+        } else if (diagnostics.cacheTrace.last) {
+            rows.push(diagnosticRow(
+                'Last Cache API action',
+                `${diagnostics.cacheTrace.last.action}: ${diagnostics.cacheTrace.last.url}`,
+                true
+            ));
+        }
+    }
+
+    return rows.join('');
+}
+
+function describeShardFailure(shards) {
+    if (shards.error) return shards.error;
+    if (!shards.failed || shards.failed.length === 0) {
+        return `${shards.checked}/${shards.total} checked, unknown shard failure`;
+    }
+
+    return shards.failed
+        .slice(0, 6)
+        .map(item => `${item.label}: ${item.error || `HTTP ${item.status}`}`)
+        .join('; ');
+}
+
+function diagnosticRow(label, value, ok) {
+    return `
+        <div class="lai-diagnostic-row ${ok ? 'ok' : 'bad'}">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(value)}</strong>
+        </div>
+    `;
+}
+
+function describeWebGPU(webGPU) {
+    if (webGPU.error) return webGPU.error;
+    const adapter = webGPU.adapter;
+    if (!adapter) return 'available, adapter unknown';
+    const description = adapter.description && adapter.description !== 'unknown'
+        ? adapter.description
+        : [adapter.vendor, adapter.architecture, adapter.device].filter(part => part && part !== 'unknown').join(' ');
+    return description || 'available';
+}
+
+function logQwenDiagnostics(diagnostics) {
+    log(`Qwen diagnostics: model=${diagnostics.model}, size=${diagnostics.modelSize}, vram=${diagnostics.vram}`);
+    log(`Browser: online=${diagnostics.online}, secureContext=${diagnostics.secureContext}`);
+
+    if (diagnostics.webGPU?.adapter) {
+        log(`WebGPU adapter: ${describeWebGPU(diagnostics.webGPU)}`, 'success');
+    } else {
+        log(`WebGPU issue: ${diagnostics.webGPU?.error || 'unavailable'}`, 'error');
+    }
+
+    if (diagnostics.storage?.available) {
+        log(`Storage: ${formatBytes(diagnostics.storage.free)} free / ${formatBytes(diagnostics.storage.quota)} quota, persisted=${diagnostics.storage.persisted}`);
+    } else {
+        log(`Storage estimate unavailable: ${diagnostics.storage?.error}`, 'error');
+    }
+
+    log(`Cache API: ${diagnostics.cache?.writeTest ? 'write test OK' : diagnostics.cache?.error || 'write test failed'}`, diagnostics.cache?.writeTest ? 'success' : 'error');
+
+    Object.entries(diagnostics.network || {}).forEach(([key, item]) => {
+        if (key === 'shards') {
+            if (item.ok) {
+                log(`Network model shards: ${item.checked}/${item.total} OK, total ${formatBytes(item.totalBytes)}`, 'success');
+            } else {
+                log(`Network model shards failed: ${describeShardFailure(item)}`, 'error');
+            }
+            return;
+        }
+
+        const detail = item.ok
+            ? `OK ${item.status}${item.size ? ` (${formatBytes(item.size)})` : ''}`
+            : item.error || `HTTP ${item.status}`;
+        log(`Network ${item.label}: ${detail}`, item.ok ? 'success' : 'error');
+    });
+}
+
+function logErrorDetails(err) {
+    if (!err) return;
+    log(`Error name: ${err.name || 'unknown'}`, 'error');
+    if (err.stack) {
+        log(`Error stack: ${err.stack}`, 'error');
+    }
+}
+
+function formatBytes(bytes) {
+    if (bytes == null || Number.isNaN(bytes)) return 'unknown';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = Number(bytes);
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+    }
+    return `${value.toFixed(value >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function truncateMiddle(text, maxLength) {
+    const value = String(text || '');
+    if (value.length <= maxLength) return value;
+
+    const sideLength = Math.floor((maxLength - 3) / 2);
+    return `${value.slice(0, sideLength)}...${value.slice(-sideLength)}`;
+}
+
+function handleQwenProgress(progress) {
+    const percent = Math.max(0, Math.min(100, Math.round((progress.progress || 0) * 100)));
+    const text = progress.text || progress.timeElapsed
+        ? `${progress.text || 'Loading'}`
+        : 'Loading model files...';
+
+    const bar = document.getElementById('qwen-progress-bar');
+    const label = document.getElementById('qwen-progress-text');
+
+    if (bar) bar.style.width = `${percent || 8}%`;
+    if (label) label.textContent = percent > 0 ? `${text} (${percent}%)` : text;
+
+    if (percent > 0 && percent % 20 === 0) {
+        log(`Qwen Browser load progress: ${percent}%`);
+    }
+}
+
+function updateConnectionPanel(state) {
+    if (!progressPanel) return;
+
+    const command = escapeHtml(DEFAULT_START_COMMAND);
+    const endpoint = escapeHtml(baseUrl);
+    const model = escapeHtml(modelId);
+
+    if (state === 'checking') {
+        if (dlBar) dlBar.style.width = '35%';
+        if (dlPercent) dlPercent.innerText = 'Checking';
+        if (dlFilename) dlFilename.innerText = `Connecting to ${baseUrl}`;
+        progressPanel.classList.remove('collapsed');
+        return;
+    }
+
+    const isConnected = state === 'connected';
+    progressPanel.innerHTML = `
+        <div class="lai-local-runtime ${isConnected ? 'connected' : 'offline'}">
+            <div class="lai-local-runtime-main">
+                <strong>${isConnected ? 'Bonsai server connected' : 'Bonsai server offline'}</strong>
+                <span>${endpoint}</span>
+                <small>Model: ${model}</small>
+            </div>
+            <div class="lai-local-runtime-actions">
+                <button id="runtime-reconnect-btn" class="lai-header-btn lai-runtime-btn">${isConnected ? 'Check' : 'Reconnect'}</button>
+                <button id="runtime-copy-command-btn" class="lai-header-btn lai-runtime-btn">Copy Command</button>
+            </div>
+            ${isConnected ? '' : `<pre class="lai-command-box">${command}</pre>`}
+        </div>
+    `;
+
+    document.getElementById('runtime-reconnect-btn')?.addEventListener('click', reconnect);
+    document.getElementById('runtime-copy-command-btn')?.addEventListener('click', copyStartCommand);
+}
+
+function updateModelDisplay() {
+    const headerTitle = document.getElementById('model-title');
+    const headerSubtitle = document.querySelector('.lai-subtitle');
+    const platformBadge = document.getElementById('platform-badge');
+    const isQwen = runtimeMode === RUNTIME_MODES.QWEN_BROWSER;
+
+    if (headerTitle) {
+        headerTitle.innerHTML = isQwen
+            ? `${escapeHtml(qwenModel.name.split(' ')[0])} <span>${escapeHtml(qwenModel.name.split(' ').slice(1).join(' '))} MLC</span>`
+            : 'Bonsai 8B <span>1-bit</span>';
+    }
+
+    if (headerSubtitle) {
+        headerSubtitle.textContent = isQwen
+            ? 'Running locally in-browser with WebGPU'
+            : 'Running locally through an OpenAI-compatible endpoint';
+    }
+
+    if (platformBadge) {
+        platformBadge.classList.add('visible');
+        platformBadge.textContent = isQwen ? 'No server' : 'Local server';
+    }
+
+    document.title = `${isQwen ? qwenModel.name : BONSAI_MODEL_NAME} - Local AI Chat`;
+}
+
+// === CHAT LOGIC ===
+async function handleSend() {
+    const text = userInput.value.trim();
+    if (!text || isGenerating || !isLoaded) return;
+
+    const startTime = performance.now();
+    window.currentGenInputText = text;
+    userInput.value = '';
+    userInput.style.height = 'auto';
+    appendMessage('user', text);
+
+    isGenerating = true;
+    updateStatus('busy', 'Thinking...');
+    sendBtn.disabled = true;
+    showThinkingBubble();
+
+    const systemPrompt = systemPromptInput?.value?.trim() || 'You are a helpful assistant.';
+    const directness = thinkingModeToggle?.checked
+        ? ''
+        : ' Reply directly and do not show hidden chain-of-thought or private reasoning.';
+
+    const messages = buildMessages(`${systemPrompt}${directness}`);
+    const inputTokens = countTokens(messages.map(msg => msg.content).join('\n'));
+
+    try {
+        if (runtimeMode === RUNTIME_MODES.QWEN_BROWSER) {
+            await generateWithQwen(messages, startTime, inputTokens);
+            return;
+        }
+
+        activeGenerationController = new AbortController();
+        updateThinkingStatus('Sending request to local Bonsai server...');
+        const response = await fetch(`${trimBaseUrl(baseUrl)}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: activeGenerationController.signal,
+            body: JSON.stringify({
+                model: modelId,
+                messages,
+                stream: true,
+                temperature: 0.5,
+                top_p: 0.9,
+                max_tokens: 2048
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            throw new Error(`HTTP ${response.status}${errorText ? `: ${errorText}` : ''}`);
+        }
+
+        updateThinkingStatus('Streaming response...');
+        const output = await readOpenAIStream(response);
+        completeGeneration(output, startTime, inputTokens);
+    } catch (err) {
+        removeThinkingBubble();
+        isGenerating = false;
+        activeGenerationController = null;
+        sendBtn.disabled = false;
+        updateStatus(isLoaded ? 'ready' : 'error', isLoaded ? 'Ready' : 'Offline');
+        log(`Generation failed: ${formatError(err)}`, 'error');
+        appendMessage('system', `Generation failed: ${formatError(err)}`, null, null, false);
+    }
+}
+
+async function generateWithQwen(messages, startTime, inputTokens) {
+    if (!qwenEngine) {
+        throw new Error('Qwen Browser model is not loaded yet.');
+    }
+
+    updateThinkingStatus('Running Qwen in-browser...');
+    const streaming = createStreamingMessage();
+    removeThinkingBubble();
+    let output = '';
+
+    const chunks = await qwenEngine.chat.completions.create({
+        messages,
+        stream: true,
+        temperature: 0.6,
+        top_p: 0.9,
+        max_tokens: 1024,
+        stream_options: { include_usage: true }
+    });
+
+    for await (const chunk of chunks) {
+        const token = chunk?.choices?.[0]?.delta?.content || '';
+        if (token) {
+            output += token;
+            streaming.update(output);
+        }
+    }
+
+    streaming.finalize();
+    completeGeneration(output, startTime, inputTokens);
+}
+
+function buildMessages(systemPrompt) {
+    const currentChat = getCurrentChat();
+    const messages = [{ role: 'system', content: systemPrompt }];
+
+    if (!currentChat) return messages;
+
+    currentChat.messages.forEach(msg => {
+        if (msg.role === 'user') {
+            messages.push({ role: 'user', content: msg.text });
+        } else if (msg.role === 'bot') {
+            messages.push({ role: 'assistant', content: msg.text });
+        }
+    });
+
+    return messages;
+}
+
+async function readOpenAIStream(response) {
+    const contentType = response.headers.get('content-type') || '';
+
+    if (!response.body || !contentType.includes('text/event-stream')) {
+        const data = await response.json();
+        return data?.choices?.[0]?.message?.content || data?.choices?.[0]?.text || '';
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let output = '';
+    const streaming = createStreamingMessage();
+    removeThinkingBubble();
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line || !line.startsWith('data:')) continue;
+
+            const payload = line.replace(/^data:\s*/, '');
+            if (payload === '[DONE]') continue;
+
+            try {
+                const chunk = JSON.parse(payload);
+                const token = chunk?.choices?.[0]?.delta?.content || chunk?.choices?.[0]?.text || '';
+                if (token) {
+                    output += token;
+                    streaming.update(output);
+                }
+            } catch (err) {
+                log(`Skipped malformed stream chunk: ${formatError(err)}`, 'error');
+            }
+        }
+    }
+
+    streaming.finalize();
+    return output.trim();
+}
+
+function completeGeneration(output, startTime, inputTokens) {
+    removeThinkingBubble();
+    const response = cleanModelResponse(output);
+    const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+    const metrics = {
+        duration,
+        inputWords: countWords(window.currentGenInputText),
+        inputTokens,
+        outputWords: countWords(response),
+        outputTokens: countTokens(response)
+    };
+
+    removeStreamingDraft();
+    appendMessage('bot', response || 'No response returned.', null, metrics);
+
+    isGenerating = false;
+    activeGenerationController = null;
+    updateStatus('ready', 'Ready');
+    sendBtn.disabled = false;
+    userInput.focus();
+    log('Generation complete.', 'success');
+}
+
+function createStreamingMessage() {
+    removeStreamingDraft();
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'lai-message lai-bot';
+    msgDiv.id = 'lai-streaming-draft';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'lai-bubble';
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'lai-streaming-text';
+    textSpan.textContent = '';
+
+    bubble.appendChild(textSpan);
+    msgDiv.appendChild(bubble);
+    chatContainer.appendChild(msgDiv);
+
+    return {
+        update(text) {
+            if (typeof marked !== 'undefined') {
+                textSpan.innerHTML = marked.parse(text);
+            } else {
+                textSpan.innerText = text;
+            }
+            chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+        },
+        finalize() {
+            msgDiv.dataset.finalized = 'true';
+        }
+    };
+}
+
+function removeStreamingDraft() {
+    document.getElementById('lai-streaming-draft')?.remove();
+}
+
+function cleanModelResponse(text) {
+    return (text || '')
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/<\|im_end\|>/g, '')
+        .replace(/^assistant:?\s*/i, '')
+        .trim();
+}
+
+// === CHAT HISTORY ===
 function generateChatId() {
-    return 'chat-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    return 'chat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 11);
 }
 
 function saveChatsToStorage() {
@@ -277,12 +1250,6 @@ function loadChatsFromStorage() {
 }
 
 function createNewChat(silent = false) {
-    // Save current chat first if it has messages
-    const currentChat = getCurrentChat();
-    if (currentChat && currentChat.messages.length > 1) {
-        saveChatsToStorage();
-    }
-
     const newChat = {
         id: generateChatId(),
         title: 'New Chat',
@@ -294,13 +1261,11 @@ function createNewChat(silent = false) {
     chatHistory.chats.unshift(newChat);
     chatHistory.currentChatId = newChat.id;
     saveChatsToStorage();
-
-    // Clear the chat UI
     clearChatUI();
     renderChatList();
 
     if (!silent) {
-        log('New chat created', 'info');
+        log('New chat created.', 'info');
     }
 
     return newChat;
@@ -308,7 +1273,7 @@ function createNewChat(silent = false) {
 
 function getCurrentChat() {
     if (!chatHistory.currentChatId) return null;
-    return chatHistory.chats.find(c => c.id === chatHistory.currentChatId);
+    return chatHistory.chats.find(c => c.id === chatHistory.currentChatId) || null;
 }
 
 function loadChat(chatId) {
@@ -317,16 +1282,10 @@ function loadChat(chatId) {
 
     chatHistory.currentChatId = chatId;
     saveChatsToStorage();
-
-    // Clear and render messages
     clearChatUI();
-    chat.messages.forEach(msg => {
-        renderMessageFromData(msg);
-    });
-
+    chat.messages.forEach(msg => renderMessageFromData(msg));
     renderChatList();
     closeSidebar();
-    log(`Loaded chat: ${chat.title}`, 'info');
 }
 
 function deleteChat(chatId) {
@@ -338,7 +1297,8 @@ function deleteChat(chatId) {
 
     if (wasCurrentChat) {
         if (chatHistory.chats.length > 0) {
-            loadChat(chatHistory.chats[0].id);
+            chatHistory.currentChatId = chatHistory.chats[0].id;
+            loadChat(chatHistory.currentChatId);
         } else {
             createNewChat(true);
         }
@@ -346,16 +1306,22 @@ function deleteChat(chatId) {
 
     saveChatsToStorage();
     renderChatList();
-    log('Chat deleted', 'info');
+}
+
+function deleteAllChats() {
+    chatHistory = { chats: [], currentChatId: null };
+    saveChatsToStorage();
+    createNewChat(true);
+    renderChatList();
+    closeSidebar();
+    appendMessage('system', 'All chat history has been deleted.', null, null, false);
 }
 
 function updateChatTitle(chatId, firstMessage) {
     const chat = chatHistory.chats.find(c => c.id === chatId);
     if (!chat) return;
 
-    // Generate title from first 40 chars of first user message
-    const title = firstMessage.substring(0, 40) + (firstMessage.length > 40 ? '...' : '');
-    chat.title = title;
+    chat.title = firstMessage.substring(0, 40) + (firstMessage.length > 40 ? '...' : '');
     chat.updatedAt = Date.now();
     saveChatsToStorage();
     renderChatList();
@@ -374,7 +1340,6 @@ function addMessageToCurrentChat(role, text, context = null, metrics = null) {
     chat.messages.push(message);
     chat.updatedAt = Date.now();
 
-    // Update title from first user message
     if (role === 'user' && chat.messages.filter(m => m.role === 'user').length === 1) {
         updateChatTitle(chat.id, text);
     }
@@ -386,8 +1351,7 @@ function clearChatUI() {
     chatContainer.innerHTML = `
         <div class="lai-message lai-system">
             <div class="lai-bubble">
-                Welcome. The model is loading above. <br>
-                This downloads ${MODEL_SIZE} once. Future reloads will be instant.
+                Welcome. Choose Qwen Browser for server-free local chat, or Bonsai Server for the 1-bit model.
             </div>
         </div>`;
 }
@@ -405,7 +1369,7 @@ function renderChatList() {
                 <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                 </svg>
-                <p>No chats yet.<br>Start a conversation!</p>
+                <p>No chats yet.<br>Start a conversation.</p>
             </div>`;
         return;
     }
@@ -413,8 +1377,12 @@ function renderChatList() {
     chatListContainer.innerHTML = chatHistory.chats.map(chat => {
         const isActive = chat.id === chatHistory.currentChatId;
         const date = new Date(chat.updatedAt).toLocaleDateString(undefined, {
-            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
         });
+
         return `
             <div class="lai-chat-item ${isActive ? 'active' : ''}" data-chat-id="${chat.id}">
                 <div class="lai-chat-item-info">
@@ -430,7 +1398,6 @@ function renderChatList() {
             </div>`;
     }).join('');
 
-    // Add event listeners
     chatListContainer.querySelectorAll('.lai-chat-item').forEach(item => {
         item.addEventListener('click', (e) => {
             if (e.target.closest('.lai-chat-item-delete')) return;
@@ -441,20 +1408,411 @@ function renderChatList() {
     chatListContainer.querySelectorAll('.lai-chat-item-delete').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const chatId = btn.dataset.deleteId;
             showConfirmModal(
                 'Delete Chat',
                 'Are you sure you want to delete this chat? This action cannot be undone.',
-                () => deleteChat(chatId)
+                () => deleteChat(btn.dataset.deleteId)
             );
         });
     });
 }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+// === UI HELPERS ===
+function appendMessage(role, text, context = null, metrics = null, saveToHistory = true) {
+    if (saveToHistory && role !== 'system') {
+        addMessageToCurrentChat(role, text, context, metrics);
+    }
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `lai-message lai-${role}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'lai-bubble';
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'lai-msg-copy-btn';
+    copyBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>`;
+    copyBtn.title = 'Copy Text';
+    copyBtn.onclick = () => copyText(text);
+    bubble.appendChild(copyBtn);
+
+    if (context) {
+        const details = document.createElement('details');
+        details.className = 'lai-context-details';
+
+        const summary = document.createElement('summary');
+        summary.innerText = 'Show Context';
+        summary.className = 'lai-context-summary';
+
+        const content = document.createElement('pre');
+        content.className = 'lai-context-content';
+        content.innerText = context;
+
+        details.appendChild(summary);
+        details.appendChild(content);
+        bubble.appendChild(details);
+    }
+
+    const textSpan = document.createElement('span');
+    if (role === 'bot' && typeof marked !== 'undefined') {
+        textSpan.innerHTML = marked.parse(text);
+    } else {
+        textSpan.innerText = text;
+    }
+
+    bubble.appendChild(textSpan);
+
+    if (metrics) {
+        const footer = document.createElement('div');
+        footer.className = 'lai-message-metrics';
+        footer.innerText = [
+            `${metrics.duration}s`,
+            `Input: ${metrics.inputTokens} toks`,
+            `Output: ${metrics.outputWords} words (${metrics.outputTokens} toks)`
+        ].join('  |  ');
+        bubble.appendChild(footer);
+    }
+
+    msgDiv.appendChild(bubble);
+    chatContainer.appendChild(msgDiv);
+    chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+}
+
+function showThinkingBubble() {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'lai-message lai-bot lai-thinking';
+    msgDiv.id = 'lai-thinking-message';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'lai-bubble';
+    bubble.innerHTML = `
+        <div class="lai-thinking-bubble">
+            <div class="lai-thinking-timer" id="lai-thinking-timer">0.0s</div>
+            <div class="lai-thinking-dots"><span></span><span></span><span></span></div>
+            <div class="lai-thinking-status" id="lai-thinking-status">Thinking...</div>
+        </div>`;
+
+    msgDiv.appendChild(bubble);
+    chatContainer.appendChild(msgDiv);
+    chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+
+    thinkingMessageElement = msgDiv;
+    thinkingStartTime = performance.now();
+    thinkingTimerInterval = setInterval(() => {
+        const elapsed = ((performance.now() - thinkingStartTime) / 1000).toFixed(1);
+        const timerEl = document.getElementById('lai-thinking-timer');
+        if (timerEl) timerEl.textContent = `${elapsed}s`;
+    }, 100);
+}
+
+function removeThinkingBubble() {
+    if (thinkingTimerInterval) {
+        clearInterval(thinkingTimerInterval);
+        thinkingTimerInterval = null;
+    }
+
+    if (thinkingMessageElement) {
+        thinkingMessageElement.remove();
+        thinkingMessageElement = null;
+    }
+
+    thinkingStartTime = null;
+}
+
+function updateThinkingStatus(text) {
+    const statusEl = document.getElementById('lai-thinking-status');
+    if (statusEl) statusEl.textContent = text;
+}
+
+function updateStatus(state, text) {
+    if (!statusBadge) return;
+    statusBadge.className = `lai-status-badge lai-status-${state}`;
+    statusText.innerText = text;
+}
+
+function log(msg, type = 'info') {
+    const time = new Date().toLocaleTimeString();
+    const formattedMsg = `[${time}] ${msg}`;
+
+    if (type === 'error') console.error(formattedMsg);
+    else console.log(formattedMsg);
+
+    if (!debugLog) return;
+
+    const line = document.createElement('div');
+    line.textContent = `> ${msg}`;
+    if (type === 'error') line.style.color = '#ff6b6b';
+    if (type === 'success') line.style.color = '#4ade80';
+    debugLog.appendChild(line);
+    debugLog.scrollTop = debugLog.scrollHeight;
+}
+
+function initControls() {
+    sendBtn.addEventListener('click', handleSend);
+    userInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+        }
+    });
+    userInput.addEventListener('input', function () {
+        this.style.height = 'auto';
+        this.style.height = `${this.scrollHeight}px`;
+    });
+
+    settingsToggle?.addEventListener('click', () => {
+        settingsContent?.classList.toggle('hidden');
+    });
+
+    reconnectBtn?.addEventListener('click', reconnect);
+    copyCommandBtn?.addEventListener('click', copyStartCommand);
+
+    runtimeSelector?.addEventListener('change', (event) => {
+        setRuntimeMode(event.target.value);
+    });
+
+    runtimeSelectorSettings?.addEventListener('change', (event) => {
+        setRuntimeMode(event.target.value);
+    });
+
+    qwenModelSelector?.addEventListener('change', async (event) => {
+        await setQwenModel(event.target.value);
+    });
+
+    serverUrlInput?.addEventListener('change', () => {
+        baseUrl = serverUrlInput.value.trim() || DEFAULT_BASE_URL;
+        localStorage.setItem(BASE_URL_KEY, baseUrl);
+        reconnect();
+    });
+
+    modelIdInput?.addEventListener('change', () => {
+        modelId = modelIdInput.value.trim() || DEFAULT_MODEL_ID;
+        localStorage.setItem(MODEL_ID_KEY, modelId);
+        log(`Model id set to ${modelId}`, 'info');
+    });
+
+    clearCacheBtn?.addEventListener('click', () => {
+        showConfirmModal(
+            'Clear Local Settings?',
+            'This clears the saved endpoint, model id, and chat history for this page. It does not delete Bonsai model files from your machine.',
+            () => {
+                localStorage.removeItem(BASE_URL_KEY);
+                localStorage.removeItem(MODEL_ID_KEY);
+                localStorage.removeItem(RUNTIME_MODE_KEY);
+                localStorage.removeItem(RUNTIME_MODE_EXPLICIT_KEY);
+                localStorage.removeItem(QWEN_MODEL_KEY);
+                localStorage.removeItem(STORAGE_KEY);
+                location.reload();
+            },
+            'Clear',
+            'danger'
+        );
+    });
+
+    clearQwenCacheBtn?.addEventListener('click', () => {
+        showConfirmModal(
+            'Clear Qwen Model Cache?',
+            'This deletes browser caches that contain WebLLM, Hugging Face, MLC, or Qwen model files. Chat history and settings are kept.',
+            clearQwenModelCaches,
+            'Clear Qwen Cache',
+            'danger'
+        );
+    });
+
+    toggleDebugBtn?.addEventListener('click', () => {
+        if (!debugWrapper) return;
+        const isHidden = debugWrapper.style.display === 'none';
+        debugWrapper.style.display = isHidden ? 'block' : 'none';
+        toggleDebugBtn.style.opacity = isHidden ? '1' : '0.6';
+    });
+
+    const copyLogBtn = document.getElementById('copy-log-btn');
+    copyLogBtn?.addEventListener('click', () => {
+        if (debugLog) copyText(debugLog.innerText);
+    });
+
+    const examplePromptBtn = document.getElementById('example-prompt-btn');
+    examplePromptBtn?.addEventListener('click', fillExamplePrompt);
+}
+
+async function clearQwenModelCaches() {
+    if (!window.caches) {
+        appendMessage('system', 'Cache API is unavailable in this browser.', null, null, false);
+        return;
+    }
+
+    await resetQwenEngine();
+
+    const names = await caches.keys();
+    const deleted = [];
+    const inspected = [];
+
+    for (const name of names) {
+        let shouldDelete = /qwen|webllm|mlc|huggingface|model|transformers|wasm|diagnostics/i.test(name);
+
+        try {
+            const cache = await caches.open(name);
+            const requests = await cache.keys();
+            inspected.push(`${name} (${requests.length})`);
+            shouldDelete = shouldDelete || requests.some(request => /qwen|webllm|mlc-ai|huggingface|params_shard|ndarray-cache|tokenizer|wasm/i.test(request.url));
+        } catch (err) {
+            log(`Could not inspect cache ${name}: ${formatError(err)}`, 'error');
+        }
+
+        if (shouldDelete && await caches.delete(name)) {
+            deleted.push(name);
+        }
+    }
+
+    log(`Inspected caches: ${inspected.join(', ') || 'none'}`);
+    log(`Deleted Qwen/WebLLM caches: ${deleted.join(', ') || 'none'}`, deleted.length > 0 ? 'success' : 'info');
+    appendMessage(
+        'system',
+        deleted.length > 0
+            ? `Cleared ${deleted.length} Qwen/WebLLM cache(s): ${deleted.join(', ')}. Try loading Qwen again.`
+            : 'No Qwen/WebLLM caches were found to clear.',
+        null,
+        null,
+        false
+    );
+}
+
+function initChatHistoryEvents() {
+    historyToggleBtn?.addEventListener('click', openSidebar);
+    closeSidebarBtn?.addEventListener('click', closeSidebar);
+    sidebarOverlay?.addEventListener('click', closeSidebar);
+    newChatBtn?.addEventListener('click', () => createNewChat());
+
+    document.getElementById('delete-all-chats-btn')?.addEventListener('click', () => {
+        showConfirmModal(
+            'Delete All Chats',
+            'This will permanently delete all your chat history. This action cannot be undone.',
+            deleteAllChats
+        );
+    });
+}
+
+async function reconnect() {
+    if (runtimeSelector) {
+        runtimeMode = runtimeSelector.value || RUNTIME_MODES.QWEN_BROWSER;
+        localStorage.setItem(RUNTIME_MODE_KEY, runtimeMode);
+    }
+
+    if (serverUrlInput) {
+        baseUrl = serverUrlInput.value.trim() || DEFAULT_BASE_URL;
+        localStorage.setItem(BASE_URL_KEY, baseUrl);
+    }
+
+    if (modelIdInput) {
+        modelId = modelIdInput.value.trim() || DEFAULT_MODEL_ID;
+        localStorage.setItem(MODEL_ID_KEY, modelId);
+    }
+
+    isLoaded = false;
+    userInput.disabled = true;
+    sendBtn.disabled = true;
+    await init();
+}
+
+async function setQwenModel(modelKey) {
+    if (!QWEN_MODELS[modelKey]) return;
+    if (modelKey === qwenModelKey && qwenEngine) return;
+
+    qwenModelKey = modelKey;
+    qwenModel = QWEN_MODELS[qwenModelKey];
+    localStorage.setItem(QWEN_MODEL_KEY, qwenModelKey);
+    syncQwenModelSelector();
+    updateModelDisplay();
+    await resetQwenEngine();
+
+    if (runtimeMode !== RUNTIME_MODES.QWEN_BROWSER) {
+        setRuntimeMode(RUNTIME_MODES.QWEN_BROWSER);
+        return;
+    }
+
+    clearChatUI();
+    appendMessage(
+        'system',
+        `Switched to ${qwenModel.name}. This model runs locally in your browser without a server.`,
+        null,
+        null,
+        false
+    );
+    reconnect();
+}
+
+async function resetQwenEngine() {
+    if (!qwenEngine) return;
+
+    try {
+        if (typeof qwenEngine.unload === 'function') {
+            await qwenEngine.unload();
+        } else if (typeof qwenEngine.dispose === 'function') {
+            await qwenEngine.dispose();
+        }
+    } catch (err) {
+        log(`Could not unload previous Qwen model cleanly: ${formatError(err)}`, 'error');
+    } finally {
+        qwenEngine = null;
+    }
+}
+
+function setRuntimeMode(mode) {
+    if (!Object.values(RUNTIME_MODES).includes(mode)) return;
+    runtimeMode = mode;
+    localStorage.setItem(RUNTIME_MODE_KEY, runtimeMode);
+    localStorage.setItem(RUNTIME_MODE_EXPLICIT_KEY, 'true');
+    syncRuntimeSelectors();
+    clearChatUI();
+    appendMessage(
+        'system',
+        runtimeMode === RUNTIME_MODES.QWEN_BROWSER
+            ? 'Switched to Qwen Browser mode. This runs locally in your browser and does not need a server.'
+            : 'Switched to Bonsai Server mode. Start the local Bonsai runtime, then reconnect.',
+        null,
+        null,
+        false
+    );
+    reconnect();
+}
+
+function syncRuntimeSelectors() {
+    if (runtimeSelector) runtimeSelector.value = runtimeMode;
+    if (runtimeSelectorSettings) runtimeSelectorSettings.value = runtimeMode;
+}
+
+function syncQwenModelSelector() {
+    if (qwenModelSelector) qwenModelSelector.value = qwenModelKey;
+}
+
+function copyStartCommand() {
+    copyText(DEFAULT_START_COMMAND);
+    log('Copied Bonsai server command.', 'success');
+}
+
+function copyText(text) {
+    navigator.clipboard?.writeText(text).catch(() => {
+        log('Clipboard permission failed.', 'error');
+    });
+}
+
+function fillExamplePrompt() {
+    const prompts = [
+        'Explain quantum computing in simple terms',
+        'Write a concise project plan for a personal website refresh',
+        'Give me five ideas for improving focus while coding',
+        'Summarize why 1-bit models are useful for local AI',
+        'Draft a short story about a tiny model with big ambitions'
+    ];
+    fillExamplePrompt.index = ((fillExamplePrompt.index || 0) + 1) % prompts.length;
+    userInput.value = prompts[fillExamplePrompt.index];
+    userInput.style.height = 'auto';
+    userInput.style.height = `${userInput.scrollHeight}px`;
+    userInput.focus();
 }
 
 function openSidebar() {
@@ -466,14 +1824,13 @@ function closeSidebar() {
     historySidebar?.classList.remove('open');
     sidebarOverlay?.classList.remove('visible');
 }
-// === STYLED CONFIRMATION MODALS ===
+
 function showConfirmModal(title, message, onConfirm, confirmText = 'Delete', confirmClass = 'danger') {
     const overlay = document.createElement('div');
     overlay.className = 'lai-confirm-overlay';
 
     const modal = document.createElement('div');
     modal.className = 'lai-confirm-modal';
-
     modal.innerHTML = `
         <div class="lai-confirm-icon">
             <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
@@ -481,13 +1838,12 @@ function showConfirmModal(title, message, onConfirm, confirmText = 'Delete', con
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
             </svg>
         </div>
-        <h2>${title}</h2>
-        <p>${message}</p>
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml(message)}</p>
         <div class="lai-confirm-buttons">
             <button class="lai-confirm-btn cancel">Cancel</button>
-            <button class="lai-confirm-btn ${confirmClass} enabled">${confirmText}</button>
-        </div>
-    `;
+            <button class="lai-confirm-btn ${confirmClass} enabled">${escapeHtml(confirmText)}</button>
+        </div>`;
 
     const closeModal = () => {
         overlay.classList.add('fade-out');
@@ -504,1288 +1860,35 @@ function showConfirmModal(title, message, onConfirm, confirmText = 'Delete', con
     document.body.appendChild(overlay);
 }
 
-function showSliderConfirmModal(title, message, onConfirm) {
-    const overlay = document.createElement('div');
-    overlay.className = 'lai-confirm-overlay';
-
-    const modal = document.createElement('div');
-    modal.className = 'lai-confirm-modal';
-
-    modal.innerHTML = `
-        <div class="lai-confirm-icon">
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                <line x1="12" y1="9" x2="12" y2="13"></line>
-                <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
-        </div>
-        <h2>${title}</h2>
-        <p>${message}</p>
-        <div class="lai-slider-confirm">
-            <span class="lai-slider-label">Slide to confirm</span>
-            <div class="lai-slider-track" id="slider-track">
-                <span class="lai-slider-text">→ Slide to delete →</span>
-                <div class="lai-slider-thumb" id="slider-thumb">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="9 18 15 12 9 6"></polyline>
-                    </svg>
-                </div>
-            </div>
-        </div>
-        <div class="lai-confirm-buttons">
-            <button class="lai-confirm-btn cancel">Cancel</button>
-            <button class="lai-confirm-btn danger" id="confirm-delete-btn">Delete All</button>
-        </div>
-    `;
-
-    const closeModal = () => {
-        overlay.classList.add('fade-out');
-        setTimeout(() => overlay.remove(), 300);
-    };
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    // Setup slider
-    const track = modal.querySelector('#slider-track');
-    const thumb = modal.querySelector('#slider-thumb');
-    const confirmBtn = modal.querySelector('#confirm-delete-btn');
-    let isDragging = false;
-    let confirmed = false;
-    const trackWidth = 360 - 32; // Approximate track width minus padding
-    const thumbWidth = 60;
-    const maxLeft = trackWidth - thumbWidth - 8;
-
-    const handleMove = (clientX) => {
-        if (!isDragging || confirmed) return;
-        const rect = track.getBoundingClientRect();
-        let newLeft = clientX - rect.left - thumbWidth / 2;
-        newLeft = Math.max(4, Math.min(newLeft, maxLeft));
-        thumb.style.left = newLeft + 'px';
-
-        if (newLeft >= maxLeft - 10) {
-            confirmed = true;
-            track.classList.add('confirmed');
-            confirmBtn.classList.add('enabled');
-        }
-    };
-
-    thumb.addEventListener('mousedown', (e) => { isDragging = true; e.preventDefault(); });
-    thumb.addEventListener('touchstart', (e) => { isDragging = true; });
-
-    document.addEventListener('mousemove', (e) => handleMove(e.clientX));
-    document.addEventListener('touchmove', (e) => handleMove(e.touches[0].clientX));
-
-    document.addEventListener('mouseup', () => { isDragging = false; if (!confirmed) resetSlider(); });
-    document.addEventListener('touchend', () => { isDragging = false; if (!confirmed) resetSlider(); });
-
-    function resetSlider() {
-        thumb.style.left = '4px';
-    }
-
-    modal.querySelector('.cancel').onclick = closeModal;
-    confirmBtn.onclick = () => {
-        if (!confirmed) return;
-        closeModal();
-        onConfirm();
-    };
-}
-
-function deleteAllChats() {
-    chatHistory.chats = [];
-    chatHistory.currentChatId = null;
-    saveChatsToStorage();
-    createNewChat(true);
-    renderChatList();
-    closeSidebar();
-    log('All chats deleted', 'info');
-    appendMessage('system', 'All chat history has been deleted.', null, null, false);
-}
-
-// Initialize chat history event listeners
-function initChatHistoryEvents() {
-    historyToggleBtn?.addEventListener('click', openSidebar);
-    closeSidebarBtn?.addEventListener('click', closeSidebar);
-    sidebarOverlay?.addEventListener('click', closeSidebar);
-    newChatBtn?.addEventListener('click', () => createNewChat());
-
-    const deleteAllBtn = document.getElementById('delete-all-chats-btn');
-    deleteAllBtn?.addEventListener('click', () => {
-        showSliderConfirmModal(
-            'Delete All Chats',
-            'This will permanently delete all your chat history. This action cannot be undone.',
-            deleteAllChats
-        );
-    });
-}
-
-// === THINKING BUBBLE ===
-function showThinkingBubble() {
-    const msgDiv = document.createElement('div');
-    msgDiv.className = 'lai-message lai-bot lai-thinking';
-    msgDiv.id = 'lai-thinking-message';
-
-    const bubble = document.createElement('div');
-    bubble.className = 'lai-bubble';
-
-    const thinkingContent = document.createElement('div');
-    thinkingContent.className = 'lai-thinking-bubble';
-
-    // Timer at the top
-    const timer = document.createElement('div');
-    timer.className = 'lai-thinking-timer';
-    timer.id = 'lai-thinking-timer';
-    timer.textContent = '0.0s';
-
-    // Animated dots
-    const dots = document.createElement('div');
-    dots.className = 'lai-thinking-dots';
-    dots.innerHTML = '<span></span><span></span><span></span>';
-
-    // Status text
-    const status = document.createElement('div');
-    status.className = 'lai-thinking-status';
-    status.id = 'lai-thinking-status';
-    status.textContent = 'Thinking...';
-
-    thinkingContent.appendChild(timer);
-    thinkingContent.appendChild(dots);
-    thinkingContent.appendChild(status);
-    bubble.appendChild(thinkingContent);
-    msgDiv.appendChild(bubble);
-
-    chatContainer.appendChild(msgDiv);
-    chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
-
-    thinkingMessageElement = msgDiv;
-    thinkingStartTime = performance.now();
-
-    // Start live timer
-    thinkingTimerInterval = setInterval(() => {
-        const elapsed = ((performance.now() - thinkingStartTime) / 1000).toFixed(1);
-        const timerEl = document.getElementById('lai-thinking-timer');
-        if (timerEl) {
-            timerEl.textContent = `${elapsed}s`;
-        }
-    }, 100);
-
-    return msgDiv;
-}
-
-function removeThinkingBubble() {
-    if (thinkingTimerInterval) {
-        clearInterval(thinkingTimerInterval);
-        thinkingTimerInterval = null;
-    }
-    if (thinkingMessageElement) {
-        thinkingMessageElement.remove();
-        thinkingMessageElement = null;
-    }
-    thinkingStartTime = null;
-}
-
-function updateThinkingStatus(text) {
-    const statusEl = document.getElementById('lai-thinking-status');
-    if (statusEl) {
-        statusEl.textContent = text;
-    }
-}
-
-// === DEBUGGING ===
-function log(msg, type = 'info') {
-    const time = new Date().toLocaleTimeString();
-    const formattedMsg = `[${time}] ${msg}`;
-
-    if (type === 'error') console.error(formattedMsg);
-    else console.log(formattedMsg);
-
-    if (debugLog) {
-        const line = document.createElement('div');
-        line.textContent = `> ${msg}`;
-        if (type === 'error') line.style.color = '#ff6b6b';
-        if (type === 'success') line.style.color = '#4ade80';
-        debugLog.appendChild(line);
-        // Auto-scroll
-        debugLog.scrollTop = debugLog.scrollHeight;
-    }
-
-    if (type === 'error') appendMessage('system', `Error: ${msg}`);
-}
-
-// Global Error Handlers
-window.onerror = function (msg, source, lineno, colno, error) {
-    log(`Global Error: ${msg} (${source}:${lineno})`, 'error');
-};
-window.onunhandledrejection = function (event) {
-    log(`Unhandled Rejection: ${event.reason}`, 'error');
-};
-
-// === INITIALIZATION ===
-async function init() {
-    try {
-        log("System Initialize...");
-        log(`User Agent: ${navigator.userAgent}`);
-        log(`Device Memory (RAM): ${navigator.deviceMemory ? '~' + navigator.deviceMemory + 'GB' : 'Unknown'}`);
-
-        // Detect platform early
-        detectPlatform();
-        if (platformInfo.isMacOS) {
-            log(`Platform: macOS${platformInfo.osVersion ? ' ' + platformInfo.osVersion : ''}`, 'success');
-        } else {
-            log(`Platform: ${navigator.platform}`);
-        }
-
-        if (dlFilename) dlFilename.innerText = "Checking Hardware...";
-
-        // REMOVED: Main thread Transformers.js import (Worker handles this now)
-        log("Using background Worker for AI engine.");
-
-        // === BROWSER CACHE CONFIG ===
-        try {
-            if (!window.caches) throw new Error("Cache API missing");
-            log("Browser Cache available.");
-        } catch (e) {
-            console.warn("Cache blocked.");
-        }
-
-        // CHECK GPU & HARDWARE PREFERENCE
-        log("Checking Hardware...");
-
-        // 1. Always check for user preference (or ask if new user)
-        // This ensures the modal appears for first-time users regardless of auto-detection
-        const hardwareChoice = await showHardwareSelectionModal();
-
-        // 2. Adjust platform info based on user choice
-        if (hardwareChoice.isAppleSilicon) {
-            platformInfo.isMacOS = true;
-            platformInfo.isAppleSilicon = true;
-            platformInfo.chipName = 'Apple Silicon';
-        } else if (hardwareChoice.isMacOS) {
-            platformInfo.isMacOS = true;
-        }
-
-        // 3. Check browser capabilities
-        if (!navigator.gpu) {
-            // Browser doesn't support WebGPU
-            platformInfo.webGPUAvailable = false;
-
-            if (hardwareChoice.hasGPU) {
-                // User has GPU but browser blocks it -> Show instructions via button (don't auto-popup)
-                log("WebGPU not available via browser API.", 'info');
-                log(`User selected: ${hardwareChoice.isAppleSilicon ? 'Apple Silicon' : 'Dedicated GPU'}`, 'info');
-
-                if (enableWebGPUBtn) {
-                    enableWebGPUBtn.style.display = 'inline-flex';
-                    enableWebGPUBtn.onclick = () => {
-                        showErrorModal(
-                            "Enable WebGPU for Best Performance",
-                            `<div style="text-align: left;">
-                                <p style="margin-bottom: 12px;">You have <strong>${hardwareChoice.isAppleSilicon ? 'Apple Silicon' : 'a dedicated GPU'}</strong> but WebGPU isn't enabled in your browser. The model will run using <strong>WASM (CPU)</strong> which is slower.</p>
-                                
-                                <div style="background: rgba(139, 92, 246, 0.1); padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid rgba(139, 92, 246, 0.3);">
-                                    <strong>⚡ Enable WebGPU for 10x faster performance:</strong>
-                                    <ol style="margin: 8px 0 0 20px; padding: 0;">
-                                        ${platformInfo.isMacOS ?
-                                `<li>Open <code>chrome://flags</code> in Chrome</li>
-                                            <li>Search for <strong>"WebGPU"</strong></li>
-                                            <li>Enable <strong>"Unsafe WebGPU Support"</strong></li>
-                                            <li>Relaunch Chrome</li>
-                                            <li style="margin-top: 8px;"><em>Or try Safari which has native WebGPU support!</em></li>`
-                                :
-                                `<li>Open <code>chrome://flags</code> in Chrome</li>
-                                            <li>Search for <strong>"WebGPU"</strong></li>
-                                            <li>Enable <strong>"WebGPU Developer Features"</strong></li>
-                                            <li>Relaunch Chrome</li>`
-                            }
-                                    </ol>
-                                </div>
-                            </div>`
-                        );
-                    };
-                }
-
-                updatePlatformBadge();
-            } else {
-                log("User selected CPU only - using WASM mode.", 'info');
-            }
-        } else {
-            // Browser SUPPORTS WebGPU
-            if (hardwareChoice.hasGPU) {
-                // User wants GPU + Browser has GPU -> Great!
-                // Still allow detectGPU to refine info (get exact GPU name)
-                const adapter = await detectGPU();
-
-                if (!adapter) {
-                    log("WebGPU supported but no adapter found. Using WASM fallback.", 'info');
-                    platformInfo.webGPUAvailable = false;
-                } else {
-                    platformInfo.webGPUAvailable = true;
-                    log("WebGPU is available - using GPU acceleration!", 'success');
-                    updatePlatformBadge();
-                }
-            } else {
-                // User explicitly selected CPU-only even though browser supports WebGPU
-                log("User selected CPU-only mode (overriding WebGPU availability).", 'info');
-                platformInfo.webGPUAvailable = false;
-            }
-        }
-
-        // Determine device, model, and dtype based on WebGPU availability
-        const useDevice = platformInfo.webGPUAvailable ? 'webgpu' : 'wasm';
-
-        // Select model based on device and user preference
-        if (platformInfo.webGPUAvailable) {
-            // Check for saved model preference
-            const savedModel = localStorage.getItem(MODEL_SELECTION_KEY);
-            const selectedKey = (savedModel && WEBGPU_MODELS[savedModel]) ? savedModel : DEFAULT_WEBGPU_MODEL;
-
-            MODEL_ID = WEBGPU_MODELS[selectedKey].id;
-            MODEL_NAME = WEBGPU_MODELS[selectedKey].name;
-            MODEL_SIZE = WEBGPU_MODELS[selectedKey].size;
-        } else {
-            MODEL_ID = WASM_MODEL_ID;
-            MODEL_NAME = WASM_MODEL_NAME;
-            MODEL_SIZE = WASM_MODEL_SIZE;
-            log("Using CPU-compatible model (Qwen2.5-1.5B) for WASM mode", 'info');
-        }
-
-        log(`Using device: ${useDevice}`);
-        log(`Model: ${MODEL_NAME}`);
-        updateStatus('busy', `Loading ${MODEL_NAME}...`);
-
-        // Update the UI header to show the current model
-        updateModelDisplay();
-
-        log(`Starting Pipeline for: ${MODEL_ID}`);
-
-        if (dlFilename) dlFilename.innerText = "Initializing Model...";
-
-        // Build pipeline options (Worker will handle progress_callback logic via messages)
-        const pipelineOptions = {
-            device: useDevice,
-            // progress_callback: implicitly handled by worker
-        };
-
-        // Add dtype for WebGPU mode
-        if (platformInfo.webGPUAvailable) {
-            pipelineOptions.dtype = 'q4f16';
-        }
-
-        // Initialize Worker
-        worker = new Worker('worker.js', { type: 'module' });
-
-        // Add detailed error logging for Worker startup
-        worker.onerror = (err) => {
-            console.error("Worker Error Event:", err);
-            log(`Worker Startup Error: ${err.message || 'Check console for details'}`, 'error');
-            if (dlFilename) {
-                dlFilename.innerText = "Worker Initialization Failed";
-                dlFilename.style.color = "red";
-            }
-        };
-
-        // Define Message Handler
-        worker.onmessage = (e) => {
-            const { type, data, error, output, partial, status } = e.data;
-
-            if (type === 'progress') {
-                handleDownloadProgress(data);
-            }
-            else if (type === 'ready') {
-                isLoaded = true;
-                log("Pipeline creation complete (Worker).", 'success');
-                finishLoading();
-            }
-            else if (type === 'error') {
-                log(`Worker Error: ${error}`, 'error');
-                if (dlFilename) {
-                    dlFilename.innerText = `Error: ${error}`;
-                    dlFilename.style.color = "red";
-                }
-                removeThinkingBubble();
-                isGenerating = false;
-                sendBtn.disabled = false;
-            }
-            else if (type === 'output') {
-                // Partial output (if implemented in worker)
-            }
-            else if (type === 'complete') {
-                // Generation Complete
-                handleGenerationComplete(output);
-            }
-            else if (type === 'status') {
-                if (data.status === 'initiate') {
-                    log(`Initiating download: ${data.file}`);
-                    if (dlFilename) dlFilename.innerText = `Preparing: ${data.file}`;
-                } else if (data.status === 'done') {
-                    log(`Finished: ${data.file}`, 'success');
-                }
-            }
-        };
-
-        log("Worker initialized. Sending init command...", 'info');
-        worker.postMessage({
-            type: 'init',
-            data: { model: MODEL_ID, options: pipelineOptions }
-        });
-
-    } catch (err) {
-        // If user stopped the download, suppress the error
-        if (isDownloadStopped) {
-            log("Download process terminated by user.", 'info');
-            return;
-        }
-
-        console.error("CRITICAL ERROR OBJECT:", err);
-        const errMsg = err?.message || err?.toString() || "Unknown Error";
-        const errStack = err?.stack || "No stack trace";
-
-        log(`CRITICAL: ${errMsg}`, 'error');
-        log(`Stack: ${errStack}`, 'error');
-
-        updateStatus('error', 'Failed');
-        if (dlFilename) {
-            dlFilename.innerText = "Error: " + errMsg;
-            dlFilename.style.color = "red";
-        }
-    }
-}
-
-// === LOADING UI HELPERS ===
-function switchToInitStage() {
-    if (!downloadStage.classList.contains('hidden')) {
-        log("Switching to Initialization Stage...");
-        downloadStage.classList.add('hidden');
-        initStage.classList.remove('hidden');
-        updateStatus('busy', 'Initializing GPU...');
-    }
-}
-
-function finishLoading() {
-    // Show success message
-    progressPanel.classList.remove('collapsed');
-    progressPanel.style.display = 'block';
-    progressPanel.innerHTML = '<div style="color: var(--lai-success); font-weight: 700; text-align: center; padding: 10px;">Model Downloaded Successfully</div>';
-
-    // Enable Chat
-    updateStatus('ready', 'Ready');
-    userInput.disabled = false;
-    sendBtn.disabled = false;
-    userInput.placeholder = `Ask ${MODEL_NAME.split(' ')[0]} something...`;
-
-    // Build context-aware welcome message that includes model name
-    let welcomeMsg = `✅ System Online. ${MODEL_NAME} loaded on your device.`;
-
-    if (platformInfo.webGPUAvailable) {
-        // WebGPU is available - show GPU acceleration message
-        if (platformInfo.isMacOS) {
-            if (platformInfo.isAppleSilicon && platformInfo.chipName) {
-                welcomeMsg = `✅ ${MODEL_NAME} is ready! Running on your Apple ${platformInfo.chipName} with WebGPU acceleration.`;
-            } else if (platformInfo.isAppleSilicon) {
-                welcomeMsg = `✅ ${MODEL_NAME} is ready! Running on your Apple Silicon Mac with WebGPU.`;
-            } else {
-                welcomeMsg = `✅ ${MODEL_NAME} is ready! Running on your Mac with WebGPU.`;
-            }
-        } else {
-            welcomeMsg = `✅ ${MODEL_NAME} is ready! Using WebGPU acceleration.`;
-        }
-    } else {
-        // WASM fallback - show CPU message with tips
-        if (platformInfo.isMacOS) {
-            welcomeMsg = `✅ ${MODEL_NAME} is ready! Running on your Mac using WASM (CPU). Enable WebGPU in Chrome flags for the larger 4B model!`;
-        } else {
-            welcomeMsg = `✅ ${MODEL_NAME} is ready! Using WASM (CPU mode). Responses may be slower.`;
-        }
-    }
-    appendMessage('system', welcomeMsg);
-}
-
-// === CHAT LOGIC ===
-async function handleSend() {
-    const text = userInput.value.trim();
-    if (!text || isGenerating || !worker) return;
-
-    // Metrics: Start Time
-    const startTime = performance.now();
-
-    userInput.value = '';
-    userInput.style.height = 'auto';
-    appendMessage('user', text);
-
-    isGenerating = true;
-    updateStatus('busy', 'Thinking...');
-    sendBtn.disabled = true;
-
-    // Show the animated thinking bubble with timer
-    showThinkingBubble();
-
-    // Timeout warning for slow generations
-    window.genTimeoutWarning = setTimeout(() => {
-        if (isGenerating) {
-            updateStatus('busy', 'Still working on it...');
-            updateThinkingStatus('Still processing, please wait...');
-            log("Generation is taking longer than usual...", 'info');
-        }
-    }, 8000); // 8 seconds
-
-    log("Generating response...");
-    // Get settings values
-    const systemPrompt = systemPromptInput?.value?.trim() || 'You are a helpful assistant.';
-    const thinkingEnabled = thinkingModeToggle?.checked || false;
-    const thinkingDirective = thinkingEnabled ? '' : ' /no_think';
-
-    // Qwen3 uses ChatML format
-    const prompt = `<|im_start|>system
-${systemPrompt}${thinkingDirective}<|im_end|>
-<|im_start|>user
-${text}<|im_end|>
-<|im_start|>assistant
-`;
-
-    // Store stats for current generation and update metrics (approx)
-    window.currentGenStartTime = startTime;
-    window.currentGenInputText = text;
-    window.currentGenPrompt = prompt;
-    window.currentGenInputTokens = countTokens(prompt);
-
-    updateThinkingStatus('Starting inference (Worker)...');
-
-    worker.postMessage({
-        type: 'generate',
-        data: {
-            prompt: prompt,
-            config: {
-                max_new_tokens: 2048,
-                temperature: 0.7,
-                do_sample: true,
-                top_k: 50,
-            }
-        }
-    });
-
-    // Cleanup logic (timeout) remains in main thread, but handling success is now in worker.onmessage
-}
-
-// === WORKER HANDLERS ===
-function handleGenerationComplete(outputRaw) {
-    if (!isGenerating) return;
-
-    clearTimeout(window.genTimeoutWarning);
-
-    const startTime = window.currentGenStartTime;
-    const prompt = window.currentGenPrompt;
-
-    const endTime = performance.now();
-    const duration = ((endTime - startTime) / 1000).toFixed(2);
-
-    // Parse output
-    const { context, response } = parseChatOutput(outputRaw, prompt);
-
-    // Metrics
-    const inputWords = countWords(window.currentGenInputText);
-    const inputTokens = window.currentGenInputTokens;
-    const outputWords = countWords(response);
-    const outputTokens = countTokens(response);
-
-    const metrics = {
-        duration,
-        inputWords,
-        inputTokens,
-        outputWords,
-        outputTokens
-    };
-
-    removeThinkingBubble();
-    appendMessage('bot', response, context, metrics);
-    log("Generation Complete.", 'success');
-
-    isGenerating = false;
-    updateStatus('ready', 'Ready');
-    sendBtn.disabled = false;
-    userInput.focus();
-}
-
-function handleDownloadProgress(data) {
-    // Reused logic from original progress_callback
-    const percent = Math.round(data.progress || 0);
-    const loaded = data.loaded || 0;
-    const total = data.total || 0;
-    const fileName = data.file;
-
-    if (dlBar) dlBar.style.width = `${percent}%`;
-    if (dlPercent) dlPercent.innerText = `${percent}%`;
-
-    const sizeText = total > 0
-        ? `(${Math.round(loaded / 1024 / 1024)}MB / ${Math.round(total / 1024 / 1024)}MB)`
-        : '';
-
-    if (dlFilename) dlFilename.innerText = `Downloading: ${fileName} ${sizeText}`;
-
-    if (percent % 10 === 0 && percent > 0) {
-        log(`[${fileName}] ${percent}%`);
-    }
-}
-
 function countWords(str) {
     if (!str) return 0;
-    return str.trim().split(/\s+/).length;
+    return str.trim().split(/\s+/).filter(Boolean).length;
 }
 
 function countTokens(str) {
     if (!str) return 0;
-    // Fallback approximation (rule of thumb: 4 chars per token)
     return Math.ceil(str.length / 4);
 }
 
-function parseChatOutput(raw, originalPrompt) {
-    // 1. Try to cleanly strip the original prompt if it matches exactly
-    let clean = raw;
-    let context = "";
-
-    // The model typically echoes the prompt or part of it. 
-    // We want to find where the "assistant" starts speaking.
-    // Based on user report, it might output: "system\n... user\n... assistant\n\nResponse..."
-
-    // Strategy: Look for the last occurrence of "<|im_start|>assistant" or just "assistant" header
-    // But since we provided the prompt, we should ideally just strip that exact string.
-
-    if (raw.startsWith(originalPrompt)) {
-        context = originalPrompt;
-        clean = raw.substring(originalPrompt.length).trim();
-    } else {
-        // Fallback: splitting by known tokens
-        const parts = raw.split('<|im_start|>assistant');
-        if (parts.length > 1) {
-            // The last part is likely the response
-            clean = parts.pop().trim();
-            context = parts.slice(0, -1).join('<|im_start|>assistant') + '<|im_start|>assistant';
-        } else {
-            // Fallback for "system... user... assistant" plain text artifacts (CRITICAL FIX)
-            // Regex to find "assistant" followed by newline(s) at the start of a line
-            const assistantRegex = /assistant\s*$/im;
-            const plainSplit = raw.split(/assistant\s*\n/i);
-
-            if (plainSplit.length > 1) {
-                // We take the last part as response, everything else as context
-                clean = plainSplit.pop().trim();
-                context = raw.substring(0, raw.lastIndexOf(clean)).trim();
-            }
-        }
-    }
-
-    // Clean up the response
-    // Remove any <think>...</think> blocks
-    clean = clean.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    // Remove any leftover ChatML tokens
-    clean = clean.replace(/<\|im_end\|>/g, '').trim();
-
-    // Remove leading "assistant" label if it stuck around
-    clean = clean.replace(/^assistant:?\s*/i, '').trim();
-
-    // If context is empty (perfect match wasn't found), try to extract what looks like system/user turns
-    if (!context) {
-        // Just treat everything before the cleaned response as context
-        const responseIndex = raw.indexOf(clean);
-        if (responseIndex > 0) {
-            context = raw.substring(0, responseIndex).trim();
-        }
-    }
-
-    return { context, response: clean };
+function trimBaseUrl(url) {
+    return url.replace(/\/$/, '');
 }
 
-// === UI HELPERS ===
-function appendMessage(role, text, context = null, metrics = null, saveToHistory = true) {
-    // Save to chat history if requested (not when reloading from storage)
-    if (saveToHistory && role !== 'system') {
-        addMessageToCurrentChat(role, text, context, metrics);
-    }
-
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `lai-message lai-${role}`;
-
-    const bubble = document.createElement('div');
-    bubble.className = 'lai-bubble';
-
-    // Copy Button
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'lai-msg-copy-btn';
-    copyBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>`;
-    copyBtn.title = 'Copy Text';
-    copyBtn.onclick = () => {
-        navigator.clipboard.writeText(text).then(() => {
-            const originalHTML = copyBtn.innerHTML;
-            copyBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" class="text-green-500">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>`;
-            setTimeout(() => {
-                copyBtn.innerHTML = originalHTML;
-            }, 2000);
-        });
-    };
-    bubble.appendChild(copyBtn);
-
-    // If there is context (e.g. system prompt echoes), add a toggle
-    if (context) {
-        const details = document.createElement('details');
-        details.className = 'lai-context-details';
-
-        const summary = document.createElement('summary');
-        summary.innerText = 'Show Context / Thought Process';
-        summary.className = 'lai-context-summary';
-
-        const content = document.createElement('pre');
-        content.className = 'lai-context-content';
-        content.innerText = context;
-
-        details.appendChild(summary);
-        details.appendChild(content);
-        bubble.appendChild(details);
-    }
-
-    const textSpan = document.createElement('span');
-
-    // Parse Markdown for bot messages
-    if (role === 'bot' && typeof marked !== 'undefined') {
-        textSpan.innerHTML = marked.parse(text);
-    } else {
-        textSpan.innerText = text;
-    }
-
-    bubble.appendChild(textSpan);
-
-    // Metrics Footer
-    if (metrics) {
-        const footer = document.createElement('div');
-        footer.className = 'lai-message-metrics';
-
-        // Refined Format: Input: ... | Output: ...
-        const parts = [
-            `⏱️ ${metrics.duration}s`,
-            `Input: ${metrics.inputWords} words (${metrics.inputTokens} toks)`,
-            `Output: ${metrics.outputWords} words (${metrics.outputTokens} toks)`
-        ];
-
-        footer.innerText = parts.join('  |  ');
-        bubble.appendChild(footer);
-    }
-
-    msgDiv.appendChild(bubble);
-    chatContainer.appendChild(msgDiv);
-    chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
-function updateStatus(state, text) {
-    if (!statusBadge) return;
-    statusBadge.className = `lai-status-badge lai-status-${state}`;
-    statusText.innerText = text;
+function formatError(err) {
+    if (err?.name === 'AbortError') return 'Request timed out';
+    return err?.message || String(err);
 }
 
-// === EVENTS ===
-sendBtn.addEventListener('click', handleSend);
-userInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-});
-userInput.addEventListener('input', function () {
-    this.style.height = 'auto';
-    this.style.height = (this.scrollHeight) + 'px';
-});
+window.onerror = function (msg, source, lineno) {
+    log(`Global error: ${msg} (${source}:${lineno})`, 'error');
+};
 
-const copyLogBtn = document.getElementById('copy-log-btn');
-if (copyLogBtn) {
-    copyLogBtn.addEventListener('click', () => {
-        if (!debugLog) return;
-        const textToCopy = debugLog.innerText;
-        navigator.clipboard.writeText(textToCopy).then(() => {
-            const originalText = copyLogBtn.innerHTML;
-            copyLogBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" class="text-green-500" stroke="currentColor" stroke-width="2">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg> Copied!`;
-            setTimeout(() => {
-                copyLogBtn.innerHTML = originalText;
-            }, 2000);
-        }).catch(err => {
-            console.error('Failed to copy:', err);
-            log("Clipboard permission failed.", 'error');
-        });
-    });
-}
-
-// Settings Toggle
-if (settingsToggle && settingsContent) {
-    settingsToggle.addEventListener('click', () => {
-        settingsContent.classList.toggle('hidden');
-    });
-}
-
-// === EXAMPLE PROMPTS ===
-const examplePrompts = [
-    "Explain quantum computing in simple terms",
-    "Write a haiku about programming",
-    "What are the benefits of meditation?",
-    "How do I make the perfect cup of coffee?",
-    "Explain the theory of relativity like I'm 10",
-    "What are 5 creative date ideas for a rainy day?",
-    "Write a short story about a robot learning to love",
-    "What's the difference between machine learning and AI?",
-    "Give me a workout routine I can do at home",
-    "Explain blockchain technology without using jargon",
-    "What are some tips for better sleep?",
-    "Write a poem about the ocean",
-    "How do I start learning a new language effectively?",
-    "What are the most important soft skills for career success?",
-    "Explain how vaccines work",
-    "Give me 3 healthy breakfast ideas",
-    "What's the history behind the internet?",
-    "How can I be more productive while working from home?",
-    "Write a motivational quote about perseverance",
-    "Explain the water cycle to a child",
-    "What are some eco-friendly lifestyle changes I can make?",
-    "How do neural networks learn?"
-];
-let currentPromptIndex = 0;
-
-const examplePromptBtn = document.getElementById('example-prompt-btn');
-if (examplePromptBtn) {
-    examplePromptBtn.addEventListener('click', () => {
-        if (userInput) {
-            userInput.value = examplePrompts[currentPromptIndex];
-            userInput.style.height = 'auto';
-            userInput.style.height = (userInput.scrollHeight) + 'px';
-            userInput.focus();
-            currentPromptIndex = (currentPromptIndex + 1) % examplePrompts.length;
-        }
-    });
-}
-
-// Clear Cache Button
-if (clearCacheBtn) {
-    clearCacheBtn.addEventListener('click', () => {
-        showConfirmModal(
-            'Clear Model Cache?',
-            'This will delete ALL cached model files (4B and 8B models). You will need to re-download them.',
-            async () => {
-                try {
-                    log('Clearing all model caches...', 'info');
-                    clearCacheBtn.disabled = true;
-                    clearCacheBtn.textContent = 'Clearing...';
-
-                    if (!window.caches) {
-                        throw new Error("Cache API not available (requires HTTPS or localhost)");
-                    }
-
-                    // Get all cache names and delete any that look like transformers/model caches
-                    const cacheNames = await window.caches.keys();
-                    let deletedCount = 0;
-
-                    for (const cacheName of cacheNames) {
-                        // Delete transformers cache and any other model-related caches
-                        if (cacheName.includes('transformers') ||
-                            cacheName.includes('onnx') ||
-                            cacheName.includes('huggingface') ||
-                            cacheName.includes('model')) {
-                            const deleted = await window.caches.delete(cacheName);
-                            if (deleted) {
-                                log(`Deleted cache: ${cacheName}`, 'success');
-                                deletedCount++;
-                            }
-                        }
-                    }
-
-                    // Also try the main transformers-cache directly
-                    const mainCacheDeleted = await window.caches.delete('transformers-cache');
-                    if (mainCacheDeleted) deletedCount++;
-
-                    if (deletedCount > 0) {
-                        log(`Cleared ${deletedCount} cache(s) successfully!`, 'success');
-                        appendMessage('system', `Cleared ${deletedCount} model cache(s)! Models will be re-downloaded on next use.`);
-                    } else {
-                        log('No model caches found to delete.', 'info');
-                        appendMessage('system', 'No cached models found.');
-                    }
-
-                    clearCacheBtn.disabled = false;
-                    clearCacheBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-                Clear Cache`;
-                } catch (err) {
-                    log(`Failed to clear cache: ${err.message}`, 'error');
-                    clearCacheBtn.disabled = false;
-                }
-            },
-            'Clear Cache',
-            'danger'
-        );
-    });
-}
-
-// Reset Hardware Choice Button
-if (resetHardwareBtn) {
-    resetHardwareBtn.addEventListener('click', () => {
-        showConfirmModal(
-            'Reset Hardware Choice?',
-            'This will clear your saved preference and reload the page to detect hardware again.',
-            () => {
-                clearHardwareSelection();
-                location.reload();
-            },
-            'Reset & Reload',
-            'danger'
-        );
-    });
-}
-
-// Download Control Buttons
-if (stopDownloadBtn) {
-    stopDownloadBtn.addEventListener('click', () => {
-        log('Stopping download by user request...', 'info');
-        isDownloadStopped = true;
-
-        // Terminate the worker to immediately kill all fetches and processing
-        if (worker) {
-            worker.terminate();
-            worker = null;
-            log('Worker process terminated.', 'error');
-        }
-
-        // Update UI
-        if (typeof statusText !== 'undefined') statusText.innerText = 'Download Cancelled';
-        if (typeof dlFilename !== 'undefined') dlFilename.innerText = 'Download stopped by user.';
-
-        stopDownloadBtn.classList.add('hidden');
-        if (restartDownloadBtn) restartDownloadBtn.classList.remove('hidden');
-
-        // Disable loaders
-        const bar = document.querySelector('.lai-infinite-bar');
-        if (bar) bar.style.animation = 'none';
-    });
-}
-
-if (restartDownloadBtn) {
-    restartDownloadBtn.addEventListener('click', () => {
-        location.reload();
-    });
-}
-
-if (restartDownloadBtn) {
-    restartDownloadBtn.addEventListener('click', () => {
-        location.reload();
-    });
-}
-
-// Debug Console Toggle
-if (toggleDebugBtn) {
-    toggleDebugBtn.addEventListener('click', () => {
-        // Toggle the entire debug wrapper (header + log)
-        if (debugWrapper) {
-            const isHidden = debugWrapper.style.display === 'none';
-            debugWrapper.style.display = isHidden ? 'block' : 'none';
-
-            // Update icon opacity
-            toggleDebugBtn.style.opacity = isHidden ? '1' : '0.6';
-        }
-    });
-}
-
-function showErrorModal(title, message) {
-    // Create Overlay
-    const overlay = document.createElement('div');
-    overlay.className = 'lai-modal-overlay';
-
-    // Create Modal
-    const modal = document.createElement('div');
-    modal.className = 'lai-modal';
-
-    modal.innerHTML = `
-        <div class="lai-modal-icon">
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                <line x1="12" y1="9" x2="12" y2="13"></line>
-                <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
-        </div>
-        </div>
-        <h2>${title}</h2>
-        <div class="lai-modal-body">${message}</div>
-        <button class="lai-modal-btn">I Understand</button>
-    `;
-
-    // Cleanup on click
-    const btn = modal.querySelector('.lai-modal-btn');
-    btn.onclick = () => {
-        overlay.classList.add('fade-out');
-        setTimeout(() => overlay.remove(), 300);
-    };
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-}
-
-// Hardware Selection Modal - shown when auto-detection fails
-const HARDWARE_SELECTION_KEY = 'lai-hardware-selection';
-
-function showHardwareSelectionModal() {
-    return new Promise((resolve) => {
-        // Check if user has previously made a selection
-        const savedSelection = localStorage.getItem(HARDWARE_SELECTION_KEY);
-        if (savedSelection) {
-            const parsed = JSON.parse(savedSelection);
-            resolve(parsed);
-            return;
-        }
-
-        const overlay = document.createElement('div');
-        overlay.className = 'lai-modal-overlay lai-hardware-modal';
-
-        const modal = document.createElement('div');
-        modal.className = 'lai-modal lai-hardware-selection';
-
-        modal.innerHTML = `
-            <div class="lai-modal-icon" style="background: rgba(139, 92, 246, 0.15); color: var(--lai-accent);">
-                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
-                    <rect x="9" y="9" width="6" height="6"></rect>
-                    <line x1="9" y1="1" x2="9" y2="4"></line>
-                    <line x1="15" y1="1" x2="15" y2="4"></line>
-                    <line x1="9" y1="20" x2="9" y2="23"></line>
-                    <line x1="15" y1="20" x2="15" y2="23"></line>
-                    <line x1="20" y1="9" x2="23" y2="9"></line>
-                    <line x1="20" y1="14" x2="23" y2="14"></line>
-                    <line x1="1" y1="9" x2="4" y2="9"></line>
-                    <line x1="1" y1="14" x2="4" y2="14"></line>
-                </svg>
-            </div>
-            <h2>Select Your Hardware</h2>
-            <p style="color: var(--lai-text-secondary); margin-bottom: 20px; font-size: 0.9rem;">
-                We couldn't automatically detect your hardware. Please select your device type for the best performance:
-            </p>
-            
-            <div class="lai-hardware-options">
-                <button class="lai-hardware-option" data-type="apple-silicon">
-                    <div class="lai-hw-icon">
-                        <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
-                            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-                        </svg>
-                    </div>
-                    <div class="lai-hw-info">
-                        <strong>Apple Silicon Mac</strong>
-                        <span>M1, M2, M3, M4 chip</span>
-                    </div>
-                    <div class="lai-hw-tag fast">⚡ Fast</div>
-                </button>
-                
-                <button class="lai-hardware-option" data-type="dedicated-gpu">
-                    <div class="lai-hw-icon">
-                        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-                            <line x1="6" y1="12" x2="6" y2="12.01"></line>
-                            <line x1="10" y1="12" x2="10" y2="12.01"></line>
-                            <line x1="14" y1="12" x2="14" y2="12.01"></line>
-                            <line x1="18" y1="12" x2="18" y2="12.01"></line>
-                        </svg>
-                    </div>
-                    <div class="lai-hw-info">
-                        <strong>Dedicated GPU</strong>
-                        <span>NVIDIA/AMD graphics card</span>
-                    </div>
-                    <div class="lai-hw-tag fast">⚡ Fast</div>
-                </button>
-                
-                <button class="lai-hardware-option" data-type="cpu-only">
-                    <div class="lai-hw-icon">
-                        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
-                            <rect x="9" y="9" width="6" height="6"></rect>
-                        </svg>
-                    </div>
-                    <div class="lai-hw-info">
-                        <strong>CPU Only</strong>
-                        <span>No dedicated GPU / Intel Mac</span>
-                    </div>
-                    <div class="lai-hw-tag slow">🐢 Slower</div>
-                </button>
-            </div>
-            
-            <label class="lai-remember-choice">
-                <input type="checkbox" id="remember-hardware" checked>
-                <span>Remember my choice</span>
-            </label>
-        `;
-
-        const closeAndResolve = (selection) => {
-            const remember = modal.querySelector('#remember-hardware').checked;
-            if (remember) {
-                localStorage.setItem(HARDWARE_SELECTION_KEY, JSON.stringify(selection));
-            }
-            overlay.classList.add('fade-out');
-            setTimeout(() => {
-                overlay.remove();
-                resolve(selection);
-            }, 300);
-        };
-
-        // Handle option clicks
-        modal.querySelectorAll('.lai-hardware-option').forEach(btn => {
-            btn.onclick = () => {
-                const type = btn.dataset.type;
-                let selection = { hasGPU: false, isAppleSilicon: false, isMacOS: false };
-
-                if (type === 'apple-silicon') {
-                    selection = { hasGPU: true, isAppleSilicon: true, isMacOS: true };
-                } else if (type === 'dedicated-gpu') {
-                    selection = { hasGPU: true, isAppleSilicon: false, isMacOS: false };
-                } else {
-                    selection = { hasGPU: false, isAppleSilicon: false, isMacOS: false };
-                }
-
-                closeAndResolve(selection);
-            };
-        });
-
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-    });
-}
-
-// Clear saved hardware selection (useful for settings)
-function clearHardwareSelection() {
-    localStorage.removeItem(HARDWARE_SELECTION_KEY);
-    log('Hardware selection cleared. Will ask on next load.', 'info');
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-    // Initialize chat history
-    loadChatsFromStorage();
-    initChatHistoryEvents();
-    renderChatList();
-
-    // Initialize model selector (always visible in header)
-    initModelSelector();
-
-    // Load current chat if exists, otherwise create new one
-    const currentChat = getCurrentChat();
-    if (currentChat && currentChat.messages.length > 0) {
-        clearChatUI();
-        currentChat.messages.forEach(msg => renderMessageFromData(msg));
-    } else if (!currentChat && chatHistory.chats.length === 0) {
-        // First visit - create initial chat silently
-        createNewChat(true);
-    }
-
-    // Initialize the AI model
-    init();
-});
-
-// === MODEL SELECTOR ===
-function initModelSelector() {
-    const modelSelectorWrapper = document.getElementById('model-selector-wrapper');
-    const modelSelector = document.getElementById('model-selector');
-    const fallbackBadge = document.getElementById('fallback-badge');
-
-    if (!modelSelector) return;
-
-    // Check if WebGPU is available (navigator.gpu exists)
-    // Note: Full WebGPU check happens in init(), this is just for UI
-    const hasWebGPU = !!navigator.gpu;
-
-    if (hasWebGPU) {
-        // Show model selector for WebGPU users
-        if (modelSelectorWrapper) modelSelectorWrapper.style.display = 'flex';
-        if (fallbackBadge) fallbackBadge.style.display = 'none';
-
-        // Load saved preference and set MODEL_NAME/MODEL_ID immediately
-        const savedModel = localStorage.getItem(MODEL_SELECTION_KEY);
-        const selectedKey = (savedModel && WEBGPU_MODELS[savedModel]) ? savedModel : DEFAULT_WEBGPU_MODEL;
-
-        // Set the dropdown value
-        modelSelector.value = selectedKey;
-
-        // Set global MODEL_NAME and MODEL_ID to show correct name immediately
-        MODEL_ID = WEBGPU_MODELS[selectedKey].id;
-        MODEL_NAME = WEBGPU_MODELS[selectedKey].name;
-
-        // Update the display immediately
-        updateModelDisplay();
-
-        // Handle model change
-        modelSelector.addEventListener('change', (e) => {
-            const newModel = e.target.value;
-            const currentModel = localStorage.getItem(MODEL_SELECTION_KEY) || DEFAULT_WEBGPU_MODEL;
-
-            if (newModel !== currentModel) {
-                localStorage.setItem(MODEL_SELECTION_KEY, newModel);
-
-                // Show confirmation and reload
-                showModelChangeModal(
-                    'Model Changed',
-                    `Switching to <strong>${WEBGPU_MODELS[newModel].name}</strong> (${WEBGPU_MODELS[newModel].size}).<br><br>The page will reload to load the new model.`,
-                    () => window.location.reload()
-                );
-            }
-        });
-
-        log(`Model selector initialized (${MODEL_NAME})`, 'success');
-    } else {
-        // Hide model selector, show fallback badge for WASM/CPU users
-        if (modelSelectorWrapper) modelSelectorWrapper.style.display = 'none';
-        if (fallbackBadge) fallbackBadge.style.display = 'flex';
-
-        // Set to WASM model
-        MODEL_ID = WASM_MODEL_ID;
-        MODEL_NAME = WASM_MODEL_NAME;
-
-        // Update the display to show the WASM model
-        updateModelDisplay();
-
-        log(`WebGPU not available - using ${MODEL_NAME} (CPU mode)`, 'info');
-    }
-}
-
-function showModelChangeModal(title, message, onConfirm) {
-    const overlay = document.createElement('div');
-    overlay.className = 'lai-modal-overlay';
-
-    const modal = document.createElement('div');
-    modal.className = 'lai-modal';
-
-    modal.innerHTML = `
-        <div class="lai-modal-icon" style="color: #8b5cf6;">
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
-                <rect x="9" y="9" width="6" height="6"></rect>
-                <line x1="9" y1="1" x2="9" y2="4"></line>
-                <line x1="15" y1="1" x2="15" y2="4"></line>
-                <line x1="9" y1="20" x2="9" y2="23"></line>
-                <line x1="15" y1="20" x2="15" y2="23"></line>
-                <line x1="20" y1="9" x2="23" y2="9"></line>
-                <line x1="20" y1="14" x2="23" y2="14"></line>
-                <line x1="1" y1="9" x2="4" y2="9"></line>
-                <line x1="1" y1="14" x2="4" y2="14"></line>
-            </svg>
-        </div>
-        <h2>${title}</h2>
-        <div class="lai-modal-body">${message}</div>
-        <button class="lai-modal-btn">Reload Now</button>
-    `;
-
-    const btn = modal.querySelector('.lai-modal-btn');
-    btn.onclick = () => {
-        overlay.classList.add('fade-out');
-        setTimeout(() => {
-            overlay.remove();
-            onConfirm();
-        }, 300);
-    };
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-}
+window.onunhandledrejection = function (event) {
+    log(`Unhandled rejection: ${formatError(event.reason)}`, 'error');
+};

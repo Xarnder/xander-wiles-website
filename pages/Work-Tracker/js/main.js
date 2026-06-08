@@ -1,15 +1,48 @@
-import { DOM, updateCurrencyDisplays, renderCalendar, applyWidgetOrder, applyWidgetTitles } from './ui.js';
+import {
+    DOM,
+    updateCurrencyDisplays,
+    renderCalendar,
+    applyWidgetOrder,
+    applyWidgetTitles,
+    renderWidgetOrderList,
+    renderPercentageCutList,
+    addPercentageCutListItem,
+    getPercentageCutsFromWidget,
+    setupWidgetImageExports
+} from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
-import { state, updateCurrency } from './state.js';
-import { loadHistory, renderDashboardData } from './api.js';
+import {
+    state,
+    updateCurrency,
+    updateWidgetOrder,
+    updateWidgetTitles,
+    updateStartOfWeek,
+    updateContinueSession,
+    updatePercentageCuts
+} from './state.js';
+import { renderDashboardData, savePercentageCuts } from './api.js';
+
+let percentageCutsSaveTimeout = null;
+
+function schedulePercentageCutsAutosave() {
+    updatePercentageCuts(getPercentageCutsFromWidget());
+    renderDashboardData();
+
+    clearTimeout(percentageCutsSaveTimeout);
+    percentageCutsSaveTimeout = setTimeout(() => {
+        savePercentageCuts(state.percentageCuts, { silent: true });
+    }, 1200);
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize UI
     updateCurrencyDisplays();
     DOM.currencySelect.value = state.currentCurrency;
+    renderPercentageCutList();
     applyWidgetOrder();
     applyWidgetTitles();
+    setupWidgetImageExports();
 
     // Setup Auth
     setupAuth();
@@ -45,8 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (DOM.startOfWeekSelect) {
             DOM.startOfWeekSelect.value = state.startOfWeek.toString();
         }
-        // Import dynamically here to avoid circular dep if needed, but it's imported at top anyway
-        import('./ui.js').then(module => module.renderWidgetOrderList());
+        renderWidgetOrderList();
         DOM.settingsModal.classList.remove('hidden');
     });
 
@@ -58,17 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCurrency(DOM.currencySelect.value);
 
         if (DOM.startOfWeekSelect) {
-            import('./state.js').then(module => {
-                module.updateStartOfWeek(parseInt(DOM.startOfWeekSelect.value));
-                // We don't reload the entire UI tree, we just force Dashboard metadata to repaint over
-                import('./api.js').then(apiModule => {
-                    apiModule.renderDashboardData();
-                    import('./ui.js').then(uiModule => {
-                        uiModule.renderCalendar();
-                        uiModule.renderChart();
-                    });
-                });
-            });
+            updateStartOfWeek(parseInt(DOM.startOfWeekSelect.value));
         }
 
         // Harvest new widget order
@@ -76,26 +98,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const items = DOM.widgetOrderList.querySelectorAll('.sortable-item');
         items.forEach(item => newOrder.push(item.dataset.id));
 
-        import('./state.js').then(module => {
-            module.updateWidgetOrder(newOrder);
-            module.updateWidgetTitles(DOM.showTitlesToggle.checked);
-            module.updateContinueSession(DOM.continueSessionToggle.checked);
-        });
+        updateWidgetOrder(newOrder);
+        updateWidgetTitles(DOM.showTitlesToggle.checked);
+        updateContinueSession(DOM.continueSessionToggle.checked);
 
         applyWidgetOrder();
         applyWidgetTitles();
         updateCurrencyDisplays();
+        renderDashboardData();
 
-        if (state.currentUser) {
-            loadHistory();
-        }
         DOM.settingsModal.classList.add('hidden');
 
-        // Alert to reload for widget order
         import('./ui.js').then(module => {
-            module.showAlert("Settings Saved", "Your settings have been saved! Please reload the page to cleanly view any changes to your widget order.");
+            module.showAlert("Settings Saved", "Your settings have been saved.");
         });
     });
+
+    if (DOM.addPercentageCutBtn) {
+        DOM.addPercentageCutBtn.addEventListener('click', () => {
+            addPercentageCutListItem();
+            schedulePercentageCutsAutosave();
+        });
+    }
+
+    if (DOM.percentageCutList) {
+        DOM.percentageCutList.addEventListener('input', schedulePercentageCutsAutosave);
+        DOM.percentageCutList.addEventListener('click', schedulePercentageCutsAutosave);
+        DOM.percentageCutList.addEventListener('drop', schedulePercentageCutsAutosave);
+        DOM.percentageCutList.addEventListener('dragend', schedulePercentageCutsAutosave);
+    }
 
     // Calendar Events
     if (DOM.prevMonthBtn && DOM.nextMonthBtn) {

@@ -1,7 +1,9 @@
 /* --- Configuration & State --- */
 const config = {
-    posterWidth: 842, 
-    posterHeight: 1191,
+    pageSizes: {
+        portrait: { width: 842, height: 1191 },
+        landscape: { width: 1191, height: 842 }
+    },
     defaultColors: [
         "#3B6085", "#2E7D75", "#359C86", "#8CB078", "#BCC773", 
         "#EBCB76", "#F2AB61", "#F1945F", "#EE7D55", "#D56C5B"
@@ -15,6 +17,8 @@ let items = [
 ];
 
 let renderTimeout; 
+let pageOrientation = 'portrait';
+let resizePoster = () => {};
 
 /* --- DOM Elements --- */
 const poster = document.getElementById('poster');
@@ -30,6 +34,7 @@ const loginOverlay = document.getElementById('login-overlay');
 const uiThemeToggle = document.getElementById('uiThemeToggle');
 const autoRenderToggle = document.getElementById('autoRenderToggle');
 const exportScaleSelect = document.getElementById('exportScale');
+const landscapeToggle = document.getElementById('landscapeToggle');
 
 // Inputs
 const bgColorPicker = document.getElementById('bgColorPicker');
@@ -53,6 +58,7 @@ function init() {
     setupEventListeners();
     setupResizeObserver();
     updateVisuals(); 
+    applyOrientation();
     
     rangeInputs.forEach(el => updateSliderValue(el.id, el.value));
 
@@ -67,6 +73,23 @@ function init() {
 }
 
 /* --- Core Logic --- */
+
+function getPosterDimensions() {
+    return config.pageSizes[pageOrientation];
+}
+
+function applyOrientation() {
+    pageOrientation = landscapeToggle && landscapeToggle.checked ? 'landscape' : 'portrait';
+    const dimensions = getPosterDimensions();
+
+    document.documentElement.style.setProperty('--poster-width', `${dimensions.width}px`);
+    document.documentElement.style.setProperty('--poster-height', `${dimensions.height}px`);
+    poster.classList.toggle('landscape-mode', pageOrientation === 'landscape');
+
+    renderPosterItems();
+    resizePoster();
+    hideRenderOverlay();
+}
 
 function updateVisuals() {
     poster.style.setProperty('--poster-bg', bgColorPicker.value);
@@ -95,7 +118,11 @@ function updateVisuals() {
         
         if(id === 'numXSlider') poster.style.setProperty('--number-offset-x', `${val}px`);
         if(id === 'textXSlider') poster.style.setProperty('--text-offset-x', `${val}px`);
-        if(id === 'overlapSlider') poster.style.setProperty('--block-overlap', `${val}px`);
+        if(id === 'overlapSlider') {
+            const landscapeOverlap = Math.max(40, Math.min(90, Number(val) * 0.62));
+            poster.style.setProperty('--block-overlap', `${val}px`);
+            poster.style.setProperty('--landscape-overlap', `${landscapeOverlap}px`);
+        }
     });
 }
 
@@ -104,10 +131,30 @@ function updateSliderValue(id, value) {
     if (display) display.textContent = value;
 }
 
+function updateNumberSize(value) {
+    document.querySelectorAll('.number-svg text').forEach(svgEl => {
+        svgEl.setAttribute('font-size', value);
+    });
+}
+
 function renderPosterItems() {
     itemsContainer.innerHTML = ''; 
-    if (items.length >= 10) itemsContainer.classList.add('wide-layout');
-    else itemsContainer.classList.remove('wide-layout');
+    itemsContainer.classList.toggle('wide-layout', items.length >= 10);
+    itemsContainer.classList.toggle('landscape-layout', pageOrientation === 'landscape');
+
+    const targetContainers = [itemsContainer];
+    if (pageOrientation === 'landscape') {
+        const leftColumn = document.createElement('div');
+        const rightColumn = document.createElement('div');
+        leftColumn.className = 'item-column';
+        rightColumn.className = 'item-column';
+        itemsContainer.appendChild(leftColumn);
+        itemsContainer.appendChild(rightColumn);
+        targetContainers[0] = leftColumn;
+        targetContainers[1] = rightColumn;
+    }
+
+    const firstColumnCount = Math.ceil(items.length / 2);
 
     items.forEach((item, index) => {
         const row = document.createElement('div');
@@ -123,7 +170,7 @@ function renderPosterItems() {
         svg.setAttribute("class", "number-svg");
         svg.setAttribute("viewBox", "0 0 200 150"); 
         
-        const fontSize = "130";
+        const fontSize = document.getElementById('numberSizeSlider') ? document.getElementById('numberSizeSlider').value : "130";
         const fontWeight = "900"; 
         const outlineVal = document.getElementById('outlineSlider') ? document.getElementById('outlineSlider').value : 18;
 
@@ -196,7 +243,11 @@ function renderPosterItems() {
 
         row.appendChild(numDiv);
         row.appendChild(contentDiv);
-        itemsContainer.appendChild(row);
+
+        const targetContainer = pageOrientation === 'landscape' && index >= firstColumnCount
+            ? targetContainers[1]
+            : targetContainers[0];
+        targetContainer.appendChild(row);
     });
 }
 
@@ -211,6 +262,7 @@ function triggerAutoRender() {
 
 function performRender(scaleVal, isDownload, format = 'png') {
     log(`Render start (Scale: ${scaleVal}x)...`);
+    const dimensions = getPosterDimensions();
 
     // OFF-SCREEN SANDBOX to prevent flash
     const sandbox = document.createElement('div');
@@ -218,8 +270,8 @@ function performRender(scaleVal, isDownload, format = 'png') {
     sandbox.style.top = '-10000px';   
     sandbox.style.left = '-10000px';  
     sandbox.style.zIndex = '-99999';
-    sandbox.style.width = config.posterWidth + 'px';
-    sandbox.style.height = config.posterHeight + 'px';
+    sandbox.style.width = dimensions.width + 'px';
+    sandbox.style.height = dimensions.height + 'px';
     sandbox.style.overflow = 'hidden';
     document.body.appendChild(sandbox);
 
@@ -235,10 +287,10 @@ function performRender(scaleVal, isDownload, format = 'png') {
 
     html2canvas(clone, {
         scale: scaleVal,
-        width: config.posterWidth,
-        height: config.posterHeight,
-        windowWidth: config.posterWidth,
-        windowHeight: config.posterHeight,
+        width: dimensions.width,
+        height: dimensions.height,
+        windowWidth: dimensions.width,
+        windowHeight: dimensions.height,
         useCORS: true,
         backgroundColor: bgColorPicker.value,
         
@@ -258,7 +310,7 @@ function performRender(scaleVal, isDownload, format = 'png') {
         document.body.removeChild(sandbox);
         if (isDownload) {
             const link = document.createElement('a');
-            link.download = `PosterGen-${Date.now()}.${format}`;
+            link.download = `PosterGen-${pageOrientation}-${Date.now()}.${format}`;
             link.href = canvas.toDataURL(`image/${format}`, 0.9);
             link.click();
             log(`Exported ${format.toUpperCase()}`);
@@ -287,25 +339,33 @@ function setupResizeObserver() {
     const wrapper = document.getElementById('scaler-wrapper');
     const container = document.querySelector('.preview-area');
     
-    const fitPoster = () => {
+    resizePoster = () => {
         if(!wrapper || !container) return;
+        const dimensions = getPosterDimensions();
         const padding = 40; 
         const availW = container.clientWidth - padding;
         const availH = container.clientHeight - padding;
-        const scale = Math.min(availW / config.posterWidth, availH / config.posterHeight);
+        const scale = Math.min(availW / dimensions.width, availH / dimensions.height);
         wrapper.style.transform = `scale(${Math.max(scale, 0.1)})`; 
     };
     
-    const observer = new ResizeObserver(() => fitPoster());
+    const observer = new ResizeObserver(() => resizePoster());
     observer.observe(container);
-    window.addEventListener('resize', fitPoster);
-    fitPoster();
+    window.addEventListener('resize', resizePoster);
+    resizePoster();
 }
 
 function setupEventListeners() {
     uiThemeToggle.addEventListener('click', () => {
         document.body.classList.toggle('light-mode');
     });
+
+    if (landscapeToggle) {
+        landscapeToggle.addEventListener('change', () => {
+            applyOrientation();
+            triggerAutoRender();
+        });
+    }
 
     rangeInputs.forEach(el => {
         el.addEventListener('input', () => {
@@ -316,6 +376,7 @@ function setupEventListeners() {
                     svgEl.setAttribute('stroke-width', el.value * 2);
                 });
             }
+            if(el.id === 'numberSizeSlider') updateNumberSize(el.value);
             triggerAutoRender();
         });
     });
@@ -370,7 +431,7 @@ function setupEventListeners() {
     });
 
     document.getElementById('saveProjectBtn').addEventListener('click', () => {
-        const data = { meta: "PosterGen", items, settings: {} };
+        const data = { meta: "PosterGen", items, settings: {}, orientation: pageOrientation };
         rangeInputs.forEach(r => data.settings[r.id] = r.value);
         data.mainTitle = posterTitle.innerText;
         data.colors = { bg: bgColorPicker.value, text: textColorPicker.value, title: titleColorPicker.value };
@@ -386,6 +447,7 @@ function setupEventListeners() {
                 const d = JSON.parse(evt.target.result);
                 items = d.items || items;
                 if(d.mainTitle) posterTitle.innerText = d.mainTitle;
+                if(landscapeToggle) landscapeToggle.checked = d.orientation === 'landscape';
                 if(d.colors) { bgColorPicker.value=d.colors.bg; textColorPicker.value=d.colors.text; titleColorPicker.value=d.colors.title; }
                 if(d.settings) {
                     Object.entries(d.settings).forEach(([k,v]) => {
@@ -393,7 +455,7 @@ function setupEventListeners() {
                         if(el) { el.value = v; updateSliderValue(k,v); }
                     });
                 }
-                renderPosterItems(); updateVisuals(); triggerAutoRender();
+                applyOrientation(); updateVisuals(); triggerAutoRender();
             } catch(x) { log("Load error"); }
         };
         reader.readAsText(e.target.files[0]);

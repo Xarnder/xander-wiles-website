@@ -372,6 +372,7 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
             if (document.getElementById('show-site-header-toggle')) document.getElementById('show-site-header-toggle').checked = !!state.appData.settings.showSiteHeader;
             if (document.getElementById('disable-important-pinning-toggle')) document.getElementById('disable-important-pinning-toggle').checked = !!state.appData.settings.disableImportantPinning;
+            if (document.getElementById('time-automation-confirm-toggle')) document.getElementById('time-automation-confirm-toggle').checked = state.appData.settings.timeAutomationConfirm !== false;
             if (document.getElementById('daily-reset-time-input')) document.getElementById('daily-reset-time-input').value = state.appData.settings.dailyResetTime || '04:00';
             if (document.getElementById('main-nav-placeholder')) {
                 document.getElementById('main-nav-placeholder').style.display = state.appData.settings.showSiteHeader ? 'block' : 'none';
@@ -591,6 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSettingListener('auto-archive-toggle', 'autoArchive', true);
     setupSettingListener('show-numbers-toggle', 'showNumbers', true);
     setupSettingListener('drag-tasks-toggle', 'dragEnabled', true);
+    setupSettingListener('time-automation-confirm-toggle', 'timeAutomationConfirm', true);
     setupSettingListener('sort-select', 'sortMode', false);
     setupSettingListener('daily-reset-time-input', 'dailyResetTime', false);
     setupSettingListener('fancy-speed-select', 'fancySpeed', false, (val) => {
