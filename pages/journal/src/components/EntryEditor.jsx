@@ -1079,12 +1079,17 @@ export default function EntryEditor() {
                             </div>
                         )}
 
-                        <LocalSummaryPanel
-                            entryText={displayContent}
-                            wordCount={wordCount}
-                            savedSummaryRecord={localAiSummaryRecord}
-                            onSummaryGenerated={handleLocalSummaryGenerated}
-                        />
+                        <div className="mb-6 rounded-lg border border-secondary/20 bg-secondary/10 px-4 py-3 text-sm text-text-secondary">
+                            <div className="flex items-start gap-3">
+                                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />
+                                <div>
+                                    <p className="font-bold text-white">AI summary available after saving</p>
+                                    <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                                        Save this entry, then switch to view mode to generate or review the private local AI summary.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
 
                         {/* Image Upload Area */}
                         <div className="mb-4">
