@@ -363,11 +363,14 @@ export function updateSetting(settingKey, value) {
         .catch(e => handleSyncError(e));
 }
 
-export function processAutomatedLists() {
+let automationConfirmationOpen = false;
+
+export async function processAutomatedLists() {
     if (!state.currentUser) return;
+    if (automationConfirmationOpen) return;
+
     const now = Date.now();
-    const batch = writeBatch(db);
-    let modifications = 0;
+    const pendingMoves = [];
     const movedTasksLog = [];
 
     state.appData.rawLists.forEach(list => {
@@ -408,11 +411,6 @@ export function processAutomatedLists() {
                 if (schedType === 'weekly' && today.getDay() !== 1) shouldRunNow = false; // Run on Mondays
                 if (schedType === 'monthly' && today.getDate() !== 1) shouldRunNow = false; // Run on 1st
                 
-                if (shouldRunNow) {
-                    batch.update(doc(db, "users", state.currentUser.uid, "lists", list.id), {
-                        lastScheduleRun: now
-                    });
-                }
             }
         }
 
@@ -431,37 +429,81 @@ export function processAutomatedLists() {
             }
         });
 
-        if (tasksToMove.length > 0) {
-            tasksToMove.forEach(taskId => {
-                const text = state.appData.tasks[taskId]?.text || 'Unknown Task';
-                movedTasksLog.push({ text: text, from: list.title, to: destList.title });
-            });
-            batch.update(doc(db, "users", state.currentUser.uid, "lists", list.id), {
-                taskIds: arrayRemove(...tasksToMove)
-            });
-            batch.update(doc(db, "users", state.currentUser.uid, "lists", destListId), {
-                taskIds: arrayUnion(...tasksToMove)
-            });
-            tasksToMove.forEach(taskId => {
-                batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
-                    [`listAddedAt.${destListId}`]: now,
-                    archived: false,
-                    lastAutoMovedAt: now,
-                    lastAutoMovedFromListId: list.id,
-                    lastAutoMovedToListId: destListId
-                });
-            });
-            modifications++;
-        }
+        if (tasksToMove.length === 0) return;
+
+        pendingMoves.push({
+            fromListId: list.id,
+            fromListTitle: list.title,
+            toListId: destListId,
+            toListTitle: destList.title,
+            isScheduleRun: type === 'schedule',
+            taskIds: tasksToMove
+        });
+
+        tasksToMove.forEach(taskId => {
+            const text = state.appData.tasks[taskId]?.text || 'Unknown Task';
+            movedTasksLog.push({ text: text, from: list.title, to: destList.title });
+        });
     });
 
-    if (modifications > 0) {
-        batch.commit().then(() => {
-            console.log(`[Automation] Successfully processed ${modifications} lists.`);
-            if (movedTasksLog.length > 0) {
-                import('./ui.js').then(UI => UI.showAutomationReport(movedTasksLog));
+    if (pendingMoves.length === 0) return;
+
+    automationConfirmationOpen = true;
+
+    try {
+        const shouldConfirmMove = state.appData.settings.timeAutomationConfirm !== false;
+        let UI = null;
+        let shouldMove = true;
+
+        if (shouldConfirmMove) {
+            UI = await import('./ui.js');
+            shouldMove = await UI.showAutomationMoveConfirmation(movedTasksLog);
+        }
+
+        if (!state.currentUser) return;
+
+        if (!shouldMove) {
+            const skippedSchedules = pendingMoves.filter(move => move.isScheduleRun);
+            if (skippedSchedules.length > 0) {
+                const skipBatch = writeBatch(db);
+                skippedSchedules.forEach(move => {
+                    skipBatch.update(doc(db, "users", state.currentUser.uid, "lists", move.fromListId), {
+                        lastScheduleRun: now
+                    });
+                });
+                await skipBatch.commit();
             }
-        }).catch(e => handleSyncError(e));
+            return;
+        }
+
+        const batch = writeBatch(db);
+        pendingMoves.forEach(move => {
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", move.fromListId), {
+                taskIds: arrayRemove(...move.taskIds),
+                ...(move.isScheduleRun ? { lastScheduleRun: now } : {})
+            });
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", move.toListId), {
+                taskIds: arrayUnion(...move.taskIds)
+            });
+            move.taskIds.forEach(taskId => {
+                batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+                    [`listAddedAt.${move.toListId}`]: now,
+                    archived: false,
+                    lastAutoMovedAt: now,
+                    lastAutoMovedFromListId: move.fromListId,
+                    lastAutoMovedToListId: move.toListId
+                });
+            });
+        });
+
+        await batch.commit();
+        console.log(`[Automation] Successfully processed ${pendingMoves.length} lists.`);
+        if (!UI) UI = await import('./ui.js');
+        UI.showAutomationReport(movedTasksLog);
+    } catch (e) {
+        handleSyncError(e);
+    } finally {
+        automationConfirmationOpen = false;
     }
 }
 

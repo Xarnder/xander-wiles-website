@@ -223,6 +223,13 @@
                 <button id="recent-auto-moved-btn" class="menu-action-item" title="Recent Auto-Moved Tasks">
                     <i class="ph ph-clock-counter-clockwise"></i> Recent Auto-Moved Tasks
                 </button>
+                <label class="dropdown-item-toggle" title="Ask before time automation moves tasks">
+                    <span><i class="ph ph-arrows-left-right"></i> Confirm Time Automation Moves</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="time-automation-confirm-toggle" checked>
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
                 <button id="export-board-csv-btn" class="menu-action-item" title="Export Board to CSV">
                     <i class="ph ph-file-csv"></i> Export Board to CSV
                 </button>
@@ -950,6 +957,28 @@
             </div>
             <div class="modal-actions-bar" style="margin-top: 20px;">
                 <button id="close-time-help-btn-bottom" class="btn primary full-width">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AUTOMATION MOVE CONFIRMATION MODAL -->
+    <div id="automation-confirm-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel automation-confirm-modal">
+            <div class="automation-confirm-icon"><i class="ph ph-arrows-left-right"></i></div>
+            <h2>Move these tasks?</h2>
+            <p id="automation-confirm-desc">
+                These tasks are being moved from one list to another.
+            </p>
+            <div id="automation-confirm-list" class="automation-confirm-list">
+                <!-- Pending automation tasks injected here -->
+            </div>
+            <div class="automation-confirm-actions">
+                <button id="automation-confirm-ok-btn" class="btn primary">
+                    <i class="ph ph-check-circle"></i> Okay, move tasks
+                </button>
+                <button id="automation-confirm-cancel-btn" class="btn secondary">
+                    Cancel - do not move
+                </button>
             </div>
         </div>
     </div>

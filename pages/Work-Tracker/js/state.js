@@ -54,6 +54,16 @@ function loadPercentageCuts() {
     }
 }
 
+function loadActiveCutStatsPeriods() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('work_tracker_active_periods'));
+        if (Array.isArray(saved) && saved.length > 0) return saved;
+    } catch (e) {
+        console.warn('Debug: Could not parse active periods from storage', e);
+    }
+    return ['daily', 'weekly', 'monthly'];
+}
+
 export const state = {
     currentUser: null,
     timerInterval: null,
@@ -71,7 +81,13 @@ export const state = {
     showWidgetTitles: localStorage.getItem('work_tracker_show_titles') !== 'false',
     startOfWeek: parseInt(localStorage.getItem('work_tracker_start_of_week')) || 0, // 0 = Sunday, 1 = Monday
     continueSessionOnClose: localStorage.getItem('work_tracker_continue_session') !== 'false', // default true
-    percentageCuts: loadPercentageCuts()
+    percentageCuts: loadPercentageCuts(),
+    timeCostItems: [],
+    tcHourlyRate: parseFloat(localStorage.getItem('work_tracker_tc_hourly_rate')) || 20,
+    tcDailyHours: parseFloat(localStorage.getItem('work_tracker_tc_daily_hours')) || 8,
+    tcIncludeWeekends: localStorage.getItem('work_tracker_tc_include_weekends') === 'true',
+    activeCutStatsPeriods: loadActiveCutStatsPeriods(),
+    lastStatsTotals: { daily: 0, weekly: 0, monthly: 0 }
 };
 
 export function updateCurrency(newCurrency) {
@@ -112,4 +128,29 @@ export function updatePercentageCuts(newCuts) {
     state.percentageCuts = sanitizePercentageCuts(newCuts);
     localStorage.setItem('work_tracker_percentage_cuts', JSON.stringify(state.percentageCuts));
     return state.percentageCuts;
+}
+
+export function updateTimeCostItems(newItems) {
+    state.timeCostItems = newItems;
+    return state.timeCostItems;
+}
+
+export function updateTcHourlyRate(rate) {
+    state.tcHourlyRate = rate;
+    localStorage.setItem('work_tracker_tc_hourly_rate', rate);
+}
+
+export function updateTcDailyHours(hours) {
+    state.tcDailyHours = hours;
+    localStorage.setItem('work_tracker_tc_daily_hours', hours);
+}
+
+export function updateTcIncludeWeekends(includeWeekends) {
+    state.tcIncludeWeekends = includeWeekends;
+    localStorage.setItem('work_tracker_tc_include_weekends', includeWeekends);
+}
+
+export function updateActiveCutStatsPeriods(periods) {
+    state.activeCutStatsPeriods = periods;
+    localStorage.setItem('work_tracker_active_periods', JSON.stringify(periods));
 }

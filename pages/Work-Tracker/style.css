@@ -441,37 +441,41 @@ button:active {
     gap: 14px;
     margin-top: 0;
     min-height: 0;
-    overflow: visible;
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.cut-stats::-webkit-scrollbar {
+    width: 6px;
+}
+
+.cut-stats::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.cut-stats::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.cut-stats::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
 }
 
 .cut-stats-widget {
     display: flex;
     flex-direction: column;
     max-height: clamp(420px, 72vh, 780px);
-    overflow: auto;
-    overscroll-behavior: contain;
-    scrollbar-color: rgba(0, 212, 255, 0.45) rgba(255, 255, 255, 0.06);
-    scrollbar-width: thin;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
 }
 
-.cut-stats-widget::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-.cut-stats-widget::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 999px;
-}
-
-.cut-stats-widget::-webkit-scrollbar-thumb {
-    background: rgba(0, 212, 255, 0.45);
-    border-radius: 999px;
-}
-
-.cut-stats-widget .widget-title {
+.cut-stats-header-row {
     flex: 0 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-top: 0;
     margin-bottom: 18px;
     position: sticky;
@@ -479,6 +483,44 @@ button:active {
     z-index: 2;
     padding-bottom: 10px;
     background: rgba(15, 17, 28, 0.98);
+    gap: 15px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cut-stats-widget .widget-title {
+    margin: 0;
+}
+
+.period-toggle-group {
+    display: flex;
+    gap: 8px;
+}
+
+.period-toggle-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    font-family: var(--font-family);
+}
+
+.period-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.period-toggle-btn.active {
+    background: rgba(0, 212, 255, 0.15);
+    border-color: var(--accent-blue);
+    color: var(--accent-blue);
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.2);
 }
 
 .cut-stats-heading {
@@ -736,6 +778,194 @@ button:active {
     background: rgba(255, 152, 0, 0.15);
     border-color: rgba(255, 152, 0, 0.3);
     color: #ffe0b2;
+}
+
+/* View Switcher */
+.view-switcher {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.view-switcher button {
+    min-width: 150px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.view-switcher button.active {
+    background: rgba(0, 212, 255, 0.2);
+    border-color: var(--accent-blue);
+    color: var(--text-primary);
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.3);
+}
+
+/* Time Cost View */
+.time-cost-widget {
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.tc-settings-row {
+    display: flex;
+    gap: 20px;
+}
+
+.tc-settings-row .input-group {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+@media (max-width: 480px) {
+    .tc-settings-row {
+        flex-direction: column;
+        gap: 15px;
+    }
+}
+
+.tc-checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 22px;
+    justify-content: flex-start;
+}
+
+/* Custom switch toggle */
+.tc-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.tc-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.tc-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 24px;
+}
+
+.tc-slider::before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3.5px;
+    bottom: 3.5px;
+    background-color: #ffffff;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.tc-switch input:checked + .tc-slider {
+    background-color: var(--accent-blue);
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.4);
+}
+
+.tc-switch input:checked + .tc-slider::before {
+    transform: translateX(20px);
+}
+
+.tc-switch input:focus-visible + .tc-slider {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+
+.tc-switch-label {
+    margin-bottom: 0;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: color 0.2s ease;
+}
+
+.tc-checkbox-group:hover .tc-switch-label {
+    color: var(--text-primary);
+}
+
+.tc-breakdown-container {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid var(--card-border);
+}
+
+.tc-breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.tc-breakdown-table th,
+.tc-breakdown-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tc-breakdown-table th {
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.tc-breakdown-table tr:last-child td {
+    border-bottom: none;
+}
+
+.tc-breakdown-table td {
+    font-size: 1.05rem;
+}
+
+.tc-breakdown-table .tc-amount {
+    color: var(--accent-blue);
+    font-weight: 700;
+}
+
+.tc-breakdown-table .tc-time {
+    color: var(--accent-green);
+    font-weight: 700;
+}
+
+.tc-breakdown-table tr.tc-total-row {
+    background: rgba(0, 212, 255, 0.05);
+}
+
+.tc-breakdown-table tr.tc-total-row td {
+    border-top: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+/* Freeze first column in Saved Items table */
+.tc-breakdown-table th.tc-sticky-col,
+.tc-breakdown-table td.tc-sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: #0e101c !important; /* opaque backdrop match for glass card */
+    border-right: 1.5px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.tc-breakdown-table th.tc-sticky-col {
+    z-index: 3;
 }
 
 /* Mobile Responsiveness */
@@ -1110,7 +1340,10 @@ button:active {
     gap: 8px;
     margin-top: auto;
     padding-top: 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
     flex-wrap: wrap;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .widget-export-format {
@@ -1128,15 +1361,6 @@ button:active {
 
 .widget-export-button {
     min-height: 36px;
-}
-
-.cut-stats-widget .widget-export-footer {
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
-    margin-top: 18px;
-    padding-top: 12px;
-    background: linear-gradient(180deg, rgba(15, 17, 28, 0), rgba(15, 17, 28, 0.98) 38%);
 }
 
 .widget-export-capturing .widget-export-footer {
@@ -1378,6 +1602,27 @@ button:active {
 
 .cut-settings-group {
     align-items: stretch;
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.cut-settings-group::-webkit-scrollbar {
+    width: 6px;
+}
+
+.cut-settings-group::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.cut-settings-group::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.cut-settings-group::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
 }
 
 .cut-widget-header {
@@ -1392,6 +1637,8 @@ button:active {
 .percentage-cuts-widget {
     display: flex;
     flex-direction: column;
+    max-height: clamp(420px, 72vh, 780px);
+    overflow: hidden;
 }
 
 .cut-widget-footer {

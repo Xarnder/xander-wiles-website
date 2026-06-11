@@ -72,60 +72,22 @@ body {
     gap: 12px;
 }
 
-/* Model Selector in Header */
-.lai-model-selector-wrapper {
-    display: flex;
-    align-items: center;
-}
-
-.lai-model-selector-wrapper .lai-select {
-    background: rgba(139, 92, 246, 0.15);
-    border: 1px solid rgba(139, 92, 246, 0.4);
-    border-radius: 8px;
-    padding: 6px 28px 6px 10px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--lai-accent);
-    cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238b5cf6' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-    transition: all 0.2s ease;
-}
-
-.lai-model-selector-wrapper .lai-select:hover {
-    background: rgba(139, 92, 246, 0.25);
-    border-color: var(--lai-accent);
-}
-
-.lai-model-selector-wrapper .lai-select:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
-}
-
-/* Fallback Mode Badge (shown when WebGPU unavailable) */
-.lai-fallback-badge {
-    display: none;
-    align-items: center;
-    gap: 6px;
-    background: rgba(234, 179, 8, 0.15);
-    border: 1px solid rgba(234, 179, 8, 0.4);
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: #eab308;
-}
-
-.lai-fallback-icon {
-    font-size: 0.85rem;
-}
-
 /* Header Action Buttons */
 .lai-header-actions {
     display: flex;
     gap: 8px;
+}
+
+.lai-runtime-selector-wrapper {
+    display: flex;
+    align-items: center;
+}
+
+.lai-runtime-select {
+    max-width: 150px;
+    font-size: 0.75rem;
+    color: var(--lai-text-primary);
+    background-color: rgba(255, 255, 255, 0.06);
 }
 
 .lai-header-btn {
@@ -617,6 +579,103 @@ body {
     display: none;
 }
 
+.lai-local-runtime {
+    display: grid;
+    gap: 12px;
+    border: 1px solid var(--lai-glass-border);
+    border-radius: 12px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.lai-local-runtime.connected {
+    border-color: rgba(34, 197, 94, 0.35);
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.lai-local-runtime.offline {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.lai-local-runtime.loading {
+    border-color: rgba(139, 92, 246, 0.35);
+    background: rgba(139, 92, 246, 0.08);
+}
+
+.lai-local-runtime-main {
+    display: grid;
+    gap: 4px;
+}
+
+.lai-local-runtime-main span,
+.lai-local-runtime-main small {
+    color: var(--lai-text-secondary);
+    font-family: monospace;
+    overflow-wrap: anywhere;
+}
+
+.lai-local-runtime-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.lai-runtime-btn {
+    width: auto;
+    min-width: 96px;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+}
+
+.lai-command-box {
+    margin: 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--lai-glass-border);
+    color: var(--lai-text-primary);
+    font-size: 0.78rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.lai-diagnostic-list {
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid var(--lai-glass-border);
+}
+
+.lai-diagnostic-row {
+    display: grid;
+    grid-template-columns: minmax(100px, 0.45fr) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    font-size: 0.72rem;
+}
+
+.lai-diagnostic-row span {
+    color: var(--lai-text-secondary);
+}
+
+.lai-diagnostic-row strong {
+    font-family: monospace;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.lai-diagnostic-row.ok strong {
+    color: var(--lai-success);
+}
+
+.lai-diagnostic-row.bad strong {
+    color: var(--lai-danger);
+}
+
 .lai-stage-container {
     margin-bottom: 10px;
 }
@@ -997,6 +1056,24 @@ body {
     border-color: var(--lai-accent);
 }
 
+.lai-text-input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--lai-glass-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: var(--lai-text-primary);
+    font-family: inherit;
+}
+
+.lai-text-input:focus {
+    outline: none;
+    border-color: var(--lai-accent);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
 /* Model Selector Row */
 .lai-model-row {
     background: rgba(139, 92, 246, 0.05);
@@ -1037,6 +1114,13 @@ body {
     background: #1e1e23;
     color: var(--lai-text-primary);
     padding: 8px;
+}
+
+.lai-runtime-selector-wrapper .lai-runtime-select {
+    max-width: 160px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+    font-size: 0.75rem;
 }
 
 /* Cache Row */

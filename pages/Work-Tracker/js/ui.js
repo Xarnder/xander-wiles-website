@@ -25,6 +25,7 @@ export const DOM = {
     monthlyEarningsDisplay: document.getElementById('monthly-earnings'),
     percentageCutStatsWidget: document.getElementById('widget-cut-stats'),
     percentageCutStats: document.getElementById('percentage-cut-stats'),
+    cutStatsTotalPercentage: document.getElementById('cut-stats-total-percentage'),
     prevMonthBtn: document.getElementById('prev-month'),
     nextMonthBtn: document.getElementById('next-month'),
     calendarMonthYear: document.getElementById('calendar-month-year'),
@@ -74,7 +75,21 @@ export const DOM = {
     sessionProject: document.getElementById('session-project'),
     sessionProjectSelect: document.getElementById('session-project-select'),
     sessionFocused: document.getElementById('session-focused'),
-    saveSessionBtn: document.getElementById('save-session-btn')
+    saveSessionBtn: document.getElementById('save-session-btn'),
+    
+    viewDashboardBtn: document.getElementById('view-dashboard-btn'),
+    viewTimeCostBtn: document.getElementById('view-time-cost-btn'),
+    dashboardView: document.getElementById('dashboard-view'),
+    timeCostView: document.getElementById('time-cost-view'),
+    tcItemName: document.getElementById('tc-item-name'),
+    tcItemCost: document.getElementById('tc-item-cost'),
+    tcHourlyRate: document.getElementById('tc-hourly-rate'),
+    tcDailyHours: document.getElementById('tc-daily-hours'),
+    tcIncludeWeekends: document.getElementById('tc-include-weekends'),
+    tcCutsSummary: document.getElementById('tc-cuts-summary'),
+    tcBreakdownContainer: document.getElementById('tc-breakdown-container'),
+    tcSaveBtn: document.getElementById('tc-save-btn'),
+    tcSavedItemsContainer: document.getElementById('tc-saved-items-container')
 };
 
 export function showAlert(title, message) {
@@ -166,6 +181,18 @@ export function renderPercentageCutStats(totals) {
         DOM.percentageCutStatsWidget.classList.remove('hidden');
     }
 
+    let remainingPercentage = 100;
+    state.percentageCuts.forEach(cut => {
+        const sourcePool = cut.basis === 'original' ? 100 : remainingPercentage;
+        const deduction = sourcePool * (cut.percentage / 100);
+        remainingPercentage = Math.max(remainingPercentage - deduction, 0);
+    });
+    const totalCutPercentage = 100 - remainingPercentage;
+
+    if (DOM.cutStatsTotalPercentage) {
+        DOM.cutStatsTotalPercentage.textContent = `(-${totalCutPercentage.toFixed(1)}%)`;
+    }
+
     let runningTotals = {
         daily: totals.daily || 0,
         weekly: totals.weekly || 0,
@@ -217,6 +244,8 @@ export function renderPercentageCutStats(totals) {
             { label: 'This Week', key: 'weekly' },
             { label: 'This Month', key: 'monthly' }
         ].forEach(period => {
+            if (!state.activeCutStatsPeriods.includes(period.key)) return;
+
             const beforeAmount = beforeTotals[period.key];
             const sourceAmount = sourceTotals[period.key];
             const afterAmount = runningTotals[period.key];
@@ -1000,7 +1029,7 @@ function createCutActionButton(action, title, svg) {
     return button;
 }
 
-function handlePercentageCutAction(e) {
+async function handlePercentageCutAction(e) {
     const button = e.target.closest('button[data-action]');
     if (!button) return;
 
@@ -1008,14 +1037,34 @@ function handlePercentageCutAction(e) {
     if (!item) return;
 
     if (button.dataset.action === 'remove') {
-        item.remove();
+        // Prevent default click propagation so schedulePercentageCutsAutosave does not run synchronously
+        e.preventDefault();
+        e.stopPropagation();
+
+        const nameInput = item.querySelector('.cut-name-input');
+        const cutName = nameInput ? nameInput.value.trim() : "";
+        const displayName = cutName ? `"${cutName}"` : "this percentage cut";
+
+        const confirmed = await showConfirm(
+            "Remove Percentage Cut",
+            `Are you sure you want to remove ${displayName}?`
+        );
+        if (confirmed) {
+            item.remove();
+            updatePercentageCutMoveButtons();
+            
+            // Dispatch input event to trigger auto-save in main.js
+            if (DOM.percentageCutList) {
+                DOM.percentageCutList.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
     } else if (button.dataset.action === 'up' && item.previousElementSibling) {
         DOM.percentageCutList.insertBefore(item, item.previousElementSibling);
+        updatePercentageCutMoveButtons();
     } else if (button.dataset.action === 'down' && item.nextElementSibling) {
         DOM.percentageCutList.insertBefore(item.nextElementSibling, item);
+        updatePercentageCutMoveButtons();
     }
-
-    updatePercentageCutMoveButtons();
 }
 
 function updatePercentageCutMoveButtons() {
@@ -1145,5 +1194,240 @@ function handleDragEnd(e) {
     items.forEach(item => {
         item.style.borderStyle = 'solid';
         item.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+    });
+}
+
+export function renderTcCutsSummary() {
+    if (!DOM.tcCutsSummary) return;
+
+    const baseRate = DOM.tcHourlyRate ? (parseFloat(DOM.tcHourlyRate.value) || state.tcHourlyRate || 20) : (state.tcHourlyRate || 20);
+    
+    let accumulatedRate = baseRate;
+    state.percentageCuts.forEach(cut => {
+        const sourcePool = cut.basis === 'original' ? baseRate : accumulatedRate;
+        const deduction = sourcePool * (cut.percentage / 100);
+        accumulatedRate = Math.max(accumulatedRate - deduction, 0);
+    });
+    const effectiveRate = accumulatedRate;
+    const totalCutPercentage = baseRate > 0 ? ((baseRate - effectiveRate) / baseRate) * 100 : 0;
+
+    DOM.tcCutsSummary.innerHTML = `Percentage Cuts: <span style="color: var(--accent-blue); font-weight: 700;">-${totalCutPercentage.toFixed(1)}%</span> (Effective Rate: <span style="color: var(--accent-green); font-weight: 700;">${state.currentCurrency}${effectiveRate.toFixed(2)}/h</span>)`;
+}
+
+export function renderTimeCostBreakdown() {
+    renderTcCutsSummary();
+    if (!DOM.tcBreakdownContainer) return;
+
+    const cost = parseFloat(DOM.tcItemCost ? DOM.tcItemCost.value : '') || 0;
+    const baseRate = DOM.tcHourlyRate ? (parseFloat(DOM.tcHourlyRate.value) || state.tcHourlyRate || 20) : (state.tcHourlyRate || 20);
+    const dailyHours = DOM.tcDailyHours ? (parseFloat(DOM.tcDailyHours.value) || state.tcDailyHours || 8) : (state.tcDailyHours || 8);
+    const includeWeekends = DOM.tcIncludeWeekends ? DOM.tcIncludeWeekends.checked : state.tcIncludeWeekends;
+    const daysInWeek = includeWeekends ? 7 : 5;
+    const daysInMonth = includeWeekends ? 30.4 : 21.6;
+
+    if (cost <= 0) {
+        DOM.tcBreakdownContainer.innerHTML = '<p class="loading-text" style="margin-top: 20px;">Enter an item cost to see the breakdown.</p>';
+        return;
+    }
+
+    const baseHours = cost / baseRate;
+
+    let accumulatedRate = baseRate;
+    
+    state.percentageCuts.forEach(cut => {
+        const sourcePool = cut.basis === 'original' ? baseRate : accumulatedRate;
+        const deduction = sourcePool * (cut.percentage / 100);
+        accumulatedRate = Math.max(accumulatedRate - deduction, 0);
+    });
+
+    const effectiveRate = accumulatedRate;
+    const effectiveHours = effectiveRate > 0 ? cost / effectiveRate : Infinity;
+
+    function formatDaysWeeksMonths(totalHours) {
+        if (totalHours === Infinity) return { days: '∞', weeks: '∞', months: '∞' };
+        
+        const days = totalHours / dailyHours;
+        const weeks = days / daysInWeek;
+        const months = days / daysInMonth;
+
+        return {
+            days: days.toFixed(1),
+            weeks: weeks.toFixed(1),
+            months: months.toFixed(1)
+        };
+    }
+
+    const baseTimeFormatted = formatDaysWeeksMonths(baseHours);
+    const effectiveTimeFormatted = formatDaysWeeksMonths(effectiveHours);
+    const totalCutPercentage = baseRate > 0 ? ((baseRate - effectiveRate) / baseRate) * 100 : 0;
+
+    let html = `
+        <table class="tc-breakdown-table">
+            <thead>
+                <tr>
+                    <th>Scenario</th>
+                    <th>Hourly Rate</th>
+                    <th>Hours</th>
+                    <th>Days</th>
+                    <th>Weeks</th>
+                    <th>Months</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Base Rate</td>
+                    <td class="tc-amount"><span class="currency-symbol">${state.currentCurrency}</span>${baseRate.toFixed(2)}</td>
+                    <td class="tc-time">${formatDuration(baseHours * 60 * 60 * 1000)}</td>
+                    <td class="tc-time">${baseTimeFormatted.days}</td>
+                    <td class="tc-time">${baseTimeFormatted.weeks} wks</td>
+                    <td class="tc-time">${baseTimeFormatted.months} mos</td>
+                </tr>
+    `;
+
+    if (state.percentageCuts.length > 0) {
+        html += `
+                <tr class="tc-total-row">
+                    <td>After All Cuts (-${totalCutPercentage.toFixed(1)}%)</td>
+                    <td class="tc-amount"><span class="currency-symbol">${state.currentCurrency}</span>${effectiveRate.toFixed(2)}</td>
+                    <td class="tc-time">${effectiveHours === Infinity ? '∞' : formatDuration(effectiveHours * 60 * 60 * 1000)}</td>
+                    <td class="tc-time">${effectiveTimeFormatted.days}</td>
+                    <td class="tc-time">${effectiveTimeFormatted.weeks} wks</td>
+                    <td class="tc-time">${effectiveTimeFormatted.months} mos</td>
+                </tr>
+        `;
+    }
+
+    html += `
+            </tbody>
+        </table>
+    `;
+
+    DOM.tcBreakdownContainer.innerHTML = html;
+}
+
+export function renderSavedTimeCostItems() {
+    renderTcCutsSummary();
+    if (!DOM.tcSavedItemsContainer) return;
+
+    if (!state.timeCostItems || state.timeCostItems.length === 0) {
+        DOM.tcSavedItemsContainer.innerHTML = '<p class="loading-text">No saved items.</p>';
+        return;
+    }
+
+    const baseRate = DOM.tcHourlyRate ? (parseFloat(DOM.tcHourlyRate.value) || state.tcHourlyRate || 20) : (state.tcHourlyRate || 20);
+    const dailyHours = DOM.tcDailyHours ? (parseFloat(DOM.tcDailyHours.value) || state.tcDailyHours || 8) : (state.tcDailyHours || 8);
+    const includeWeekends = DOM.tcIncludeWeekends ? DOM.tcIncludeWeekends.checked : state.tcIncludeWeekends;
+    const daysInWeek = includeWeekends ? 7 : 5;
+    const daysInMonth = includeWeekends ? 30.4 : 21.6;
+
+    let accumulatedRate = baseRate;
+    state.percentageCuts.forEach(cut => {
+        const sourcePool = cut.basis === 'original' ? baseRate : accumulatedRate;
+        const deduction = sourcePool * (cut.percentage / 100);
+        accumulatedRate = Math.max(accumulatedRate - deduction, 0);
+    });
+    const effectiveRate = accumulatedRate;
+    const totalCutPercentage = baseRate > 0 ? ((baseRate - effectiveRate) / baseRate) * 100 : 0;
+
+    let html = `
+        <div style="overflow-x: auto; width: 100%;">
+            <table class="tc-breakdown-table" style="min-width: 900px;">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="tc-sticky-col" style="vertical-align: middle;">Item Name</th>
+                        <th rowspan="2" style="vertical-align: middle;">Cost</th>
+                        <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">Base Time</th>
+                        <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">After Cuts Time (-${totalCutPercentage.toFixed(1)}%)</th>
+                        <th rowspan="2" style="vertical-align: middle; text-align: center;">Actions</th>
+                    </tr>
+                    <tr>
+                        <th style="font-size: 0.8rem; padding: 6px 10px;">Hours</th>
+                        <th style="font-size: 0.8rem; padding: 6px 10px;">Days</th>
+                        <th style="font-size: 0.8rem; padding: 6px 10px;">Weeks</th>
+                        <th style="font-size: 0.8rem; padding: 6px 10px;">Months</th>
+                        <th style="font-size: 0.8rem; padding: 6px 10px;">Hours</th>
+                        <th style="font-size: 0.8rem; padding: 6px 10px;">Days</th>
+                        <th style="font-size: 0.8rem; padding: 6px 10px;">Weeks</th>
+                        <th style="font-size: 0.8rem; padding: 6px 10px;">Months</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    state.timeCostItems.forEach(item => {
+        const cost = item.cost;
+        const baseHours = cost / baseRate;
+        const effectiveHours = effectiveRate > 0 ? cost / effectiveRate : Infinity;
+
+        // Base time components
+        const baseDays = baseHours / dailyHours;
+        const baseWeeks = baseDays / daysInWeek;
+        const baseMonths = baseDays / daysInMonth;
+
+        // Effective time components
+        const effectiveDays = effectiveHours / dailyHours;
+        const effectiveWeeks = effectiveDays / daysInWeek;
+        const effectiveMonths = effectiveDays / daysInMonth;
+
+        const baseHoursStr = baseHours === Infinity ? '∞' : `${baseHours.toFixed(1)}h`;
+        const baseDaysStr = baseHours === Infinity ? '∞' : `${baseDays.toFixed(1)}d`;
+        const baseWeeksStr = baseHours === Infinity ? '∞' : `${baseWeeks.toFixed(1)}w`;
+        const baseMonthsStr = baseHours === Infinity ? '∞' : `${baseMonths.toFixed(1)}m`;
+
+        const effectiveHoursStr = effectiveHours === Infinity ? '∞' : `${effectiveHours.toFixed(1)}h`;
+        const effectiveDaysStr = effectiveHours === Infinity ? '∞' : `${effectiveDays.toFixed(1)}d`;
+        const effectiveWeeksStr = effectiveHours === Infinity ? '∞' : `${effectiveWeeks.toFixed(1)}w`;
+        const effectiveMonthsStr = effectiveHours === Infinity ? '∞' : `${effectiveMonths.toFixed(1)}m`;
+
+        html += `
+                <tr>
+                    <td class="tc-sticky-col" style="font-weight: 600; white-space: nowrap;">${item.name || 'Unnamed Item'}</td>
+                    <td class="tc-amount">${state.currentCurrency}${cost.toFixed(2)}</td>
+                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseHoursStr}</td>
+                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseDaysStr}</td>
+                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseWeeksStr}</td>
+                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseMonthsStr}</td>
+                    <td class="tc-time" style="font-size: 0.95rem;">${effectiveHoursStr}</td>
+                    <td class="tc-time" style="font-size: 0.95rem;">${effectiveDaysStr}</td>
+                    <td class="tc-time" style="font-size: 0.95rem;">${effectiveWeeksStr}</td>
+                    <td class="tc-time" style="font-size: 0.95rem;">${effectiveMonthsStr}</td>
+                    <td style="text-align: center;">
+                        <button class="btn-delete tc-delete-btn" data-id="${item.id}" title="Delete Item" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary);">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                            </svg>
+                        </button>
+                    </td>
+                </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    DOM.tcSavedItemsContainer.innerHTML = html;
+
+    const deleteBtns = DOM.tcSavedItemsContainer.querySelectorAll('.tc-delete-btn');
+    deleteBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const itemId = btn.dataset.id;
+            const itemObj = state.timeCostItems.find(x => x.id === itemId);
+            const itemName = itemObj ? itemObj.name || 'Unnamed Item' : 'this item';
+            const displayName = itemName ? `"${itemName}"` : 'this item';
+
+            const confirmed = await showConfirm(
+                "Delete Saved Item",
+                `Are you sure you want to delete ${displayName}?`
+            );
+            if (confirmed) {
+                import('./api.js').then(module => module.deleteTimeCostItem(itemId));
+            }
+        });
     });
 }

@@ -46,6 +46,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const squircleColorPicker = document.getElementById('squircle-color-picker');
     const squircleColorCode = document.getElementById('squircle-color-code');
     const squircleColorGroup = document.getElementById('squircle-color-group');
+    const squirclePaddingSlider = document.getElementById('squircle-padding-slider');
+    const squirclePaddingValue = document.getElementById('squircle-padding-value');
+    const squirclePaddingGroup = document.getElementById('squircle-padding-group');
+    const appleTouchNoSquircleToggle = document.getElementById('apple-touch-no-squircle-toggle');
+    const appleTouchNoSquircleGroup = document.getElementById('apple-touch-no-squircle-group');
 
     // --- Beta Overlay Elements ---
     const overlayType = document.getElementById('overlay-type');
@@ -114,6 +119,10 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePaddingPreview();
     });
 
+    paddingSmallIconsCheckbox.addEventListener('change', () => {
+        updatePaddingPreview();
+    });
+
     // Background Controls Listeners
     bgTransparentToggle.addEventListener('change', () => {
         const isTransparent = bgTransparentToggle.checked;
@@ -143,9 +152,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isSquircleActive) {
             squircleColorGroup.style.opacity = '1';
             squircleColorGroup.style.pointerEvents = 'auto';
+            squirclePaddingGroup.style.opacity = '1';
+            squirclePaddingGroup.style.pointerEvents = 'auto';
+            appleTouchNoSquircleGroup.style.opacity = '1';
+            appleTouchNoSquircleGroup.style.pointerEvents = 'auto';
         } else {
             squircleColorGroup.style.opacity = '0.5';
             squircleColorGroup.style.pointerEvents = 'none';
+            squirclePaddingGroup.style.opacity = '0.5';
+            squirclePaddingGroup.style.pointerEvents = 'none';
+            appleTouchNoSquircleGroup.style.opacity = '0.5';
+            appleTouchNoSquircleGroup.style.pointerEvents = 'none';
         }
         applySquircleToStateSvgs();
         renderPreviewsInDOM();
@@ -154,6 +171,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     squircleColorPicker.addEventListener('input', () => {
         squircleColorCode.textContent = squircleColorPicker.value;
+        applySquircleToStateSvgs();
+        renderPreviewsInDOM();
+        updatePaddingPreview();
+    });
+
+    appleTouchNoSquircleToggle.addEventListener('change', () => {
+        applySquircleToStateSvgs();
+        renderPreviewsInDOM();
+        updatePaddingPreview();
+    });
+
+    squirclePaddingSlider.addEventListener('input', () => {
+        squirclePaddingValue.textContent = squirclePaddingSlider.value + '%';
         applySquircleToStateSvgs();
         renderPreviewsInDOM();
         updatePaddingPreview();
@@ -349,7 +379,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const lightPalette = await getSmartPalette(imagePreview.src, settings.colors);
 
                 // 1. Trace PNG to create Light SVG
-                baseLightSvgString = traceImageDataToSvg(sourceImageData, lightPalette, settings);
+                const tracedSvg = traceImageDataToSvg(sourceImageData, lightPalette, settings);
+                baseLightSvgString = cleanSvg(tracedSvg);
                 // 2. Invert Traced SVG to create Dark SVG
                 baseDarkSvgString = generateDarkSvg(baseLightSvgString);
             }
@@ -379,11 +410,43 @@ document.addEventListener('DOMContentLoaded', () => {
         const svgEl = doc.querySelector('svg');
         if (!svgEl) return svgStr;
 
-        if (!svgEl.hasAttribute('viewBox') && svgEl.hasAttribute('width') && svgEl.hasAttribute('height')) {
-            const w = parseFloat(svgEl.getAttribute('width'));
-            const h = parseFloat(svgEl.getAttribute('height'));
-            svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        let minX = 0, minY = 0, width = 100, height = 100;
+        let hasSize = false;
+
+        if (svgEl.hasAttribute('viewBox')) {
+            const vb = svgEl.getAttribute('viewBox');
+            const parts = vb.match(/-?[\d\.]+(?:e-?\d+)?/gi)?.map(parseFloat);
+            if (parts && parts.length >= 4) {
+                minX = parts[0];
+                minY = parts[1];
+                width = parts[2];
+                height = parts[3];
+                hasSize = true;
+            }
+        } else {
+            const wAttr = svgEl.getAttribute('width');
+            const hAttr = svgEl.getAttribute('height');
+            if (wAttr && hAttr) {
+                width = parseFloat(wAttr) || 100;
+                height = parseFloat(hAttr) || 100;
+                hasSize = true;
+            }
         }
+
+        if (hasSize && width !== height) {
+            if (width > height) {
+                const diff = width - height;
+                minY = minY - diff / 2;
+                height = width;
+            } else {
+                const diff = height - width;
+                minX = minX - diff / 2;
+                width = height;
+            }
+        }
+
+        // Always set the squared viewBox
+        svgEl.setAttribute('viewBox', `${minX} ${minY} ${width} ${height}`);
         svgEl.removeAttribute('width');
         svgEl.removeAttribute('height');
         return new XMLSerializer().serializeToString(doc);
@@ -679,7 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isVectorMode) {
                 updateStatus('Rasterizing SVG...');
                 // We use the Light SVG (Original) for the PNG fallbacks
-                pngSourceBlob = await svgToPngBlob(lightSvgString, 1024);
+                pngSourceBlob = await svgToPngBlob(baseLightSvgString, 1024);
             }
 
             for (const size of iconSizes) {
@@ -710,13 +773,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 // should NOT automatically apply to output images.
                 // Updated Logic: Always apply background for Apple Touch Icon (180) unless explicitly transparent
                 // For other sizes, respect "Apply to all" checkbox
+                const isAppleTouch = (size === 180);
+                const skipSquircleForApple = isAppleTouch && squircleToggle.checked && appleTouchNoSquircleToggle.checked;
+
                 if (!bgTransparentToggle.checked) {
-                    if (size === 180 || bgApplyAllCheckbox.checked) {
+                    if (isAppleTouch || bgApplyAllCheckbox.checked) {
                         backgroundColor = bgColorPicker.value;
                     }
+                } else if (skipSquircleForApple) {
+                    // Force background color for Apple Touch Icon if squircle is skipped and transparent is set
+                    backgroundColor = bgColorPicker.value;
                 }
 
                 let squircleColor = squircleToggle.checked ? squircleColorPicker.value : null;
+                if (skipSquircleForApple) {
+                    squircleColor = null;
+                }
 
                 imageBlobs[size] = await convertToSquare(compressedFile, size, paddingPercent, backgroundColor, squircleColor);
             }
@@ -838,31 +910,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let filesHtml = '';
         for (const [filename, blob] of Object.entries(generatedFiles)) {
-            let iconSvg = '';
-            let iconClass = '';
-            if (filename.endsWith('.svg')) {
-                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>`;
-                iconClass = 'svg';
-            } else if (filename.endsWith('.webmanifest') || filename.endsWith('.json')) {
-                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M9 1.5V4h2.5L9 1.5zM8 4H4.5A1.5 1.5 0 0 0 3 5.5v7A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6H9a1 1 0 0 1-1-1zM1.5 2A1.5 1.5 0 0 0 0 3.5v7A1.5 1.5 0 0 0 1.5 12H2V3a2 2 0 0 1 2-2h5v-.5A1.5 1.5 0 0 0 7.5 0h-6z"/></svg>`;
-                iconClass = 'manifest';
+            let previewContent = '';
+            let isVisual = filename.endsWith('.png') || filename.endsWith('.svg') || filename.endsWith('.ico');
+            
+            if (isVisual) {
+                const url = URL.createObjectURL(blob);
+                previewContent = `<img src="${url}" class="file-preview-image" alt="${filename}">`;
             } else {
-                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.002 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2V3zm1 9v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1H1.002zm14-1V3a1 1 0 0 0-1-1h-12a1 1 0 0 0-1 1v8h14z"/></svg>`;
-                iconClass = 'image';
+                let iconSvg = '';
+                if (filename.endsWith('.webmanifest') || filename.endsWith('.json')) {
+                    iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M9 1.5V4h2.5L9 1.5zM8 4H4.5A1.5 1.5 0 0 0 3 5.5v7A1.5 1.5 0 0 0 4.5 14h7a1.5 1.5 0 0 0 1.5-1.5V6H9a1 1 0 0 1-1-1zM1.5 2A1.5 1.5 0 0 0 0 3.5v7A1.5 1.5 0 0 0 1.5 12H2V3a2 2 0 0 1 2-2h5v-.5A1.5 1.5 0 0 0 7.5 0h-6z"/></svg>`;
+                } else {
+                    iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M.002 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-12a2 2 0 0 1-2-2V3zm1 9v1a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1H1.002zm14-1V3a1 1 0 0 0-1-1h-12a1 1 0 0 0-1 1v8h14z"/></svg>`;
+                }
+                previewContent = `<div class="file-icon-placeholder">${iconSvg}</div>`;
             }
             
             const sizeStr = formatBytes(blob.size);
             
             filesHtml += `
-                <div class="file-row">
-                    <div class="file-info">
-                        <div class="file-icon ${iconClass}">
-                            ${iconSvg}
-                        </div>
-                        <div>
-                            <div class="file-name">${filename}</div>
-                            <div class="file-size">${sizeStr}</div>
-                        </div>
+                <div class="file-grid-item">
+                    <div class="file-preview-area">
+                        ${previewContent}
+                    </div>
+                    <div class="file-grid-info">
+                        <div class="file-name" title="${filename}">${filename}</div>
+                        <div class="file-size">${sizeStr}</div>
                     </div>
                     <button class="individual-download-btn" data-filename="${filename}" title="Download ${filename}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
@@ -959,8 +1032,12 @@ document.addEventListener('DOMContentLoaded', () => {
             canvas.height = size;
             const ctx = canvas.getContext('2d');
 
+            const squirclePaddingPercent = squircleColor ? ((parseInt(squirclePaddingSlider.value) || 0) / 100) : 0;
+            const squircleSize = size * (1 - 2 * squirclePaddingPercent);
+            const squircleOffset = size * squirclePaddingPercent;
+
             if (squircleColor) {
-                const pathString = generateSquirclePath(0, 0, size, size);
+                const pathString = generateSquirclePath(squircleOffset, squircleOffset, squircleSize, squircleSize);
                 const path = new Path2D(pathString);
                 ctx.fillStyle = squircleColor;
                 ctx.fill(path);
@@ -971,8 +1048,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const img = new Image();
             img.onload = async () => {
-                const availableSize = size * (1 - (paddingPercent * 2));
-                const offset = size * paddingPercent;
+                const availableSize = squircleSize * (1 - (paddingPercent * 2));
+                const offset = squircleOffset + squircleSize * paddingPercent;
 
                 const scale = Math.min(availableSize / img.width, availableSize / img.height);
                 const newWidth = img.width * scale;
@@ -1031,8 +1108,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let fileToUse = sourceFile;
         // If vector mode (either uploaded SVG, or PNG traced to SVG in vector mode)
-        if (processingMode === 'vector' && lightSvgString) {
-            fileToUse = await svgToPngBlob(lightSvgString, 256);
+        if (processingMode === 'vector' && baseLightSvgString) {
+            fileToUse = await svgToPngBlob(baseLightSvgString, 256);
         } else if (!fileToUse && sourceImageData) {
             // Should not happen as sourceFile is set on upload, but for safety
         }
@@ -1209,6 +1286,15 @@ document.addEventListener('DOMContentLoaded', () => {
         squircleColorCode.textContent = '#8b5cf6';
         squircleColorGroup.style.opacity = '0.5';
         squircleColorGroup.style.pointerEvents = 'none';
+        squirclePaddingSlider.value = 0;
+        squirclePaddingValue.textContent = '0%';
+        squirclePaddingGroup.style.opacity = '0.5';
+        squirclePaddingGroup.style.pointerEvents = 'none';
+        appleTouchNoSquircleToggle.checked = false;
+        appleTouchNoSquircleGroup.style.opacity = '0.5';
+        appleTouchNoSquircleGroup.style.pointerEvents = 'none';
+
+        paddingSmallIconsCheckbox.checked = true;
 
         // Reset ICO resolution checkboxes
         document.getElementById('ico-size-16').checked = true;
@@ -1231,56 +1317,88 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Squircle Logic ---
     function generateSquirclePath(minX, minY, w, h) {
-        // Calculate dynamic corner radius and smoothing parameters
-        const cornerRadius = Math.min(w, h) * 0.2236; // iOS corner radius ratio
-        const cornerSmoothing = 0.6; // iOS corner smoothing
+        const sx = w / 223.2;
+        const sy = h / 223.2;
 
-        const roundingAndSmoothingBudget = Math.min(w, h) / 2;
-        
-        // Corner parameter math matching Figma's implementation
-        const getParams = (r) => {
-            let s = cornerSmoothing;
-            let p = (1 + s) * r;
-            
-            // Limit smoothing and p to fit budget
-            const maxCornerSmoothing = roundingAndSmoothingBudget / r - 1;
-            s = Math.min(s, maxCornerSmoothing);
-            p = Math.min(p, roundingAndSmoothingBudget);
-
-            const toRad = (deg) => deg * Math.PI / 180;
-            const arcMeasure = 90 * (1 - s);
-            const arcSectionLength = Math.sin(toRad(arcMeasure / 2)) * r * Math.sqrt(2);
-            const angleAlpha = (90 - arcMeasure) / 2;
-            const p3ToP4Distance = r * Math.tan(toRad(angleAlpha / 2));
-            const angleBeta = 45 * s;
-            const c = p3ToP4Distance * Math.cos(toRad(angleBeta));
-            const d = c * Math.tan(toRad(angleBeta));
-            const b = (p - arcSectionLength - c - d) / 3;
-            const a = 2 * b;
-
-            return { a, b, c, d, p, arcSectionLength, r };
-        };
-
-        const params = getParams(cornerRadius);
-        const { a, b, c, d, p, arcSectionLength, r } = params;
-
-        // Helper to format values to 4 decimal places
         const f = (val) => Number(val.toFixed(4));
 
-        // SVG relative commands for each corner
-        const drawTopRight = `c ${f(a)} 0 ${f(a + b)} 0 ${f(a + b + c)} ${f(d)} a ${f(r)} ${f(r)} 0 0 1 ${f(arcSectionLength)} ${f(arcSectionLength)} c ${f(d)} ${f(c)} ${f(d)} ${f(b + c)} ${f(d)} ${f(a + b + c)}`;
-        const drawBottomRight = `c 0 ${f(a)} 0 ${f(a + b)} ${f(-d)} ${f(a + b + c)} a ${f(r)} ${f(r)} 0 0 1 ${f(-arcSectionLength)} ${f(arcSectionLength)} c ${f(-c)} ${f(d)} ${f(-(b + c))} ${f(d)} ${f(-(a + b + c))} ${f(d)}`;
-        const drawBottomLeft = `c ${f(-a)} 0 ${f(-(a + b))} 0 ${f(-(a + b + c))} ${f(-d)} a ${f(r)} ${f(r)} 0 0 1 ${f(-arcSectionLength)} ${f(-arcSectionLength)} c ${f(-d)} ${f(-c)} ${f(-d)} ${f(-(b + c))} ${f(-d)} ${f(-(a + b + c))}`;
-        const drawTopLeft = `c 0 ${f(-a)} 0 ${f(-(a + b))} ${f(d)} ${f(-(a + b + c))} a ${f(r)} ${f(r)} 0 0 1 ${f(arcSectionLength)} ${f(-arcSectionLength)} c ${f(c)} ${f(-d)} ${f(b + c)} ${f(-d)} ${f(a + b + c)} ${f(-d)}`;
+        // M 161.9 220.3
+        const m_x = f(minX + 161.9 * sx);
+        const m_y = f(minY + 220.3 * sy);
 
-        return `M ${f(minX + w - p)} ${f(minY)} ` +
-               `${drawTopRight} ` +
-               `L ${f(minX + w)} ${f(minY + h - p)} ` +
-               `${drawBottomRight} ` +
-               `L ${f(minX + p)} ${f(minY + h)} ` +
-               `${drawBottomLeft} ` +
-               `L ${f(minX)} ${f(minY + p)} ` +
-               `${drawTopLeft} Z`;
+        // c -33.53 3.88 -67.06 3.88 -100.6 0
+        const c1_dx1 = f(-33.53 * sx);
+        const c1_dy1 = f(3.88 * sy);
+        const c1_dx2 = f(-67.06 * sx);
+        const c1_dy2 = f(3.88 * sy);
+        const c1_dx3 = f(-100.6 * sx);
+        const c1_dy3 = f(0 * sy);
+
+        // c -30.6 -3.54 -54.86 -27.8 -58.4 -58.4
+        const c2_dx1 = f(-30.6 * sx);
+        const c2_dy1 = f(-3.54 * sy);
+        const c2_dx2 = f(-54.86 * sx);
+        const c2_dy2 = f(-27.8 * sy);
+        const c2_dx3 = f(-58.4 * sx);
+        const c2_dy3 = f(-58.4 * sy);
+
+        // c -3.88 -33.53 -3.88 -67.06 0 -100.6
+        const c3_dx1 = f(-3.88 * sx);
+        const c3_dy1 = f(-33.53 * sy);
+        const c3_dx2 = f(-3.88 * sx);
+        const c3_dy2 = f(-67.06 * sy);
+        const c3_dx3 = f(0 * sx);
+        const c3_dy3 = f(-100.6 * sy);
+
+        // C 6.44 30.7 30.7 6.44 61.3 2.91
+        const c4_x1 = f(minX + 6.44 * sx);
+        const c4_y1 = f(minY + 30.7 * sy);
+        const c4_x2 = f(minX + 30.7 * sx);
+        const c4_y2 = f(minY + 6.44 * sy);
+        const c4_x3 = f(minX + 61.3 * sx);
+        const c4_y3 = f(minY + 2.91 * sy);
+
+        // c 33.53 -3.88 67.06 -3.88 100.6 0
+        const c5_dx1 = f(33.53 * sx);
+        const c5_dy1 = f(-3.88 * sy);
+        const c5_dx2 = f(67.06 * sx);
+        const c5_dy2 = f(-3.88 * sy);
+        const c5_dx3 = f(100.6 * sx);
+        const c5_dy3 = f(0 * sy);
+
+        // c 30.6 3.54 54.86 27.8 58.4 58.4
+        const c6_dx1 = f(30.6 * sx);
+        const c6_dy1 = f(3.54 * sy);
+        const c6_dx2 = f(54.86 * sx);
+        const c6_dy2 = f(27.8 * sy);
+        const c6_dx3 = f(58.4 * sx);
+        const c6_dy3 = f(58.4 * sy);
+
+        // c 3.88 33.53 3.88 67.06 0 100.6
+        const c7_dx1 = f(3.88 * sx);
+        const c7_dy1 = f(33.53 * sy);
+        const c7_dx2 = f(3.88 * sx);
+        const c7_dy2 = f(67.06 * sy);
+        const c7_dx3 = f(0 * sx);
+        const c7_dy3 = f(100.6 * sy);
+
+        // c -3.54 30.6 -27.8 54.86 -58.4 58.4
+        const c8_dx1 = f(-3.54 * sx);
+        const c8_dy1 = f(30.6 * sy);
+        const c8_dx2 = f(-27.8 * sx);
+        const c8_dy2 = f(54.86 * sy);
+        const c8_dx3 = f(-58.4 * sx);
+        const c8_dy3 = f(58.4 * sy);
+
+        return `M${m_x},${m_y}` +
+            `c${c1_dx1},${c1_dy1},${c1_dx2},${c1_dy2},${c1_dx3},${c1_dy3}` +
+            `c${c2_dx1},${c2_dy1},${c2_dx2},${c2_dy2},${c2_dx3},${c2_dy3}` +
+            `c${c3_dx1},${c3_dy1},${c3_dx2},${c3_dy2},${c3_dx3},${c3_dy3}` +
+            `C${c4_x1},${c4_y1},${c4_x2},${c4_y2},${c4_x3},${c4_y3}` +
+            `c${c5_dx1},${c5_dy1},${c5_dx2},${c5_dy2},${c5_dx3},${c5_dy3}` +
+            `c${c6_dx1},${c6_dy1},${c6_dx2},${c6_dy2},${c6_dx3},${c6_dy3}` +
+            `c${c7_dx1},${c7_dy1},${c7_dx2},${c7_dy2},${c7_dx3},${c7_dy3}` +
+            `c${c8_dx1},${c8_dy1},${c8_dx2},${c8_dy2},${c8_dx3},${c8_dy3}Z`;
     }
 
     function injectSquircle(svgStr, squircleColor) {
@@ -1313,9 +1431,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            const squirclePaddingPercent = (parseInt(squirclePaddingSlider.value) || 0) / 100;
+            const offset = width * squirclePaddingPercent;
+            const squircleW = width * (1 - 2 * squirclePaddingPercent);
+            const squircleH = height * (1 - 2 * squirclePaddingPercent);
+
             // Create squircle path
             const squirclePath = doc.createElementNS("http://www.w3.org/2000/svg", "path");
-            squirclePath.setAttribute("d", generateSquirclePath(minX, minY, width, height));
+            squirclePath.setAttribute("d", generateSquirclePath(minX + offset, minY + offset, squircleW, squircleH));
             squirclePath.setAttribute("fill", squircleColor);
             squirclePath.setAttribute("class", "svg-squircle-bg");
 
@@ -1323,7 +1446,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
             const cx = minX + width / 2;
             const cy = minY + height / 2;
-            g.setAttribute("transform", `translate(${cx}, ${cy}) scale(0.75) translate(${-cx}, ${-cy})`);
+            const finalScale = 0.75 * (1 - 2 * squirclePaddingPercent);
+            g.setAttribute("transform", `translate(${cx}, ${cy}) scale(${finalScale}) translate(${-cx}, ${-cy})`);
 
             // Move non-metadata children to group
             const children = Array.from(svgEl.childNodes);

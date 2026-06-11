@@ -98,8 +98,15 @@
                 </div>
             </div>
 
-            <div class="dashboard-grid">
-                <!-- Timer Card -->
+            <!-- View Switcher -->
+            <div class="view-switcher">
+                <button id="view-dashboard-btn" class="btn-outline active">Dashboard</button>
+                <button id="view-time-cost-btn" class="btn-outline">Time Cost</button>
+            </div>
+
+            <div id="dashboard-view">
+                <div class="dashboard-grid">
+                    <!-- Timer Card -->
                 <section class="card timer-widget" id="widget-timer">
                     <h2 class="widget-title">Timer</h2>
                     <div class="input-group">
@@ -171,6 +178,34 @@
                                     class="currency-symbol">£</span>0.00</span>
                         </div>
                     </div>
+
+                </section>
+
+                <!-- Percentage Cut Results -->
+                <section class="card cut-stats-widget hidden" id="widget-cut-stats">
+                    <div class="cut-stats-header-row">
+                        <h2 class="widget-title" style="margin: 0;">After Percentage Cuts <span id="cut-stats-total-percentage" style="color: var(--accent-blue); font-weight: 700; font-size: 1.15rem; margin-left: 5px;"></span></h2>
+                        <div class="period-toggle-group">
+                            <button type="button" class="period-toggle-btn active" data-period="daily">Today</button>
+                            <button type="button" class="period-toggle-btn active" data-period="weekly">Week</button>
+                            <button type="button" class="period-toggle-btn active" data-period="monthly">Month</button>
+                        </div>
+                    </div>
+                    <div id="percentage-cut-stats" class="cut-stats" aria-live="polite"></div>
+                </section>
+
+                <!-- Percentage Cuts -->
+                <section class="card percentage-cuts-widget" id="widget-cuts">
+                    <div class="cut-widget-header">
+                        <h2 class="widget-title" style="margin: 0;">Percentage Cuts</h2>
+                        <button id="add-percentage-cut-btn" class="btn-outline btn-small" type="button">+ Add Cut</button>
+                    </div>
+
+                    <div class="input-group cut-settings-group">
+                        <ul id="percentage-cut-list" class="sortable-list percentage-cut-list">
+                            <!-- Cut items will be injected by JS -->
+                        </ul>
+                    </div>
                 </section>
 
                 <!-- Calendar -->
@@ -214,6 +249,71 @@
                     <div id="history-list" class="history-list">
                         <p class="loading-text">Loading history...</p>
                     </div>
+                </section>
+            </div>
+            </div>
+
+            <!-- Time Cost View -->
+            <div id="time-cost-view" class="hidden">
+                <!-- Saved Items Sheet -->
+                <section class="card time-cost-widget" style="margin-bottom: 25px;">
+                    <h2 class="widget-title">Saved Items</h2>
+                    <div id="tc-saved-items-container">
+                        <p class="loading-text">No saved items.</p>
+                    </div>
+                </section>
+
+                <!-- Global Settings Area -->
+                <section class="card time-cost-widget" style="margin-bottom: 25px;">
+                    <h2 class="widget-title">Earning Settings</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.95rem;">
+                        Configure your global earning rate and average daily work hours.
+                        <span id="tc-cuts-summary" style="display: block; margin-top: 8px; color: var(--text-primary); font-size: 0.95rem;">
+                            Percentage Cuts: <span style="color: var(--accent-blue); font-weight: 700;">-0.0%</span> (Effective Rate: <span style="color: var(--accent-green); font-weight: 700;">£20.00/h</span>)
+                        </span>
+                    </p>
+                    <div class="tc-settings-row">
+                        <div class="input-group">
+                            <label for="tc-hourly-rate">Hourly Rate (<span class="currency-symbol">£</span>)</label>
+                            <input type="number" id="tc-hourly-rate" value="20" min="0">
+                        </div>
+                        <div class="input-group">
+                            <label for="tc-daily-hours">Avg Daily Work Hours</label>
+                            <input type="number" id="tc-daily-hours" value="8" min="1" max="24">
+                        </div>
+                    </div>
+                    <div class="tc-checkbox-group">
+                        <label class="tc-switch" for="tc-include-weekends">
+                            <input type="checkbox" id="tc-include-weekends">
+                            <span class="tc-slider"></span>
+                        </label>
+                        <label for="tc-include-weekends" class="tc-switch-label">Include Weekends in Calculations</label>
+                    </div>
+                </section>
+
+                <!-- Time Cost Calculator -->
+                <section class="card time-cost-widget" id="widget-time-cost">
+                    <h2 class="widget-title">Time Cost Calculator</h2>
+                    <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.95rem;">
+                        Calculate how much time you need to work to afford an item.
+                    </p>
+                    
+                    <div class="input-group">
+                        <label for="tc-item-name">Item Name</label>
+                        <input type="text" id="tc-item-name" placeholder="e.g. New Laptop">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="tc-item-cost">Item Cost (<span class="currency-symbol">£</span>)</label>
+                        <input type="number" id="tc-item-cost" min="0" placeholder="0.00">
+                    </div>
+
+                    <div id="tc-breakdown-container" class="tc-breakdown-container">
+                        <!-- Breakdown will be injected here -->
+                        <p class="loading-text" style="margin-top: 20px;">Enter an item cost to see the breakdown.</p>
+                    </div>
+
+                    <button id="tc-save-btn" class="btn-primary" style="margin-top: 20px; width: 100%;">Save Item</button>
                 </section>
             </div>
 
@@ -385,6 +485,9 @@
             </div>
         </div>
     </main>
+
+    <!-- Widget Image Exporter -->
+    <script src="vendor/html2canvas.min.js"></script>
 
     <!-- Firebase Logic -->
     <script type="module" src="js/main.js"></script>

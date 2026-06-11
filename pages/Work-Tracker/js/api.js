@@ -1,6 +1,6 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
-import { state, updatePercentageCuts } from './state.js';
+import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcIncludeWeekends } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList } from './ui.js';
 import { getStartOfWeekDate, formatDuration } from './utils.js';
 
@@ -138,6 +138,121 @@ export function loadPercentageCuts() {
     });
 }
 
+export async function saveTimeCostItem(itemData) {
+    if (!state.currentUser) {
+        showAlert("Not Signed In", "Please sign in before saving items.");
+        return;
+    }
+    try {
+        await addDoc(collection(db, "users", state.currentUser.uid, "timeCostItems"), {
+            ...itemData,
+            createdAt: serverTimestamp()
+        });
+        console.log("Debug: Time cost item saved to Firebase");
+    } catch (e) {
+        console.error("Debug: Error adding time cost item: ", e);
+        showAlert("Save Error", "Error saving item! Please check your internet connection.");
+    }
+}
+
+export async function deleteTimeCostItem(itemId) {
+    if (!state.currentUser) return;
+    try {
+        await deleteDoc(doc(db, "users", state.currentUser.uid, "timeCostItems", itemId));
+        console.log("Debug: Time cost item deleted", itemId);
+    } catch (e) {
+        console.error("Debug: Error deleting time cost item: ", e);
+        showAlert("Error", "There was an error deleting this item.");
+    }
+}
+
+export function loadTimeCostItems() {
+    if (!state.currentUser) return;
+
+    const q = query(
+        collection(db, "users", state.currentUser.uid, "timeCostItems"),
+        orderBy("createdAt", "desc")
+    );
+
+    onSnapshot(q, (querySnapshot) => {
+        const items = [];
+        querySnapshot.forEach((docSnap) => {
+            items.push({ id: docSnap.id, ...docSnap.data() });
+        });
+
+        updateTimeCostItems(items);
+        import('./ui.js').then(module => module.renderSavedTimeCostItems());
+        console.log("Debug: Time cost items updated from Firebase");
+    }, (error) => {
+        console.error("Debug: Time cost items snapshot error", error);
+    });
+}
+
+export async function saveTimeCostSettings(hourlyRate, dailyHours, includeWeekends) {
+    if (!state.currentUser) return;
+    try {
+        await setDoc(doc(db, "users", state.currentUser.uid, "settings", "timeCost"), {
+            hourlyRate,
+            dailyHours,
+            includeWeekends,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+        console.log("Debug: Time cost settings saved to Firebase");
+    } catch (e) {
+        console.error("Debug: Error saving time cost settings: ", e);
+    }
+}
+
+export function loadTimeCostSettings() {
+    if (!state.currentUser) return;
+
+    const settingsRef = doc(db, "users", state.currentUser.uid, "settings", "timeCost");
+
+    onSnapshot(settingsRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            let changed = false;
+
+            if (data.hourlyRate !== undefined && parseFloat(DOM.tcHourlyRate ? DOM.tcHourlyRate.value : 0) !== data.hourlyRate) {
+                updateTcHourlyRate(data.hourlyRate);
+                if (DOM.tcHourlyRate) {
+                    DOM.tcHourlyRate.value = data.hourlyRate;
+                }
+                changed = true;
+            }
+
+            if (data.dailyHours !== undefined && parseFloat(DOM.tcDailyHours ? DOM.tcDailyHours.value : 0) !== data.dailyHours) {
+                updateTcDailyHours(data.dailyHours);
+                if (DOM.tcDailyHours) {
+                    DOM.tcDailyHours.value = data.dailyHours;
+                }
+                changed = true;
+            }
+
+            if (data.includeWeekends !== undefined && (DOM.tcIncludeWeekends ? DOM.tcIncludeWeekends.checked : false) !== data.includeWeekends) {
+                updateTcIncludeWeekends(data.includeWeekends);
+                if (DOM.tcIncludeWeekends) {
+                    DOM.tcIncludeWeekends.checked = data.includeWeekends;
+                }
+                changed = true;
+            }
+
+            if (changed) {
+                import('./ui.js').then(module => {
+                    module.renderTimeCostBreakdown();
+                    module.renderSavedTimeCostItems();
+                });
+            }
+            console.log("Debug: Time cost settings updated from Firebase");
+        } else {
+            // Document doesn't exist, we can migrate local values to Firebase
+            saveTimeCostSettings(state.tcHourlyRate, state.tcDailyHours, state.tcIncludeWeekends);
+        }
+    }, (error) => {
+        console.error("Debug: Time cost settings snapshot error", error);
+    });
+}
+
 export function renderDashboardData() {
     DOM.historyList.innerHTML = "";
 
@@ -253,11 +368,12 @@ export function renderDashboardData() {
 
     DOM.monthlyHoursDisplay.textContent = formatDuration(totalMonthlyMs);
     DOM.monthlyEarningsDisplay.textContent = `${state.currentCurrency}${totalMonthlyEarnings.toFixed(2)}`;
-    renderPercentageCutStats({
+    state.lastStatsTotals = {
         daily: totalDailyEarnings,
         weekly: totalWeeklyEarnings,
         monthly: totalMonthlyEarnings
-    });
+    };
+    renderPercentageCutStats(state.lastStatsTotals);
 
     renderCalendar();
     renderChart();

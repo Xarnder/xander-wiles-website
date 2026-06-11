@@ -41,7 +41,7 @@
     },
     {
         "id": "sad-songs",
-        "csvPath": "/assets/Music_CSV/playlist_metadata_complete.csv",
+        "csvPath": "/assets/Music_CSV/Sad Songs_playlist_metadata.csv",
         "description": "For those introspective moments.",
         "theme": "#3182ce",
         "accent": "#90cdf4",

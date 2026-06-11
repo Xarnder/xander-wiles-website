@@ -178,7 +178,7 @@
                     <!-- Small Icons Toggle -->
                     <div class="toggle-row">
                         <div class="toggle-switch-wrapper">
-                            <input type="checkbox" id="padding-small-icons" class="toggle-input">
+                            <input type="checkbox" id="padding-small-icons" class="toggle-input" checked>
                             <label for="padding-small-icons" class="toggle-label"></label>
                         </div>
                         <label for="padding-small-icons" class="toggle-text">Apply padding to small favicon sizes (16x16, 32x32)</label>
@@ -242,6 +242,22 @@
                                 <span id="squircle-color-code"
                                     style="font-family: 'SF Mono', monospace; font-size: 0.9rem; color: var(--text-muted); background: var(--bg-secondary); padding: 0.25rem 0.5rem; border-radius: 6px;">#8b5cf6</span>
                             </div>
+                        </div>
+
+                        <!-- Squircle Padding Slider -->
+                        <div class="control-group" id="squircle-padding-group" style="opacity: 0.5; pointer-events: none; width: 100%;">
+                            <label for="squircle-padding-slider">Squircle Padding</label>
+                            <input type="range" id="squircle-padding-slider" min="0" max="40" value="0" step="5">
+                            <span id="squircle-padding-value">0%</span>
+                        </div>
+
+                        <!-- Skip Squircle for Apple Touch Icon Toggle -->
+                        <div class="toggle-row" id="apple-touch-no-squircle-group" style="opacity: 0.5; pointer-events: none; margin-top: 0.5rem;">
+                            <div class="toggle-switch-wrapper">
+                                <input type="checkbox" id="apple-touch-no-squircle-toggle" class="toggle-input">
+                                <label for="apple-touch-no-squircle-toggle" class="toggle-label"></label>
+                            </div>
+                            <label for="apple-touch-no-squircle-toggle" class="toggle-text">Skip squircle for Apple Touch Icon (use full background)</label>
                         </div>
                     </div>
 

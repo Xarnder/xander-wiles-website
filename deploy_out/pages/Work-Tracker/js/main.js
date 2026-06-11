@@ -1,15 +1,105 @@
-import { DOM, updateCurrencyDisplays, renderCalendar, applyWidgetOrder, applyWidgetTitles } from './ui.js';
+import {
+    DOM,
+    updateCurrencyDisplays,
+    renderCalendar,
+    applyWidgetOrder,
+    applyWidgetTitles,
+    renderWidgetOrderList,
+    renderPercentageCutList,
+    addPercentageCutListItem,
+    getPercentageCutsFromWidget,
+    setupWidgetImageExports,
+    renderTimeCostBreakdown,
+    renderSavedTimeCostItems,
+    renderTcCutsSummary,
+    renderPercentageCutStats
+} from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
-import { state, updateCurrency } from './state.js';
-import { loadHistory, renderDashboardData } from './api.js';
+import {
+    state,
+    updateCurrency,
+    updateWidgetOrder,
+    updateWidgetTitles,
+    updateStartOfWeek,
+    updateContinueSession,
+    updatePercentageCuts,
+    updateTcHourlyRate,
+    updateTcDailyHours,
+    updateTcIncludeWeekends,
+    updateActiveCutStatsPeriods
+} from './state.js';
+import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings } from './api.js';
+
+let percentageCutsSaveTimeout = null;
+
+function schedulePercentageCutsAutosave() {
+    updatePercentageCuts(getPercentageCutsFromWidget());
+    renderDashboardData();
+    renderTimeCostBreakdown();
+    renderSavedTimeCostItems();
+
+    clearTimeout(percentageCutsSaveTimeout);
+    percentageCutsSaveTimeout = setTimeout(() => {
+        savePercentageCuts(state.percentageCuts, { silent: true });
+    }, 1200);
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize UI
     updateCurrencyDisplays();
     DOM.currencySelect.value = state.currentCurrency;
+    renderPercentageCutList();
     applyWidgetOrder();
     applyWidgetTitles();
+    setupWidgetImageExports();
+
+    // Initialize period toggle active classes and click handlers from state
+    const toggleBtns = document.querySelectorAll('.period-toggle-btn');
+    toggleBtns.forEach(btn => {
+        const period = btn.dataset.period;
+        if (state.activeCutStatsPeriods.includes(period)) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+        
+        btn.addEventListener('click', () => {
+            const isActive = btn.classList.contains('active');
+            const periodKey = btn.dataset.period;
+            
+            let nextActivePeriods = [...state.activeCutStatsPeriods];
+            if (isActive) {
+                if (nextActivePeriods.length <= 1) {
+                    import('./ui.js').then(module => module.showAlert("Selection Blocked", "At least one statistics period must remain visible."));
+                    return;
+                }
+                nextActivePeriods = nextActivePeriods.filter(p => p !== periodKey);
+                btn.classList.remove('active');
+            } else {
+                nextActivePeriods.push(periodKey);
+                btn.classList.add('active');
+            }
+            
+            updateActiveCutStatsPeriods(nextActivePeriods);
+            
+            if (state.lastStatsTotals) {
+                renderPercentageCutStats(state.lastStatsTotals);
+            }
+        });
+    });
+
+    if (DOM.tcHourlyRate) {
+        DOM.tcHourlyRate.value = state.tcHourlyRate;
+    }
+    if (DOM.tcDailyHours) {
+        DOM.tcDailyHours.value = state.tcDailyHours;
+    }
+    if (DOM.tcIncludeWeekends) {
+        DOM.tcIncludeWeekends.checked = state.tcIncludeWeekends;
+    }
+
+    renderTcCutsSummary();
 
     // Setup Auth
     setupAuth();
@@ -17,6 +107,88 @@ document.addEventListener('DOMContentLoaded', () => {
     // Timer Events
     DOM.startBtn.addEventListener('click', startTimer);
     DOM.stopBtn.addEventListener('click', stopTimer);
+
+    // View Switcher Events
+    if (DOM.viewDashboardBtn && DOM.viewTimeCostBtn) {
+        DOM.viewDashboardBtn.addEventListener('click', () => {
+            DOM.viewDashboardBtn.classList.add('active');
+            DOM.viewTimeCostBtn.classList.remove('active');
+            DOM.dashboardView.classList.remove('hidden');
+            DOM.timeCostView.classList.add('hidden');
+        });
+
+        DOM.viewTimeCostBtn.addEventListener('click', () => {
+            DOM.viewTimeCostBtn.classList.add('active');
+            DOM.viewDashboardBtn.classList.remove('active');
+            DOM.timeCostView.classList.remove('hidden');
+            DOM.dashboardView.classList.add('hidden');
+            renderTimeCostBreakdown(); // Initialize
+            renderSavedTimeCostItems(); // Initialize
+        });
+    }
+
+    // Time Cost Events
+    let tcSettingsTimeout = null;
+
+    const handleTcSettingsInput = () => {
+        const hourlyRate = parseFloat(DOM.tcHourlyRate ? DOM.tcHourlyRate.value : 0) || 20;
+        const dailyHours = parseFloat(DOM.tcDailyHours ? DOM.tcDailyHours.value : 0) || 8;
+        const includeWeekends = DOM.tcIncludeWeekends ? DOM.tcIncludeWeekends.checked : false;
+
+        updateTcHourlyRate(hourlyRate);
+        updateTcDailyHours(dailyHours);
+        updateTcIncludeWeekends(includeWeekends);
+
+        renderTimeCostBreakdown();
+        renderSavedTimeCostItems();
+
+        clearTimeout(tcSettingsTimeout);
+        tcSettingsTimeout = setTimeout(() => {
+            saveTimeCostSettings(state.tcHourlyRate, state.tcDailyHours, state.tcIncludeWeekends);
+        }, 1200);
+    };
+
+    if (DOM.tcItemCost) {
+        DOM.tcItemCost.addEventListener('input', () => {
+            renderTimeCostBreakdown();
+            renderSavedTimeCostItems();
+        });
+    }
+    if (DOM.tcHourlyRate) {
+        DOM.tcHourlyRate.addEventListener('input', handleTcSettingsInput);
+    }
+    if (DOM.tcDailyHours) {
+        DOM.tcDailyHours.addEventListener('input', handleTcSettingsInput);
+    }
+    if (DOM.tcIncludeWeekends) {
+        DOM.tcIncludeWeekends.addEventListener('change', handleTcSettingsInput);
+    }
+
+    if (DOM.tcSaveBtn) {
+        DOM.tcSaveBtn.addEventListener('click', () => {
+            const name = DOM.tcItemName.value.trim();
+            const cost = parseFloat(DOM.tcItemCost.value);
+            
+            if (!name) {
+                import('./ui.js').then(module => module.showAlert("Invalid Input", "Please enter an item name."));
+                return;
+            }
+            if (isNaN(cost) || cost <= 0) {
+                import('./ui.js').then(module => module.showAlert("Invalid Input", "Please enter a valid item cost."));
+                return;
+            }
+
+            saveTimeCostItem({
+                name,
+                cost
+            });
+            
+            // Clear inputs after save
+            DOM.tcItemName.value = '';
+            DOM.tcItemCost.value = '';
+            renderTimeCostBreakdown();
+        });
+    }
 
     // Dropdown Sync Events
     if (DOM.companySelect) {
@@ -45,8 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (DOM.startOfWeekSelect) {
             DOM.startOfWeekSelect.value = state.startOfWeek.toString();
         }
-        // Import dynamically here to avoid circular dep if needed, but it's imported at top anyway
-        import('./ui.js').then(module => module.renderWidgetOrderList());
+        renderWidgetOrderList();
         DOM.settingsModal.classList.remove('hidden');
     });
 
@@ -58,17 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCurrency(DOM.currencySelect.value);
 
         if (DOM.startOfWeekSelect) {
-            import('./state.js').then(module => {
-                module.updateStartOfWeek(parseInt(DOM.startOfWeekSelect.value));
-                // We don't reload the entire UI tree, we just force Dashboard metadata to repaint over
-                import('./api.js').then(apiModule => {
-                    apiModule.renderDashboardData();
-                    import('./ui.js').then(uiModule => {
-                        uiModule.renderCalendar();
-                        uiModule.renderChart();
-                    });
-                });
-            });
+            updateStartOfWeek(parseInt(DOM.startOfWeekSelect.value));
         }
 
         // Harvest new widget order
@@ -76,26 +237,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const items = DOM.widgetOrderList.querySelectorAll('.sortable-item');
         items.forEach(item => newOrder.push(item.dataset.id));
 
-        import('./state.js').then(module => {
-            module.updateWidgetOrder(newOrder);
-            module.updateWidgetTitles(DOM.showTitlesToggle.checked);
-            module.updateContinueSession(DOM.continueSessionToggle.checked);
-        });
+        updateWidgetOrder(newOrder);
+        updateWidgetTitles(DOM.showTitlesToggle.checked);
+        updateContinueSession(DOM.continueSessionToggle.checked);
 
         applyWidgetOrder();
         applyWidgetTitles();
         updateCurrencyDisplays();
+        renderDashboardData();
 
-        if (state.currentUser) {
-            loadHistory();
-        }
         DOM.settingsModal.classList.add('hidden');
 
-        // Alert to reload for widget order
         import('./ui.js').then(module => {
-            module.showAlert("Settings Saved", "Your settings have been saved! Please reload the page to cleanly view any changes to your widget order.");
+            module.showAlert("Settings Saved", "Your settings have been saved.");
         });
     });
+
+    if (DOM.addPercentageCutBtn) {
+        DOM.addPercentageCutBtn.addEventListener('click', () => {
+            addPercentageCutListItem();
+            schedulePercentageCutsAutosave();
+        });
+    }
+
+    if (DOM.percentageCutList) {
+        DOM.percentageCutList.addEventListener('input', schedulePercentageCutsAutosave);
+        DOM.percentageCutList.addEventListener('click', schedulePercentageCutsAutosave);
+        DOM.percentageCutList.addEventListener('drop', schedulePercentageCutsAutosave);
+        DOM.percentageCutList.addEventListener('dragend', schedulePercentageCutsAutosave);
+    }
 
     // Calendar Events
     if (DOM.prevMonthBtn && DOM.nextMonthBtn) {
