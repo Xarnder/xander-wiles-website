@@ -7,6 +7,10 @@ function createCutId() {
     return `cut-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function createTimeScaleId() {
+    return `tc-scale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function sanitizePercentageCuts(cuts) {
     if (!Array.isArray(cuts)) return [];
 
@@ -29,6 +33,25 @@ function sanitizePercentageCuts(cuts) {
             ...cut,
             name: cut.name || `Cut ${index + 1}`
         }));
+}
+
+function sanitizeCustomTimeScales(scales) {
+    if (!Array.isArray(scales)) return [];
+
+    const allowedUnits = ['minutes', 'hours', 'days', 'weeks', 'months', 'years'];
+
+    return scales
+        .map((scale) => {
+            const amount = Number(scale.amount);
+            const unit = allowedUnits.includes(scale.unit) ? scale.unit : 'hours';
+
+            return {
+                id: scale.id || createTimeScaleId(),
+                amount: Number.isFinite(amount) ? Math.min(Math.max(amount, 0), 100000) : 0,
+                unit
+            };
+        })
+        .filter(scale => scale.amount > 0);
 }
 
 function loadWidgetOrder() {
@@ -64,6 +87,25 @@ function loadActiveCutStatsPeriods() {
     return ['daily', 'weekly', 'monthly'];
 }
 
+function loadTcCustomTimeScales() {
+    try {
+        return sanitizeCustomTimeScales(JSON.parse(localStorage.getItem('work_tracker_tc_custom_time_scales')) || []);
+    } catch (e) {
+        console.warn('Debug: Could not parse custom time scales from storage', e);
+        return [];
+    }
+}
+
+function loadTcWorkingDaysPerWeek() {
+    const saved = parseFloat(localStorage.getItem('work_tracker_tc_working_days_per_week'));
+    if (Number.isFinite(saved)) return Math.min(Math.max(saved, 1), 7);
+
+    const legacyIncludeWeekends = localStorage.getItem('work_tracker_tc_include_weekends');
+    if (legacyIncludeWeekends === 'true') return 7;
+
+    return 5;
+}
+
 export const state = {
     currentUser: null,
     timerInterval: null,
@@ -85,7 +127,8 @@ export const state = {
     timeCostItems: [],
     tcHourlyRate: parseFloat(localStorage.getItem('work_tracker_tc_hourly_rate')) || 20,
     tcDailyHours: parseFloat(localStorage.getItem('work_tracker_tc_daily_hours')) || 8,
-    tcIncludeWeekends: localStorage.getItem('work_tracker_tc_include_weekends') === 'true',
+    tcWorkingDaysPerWeek: loadTcWorkingDaysPerWeek(),
+    tcCustomTimeScales: loadTcCustomTimeScales(),
     activeCutStatsPeriods: loadActiveCutStatsPeriods(),
     lastStatsTotals: { daily: 0, weekly: 0, monthly: 0 }
 };
@@ -145,9 +188,24 @@ export function updateTcDailyHours(hours) {
     localStorage.setItem('work_tracker_tc_daily_hours', hours);
 }
 
-export function updateTcIncludeWeekends(includeWeekends) {
-    state.tcIncludeWeekends = includeWeekends;
-    localStorage.setItem('work_tracker_tc_include_weekends', includeWeekends);
+export function updateTcWorkingDaysPerWeek(days) {
+    const parsedDays = Number(days);
+    state.tcWorkingDaysPerWeek = Number.isFinite(parsedDays) ? Math.min(Math.max(parsedDays, 1), 7) : 5;
+    localStorage.setItem('work_tracker_tc_working_days_per_week', state.tcWorkingDaysPerWeek);
+}
+
+export function createTcCustomTimeScale(amount = 1, unit = 'hours') {
+    return sanitizeCustomTimeScales([{ amount, unit }])[0] || {
+        id: createTimeScaleId(),
+        amount: 1,
+        unit: 'hours'
+    };
+}
+
+export function updateTcCustomTimeScales(scales) {
+    state.tcCustomTimeScales = sanitizeCustomTimeScales(scales);
+    localStorage.setItem('work_tracker_tc_custom_time_scales', JSON.stringify(state.tcCustomTimeScales));
+    return state.tcCustomTimeScales;
 }
 
 export function updateActiveCutStatsPeriods(periods) {

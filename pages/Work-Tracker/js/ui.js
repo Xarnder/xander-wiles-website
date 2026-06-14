@@ -1,4 +1,4 @@
-import { createPercentageCut, state } from './state.js';
+import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales } from './state.js';
 import { formatDuration } from './utils.js';
 
 export const DOM = {
@@ -85,8 +85,9 @@ export const DOM = {
     tcItemCost: document.getElementById('tc-item-cost'),
     tcHourlyRate: document.getElementById('tc-hourly-rate'),
     tcDailyHours: document.getElementById('tc-daily-hours'),
-    tcIncludeWeekends: document.getElementById('tc-include-weekends'),
+    tcWorkingDays: document.getElementById('tc-working-days'),
     tcCutsSummary: document.getElementById('tc-cuts-summary'),
+    tcRateBreakdown: document.getElementById('tc-rate-breakdown'),
     tcBreakdownContainer: document.getElementById('tc-breakdown-container'),
     tcSaveBtn: document.getElementById('tc-save-btn'),
     tcSavedItemsContainer: document.getElementById('tc-saved-items-container')
@@ -1197,50 +1198,319 @@ function handleDragEnd(e) {
     });
 }
 
-export function renderTcCutsSummary() {
-    if (!DOM.tcCutsSummary) return;
+function getTimeCostSettings() {
+    const hourlyRateInput = DOM.tcHourlyRate ? parseFloat(DOM.tcHourlyRate.value) : NaN;
+    const dailyHoursInput = DOM.tcDailyHours ? parseFloat(DOM.tcDailyHours.value) : NaN;
+    const workingDaysInput = DOM.tcWorkingDays ? parseFloat(DOM.tcWorkingDays.value) : NaN;
 
-    const baseRate = DOM.tcHourlyRate ? (parseFloat(DOM.tcHourlyRate.value) || state.tcHourlyRate || 20) : (state.tcHourlyRate || 20);
-    
+    return {
+        baseRate: Number.isFinite(hourlyRateInput) ? hourlyRateInput : (state.tcHourlyRate || 20),
+        dailyHours: Number.isFinite(dailyHoursInput) && dailyHoursInput > 0 ? dailyHoursInput : (state.tcDailyHours || 8),
+        workingDaysPerWeek: Number.isFinite(workingDaysInput) && workingDaysInput > 0
+            ? Math.min(Math.max(workingDaysInput, 1), 7)
+            : (state.tcWorkingDaysPerWeek || 5)
+    };
+}
+
+function getEffectiveHourlyRate(baseRate) {
     let accumulatedRate = baseRate;
+
     state.percentageCuts.forEach(cut => {
         const sourcePool = cut.basis === 'original' ? baseRate : accumulatedRate;
         const deduction = sourcePool * (cut.percentage / 100);
         accumulatedRate = Math.max(accumulatedRate - deduction, 0);
     });
+
     const effectiveRate = accumulatedRate;
     const totalCutPercentage = baseRate > 0 ? ((baseRate - effectiveRate) / baseRate) * 100 : 0;
+
+    return { effectiveRate, totalCutPercentage };
+}
+
+function formatMoneyAmount(amount) {
+    return `${state.currentCurrency}${amount.toFixed(2)}`;
+}
+
+function formatTargetMoney(amount) {
+    return `${state.currentCurrency}${amount.toLocaleString('en-GB')}`;
+}
+
+function formatEarningTime(hours, settings) {
+    if (!Number.isFinite(hours)) return '∞';
+    if (hours <= 0) return '0m';
+
+    const totalMinutes = Math.ceil(hours * 60);
+    if (totalMinutes < 1) return '<1m';
+
+    const workDayMinutes = Math.max(settings.dailyHours, 1) * 60;
+    if (totalMinutes < workDayMinutes) {
+        return formatDuration(totalMinutes * 60 * 1000);
+    }
+
+    const units = [
+        { label: 'yr', minutes: workDayMinutes * settings.workingDaysPerWeek * 4.345 * 12 },
+        { label: 'mo', minutes: workDayMinutes * settings.workingDaysPerWeek * 4.345 },
+        { label: 'wk', minutes: workDayMinutes * settings.workingDaysPerWeek },
+        { label: 'd', minutes: workDayMinutes },
+        { label: 'h', minutes: 60 },
+        { label: 'm', minutes: 1 }
+    ];
+    let remainingMinutes = totalMinutes;
+    const parts = [];
+
+    units.forEach(unit => {
+        const amount = Math.floor(remainingMinutes / unit.minutes);
+        if (amount > 0) {
+            parts.push(`${amount}${unit.label}`);
+            remainingMinutes -= amount * unit.minutes;
+        }
+    });
+
+    return parts.slice(0, 4).join(' ');
+}
+
+function formatScaleAmount(amount) {
+    return Number.isInteger(amount) ? amount.toString() : amount.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function getTimeScaleUnitLabel(unit, amount) {
+    const singularUnits = {
+        minutes: 'minute',
+        hours: 'hour',
+        days: 'day',
+        weeks: 'week',
+        months: 'month',
+        years: 'year'
+    };
+
+    return amount === 1 ? singularUnits[unit] : unit;
+}
+
+function getTimeScaleHours(scale, settings) {
+    const daysInWeek = settings.workingDaysPerWeek;
+    const daysInMonth = settings.workingDaysPerWeek * 4.345;
+
+    switch (scale.unit) {
+        case 'minutes':
+            return scale.amount / 60;
+        case 'hours':
+            return scale.amount;
+        case 'days':
+            return scale.amount * settings.dailyHours;
+        case 'weeks':
+            return scale.amount * daysInWeek * settings.dailyHours;
+        case 'months':
+            return scale.amount * daysInMonth * settings.dailyHours;
+        case 'years':
+            return scale.amount * daysInMonth * 12 * settings.dailyHours;
+        default:
+            return scale.amount;
+    }
+}
+
+function getTimeScaleWorkLabel(scale, settings) {
+    const daysInWeek = settings.workingDaysPerWeek;
+    const daysInMonth = settings.workingDaysPerWeek * 4.345;
+    const amount = formatScaleAmount(scale.amount);
+    const unit = getTimeScaleUnitLabel(scale.unit, scale.amount);
+
+    if (scale.unit === 'days') {
+        return `${amount} ${unit} (${formatScaleAmount(scale.amount * settings.dailyHours)}h)`;
+    }
+    if (scale.unit === 'weeks') {
+        return `${amount} ${unit} (${formatScaleAmount(scale.amount * daysInWeek)}d)`;
+    }
+    if (scale.unit === 'months') {
+        return `${amount} ${unit} (${formatScaleAmount(scale.amount * daysInMonth)}d)`;
+    }
+    if (scale.unit === 'years') {
+        return `${amount} ${unit} (${formatScaleAmount(scale.amount * 12)}mo)`;
+    }
+
+    return `${amount} ${unit}`;
+}
+
+export function renderTcCutsSummary() {
+    if (!DOM.tcCutsSummary) return;
+
+    const { baseRate } = getTimeCostSettings();
+    const { effectiveRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
 
     DOM.tcCutsSummary.innerHTML = `Percentage Cuts: <span style="color: var(--accent-blue); font-weight: 700;">-${totalCutPercentage.toFixed(1)}%</span> (Effective Rate: <span style="color: var(--accent-green); font-weight: 700;">${state.currentCurrency}${effectiveRate.toFixed(2)}/h</span>)`;
 }
 
+export function renderTimeCostRateBreakdown() {
+    if (!DOM.tcRateBreakdown) return;
+
+    const settings = getTimeCostSettings();
+    const { baseRate, dailyHours, workingDaysPerWeek } = settings;
+    const { effectiveRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
+    const workingDaysPerMonth = workingDaysPerWeek * 4.345;
+    const defaultScales = [
+        { label: 'Per Minute', amount: 1, unit: 'minutes' },
+        { label: 'Per Hour', amount: 1, unit: 'hours' },
+        { label: `Per Day (${dailyHours.toFixed(1)}h)`, amount: 1, unit: 'days' },
+        { label: `Per Week (${formatScaleAmount(workingDaysPerWeek)}d)`, amount: 1, unit: 'weeks' },
+        { label: `Per Month (${formatScaleAmount(workingDaysPerMonth)}d)`, amount: 1, unit: 'months' },
+        { label: 'Per Year (12mo)', amount: 1, unit: 'years' }
+    ];
+    const customScales = state.tcCustomTimeScales.map(scale => ({
+        ...scale,
+        label: `Custom: ${formatScaleAmount(scale.amount)} ${getTimeScaleUnitLabel(scale.unit, scale.amount)}`,
+        custom: true
+    }));
+
+    const bodyRows = [...defaultScales, ...customScales].map(scale => {
+        const hours = getTimeScaleHours(scale, settings);
+        const beforeCuts = hours * baseRate;
+        const afterCuts = hours * effectiveRate;
+        const cutAmount = beforeCuts - afterCuts;
+
+        return `
+            <tr${scale.custom ? ' class="tc-custom-scale-row"' : ''}>
+                <td>${scale.label}</td>
+                <td class="tc-time">${getTimeScaleWorkLabel(scale, settings)}</td>
+                <td class="tc-amount">${formatMoneyAmount(beforeCuts)}</td>
+                <td class="tc-amount">${formatMoneyAmount(afterCuts)}</td>
+                <td class="tc-time">-${totalCutPercentage.toFixed(1)}% (${formatMoneyAmount(cutAmount)})</td>
+                <td class="tc-scale-actions">
+                    ${scale.custom ? `<button class="cut-icon-btn cut-remove-btn tc-remove-scale-btn" type="button" data-scale-id="${scale.id}" title="Remove custom time amount">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>` : '<span class="tc-muted-action">Default</span>'}
+                </td>
+            </tr>
+        `;
+    }).join('');
+    const earningTargets = [1, 10, 100, 1000, 10000];
+    const targetRows = earningTargets.map(target => {
+        const baseHours = baseRate > 0 ? target / baseRate : Infinity;
+        const effectiveHours = effectiveRate > 0 ? target / effectiveRate : Infinity;
+        const extraHours = effectiveHours - baseHours;
+        const extraTimeLabel = !Number.isFinite(effectiveHours) && Number.isFinite(baseHours)
+            ? '∞'
+            : Number.isFinite(extraHours) && extraHours > 0
+                ? `+${formatEarningTime(extraHours, settings)}`
+                : 'No change';
+
+        return `
+            <tr>
+                <td class="tc-amount">${formatTargetMoney(target)}</td>
+                <td class="tc-time">${formatEarningTime(baseHours, settings)}</td>
+                <td class="tc-time">${formatEarningTime(effectiveHours, settings)}</td>
+                <td class="tc-time">${extraTimeLabel}</td>
+            </tr>
+        `;
+    }).join('');
+
+    DOM.tcRateBreakdown.innerHTML = `
+        <h3 class="tc-section-title">Time Cost Breakdown</h3>
+        <form class="tc-custom-scale-form" id="tc-custom-scale-form">
+            <div class="tc-custom-scale-field">
+                <label for="tc-custom-scale-amount">Custom Amount</label>
+                <input type="number" id="tc-custom-scale-amount" min="0.01" step="0.01" placeholder="e.g. 90" required>
+            </div>
+            <div class="tc-custom-scale-field">
+                <label for="tc-custom-scale-unit">Time Scale</label>
+                <select id="tc-custom-scale-unit" class="currency-dropdown">
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                    <option value="days">Days</option>
+                    <option value="weeks">Weeks</option>
+                    <option value="months">Months</option>
+                    <option value="years">Years</option>
+                </select>
+            </div>
+            <button class="btn-outline btn-small" type="submit">Add</button>
+        </form>
+        <div class="tc-table-scroll">
+            <table class="tc-breakdown-table">
+                <thead>
+                    <tr>
+                        <th>Time Scale</th>
+                        <th>Work Time</th>
+                        <th>Before Cuts</th>
+                        <th>After Cuts</th>
+                        <th>Cut</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${bodyRows}
+                </tbody>
+            </table>
+        </div>
+        <div class="tc-target-breakdown">
+            <h4 class="tc-subsection-title">Time to Make</h4>
+            <div class="tc-table-scroll">
+                <table class="tc-breakdown-table tc-target-table">
+                    <thead>
+                        <tr>
+                            <th>Target</th>
+                            <th>Before Cuts</th>
+                            <th>After Cuts (-${totalCutPercentage.toFixed(1)}%)</th>
+                            <th>Extra Time From Cuts</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${targetRows}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+
+    const customScaleForm = DOM.tcRateBreakdown.querySelector('#tc-custom-scale-form');
+    const amountInput = DOM.tcRateBreakdown.querySelector('#tc-custom-scale-amount');
+    const unitSelect = DOM.tcRateBreakdown.querySelector('#tc-custom-scale-unit');
+
+    if (customScaleForm && amountInput && unitSelect) {
+        customScaleForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const amount = parseFloat(amountInput.value);
+
+            if (!Number.isFinite(amount) || amount <= 0) {
+                amountInput.reportValidity();
+                return;
+            }
+
+            updateTcCustomTimeScales([
+                ...state.tcCustomTimeScales,
+                createTcCustomTimeScale(amount, unitSelect.value)
+            ]);
+            renderTimeCostRateBreakdown();
+        });
+    }
+
+    DOM.tcRateBreakdown.querySelectorAll('.tc-remove-scale-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const scaleId = button.dataset.scaleId;
+            updateTcCustomTimeScales(state.tcCustomTimeScales.filter(scale => scale.id !== scaleId));
+            renderTimeCostRateBreakdown();
+        });
+    });
+}
+
 export function renderTimeCostBreakdown() {
     renderTcCutsSummary();
+    renderTimeCostRateBreakdown();
     if (!DOM.tcBreakdownContainer) return;
 
     const cost = parseFloat(DOM.tcItemCost ? DOM.tcItemCost.value : '') || 0;
-    const baseRate = DOM.tcHourlyRate ? (parseFloat(DOM.tcHourlyRate.value) || state.tcHourlyRate || 20) : (state.tcHourlyRate || 20);
-    const dailyHours = DOM.tcDailyHours ? (parseFloat(DOM.tcDailyHours.value) || state.tcDailyHours || 8) : (state.tcDailyHours || 8);
-    const includeWeekends = DOM.tcIncludeWeekends ? DOM.tcIncludeWeekends.checked : state.tcIncludeWeekends;
-    const daysInWeek = includeWeekends ? 7 : 5;
-    const daysInMonth = includeWeekends ? 30.4 : 21.6;
+    const { baseRate, dailyHours, workingDaysPerWeek } = getTimeCostSettings();
+    const daysInWeek = workingDaysPerWeek;
+    const daysInMonth = workingDaysPerWeek * 4.345;
 
     if (cost <= 0) {
         DOM.tcBreakdownContainer.innerHTML = '<p class="loading-text" style="margin-top: 20px;">Enter an item cost to see the breakdown.</p>';
         return;
     }
 
-    const baseHours = cost / baseRate;
-
-    let accumulatedRate = baseRate;
-    
-    state.percentageCuts.forEach(cut => {
-        const sourcePool = cut.basis === 'original' ? baseRate : accumulatedRate;
-        const deduction = sourcePool * (cut.percentage / 100);
-        accumulatedRate = Math.max(accumulatedRate - deduction, 0);
-    });
-
-    const effectiveRate = accumulatedRate;
+    const baseHours = baseRate > 0 ? cost / baseRate : Infinity;
+    const { effectiveRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
     const effectiveHours = effectiveRate > 0 ? cost / effectiveRate : Infinity;
 
     function formatDaysWeeksMonths(totalHours) {
@@ -1259,7 +1529,6 @@ export function renderTimeCostBreakdown() {
 
     const baseTimeFormatted = formatDaysWeeksMonths(baseHours);
     const effectiveTimeFormatted = formatDaysWeeksMonths(effectiveHours);
-    const totalCutPercentage = baseRate > 0 ? ((baseRate - effectiveRate) / baseRate) * 100 : 0;
 
     let html = `
         <table class="tc-breakdown-table">
@@ -1307,6 +1576,7 @@ export function renderTimeCostBreakdown() {
 
 export function renderSavedTimeCostItems() {
     renderTcCutsSummary();
+    renderTimeCostRateBreakdown();
     if (!DOM.tcSavedItemsContainer) return;
 
     if (!state.timeCostItems || state.timeCostItems.length === 0) {
@@ -1314,20 +1584,10 @@ export function renderSavedTimeCostItems() {
         return;
     }
 
-    const baseRate = DOM.tcHourlyRate ? (parseFloat(DOM.tcHourlyRate.value) || state.tcHourlyRate || 20) : (state.tcHourlyRate || 20);
-    const dailyHours = DOM.tcDailyHours ? (parseFloat(DOM.tcDailyHours.value) || state.tcDailyHours || 8) : (state.tcDailyHours || 8);
-    const includeWeekends = DOM.tcIncludeWeekends ? DOM.tcIncludeWeekends.checked : state.tcIncludeWeekends;
-    const daysInWeek = includeWeekends ? 7 : 5;
-    const daysInMonth = includeWeekends ? 30.4 : 21.6;
-
-    let accumulatedRate = baseRate;
-    state.percentageCuts.forEach(cut => {
-        const sourcePool = cut.basis === 'original' ? baseRate : accumulatedRate;
-        const deduction = sourcePool * (cut.percentage / 100);
-        accumulatedRate = Math.max(accumulatedRate - deduction, 0);
-    });
-    const effectiveRate = accumulatedRate;
-    const totalCutPercentage = baseRate > 0 ? ((baseRate - effectiveRate) / baseRate) * 100 : 0;
+    const { baseRate, dailyHours, workingDaysPerWeek } = getTimeCostSettings();
+    const daysInWeek = workingDaysPerWeek;
+    const daysInMonth = workingDaysPerWeek * 4.345;
+    const { effectiveRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
 
     let html = `
         <div style="overflow-x: auto; width: 100%;">
@@ -1356,7 +1616,7 @@ export function renderSavedTimeCostItems() {
 
     state.timeCostItems.forEach(item => {
         const cost = item.cost;
-        const baseHours = cost / baseRate;
+        const baseHours = baseRate > 0 ? cost / baseRate : Infinity;
         const effectiveHours = effectiveRate > 0 ? cost / effectiveRate : Infinity;
 
         // Base time components

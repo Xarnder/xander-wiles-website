@@ -1,6 +1,6 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
-import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcIncludeWeekends } from './state.js';
+import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList } from './ui.js';
 import { getStartOfWeekDate, formatDuration } from './utils.js';
 
@@ -188,13 +188,13 @@ export function loadTimeCostItems() {
     });
 }
 
-export async function saveTimeCostSettings(hourlyRate, dailyHours, includeWeekends) {
+export async function saveTimeCostSettings(hourlyRate, dailyHours, workingDaysPerWeek) {
     if (!state.currentUser) return;
     try {
         await setDoc(doc(db, "users", state.currentUser.uid, "settings", "timeCost"), {
             hourlyRate,
             dailyHours,
-            includeWeekends,
+            workingDaysPerWeek,
             updatedAt: serverTimestamp()
         }, { merge: true });
         console.log("Debug: Time cost settings saved to Firebase");
@@ -229,10 +229,18 @@ export function loadTimeCostSettings() {
                 changed = true;
             }
 
-            if (data.includeWeekends !== undefined && (DOM.tcIncludeWeekends ? DOM.tcIncludeWeekends.checked : false) !== data.includeWeekends) {
-                updateTcIncludeWeekends(data.includeWeekends);
-                if (DOM.tcIncludeWeekends) {
-                    DOM.tcIncludeWeekends.checked = data.includeWeekends;
+            const loadedWorkingDays = data.workingDaysPerWeek !== undefined
+                ? data.workingDaysPerWeek
+                : data.includeWeekends === true
+                    ? 7
+                    : data.includeWeekends === false
+                        ? 5
+                        : undefined;
+
+            if (loadedWorkingDays !== undefined && parseFloat(DOM.tcWorkingDays ? DOM.tcWorkingDays.value : 0) !== loadedWorkingDays) {
+                updateTcWorkingDaysPerWeek(loadedWorkingDays);
+                if (DOM.tcWorkingDays) {
+                    DOM.tcWorkingDays.value = state.tcWorkingDaysPerWeek;
                 }
                 changed = true;
             }
@@ -246,7 +254,7 @@ export function loadTimeCostSettings() {
             console.log("Debug: Time cost settings updated from Firebase");
         } else {
             // Document doesn't exist, we can migrate local values to Firebase
-            saveTimeCostSettings(state.tcHourlyRate, state.tcDailyHours, state.tcIncludeWeekends);
+            saveTimeCostSettings(state.tcHourlyRate, state.tcDailyHours, state.tcWorkingDaysPerWeek);
         }
     }, (error) => {
         console.error("Debug: Time cost settings snapshot error", error);

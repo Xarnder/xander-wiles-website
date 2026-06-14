@@ -901,6 +901,123 @@ button:active {
     color: var(--text-primary);
 }
 
+.tc-rate-breakdown {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--card-border);
+}
+
+.tc-section-title {
+    margin: 0 0 10px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+.tc-subsection-title {
+    margin: 0 0 10px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+.tc-target-breakdown {
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid var(--card-border);
+}
+
+.tc-custom-scale-form {
+    display: grid;
+    grid-template-columns: minmax(150px, 220px) minmax(150px, 220px) auto;
+    gap: 12px;
+    align-items: end;
+    margin: 14px 0 18px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+}
+
+.tc-custom-scale-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.tc-custom-scale-field label {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+}
+
+.tc-custom-scale-field input,
+.tc-custom-scale-field select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 42px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    font-size: 0.95rem;
+    transition: border-color 0.3s, box-shadow 0.3s, background 0.3s;
+}
+
+.tc-custom-scale-field input {
+    text-align: right;
+}
+
+.tc-custom-scale-field select {
+    appearance: none;
+    cursor: pointer;
+    padding-right: 34px;
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%),
+        linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
+    background-position:
+        calc(100% - 18px) 18px,
+        calc(100% - 12px) 18px;
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+}
+
+.tc-custom-scale-field input:focus,
+.tc-custom-scale-field select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    background-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 15px rgba(0, 212, 255, 0.25);
+}
+
+.tc-custom-scale-form .btn-small {
+    min-height: 42px;
+    padding: 10px 16px;
+    white-space: nowrap;
+}
+
+.tc-table-scroll {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.tc-table-scroll .tc-breakdown-table {
+    min-width: 860px;
+}
+
+.tc-table-scroll .tc-target-table {
+    min-width: 720px;
+}
+
 .tc-breakdown-container {
     margin-top: 30px;
     padding-top: 20px;
@@ -954,6 +1071,24 @@ button:active {
     border-top: 1px solid rgba(0, 212, 255, 0.2);
 }
 
+.tc-breakdown-table tr.tc-custom-scale-row {
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.tc-scale-actions {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.tc-muted-action {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.tc-remove-scale-btn {
+    vertical-align: middle;
+}
+
 /* Freeze first column in Saved Items table */
 .tc-breakdown-table th.tc-sticky-col,
 .tc-breakdown-table td.tc-sticky-col {
@@ -970,6 +1105,14 @@ button:active {
 
 /* Mobile Responsiveness */
 @media (max-width: 480px) {
+    .tc-custom-scale-form {
+        grid-template-columns: 1fr;
+    }
+
+    .tc-custom-scale-form .btn-small {
+        width: 100%;
+    }
+
     .app-container {
         margin-top: 60px;
         padding: 15px;
@@ -1650,16 +1793,33 @@ button:active {
 }
 
 .percentage-cut-item {
-    gap: 10px;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-areas:
+        "handle fields"
+        ". actions";
+    column-gap: 12px;
+    row-gap: 10px;
     align-items: center;
     cursor: grab;
+    padding: 12px;
+}
+
+.percentage-cut-item .drag-handle {
+    grid-area: handle;
+    justify-content: center;
+    margin-right: 0;
+    width: 24px;
 }
 
 .percentage-cut-fields {
+    grid-area: fields;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 105px;
-    gap: 8px;
-    flex: 1;
+    grid-template-columns: minmax(140px, 1fr) 96px;
+    grid-template-areas:
+        "name percent"
+        "basis basis";
+    gap: 10px;
     min-width: 0;
 }
 
@@ -1670,8 +1830,14 @@ button:active {
     text-align: left;
 }
 
+.cut-name-input {
+    grid-area: name;
+}
+
 .cut-percent-field {
+    grid-area: percent;
     position: relative;
+    min-width: 0;
 }
 
 .cut-percent-field .cut-percentage-input {
@@ -1690,11 +1856,11 @@ button:active {
 }
 
 .cut-basis-toggle {
-    grid-column: 1 / -1;
+    grid-area: basis;
     width: 100%;
     min-width: 0;
     padding: 8px 10px;
-    border-radius: 10px;
+    border-radius: 8px;
     font-size: clamp(0.68rem, 1.8vw, 0.82rem);
     font-weight: 700;
     letter-spacing: 0;
@@ -1724,8 +1890,12 @@ button:active {
 }
 
 .percentage-cut-actions {
+    grid-area: actions;
     display: flex;
+    flex-wrap: nowrap;
     gap: 4px;
+    justify-content: flex-end;
+    min-width: 0;
 }
 
 .cut-icon-btn {
@@ -1763,13 +1933,12 @@ button:active {
 
 @media (max-width: 480px) {
     .percentage-cut-fields {
-        grid-template-columns: 1fr;
-        flex-basis: calc(100% - 38px);
+        grid-template-columns: minmax(0, 1fr) 88px;
     }
 
     .percentage-cut-actions {
-        margin-left: 35px;
-        width: calc(100% - 35px);
+        margin-left: 0;
+        width: 100%;
         justify-content: flex-end;
     }
 
@@ -1787,6 +1956,10 @@ button:active {
         align-items: stretch;
         display: grid;
         grid-template-columns: 1fr;
+        grid-template-areas:
+            "handle"
+            "fields"
+            "actions";
         gap: 8px;
         padding: 10px;
     }
@@ -1798,8 +1971,12 @@ button:active {
     }
 
     .percentage-cut-fields {
-        flex-basis: 100%;
         width: 100%;
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "name"
+            "percent"
+            "basis";
     }
 
     .percentage-cut-actions {

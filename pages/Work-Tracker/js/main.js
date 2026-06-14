@@ -26,7 +26,7 @@ import {
     updatePercentageCuts,
     updateTcHourlyRate,
     updateTcDailyHours,
-    updateTcIncludeWeekends,
+    updateTcWorkingDaysPerWeek,
     updateActiveCutStatsPeriods
 } from './state.js';
 import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings } from './api.js';
@@ -95,8 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (DOM.tcDailyHours) {
         DOM.tcDailyHours.value = state.tcDailyHours;
     }
-    if (DOM.tcIncludeWeekends) {
-        DOM.tcIncludeWeekends.checked = state.tcIncludeWeekends;
+    if (DOM.tcWorkingDays) {
+        DOM.tcWorkingDays.value = state.tcWorkingDaysPerWeek;
     }
 
     renderTcCutsSummary();
@@ -133,18 +133,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleTcSettingsInput = () => {
         const hourlyRate = parseFloat(DOM.tcHourlyRate ? DOM.tcHourlyRate.value : 0) || 20;
         const dailyHours = parseFloat(DOM.tcDailyHours ? DOM.tcDailyHours.value : 0) || 8;
-        const includeWeekends = DOM.tcIncludeWeekends ? DOM.tcIncludeWeekends.checked : false;
+        const workingDaysPerWeek = parseFloat(DOM.tcWorkingDays ? DOM.tcWorkingDays.value : 0) || 5;
 
         updateTcHourlyRate(hourlyRate);
         updateTcDailyHours(dailyHours);
-        updateTcIncludeWeekends(includeWeekends);
+        updateTcWorkingDaysPerWeek(workingDaysPerWeek);
 
         renderTimeCostBreakdown();
         renderSavedTimeCostItems();
 
         clearTimeout(tcSettingsTimeout);
         tcSettingsTimeout = setTimeout(() => {
-            saveTimeCostSettings(state.tcHourlyRate, state.tcDailyHours, state.tcIncludeWeekends);
+            saveTimeCostSettings(state.tcHourlyRate, state.tcDailyHours, state.tcWorkingDaysPerWeek);
         }, 1200);
     };
 
@@ -160,8 +160,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (DOM.tcDailyHours) {
         DOM.tcDailyHours.addEventListener('input', handleTcSettingsInput);
     }
-    if (DOM.tcIncludeWeekends) {
-        DOM.tcIncludeWeekends.addEventListener('change', handleTcSettingsInput);
+    if (DOM.tcWorkingDays) {
+        DOM.tcWorkingDays.addEventListener('input', handleTcSettingsInput);
     }
 
     if (DOM.tcSaveBtn) {
