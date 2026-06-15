@@ -1,7 +1,7 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
 import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek } from './state.js';
-import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList } from './ui.js';
+import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts } from './ui.js';
 import { getStartOfWeekDate, formatDuration } from './utils.js';
 
 function getPercentageCutsRef() {
@@ -297,7 +297,19 @@ export function renderDashboardData() {
         const item = document.createElement('div');
         item.className = 'history-item';
         const formattedTime = formatDuration(data.durationMs);
-        const dateStr = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const endDateObj = data.endTime ? new Date(data.endTime) : new Date(data.startTime + data.durationMs);
+        const timeFormat = { hour: '2-digit', minute: '2-digit' };
+        const startTimeStr = dateObj.toLocaleTimeString([], timeFormat);
+        const endTimeStr = endDateObj.toLocaleTimeString([], timeFormat);
+        const startDateStr = dateObj.toLocaleDateString();
+        const endDateStr = endDateObj.toLocaleDateString();
+        const startDateTimeStr = `${startDateStr} ${startTimeStr}`;
+        const endDateTimeStr = startDateStr === endDateStr ? endTimeStr : `${endDateStr} ${endTimeStr}`;
+        const sessionEarnings = Number(data.earnings) || 0;
+        const afterCutsEarnings = getAmountAfterPercentageCuts(sessionEarnings);
+        const afterCutsHtml = state.percentageCuts.length
+            ? `<small class="history-after-cuts">After cuts ${state.currentCurrency}${afterCutsEarnings.toFixed(2)}</small>`
+            : '';
 
         const companyHtml = data.company ? `<span class="history-badge history-badge-company">${data.company}</span>` : '';
         const projectHtml = data.project ? `<span class="history-badge history-badge-project">${data.project}</span>` : '';
@@ -311,7 +323,10 @@ export function renderDashboardData() {
         item.innerHTML = `
             <div class="history-item-content">
                 <div>
-                    <span class="history-date">${dateStr}</span>
+                    <span class="history-date">
+                        <span>Started ${startDateTimeStr}</span>
+                        <span>Ended ${endDateTimeStr}</span>
+                    </span>
                     <strong>${formattedTime}</strong>
                     <div class="history-badges">
                         ${companyHtml}
@@ -320,7 +335,8 @@ export function renderDashboardData() {
                     </div>
                 </div>
                 <div class="history-details">
-                    <div>${state.currentCurrency}${data.earnings.toFixed(2)}</div>
+                    <div>${state.currentCurrency}${sessionEarnings.toFixed(2)}</div>
+                    ${afterCutsHtml}
                     <small>@ ${state.currentCurrency}${data.rate}/hr</small>
                 </div>
             </div>

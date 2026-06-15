@@ -281,6 +281,217 @@ body {
     text-shadow: 0 0 10px rgba(0, 230, 118, 0.4);
 }
 
+.money-counter-widget {
+    position: relative;
+    overflow: hidden;
+}
+
+.money-counter-widget::after {
+    content: "";
+    position: absolute;
+    inset: auto -20% -35% -20%;
+    height: 55%;
+    background: radial-gradient(circle at 50% 50%, rgba(0, 230, 118, 0.18), transparent 62%);
+    pointer-events: none;
+}
+
+.money-counter-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.money-counter-status {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    padding: 6px 10px;
+    text-transform: uppercase;
+}
+
+.money-counter-active .money-counter-status {
+    background: rgba(0, 230, 118, 0.14);
+    border-color: rgba(0, 230, 118, 0.38);
+    color: var(--accent-green);
+    box-shadow: 0 0 18px rgba(0, 230, 118, 0.22);
+}
+
+.money-counter-total {
+    color: var(--accent-green);
+    font-size: clamp(2.1rem, 7vw, 4.3rem);
+    font-weight: 800;
+    line-height: 0.95;
+    margin: 6px 0 20px;
+    text-shadow: 0 0 22px rgba(0, 230, 118, 0.28);
+}
+
+.money-counter-stage {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    min-height: 250px;
+    perspective: 900px;
+}
+
+.money-stack {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 250px;
+    align-items: flex-end;
+    justify-content: center;
+    transform-style: preserve-3d;
+}
+
+.money-stack-pieces {
+    position: absolute;
+    bottom: 60px;
+    left: 50%;
+    width: 96px;
+    height: 168px;
+    transform: translateX(-50%) rotateX(62deg);
+    transform-origin: center bottom;
+    transform-style: preserve-3d;
+}
+
+.money-stack-coin-small .money-stack-pieces {
+    width: 70px;
+}
+
+.money-stack-coin-large .money-stack-pieces {
+    width: 86px;
+}
+
+.money-stack-note .money-stack-pieces {
+    width: 122px;
+}
+
+.money-piece {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--i) * 4px);
+    display: grid;
+    place-items: center;
+    transform: translateX(-50%) translateZ(calc(var(--i) * 1.8px));
+    transform-origin: center;
+    will-change: transform;
+}
+
+.money-piece em {
+    font-style: normal;
+    font-weight: 900;
+    letter-spacing: 0;
+    transform: rotateX(-62deg);
+}
+
+.money-piece.coin {
+    border-radius: 50%;
+    box-shadow:
+        inset -8px -10px 12px rgba(0, 0, 0, 0.28),
+        inset 7px 8px 10px rgba(255, 255, 255, 0.35),
+        0 7px 0 rgba(98, 71, 25, 0.72),
+        0 14px 20px rgba(0, 0, 0, 0.32);
+}
+
+.money-piece.coin-small {
+    width: 46px;
+    height: 46px;
+    background: linear-gradient(145deg, #d9a956, #8a5e24 56%, #f4d182);
+    color: #331e0a;
+    font-size: 0.68rem;
+}
+
+.money-piece.coin-large {
+    width: 58px;
+    height: 58px;
+    background:
+        radial-gradient(circle at 50% 50%, #f5cf65 0 34%, #d4dce3 35% 55%, #f0c052 56% 100%);
+    color: #2c2409;
+    font-size: 0.78rem;
+}
+
+.money-piece.note {
+    width: 92px;
+    height: 44px;
+    border-radius: 7px;
+    background:
+        linear-gradient(90deg, rgba(255,255,255,0.24), transparent 22% 78%, rgba(255,255,255,0.18)),
+        linear-gradient(135deg, #d87687, #9b2448 54%, #f3a0a9);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #fff3f6;
+    font-size: 0.74rem;
+    box-shadow:
+        0 3px 0 rgba(77, 12, 30, 0.72),
+        0 12px 20px rgba(0, 0, 0, 0.28);
+}
+
+.money-stack-base {
+    position: absolute;
+    bottom: 46px;
+    left: 50%;
+    width: 84px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.42) 66%, transparent 72%);
+    transform: translateX(-50%);
+}
+
+.money-stack-coin-small .money-stack-base {
+    width: 68px;
+}
+
+.money-stack-coin-large .money-stack-base {
+    width: 82px;
+}
+
+.money-stack-note .money-stack-base {
+    width: 116px;
+}
+
+.money-stack-label {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    padding-top: 202px;
+    text-align: center;
+}
+
+.money-stack-label span {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+
+.money-stack-label strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 1.2rem;
+    margin-top: 4px;
+}
+
+.money-stack-more {
+    position: absolute;
+    left: 50%;
+    bottom: 4px;
+    z-index: 5;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.38);
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 4px 7px;
+    transform: translateX(36px) rotateX(-62deg);
+}
+
 /* Condensed Light Buttons */
 button {
     cursor: pointer;
@@ -728,6 +939,11 @@ button:active {
     margin-bottom: 4px;
 }
 
+.history-date span {
+    display: block;
+    line-height: 1.35;
+}
+
 .history-details {
     text-align: right;
     font-weight: 500;
@@ -736,6 +952,13 @@ button:active {
 .history-details small {
     color: var(--text-secondary);
     font-weight: normal;
+}
+
+.history-after-cuts {
+    color: var(--accent-green) !important;
+    display: block;
+    font-size: 0.78rem;
+    margin-top: 2px;
 }
 
 .history-badges {
@@ -1105,6 +1328,23 @@ button:active {
 
 /* Mobile Responsiveness */
 @media (max-width: 480px) {
+    .money-counter-stage {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .money-stack {
+        min-height: 210px;
+    }
+
+    .money-stack-pieces {
+        height: 138px;
+    }
+
+    .money-stack-label {
+        padding-top: 164px;
+    }
+
     .tc-custom-scale-form {
         grid-template-columns: 1fr;
     }

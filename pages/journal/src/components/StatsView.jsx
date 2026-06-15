@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import StorageStats from './StorageStats';
 import FirestoreUsage from './FirestoreUsage';
+import { subEntriesToPlainText } from '../utils/entrySections';
 
 // List of common stop words to exclude from analysis
 const STOP_WORDS = new Set([
@@ -42,6 +43,10 @@ const MOOD_CONFIG = {
     4: { icon: Heart, label: 'Great', color: '#4ade80' },
     5: { icon: Zap, label: 'Amazing', color: '#8b5cf6' },
 };
+
+const getEntryText = (entry) => [entry.content || entry.text || '', subEntriesToPlainText(entry.subEntries)]
+    .filter(Boolean)
+    .join('\n\n');
 
 import { useNavigate } from 'react-router-dom';
 
@@ -160,8 +165,8 @@ export default function StatsView() {
             size += data.textSize;
         } else if (data.contentSizeInBytes) {
             size += data.contentSizeInBytes;
-        } else if (data.content) {
-            size += new Blob([data.content]).size;
+        } else if (data.content || data.subEntries) {
+            size += new Blob([getEntryText(data)]).size;
         }
         if (data.imageSize) {
             size += data.imageSize;
@@ -209,7 +214,7 @@ export default function StatsView() {
 
             const processedRows = exportEntries.map(entry => {
                 const date = entry.id;
-                const text = entry.content || entry.text || '';
+                const text = getEntryText(entry);
                 const cleanTextForWords = text.replace(/[#*`_~]/g, ' ');
                 const words = cleanTextForWords.toLowerCase().match(/\b\w+\b/g) || [];
                 const wordCount = words.length;
@@ -270,7 +275,7 @@ export default function StatsView() {
 
         entries.forEach(entry => {
             // Basic word count logic: split by spaces, filter empty strings
-            const text = entry.content || entry.text || '';
+            const text = getEntryText(entry);
             // Remove markdown chars approximately
             const cleanText = text.replace(/[#*`_~]/g, ' ');
             const words = cleanText.toLowerCase().match(/\b\w+\b/g) || [];

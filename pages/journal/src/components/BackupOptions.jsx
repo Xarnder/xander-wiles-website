@@ -1,18 +1,20 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, documentId } from 'firebase/firestore';
+import { collection, query, where, getDocs, documentId, doc, onSnapshot } from 'firebase/firestore';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import { Download, X, FileText, Calendar, Layers, Archive, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
-import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { format } from 'date-fns';
 
 import { useBackup } from '../context/BackupContext';
+import { ENTRY_SECTIONS_SETTINGS_DOC, normalizeEntrySections } from '../utils/entrySections';
 
-export default function BackupOptions() {
+export default function BackupOptions({ showTrigger = true }) {
     const { currentUser } = useAuth();
     const { isBackupOpen: isOpen, closeBackup, backupMessage, openBackup } = useBackup();
+    const [entrySections, setEntrySections] = useState([]);
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState(null); // { type: 'success' | 'error', message: string }
 
@@ -26,6 +28,26 @@ export default function BackupOptions() {
     const [fileFormat, setFileFormat] = useState('md'); // md, json, txt
 
     const resetStatus = () => setStatus(null);
+
+    useEffect(() => {
+        if (!currentUser) return undefined;
+
+        const settingsRef = doc(db, 'users', currentUser.uid, 'settings', ENTRY_SECTIONS_SETTINGS_DOC);
+        const unsubscribe = onSnapshot(settingsRef, (snapshot) => {
+            setEntrySections(normalizeEntrySections(snapshot.data()?.sections));
+        }, (error) => {
+            console.error('Failed to load entry section settings for backup:', error);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    const entrySectionNameById = useMemo(() => {
+        return entrySections.reduce((result, section) => {
+            result[section.id] = section.name;
+            return result;
+        }, {});
+    }, [entrySections]);
 
     const handleBackup = async () => {
         if (!currentUser) return;
@@ -72,13 +94,13 @@ export default function BackupOptions() {
             } else if (grouping === 'month') {
                 const byMonth = groupBy(entries, (e) => e.id.substring(0, 7)); // YYYY-MM
                 Object.entries(byMonth).forEach(([month, monthEntries]) => {
-                    const content = formatGroupedContent(monthEntries, fileFormat, `Month: ${month}`);
+                    const content = formatGroupedContent(monthEntries, fileFormat);
                     rootFolder.file(`${month}.${fileFormat}`, content);
                 });
             } else if (grouping === 'year') {
                 const byYear = groupBy(entries, (e) => e.id.substring(0, 4)); // YYYY
                 Object.entries(byYear).forEach(([year, yearEntries]) => {
-                    const content = formatGroupedContent(yearEntries, fileFormat, `Year: ${year}`);
+                    const content = formatGroupedContent(yearEntries, fileFormat);
                     rootFolder.file(`${year}.${fileFormat}`, content);
                 });
             }
@@ -117,17 +139,17 @@ export default function BackupOptions() {
         // Try to extract just the title part after the colon
         const colonMatch = rawTitle.match(/:\s*(.+?)(?:\+\+|\*\*|$)/);
         if (colonMatch && colonMatch[1]) {
-            return colonMatch[1].replace(/[\*\+]+/g, '').trim();
+            return colonMatch[1].replace(/[*+]+/g, '').trim();
         }
 
         // If no colon pattern, try to extract from ++ markers with dash separator
         const dashMatch = rawTitle.match(/\+\+[^-]+-\s*(.+?)\+\+/);
         if (dashMatch && dashMatch[1]) {
-            return dashMatch[1].replace(/[\*\+]+/g, '').trim();
+            return dashMatch[1].replace(/[*+]+/g, '').trim();
         }
 
         // Fallback: just strip formatting chars
-        return rawTitle.replace(/[\*\+#]+/g, '').trim();
+        return rawTitle.replace(/[*+#]+/g, '').trim();
     };
 
     // Helper: Format Content
@@ -135,17 +157,38 @@ export default function BackupOptions() {
         const title = cleanTitle(entry.title) || entry.id;
         const body = entry.content || '';
         const date = entry.id;
+        const subEntryText = formatSubEntries(entry.subEntries, fmt);
 
         if (fmt === 'json') {
             return JSON.stringify({ ...entry, title: cleanTitle(entry.title) }, null, 2);
         } else if (fmt === 'md') {
-            return `---\ndate: ${date}\ntitle: ${title}\n---\n\n${body}`;
+            return `---\ndate: ${date}\ntitle: ${title}\n---\n\n${body}${subEntryText}`;
         } else { // txt
-            return `Date: ${date}\nTitle: ${title}\n\n${body}`;
+            return `Date: ${date}\nTitle: ${title}\n\n${body}${subEntryText}`;
         }
     };
 
-    const formatGroupedContent = (entries, fmt, header) => {
+    const formatSubEntries = (subEntries, fmt) => {
+        if (!subEntries || typeof subEntries !== 'object') return '';
+
+        const sections = Object.entries(subEntries)
+            .map(([sectionId, value]) => {
+                const content = typeof value?.content === 'string' ? value.content.trim() : '';
+                const title = typeof value?.title === 'string' ? value.title.trim() : '';
+                if (!content && !title) return null;
+
+                const sectionName = entrySectionNameById[sectionId] || sectionId;
+                const heading = title ? `${sectionName}: ${title}` : sectionName;
+
+                if (fmt === 'md') return `\n\n## ${heading}\n\n${content}`;
+                return `\n\n${heading}\n${'-'.repeat(Math.min(heading.length, 40))}\n${content}`;
+            })
+            .filter(Boolean);
+
+        return sections.join('');
+    };
+
+    const formatGroupedContent = (entries, fmt) => {
         if (fmt === 'json') {
             return JSON.stringify(entries, null, 2);
         }
@@ -164,13 +207,15 @@ export default function BackupOptions() {
 
     return (
         <>
-            <button
-                onClick={() => openBackup()}
-                className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
-                title="Backup Options"
-            >
-                <Download className="h-5 w-5" />
-            </button>
+            {showTrigger && (
+                <button
+                    onClick={() => openBackup()}
+                    className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
+                    title="Backup Options"
+                >
+                    <Download className="h-5 w-5" />
+                </button>
+            )}
 
             {isOpen && ReactDOM.createPortal(
                 <div className="fixed inset-0 z-[100] flex flex-col items-center overflow-y-auto p-4 bg-black/80 backdrop-blur-md animation-fade-in">
@@ -196,7 +241,7 @@ export default function BackupOptions() {
                                     <AlertCircle className="w-6 h-6 text-primary" />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-white mb-1">Weekly Check-in</h3>
+                                    <h3 className="font-bold text-white mb-1">Backup Reminder</h3>
                                     <p className="text-sm text-gray-200">{backupMessage}</p>
                                 </div>
                             </div>

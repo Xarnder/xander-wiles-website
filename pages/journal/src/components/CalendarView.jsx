@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, getDocs, query, where, documentId, getCountFromServer, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, documentId, getCountFromServer, onSnapshot } from 'firebase/firestore';
 import { format, startOfYear, endOfYear, eachMonthOfInterval, startOfMonth, getDay, getDaysInMonth } from 'date-fns';
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { subEntriesToPlainText } from '../utils/entrySections';
 
 export default function CalendarView() {
     const { currentUser } = useAuth();
@@ -60,7 +61,7 @@ export default function CalendarView() {
                     querySnapshot.forEach((doc) => {
                         const data = doc.data();
                         entryData.set(doc.id, {
-                            wordCount: countWords(data.content || ''),
+                            wordCount: countWords([data.content || '', subEntriesToPlainText(data.subEntries)].filter(Boolean).join(' ')),
                             imageCount: (data.images ? data.images.length : (data.imageUrl || data.imageMetadata ? 1 : 0)),
                             hasTitle: !!data.title && data.title.trim().length > 0,
                             tags: data.tags || [],

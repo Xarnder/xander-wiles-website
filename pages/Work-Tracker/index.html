@@ -131,6 +131,11 @@
                         </select>
                     </div>
 
+                    <div class="input-group timer-start-group">
+                        <label for="timer-start-time">Start Time</label>
+                        <input type="datetime-local" id="timer-start-time">
+                    </div>
+
                     <div class="timer-display">
                         <span id="timer">00:00:00</span>
                         <div id="live-earnings" class="highlight-text"><span class="currency-symbol">£</span>0.00</div>
@@ -139,6 +144,41 @@
                     <div class="btn-group">
                         <button id="start-btn" class="btn-success">Start Work</button>
                         <button id="stop-btn" class="btn-danger hidden">Stop Work</button>
+                    </div>
+                </section>
+
+                <!-- Live Money Counter -->
+                <section class="card money-counter-widget" id="widget-money-counter">
+                    <div class="money-counter-header">
+                        <h2 class="widget-title" style="margin: 0;">Live Money Counter</h2>
+                        <span id="money-counter-status" class="money-counter-status">Idle</span>
+                    </div>
+                    <div class="money-counter-total" id="money-counter-total"><span class="currency-symbol">£</span>0.00</div>
+                    <div class="money-counter-stage" id="money-counter-stage" aria-live="polite">
+                        <div class="money-stack money-stack-coin-small" data-denomination="20p">
+                            <div class="money-stack-pieces" id="money-stack-20p"></div>
+                            <div class="money-stack-base"></div>
+                            <div class="money-stack-label">
+                                <span>20p coins</span>
+                                <strong id="money-count-20p">0</strong>
+                            </div>
+                        </div>
+                        <div class="money-stack money-stack-coin-large" data-denomination="£1">
+                            <div class="money-stack-pieces" id="money-stack-1"></div>
+                            <div class="money-stack-base"></div>
+                            <div class="money-stack-label">
+                                <span>£1 coins</span>
+                                <strong id="money-count-1">0</strong>
+                            </div>
+                        </div>
+                        <div class="money-stack money-stack-note" data-denomination="£10">
+                            <div class="money-stack-pieces" id="money-stack-10"></div>
+                            <div class="money-stack-base"></div>
+                            <div class="money-stack-label">
+                                <span>£10 notes</span>
+                                <strong id="money-count-10">0</strong>
+                            </div>
+                        </div>
                     </div>
                 </section>
 

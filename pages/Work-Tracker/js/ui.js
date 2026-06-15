@@ -11,6 +11,16 @@ export const DOM = {
     stopBtn: document.getElementById('stop-btn'),
     timerDisplay: document.getElementById('timer'),
     hourlyRateInput: document.getElementById('hourly-rate'),
+    timerStartTimeInput: document.getElementById('timer-start-time'),
+    moneyCounterWidget: document.getElementById('widget-money-counter'),
+    moneyCounterStatus: document.getElementById('money-counter-status'),
+    moneyCounterTotal: document.getElementById('money-counter-total'),
+    moneyStack20p: document.getElementById('money-stack-20p'),
+    moneyStack1: document.getElementById('money-stack-1'),
+    moneyStack10: document.getElementById('money-stack-10'),
+    moneyCount20p: document.getElementById('money-count-20p'),
+    moneyCount1: document.getElementById('money-count-1'),
+    moneyCount10: document.getElementById('money-count-10'),
     companyInput: document.getElementById('company-input'),
     projectInput: document.getElementById('project-input'),
     companySelect: document.getElementById('company-select'),
@@ -140,9 +150,70 @@ export function updateCurrencyDisplays() {
         const hoursFloat = elapsedMs / (1000 * 60 * 60);
         const earned = hoursFloat * state.currentSessionRate;
         DOM.liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${earned.toFixed(2)}`;
+        renderLiveMoneyCounter(earned, true);
     } else {
         DOM.liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>0.00`;
+        renderLiveMoneyCounter(0, false);
     }
+}
+
+const moneyCounterStackCounts = {
+    twentyP: null,
+    pound: null,
+    note: null
+};
+
+function createMoneyPieces(count, type) {
+    const visibleCount = Math.min(count, type === 'note' ? 18 : 24);
+    const overflow = Math.max(count - visibleCount, 0);
+    const label = type.includes('note') ? '£10' : type.includes('coin-large') ? '£1' : '20p';
+    let html = '';
+
+    for (let i = 0; i < visibleCount; i++) {
+        html += `<span class="money-piece ${type}" style="--i:${i};"><em>${label}</em></span>`;
+    }
+
+    if (overflow > 0) {
+        html += `<span class="money-stack-more">+${overflow}</span>`;
+    }
+
+    return html;
+}
+
+function renderMoneyStack(container, count, type, key) {
+    if (!container || moneyCounterStackCounts[key] === count) return;
+
+    moneyCounterStackCounts[key] = count;
+    container.innerHTML = createMoneyPieces(count, type);
+}
+
+export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.startTime)) {
+    if (!DOM.moneyCounterWidget) return;
+
+    const safeEarned = Math.max(Number(earned) || 0, 0);
+    const pennies = Math.floor(safeEarned * 100);
+    const noteCount = Math.floor(pennies / 1000);
+    const remainingAfterNotes = pennies % 1000;
+    const poundCount = Math.floor(remainingAfterNotes / 100);
+    const twentyPCount = Math.floor((remainingAfterNotes % 100) / 20);
+
+    DOM.moneyCounterWidget.classList.toggle('money-counter-active', isRunning);
+
+    if (DOM.moneyCounterStatus) {
+        DOM.moneyCounterStatus.textContent = isRunning ? 'Live' : 'Idle';
+    }
+
+    if (DOM.moneyCounterTotal) {
+        DOM.moneyCounterTotal.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${safeEarned.toFixed(2)}`;
+    }
+
+    renderMoneyStack(DOM.moneyStack20p, twentyPCount, 'coin coin-small', 'twentyP');
+    renderMoneyStack(DOM.moneyStack1, poundCount, 'coin coin-large', 'pound');
+    renderMoneyStack(DOM.moneyStack10, noteCount, 'note', 'note');
+
+    if (DOM.moneyCount20p) DOM.moneyCount20p.textContent = twentyPCount;
+    if (DOM.moneyCount1) DOM.moneyCount1.textContent = poundCount;
+    if (DOM.moneyCount10) DOM.moneyCount10.textContent = noteCount;
 }
 
 function formatMoney(amount) {
@@ -281,12 +352,17 @@ export function toggleTimerUI(isRunning) {
     if (isRunning) {
         DOM.startBtn.classList.add('hidden');
         DOM.stopBtn.classList.remove('hidden');
-        DOM.hourlyRateInput.disabled = true;
     } else {
         DOM.startBtn.classList.remove('hidden');
         DOM.stopBtn.classList.add('hidden');
-        DOM.hourlyRateInput.disabled = false;
     }
+
+    DOM.hourlyRateInput.disabled = isRunning;
+    if (DOM.timerStartTimeInput) DOM.timerStartTimeInput.disabled = isRunning;
+    if (DOM.companyInput) DOM.companyInput.disabled = isRunning;
+    if (DOM.companySelect) DOM.companySelect.disabled = isRunning;
+    if (DOM.projectInput) DOM.projectInput.disabled = isRunning;
+    if (DOM.projectSelect) DOM.projectSelect.disabled = isRunning;
 }
 
 export function renderCalendar() {
@@ -506,8 +582,11 @@ export function renderGanttChart() {
 
     // Render live active session if one is currently ticking
     if (state.timerInterval && state.startTime) {
-        const activeDuration = Date.now() - state.startTime;
-        createGanttBlock(new Date(state.startTime), activeDuration, state.currentProject, state.currentCompany, true);
+        const liveStartMs = Math.max(state.startTime, startOfToday.getTime());
+        const activeDuration = Date.now() - liveStartMs;
+        if (activeDuration > 0) {
+            createGanttBlock(new Date(liveStartMs), activeDuration, state.currentProject, state.currentCompany, true);
+        }
     }
 }
 
@@ -823,6 +902,7 @@ export function renderWidgetOrderList() {
 
     const labels = {
         'widget-timer': 'Timer & Controls',
+        'widget-money-counter': 'Live Money Counter',
         'widget-stats': 'Statistics',
         'widget-cut-stats': 'After Percentage Cuts',
         'widget-cuts': 'Percentage Cuts',
@@ -1212,16 +1292,22 @@ function getTimeCostSettings() {
     };
 }
 
-function getEffectiveHourlyRate(baseRate) {
-    let accumulatedRate = baseRate;
+export function getAmountAfterPercentageCuts(baseAmount) {
+    const originalAmount = Math.max(Number(baseAmount) || 0, 0);
+    let accumulatedAmount = originalAmount;
 
     state.percentageCuts.forEach(cut => {
-        const sourcePool = cut.basis === 'original' ? baseRate : accumulatedRate;
+        const sourcePool = cut.basis === 'original' ? originalAmount : accumulatedAmount;
         const deduction = sourcePool * (cut.percentage / 100);
-        accumulatedRate = Math.max(accumulatedRate - deduction, 0);
+        accumulatedAmount = Math.max(accumulatedAmount - deduction, 0);
     });
 
-    const effectiveRate = accumulatedRate;
+    return accumulatedAmount;
+}
+
+function getEffectiveHourlyRate(baseRate) {
+    const effectiveRate = getAmountAfterPercentageCuts(baseRate);
+
     const totalCutPercentage = baseRate > 0 ? ((baseRate - effectiveRate) / baseRate) * 100 : 0;
 
     return { effectiveRate, totalCutPercentage };

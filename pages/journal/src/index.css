@@ -25,6 +25,26 @@
 }
 
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  :root[data-theme="light"] {
+    --color-bg: #f6f7fb;
+    --color-surface: #ffffff;
+    --color-glass-bg: rgba(255, 255, 255, 0.78);
+    --color-glass-border: rgba(15, 23, 42, 0.1);
+    --color-primary: #7c3aed;
+    --color-primary-variant: #6d28d9;
+    --color-secondary: #0891b2;
+    --color-accent: #d97706;
+    --color-text: #101828;
+    --color-text-secondary: #344054;
+    --color-text-muted: #667085;
+    --color-border: rgba(15, 23, 42, 0.1);
+    color-scheme: light;
+  }
+
   body {
     @apply bg-bg text-text font-body antialiased selection:bg-primary selection:text-white;
     background-image:
@@ -57,9 +77,55 @@
     color-scheme: dark;
   }
 
+  :root[data-theme="light"] .glass-input {
+    color-scheme: light;
+  }
+
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
   }
+}
+
+:root[data-theme="light"] body {
+  background-image:
+    radial-gradient(circle at 15% 50%, rgba(124, 58, 237, 0.1) 0%, transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(8, 145, 178, 0.1) 0%, transparent 25%);
+}
+
+:root[data-theme="light"] .text-white {
+  color: var(--color-text);
+}
+
+:root[data-theme="light"] .text-white\/70 {
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+:root[data-theme="light"] .bg-white\/5 {
+  background-color: rgba(15, 23, 42, 0.04);
+}
+
+:root[data-theme="light"] .hover\:bg-white\/5:hover {
+  background-color: rgba(15, 23, 42, 0.06);
+}
+
+:root[data-theme="light"] .hover\:bg-white\/10:hover,
+:root[data-theme="light"] .bg-white\/10 {
+  background-color: rgba(15, 23, 42, 0.08);
+}
+
+:root[data-theme="light"] .border-white\/5,
+:root[data-theme="light"] .border-white\/10,
+:root[data-theme="light"] .hover\:border-white\/20:hover {
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+:root[data-theme="light"] .bg-black\/20,
+:root[data-theme="light"] .bg-black\/30 {
+  background-color: rgba(15, 23, 42, 0.06);
+}
+
+:root[data-theme="light"] .bg-\[\#0a0a0b\]\/95 {
+  background-color: rgba(246, 247, 251, 0.96);
 }
 
 /* Custom markdown styles override */
@@ -214,6 +280,79 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* --- Modern Confirm Slider --- */
+.confirm-slider {
+  --confirm-progress: 0%;
+  appearance: none;
+  height: 42px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(139, 92, 246, 0.9) 0 var(--confirm-progress), rgba(255, 255, 255, 0.08) var(--confirm-progress) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -8px 20px rgba(0, 0, 0, 0.16);
+  cursor: grab;
+}
+
+.confirm-slider:active {
+  cursor: grabbing;
+}
+
+.confirm-slider:disabled {
+  cursor: not-allowed;
+}
+
+.confirm-slider::-webkit-slider-runnable-track {
+  height: 20px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.confirm-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -2px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 3px solid rgba(139, 92, 246, 0.95);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), 0 0 0 5px rgba(139, 92, 246, 0.16);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.confirm-slider:active::-webkit-slider-thumb {
+  transform: scale(1.06);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4), 0 0 0 7px rgba(139, 92, 246, 0.2);
+}
+
+.confirm-slider::-moz-range-track {
+  height: 20px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.confirm-slider::-moz-range-progress {
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.9);
+}
+
+.confirm-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 3px solid rgba(139, 92, 246, 0.95);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), 0 0 0 5px rgba(139, 92, 246, 0.16);
+}
+
+:root[data-theme="light"] .confirm-slider {
+  background:
+    linear-gradient(90deg, rgba(124, 58, 237, 0.9) 0 var(--confirm-progress), rgba(15, 23, 42, 0.08) var(--confirm-progress) 100%);
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -8px 20px rgba(15, 23, 42, 0.08);
 }
 
 /* --- Special Day Shockwave Animations --- */

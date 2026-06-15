@@ -1,21 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Outlet, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, PenTool } from 'lucide-react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { LogOut, Book, Calendar as CalendarIcon, Search, List, BarChart, Menu, X, FileDown, Image as ImageIcon, History, Tag, PenTool, Settings } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, documentId, onSnapshot } from 'firebase/firestore';
-import DirectoryImporter from './DirectoryImporter';
-import DataRepair from './DataRepair';
-import BackupOptions from './BackupOptions';
+import { collection, query, where, documentId, onSnapshot } from 'firebase/firestore';
 import SearchModal from './SearchModal';
 import MobileMenuModal from './MobileMenuModal';
+import BackupOptions from './BackupOptions';
 
 export default function Layout() {
     const { currentUser, logout } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const params = useParams();
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isQuickWriting, setIsQuickWriting] = useState(false);
@@ -122,6 +119,7 @@ export default function Layout() {
         else if (path === '/tags') title = "Journal - Tags";
         else if (path === '/memories') title = "Journal - Memories";
         else if (path === '/pdf-export') title = "Journal - Export PDF";
+        else if (path === '/settings') title = "Journal - Settings";
         else if (path.startsWith('/entry/')) {
             const dateStr = path.split('/').pop();
             title = `Journal - ${dateStr}`;
@@ -152,6 +150,7 @@ export default function Layout() {
     return (
         <div className="min-h-screen flex flex-col font-body text-text">
             <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+            <BackupOptions showTrigger={false} />
 
             {/* Glass Header */}
             <header className="sticky top-0 z-50 px-4 pt-4 pb-2">
@@ -188,9 +187,6 @@ export default function Layout() {
                             >
                                 <Search className="h-5 w-5" />
                             </button>
-                            <DirectoryImporter />
-                            <DataRepair />
-                            <BackupOptions />
                         </div>
 
                         <button
@@ -250,6 +246,14 @@ export default function Layout() {
                         </button>
 
                         <button
+                            onClick={() => navigate('/settings')}
+                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/settings' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
+                            title="Settings"
+                        >
+                            <Settings className="h-5 w-5" />
+                        </button>
+
+                        <button
                             onClick={handleLogout}
                             className="flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-red-500/10 hover:text-red-400 border border-transparent hover:border-red-500/20 transition-all duration-200"
                         >
@@ -298,11 +302,9 @@ export default function Layout() {
                                 <NavItem path="/tags" icon={Tag} label="Tags" />
                                 <NavItem path="/memories" icon={History} label="Memories" />
                                 <NavItem path="/pdf-export" icon={FileDown} label="PDF Export" />
+                                <NavItem path="/settings" icon={Settings} label="Settings" />
                             </>
                         }
-                        importer={<DirectoryImporter />}
-                        repair={<DataRepair />}
-                        backup={<BackupOptions />}
                     />
                 </div>
             </header>

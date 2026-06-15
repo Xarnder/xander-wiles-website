@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert, renderGanttChart } from './ui.js';
+import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert, renderGanttChart, renderLiveMoneyCounter } from './ui.js';
 import { saveSession } from './api.js';
 
 export function updateTimerDisplay(elapsedMs) {
@@ -14,6 +14,7 @@ export function updateTimerDisplay(elapsedMs) {
     const hoursFloat = elapsedMs / (1000 * 60 * 60);
     const earned = hoursFloat * state.currentSessionRate;
     DOM.liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${earned.toFixed(2)}`;
+    renderLiveMoneyCounter(earned, Boolean(state.startTime));
 
     document.title = `${formattedTime} - Work Tracker`;
 }
@@ -27,7 +28,24 @@ export function startTimer() {
         return;
     }
 
-    state.startTime = Date.now();
+    const now = Date.now();
+    let selectedStartTime = now;
+
+    if (DOM.timerStartTimeInput && DOM.timerStartTimeInput.value) {
+        selectedStartTime = new Date(DOM.timerStartTimeInput.value).getTime();
+
+        if (!Number.isFinite(selectedStartTime)) {
+            showAlert("Invalid Input", "Please enter a valid start time.");
+            return;
+        }
+
+        if (selectedStartTime > now) {
+            showAlert("Invalid Input", "Start time cannot be in the future.");
+            return;
+        }
+    }
+
+    state.startTime = selectedStartTime;
     state.currentSessionRate = rate;
     state.currentCompany = DOM.companyInput.value.trim();
     state.currentProject = DOM.projectInput.value.trim();
@@ -38,6 +56,8 @@ export function startTimer() {
     localStorage.setItem('work_tracker_project', state.currentProject);
 
     toggleTimerUI(true);
+    updateTimerDisplay(Date.now() - state.startTime);
+    renderGanttChart();
 
     state.timerInterval = setInterval(() => {
         updateTimerDisplay(Date.now() - state.startTime);
@@ -66,6 +86,10 @@ export async function stopTimer() {
     toggleTimerUI(false);
     DOM.timerDisplay.textContent = "00:00:00";
     DOM.liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>0.00`;
+    renderLiveMoneyCounter(0, false);
+    if (DOM.timerStartTimeInput) {
+        DOM.timerStartTimeInput.value = '';
+    }
     document.title = "Work Tracker";
 }
 
@@ -82,6 +106,9 @@ export function checkRestorableSession() {
         DOM.hourlyRateInput.value = state.currentSessionRate;
         DOM.companyInput.value = state.currentCompany;
         DOM.projectInput.value = state.currentProject;
+        if (DOM.timerStartTimeInput) {
+            DOM.timerStartTimeInput.value = '';
+        }
 
         toggleTimerUI(true);
         updateTimerDisplay(Date.now() - state.startTime);

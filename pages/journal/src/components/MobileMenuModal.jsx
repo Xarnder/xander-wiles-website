@@ -7,10 +7,7 @@ export default function MobileMenuModal({
     onClose, 
     currentUser, 
     handleLogout, 
-    navItems: NavItems,
-    importer: Importer,
-    repair: Repair,
-    backup: Backup
+    navItems: NavItems
 }) {
     // Lock body scroll when open
     useEffect(() => {
@@ -60,30 +57,6 @@ export default function MobileMenuModal({
                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                     <div className="space-y-1">
                         {NavItems}
-                    </div>
-
-                    <div className="h-px bg-white/10 my-4" />
-
-                    <h3 className="text-xs font-bold text-text-muted uppercase tracking-widest mb-4 px-2">Management</h3>
-                    <div className="grid grid-cols-3 gap-2">
-                        <div className="flex flex-col items-center justify-center gap-1">
-                            <div className="bg-white/5 p-2 rounded-lg w-full flex justify-center border border-white/5 hover:border-primary/30 transition-colors">
-                                {Importer}
-                            </div>
-                            <span className="text-[10px] text-text-muted uppercase tracking-wider">Import</span>
-                        </div>
-                        <div className="flex flex-col items-center justify-center gap-1">
-                            <div className="bg-white/5 p-2 rounded-lg w-full flex justify-center border border-white/5 hover:border-primary/30 transition-colors">
-                                {Repair}
-                            </div>
-                            <span className="text-[10px] text-text-muted uppercase tracking-wider">Repair</span>
-                        </div>
-                        <div className="flex flex-col items-center justify-center gap-1">
-                            <div className="bg-white/5 p-2 rounded-lg w-full flex justify-center border border-white/5 hover:border-primary/30 transition-colors">
-                                {Backup}
-                            </div>
-                            <span className="text-[10px] text-text-muted uppercase tracking-wider">Backup</span>
-                        </div>
                     </div>
                 </div>
 

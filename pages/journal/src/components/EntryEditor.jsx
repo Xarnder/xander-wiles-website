@@ -8,9 +8,9 @@ import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, onS
 import ReactMarkdown from 'react-markdown';
 import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
-import { format, parseISO, getDay, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
+import { format, parseISO, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, BookOpen, Type } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
@@ -19,11 +19,34 @@ import ImageWithSkeleton from './ImageWithSkeleton';
 import SpecialDayAnimation from './SpecialDayAnimation';
 import LocalSummaryPanel from './LocalSummaryPanel';
 import { LOCAL_SUMMARISER_MODEL_ID } from '../lib/localSummariser';
+import {
+    cleanSubEntriesForSave,
+    ENTRY_SECTIONS_SETTINGS_DOC,
+    hasSubEntryContent,
+    normalizeEntrySections,
+    subEntriesToPlainText
+} from '../utils/entrySections';
+
+function createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries }) {
+    return JSON.stringify({
+        content,
+        title,
+        selectedTags,
+        mood,
+        isSpecial,
+        subEntries: cleanSubEntriesForSave(subEntries)
+    });
+}
+
+function countWordsInText(text) {
+    if (!text) return 0;
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+}
 
 export default function EntryEditor() {
     const { currentUser } = useAuth();
     const { success, error: toastError } = useToast();
-    const { openBackup } = useBackup();
+    const { openBackupReminder } = useBackup();
     const { date } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
@@ -37,6 +60,8 @@ export default function EntryEditor() {
     const [buttonRect, setButtonRect] = useState(null);
     const [showRawHeader, setShowRawHeader] = useState(false);
     const [localAiSummaryRecord, setLocalAiSummaryRecord] = useState(null);
+    const [entrySections, setEntrySections] = useState([]);
+    const [subEntries, setSubEntries] = useState({});
 
     // Image State
     const [images, setImages] = useState([]); // Array of { url, path, size }
@@ -66,7 +91,7 @@ export default function EntryEditor() {
     const [showPrompts, setShowPrompts] = useState(false);
     const [currentPrompt, setCurrentPrompt] = useState('');
     const autoSaveTimerRef = useRef(null);
-    const lastSavedContent = useRef('');
+    const lastSavedSignature = useRef('');
     const isFirstLoad = useRef(true);
 
     const WRITING_PROMPTS = [
@@ -177,7 +202,7 @@ export default function EntryEditor() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditing, content, title, selectedTags, mood, date]);
+    }, [isEditing, content, title, selectedTags, mood, subEntries, date]);
 
     // Auto-save logic
     useEffect(() => {
@@ -186,8 +211,8 @@ export default function EntryEditor() {
             return;
         }
 
-        // Only trigger auto-save if content actually changed from what we last saved
-        if (content === lastSavedContent.current) return;
+        const currentSignature = createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries });
+        if (currentSignature === lastSavedSignature.current) return;
 
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
 
@@ -198,7 +223,7 @@ export default function EntryEditor() {
         return () => {
             if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         };
-    }, [content, title, selectedTags, mood, isEditing]);
+    }, [content, title, selectedTags, mood, isSpecial, subEntries, isEditing]);
 
     async function handleAutoSave() {
         if (!currentUser || !isEditing) return;
@@ -208,6 +233,7 @@ export default function EntryEditor() {
             const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
             const trimmedTitle = title.trim();
             const inferredTitle = content.split('\n')[0].replace('#', '').trim();
+            const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
             
             await setDoc(docRef, {
                 title: trimmedTitle || inferredTitle,
@@ -216,9 +242,11 @@ export default function EntryEditor() {
                 tags: selectedTags,
                 mood: mood,
                 isSpecial: isSpecial,
+                subEntries: cleanedSubEntries,
+                textSize: new Blob([content, subEntriesToPlainText(cleanedSubEntries)]).size
             }, { merge: true });
             
-            lastSavedContent.current = content;
+            lastSavedSignature.current = createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries: cleanedSubEntries });
             setTimeout(() => setIsAutoSaving(false), 2000);
         } catch (err) {
             console.error("Auto-save error:", err);
@@ -242,20 +270,41 @@ export default function EntryEditor() {
         return content.replace(/(?:\*\*)?\+\+.*?\+\+(?:\*\*)?/g, '').trim();
     }, [content, showRawHeader]);
 
+    const visibleSubEntries = useMemo(() => {
+        return entrySections
+            .map((section) => {
+                const value = subEntries[section.id] || {};
+                const subEntryContent = typeof value.content === 'string' ? value.content.trim() : '';
+                const subEntryTitle = typeof value.title === 'string' ? value.title.trim() : '';
+                if (!subEntryContent && !subEntryTitle) return null;
+                return {
+                    section,
+                    title: subEntryTitle,
+                    content: subEntryContent
+                };
+            })
+            .filter(Boolean);
+    }, [entrySections, subEntries]);
+
     const wordCount = useMemo(() => {
-        if (!displayContent) return 0;
-        return displayContent.trim().split(/\s+/).filter(word => word.length > 0).length;
+        return countWordsInText(displayContent);
     }, [displayContent]);
+
+    const subEntryWordCount = useMemo(() => {
+        return visibleSubEntries.reduce((total, subEntry) => total + countWordsInText(subEntry.content), 0);
+    }, [visibleSubEntries]);
+
+    const totalWordCount = wordCount + subEntryWordCount;
 
     const readingTime = useMemo(() => {
         const wordsPerMinute = 200;
-        const minutes = wordCount / wordsPerMinute;
+        const minutes = totalWordCount / wordsPerMinute;
         if (minutes < 1) return "< 1 min read";
         return `${Math.ceil(minutes)} min read`;
-    }, [wordCount]);
+    }, [totalWordCount]);
 
     const wordGoal = 200;
-    const wordProgress = Math.min(100, (wordCount / wordGoal) * 100);
+    const wordProgress = Math.min(100, (totalWordCount / wordGoal) * 100);
 
     const timeSinceEntry = useMemo(() => {
         if (!date) return "";
@@ -311,7 +360,15 @@ export default function EntryEditor() {
                     setIsSpecial(data.isSpecial || false);
                     setMood(data.mood || null);
                     setLocalAiSummaryRecord(data.aiSummary?.local || null);
-                    lastSavedContent.current = data.content || '';
+                    setSubEntries(data.subEntries || {});
+                    lastSavedSignature.current = createEntrySignature({
+                        content: data.content || '',
+                        title: data.title || '',
+                        selectedTags: data.tags || [],
+                        mood: data.mood || null,
+                        isSpecial: data.isSpecial || false,
+                        subEntries: data.subEntries || {}
+                    });
                     isFirstLoad.current = true;
 
                     // Handle new schema vs legacy schema
@@ -344,7 +401,15 @@ export default function EntryEditor() {
                     setIsSpecial(false);
                     setMood(null);
                     setLocalAiSummaryRecord(null);
-                    lastSavedContent.current = '';
+                    setSubEntries({});
+                    lastSavedSignature.current = createEntrySignature({
+                        content: '',
+                        title: '',
+                        selectedTags: [],
+                        mood: null,
+                        isSpecial: false,
+                        subEntries: {}
+                    });
                     isFirstLoad.current = true;
                 }
             } catch (error) {
@@ -356,6 +421,20 @@ export default function EntryEditor() {
 
         fetchEntry();
     }, [date, currentUser]);
+
+    // Fetch configurable sub-entry sections
+    useEffect(() => {
+        if (!currentUser) return;
+
+        const settingsRef = doc(db, 'users', currentUser.uid, 'settings', ENTRY_SECTIONS_SETTINGS_DOC);
+        const unsubscribe = onSnapshot(settingsRef, (snapshot) => {
+            setEntrySections(normalizeEntrySections(snapshot.data()?.sections));
+        }, (error) => {
+            console.error('Error fetching entry management settings:', error);
+        });
+
+        return () => unsubscribe();
+    }, [currentUser]);
 
     // Fetch available tags
     useEffect(() => {
@@ -526,8 +605,10 @@ export default function EntryEditor() {
         if (!currentUser) return;
 
         // Duplicate sentence check
-        if (!skipDuplicateCheck && content) {
-            const sentences = content.split('.')
+        const duplicateCheckText = [content, subEntriesToPlainText(subEntries)].filter(Boolean).join('. ');
+
+        if (!skipDuplicateCheck && duplicateCheckText) {
+            const sentences = duplicateCheckText.split('.')
                 .map(s => s.trim())
                 .filter(s => s.length > 3); // Ignore very short fragments like "..." or "A."
             
@@ -550,13 +631,12 @@ export default function EntryEditor() {
             const trimmedContent = content.trim();
             const trimmedTitle = title.trim();
             const inferredTitle = content.split('\n')[0].replace('#', '').trim();
+            const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
 
-            if (!trimmedContent && !trimmedTitle && images.length === 0) {
+            if (!trimmedContent && !trimmedTitle && images.length === 0 && !hasSubEntryContent(cleanedSubEntries)) {
                 await deleteDoc(docRef);
             } else {
-                const textSize = new Blob([content]).size;
-                const totalImageSize = images.reduce((acc, img) => acc + (img.size || 0), 0);
-
+                const textSize = new Blob([content, subEntriesToPlainText(cleanedSubEntries)]).size;
                 // For backward compatibility until migration is complete or ignored
                 const mainImage = images.length > 0 ? images[0] : null;
 
@@ -569,6 +649,7 @@ export default function EntryEditor() {
                     tags: selectedTags, // Array of tag IDs
                     isSpecial: isSpecial,
                     mood: mood,
+                    subEntries: cleanedSubEntries,
                     // Backward compatibility fields
                     imageUrl: mainImage ? mainImage.url : null,
                     imageSize: mainImage ? mainImage.size : 0,
@@ -578,6 +659,14 @@ export default function EntryEditor() {
                 }, { merge: true });
             }
 
+            lastSavedSignature.current = createEntrySignature({
+                content,
+                title,
+                selectedTags,
+                mood,
+                isSpecial,
+                subEntries: cleanedSubEntries
+            });
             setIsEditing(false);
             setShowDuplicateConfirm(false);
             success('Entry saved successfully');
@@ -586,7 +675,8 @@ export default function EntryEditor() {
             const today = new Date();
             const dayName = format(today, 'EEEE');
             setTimeout(() => {
-                openBackup(`It's ${dayName}! Great time to reflect and download a backup of your entries.`);
+                openBackupReminder(`It's ${dayName}! Great time to reflect and download a backup of your entries.`)
+                    .catch((error) => console.error('Failed to open scheduled backup reminder:', error));
             }, 1500);
         } catch (err) {
             console.error("Error saving entry:", err);
@@ -608,7 +698,15 @@ export default function EntryEditor() {
 
     const handleCopy = async () => {
         try {
-            const textToCopy = `${displayDate} - ${title} - ${displayContent}`;
+            const subEntryText = visibleSubEntries
+                .map((subEntry) => {
+                    const heading = subEntry.title
+                        ? `${subEntry.section.name}: ${subEntry.title}`
+                        : subEntry.section.name;
+                    return `${heading}\n${subEntry.content}`;
+                })
+                .join('\n\n');
+            const textToCopy = [displayDate, title, displayContent, subEntryText].filter(Boolean).join('\n\n');
             await navigator.clipboard.writeText(textToCopy);
             success('Entry copied to clipboard');
         } catch (err) {
@@ -646,6 +744,16 @@ export default function EntryEditor() {
 
         success('Local AI summary saved');
     }
+
+    const updateSubEntry = (sectionId, field, value) => {
+        setSubEntries((currentSubEntries) => ({
+            ...currentSubEntries,
+            [sectionId]: {
+                ...(currentSubEntries[sectionId] || {}),
+                [field]: value
+            }
+        }));
+    };
 
     const mdeOptions = useMemo(() => {
         return {
@@ -917,7 +1025,7 @@ export default function EntryEditor() {
                             className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-500 ease-out"
                             style={{ width: `${wordProgress}%` }}
                         />
-                        {wordCount >= wordGoal && (
+                        {totalWordCount >= wordGoal && (
                             <div className="absolute right-2 top-2 flex items-center text-[10px] text-green-400 font-bold uppercase tracking-widest animate-pulse">
                                 <Target className="w-3 h-3 mr-1" />
                                 Goal Reached
@@ -1194,19 +1302,62 @@ export default function EntryEditor() {
                         </div>
 
                         <div className="flex-1 overflow-auto custom-scrollbar -mr-4 pr-4">
-                            <SimpleMdeReact
-                                value={content}
-                                onChange={setContent}
-                                options={mdeOptions}
-                                className="prose-dark"
-                            />
+                            <div className="mb-6">
+                                <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
+                                    <BookOpen className="h-4 w-4 text-primary" />
+                                    Main entry
+                                </div>
+                                <SimpleMdeReact
+                                    value={content}
+                                    onChange={setContent}
+                                    options={mdeOptions}
+                                    className="prose-dark"
+                                />
+                            </div>
+
+                            {entrySections.length > 0 && (
+                                <div className="space-y-4">
+                                    {entrySections.map((section) => {
+                                        const subEntry = subEntries[section.id] || {};
+
+                                        return (
+                                            <section
+                                                key={section.id}
+                                                className="rounded-xl border border-white/10 bg-white/5 p-4"
+                                            >
+                                                <div className="mb-3 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
+                                                    <Type className="h-4 w-4 shrink-0 text-primary" />
+                                                    <span className="min-w-0 truncate">{section.name}</span>
+                                                </div>
+
+                                                {section.hasCustomTitle && (
+                                                    <input
+                                                        value={subEntry.title || ''}
+                                                        onChange={(event) => updateSubEntry(section.id, 'title', event.target.value)}
+                                                        placeholder={`${section.name} title`}
+                                                        className="mb-3 w-full min-w-0 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                                                    />
+                                                )}
+
+                                                <textarea
+                                                    value={subEntry.content || ''}
+                                                    onChange={(event) => updateSubEntry(section.id, 'content', event.target.value)}
+                                                    placeholder={`Write ${section.name.toLowerCase()}...`}
+                                                    rows={7}
+                                                    className="w-full min-w-0 resize-y rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                                                />
+                                            </section>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                         
                         <div className="mt-4 flex items-center justify-between text-[10px] text-text-muted uppercase tracking-widest font-bold border-t border-white/5 pt-4">
                             <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-1.5">
                                     <PenTool className="w-3 h-3" />
-                                    {wordCount} words
+                                    {totalWordCount} words
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                     <Clock className="w-3 h-3" />
@@ -1276,7 +1427,7 @@ export default function EntryEditor() {
                                     <div className="flex items-center gap-4 text-xs">
                                         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
                                             <PenTool className="w-3.5 h-3.5 text-secondary" />
-                                            <span className="text-white font-medium">{wordCount} words</span>
+                                            <span className="text-white font-medium">{totalWordCount} words</span>
                                         </div>
                                         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
                                             <Clock className="w-3.5 h-3.5 text-primary" />
@@ -1301,9 +1452,38 @@ export default function EntryEditor() {
                                 )}
 
                                 <div className="markdown-content prose prose-invert max-w-none">
-                                    {displayContent ? (
+                                    {displayContent && (
                                         <ReactMarkdown>{displayContent}</ReactMarkdown>
-                                    ) : (
+                                    )}
+
+                                    {visibleSubEntries.length > 0 && (
+                                        <div className={`${displayContent ? 'mt-10 border-t border-white/10 pt-8' : ''} space-y-6`}>
+                                            {visibleSubEntries.map((subEntry) => (
+                                                <section
+                                                    key={subEntry.section.id}
+                                                    className="rounded-xl border border-white/10 bg-white/5 p-4 sm:p-5"
+                                                >
+                                                    <div className="mb-4 flex min-w-0 flex-col gap-1">
+                                                        <div className="flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+                                                            <Type className="h-4 w-4 shrink-0" />
+                                                            <span className="min-w-0 truncate">{subEntry.section.name}</span>
+                                                        </div>
+                                                        {subEntry.title && (
+                                                            <h3 className="m-0 text-xl font-serif font-bold text-white">{subEntry.title}</h3>
+                                                        )}
+                                                    </div>
+
+                                                    {subEntry.content && (
+                                                        <div className="markdown-content prose prose-invert max-w-none">
+                                                            <ReactMarkdown>{subEntry.content}</ReactMarkdown>
+                                                        </div>
+                                                    )}
+                                                </section>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {!displayContent && visibleSubEntries.length === 0 && (
                                         <div className="flex flex-col items-center justify-center h-[40vh] text-text-muted opacity-60">
                                             <Edit2 className="w-12 h-12 mb-4 opacity-30" />
                                             <p className="text-lg">This page is empty.</p>
@@ -1318,7 +1498,7 @@ export default function EntryEditor() {
                             </div>
                         </div>
                         <StorageStats
-                            entryTextSize={new Blob([content]).size}
+                            entryTextSize={new Blob([content, subEntriesToPlainText(subEntries)]).size}
                             entryImageSize={images.reduce((acc, img) => acc + (img.size || 0), 0)}
                         />
                     </>

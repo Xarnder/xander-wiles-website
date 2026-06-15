@@ -14,6 +14,7 @@ import PdfExportView from './components/PdfExportView';
 import ImageView from './components/ImageView';
 import MemoriesView from './components/MemoriesView';
 import TagsView from './components/TagsView';
+import SettingsView from './components/SettingsView';
 
 function PrivateRoute({ children }) {
   const { currentUser } = useAuth();
@@ -43,6 +44,7 @@ function App() {
               <Route path="/tags" element={<TagsView />} />
               <Route path="/memories" element={<MemoriesView />} />
               <Route path="/pdf-export" element={<PdfExportView />} />
+              <Route path="/settings" element={<SettingsView />} />
             </Route>
           </Routes>
         </BackupProvider>

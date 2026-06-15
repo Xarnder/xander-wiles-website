@@ -6,6 +6,7 @@ import { format, subDays, subMonths, subYears, parseISO, startOfWeek, endOfWeek,
 import { useNavigate } from 'react-router-dom';
 import { History, Star, Calendar, MessageSquare, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import ImageWithSkeleton from './ImageWithSkeleton';
+import { subEntriesToPlainText } from '../utils/entrySections';
 
 // Reuse stop words for extracting standard title pattern
 const extractTitle = (content, storedTitle) => {
@@ -68,7 +69,8 @@ export default function MemoriesView() {
             const fetched = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                const wordCount = countWords(data.content || data.text);
+                const text = [data.content || data.text || '', subEntriesToPlainText(data.subEntries)].filter(Boolean).join('\n\n');
+                const wordCount = countWords(text);
                 const title = extractTitle(data.content || data.text, data.title);
                 const img = extractImageUrl(data);
 
@@ -79,7 +81,7 @@ export default function MemoriesView() {
                     wordCount,
                     imageUrl: img,
                     isSpecial: data.isSpecial || false,
-                    contentPreview: (data.content || data.text || '').substring(0, 100) + '...'
+                    contentPreview: text.substring(0, 100) + '...'
                 });
             });
             // Sort by most recent
