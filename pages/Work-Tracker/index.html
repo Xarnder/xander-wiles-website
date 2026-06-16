@@ -151,9 +151,16 @@
                 <section class="card money-counter-widget" id="widget-money-counter">
                     <div class="money-counter-header">
                         <h2 class="widget-title" style="margin: 0;">Live Money Counter</h2>
-                        <span id="money-counter-status" class="money-counter-status">Idle</span>
+                        <div class="money-counter-header-actions">
+                            <div class="money-counter-mode-toggle" role="group" aria-label="Live money counter amount mode">
+                                <button type="button" class="money-counter-mode-btn active" data-money-counter-mode="before">Before</button>
+                                <button type="button" class="money-counter-mode-btn" data-money-counter-mode="after">After Cuts</button>
+                            </div>
+                            <span id="money-counter-status" class="money-counter-status">Idle</span>
+                        </div>
                     </div>
                     <div class="money-counter-total" id="money-counter-total"><span class="currency-symbol">£</span>0.00</div>
+                    <div class="money-counter-mode-label" id="money-counter-mode-label">Before percentage cuts</div>
                     <div class="money-counter-stage" id="money-counter-stage" aria-live="polite">
                         <div class="money-stack money-stack-coin-small" data-denomination="20p">
                             <div class="money-stack-pieces" id="money-stack-20p"></div>
@@ -298,8 +305,52 @@
                 <!-- Saved Items Sheet -->
                 <section class="card time-cost-widget" style="margin-bottom: 25px;">
                     <h2 class="widget-title">Saved Items</h2>
+                    <div class="tc-saved-items-filters" aria-label="Saved item filters">
+                        <div class="input-group">
+                            <label for="tc-saved-filter-search">Search Items</label>
+                            <input type="search" id="tc-saved-filter-search" placeholder="Item name">
+                        </div>
+                        <div class="input-group">
+                            <label for="tc-saved-filter-date-status">Date Bought</label>
+                            <select id="tc-saved-filter-date-status" class="currency-dropdown">
+                                <option value="all">All items</option>
+                                <option value="with-date">With date bought</option>
+                                <option value="without-date">Without date bought</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="tc-saved-filter-from">Bought From</label>
+                            <input type="date" id="tc-saved-filter-from">
+                        </div>
+                        <div class="input-group">
+                            <label for="tc-saved-filter-to">Bought To</label>
+                            <input type="date" id="tc-saved-filter-to">
+                        </div>
+                        <button id="tc-saved-filter-clear" class="btn-outline btn-small" type="button">Clear</button>
+                    </div>
                     <div id="tc-saved-items-container">
                         <p class="loading-text">No saved items.</p>
+                    </div>
+                    <div class="tc-saved-chart-section">
+                        <div class="tc-saved-chart-header">
+                            <h3>Time Comparison</h3>
+                            <div class="tc-saved-chart-legend" aria-label="Chart legend">
+                                <span><i class="tc-chart-swatch tc-chart-swatch-base"></i>Base time</span>
+                                <span><i class="tc-chart-swatch tc-chart-swatch-after"></i>After cuts</span>
+                            </div>
+                        </div>
+                        <div id="tc-saved-items-chart" class="tc-saved-items-chart">
+                            <p class="loading-text">Save items to compare their time cost.</p>
+                        </div>
+                    </div>
+                    <div class="tc-saved-chart-section">
+                        <div class="tc-saved-chart-header">
+                            <h3>Comparison Matrix</h3>
+                            <p class="tc-saved-chart-hint">Rows show one item compared with each item across the top.</p>
+                        </div>
+                        <div id="tc-saved-items-matrix" class="tc-saved-items-matrix">
+                            <p class="loading-text">Save at least two items to compare them.</p>
+                        </div>
                     </div>
                 </section>
 
@@ -346,6 +397,11 @@
                     <div class="input-group">
                         <label for="tc-item-cost">Item Cost (<span class="currency-symbol">£</span>)</label>
                         <input type="number" id="tc-item-cost" min="0" placeholder="0.00">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="tc-item-date-bought">Date Bought (Optional)</label>
+                        <input type="date" id="tc-item-date-bought">
                     </div>
 
                     <div id="tc-breakdown-container" class="tc-breakdown-container">
@@ -416,6 +472,15 @@
                     <select id="start-of-week-select" class="currency-dropdown">
                         <option value="0">Sunday</option>
                         <option value="1">Monday</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="widget-spacing-select">Widget Spacing</label>
+                    <select id="widget-spacing-select" class="currency-dropdown">
+                        <option value="compact">Compact</option>
+                        <option value="comfortable">Comfortable</option>
+                        <option value="spacious">Spacious</option>
                     </select>
                 </div>
 
@@ -521,6 +586,37 @@
 
                 <div class="settings-footer">
                     <button id="save-session-btn" class="btn-primary">Save Session</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Time Cost Item Modal (Edit) -->
+        <div id="tc-item-modal" class="modal-overlay hidden">
+            <div class="modal-content card">
+                <div class="modal-header">
+                    <h2>Edit Saved Item</h2>
+                    <button id="close-tc-item-modal" class="btn-text">&times;</button>
+                </div>
+
+                <input type="hidden" id="edit-tc-item-id" value="">
+
+                <div class="input-group">
+                    <label for="edit-tc-item-name">Item Name</label>
+                    <input type="text" id="edit-tc-item-name" placeholder="Item name">
+                </div>
+
+                <div class="input-group">
+                    <label for="edit-tc-item-cost">Item Cost (<span class="currency-symbol">£</span>)</label>
+                    <input type="number" id="edit-tc-item-cost" min="0" step="0.01" placeholder="0.00">
+                </div>
+
+                <div class="input-group">
+                    <label for="edit-tc-item-date-bought">Date Bought (Optional)</label>
+                    <input type="date" id="edit-tc-item-date-bought">
+                </div>
+
+                <div class="settings-footer">
+                    <button id="save-tc-item-btn" class="btn-primary">Save Item</button>
                 </div>
             </div>
         </div>

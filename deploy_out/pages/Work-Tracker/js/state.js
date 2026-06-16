@@ -106,6 +106,31 @@ function loadTcWorkingDaysPerWeek() {
     return 5;
 }
 
+function loadDashboardDensity() {
+    const saved = localStorage.getItem('work_tracker_dashboard_density');
+    if (saved === 'compact' || saved === 'spacious') return saved;
+    return 'comfortable';
+}
+
+function loadMoneyCounterMode() {
+    return localStorage.getItem('work_tracker_money_counter_mode') === 'after' ? 'after' : 'before';
+}
+
+function loadTcMatrixSelectedItemIds() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('work_tracker_tc_matrix_selected_items')) || [];
+        if (!Array.isArray(saved)) return [];
+        return saved.map(id => String(id)).filter(Boolean).slice(0, 10);
+    } catch (e) {
+        console.warn('Debug: Could not parse matrix item selection from storage', e);
+        return [];
+    }
+}
+
+function loadTcMatrixSelectionInitialized() {
+    return localStorage.getItem('work_tracker_tc_matrix_selection_initialized') === 'true';
+}
+
 export const state = {
     currentUser: null,
     timerInterval: null,
@@ -128,7 +153,17 @@ export const state = {
     tcHourlyRate: parseFloat(localStorage.getItem('work_tracker_tc_hourly_rate')) || 20,
     tcDailyHours: parseFloat(localStorage.getItem('work_tracker_tc_daily_hours')) || 8,
     tcWorkingDaysPerWeek: loadTcWorkingDaysPerWeek(),
+    dashboardDensity: loadDashboardDensity(),
+    moneyCounterMode: loadMoneyCounterMode(),
     tcCustomTimeScales: loadTcCustomTimeScales(),
+    tcSavedItemFilters: {
+        search: '',
+        dateStatus: 'all',
+        fromDate: '',
+        toDate: ''
+    },
+    tcMatrixSelectedItemIds: loadTcMatrixSelectedItemIds(),
+    tcMatrixSelectionInitialized: loadTcMatrixSelectionInitialized(),
     activeCutStatsPeriods: loadActiveCutStatsPeriods(),
     lastStatsTotals: { daily: 0, weekly: 0, monthly: 0 }
 };
@@ -158,6 +193,16 @@ export function updateContinueSession(continueSession) {
     localStorage.setItem('work_tracker_continue_session', continueSession);
 }
 
+export function updateDashboardDensity(density) {
+    state.dashboardDensity = density === 'compact' || density === 'spacious' ? density : 'comfortable';
+    localStorage.setItem('work_tracker_dashboard_density', state.dashboardDensity);
+}
+
+export function updateMoneyCounterMode(mode) {
+    state.moneyCounterMode = mode === 'after' ? 'after' : 'before';
+    localStorage.setItem('work_tracker_money_counter_mode', state.moneyCounterMode);
+}
+
 export function createPercentageCut(name = '', percentage = 0) {
     return {
         id: createCutId(),
@@ -176,6 +221,24 @@ export function updatePercentageCuts(newCuts) {
 export function updateTimeCostItems(newItems) {
     state.timeCostItems = newItems;
     return state.timeCostItems;
+}
+
+export function updateTcSavedItemFilters(filters) {
+    state.tcSavedItemFilters = {
+        ...state.tcSavedItemFilters,
+        ...filters
+    };
+    return state.tcSavedItemFilters;
+}
+
+export function updateTcMatrixSelectedItemIds(ids) {
+    state.tcMatrixSelectedItemIds = Array.isArray(ids)
+        ? ids.map(id => String(id)).filter(Boolean).slice(0, 10)
+        : [];
+    state.tcMatrixSelectionInitialized = true;
+    localStorage.setItem('work_tracker_tc_matrix_selected_items', JSON.stringify(state.tcMatrixSelectedItemIds));
+    localStorage.setItem('work_tracker_tc_matrix_selection_initialized', 'true');
+    return state.tcMatrixSelectedItemIds;
 }
 
 export function updateTcHourlyRate(rate) {

@@ -30,3 +30,40 @@ export function formatDateTimeLocal(dateInput) {
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 16);
 }
+
+export function toTimestampMs(value) {
+    if (value == null) return NaN;
+    if (typeof value === 'number') return value;
+    if (value instanceof Date) return value.getTime();
+    if (typeof value.toMillis === 'function') return value.toMillis();
+    if (typeof value.seconds === 'number') return value.seconds * 1000;
+
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+export function getSessionTimeRange(session) {
+    const startMs = toTimestampMs(session.startTime);
+    const durationMs = Number(session.durationMs);
+    const explicitEndMs = toTimestampMs(session.endTime);
+    const endMs = Number.isFinite(explicitEndMs)
+        ? explicitEndMs
+        : startMs + (Number.isFinite(durationMs) ? durationMs : 0);
+
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+
+    return { startMs, endMs, durationMs: endMs - startMs };
+}
+
+export function getSessionOverlapMs(session, windowStart, windowEnd) {
+    const range = getSessionTimeRange(session);
+    if (!range) return 0;
+
+    const windowStartMs = toTimestampMs(windowStart);
+    const windowEndMs = toTimestampMs(windowEnd);
+    if (!Number.isFinite(windowStartMs) || !Number.isFinite(windowEndMs)) return 0;
+
+    const overlapStart = Math.max(range.startMs, windowStartMs);
+    const overlapEnd = Math.min(range.endMs, windowEndMs);
+    return Math.max(overlapEnd - overlapStart, 0);
+}

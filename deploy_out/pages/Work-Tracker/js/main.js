@@ -4,6 +4,7 @@ import {
     renderCalendar,
     applyWidgetOrder,
     applyWidgetTitles,
+    applyDashboardDensity,
     renderWidgetOrderList,
     renderPercentageCutList,
     addPercentageCutListItem,
@@ -12,7 +13,8 @@ import {
     renderTimeCostBreakdown,
     renderSavedTimeCostItems,
     renderTcCutsSummary,
-    renderPercentageCutStats
+    renderPercentageCutStats,
+    renderMoneyCounterModeControls
 } from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
@@ -23,10 +25,13 @@ import {
     updateWidgetTitles,
     updateStartOfWeek,
     updateContinueSession,
+    updateDashboardDensity,
+    updateMoneyCounterMode,
     updatePercentageCuts,
     updateTcHourlyRate,
     updateTcDailyHours,
     updateTcWorkingDaysPerWeek,
+    updateTcSavedItemFilters,
     updateActiveCutStatsPeriods
 } from './state.js';
 import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings } from './api.js';
@@ -38,6 +43,7 @@ function schedulePercentageCutsAutosave() {
     renderDashboardData();
     renderTimeCostBreakdown();
     renderSavedTimeCostItems();
+    renderMoneyCounterModeControls();
 
     clearTimeout(percentageCutsSaveTimeout);
     percentageCutsSaveTimeout = setTimeout(() => {
@@ -52,6 +58,8 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPercentageCutList();
     applyWidgetOrder();
     applyWidgetTitles();
+    applyDashboardDensity();
+    renderMoneyCounterModeControls();
     setupWidgetImageExports();
 
     // Initialize period toggle active classes and click handlers from state
@@ -180,13 +188,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
             saveTimeCostItem({
                 name,
-                cost
+                cost,
+                dateBought: DOM.tcItemDateBought && DOM.tcItemDateBought.value ? DOM.tcItemDateBought.value : null
             });
             
             // Clear inputs after save
             DOM.tcItemName.value = '';
             DOM.tcItemCost.value = '';
+            if (DOM.tcItemDateBought) DOM.tcItemDateBought.value = '';
             renderTimeCostBreakdown();
+        });
+    }
+
+    const handleSavedItemFilterInput = () => {
+        updateTcSavedItemFilters({
+            search: DOM.tcSavedFilterSearch ? DOM.tcSavedFilterSearch.value : '',
+            dateStatus: DOM.tcSavedFilterDateStatus ? DOM.tcSavedFilterDateStatus.value : 'all',
+            fromDate: DOM.tcSavedFilterFrom ? DOM.tcSavedFilterFrom.value : '',
+            toDate: DOM.tcSavedFilterTo ? DOM.tcSavedFilterTo.value : ''
+        });
+        renderSavedTimeCostItems();
+    };
+
+    [DOM.tcSavedFilterSearch, DOM.tcSavedFilterDateStatus, DOM.tcSavedFilterFrom, DOM.tcSavedFilterTo].forEach(control => {
+        if (!control) return;
+        control.addEventListener('input', handleSavedItemFilterInput);
+        control.addEventListener('change', handleSavedItemFilterInput);
+    });
+
+    if (DOM.tcSavedFilterClear) {
+        DOM.tcSavedFilterClear.addEventListener('click', () => {
+            if (DOM.tcSavedFilterSearch) DOM.tcSavedFilterSearch.value = '';
+            if (DOM.tcSavedFilterDateStatus) DOM.tcSavedFilterDateStatus.value = 'all';
+            if (DOM.tcSavedFilterFrom) DOM.tcSavedFilterFrom.value = '';
+            if (DOM.tcSavedFilterTo) DOM.tcSavedFilterTo.value = '';
+            handleSavedItemFilterInput();
+        });
+    }
+
+    if (DOM.closeTcItemModalBtn) {
+        DOM.closeTcItemModalBtn.addEventListener('click', () => {
+            DOM.tcItemModal.classList.add('hidden');
+        });
+    }
+
+    if (DOM.saveTcItemBtn) {
+        DOM.saveTcItemBtn.addEventListener('click', () => {
+            const itemId = DOM.editTcItemId.value;
+            const name = DOM.editTcItemName.value.trim() || 'Unnamed Item';
+            const cost = parseFloat(DOM.editTcItemCost.value);
+
+            if (!itemId) return;
+
+            if (!Number.isFinite(cost) || cost < 0) {
+                import('./ui.js').then(module => module.showAlert("Invalid Cost", "Please enter a valid item cost."));
+                return;
+            }
+
+            import('./api.js').then(module => {
+                module.updateTimeCostItem(itemId, {
+                    name,
+                    cost,
+                    dateBought: DOM.editTcItemDateBought.value || null
+                });
+            });
+
+            DOM.tcItemModal.classList.add('hidden');
         });
     }
 
@@ -214,6 +281,9 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.currencySelect.value = state.currentCurrency;
         DOM.showTitlesToggle.checked = state.showWidgetTitles;
         DOM.continueSessionToggle.checked = state.continueSessionOnClose;
+        if (DOM.widgetSpacingSelect) {
+            DOM.widgetSpacingSelect.value = state.dashboardDensity;
+        }
         if (DOM.startOfWeekSelect) {
             DOM.startOfWeekSelect.value = state.startOfWeek.toString();
         }
@@ -240,9 +310,13 @@ document.addEventListener('DOMContentLoaded', () => {
         updateWidgetOrder(newOrder);
         updateWidgetTitles(DOM.showTitlesToggle.checked);
         updateContinueSession(DOM.continueSessionToggle.checked);
+        if (DOM.widgetSpacingSelect) {
+            updateDashboardDensity(DOM.widgetSpacingSelect.value);
+        }
 
         applyWidgetOrder();
         applyWidgetTitles();
+        applyDashboardDensity();
         updateCurrencyDisplays();
         renderDashboardData();
 
@@ -266,6 +340,13 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.percentageCutList.addEventListener('drop', schedulePercentageCutsAutosave);
         DOM.percentageCutList.addEventListener('dragend', schedulePercentageCutsAutosave);
     }
+
+    DOM.moneyCounterModeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            updateMoneyCounterMode(button.dataset.moneyCounterMode);
+            renderMoneyCounterModeControls();
+        });
+    });
 
     // Calendar Events
     if (DOM.prevMonthBtn && DOM.nextMonthBtn) {

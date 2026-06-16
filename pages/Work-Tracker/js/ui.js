@@ -1,4 +1,4 @@
-import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales } from './state.js';
+import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds } from './state.js';
 import { formatDuration } from './utils.js';
 
 export const DOM = {
@@ -15,6 +15,8 @@ export const DOM = {
     moneyCounterWidget: document.getElementById('widget-money-counter'),
     moneyCounterStatus: document.getElementById('money-counter-status'),
     moneyCounterTotal: document.getElementById('money-counter-total'),
+    moneyCounterModeLabel: document.getElementById('money-counter-mode-label'),
+    moneyCounterModeButtons: document.querySelectorAll('.money-counter-mode-btn'),
     moneyStack20p: document.getElementById('money-stack-20p'),
     moneyStack1: document.getElementById('money-stack-1'),
     moneyStack10: document.getElementById('money-stack-10'),
@@ -46,6 +48,7 @@ export const DOM = {
     settingsModal: document.getElementById('settings-modal'),
     currencySelect: document.getElementById('currency-select'),
     startOfWeekSelect: document.getElementById('start-of-week-select'),
+    widgetSpacingSelect: document.getElementById('widget-spacing-select'),
     saveSettingsBtn: document.getElementById('save-settings'),
     alertModal: document.getElementById('alert-modal'),
     alertTitle: document.getElementById('alert-title'),
@@ -93,6 +96,7 @@ export const DOM = {
     timeCostView: document.getElementById('time-cost-view'),
     tcItemName: document.getElementById('tc-item-name'),
     tcItemCost: document.getElementById('tc-item-cost'),
+    tcItemDateBought: document.getElementById('tc-item-date-bought'),
     tcHourlyRate: document.getElementById('tc-hourly-rate'),
     tcDailyHours: document.getElementById('tc-daily-hours'),
     tcWorkingDays: document.getElementById('tc-working-days'),
@@ -100,7 +104,21 @@ export const DOM = {
     tcRateBreakdown: document.getElementById('tc-rate-breakdown'),
     tcBreakdownContainer: document.getElementById('tc-breakdown-container'),
     tcSaveBtn: document.getElementById('tc-save-btn'),
-    tcSavedItemsContainer: document.getElementById('tc-saved-items-container')
+    tcSavedItemsContainer: document.getElementById('tc-saved-items-container'),
+    tcSavedItemsChart: document.getElementById('tc-saved-items-chart'),
+    tcSavedItemsMatrix: document.getElementById('tc-saved-items-matrix'),
+    tcSavedFilterSearch: document.getElementById('tc-saved-filter-search'),
+    tcSavedFilterDateStatus: document.getElementById('tc-saved-filter-date-status'),
+    tcSavedFilterFrom: document.getElementById('tc-saved-filter-from'),
+    tcSavedFilterTo: document.getElementById('tc-saved-filter-to'),
+    tcSavedFilterClear: document.getElementById('tc-saved-filter-clear'),
+    tcItemModal: document.getElementById('tc-item-modal'),
+    closeTcItemModalBtn: document.getElementById('close-tc-item-modal'),
+    editTcItemId: document.getElementById('edit-tc-item-id'),
+    editTcItemName: document.getElementById('edit-tc-item-name'),
+    editTcItemCost: document.getElementById('edit-tc-item-cost'),
+    editTcItemDateBought: document.getElementById('edit-tc-item-date-bought'),
+    saveTcItemBtn: document.getElementById('save-tc-item-btn')
 };
 
 export function showAlert(title, message) {
@@ -190,8 +208,11 @@ function renderMoneyStack(container, count, type, key) {
 export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.startTime)) {
     if (!DOM.moneyCounterWidget) return;
 
-    const safeEarned = Math.max(Number(earned) || 0, 0);
-    const pennies = Math.floor(safeEarned * 100);
+    const beforeCutsEarned = Math.max(Number(earned) || 0, 0);
+    const displayEarned = state.moneyCounterMode === 'after'
+        ? getAmountAfterPercentageCuts(beforeCutsEarned)
+        : beforeCutsEarned;
+    const pennies = Math.floor(displayEarned * 100);
     const noteCount = Math.floor(pennies / 1000);
     const remainingAfterNotes = pennies % 1000;
     const poundCount = Math.floor(remainingAfterNotes / 100);
@@ -204,7 +225,13 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
     }
 
     if (DOM.moneyCounterTotal) {
-        DOM.moneyCounterTotal.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${safeEarned.toFixed(2)}`;
+        DOM.moneyCounterTotal.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${displayEarned.toFixed(2)}`;
+    }
+
+    if (DOM.moneyCounterModeLabel) {
+        DOM.moneyCounterModeLabel.textContent = state.moneyCounterMode === 'after'
+            ? 'After percentage cuts'
+            : 'Before percentage cuts';
     }
 
     renderMoneyStack(DOM.moneyStack20p, twentyPCount, 'coin coin-small', 'twentyP');
@@ -214,6 +241,22 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
     if (DOM.moneyCount20p) DOM.moneyCount20p.textContent = twentyPCount;
     if (DOM.moneyCount1) DOM.moneyCount1.textContent = poundCount;
     if (DOM.moneyCount10) DOM.moneyCount10.textContent = noteCount;
+}
+
+export function renderMoneyCounterModeControls() {
+    DOM.moneyCounterModeButtons.forEach(button => {
+        const isActive = button.dataset.moneyCounterMode === state.moneyCounterMode;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+
+    if (state.startTime) {
+        const elapsedMs = Date.now() - state.startTime;
+        const earned = (elapsedMs / (1000 * 60 * 60)) * state.currentSessionRate;
+        renderLiveMoneyCounter(earned, true);
+    } else {
+        renderLiveMoneyCounter(0, false);
+    }
 }
 
 function formatMoney(amount) {
@@ -434,26 +477,45 @@ export function renderChart() {
     if (!DOM.weeklyChart) return;
     DOM.weeklyChart.innerHTML = '';
 
-    import('./utils.js').then(({ getStartOfWeekDate }) => {
+    import('./utils.js').then(({ getStartOfWeekDate, getSessionTimeRange }) => {
         const daysArrBase = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const daysArr = [...daysArrBase.slice(state.startOfWeek), ...daysArrBase.slice(0, state.startOfWeek)];
 
         const now = new Date();
         const startOfWeek = getStartOfWeekDate(now, state.startOfWeek);
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 7);
+        const startOfWeekMs = startOfWeek.getTime();
+        const endOfWeekMs = endOfWeek.getTime();
         const weekData = Array(7).fill().map(() => []);
         let maxDailyHours = 0;
 
-        const currentWeekSessions = state.allSessions.filter(session => new Date(session.startTime) >= startOfWeek);
+        state.allSessions.forEach(session => {
+            const range = getSessionTimeRange(session);
+            if (!range) return;
 
-        currentWeekSessions.forEach(session => {
-            let actualDay = new Date(session.startTime).getDay();
-            let dayIndex = (actualDay - state.startOfWeek + 7) % 7;
-            weekData[dayIndex].push({
-                hours: session.durationMs / (1000 * 60 * 60),
-                durationMs: session.durationMs,
-                company: session.company,
-                project: session.project
-            });
+            let segmentStartMs = Math.max(range.startMs, startOfWeekMs);
+            const segmentEndLimitMs = Math.min(range.endMs, endOfWeekMs);
+            if (segmentStartMs >= segmentEndLimitMs) return;
+
+            while (segmentStartMs < segmentEndLimitMs) {
+                const segmentStart = new Date(segmentStartMs);
+                const nextDay = new Date(segmentStart);
+                nextDay.setHours(24, 0, 0, 0);
+                const segmentEndMs = Math.min(nextDay.getTime(), segmentEndLimitMs);
+                const segmentDurationMs = segmentEndMs - segmentStartMs;
+                const actualDay = segmentStart.getDay();
+                const dayIndex = (actualDay - state.startOfWeek + 7) % 7;
+
+                weekData[dayIndex].push({
+                    hours: segmentDurationMs / (1000 * 60 * 60),
+                    durationMs: segmentDurationMs,
+                    company: session.company,
+                    project: session.project
+                });
+
+                segmentStartMs = segmentEndMs;
+            }
         });
 
         weekData.forEach(daySessions => {
@@ -467,19 +529,23 @@ export function renderChart() {
         const yAxisDiv = document.createElement('div');
         yAxisDiv.className = 'chart-y-axis';
 
-        const maxLabel = document.createElement('div');
-        maxLabel.textContent = scaleMax + 'h';
-
-        const midLabel = document.createElement('div');
-        midLabel.textContent = (scaleMax / 2).toFixed(1) + 'h';
-
-        const zeroLabel = document.createElement('div');
-        zeroLabel.textContent = '0h';
-
-        yAxisDiv.appendChild(maxLabel);
-        yAxisDiv.appendChild(midLabel);
-        yAxisDiv.appendChild(zeroLabel);
+        [1, 0.75, 0.5, 0.25, 0].forEach(ratio => {
+            const label = document.createElement('div');
+            const hours = scaleMax * ratio;
+            label.textContent = ratio === 0 ? '0h' : `${Number.isInteger(hours) ? hours : hours.toFixed(1)}h`;
+            yAxisDiv.appendChild(label);
+        });
         DOM.weeklyChart.appendChild(yAxisDiv);
+
+        const gridDiv = document.createElement('div');
+        gridDiv.className = 'chart-grid-lines';
+        for (let i = 0; i <= 8; i++) {
+            const line = document.createElement('span');
+            line.className = i % 2 === 0 ? 'chart-grid-line chart-grid-line-major' : 'chart-grid-line';
+            line.style.bottom = `${(i / 8) * 100}%`;
+            gridDiv.appendChild(line);
+        }
+        DOM.weeklyChart.appendChild(gridDiv);
 
         daysArr.forEach((label, index) => {
             const colDiv = document.createElement('div');
@@ -873,6 +939,11 @@ export function setupWidgetImageExports() {
         if (widget.querySelector(':scope > .widget-export-footer')) return;
         widget.appendChild(createWidgetExportFooter(widget));
     });
+}
+
+export function applyDashboardDensity() {
+    document.body.classList.remove('dashboard-density-compact', 'dashboard-density-comfortable', 'dashboard-density-spacious');
+    document.body.classList.add(`dashboard-density-${state.dashboardDensity || 'comfortable'}`);
 }
 
 export function updateActiveFilterDisplay() {
@@ -1317,6 +1388,16 @@ function formatMoneyAmount(amount) {
     return `${state.currentCurrency}${amount.toFixed(2)}`;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
 function formatTargetMoney(amount) {
     return `${state.currentCurrency}${amount.toLocaleString('en-GB')}`;
 }
@@ -1370,6 +1451,209 @@ function getTimeScaleUnitLabel(unit, amount) {
     };
 
     return amount === 1 ? singularUnits[unit] : unit;
+}
+
+function renderSavedItemsComparisonChart(items, baseRate, effectiveRate) {
+    if (!DOM.tcSavedItemsChart) return;
+
+    if (!items || items.length === 0) {
+        DOM.tcSavedItemsChart.innerHTML = '<p class="loading-text">No saved items match these filters.</p>';
+        return;
+    }
+
+    const chartItems = items.map(item => {
+        const cost = Number(item.cost) || 0;
+        const baseHours = baseRate > 0 ? cost / baseRate : Infinity;
+        const effectiveHours = effectiveRate > 0 ? cost / effectiveRate : Infinity;
+
+        return {
+            name: item.name || 'Unnamed Item',
+            cost,
+            baseHours,
+            effectiveHours
+        };
+    });
+
+    const finiteHours = chartItems
+        .flatMap(item => [item.baseHours, item.effectiveHours])
+        .filter(Number.isFinite);
+
+    if (finiteHours.length === 0) {
+        DOM.tcSavedItemsChart.innerHTML = '<p class="loading-text">Set an hourly rate above 0 to compare saved items.</p>';
+        return;
+    }
+
+    const maxHours = Math.max(...finiteHours, 1);
+    const formatChartHours = hours => Number.isFinite(hours) ? `${hours.toFixed(hours >= 10 ? 1 : 2)}h` : '∞';
+    const getWidth = hours => Number.isFinite(hours) && hours > 0 ? Math.max((hours / maxHours) * 100, 2) : 0;
+
+    DOM.tcSavedItemsChart.innerHTML = `
+        <div class="tc-comparison-chart" role="img" aria-label="Saved item time comparison chart">
+            ${chartItems.map(item => `
+                <div class="tc-comparison-row">
+                    <div class="tc-comparison-item">
+                        <strong>${escapeHtml(item.name)}</strong>
+                        <span>${state.currentCurrency}${item.cost.toFixed(2)}</span>
+                    </div>
+                    <div class="tc-comparison-bars">
+                        <div class="tc-comparison-bar-line">
+                            <span class="tc-comparison-bar-label">Base</span>
+                            <div class="tc-comparison-track">
+                                <span class="tc-comparison-bar tc-comparison-bar-base" style="width: ${getWidth(item.baseHours)}%;"></span>
+                            </div>
+                            <span class="tc-comparison-value">${formatChartHours(item.baseHours)}</span>
+                        </div>
+                        <div class="tc-comparison-bar-line">
+                            <span class="tc-comparison-bar-label">After</span>
+                            <div class="tc-comparison-track">
+                                <span class="tc-comparison-bar tc-comparison-bar-after" style="width: ${getWidth(item.effectiveHours)}%;"></span>
+                            </div>
+                            <span class="tc-comparison-value">${formatChartHours(item.effectiveHours)}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderSavedItemsComparisonMatrix(items) {
+    if (!DOM.tcSavedItemsMatrix) return;
+
+    if (!items || items.length === 0) {
+        DOM.tcSavedItemsMatrix.innerHTML = '<p class="loading-text">No saved items match these filters.</p>';
+        return;
+    }
+
+    const selectableItems = items.map(item => ({
+        id: String(item.id),
+        name: item.name || 'Unnamed Item',
+        cost: Number(item.cost) || 0
+    }));
+    const visibleIds = selectableItems.map(item => item.id);
+    let selectedIds = (state.tcMatrixSelectedItemIds || []).filter(id => visibleIds.includes(id)).slice(0, 10);
+
+    if (!state.tcMatrixSelectionInitialized && selectedIds.length === 0) {
+        selectedIds = selectableItems.slice(0, 10).map(item => item.id);
+        updateTcMatrixSelectedItemIds(selectedIds);
+    }
+
+    const selectedIdSet = new Set(selectedIds);
+    const matrixItems = selectableItems.filter(item => selectedIdSet.has(item.id));
+    const selectedCount = matrixItems.length;
+    const capMessage = items.length > 10
+        ? `<span class="tc-matrix-limit-note">Matrix limited to 10 selected items.</span>`
+        : '';
+
+    const formatMultiplier = (rowCost, columnCost) => {
+        if (rowCost <= 0 || columnCost <= 0) return 'N/A';
+
+        const multiplier = rowCost / columnCost;
+        if (multiplier < 0.01) return '<0.01x';
+        if (multiplier >= 1000) return `${Math.round(multiplier).toLocaleString('en-GB')}x`;
+        if (multiplier >= 100) return `${multiplier.toFixed(0)}x`;
+        if (multiplier >= 10) return `${multiplier.toFixed(1)}x`;
+        return `${multiplier.toFixed(2).replace(/\.?0+$/, '')}x`;
+    };
+
+    const formatCellTitle = (rowItem, columnItem) => {
+        if (rowItem.cost <= 0 || columnItem.cost <= 0) {
+            return `${rowItem.name} cannot be compared with ${columnItem.name} because one item has no cost.`;
+        }
+
+        return `1 ${rowItem.name} equals ${formatMultiplier(rowItem.cost, columnItem.cost)} ${columnItem.name}`;
+    };
+
+    const matrixTableHtml = selectedCount < 2
+        ? '<p class="loading-text">Select at least two items to compare them.</p>'
+        : `
+            <div class="tc-matrix-scroll" role="region" aria-label="Saved item multiplier comparison matrix" tabindex="0">
+                <table class="tc-matrix-table">
+                    <thead>
+                        <tr>
+                            <th class="tc-matrix-corner">
+                                <span>1 item equals</span>
+                                <strong>Compared with</strong>
+                            </th>
+                            ${matrixItems.map(item => `
+                                <th scope="col" title="${escapeHtml(item.name)}">
+                                    <span>${escapeHtml(item.name)}</span>
+                                    <em>${state.currentCurrency}${item.cost.toFixed(2)}</em>
+                                </th>
+                            `).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${matrixItems.map(rowItem => `
+                            <tr>
+                                <th scope="row" title="${escapeHtml(rowItem.name)}">
+                                    <span>${escapeHtml(rowItem.name)}</span>
+                                    <em>${state.currentCurrency}${rowItem.cost.toFixed(2)}</em>
+                                </th>
+                                ${matrixItems.map(columnItem => {
+                                    const isSameItem = rowItem === columnItem;
+                                    const cellTitle = formatCellTitle(rowItem, columnItem);
+                                    return `
+                                        <td class="${isSameItem ? 'tc-matrix-self' : ''}" title="${escapeHtml(cellTitle)}">
+                                            <strong>${formatMultiplier(rowItem.cost, columnItem.cost)}</strong>
+                                        </td>
+                                    `;
+                                }).join('')}
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+    DOM.tcSavedItemsMatrix.innerHTML = `
+        <div class="tc-matrix-selector">
+            <div class="tc-matrix-selector-header">
+                <strong>${selectedCount}/10 selected</strong>
+                ${capMessage}
+            </div>
+            <div class="tc-matrix-option-grid" aria-label="Choose saved items for the comparison matrix">
+                ${selectableItems.map(item => {
+                    const isSelected = selectedIdSet.has(item.id);
+                    const isDisabled = !isSelected && selectedCount >= 10;
+                    return `
+                        <label class="tc-matrix-option ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}">
+                            <input type="checkbox" data-matrix-item-id="${escapeHtml(item.id)}" ${isSelected ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
+                            <span>
+                                <strong>${escapeHtml(item.name)}</strong>
+                                <em>${state.currentCurrency}${item.cost.toFixed(2)}</em>
+                            </span>
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+        ${matrixTableHtml}
+    `;
+
+    DOM.tcSavedItemsMatrix.querySelectorAll('[data-matrix-item-id]').forEach(input => {
+        input.addEventListener('change', () => {
+            const itemId = input.dataset.matrixItemId;
+            const nextSelectedIds = new Set(selectedIds);
+
+            if (input.checked) {
+                if (nextSelectedIds.size >= 10) {
+                    input.checked = false;
+                    return;
+                }
+                nextSelectedIds.add(itemId);
+            } else {
+                nextSelectedIds.delete(itemId);
+            }
+
+            const nextIds = selectableItems
+                .map(item => item.id)
+                .filter(id => nextSelectedIds.has(id))
+                .slice(0, 10);
+            updateTcMatrixSelectedItemIds(nextIds);
+            renderSavedTimeCostItems();
+        });
+    });
 }
 
 function getTimeScaleHours(scale, settings) {
@@ -1667,6 +1951,8 @@ export function renderSavedTimeCostItems() {
 
     if (!state.timeCostItems || state.timeCostItems.length === 0) {
         DOM.tcSavedItemsContainer.innerHTML = '<p class="loading-text">No saved items.</p>';
+        renderSavedItemsComparisonChart([], 0, 0);
+        renderSavedItemsComparisonMatrix([]);
         return;
     }
 
@@ -1674,14 +1960,42 @@ export function renderSavedTimeCostItems() {
     const daysInWeek = workingDaysPerWeek;
     const daysInMonth = workingDaysPerWeek * 4.345;
     const { effectiveRate, totalCutPercentage } = getEffectiveHourlyRate(baseRate);
+    const filters = state.tcSavedItemFilters || {};
+    const searchTerm = String(filters.search || '').trim().toLowerCase();
+    const fromDate = filters.fromDate || '';
+    const toDate = filters.toDate || '';
+    const dateStatus = filters.dateStatus || 'all';
+    const filteredItems = state.timeCostItems.filter(item => {
+        const itemName = String(item.name || '').toLowerCase();
+        const dateBought = item.dateBought || '';
+
+        if (searchTerm && !itemName.includes(searchTerm)) return false;
+        if (dateStatus === 'with-date' && !dateBought) return false;
+        if (dateStatus === 'without-date' && dateBought) return false;
+        if (fromDate && (!dateBought || dateBought < fromDate)) return false;
+        if (toDate && (!dateBought || dateBought > toDate)) return false;
+
+        return true;
+    });
+
+    if (filteredItems.length === 0) {
+        DOM.tcSavedItemsContainer.innerHTML = '<p class="loading-text">No saved items match these filters.</p>';
+        renderSavedItemsComparisonChart([], baseRate, effectiveRate);
+        renderSavedItemsComparisonMatrix([]);
+        return;
+    }
+
+    renderSavedItemsComparisonChart(filteredItems, baseRate, effectiveRate);
+    renderSavedItemsComparisonMatrix(filteredItems);
 
     let html = `
         <div style="overflow-x: auto; width: 100%;">
-            <table class="tc-breakdown-table" style="min-width: 900px;">
+            <table class="tc-breakdown-table" style="min-width: 1060px;">
                 <thead>
                     <tr>
                         <th rowspan="2" class="tc-sticky-col" style="vertical-align: middle;">Item Name</th>
                         <th rowspan="2" style="vertical-align: middle;">Cost</th>
+                        <th rowspan="2" style="vertical-align: middle;">Date Bought</th>
                         <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">Base Time</th>
                         <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">After Cuts Time (-${totalCutPercentage.toFixed(1)}%)</th>
                         <th rowspan="2" style="vertical-align: middle; text-align: center;">Actions</th>
@@ -1700,8 +2014,11 @@ export function renderSavedTimeCostItems() {
                 <tbody>
     `;
 
-    state.timeCostItems.forEach(item => {
-        const cost = item.cost;
+    filteredItems.forEach(item => {
+        const cost = Number(item.cost) || 0;
+        const itemName = item.name || 'Unnamed Item';
+        const escapedItemName = escapeHtml(itemName);
+        const dateBought = item.dateBought || '';
         const baseHours = baseRate > 0 ? cost / baseRate : Infinity;
         const effectiveHours = effectiveRate > 0 ? cost / effectiveRate : Infinity;
 
@@ -1727,8 +2044,11 @@ export function renderSavedTimeCostItems() {
 
         html += `
                 <tr>
-                    <td class="tc-sticky-col" style="font-weight: 600; white-space: nowrap;">${item.name || 'Unnamed Item'}</td>
-                    <td class="tc-amount">${state.currentCurrency}${cost.toFixed(2)}</td>
+                    <td class="tc-sticky-col" style="font-weight: 600; white-space: nowrap;">${escapedItemName}</td>
+                    <td class="tc-amount">
+                        ${state.currentCurrency}${cost.toFixed(2)}
+                    </td>
+                    <td class="tc-date-bought-display">${dateBought ? escapeHtml(new Date(`${dateBought}T00:00:00`).toLocaleDateString()) : '<span class="tc-muted-action">Not set</span>'}</td>
                     <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseHoursStr}</td>
                     <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseDaysStr}</td>
                     <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseWeeksStr}</td>
@@ -1738,6 +2058,12 @@ export function renderSavedTimeCostItems() {
                     <td class="tc-time" style="font-size: 0.95rem;">${effectiveWeeksStr}</td>
                     <td class="tc-time" style="font-size: 0.95rem;">${effectiveMonthsStr}</td>
                     <td style="text-align: center;">
+                        <button class="btn-edit tc-edit-btn" data-id="${escapeHtml(item.id)}" title="Edit Item" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary);">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                        </button>
                         <button class="btn-delete tc-delete-btn" data-id="${item.id}" title="Delete Item" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary);">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="3 6 5 6 21 6"></polyline>
@@ -1758,6 +2084,20 @@ export function renderSavedTimeCostItems() {
     `;
 
     DOM.tcSavedItemsContainer.innerHTML = html;
+
+    const editBtns = DOM.tcSavedItemsContainer.querySelectorAll('.tc-edit-btn');
+    editBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const item = state.timeCostItems.find(x => x.id === btn.dataset.id);
+            if (!item || !DOM.tcItemModal) return;
+
+            DOM.editTcItemId.value = item.id;
+            DOM.editTcItemName.value = item.name || '';
+            DOM.editTcItemCost.value = Number(item.cost || 0).toFixed(2);
+            DOM.editTcItemDateBought.value = item.dateBought || '';
+            DOM.tcItemModal.classList.remove('hidden');
+        });
+    });
 
     const deleteBtns = DOM.tcSavedItemsContainer.querySelectorAll('.tc-delete-btn');
     deleteBtns.forEach(btn => {

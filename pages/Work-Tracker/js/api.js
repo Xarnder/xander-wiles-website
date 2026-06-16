@@ -2,7 +2,7 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, d
 import { db } from './config.js';
 import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts } from './ui.js';
-import { getStartOfWeekDate, formatDuration } from './utils.js';
+import { getStartOfWeekDate, formatDuration, getSessionOverlapMs } from './utils.js';
 
 function getPercentageCutsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
@@ -16,6 +16,23 @@ function serializePercentageCuts(cuts) {
         basis: cut.basis,
         order: index
     }));
+}
+
+function renderStatsEarnings(displayEl, beforeAmount) {
+    if (!displayEl) return;
+
+    const before = Number(beforeAmount) || 0;
+    const after = getAmountAfterPercentageCuts(before);
+
+    if (!state.percentageCuts.length) {
+        displayEl.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}`;
+        return;
+    }
+
+    displayEl.innerHTML = `
+        <span class="stats-earnings-after"><span class="currency-symbol">${state.currentCurrency}</span>${after.toFixed(2)}</span>
+        <span class="stats-earnings-before">Before cuts <span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}</span>
+    `;
 }
 
 export async function saveSession(durationMs, totalEarned) {
@@ -166,6 +183,17 @@ export async function deleteTimeCostItem(itemId) {
     }
 }
 
+export async function updateTimeCostItem(itemId, itemData) {
+    if (!state.currentUser || !itemId) return;
+    try {
+        await updateDoc(doc(db, "users", state.currentUser.uid, "timeCostItems", itemId), itemData);
+        console.log("Debug: Time cost item updated", itemId);
+    } catch (e) {
+        console.error("Debug: Error updating time cost item: ", e);
+        showAlert("Update Error", "Error updating saved item! Please check your internet connection.");
+    }
+}
+
 export function loadTimeCostItems() {
     if (!state.currentUser) return;
 
@@ -274,6 +302,8 @@ export function renderDashboardData() {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfWeek = getStartOfWeekDate(now, state.startOfWeek);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     state.allSessions.forEach((data) => {
@@ -284,9 +314,12 @@ export function renderDashboardData() {
             totalDailyEarnings += data.earnings;
         }
 
-        if (dateObj >= startOfWeek) {
-            totalWeeklyMs += data.durationMs;
-            totalWeeklyEarnings += data.earnings;
+        const weeklyOverlapMs = getSessionOverlapMs(data, startOfWeek, endOfWeek);
+        if (weeklyOverlapMs > 0) {
+            const sessionDurationMs = Number(data.durationMs) || weeklyOverlapMs;
+            const overlapRatio = sessionDurationMs > 0 ? weeklyOverlapMs / sessionDurationMs : 1;
+            totalWeeklyMs += weeklyOverlapMs;
+            totalWeeklyEarnings += (Number(data.earnings) || 0) * overlapRatio;
         }
 
         if (dateObj >= startOfMonth) {
@@ -385,13 +418,13 @@ export function renderDashboardData() {
     });
 
     DOM.dailyHoursDisplay.textContent = formatDuration(totalDailyMs);
-    DOM.dailyEarningsDisplay.textContent = `${state.currentCurrency}${totalDailyEarnings.toFixed(2)}`;
+    renderStatsEarnings(DOM.dailyEarningsDisplay, totalDailyEarnings);
 
     DOM.weeklyHoursDisplay.textContent = formatDuration(totalWeeklyMs);
-    DOM.weeklyEarningsDisplay.textContent = `${state.currentCurrency}${totalWeeklyEarnings.toFixed(2)}`;
+    renderStatsEarnings(DOM.weeklyEarningsDisplay, totalWeeklyEarnings);
 
     DOM.monthlyHoursDisplay.textContent = formatDuration(totalMonthlyMs);
-    DOM.monthlyEarningsDisplay.textContent = `${state.currentCurrency}${totalMonthlyEarnings.toFixed(2)}`;
+    renderStatsEarnings(DOM.monthlyEarningsDisplay, totalMonthlyEarnings);
     state.lastStatsTotals = {
         daily: totalDailyEarnings,
         weekly: totalWeeklyEarnings,
