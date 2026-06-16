@@ -10,7 +10,7 @@ import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
 import { format, parseISO, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, BookOpen, Type } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, BookOpen, Hash, Type } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
@@ -21,20 +21,38 @@ import LocalSummaryPanel from './LocalSummaryPanel';
 import { LOCAL_SUMMARISER_MODEL_ID } from '../lib/localSummariser';
 import {
     cleanSubEntriesForSave,
+    cleanNumericEntriesForSave,
     ENTRY_SECTIONS_SETTINGS_DOC,
+    hasNumericEntryValues,
     hasSubEntryContent,
+    normalizeNumericEntryFields,
     normalizeEntrySections,
+    numericEntriesToPlainText,
     subEntriesToPlainText
 } from '../utils/entrySections';
 
-function createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries }) {
+function cleanConfiguredNumericEntries(numericEntries, numericFields, shouldFilterByFields) {
+    const cleanedEntries = cleanNumericEntriesForSave(numericEntries);
+    if (!shouldFilterByFields) return cleanedEntries;
+
+    const allowedFieldIds = new Set(numericFields.map((field) => field.id));
+    return Object.entries(cleanedEntries).reduce((result, [fieldId, value]) => {
+        if (allowedFieldIds.has(fieldId)) {
+            result[fieldId] = value;
+        }
+        return result;
+    }, {});
+}
+
+function createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries, numericEntries, numericFields, entrySettingsLoaded }) {
     return JSON.stringify({
         content,
         title,
         selectedTags,
         mood,
         isSpecial,
-        subEntries: cleanSubEntriesForSave(subEntries)
+        subEntries: cleanSubEntriesForSave(subEntries),
+        numericEntries: cleanConfiguredNumericEntries(numericEntries, numericFields || [], entrySettingsLoaded)
     });
 }
 
@@ -62,6 +80,9 @@ export default function EntryEditor() {
     const [localAiSummaryRecord, setLocalAiSummaryRecord] = useState(null);
     const [entrySections, setEntrySections] = useState([]);
     const [subEntries, setSubEntries] = useState({});
+    const [numericFields, setNumericFields] = useState([]);
+    const [numericEntries, setNumericEntries] = useState({});
+    const [entrySettingsLoaded, setEntrySettingsLoaded] = useState(false);
 
     // Image State
     const [images, setImages] = useState([]); // Array of { url, path, size }
@@ -202,7 +223,7 @@ export default function EntryEditor() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditing, content, title, selectedTags, mood, subEntries, date]);
+    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, date]);
 
     // Auto-save logic
     useEffect(() => {
@@ -211,7 +232,7 @@ export default function EntryEditor() {
             return;
         }
 
-        const currentSignature = createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries });
+        const currentSignature = createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries, numericEntries, numericFields, entrySettingsLoaded });
         if (currentSignature === lastSavedSignature.current) return;
 
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -223,7 +244,7 @@ export default function EntryEditor() {
         return () => {
             if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         };
-    }, [content, title, selectedTags, mood, isSpecial, subEntries, isEditing]);
+    }, [content, title, selectedTags, mood, isSpecial, subEntries, numericEntries, numericFields, entrySettingsLoaded, isEditing]);
 
     async function handleAutoSave() {
         if (!currentUser || !isEditing) return;
@@ -234,6 +255,7 @@ export default function EntryEditor() {
             const trimmedTitle = title.trim();
             const inferredTitle = content.split('\n')[0].replace('#', '').trim();
             const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
+            const cleanedNumericEntries = cleanConfiguredNumericEntries(numericEntries, numericFields, entrySettingsLoaded);
             
             await setDoc(docRef, {
                 title: trimmedTitle || inferredTitle,
@@ -243,10 +265,25 @@ export default function EntryEditor() {
                 mood: mood,
                 isSpecial: isSpecial,
                 subEntries: cleanedSubEntries,
-                textSize: new Blob([content, subEntriesToPlainText(cleanedSubEntries)]).size
+                numericEntries: cleanedNumericEntries,
+                textSize: new Blob([
+                    content,
+                    subEntriesToPlainText(cleanedSubEntries),
+                    numericEntriesToPlainText(cleanedNumericEntries, numericFields)
+                ]).size
             }, { merge: true });
             
-            lastSavedSignature.current = createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries: cleanedSubEntries });
+            lastSavedSignature.current = createEntrySignature({
+                content,
+                title,
+                selectedTags,
+                mood,
+                isSpecial,
+                subEntries: cleanedSubEntries,
+                numericEntries: cleanedNumericEntries,
+                numericFields,
+                entrySettingsLoaded
+            });
             setTimeout(() => setIsAutoSaving(false), 2000);
         } catch (err) {
             console.error("Auto-save error:", err);
@@ -285,6 +322,20 @@ export default function EntryEditor() {
             })
             .filter(Boolean);
     }, [entrySections, subEntries]);
+
+    const visibleNumericEntries = useMemo(() => {
+        const cleanedEntries = cleanNumericEntriesForSave(numericEntries);
+
+        return numericFields
+            .map((field) => {
+                if (!Object.prototype.hasOwnProperty.call(cleanedEntries, field.id)) return null;
+                return {
+                    field,
+                    value: cleanedEntries[field.id]
+                };
+            })
+            .filter(Boolean);
+    }, [numericFields, numericEntries]);
 
     const wordCount = useMemo(() => {
         return countWordsInText(displayContent);
@@ -361,13 +412,17 @@ export default function EntryEditor() {
                     setMood(data.mood || null);
                     setLocalAiSummaryRecord(data.aiSummary?.local || null);
                     setSubEntries(data.subEntries || {});
+                    setNumericEntries(data.numericEntries || {});
                     lastSavedSignature.current = createEntrySignature({
                         content: data.content || '',
                         title: data.title || '',
                         selectedTags: data.tags || [],
                         mood: data.mood || null,
                         isSpecial: data.isSpecial || false,
-                        subEntries: data.subEntries || {}
+                        subEntries: data.subEntries || {},
+                        numericEntries: data.numericEntries || {},
+                        numericFields: [],
+                        entrySettingsLoaded: false
                     });
                     isFirstLoad.current = true;
 
@@ -402,13 +457,17 @@ export default function EntryEditor() {
                     setMood(null);
                     setLocalAiSummaryRecord(null);
                     setSubEntries({});
+                    setNumericEntries({});
                     lastSavedSignature.current = createEntrySignature({
                         content: '',
                         title: '',
                         selectedTags: [],
                         mood: null,
                         isSpecial: false,
-                        subEntries: {}
+                        subEntries: {},
+                        numericEntries: {},
+                        numericFields: [],
+                        entrySettingsLoaded: false
                     });
                     isFirstLoad.current = true;
                 }
@@ -422,15 +481,22 @@ export default function EntryEditor() {
         fetchEntry();
     }, [date, currentUser]);
 
-    // Fetch configurable sub-entry sections
+    // Fetch configurable entry fields
     useEffect(() => {
-        if (!currentUser) return;
+        if (!currentUser) {
+            setEntrySettingsLoaded(false);
+            return undefined;
+        }
 
         const settingsRef = doc(db, 'users', currentUser.uid, 'settings', ENTRY_SECTIONS_SETTINGS_DOC);
         const unsubscribe = onSnapshot(settingsRef, (snapshot) => {
-            setEntrySections(normalizeEntrySections(snapshot.data()?.sections));
+            const data = snapshot.data() || {};
+            setEntrySections(normalizeEntrySections(data.sections));
+            setNumericFields(normalizeNumericEntryFields(data.numericFields));
+            setEntrySettingsLoaded(true);
         }, (error) => {
             console.error('Error fetching entry management settings:', error);
+            setEntrySettingsLoaded(false);
         });
 
         return () => unsubscribe();
@@ -632,11 +698,16 @@ export default function EntryEditor() {
             const trimmedTitle = title.trim();
             const inferredTitle = content.split('\n')[0].replace('#', '').trim();
             const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
+            const cleanedNumericEntries = cleanConfiguredNumericEntries(numericEntries, numericFields, entrySettingsLoaded);
 
-            if (!trimmedContent && !trimmedTitle && images.length === 0 && !hasSubEntryContent(cleanedSubEntries)) {
+            if (!trimmedContent && !trimmedTitle && images.length === 0 && !hasSubEntryContent(cleanedSubEntries) && !hasNumericEntryValues(cleanedNumericEntries)) {
                 await deleteDoc(docRef);
             } else {
-                const textSize = new Blob([content, subEntriesToPlainText(cleanedSubEntries)]).size;
+                const textSize = new Blob([
+                    content,
+                    subEntriesToPlainText(cleanedSubEntries),
+                    numericEntriesToPlainText(cleanedNumericEntries, numericFields)
+                ]).size;
                 // For backward compatibility until migration is complete or ignored
                 const mainImage = images.length > 0 ? images[0] : null;
 
@@ -650,6 +721,7 @@ export default function EntryEditor() {
                     isSpecial: isSpecial,
                     mood: mood,
                     subEntries: cleanedSubEntries,
+                    numericEntries: cleanedNumericEntries,
                     // Backward compatibility fields
                     imageUrl: mainImage ? mainImage.url : null,
                     imageSize: mainImage ? mainImage.size : 0,
@@ -665,7 +737,10 @@ export default function EntryEditor() {
                 selectedTags,
                 mood,
                 isSpecial,
-                subEntries: cleanedSubEntries
+                subEntries: cleanedSubEntries,
+                numericEntries: cleanedNumericEntries,
+                numericFields,
+                entrySettingsLoaded
             });
             setIsEditing(false);
             setShowDuplicateConfirm(false);
@@ -706,7 +781,10 @@ export default function EntryEditor() {
                     return `${heading}\n${subEntry.content}`;
                 })
                 .join('\n\n');
-            const textToCopy = [displayDate, title, displayContent, subEntryText].filter(Boolean).join('\n\n');
+            const numericEntryText = visibleNumericEntries
+                .map((entry) => `${entry.field.name}: ${entry.value}`)
+                .join('\n');
+            const textToCopy = [displayDate, title, displayContent, subEntryText, numericEntryText].filter(Boolean).join('\n\n');
             await navigator.clipboard.writeText(textToCopy);
             success('Entry copied to clipboard');
         } catch (err) {
@@ -752,6 +830,13 @@ export default function EntryEditor() {
                 ...(currentSubEntries[sectionId] || {}),
                 [field]: value
             }
+        }));
+    };
+
+    const updateNumericEntry = (fieldId, value) => {
+        setNumericEntries((currentEntries) => ({
+            ...currentEntries,
+            [fieldId]: value
         }));
     };
 
@@ -1351,6 +1436,35 @@ export default function EntryEditor() {
                                     })}
                                 </div>
                             )}
+
+                            {numericFields.length > 0 && (
+                                <div className={`${entrySections.length > 0 ? 'mt-4' : ''} grid gap-4 sm:grid-cols-2`}>
+                                    {numericFields.map((field) => (
+                                        <section
+                                            key={field.id}
+                                            className="rounded-xl border border-white/10 bg-white/5 p-4"
+                                        >
+                                            <label
+                                                htmlFor={`numeric-entry-${field.id}`}
+                                                className="mb-3 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted"
+                                            >
+                                                <Hash className="h-4 w-4 shrink-0 text-primary" />
+                                                <span className="min-w-0 truncate">{field.name}</span>
+                                            </label>
+                                            <input
+                                                id={`numeric-entry-${field.id}`}
+                                                type="number"
+                                                inputMode="decimal"
+                                                step="any"
+                                                value={numericEntries[field.id] ?? ''}
+                                                onChange={(event) => updateNumericEntry(field.id, event.target.value)}
+                                                placeholder="0"
+                                                className="w-full min-w-0 rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-lg font-semibold text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                                            />
+                                        </section>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         
                         <div className="mt-4 flex items-center justify-between text-[10px] text-text-muted uppercase tracking-widest font-bold border-t border-white/5 pt-4">
@@ -1483,7 +1597,24 @@ export default function EntryEditor() {
                                         </div>
                                     )}
 
-                                    {!displayContent && visibleSubEntries.length === 0 && (
+                                    {visibleNumericEntries.length > 0 && (
+                                        <div className={`${displayContent || visibleSubEntries.length > 0 ? 'mt-10 border-t border-white/10 pt-8' : ''} grid gap-3 sm:grid-cols-2`}>
+                                            {visibleNumericEntries.map((entry) => (
+                                                <section
+                                                    key={entry.field.id}
+                                                    className="rounded-xl border border-white/10 bg-white/5 p-4"
+                                                >
+                                                    <div className="mb-2 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+                                                        <Hash className="h-4 w-4 shrink-0" />
+                                                        <span className="min-w-0 truncate">{entry.field.name}</span>
+                                                    </div>
+                                                    <p className="m-0 text-3xl font-bold text-white">{entry.value}</p>
+                                                </section>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {!displayContent && visibleSubEntries.length === 0 && visibleNumericEntries.length === 0 && (
                                         <div className="flex flex-col items-center justify-center h-[40vh] text-text-muted opacity-60">
                                             <Edit2 className="w-12 h-12 mb-4 opacity-30" />
                                             <p className="text-lg">This page is empty.</p>
@@ -1498,7 +1629,11 @@ export default function EntryEditor() {
                             </div>
                         </div>
                         <StorageStats
-                            entryTextSize={new Blob([content, subEntriesToPlainText(subEntries)]).size}
+                            entryTextSize={new Blob([
+                                content,
+                                subEntriesToPlainText(subEntries),
+                                numericEntriesToPlainText(numericEntries, numericFields)
+                            ]).size}
                             entryImageSize={images.reduce((acc, img) => acc + (img.size || 0), 0)}
                         />
                     </>

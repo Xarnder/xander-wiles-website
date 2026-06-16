@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Archive, Bell, BookOpen, Check, FolderInput, Lock, Loader2, Moon, Plus, Settings, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Archive, Bell, BookOpen, Check, FolderInput, Hash, Lock, Loader2, Moon, Plus, Settings, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
 import { collection, deleteField, doc, getDocs, onSnapshot, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useBackup } from '../context/BackupContext';
@@ -9,10 +9,14 @@ import DataRepair from './DataRepair';
 import DirectoryImporter from './DirectoryImporter';
 import {
     createEntrySectionId,
+    createNumericEntryFieldId,
     ENTRY_SECTION_NAME_MAX_LENGTH,
     ENTRY_SECTIONS_SETTINGS_DOC,
     MAX_CUSTOM_ENTRY_SECTIONS,
+    MAX_NUMERIC_ENTRY_FIELDS,
+    normalizeNumericEntryFields,
     normalizeEntrySections,
+    numericEntriesToPlainText,
     sanitizeEntrySectionName,
     subEntriesToPlainText
 } from '../utils/entrySections';
@@ -56,13 +60,24 @@ function appendSubEntryToMainContent(content, section, subEntry) {
     return `${existingContent.trimEnd()}${separator}${block}`;
 }
 
+function appendNumericEntryToMainContent(content, field, value) {
+    const numericValue = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numericValue)) return content || '';
+
+    const existingContent = content || '';
+    const separator = existingContent.trim() ? '\n\n---\n\n' : '';
+    return `${existingContent.trimEnd()}${separator}## ${field.name}\n\n${numericValue}`;
+}
+
 export default function SettingsView() {
     const { currentUser } = useAuth();
     const { backupReminderSettings, openBackup, updateBackupReminderSettings } = useBackup();
     const [theme, setTheme] = useState(getInitialTheme);
     const [entrySections, setEntrySections] = useState([]);
+    const [numericFields, setNumericFields] = useState([]);
     const [newSectionName, setNewSectionName] = useState('');
     const [newSectionHasCustomTitle, setNewSectionHasCustomTitle] = useState(false);
+    const [newNumericFieldName, setNewNumericFieldName] = useState('');
     const [sectionsSaving, setSectionsSaving] = useState(false);
     const [sectionsError, setSectionsError] = useState('');
     const [sectionsNotice, setSectionsNotice] = useState('');
@@ -72,12 +87,15 @@ export default function SettingsView() {
     const [deleteProcessing, setDeleteProcessing] = useState(false);
     const [deleteProgressMessage, setDeleteProgressMessage] = useState('');
     const [trueDeleteConfirmOpen, setTrueDeleteConfirmOpen] = useState(false);
+    const [numericDeleteCandidate, setNumericDeleteCandidate] = useState(null);
+    const [numericDeleteProcessing, setNumericDeleteProcessing] = useState(false);
     const [customTitleCandidate, setCustomTitleCandidate] = useState(null);
     const [customTitleMergeEnabled, setCustomTitleMergeEnabled] = useState(true);
     const [customTitleProcessing, setCustomTitleProcessing] = useState(false);
     const [backupReminderSaving, setBackupReminderSaving] = useState(false);
     const [backupReminderError, setBackupReminderError] = useState('');
     const lastSavedSectionsRef = useRef([]);
+    const lastSavedNumericFieldsRef = useRef([]);
 
     useEffect(() => {
         document.documentElement.dataset.theme = theme;
@@ -89,9 +107,13 @@ export default function SettingsView() {
 
         const settingsRef = doc(db, 'users', currentUser.uid, 'settings', ENTRY_SECTIONS_SETTINGS_DOC);
         const unsubscribe = onSnapshot(settingsRef, (snapshot) => {
-            const normalizedSections = normalizeEntrySections(snapshot.data()?.sections);
+            const data = snapshot.data() || {};
+            const normalizedSections = normalizeEntrySections(data.sections);
+            const normalizedNumericFields = normalizeNumericEntryFields(data.numericFields);
             lastSavedSectionsRef.current = normalizedSections;
+            lastSavedNumericFieldsRef.current = normalizedNumericFields;
             setEntrySections(normalizedSections);
+            setNumericFields(normalizedNumericFields);
             setSectionsError('');
         }, (error) => {
             console.error('Failed to load entry management settings:', error);
@@ -126,6 +148,31 @@ export default function SettingsView() {
         }
     }
 
+    async function persistNumericFields(nextFields) {
+        if (!currentUser) return;
+
+        const normalizedFields = normalizeNumericEntryFields(nextFields);
+        setNumericFields(normalizedFields);
+        setSectionsSaving(true);
+        setSectionsError('');
+        setSectionsNotice('');
+
+        try {
+            const settingsRef = doc(db, 'users', currentUser.uid, 'settings', ENTRY_SECTIONS_SETTINGS_DOC);
+            await setDoc(settingsRef, {
+                numericFields: normalizedFields,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+            lastSavedNumericFieldsRef.current = normalizedFields;
+        } catch (error) {
+            console.error('Failed to save numeric entry settings:', error);
+            setNumericFields(lastSavedNumericFieldsRef.current);
+            setSectionsError('Numeric input settings could not be saved.');
+        } finally {
+            setSectionsSaving(false);
+        }
+    }
+
     async function handleAddEntrySection() {
         const name = sanitizeEntrySectionName(newSectionName);
         if (!name || entrySections.length >= MAX_CUSTOM_ENTRY_SECTIONS) return;
@@ -143,6 +190,23 @@ export default function SettingsView() {
         setNewSectionName('');
         setNewSectionHasCustomTitle(false);
         await persistEntrySections(nextSections);
+    }
+
+    async function handleAddNumericField() {
+        const name = sanitizeEntrySectionName(newNumericFieldName);
+        if (!name || numericFields.length >= MAX_NUMERIC_ENTRY_FIELDS) return;
+
+        const nextFields = [
+            ...numericFields,
+            {
+                id: createNumericEntryFieldId(),
+                name,
+                createdAt: new Date().toISOString()
+            }
+        ];
+
+        setNewNumericFieldName('');
+        await persistNumericFields(nextFields);
     }
 
     function handleSectionNameChange(sectionId, name) {
@@ -163,6 +227,27 @@ export default function SettingsView() {
 
         await persistEntrySections(entrySections.map((item) => (
             item.id === sectionId ? { ...item, name } : item
+        )));
+    }
+
+    function handleNumericFieldNameChange(fieldId, name) {
+        setNumericFields((currentFields) => currentFields.map((field) => (
+            field.id === fieldId ? { ...field, name } : field
+        )));
+    }
+
+    async function handleNumericFieldNameCommit(fieldId) {
+        const field = numericFields.find((item) => item.id === fieldId);
+        if (!field) return;
+
+        const name = sanitizeEntrySectionName(field.name);
+        if (!name) {
+            setNumericFields(lastSavedNumericFieldsRef.current);
+            return;
+        }
+
+        await persistNumericFields(numericFields.map((item) => (
+            item.id === fieldId ? { ...item, name } : item
         )));
     }
 
@@ -223,7 +308,11 @@ export default function SettingsView() {
                 ref: entryDoc.ref,
                 payload: {
                     [`subEntries.${section.id}`]: nextSubEntry,
-                    textSize: new Blob([data.content || '', subEntriesToPlainText(nextSubEntries)]).size,
+                    textSize: new Blob([
+                        data.content || '',
+                        subEntriesToPlainText(nextSubEntries),
+                        numericEntriesToPlainText(data.numericEntries, numericFields)
+                    ]).size,
                     updatedAt: serverTimestamp()
                 }
             });
@@ -317,10 +406,18 @@ export default function SettingsView() {
 
             if (mode === 'merge') {
                 payload.content = appendSubEntryToMainContent(data.content || '', section, targetSubEntry);
-                payload.textSize = new Blob([payload.content, subEntriesToPlainText(remainingSubEntries)]).size;
+                payload.textSize = new Blob([
+                    payload.content,
+                    subEntriesToPlainText(remainingSubEntries),
+                    numericEntriesToPlainText(data.numericEntries, numericFields)
+                ]).size;
                 mergedEntries += 1;
             } else {
-                payload.textSize = new Blob([data.content || '', subEntriesToPlainText(remainingSubEntries)]).size;
+                payload.textSize = new Blob([
+                    data.content || '',
+                    subEntriesToPlainText(remainingSubEntries),
+                    numericEntriesToPlainText(data.numericEntries, numericFields)
+                ]).size;
             }
 
             updates.push({ ref: entryDoc.ref, payload });
@@ -375,6 +472,72 @@ export default function SettingsView() {
             setTrueDeleteConfirmOpen(true);
         } else {
             executeDeleteEntrySection('merge');
+        }
+    }
+
+    async function removeNumericFieldFromEntries(field) {
+        if (!currentUser) return { changedEntries: 0, mergedEntries: 0 };
+
+        const entriesRef = collection(db, 'users', currentUser.uid, 'entries');
+        const entriesSnapshot = await getDocs(entriesRef);
+        const remainingFields = numericFields.filter((item) => item.id !== field.id);
+        const updates = [];
+        let mergedEntries = 0;
+
+        entriesSnapshot.forEach((entryDoc) => {
+            const data = entryDoc.data();
+            const numericEntries = data.numericEntries;
+            const hasField = numericEntries && Object.prototype.hasOwnProperty.call(numericEntries, field.id);
+
+            if (!hasField) return;
+
+            const remainingNumericEntries = { ...numericEntries };
+            delete remainingNumericEntries[field.id];
+
+            const nextContent = appendNumericEntryToMainContent(data.content || '', field, numericEntries[field.id]);
+
+            updates.push({
+                ref: entryDoc.ref,
+                payload: {
+                    content: nextContent,
+                    [`numericEntries.${field.id}`]: deleteField(),
+                    textSize: new Blob([
+                        nextContent,
+                        subEntriesToPlainText(data.subEntries),
+                        numericEntriesToPlainText(remainingNumericEntries, remainingFields)
+                    ]).size,
+                    updatedAt: serverTimestamp()
+                }
+            });
+            mergedEntries += 1;
+        });
+
+        await commitEntryUpdates(updates);
+
+        return {
+            changedEntries: updates.length,
+            mergedEntries
+        };
+    }
+
+    async function confirmRemoveNumericField() {
+        if (!numericDeleteCandidate) return;
+
+        const field = numericDeleteCandidate;
+        setNumericDeleteProcessing(true);
+        setSectionsError('');
+        setSectionsNotice('');
+
+        try {
+            const result = await removeNumericFieldFromEntries(field);
+            await persistNumericFields(numericFields.filter((item) => item.id !== field.id));
+            setSectionsNotice(`${field.name} removed. Merged ${result.mergedEntries} saved numeric value${result.mergedEntries === 1 ? '' : 's'} into main entries.`);
+            setNumericDeleteCandidate(null);
+        } catch (error) {
+            console.error('Failed to remove numeric field:', error);
+            setSectionsError('This numeric input could not be removed. No settings were changed.');
+        } finally {
+            setNumericDeleteProcessing(false);
         }
     }
 
@@ -546,7 +709,7 @@ export default function SettingsView() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <h3 className="text-base font-bold text-white">Entry management</h3>
-                            <p className="mt-1 text-sm text-text-muted">Add up to {MAX_CUSTOM_ENTRY_SECTIONS} extra writing sections.</p>
+                            <p className="mt-1 text-sm text-text-muted">Add extra writing sections and numerical trackers.</p>
                         </div>
                         {sectionsSaving && (
                             <span className="text-xs font-bold uppercase tracking-widest text-primary">Saving...</span>
@@ -671,6 +834,89 @@ export default function SettingsView() {
                             <span className="absolute left-1 top-1 h-4 w-4 rounded-full bg-text-muted transition-transform peer-checked:translate-x-5 peer-checked:bg-white" />
                         </span>
                     </label>
+
+                    <div className="mt-6 border-t border-white/10 pt-5">
+                        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                            <div className="min-w-0">
+                                <h4 className="font-bold text-white">Numerical inputs</h4>
+                                <p className="mt-1 text-sm text-text-muted">
+                                    Add up to {MAX_NUMERIC_ENTRY_FIELDS} number-only fields for daily counts or measurements.
+                                </p>
+                            </div>
+                            <span className="text-xs font-bold uppercase tracking-widest text-text-muted">
+                                {numericFields.length}/{MAX_NUMERIC_ENTRY_FIELDS}
+                            </span>
+                        </div>
+
+                        {numericFields.length > 0 && (
+                            <div className="mb-4 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10 bg-white/5">
+                                {numericFields.map((field) => (
+                                    <div
+                                        key={field.id}
+                                        className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center"
+                                    >
+                                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                                <Hash className="h-4 w-4" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <label className="sr-only" htmlFor={`numeric-field-${field.id}`}>
+                                                    Numeric input name
+                                                </label>
+                                                <input
+                                                    id={`numeric-field-${field.id}`}
+                                                    value={field.name}
+                                                    onChange={(event) => handleNumericFieldNameChange(field.id, event.target.value)}
+                                                    onBlur={() => handleNumericFieldNameCommit(field.id)}
+                                                    onKeyDown={(event) => {
+                                                        if (event.key === 'Enter') event.currentTarget.blur();
+                                                    }}
+                                                    maxLength={ENTRY_SECTION_NAME_MAX_LENGTH}
+                                                    className="w-full min-w-0 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-white outline-none transition-colors focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setNumericDeleteCandidate(field)}
+                                            className="flex h-10 w-full items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-300 transition-colors hover:bg-red-500/20 sm:w-10"
+                                            title="Remove numeric input"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                            <div className="min-w-0">
+                                <label className="text-xs font-bold uppercase tracking-widest text-text-muted">
+                                    New numerical input
+                                </label>
+                                <input
+                                    value={newNumericFieldName}
+                                    onChange={(event) => setNewNumericFieldName(event.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') handleAddNumericField();
+                                    }}
+                                    maxLength={ENTRY_SECTION_NAME_MAX_LENGTH}
+                                    placeholder="Miles run"
+                                    className="mt-2 w-full min-w-0 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleAddNumericField}
+                                disabled={!sanitizeEntrySectionName(newNumericFieldName) || numericFields.length >= MAX_NUMERIC_ENTRY_FIELDS || sectionsSaving}
+                                className="flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-variant disabled:cursor-not-allowed disabled:opacity-45"
+                            >
+                                <Plus className="h-4 w-4" />
+                                Add
+                            </button>
+                        </div>
+                    </div>
 
                     {sectionsError && (
                         <p className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
@@ -840,6 +1086,66 @@ export default function SettingsView() {
             cancelText="Keep data"
             isDangerous={true}
         />
+
+        {numericDeleteCandidate && (
+            <div className="fixed inset-0 z-[55] flex items-center justify-center p-3 sm:p-4">
+                <div
+                    className="absolute inset-0 bg-black/70 backdrop-blur-sm animation-fade-in"
+                    onClick={() => {
+                        if (!numericDeleteProcessing) setNumericDeleteCandidate(null);
+                    }}
+                />
+
+                <div className="relative w-full max-w-md overflow-hidden rounded-xl border border-white/10 bg-[#18181b] shadow-2xl animation-scale-in">
+                    <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-4">
+                        <div className="min-w-0">
+                            <h3 className="flex items-center gap-2 text-lg font-bold text-white">
+                                <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
+                                Remove numerical input
+                            </h3>
+                            <p className="mt-1 truncate text-sm text-text-muted">{numericDeleteCandidate.name}</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setNumericDeleteCandidate(null)}
+                            disabled={numericDeleteProcessing}
+                            className="rounded-lg p-2 text-text-muted transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    </div>
+
+                    <div className="space-y-4 p-4 sm:p-5">
+                        <div className="rounded-lg border border-primary/20 bg-primary/10 p-3 text-sm text-text-secondary">
+                            <p className="font-bold text-white">Saved values will be kept.</p>
+                            <p className="mt-1 leading-relaxed">
+                                Removing this input will merge each saved “{numericDeleteCandidate.name}” value into that day’s main entry, then remove the numeric field.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col-reverse gap-3 border-t border-white/10 bg-black/20 p-4 sm:flex-row sm:justify-end">
+                        <button
+                            type="button"
+                            onClick={() => setNumericDeleteCandidate(null)}
+                            disabled={numericDeleteProcessing}
+                            className="rounded-lg px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/10 disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={confirmRemoveNumericField}
+                            disabled={numericDeleteProcessing}
+                            className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-variant disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {numericDeleteProcessing && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Remove and Merge Values
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         {customTitleCandidate && (
             <div className="fixed inset-0 z-[55] flex items-center justify-center p-3 sm:p-4">

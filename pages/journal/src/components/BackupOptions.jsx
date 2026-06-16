@@ -9,12 +9,13 @@ import { Download, X, FileText, Calendar, Layers, Archive, AlertCircle, CheckCir
 import { format } from 'date-fns';
 
 import { useBackup } from '../context/BackupContext';
-import { ENTRY_SECTIONS_SETTINGS_DOC, normalizeEntrySections } from '../utils/entrySections';
+import { ENTRY_SECTIONS_SETTINGS_DOC, normalizeEntrySections, normalizeNumericEntryFields } from '../utils/entrySections';
 
 export default function BackupOptions({ showTrigger = true }) {
     const { currentUser } = useAuth();
     const { isBackupOpen: isOpen, closeBackup, backupMessage, openBackup } = useBackup();
     const [entrySections, setEntrySections] = useState([]);
+    const [numericFields, setNumericFields] = useState([]);
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState(null); // { type: 'success' | 'error', message: string }
 
@@ -34,7 +35,9 @@ export default function BackupOptions({ showTrigger = true }) {
 
         const settingsRef = doc(db, 'users', currentUser.uid, 'settings', ENTRY_SECTIONS_SETTINGS_DOC);
         const unsubscribe = onSnapshot(settingsRef, (snapshot) => {
-            setEntrySections(normalizeEntrySections(snapshot.data()?.sections));
+            const data = snapshot.data() || {};
+            setEntrySections(normalizeEntrySections(data.sections));
+            setNumericFields(normalizeNumericEntryFields(data.numericFields));
         }, (error) => {
             console.error('Failed to load entry section settings for backup:', error);
         });
@@ -48,6 +51,13 @@ export default function BackupOptions({ showTrigger = true }) {
             return result;
         }, {});
     }, [entrySections]);
+
+    const numericFieldNameById = useMemo(() => {
+        return numericFields.reduce((result, field) => {
+            result[field.id] = field.name;
+            return result;
+        }, {});
+    }, [numericFields]);
 
     const handleBackup = async () => {
         if (!currentUser) return;
@@ -158,13 +168,14 @@ export default function BackupOptions({ showTrigger = true }) {
         const body = entry.content || '';
         const date = entry.id;
         const subEntryText = formatSubEntries(entry.subEntries, fmt);
+        const numericEntryText = formatNumericEntries(entry.numericEntries, fmt);
 
         if (fmt === 'json') {
             return JSON.stringify({ ...entry, title: cleanTitle(entry.title) }, null, 2);
         } else if (fmt === 'md') {
-            return `---\ndate: ${date}\ntitle: ${title}\n---\n\n${body}${subEntryText}`;
+            return `---\ndate: ${date}\ntitle: ${title}\n---\n\n${body}${subEntryText}${numericEntryText}`;
         } else { // txt
-            return `Date: ${date}\nTitle: ${title}\n\n${body}${subEntryText}`;
+            return `Date: ${date}\nTitle: ${title}\n\n${body}${subEntryText}${numericEntryText}`;
         }
     };
 
@@ -186,6 +197,28 @@ export default function BackupOptions({ showTrigger = true }) {
             .filter(Boolean);
 
         return sections.join('');
+    };
+
+    const formatNumericEntries = (numericEntries, fmt) => {
+        if (!numericEntries || typeof numericEntries !== 'object') return '';
+
+        const fields = Object.entries(numericEntries)
+            .map(([fieldId, value]) => {
+                const numericValue = typeof value === 'number' ? value : Number(value);
+                if (!Number.isFinite(numericValue)) return null;
+
+                const fieldName = numericFieldNameById[fieldId] || fieldId;
+                return { fieldName, value: numericValue };
+            })
+            .filter(Boolean);
+
+        if (fields.length === 0) return '';
+
+        if (fmt === 'md') {
+            return `\n\n## Numerical Inputs\n\n${fields.map((field) => `- ${field.fieldName}: ${field.value}`).join('\n')}`;
+        }
+
+        return `\n\nNumerical Inputs\n----------------\n${fields.map((field) => `${field.fieldName}: ${field.value}`).join('\n')}`;
     };
 
     const formatGroupedContent = (entries, fmt) => {
