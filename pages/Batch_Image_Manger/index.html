@@ -636,6 +636,7 @@
                 <canvas id="crop-canvas"></canvas>
                 <div id="crop-overlay-instructions" class="crop-instructions">Drag to select area</div>
             </div>
+            <button type="button" id="crop-undo-btn" class="crop-undo-btn hidden">← Back & Redo</button>
 
             <div class="crop-controls">
                 <div class="inline-controls" style="margin-top: 1rem; justify-content: space-between; width: 100%;">
@@ -761,6 +762,7 @@
                     <option value="image/jpeg">JPEG</option>
                 </select>
                 <button id="colour-match-download-btn" class="popup-generate-btn" disabled>Download Corrected Image</button>
+                <button id="colour-match-send-btn" class="secondary-btn" disabled>Send to Image Manager</button>
             </div>
             <p id="colour-match-status" class="status-message"></p>
         </div>

@@ -173,6 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cropProgressText = document.getElementById('crop-progress-text');
     const cropAspectRatioSelect = document.getElementById('crop-aspect-ratio');
     const cropBackBtn = document.getElementById('crop-back-btn');
+    const cropUndoBtn = document.getElementById('crop-undo-btn');
     const cropSkipBtn = document.getElementById('crop-skip-btn');
     const cropFinishBtn = document.getElementById('crop-finish-btn');
     const cropInterfaceContainer = document.getElementById('crop-interface-container');
@@ -211,6 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const colourMatchResetBtn = document.getElementById('colour-match-reset-btn');
     const colourMatchFormatSelect = document.getElementById('colour-match-format-select');
     const colourMatchDownloadBtn = document.getElementById('colour-match-download-btn');
+    const colourMatchSendBtn = document.getElementById('colour-match-send-btn');
     const colourMatchStatus = document.getElementById('colour-match-status');
     const colourMatchProgress = document.getElementById('colour-match-progress');
     const colourMatchProgressStatus = document.getElementById('colour-match-progress-status');
@@ -252,6 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeCropImage = null; // HTMLImageElement
     let cropDisplayScale = 1; // Scale factor from actual pixels to canvas pixels
     let cropOffset = { x: 0, y: 0 }; // Offset of image on canvas if centered
+    let cropAppliedOnLast = false;
 
     let colourReferenceImage = null;
     let colourTargetImage = null;
@@ -361,8 +364,9 @@ document.addEventListener('DOMContentLoaded', () => {
     closeCropPopupBtn.addEventListener('click', closeCropModal);
     cropPopup.addEventListener('click', (e) => { if (e.target === cropPopup) closeCropModal(); });
     cropBackBtn.addEventListener('click', navigateCropPrev);
+    cropUndoBtn.addEventListener('click', undoCropOnCurrent);
     cropSkipBtn.addEventListener('click', navigateCropNext);
-    cropFinishBtn.addEventListener('click', closeCropModal);
+    cropFinishBtn.addEventListener('click', handleCropFinish);
 
     // Match Overall Colour Listeners
     openColourMatchModalBtn.addEventListener('click', openColourMatchModal);
@@ -383,6 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
     colourMatchResetBtn.addEventListener('click', resetColourMatchControls);
     colourMatchDownloadBtn.addEventListener('click', handleColourMatchDownload);
+    colourMatchSendBtn.addEventListener('click', handleColourMatchSendToManager);
 
     // Save Preview Listeners
     closeSavePreviewBtn.addEventListener('click', () => savePreviewPopup.classList.add('hidden'));
@@ -1793,6 +1798,7 @@ document.addEventListener('DOMContentLoaded', () => {
             drawImageToPreviewCanvas(colourTargetCanvas, colourTargetImage);
             drawImageToPreviewCanvas(colourBeforeCanvas, colourTargetImage);
             colourMatchDownloadBtn.disabled = true;
+            colourMatchSendBtn.disabled = true;
             scheduleColourMatchPreview();
         } catch (error) {
             showStatus(colourMatchStatus, `Could not load target image: ${error.message}`, true);
@@ -1860,6 +1866,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const token = ++colourMatchRunToken;
         colourMatchDownloadBtn.disabled = true;
+        colourMatchSendBtn.disabled = true;
         setColourMatchProgress(5, 'Analysing colour...');
         showStatus(colourMatchStatus, 'Analysing reference and target colour...', false);
 
@@ -1891,6 +1898,7 @@ document.addEventListener('DOMContentLoaded', () => {
             syncColourComparisonCanvasSize();
             updateColourComparisonSlider();
             colourMatchDownloadBtn.disabled = false;
+            colourMatchSendBtn.disabled = false;
             setColourMatchProgress(100, 'Preview ready');
             showStatus(colourMatchStatus, 'Corrected preview ready. Download preserves the target image resolution.', false);
             setTimeout(() => colourMatchProgress.classList.add('hidden'), 600);
@@ -1901,50 +1909,113 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function getColourMatchedExportBlob(token, onProgress) {
+        if (!colourReferenceImage || !colourTargetImage || !colourTargetFile) return null;
+
+        if (!colourTransferStats) {
+            colourTransferStats = buildLabHistogramMaps(colourReferenceImage, colourTargetImage, 520);
+        }
+
+        const exportCanvas = document.createElement('canvas');
+        const completed = await processColourMatchedImage(
+            colourTargetImage,
+            exportCanvas,
+            colourTargetImage.width,
+            colourTargetImage.height,
+            colourTransferStats,
+            getColourMatchControls(),
+            token,
+            onProgress
+        );
+
+        if (!completed || token !== colourMatchRunToken) return null;
+
+        const format = colourMatchFormatSelect.value;
+        const quality = format === 'image/jpeg' ? 0.95 : undefined;
+        const blob = await new Promise(resolve => exportCanvas.toBlob(resolve, format, quality));
+        if (!blob) throw new Error('Could not generate corrected image.');
+
+        const baseName = colourTargetFile.name.replace(/\.[^/.]+$/, '') || 'corrected_target';
+        const ext = getFileExtension(format);
+
+        return {
+            blob,
+            format,
+            fileName: `${baseName}_colour_matched${ext}`
+        };
+    }
+
+    function setColourMatchActionButtonsDisabled(disabled) {
+        colourMatchDownloadBtn.disabled = disabled;
+        colourMatchSendBtn.disabled = disabled;
+    }
+
     async function handleColourMatchDownload() {
         if (!colourReferenceImage || !colourTargetImage || !colourTargetFile) return;
 
         const token = ++colourMatchRunToken;
-        colourMatchDownloadBtn.disabled = true;
+        setColourMatchActionButtonsDisabled(true);
         colourMatchDownloadBtn.textContent = 'Processing...';
         setColourMatchProgress(5, 'Processing full resolution...');
         showStatus(colourMatchStatus, 'Processing full-resolution target image...', false);
 
         try {
-            if (!colourTransferStats) {
-                colourTransferStats = buildLabHistogramMaps(colourReferenceImage, colourTargetImage, 520);
-            }
-
-            const exportCanvas = document.createElement('canvas');
-            const completed = await processColourMatchedImage(
-                colourTargetImage,
-                exportCanvas,
-                colourTargetImage.width,
-                colourTargetImage.height,
-                colourTransferStats,
-                getColourMatchControls(),
+            const exportResult = await getColourMatchedExportBlob(
                 token,
                 (percent) => setColourMatchProgress(percent, 'Processing full resolution...')
             );
+            if (!exportResult) return;
 
-            if (!completed || token !== colourMatchRunToken) return;
-
-            const format = colourMatchFormatSelect.value;
-            const ext = getFileExtension(format);
-            const quality = format === 'image/jpeg' ? 0.95 : undefined;
-            const blob = await new Promise(resolve => exportCanvas.toBlob(resolve, format, quality));
-            if (!blob) throw new Error('Could not generate corrected image.');
-
-            const baseName = (colourTargetFile.name.replace(/\.[^/.]+$/, '') || 'corrected_target');
-            await safeDownload(blob, `${baseName}_colour_matched${ext}`);
+            await safeDownload(exportResult.blob, exportResult.fileName);
             setColourMatchProgress(100, 'Download ready');
             showStatus(colourMatchStatus, 'Download started.', false);
         } catch (error) {
             console.error('Colour match download error:', error);
             showStatus(colourMatchStatus, `Error: ${error.message}`, true);
         } finally {
-            colourMatchDownloadBtn.disabled = false;
             colourMatchDownloadBtn.textContent = 'Download Corrected Image';
+            setColourMatchActionButtonsDisabled(false);
+            setTimeout(() => colourMatchProgress.classList.add('hidden'), 800);
+        }
+    }
+
+    async function handleColourMatchSendToManager() {
+        if (!colourReferenceImage || !colourTargetImage || !colourTargetFile) return;
+
+        const token = ++colourMatchRunToken;
+        setColourMatchActionButtonsDisabled(true);
+        colourMatchSendBtn.textContent = 'Adding...';
+        setColourMatchProgress(5, 'Preparing image for manager...');
+        showStatus(colourMatchStatus, 'Adding corrected image to the batch manager...', false);
+
+        try {
+            const exportResult = await getColourMatchedExportBlob(
+                token,
+                (percent) => setColourMatchProgress(percent, 'Preparing image for manager...')
+            );
+            if (!exportResult) return;
+
+            const file = new File([exportResult.blob], exportResult.fileName, { type: exportResult.format });
+            imageFiles.push(file);
+            originalImageFiles.push(file);
+            imageTitles.push(formatTitle(exportResult.fileName));
+            imageFolders.push("(Root)");
+
+            currentIndex = imageFiles.length - 1;
+            setupEditor();
+            updateUIForCurrentIndex();
+
+            setColourMatchProgress(100, 'Added to manager');
+            showStatus(colourMatchStatus, `Added "${exportResult.fileName}" to the image manager.`, false);
+            showStatus(uploadStatus, `Added "${exportResult.fileName}" from colour match.`, false);
+            closeColourMatchModal();
+            editorSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (error) {
+            console.error('Colour match send error:', error);
+            showStatus(colourMatchStatus, `Error: ${error.message}`, true);
+        } finally {
+            colourMatchSendBtn.textContent = 'Send to Image Manager';
+            setColourMatchActionButtonsDisabled(false);
             setTimeout(() => colourMatchProgress.classList.add('hidden'), 800);
         }
     }
@@ -2341,6 +2412,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         isCropMode = true;
         cropIndex = currentIndex; // Start from current image
+        cropAppliedOnLast = false;
         document.body.classList.add('popup-open');
         cropPopup.classList.remove('hidden');
         await loadCropImage(cropIndex);
@@ -2354,14 +2426,48 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadCropImage(index) {
+        const isLast = index === imageFiles.length - 1;
         cropProgressText.textContent = `Image ${index + 1} of ${imageFiles.length}`;
+        if (isLast && cropAppliedOnLast) {
+            cropProgressText.textContent += ' — click Confirm & Finish when ready';
+        }
         try {
-            activeCropImage = await loadImage(originalImageFiles[index]);
+            const sourceFile = (isLast && cropAppliedOnLast) ? imageFiles[index] : originalImageFiles[index];
+            activeCropImage = await loadImage(sourceFile);
             resizeCropCanvas();
             renderCropUI();
+            updateCropNavigationUI();
         } catch (err) {
             console.error(err);
         }
+    }
+
+    function updateCropNavigationUI() {
+        const isSingleImage = imageFiles.length === 1;
+        const isLast = cropIndex === imageFiles.length - 1;
+        cropBackBtn.classList.toggle('hidden', isSingleImage);
+        cropUndoBtn.classList.toggle('hidden', !(isSingleImage && cropAppliedOnLast));
+        cropSkipBtn.textContent = isLast ? 'Skip & Finish' : 'Skip Current →';
+        if (isLast && cropAppliedOnLast) {
+            cropFinishBtn.textContent = 'Confirm & Finish';
+        } else if (isLast) {
+            cropFinishBtn.textContent = 'Finish Without Crop';
+        } else {
+            cropFinishBtn.textContent = 'Done';
+        }
+    }
+
+    function undoCropOnCurrent() {
+        imageFiles[cropIndex] = originalImageFiles[cropIndex];
+        cropAppliedOnLast = false;
+        cropStart = { x: 0, y: 0 };
+        cropEnd = { x: 0, y: 0 };
+        loadCropImage(cropIndex);
+    }
+
+    function handleCropFinish() {
+        closeCropModal();
+        showStatus(exportStatus, 'Batch cropping complete!', false);
     }
 
     function resizeCropCanvas() {
@@ -2493,7 +2599,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Min size threshold to prevent accidental clicks
         if (w > 10 && h > 10) {
             await applyCrop(cropIndex);
-            navigateCropNext();
+            if (cropIndex < imageFiles.length - 1) {
+                navigateCropNext();
+            } else {
+                cropAppliedOnLast = true;
+                await loadCropImage(cropIndex);
+            }
         } else {
             // Reset selection on accidental click
             cropStart = { x: 0, y: 0 };
@@ -2533,9 +2644,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function navigateCropNext() {
         if (cropIndex < imageFiles.length - 1) {
             cropIndex++;
+            cropAppliedOnLast = false;
             loadCropImage(cropIndex);
         } else {
-            // End of batch
             closeCropModal();
             showStatus(exportStatus, "Batch cropping complete!", false);
         }
