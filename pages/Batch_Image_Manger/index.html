@@ -80,6 +80,9 @@
                     <input type="file" id="csv-upload" accept=".csv" style="display:none;" />
                 </div>
             </div>
+            <div class="upload-tools">
+                <button type="button" id="open-colour-match-modal-btn" class="secondary-btn upload-tool-btn">Match Colour</button>
+            </div>
             <p class="privacy-notice">
                 🔒 All processing is done locally on your device. Your photos are completely private and never uploaded
                 to any server.
@@ -154,8 +157,6 @@
                             </div>
                         </div>
                     </div>
-
-                    <div class="control-group-divider"></div>
 
                     <div class="control-group-sub" style="flex-direction: column; width: 100%;">
                         <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; justify-content: center; width: 100%;">
@@ -259,6 +260,77 @@
                     </div>
                     <p id="image-counter" class="status-message" style="margin-top: 0.5rem;"></p>
                     <canvas id="preview-canvas"></canvas>
+                    <div class="control-group-sub image-adjustments-panel">
+                        <div class="panel-heading">
+                            <span>Image Edits</span>
+                            <button type="button" id="reset-adjustments-btn" class="mini-btn">Reset All</button>
+                        </div>
+                        <div class="adjustment-controls">
+                            <div class="control-group adjustment-control">
+                                <div class="slider-label-row">
+                                    <label for="exposure-slider">Exposure: <span id="exposure-value">0</span></label>
+                                    <button type="button" class="mini-btn slider-reset-btn" data-reset-slider="exposure-slider" data-reset-value="0">Reset</button>
+                                </div>
+                                <input type="range" id="exposure-slider" min="-100" max="100" value="0" step="1" />
+                            </div>
+                            <div class="control-group adjustment-control">
+                                <div class="slider-label-row">
+                                    <label for="brightness-slider">Brightness: <span id="brightness-value">100</span>%</label>
+                                    <button type="button" class="mini-btn slider-reset-btn" data-reset-slider="brightness-slider" data-reset-value="100">Reset</button>
+                                </div>
+                                <input type="range" id="brightness-slider" min="0" max="200" value="100" step="1" />
+                            </div>
+                            <div class="control-group adjustment-control">
+                                <div class="slider-label-row">
+                                    <label for="contrast-slider">Contrast: <span id="contrast-value">100</span>%</label>
+                                    <button type="button" class="mini-btn slider-reset-btn" data-reset-slider="contrast-slider" data-reset-value="100">Reset</button>
+                                </div>
+                                <input type="range" id="contrast-slider" min="0" max="200" value="100" step="1" />
+                            </div>
+                            <div class="control-group adjustment-control">
+                                <div class="slider-label-row">
+                                    <label for="saturation-slider">Saturation: <span id="saturation-value">100</span>%</label>
+                                    <button type="button" class="mini-btn slider-reset-btn" data-reset-slider="saturation-slider" data-reset-value="100">Reset</button>
+                                </div>
+                                <input type="range" id="saturation-slider" min="0" max="250" value="100" step="1" />
+                            </div>
+                            <div class="control-group adjustment-control">
+                                <div class="slider-label-row">
+                                    <label for="hue-slider">Hue: <span id="hue-value">0</span>deg</label>
+                                    <button type="button" class="mini-btn slider-reset-btn" data-reset-slider="hue-slider" data-reset-value="0">Reset</button>
+                                </div>
+                                <input type="range" id="hue-slider" min="-180" max="180" value="0" step="1" />
+                            </div>
+                            <div class="control-group adjustment-control">
+                                <div class="slider-label-row">
+                                    <label for="warmth-slider">Warmth: <span id="warmth-value">0</span></label>
+                                    <button type="button" class="mini-btn slider-reset-btn" data-reset-slider="warmth-slider" data-reset-value="0">Reset</button>
+                                </div>
+                                <input type="range" id="warmth-slider" min="-100" max="100" value="0" step="1" />
+                            </div>
+                            <div class="control-group adjustment-control">
+                                <div class="slider-label-row">
+                                    <label for="grayscale-slider">Grayscale: <span id="grayscale-value">0</span>%</label>
+                                    <button type="button" class="mini-btn slider-reset-btn" data-reset-slider="grayscale-slider" data-reset-value="0">Reset</button>
+                                </div>
+                                <input type="range" id="grayscale-slider" min="0" max="100" value="0" step="1" />
+                            </div>
+                            <div class="control-group adjustment-control">
+                                <div class="slider-label-row">
+                                    <label for="sepia-slider">Sepia: <span id="sepia-value">0</span>%</label>
+                                    <button type="button" class="mini-btn slider-reset-btn" data-reset-slider="sepia-slider" data-reset-value="0">Reset</button>
+                                </div>
+                                <input type="range" id="sepia-slider" min="0" max="100" value="0" step="1" />
+                            </div>
+                            <div class="control-group adjustment-control">
+                                <div class="slider-label-row">
+                                    <label for="blur-slider">Blur: <span id="blur-value">0</span>px</label>
+                                    <button type="button" class="mini-btn slider-reset-btn" data-reset-slider="blur-slider" data-reset-value="0">Reset</button>
+                                </div>
+                                <input type="range" id="blur-slider" min="0" max="10" value="0" step="0.1" />
+                            </div>
+                        </div>
+                    </div>
                     <div class="preview-actions" style="display:flex; justify-content:center; margin-top: 1rem; gap: 1rem;">
                         <button id="download-current-btn" class="secondary-btn">Download This Image</button>
                     </div>
@@ -586,6 +658,111 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Match Overall Colour Popup -->
+    <div id="colour-match-popup" class="popup-overlay hidden">
+        <div class="popup-card glass-card colour-match-card">
+            <button class="popup-close-btn">&times;</button>
+            <h3>Match Overall Colour</h3>
+            <p class="colour-match-help">
+                Upload the image whose colours you want to copy as the reference, then upload the image you want to correct as the target. The tool will adjust the target to match the reference.
+            </p>
+
+            <div class="colour-match-upload-grid">
+                <label class="colour-upload-panel" for="colour-reference-upload">
+                    <span class="colour-upload-title">Reference</span>
+                    <span id="colour-reference-name" class="colour-upload-filename">Upload reference image</span>
+                    <input type="file" id="colour-reference-upload" accept="image/*" hidden>
+                </label>
+                <label class="colour-upload-panel" for="colour-target-upload">
+                    <span class="colour-upload-title">Target</span>
+                    <span id="colour-target-name" class="colour-upload-filename">Upload target image</span>
+                    <input type="file" id="colour-target-upload" accept="image/*" hidden>
+                </label>
+            </div>
+
+            <div class="colour-match-preview-grid">
+                <div class="colour-preview-panel">
+                    <h4>Reference</h4>
+                    <canvas id="colour-reference-canvas"></canvas>
+                </div>
+                <div class="colour-preview-panel">
+                    <h4>Target</h4>
+                    <canvas id="colour-target-canvas"></canvas>
+                </div>
+                <div class="colour-preview-panel">
+                    <h4>Corrected Output</h4>
+                    <canvas id="colour-output-canvas"></canvas>
+                </div>
+            </div>
+
+            <div class="colour-comparison-section">
+                <div class="slider-label-row">
+                    <h4>Reference / Corrected Target</h4>
+                    <span id="colour-comparison-value">50% reference</span>
+                </div>
+                <div id="colour-comparison-frame" class="colour-comparison-frame">
+                    <canvas id="colour-before-canvas"></canvas>
+                    <div id="colour-after-layer" class="colour-after-layer">
+                        <canvas id="colour-after-canvas"></canvas>
+                    </div>
+                </div>
+                <input type="range" id="colour-comparison-slider" min="0" max="100" value="50" step="1" />
+            </div>
+
+            <div class="colour-match-controls">
+                <div class="control-group adjustment-control">
+                    <label for="colour-strength-slider">Match Strength: <span id="colour-strength-value">80</span>%</label>
+                    <input type="range" id="colour-strength-slider" min="0" max="100" value="80" step="1" />
+                </div>
+                <div class="control-group adjustment-control">
+                    <label for="colour-brightness-slider">Brightness: <span id="colour-brightness-value">0</span></label>
+                    <input type="range" id="colour-brightness-slider" min="-100" max="100" value="0" step="1" />
+                </div>
+                <div class="control-group adjustment-control">
+                    <label for="colour-contrast-slider">Contrast: <span id="colour-contrast-value">0</span></label>
+                    <input type="range" id="colour-contrast-slider" min="-100" max="100" value="0" step="1" />
+                </div>
+                <div class="control-group adjustment-control">
+                    <label for="colour-saturation-slider">Saturation: <span id="colour-saturation-value">0</span></label>
+                    <input type="range" id="colour-saturation-slider" min="-100" max="100" value="0" step="1" />
+                </div>
+                <div class="control-group adjustment-control">
+                    <label for="colour-temperature-slider">Temperature: <span id="colour-temperature-value">0</span></label>
+                    <input type="range" id="colour-temperature-slider" min="-100" max="100" value="0" step="1" />
+                </div>
+                <div class="control-group adjustment-control">
+                    <label for="colour-tint-slider">Tint: <span id="colour-tint-value">0</span></label>
+                    <input type="range" id="colour-tint-slider" min="-100" max="100" value="0" step="1" />
+                </div>
+                <div class="control-group adjustment-control">
+                    <label for="colour-gamma-slider">Gamma: <span id="colour-gamma-value">1.00</span></label>
+                    <input type="range" id="colour-gamma-slider" min="0.50" max="2.00" value="1.00" step="0.01" />
+                </div>
+            </div>
+
+            <div id="colour-match-progress" class="hidden" style="width: 100%;">
+                <div
+                    style="display:flex; justify-content:space-between; color:var(--text-secondary); font-size:0.85rem; margin-bottom:0.3rem;">
+                    <span id="colour-match-progress-status">Processing...</span>
+                    <span id="colour-match-progress-percent">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div id="colour-match-progress-bar" class="progress-fill"></div>
+                </div>
+            </div>
+
+            <div class="popup-actions colour-match-actions">
+                <button id="colour-match-reset-btn" class="secondary-btn">Reset Controls</button>
+                <select id="colour-match-format-select" aria-label="Download format">
+                    <option value="image/png" selected>PNG</option>
+                    <option value="image/jpeg">JPEG</option>
+                </select>
+                <button id="colour-match-download-btn" class="popup-generate-btn" disabled>Download Corrected Image</button>
+            </div>
+            <p id="colour-match-status" class="status-message"></p>
         </div>
     </div>
 
