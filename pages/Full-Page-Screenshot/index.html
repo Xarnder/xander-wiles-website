@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Full Page Screenshot Pro</title>
+    <meta
+      name="description"
+      content="Capture full-page screenshots, crop, annotate, and download as PNG, JPEG, or PDF. Private, local, and secure."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#top">
+          <img src="icon48.png" alt="" width="32" height="32" />
+          <span>Full Page Screenshot Pro</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="#features">Features</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#privacy">Privacy</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="container hero-inner">
+          <p class="eyebrow">Chrome extension</p>
+          <h1>Capture any full webpage in one click</h1>
+          <p class="lead">
+            Full Page Screenshot Pro scrolls through the page, stitches it together,
+            and opens an editor where you can crop, annotate, and download your
+            screenshot as PNG, JPEG, or PDF.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#how-it-works">See how it works</a>
+            <a class="btn" href="#privacy">Privacy promise</a>
+          </div>
+          <ul class="hero-points">
+            <li>Works on regular websites</li>
+            <li>Built-in crop &amp; drawing tools</li>
+            <li>Nothing leaves your browser</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="features" class="section">
+        <div class="container">
+          <h2>What it does</h2>
+          <p class="section-intro">
+            A focused tool for capturing long pages, reviewing them, and saving a
+            polished image file.
+          </p>
+          <div class="card-grid">
+            <article class="card">
+              <h3>Full-page capture</h3>
+              <p>
+                Automatically scrolls and captures the entire page, then stitches
+                the tiles into one seamless screenshot.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Flexible export</h3>
+              <p>
+                Save as PNG, JPEG, or PDF. Downscale before download to reduce
+                file size when you do not need full resolution.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Editor built in</h3>
+              <p>
+                Crop to the area you need, draw with a pen, add rectangles or
+                squares, erase mistakes, and undo recent edits.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Keyboard shortcut</h3>
+              <p>
+                Press <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd> to open
+                the extension quickly. You can change this in Chrome shortcuts
+                settings.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="section section-muted">
+        <div class="container">
+          <h2>How it works</h2>
+          <ol class="steps">
+            <li>
+              <strong>Choose a format</strong>
+              <span>Click the extension icon and pick PNG, JPEG, or PDF.</span>
+            </li>
+            <li>
+              <strong>Capture the page</strong>
+              <span>
+                The extension scrolls the active tab and captures each visible
+                section. Keep the popup open until capture finishes.
+              </span>
+            </li>
+            <li>
+              <strong>Edit in a new tab</strong>
+              <span>
+                Your screenshot opens in the editor. Crop, annotate, pick a
+                download scale, then save the file.
+              </span>
+            </li>
+          </ol>
+          <p class="note">
+            Very tall pages may be split into multiple parts because of browser
+            canvas limits. Chrome Web Store pages cannot be captured due to
+            Chrome policy.
+          </p>
+        </div>
+      </section>
+
+      <section id="privacy" class="section">
+        <div class="container">
+          <h2>Privacy &amp; security</h2>
+          <p class="section-intro">
+            Full Page Screenshot Pro is designed to process everything on your
+            device. We do not run a backend service for captures.
+          </p>
+          <div class="promise-grid">
+            <article class="promise">
+              <h3>No account required</h3>
+              <p>Install the extension and use it. No sign-up, login, or profile.</p>
+            </article>
+            <article class="promise">
+              <h3>No data collection</h3>
+              <p>
+                We do not collect, store, or sell your browsing history,
+                screenshots, or personal information.
+              </p>
+            </article>
+            <article class="promise">
+              <h3>Local processing</h3>
+              <p>
+                Screenshots are captured, stitched, edited, and downloaded on your
+                computer. They are not uploaded to our servers.
+              </p>
+            </article>
+            <article class="promise">
+              <h3>No third-party analytics</h3>
+              <p>
+                The extension does not include advertising trackers or analytics
+                SDKs.
+              </p>
+            </article>
+            <article class="promise">
+              <h3>Minimal permissions</h3>
+              <p>
+                The extension requests only what it needs: access to the active tab
+                when you start a capture, scripting to scroll the page, downloads
+                to save your file, and offscreen processing to build the image.
+              </p>
+            </article>
+            <article class="promise">
+              <h3>You stay in control</h3>
+              <p>
+                Nothing happens until you click the extension or use the keyboard
+                shortcut. You choose when to capture and when to download.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>
+          <strong>Full Page Screenshot Pro</strong>
+          <span id="year"></span>
+        </p>
+        <p class="footer-note">
+          Questions about privacy? Contact the extension developer through the
+          Chrome Web Store listing support link.
+        </p>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
