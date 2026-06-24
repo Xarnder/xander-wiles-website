@@ -1,0 +1,18 @@
+{
+  "_howTo": "Map idea_id values from Home Design Bullets.csv to image paths. Paths are relative to this folder. idea_id stays the same even if you rename an idea title.",
+  "idea-0012": [
+    "images/exterior/biometric-smart-door-locks-2.webp"
+  ],
+  "idea-0017": [
+    "images/exterior/hand-prints-in-concrete.webp"
+  ],
+  "idea-0046": [
+    "images/layout-floor-plan/secret-rooms-hallways-and-staircases.webp"
+  ],
+  "idea-0062": [
+    "images/every-room/under-floor-heating.webp"
+  ],
+  "idea-0061": [
+    "images/every-room/idea-0061.webp"
+  ]
+}

@@ -1504,6 +1504,14 @@ function createPromptCard(item, searchTerm = '') {
         }
     }
 
+    // Highlight if recently copied (last 12 hours)
+    const twelveHoursMs = 12 * 60 * 60 * 1000;
+    const copiedItems = JSON.parse(localStorage.getItem('recentlyCopiedItems') || '{}');
+    const lastCopied = copiedItems[id];
+    if (lastCopied && (Date.now() - lastCopied < twelveHoursMs)) {
+        card.classList.add('recently-copied');
+    }
+
     // --- Handlers ---
     
     // Expansion Toggle Logic
@@ -1958,6 +1966,18 @@ async function copyToClipboard(text, button) {
         }, 2000);
 
         console.log("✅ Text copied to clipboard");
+
+        // Set recent copy status
+        if (button) {
+            const card = button.closest('.glass-card');
+            if (card && card.dataset.id) {
+                const id = card.dataset.id;
+                const copiedItems = JSON.parse(localStorage.getItem('recentlyCopiedItems') || '{}');
+                copiedItems[id] = Date.now();
+                localStorage.setItem('recentlyCopiedItems', JSON.stringify(copiedItems));
+                card.classList.add('recently-copied');
+            }
+        }
     } catch (err) {
         console.error("❌ Failed to copy: ", err);
 
@@ -1974,6 +1994,18 @@ async function copyToClipboard(text, button) {
                 button.textContent = 'Copy';
                 button.classList.remove('copied');
             }, 2000);
+
+            // Set recent copy status
+            if (button) {
+                const card = button.closest('.glass-card');
+                if (card && card.dataset.id) {
+                    const id = card.dataset.id;
+                    const copiedItems = JSON.parse(localStorage.getItem('recentlyCopiedItems') || '{}');
+                    copiedItems[id] = Date.now();
+                    localStorage.setItem('recentlyCopiedItems', JSON.stringify(copiedItems));
+                    card.classList.add('recently-copied');
+                }
+            }
         } catch (copyErr) {
             console.error("❌ Fallback copy failed", copyErr);
         }

@@ -14,6 +14,7 @@ try {
 const rootDir = __dirname;
 const deployOut = path.join(rootDir, 'deploy_out');
 const journalSrc = path.join(rootDir, 'pages', 'journal');
+const zImageSrc = path.join(rootDir, 'pages', 'z-image-turbo-sveltekit');
 
 // 1. Clean Start
 console.log('Cleaning deploy_out...');
@@ -42,6 +43,12 @@ for (const item of items) {
         filter: (sourcePath) => {
             const rel = path.relative(rootDir, sourcePath);
             if (rel === path.join('pages', 'journal') || rel.startsWith(path.join('pages', 'journal') + path.sep)) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'z-image-turbo-sveltekit') ||
+                rel.startsWith(path.join('pages', 'z-image-turbo-sveltekit') + path.sep)
+            ) {
                 return false;
             }
             if (sourcePath.includes('.env')) return false;
@@ -77,7 +84,32 @@ if (fs.existsSync(journalDist)) {
     process.exit(1);
 }
 
-// 5. Replace Environment Variables in Static Files
+// 5. Build and Inject Z-Image-Turbo SvelteKit app
+console.log('Building Z-Image-Turbo App...');
+try {
+    process.chdir(zImageSrc);
+    execSync('npm install', { stdio: 'inherit' });
+    execSync('npm run build', { stdio: 'inherit' });
+} catch (error) {
+    console.error('Failed to build z-image-turbo-sveltekit:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+
+console.log('Injecting Z-Image-Turbo build...');
+const zImageDest = path.join(deployOut, 'pages', 'z-image-turbo-sveltekit');
+fs.mkdirSync(zImageDest, { recursive: true });
+
+const zImageDist = path.join(zImageSrc, 'dist');
+if (fs.existsSync(zImageDist)) {
+    fs.cpSync(zImageDist, zImageDest, { recursive: true });
+} else {
+    console.error('z-image-turbo-sveltekit dist folder not found!');
+    process.exit(1);
+}
+
+// 6. Replace Environment Variables in Static Files
 console.log('Injecting environment variables into static files...');
 
 function processDirectory(dir) {

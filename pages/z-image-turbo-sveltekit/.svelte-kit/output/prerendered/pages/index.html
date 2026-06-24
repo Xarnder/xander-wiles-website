@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="./_app/immutable/entry/start.lAN_DExI.js" rel="modulepreload">
+		<link href="./_app/immutable/chunks/CKaIBjGQ.js" rel="modulepreload">
+		<link href="./_app/immutable/chunks/DOCO80rQ.js" rel="modulepreload">
+		<link href="./_app/immutable/entry/app.DpqYxms1.js" rel="modulepreload">
+		<link href="./_app/immutable/chunks/70L5jeyE.js" rel="modulepreload">
+		<link href="./_app/immutable/nodes/0.j6a6qSJq.js" rel="modulepreload">
+		<link href="./_app/immutable/nodes/2.cklKKaVP.js" rel="modulepreload">
+		<title>Z-Image-Turbo Local ONNX</title><!-- HEAD_svelte-10pxx32_START --><meta name="description" content="On-device text-to-image generation using local ONNX files, ONNX Runtime Web, and WebGPU."><!-- HEAD_svelte-10pxx32_END -->
+		<link href="./_app/immutable/assets/2.BHsNU1C1.css" rel="stylesheet">
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">   <main class="svelte-77wapf"><h1 class="svelte-77wapf" data-svelte-h="svelte-4xuvbr">Z-Image-Turbo (Local ONNX + WebGPU)</h1> <p class="status svelte-77wapf">Pick your local model folder to begin.</p>  <div class="panel svelte-77wapf"><div class="method-switch svelte-77wapf"><button disabled class="svelte-77wapf active">Local Folder</button> <button disabled class="svelte-77wapf">Auto Download</button></div> <button disabled class="svelte-77wapf">Select Local Model Folder</button> </div>  <div class="panel svelte-77wapf"><label for="prompt" class="svelte-77wapf" data-svelte-h="svelte-tbo1d2">Prompt</label> <input id="prompt" type="text" placeholder="A cinematic robot in a rainy neon city" disabled class="svelte-77wapf" value=""> <button disabled class="svelte-77wapf">Generate</button> <button class="danger svelte-77wapf" disabled>Release Memory</button></div> <div class="canvas-wrap svelte-77wapf"><canvas width="512" height="512" class="svelte-77wapf"></canvas></div> <div class="panel svelte-77wapf"><div class="debug-header svelte-77wapf"><p class="debug-title svelte-77wapf" data-svelte-h="svelte-14j271a">Debug Terminal</p> <div class="debug-actions svelte-77wapf"><button class="small svelte-77wapf" disabled>Copy</button> <button class="small svelte-77wapf" disabled>Clear</button></div></div> <pre class="debug-console svelte-77wapf">Debug output will appear here for downloads and generation.</pre></div> </main> 
+			
+			<script>
+				{
+					__sveltekit_10ox97d = {
+						base: new URL(".", location).pathname.slice(0, -1)
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import("./_app/immutable/entry/start.lAN_DExI.js"),
+						import("./_app/immutable/entry/app.DpqYxms1.js")
+					]).then(([kit, app]) => {
+						kit.start(app, element, {
+							node_ids: [0, 2],
+							data: [null,null],
+							form: null,
+							error: null
+						});
+					});
+				}
+			</script>
+		</div>
+  </body>
+</html>
