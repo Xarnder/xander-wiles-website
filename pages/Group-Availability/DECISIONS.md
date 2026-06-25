@@ -459,19 +459,19 @@ After MVP is done
 **Your answer:**
 
 ```
-Whatever you recmond.
+Whatever you recomend
 ```
 
 **Question:** Prefer single `event.html` or split create/view into separate pages?
 
 ```
-index + event + create (plan default) / Single-page app in one HTML file
+index + event + create (plan default)
 ```
 
 **Your answer:**
 
 ```
-
+index + event + create (Seprate)
 ```
 
 ---
@@ -481,13 +481,13 @@ index + event + create (plan default) / Single-page app in one HTML file
 **Question:** Add privacy-friendly analytics (e.g. Vercel Analytics, Plausible)?
 
 ```
-Yes / No
+
 ```
 
 **Your answer:**
 
 ```
-
+No not for now
 ```
 
 ---
@@ -497,7 +497,7 @@ Yes / No
 **Free-form requirements, constraints, or features not covered above:**
 
 ```
-(e.g. "Must work offline briefly", "Need dark/light toggle", "Integrate with WhatsApp share", etc.)
+Need dark/light toggle and needs Integrate with WhatsApp share
 ```
 
 ---

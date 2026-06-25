@@ -1,35 +1,40 @@
-# Group Availability — Project Plan
+# When To Hang — Project Plan
 
 A collaborative scheduling web app where friends mark when they are free on a shared calendar. Authenticated users sign in with Google; guests can participate with only a display name. An event organizer creates an event (e.g. “Dinner”), shares a public link, and everyone highlights availability. The app surfaces overlapping free windows across the group.
 
-**Planned URL:** `https://xanderwiles.com/pages/Group-Availability/`  
+**Display name:** When To Hang (future brand: WhenToHang.com)  
+**Repo path:** `pages/Group-Availability/`  
+**Live URL (v1):** `https://xanderwiles.com/pages/Group-Availability/`  
 **Backend:** Supabase (PostgreSQL + Auth + Realtime)  
 **Hosting:** Vercel (existing monorepo build pipeline)
+
+> **Decisions locked in** — see [Resolved Product Decisions](#resolved-product-decisions) (sourced from `DECISIONS.md`).
 
 ---
 
 ## Table of Contents
 
 1. [Product Summary](#1-product-summary)
-2. [Tech Stack](#2-tech-stack)
-3. [User Roles & Flows](#3-user-roles--flows)
-4. [Screens & Features](#4-screens--features)
-5. [Data Model](#5-data-model)
-6. [Supabase Project Setup (Console)](#6-supabase-project-setup-console)
-7. [Google OAuth Setup](#7-google-oauth-setup)
-8. [Database Schema & Migrations](#8-database-schema--migrations)
-9. [Row Level Security (RLS) — Full Policies](#9-row-level-security-rls--full-policies)
-10. [Environment Variables & Secrets](#10-environment-variables--secrets)
-11. [Client Config Injection (Build-Time)](#11-client-config-injection-build-time)
-12. [Custom Domain — xanderwiles.com](#12-custom-domain--xanderwilescom)
-13. [Vercel Deployment](#13-vercel-deployment)
-14. [Realtime Sync Strategy](#14-realtime-sync-strategy)
-15. [Availability Overlap Algorithm](#15-availability-overlap-algorithm)
-16. [UI & Styling Specification](#16-ui--styling-specification)
-17. [Proposed File Structure](#17-proposed-file-structure)
-18. [Implementation Phases](#18-implementation-phases)
-19. [Security Checklist](#19-security-checklist)
-20. [Testing Plan](#20-testing-plan)
+2. [Resolved Product Decisions](#resolved-product-decisions)
+3. [Tech Stack](#2-tech-stack)
+4. [User Roles & Flows](#3-user-roles--flows)
+5. [Screens & Features](#4-screens--features)
+6. [Data Model](#5-data-model)
+7. [Supabase Project Setup (Console)](#6-supabase-project-setup-console)
+8. [Google OAuth Setup](#7-google-oauth-setup)
+9. [Database Schema & Migrations](#8-database-schema--migrations)
+10. [Row Level Security (RLS) — Full Policies](#9-row-level-security-rls--full-policies)
+11. [Environment Variables & Secrets](#10-environment-variables--secrets)
+12. [Client Config Injection (Build-Time)](#11-client-config-injection-build-time)
+13. [Custom Domain — xanderwiles.com](#12-custom-domain--xanderwilescom)
+14. [Vercel Deployment](#13-vercel-deployment)
+15. [Realtime Sync Strategy](#14-realtime-sync-strategy)
+16. [Availability Overlap Algorithm](#15-availability-overlap-algorithm)
+17. [UI & Styling Specification](#16-ui--styling-specification)
+18. [Proposed File Structure](#17-proposed-file-structure)
+19. [Implementation Phases](#18-implementation-phases)
+20. [Security Checklist](#19-security-checklist)
+21. [Testing Plan](#20-testing-plan)
 
 ---
 
@@ -37,19 +42,56 @@ A collaborative scheduling web app where friends mark when they are free on a sh
 
 ### Core loop
 
-1. **Organizer** creates an event → receives a shareable link (`/pages/Group-Availability/event/{slug}`).
+1. **Organizer** signs in with Google → creates an event → receives a shareable link (`/pages/Group-Availability/event.html?slug={slug}`).
 2. **Participants** open the link → sign in with Google **or** enter a display name (guest).
-3. Each participant paints time blocks on a calendar:
+3. Each participant paints **1-hour** time blocks on a full-day calendar (00:00–23:59 in the event timezone):
    - **Green** — mostly likely free
    - **Yellow** — might be free
-4. The **overlap view** highlights when the most people (or everyone) are free at the same time.
+4. **Blind first submission:** others’ availability is hidden until the current user saves their own availability for the first time (prevents anchoring).
+5. The **overlap view** ranks mutual free windows (green = 2 pts, yellow = 1 pt).
+6. Organizer can **close** the event and set a **last edit deadline** shown to all participants.
 
 ### Non-goals (v1)
 
+- Event password protection
 - Email/SMS reminders
 - Calendar import (Google Calendar sync)
 - Recurring events
 - Mobile native apps
+- Main site nav entry (add after MVP)
+- Analytics (not decided — skip unless requested)
+
+---
+
+## Resolved Product Decisions
+
+| Area | Decision |
+|------|----------|
+| **Branding** | **When To Hang** (future domain: WhenToHang.com) |
+| **Slot size** | **60 minutes** — no sub-hour painting; drag paints whole hours only |
+| **Daily window** | **Full day** — `00:00`–`23:59` (supports late dinners, games nights) |
+| **Event span** | **No max days**; **past dates not selectable** on create |
+| **Timezone** | **Organizer picks**; default `Europe/London`; **all participants see event timezone** |
+| **Guest name** | Editable anytime |
+| **Guest return** | Same browser via `localStorage` token; **Google login unlocks cross-device** |
+| **Guest → Google merge** | **Yes** (implement in Phase 2) |
+| **Guest security** | Token model acceptable; **no event password** for now |
+| **Grid visibility** | **Everyone sees all grids by default**; organizer can change visibility mode per event |
+| **Blind submission** | **Hide others’ availability** until current user has saved at least once |
+| **Overlap scoring** | Green = 2 pts, yellow = 1 pt; sort by total score |
+| **Organizer** | Single creator only; **cannot** edit/delete others’ slots |
+| **Event close** | Organizer can close event; **last edit deadline** displayed to all; deadline editable by organizer |
+| **Dashboard** | Authenticated users see events created/joined |
+| **Landing** | **Public** marketing page with **prominent Google sign-in** up front |
+| **Share links** | Auto-generated slug + **optional custom slug** |
+| **Google auth** | Any Google account |
+| **Data retention** | Organizer sets expiry on create; **default: 7 days after `end_date`** |
+| **Paint UX** | Toolbar picks green/yellow; click/drag to paint |
+| **Mobile** | **Touch-first** layout and interactions |
+| **Nav integration** | Add to main site nav **after MVP** |
+| **Accent color** | Cyan/teal `#38bdf8` |
+| **Supabase JS** | ESM from `esm.sh` (no separate npm build) |
+| **Page structure** | `index.html` + `create.html` + `event.html` |
 
 ---
 
@@ -57,13 +99,12 @@ A collaborative scheduling web app where friends mark when they are free on a sh
 
 | Layer | Choice | Rationale |
 |-------|--------|-----------|
-| Frontend | Vanilla HTML/CSS/JS (ES modules) | Matches most `pages/*` apps in this repo; no extra build step unless needed later |
-| Backend | Supabase | Auth, Postgres, Realtime, RLS — all sync across devices |
-| Auth | Supabase Auth + Google OAuth | Required by spec |
-| Hosting | Vercel via existing `build.js` | Same deploy path as the rest of xanderwiles.com |
-| Fonts | Outfit (Google Fonts) | Already used site-wide; wide, modern sans-serif |
-
-**Why not Firebase here:** This project explicitly requires Supabase. The To-Do List uses Firebase; this app is independent.
+| Frontend | Vanilla HTML/CSS/JS (ES modules) | Matches most `pages/*` apps; touch-first calendar without build step |
+| Supabase client | `https://esm.sh/@supabase/supabase-js@2` | No Vite sub-project; works with `build.js` env injection |
+| Backend | Supabase | Auth, Postgres, Realtime, RLS |
+| Auth | Supabase Auth + Google OAuth | Any Google account; upfront on landing |
+| Hosting | Vercel via existing `build.js` | Same deploy path as xanderwiles.com |
+| Fonts | Outfit (Google Fonts) | Site-wide; wide modern sans-serif |
 
 ---
 
@@ -73,39 +114,54 @@ A collaborative scheduling web app where friends mark when they are free on a sh
 
 | Role | How identified | Capabilities |
 |------|----------------|--------------|
-| **Organizer** | Google account that created the event | Create/edit event metadata, delete event, view all responses |
-| **Authenticated participant** | Google sign-in | Add/edit own availability; name from Google profile |
-| **Guest participant** | Display name + browser `localStorage` token | Add/edit own availability for that event only |
+| **Organizer** | Google account that created the event | Create/edit event, set timezone, visibility mode, edit deadline, close event, delete event |
+| **Authenticated participant** | Google sign-in | Paint own availability; cross-device sync; merge guest profile |
+| **Guest participant** | Display name + `localStorage` guest token | Paint own availability; edit name; same-browser return |
 
-### Flow A — Create event (organizer)
+Organizer **cannot** edit or delete other participants’ availability slots.
+
+### Flow A — Landing & create (organizer)
 
 ```
-Home → Sign in with Google → "Create Event"
-  → Title, date range, optional description
-  → Supabase insert → redirect to event page with share link
+Public landing → Google sign-in (prominent) → Dashboard of my events
+  → "Create Event" → title, dates (no past), timezone (default London),
+     optional custom slug, data expiry (default end_date + 7 days),
+     optional edit deadline
+  → Insert event → redirect to event page with share link
 ```
 
 ### Flow B — Join event (authenticated)
 
 ```
-Open share link → Sign in with Google → Calendar grid loads
-  → Paint green/yellow blocks → Auto-save to Supabase (debounced)
+Open share link → Sign in with Google (or already signed in)
+  → Join as participant → Paint calendar (toolbar: green / yellow)
+  → First save → unlock view of others' grids (per blind-submission rule)
+  → Auto-save debounced to Supabase
 ```
 
 ### Flow C — Join event (guest)
 
 ```
-Open share link → "Continue as guest" → Enter display name
-  → Generate guest_token (UUID) stored in localStorage
-  → Paint blocks → Save tied to guest_token
+Open share link → "Continue as guest" → Enter display name (editable later)
+  → guest_token in localStorage → Paint → Save
+  → Optional: "Sign in with Google" to merge guest row → cross-device access
 ```
 
-### Flow D — View overlap
+### Flow D — View overlap & others’ grids
 
 ```
-Event page → "Best times" tab (or sidebar)
-  → Heatmap / ranked list of slots where N people are free
-  → Filter: "everyone free", "≥ 80% free", include yellow or green-only
+Before first save: only own grid + empty/hidden others' section
+After first save: full multi-user grid (if visibility_mode = 'all')
+  + overlap panel ranked by score (green×2 + yellow×1)
+Organizer may set visibility_mode to restrict grids (see data model)
+```
+
+### Flow E — Event closed
+
+```
+Organizer sets is_closed = true and/or edit_deadline passes
+  → UI shows banner with deadline → all slot edits disabled
+  → Read-only view of grids + overlap remains
 ```
 
 ---
@@ -114,39 +170,56 @@ Event page → "Best times" tab (or sidebar)
 
 ### 4.1 Landing (`index.html`)
 
-- Glass hero card explaining the app
-- **Sign in with Google** (primary CTA)
-- **Create event** (requires auth)
-- List of events you created or joined (authenticated users only)
+- Public glass hero — **When To Hang** branding
+- **Sign in with Google** — primary, above the fold
+- Short value prop + “Create event” (auth required)
+- Authenticated: **dashboard** — events you organized or joined
+- Guest users browse via share links only (no dashboard)
 
-### 4.2 Create Event (`create.html` or modal on landing)
+### 4.2 Create Event (`create.html`)
 
 Fields:
 
-- Event title (required)
-- Start date / end date (required) — bounds the calendar
-- Optional description
-- Time-of-day range (e.g. 08:00–22:00) — configurable per event
-- Slot duration (default 30 min — see DECISIONS.md)
+| Field | Required | Default / rules |
+|-------|----------|-----------------|
+| Title | Yes | — |
+| Start date | Yes | ≥ today |
+| End date | Yes | ≥ start date; no max span |
+| Timezone | Yes | `Europe/London` |
+| Description | No | — |
+| Custom slug | No | Auto 8-char if blank; must be unique |
+| Data expiry | Yes | Default: `end_date + 7 days` |
+| Edit deadline | No | Optional; shown to all; organizer can change later |
+| Visibility mode | Yes | Default: `all` (everyone sees all grids after blind unlock) |
 
-On submit → insert `events` row → navigate to event page.
+Fixed for v1 (not organizer-configurable):
+
+- `day_start_time`: `00:00`
+- `day_end_time`: `23:59`
+- `slot_minutes`: `60`
+
+On submit → insert `events` + organizer `event_participants` row → navigate to event page.
 
 ### 4.3 Event Page (`event.html?slug={slug}`)
 
 Sections:
 
-1. **Header** — event title, date range, copy-link button, participant count
-2. **Identity bar** — Google avatar + name, or guest name + “Sign in to sync across devices”
-3. **Calendar grid** — days × time slots; click/drag to paint
-4. **Legend** — green / yellow / clear
-5. **Overlap panel** — best mutual windows
-6. **Participants list** — who has responded (privacy: only show names, not individual grids unless toggled)
+1. **Header** — title, date range, timezone label, copy-link, participant count
+2. **Status bar** — edit deadline countdown; “Event closed” if applicable
+3. **Identity bar** — Google avatar/name or guest name + “Sign in to sync across devices”
+4. **Paint toolbar** — green brush, yellow brush, eraser; touch-friendly targets (≥ 44px)
+5. **Calendar grid** — days × **hourly** slots; click/drag to paint whole hours
+6. **Blind gate** — until `has_submitted_availability`, others’ grids hidden with prompt: “Save your availability to see everyone else’s”
+7. **Multi-user grid** — all participants’ rows visible (When2meet-style) when unlocked + `visibility_mode = 'all'`
+8. **Overlap panel** — ranked best times (score = green×2 + yellow×1)
+9. **Organizer controls** — edit deadline, close/reopen event, visibility mode, delete event
 
-### 4.4 Overlap visualization options (implement simplest first)
+### 4.4 Mobile (touch-first)
 
-- **Ranked list:** “Sat 7 Jun, 6:00–8:00 pm — 5/6 free (4 green, 1 yellow)”
-- **Heatmap row per day** — color intensity = % free
-- Optional v2: mini multi-user grid (like When2meet)
+- Horizontal scroll for day columns OR swipe between days (pick simplest in build)
+- Large touch targets on hour cells
+- Sticky paint toolbar at bottom on small screens
+- `touch-action: manipulation` to reduce scroll/paint conflicts
 
 ---
 
@@ -164,15 +237,20 @@ event_participants (1) ──< availability_slots (many)
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | `uuid` PK | `gen_random_uuid()` |
-| `slug` | `text` UNIQUE | Short public ID, e.g. `dinner-jun-7` or random 8-char |
+| `slug` | `text` UNIQUE | Auto or custom; URL identifier |
 | `title` | `text` | “Dinner” |
 | `description` | `text` nullable | |
-| `organizer_id` | `uuid` FK → `auth.users` | Set from `auth.uid()` on insert |
-| `start_date` | `date` | First day of range |
-| `end_date` | `date` | Last day of range |
-| `day_start_time` | `time` | Default `08:00` |
-| `day_end_time` | `time` | Default `22:00` |
-| `slot_minutes` | `int` | Default `30` |
+| `organizer_id` | `uuid` FK → `auth.users` | |
+| `start_date` | `date` | First day; must be ≥ today on create |
+| `end_date` | `date` | No max span |
+| `timezone` | `text` | IANA, default `Europe/London` |
+| `day_start_time` | `time` | Fixed `00:00` (v1) |
+| `day_end_time` | `time` | Fixed `23:59` (v1) |
+| `slot_minutes` | `int` | Fixed `60` (v1) |
+| `visibility_mode` | `text` | `'all'` (default) \| `'overlap_only'` \| `'organizer_only'` |
+| `edit_deadline` | `timestamptz` nullable | Last moment participants can edit |
+| `is_closed` | `boolean` | Default `false`; organizer can close early |
+| `expires_at` | `timestamptz` | Default `end_date + 7 days` at 23:59 event TZ |
 | `created_at` | `timestamptz` | `now()` |
 | `updated_at` | `timestamptz` | trigger |
 
@@ -183,15 +261,17 @@ event_participants (1) ──< availability_slots (many)
 | `id` | `uuid` PK | |
 | `event_id` | `uuid` FK → `events` | |
 | `user_id` | `uuid` FK → `auth.users` nullable | Null for guests |
-| `guest_token` | `text` nullable | UUID stored in browser; unique per event |
-| `display_name` | `text` | From Google or guest input |
-| `avatar_url` | `text` nullable | Google profile photo |
+| `guest_token` | `text` nullable | UUID in browser |
+| `display_name` | `text` | Editable (guest + auth) |
+| `avatar_url` | `text` nullable | Google profile |
 | `is_organizer` | `boolean` | Default false |
+| `has_submitted_availability` | `boolean` | Default false; set true on first successful slot save |
+| `merged_from_guest_token` | `text` nullable | Audit trail when guest merges to Google |
 | `created_at` | `timestamptz` | |
 
 **Constraints:**
 
-- Either `user_id` OR `guest_token` must be set (not both null).
+- Either `user_id` OR `guest_token` must be set.
 - `UNIQUE (event_id, user_id)` where `user_id IS NOT NULL`
 - `UNIQUE (event_id, guest_token)` where `guest_token IS NOT NULL`
 
@@ -201,8 +281,8 @@ event_participants (1) ──< availability_slots (many)
 |--------|------|-------|
 | `id` | `uuid` PK | |
 | `participant_id` | `uuid` FK → `event_participants` | |
-| `event_id` | `uuid` FK → `events` | Denormalized for simpler RLS/queries |
-| `slot_start` | `timestamptz` | UTC storage |
+| `event_id` | `uuid` FK → `events` | Denormalized for RLS/realtime |
+| `slot_start` | `timestamptz` | UTC; interpreted in event `timezone` |
 | `confidence` | `text` | `'likely'` (green) or `'maybe'` (yellow) |
 | `created_at` | `timestamptz` | |
 
@@ -210,94 +290,80 @@ event_participants (1) ──< availability_slots (many)
 
 - `UNIQUE (participant_id, slot_start)`
 - `confidence IN ('likely', 'maybe')`
+- Slots align to **hour boundaries** in event timezone (client enforces; no half-hour blocks)
 
-### Indexes
+### Client-side edit lock
 
-```sql
-CREATE INDEX idx_availability_event_start ON availability_slots (event_id, slot_start);
-CREATE INDEX idx_participants_event ON event_participants (event_id);
-CREATE INDEX idx_events_slug ON events (slug);
+Before any slot write, client checks:
+
+```javascript
+const editable = !event.is_closed
+  && (!event.edit_deadline || new Date() < new Date(event.edit_deadline))
+  && (!event.expires_at || new Date() < new Date(event.expires_at));
 ```
+
+RLS can optionally mirror this server-side via policies on `availability_slots` INSERT/UPDATE/DELETE.
 
 ---
 
 ## 6. Supabase Project Setup (Console)
 
-Follow these steps in order at [https://supabase.com/dashboard](https://supabase.com/dashboard).
+Follow at [https://supabase.com/dashboard](https://supabase.com/dashboard).
 
 ### Step 1 — Create organization (if needed)
 
-1. Sign in to Supabase.
-2. If prompted, create an **Organization** (e.g. “Xander Wiles”).
+Sign in → create **Organization** (e.g. “Xander Wiles”).
 
-### Step 2 — Create project in **production** mode
+### Step 2 — Create project (production-minded)
 
-1. Click **New project**.
-2. **Name:** `group-availability` (or your preference).
-3. **Database password:** Generate a strong password → **save it in a password manager**. You need it for direct DB access; the app does not use it client-side.
-4. **Region:** Choose closest to your users (e.g. `West EU (London)` if UK-based).
-5. **Pricing plan:** Free tier is fine to start; production workloads may need Pro later.
-6. **Important — Production vs Development:**
-   - Supabase does not label a toggle “production mode” in the UI.
-   - **Treat this project as production** by:
-     - Using a dedicated project (not a throwaway dev project).
-     - Enabling **Point-in-Time Recovery** if on Pro (Project Settings → Database → Backups).
-     - Never exposing the **service_role** key in frontend code.
-     - Applying RLS on every table before going live.
-7. Click **Create new project** and wait ~2 minutes for provisioning.
+1. **New project** → Name: `when-to-hang` (or preference).
+2. Strong **database password** → store in password manager.
+3. **Region:** `West EU (London)` (matches default timezone).
+4. Treat as production: dedicated project, RLS before launch, never expose `service_role` in client.
+5. Wait for provisioning (~2 min).
 
-### Step 3 — Copy project credentials
+### Step 3 — Copy credentials
 
-1. Go to **Project Settings** (gear icon) → **API**.
-2. Copy and store securely:
+**Project Settings → API:**
 
-| Field | Where in dashboard | Used for |
-|-------|-------------------|----------|
-| **Project URL** | `Project URL` | `SUPABASE_URL` |
-| **anon public** key | `Project API keys` → `anon` `public` | `SUPABASE_ANON_KEY` (client-safe with RLS) |
-| **service_role** key | `service_role` `secret` | **Server only** — never Vercel env exposed to browser |
+| Field | Env var |
+|-------|---------|
+| Project URL | `SUPABASE_URL` |
+| anon public key | `SUPABASE_ANON_KEY` |
+| service_role key | **Never in client** |
 
-3. **Project ID** (reference): **Project Settings → General → Reference ID**  
-   Example: `abcdefghijklmnop`. Used in dashboard URLs and docs; the app uses **Project URL**, not the ID alone.
+**Project Settings → General → Reference ID** — for dashboard URLs only.
 
 ### Step 4 — Enable Google provider
 
-See [Section 7](#7-google-oauth-setup) — configure Google Cloud first, then:
+**Authentication → Providers → Google** → paste Client ID + Secret (Section 7).
 
-1. **Authentication** → **Providers** → **Google** → Enable.
-2. Paste **Client ID** and **Client Secret** from Google Cloud.
-3. Save.
+### Step 5 — Auth URLs
 
-### Step 5 — Configure auth URLs
+**Authentication → URL Configuration:**
 
-**Authentication** → **URL Configuration**:
+| Setting | Production | Local dev |
+|---------|------------|-----------|
+| Site URL | `https://xanderwiles.com` | `http://localhost:5500` |
+| Redirect URLs | `https://xanderwiles.com/pages/Group-Availability/**` | `http://localhost:5500/pages/Group-Availability/**` |
 
-| Setting | Local dev | Production |
-|---------|-----------|------------|
-| **Site URL** | `http://localhost:5500` or your local server | `https://xanderwiles.com` |
-| **Redirect URLs** | `http://localhost:5500/pages/Group-Availability/**` | `https://xanderwiles.com/pages/Group-Availability/**` |
+Add `https://*.vercel.app/pages/Group-Availability/**` for previews.
 
-Add every origin you will use. Wildcards are supported in redirect URLs.
+> When **WhenToHang.com** launches, add that domain here and in Google OAuth origins.
 
-### Step 6 — Run database migrations
+### Step 6 — Run migrations
 
-1. **SQL Editor** → **New query**.
-2. Paste the full SQL from [Section 8](#8-database-schema--migrations), then **Run**.
-3. Paste RLS policies from [Section 9](#9-row-level-security-rls--full-policies), then **Run**.
+SQL Editor → run [Section 8](#8-database-schema--migrations) then [Section 9](#9-row-level-security-rls--full-policies).
 
-### Step 7 — Enable Realtime (optional but recommended)
-
-1. **Database** → **Replication** (or **Publications** depending on UI version).
-2. Ensure `availability_slots` and `event_participants` are in the `supabase_realtime` publication:
+### Step 7 — Realtime
 
 ```sql
 ALTER PUBLICATION supabase_realtime ADD TABLE availability_slots;
 ALTER PUBLICATION supabase_realtime ADD TABLE event_participants;
+ALTER PUBLICATION supabase_realtime ADD TABLE events;
 ```
 
 ### Step 8 — Verify RLS
-
-In SQL Editor:
 
 ```sql
 SELECT tablename, rowsecurity FROM pg_tables
@@ -305,59 +371,32 @@ WHERE schemaname = 'public'
   AND tablename IN ('events', 'event_participants', 'availability_slots');
 ```
 
-All should show `rowsecurity = true`.
-
 ---
 
 ## 7. Google OAuth Setup
 
-### Part A — Google Cloud Console
+### Google Cloud Console
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/).
-2. Create or select a project (e.g. `xanderwiles-group-availability`).
-3. **APIs & Services** → **OAuth consent screen**:
-   - User type: **External** (unless Workspace-only).
-   - App name: `Group Availability` (or site name).
-   - User support email: your email.
-   - Authorized domains: `xanderwiles.com`, `supabase.co` (Supabase callback uses supabase domain).
-   - Scopes: add `email`, `profile`, `openid` (defaults).
-   - Add test users while in **Testing** mode.
-4. **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth client ID**:
-   - Application type: **Web application**
-   - Name: `Supabase Group Availability`
-   - **Authorized JavaScript origins:**
-     ```
-     https://xanderwiles.com
-     http://localhost:5500
-     https://YOUR_PROJECT_REF.supabase.co
-     ```
-     Replace `YOUR_PROJECT_REF` with your Supabase reference ID.
-   - **Authorized redirect URIs:**
-     ```
-     https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback
-     ```
-     This is the **only** redirect URI Google needs for Supabase Auth. Supabase handles the OAuth callback, then redirects to your app.
-5. Copy **Client ID** and **Client Secret** → paste into Supabase Google provider (Step 4 above).
+1. [Google Cloud Console](https://console.cloud.google.com/) → project e.g. `when-to-hang`.
+2. **OAuth consent screen** — External; app name **When To Hang**; domains: `xanderwiles.com`, `supabase.co` (add `whentohang.com` later).
+3. Scopes: `email`, `profile`, `openid`.
+4. **Credentials → OAuth client ID → Web application:**
+   - **Origins:** `https://xanderwiles.com`, `http://localhost:5500`, `https://YOUR_PROJECT_REF.supabase.co`
+   - **Redirect URI (only):** `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
+5. Paste Client ID + Secret into Supabase Google provider.
+6. **Publish app** when ready for public use.
 
-### Part B — Publish consent screen (production)
-
-When ready for public use:
-
-1. OAuth consent screen → **Publish app**.
-2. Google may require verification if you request sensitive scopes (basic profile/email usually does not).
+**Auth scope:** any Google account (no domain restriction).
 
 ---
 
 ## 8. Database Schema & Migrations
 
-Run this in **Supabase SQL Editor** as a single migration (or split logically).
-
 ```sql
 -- ============================================================
--- Group Availability — Schema
+-- When To Hang — Schema
 -- ============================================================
 
--- Updated-at trigger helper
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -366,20 +405,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Events
 CREATE TABLE public.events (
-  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  slug          text NOT NULL UNIQUE,
-  title         text NOT NULL,
-  description   text,
-  organizer_id  uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
-  start_date    date NOT NULL,
-  end_date      date NOT NULL,
-  day_start_time time NOT NULL DEFAULT '08:00',
-  day_end_time   time NOT NULL DEFAULT '22:00',
-  slot_minutes  int NOT NULL DEFAULT 30 CHECK (slot_minutes IN (15, 30, 60)),
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  updated_at    timestamptz NOT NULL DEFAULT now(),
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug             text NOT NULL UNIQUE,
+  title            text NOT NULL,
+  description      text,
+  organizer_id     uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  start_date       date NOT NULL,
+  end_date         date NOT NULL,
+  timezone         text NOT NULL DEFAULT 'Europe/London',
+  day_start_time   time NOT NULL DEFAULT '00:00',
+  day_end_time     time NOT NULL DEFAULT '23:59',
+  slot_minutes     int NOT NULL DEFAULT 60 CHECK (slot_minutes = 60),
+  visibility_mode  text NOT NULL DEFAULT 'all'
+    CHECK (visibility_mode IN ('all', 'overlap_only', 'organizer_only')),
+  edit_deadline    timestamptz,
+  is_closed        boolean NOT NULL DEFAULT false,
+  expires_at       timestamptz NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
   CHECK (end_date >= start_date)
 );
 
@@ -387,16 +431,17 @@ CREATE TRIGGER events_updated_at
   BEFORE UPDATE ON public.events
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
--- Participants (auth or guest)
 CREATE TABLE public.event_participants (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_id     uuid NOT NULL REFERENCES public.events (id) ON DELETE CASCADE,
-  user_id      uuid REFERENCES auth.users (id) ON DELETE CASCADE,
-  guest_token  text,
-  display_name text NOT NULL,
-  avatar_url   text,
-  is_organizer boolean NOT NULL DEFAULT false,
-  created_at   timestamptz NOT NULL DEFAULT now(),
+  id                         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id                   uuid NOT NULL REFERENCES public.events (id) ON DELETE CASCADE,
+  user_id                    uuid REFERENCES auth.users (id) ON DELETE CASCADE,
+  guest_token                text,
+  display_name               text NOT NULL,
+  avatar_url                 text,
+  is_organizer               boolean NOT NULL DEFAULT false,
+  has_submitted_availability boolean NOT NULL DEFAULT false,
+  merged_from_guest_token    text,
+  created_at                 timestamptz NOT NULL DEFAULT now(),
   CHECK (
     (user_id IS NOT NULL AND guest_token IS NULL)
     OR (user_id IS NULL AND guest_token IS NOT NULL)
@@ -413,7 +458,6 @@ CREATE UNIQUE INDEX event_participants_guest_unique
 
 CREATE INDEX idx_participants_event ON public.event_participants (event_id);
 
--- Availability slots
 CREATE TABLE public.availability_slots (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   participant_id uuid NOT NULL REFERENCES public.event_participants (id) ON DELETE CASCADE,
@@ -427,7 +471,8 @@ CREATE TABLE public.availability_slots (
 CREATE INDEX idx_availability_event_start
   ON public.availability_slots (event_id, slot_start);
 
--- Slug generator (optional helper)
+CREATE INDEX idx_events_slug ON public.events (slug);
+
 CREATE OR REPLACE FUNCTION public.generate_event_slug()
 RETURNS text AS $$
 DECLARE
@@ -441,87 +486,64 @@ BEGIN
   RETURN result;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Optional: pg_cron job to purge expired events (Supabase Pro)
+-- DELETE FROM public.events WHERE expires_at < now();
+```
+
+### Default `expires_at` on insert (client or DB trigger)
+
+Client computes: end of `end_date` in event timezone + 7 days. Example for London:
+
+```javascript
+// expires_at = end_date 23:59:59 in Europe/London + 7 days
 ```
 
 ---
 
 ## 9. Row Level Security (RLS) — Full Policies
 
-Copy and run **after** creating tables.
-
 ```sql
--- ============================================================
--- Enable RLS
--- ============================================================
 ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.event_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.availability_slots ENABLE ROW LEVEL SECURITY;
 
--- ============================================================
--- Helper: check if request can access an event (public read by slug)
--- Events are readable by anyone who knows the slug (link is the secret).
--- ============================================================
-
 -- EVENTS
--- Anyone can read events (needed for public share links)
 CREATE POLICY "events_select_public"
-  ON public.events FOR SELECT
-  TO anon, authenticated
-  USING (true);
+  ON public.events FOR SELECT TO anon, authenticated USING (true);
 
--- Only authenticated users can create; must set themselves as organizer
 CREATE POLICY "events_insert_organizer"
-  ON public.events FOR INSERT
-  TO authenticated
+  ON public.events FOR INSERT TO authenticated
   WITH CHECK (organizer_id = auth.uid());
 
--- Only organizer can update/delete their event
 CREATE POLICY "events_update_organizer"
-  ON public.events FOR UPDATE
-  TO authenticated
+  ON public.events FOR UPDATE TO authenticated
   USING (organizer_id = auth.uid())
   WITH CHECK (organizer_id = auth.uid());
 
 CREATE POLICY "events_delete_organizer"
-  ON public.events FOR DELETE
-  TO authenticated
+  ON public.events FOR DELETE TO authenticated
   USING (organizer_id = auth.uid());
 
--- ============================================================
--- EVENT PARTICIPANTS
--- ============================================================
-
--- Anyone with the link can see participant list (names only in UI; RLS allows row read)
+-- PARTICIPANTS
 CREATE POLICY "participants_select_public"
-  ON public.event_participants FOR SELECT
-  TO anon, authenticated
-  USING (true);
+  ON public.event_participants FOR SELECT TO anon, authenticated USING (true);
 
--- Authenticated: insert self as participant
 CREATE POLICY "participants_insert_auth"
-  ON public.event_participants FOR INSERT
-  TO authenticated
+  ON public.event_participants FOR INSERT TO authenticated
   WITH CHECK (user_id = auth.uid());
 
--- Guest: insert with guest_token (anon role)
--- Guest token is generated client-side; possession of token proves ownership for updates.
 CREATE POLICY "participants_insert_guest"
-  ON public.event_participants FOR INSERT
-  TO anon
+  ON public.event_participants FOR INSERT TO anon
   WITH CHECK (user_id IS NULL AND guest_token IS NOT NULL);
 
--- Authenticated: update own row
 CREATE POLICY "participants_update_auth"
-  ON public.event_participants FOR UPDATE
-  TO authenticated
+  ON public.event_participants FOR UPDATE TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
--- Guest: update row matching guest_token passed in request header
--- See client section: set header x-guest-token on Supabase client for guests.
 CREATE POLICY "participants_update_guest"
-  ON public.event_participants FOR UPDATE
-  TO anon
+  ON public.event_participants FOR UPDATE TO anon
   USING (
     guest_token IS NOT NULL
     AND guest_token = current_setting('request.headers', true)::json->>'x-guest-token'
@@ -530,48 +552,47 @@ CREATE POLICY "participants_update_guest"
     guest_token = current_setting('request.headers', true)::json->>'x-guest-token'
   );
 
--- Delete: auth own row, or organizer deletes any participant
 CREATE POLICY "participants_delete_auth"
-  ON public.event_participants FOR DELETE
-  TO authenticated
+  ON public.event_participants FOR DELETE TO authenticated
   USING (
     user_id = auth.uid()
     OR EXISTS (
       SELECT 1 FROM public.events e
-      WHERE e.id = event_participants.event_id
-        AND e.organizer_id = auth.uid()
+      WHERE e.id = event_participants.event_id AND e.organizer_id = auth.uid()
     )
   );
 
--- ============================================================
--- AVAILABILITY SLOTS
--- ============================================================
+-- SLOTS — helper: event still open for edits
+CREATE OR REPLACE FUNCTION public.event_allows_edits(p_event_id uuid)
+RETURNS boolean AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.events e
+    WHERE e.id = p_event_id
+      AND e.is_closed = false
+      AND (e.edit_deadline IS NULL OR e.edit_deadline > now())
+      AND e.expires_at > now()
+  );
+$$ LANGUAGE sql STABLE;
 
--- Public read for overlap calculation
 CREATE POLICY "slots_select_public"
-  ON public.availability_slots FOR SELECT
-  TO anon, authenticated
-  USING (true);
+  ON public.availability_slots FOR SELECT TO anon, authenticated USING (true);
 
--- Authenticated insert: only for own participant row
 CREATE POLICY "slots_insert_auth"
-  ON public.availability_slots FOR INSERT
-  TO authenticated
+  ON public.availability_slots FOR INSERT TO authenticated
   WITH CHECK (
-    EXISTS (
+    public.event_allows_edits(event_id)
+    AND EXISTS (
       SELECT 1 FROM public.event_participants p
-      WHERE p.id = participant_id
-        AND p.user_id = auth.uid()
+      WHERE p.id = participant_id AND p.user_id = auth.uid()
         AND p.event_id = availability_slots.event_id
     )
   );
 
--- Guest insert: participant must match guest_token header
 CREATE POLICY "slots_insert_guest"
-  ON public.availability_slots FOR INSERT
-  TO anon
+  ON public.availability_slots FOR INSERT TO anon
   WITH CHECK (
-    EXISTS (
+    public.event_allows_edits(event_id)
+    AND EXISTS (
       SELECT 1 FROM public.event_participants p
       WHERE p.id = participant_id
         AND p.guest_token = current_setting('request.headers', true)::json->>'x-guest-token'
@@ -579,33 +600,31 @@ CREATE POLICY "slots_insert_guest"
     )
   );
 
--- Authenticated update/delete own slots
 CREATE POLICY "slots_update_auth"
-  ON public.availability_slots FOR UPDATE
-  TO authenticated
+  ON public.availability_slots FOR UPDATE TO authenticated
   USING (
-    EXISTS (
+    public.event_allows_edits(event_id)
+    AND EXISTS (
       SELECT 1 FROM public.event_participants p
       WHERE p.id = participant_id AND p.user_id = auth.uid()
     )
   );
 
 CREATE POLICY "slots_delete_auth"
-  ON public.availability_slots FOR DELETE
-  TO authenticated
+  ON public.availability_slots FOR DELETE TO authenticated
   USING (
-    EXISTS (
+    public.event_allows_edits(event_id)
+    AND EXISTS (
       SELECT 1 FROM public.event_participants p
       WHERE p.id = participant_id AND p.user_id = auth.uid()
     )
   );
 
--- Guest delete own slots
 CREATE POLICY "slots_delete_guest"
-  ON public.availability_slots FOR DELETE
-  TO anon
+  ON public.availability_slots FOR DELETE TO anon
   USING (
-    EXISTS (
+    public.event_allows_edits(event_id)
+    AND EXISTS (
       SELECT 1 FROM public.event_participants p
       WHERE p.id = participant_id
         AND p.guest_token = current_setting('request.headers', true)::json->>'x-guest-token'
@@ -613,70 +632,51 @@ CREATE POLICY "slots_delete_guest"
   );
 ```
 
-### Guest token header (client implementation note)
-
-For anonymous guests, the Supabase JS client must send a custom header on each request:
+### Guest token header
 
 ```javascript
-const guestToken = localStorage.getItem(`ga_guest_${eventId}`);
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  global: {
-    headers: { 'x-guest-token': guestToken ?? '' }
-  }
+const guestToken = localStorage.getItem(`wth_guest_${eventId}`);
+const supabase = createClient(url, anonKey, {
+  global: { headers: { 'x-guest-token': guestToken ?? '' } }
 });
 ```
 
-> **Security note:** Guest identity is “possession of the token.” Anyone with the token can edit that guest’s availability. This is acceptable for low-stakes scheduling; see DECISIONS.md for hardening options.
+### Guest → Google merge (Phase 2)
+
+1. Guest has `participant_id` + `guest_token` in localStorage.
+2. User signs in with Google.
+3. If no existing participant row for that `user_id` on event:
+   - `UPDATE event_participants SET user_id = auth.uid(), guest_token = NULL, merged_from_guest_token = <old token> WHERE id = <guest participant id>` (via RPC or careful policy).
+4. Clear guest token from localStorage.
 
 ---
 
 ## 10. Environment Variables & Secrets
 
-### What is safe where
-
-| Variable | Client/browser? | Vercel env? | Notes |
-|----------|---------------|-------------|-------|
+| Variable | Client? | Vercel? | Notes |
+|----------|---------|---------|-------|
 | `SUPABASE_URL` | Yes | Yes | Public |
-| `SUPABASE_ANON_KEY` | Yes | Yes | Public **by design**; RLS protects data |
-| `SUPABASE_SERVICE_ROLE_KEY` | **Never** | Only if you add server routes | Bypasses RLS — do not use in static JS |
-| Database password | **Never** | **Never** | Direct Postgres only |
+| `SUPABASE_ANON_KEY` | Yes | Yes | Public with RLS |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Never** | Server only | Not needed for v1 |
 
-The **anon key is not a secret** in Supabase’s model — security comes from **RLS policies**, not hiding the anon key. Still avoid committing values to git; inject at build time.
-
-### Local development — `.env.local` (repo root)
-
-Create `/Users/xanderwiles/Documents/Work/Code/Web_Apps/xander-wiles-website/.env.local`:
+### `.env.local` (repo root, not committed)
 
 ```bash
-# Supabase — Group Availability
 SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_ANON_KEY=eyJ...
 ```
 
-**Do not commit** `.env.local` (already excluded in `build.js` copy filter).
+### Vercel
 
-### Vercel — Project Environment Variables
-
-1. Vercel Dashboard → your **xander-wiles-website** project.
-2. **Settings** → **Environment Variables**.
-3. Add:
-
-| Name | Value | Environments |
-|------|-------|--------------|
-| `SUPABASE_URL` | `https://YOUR_PROJECT_REF.supabase.co` | Production, Preview, Development |
-| `SUPABASE_ANON_KEY` | your anon key | Production, Preview, Development |
-
-4. **Do not** add `SUPABASE_SERVICE_ROLE_KEY` unless you add Edge Functions later.
-
-5. Redeploy after adding variables (Vercel rebuild runs `node build.js`, which injects env vars — see below).
+Add both vars for Production, Preview, Development → redeploy.
 
 ---
 
 ## 11. Client Config Injection (Build-Time)
 
-This repo already replaces `process.env.VAR_NAME` in deployed JS/HTML at build time (`build.js` lines 112–158). Use the same pattern as Firebase apps.
+Uses existing `build.js` `process.env.*` replacement.
 
-### `supabase-config.js` (source — committed with placeholders)
+### `supabase-config.js`
 
 ```javascript
 export const supabaseConfig = {
@@ -685,189 +685,104 @@ export const supabaseConfig = {
 };
 ```
 
-### `supabase-client.js`
+### `js/supabase-client.js`
 
 ```javascript
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { supabaseConfig } from './supabase-config.js';
+import { supabaseConfig } from '../supabase-config.js';
 
-export const supabase = createClient(supabaseConfig.url, supabaseConfig.anonKey);
+export function createSupabaseClient(guestToken) {
+  return createClient(supabaseConfig.url, supabaseConfig.anonKey, {
+    global: {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {}
+    }
+  });
+}
 ```
-
-After `node build.js` runs on Vercel with env vars set, output becomes:
-
-```javascript
-export const supabaseConfig = {
-  url: "https://xxxx.supabase.co",
-  anonKey: "eyJ...",
-};
-```
-
-### `.gitignore` reminder
-
-Never commit filled-in keys. Placeholders using `process.env.*` are fine.
-
-### Local preview without full build
-
-For local dev, either:
-
-- Run `node build.js` and serve `deploy_out`, or
-- Temporarily hardcode in a **gitignored** `supabase-config.local.js` override (optional dev convenience).
 
 ---
 
 ## 12. Custom Domain — xanderwiles.com
 
-### A. Vercel (site hosting)
+### Vercel
 
-Already configured if the main site is on Vercel. The app lives at:
+App at `https://xanderwiles.com/pages/Group-Availability/`. Future: point `whentohang.com` to same deployment or subdirectory.
 
-`https://xanderwiles.com/pages/Group-Availability/`
+### Supabase Auth
 
-No extra Vercel domain step unless this is a new project.
+- **Site URL:** `https://xanderwiles.com`
+- **Redirect URLs:** `https://xanderwiles.com/pages/Group-Availability/**`
 
-### B. Supabase Auth (required for Google login on your domain)
+### Google OAuth
 
-1. Supabase Dashboard → **Authentication** → **URL Configuration**.
-2. Set **Site URL** to:
-   ```
-   https://xanderwiles.com
-   ```
-3. Under **Redirect URLs**, add:
-   ```
-   https://xanderwiles.com/pages/Group-Availability/**
-   http://localhost:5500/pages/Group-Availability/**
-   ```
-   Add any preview URLs if needed, e.g.:
-   ```
-   https://*.vercel.app/pages/Group-Availability/**
-   ```
-
-4. **Authentication** → **Providers** → **Google** — ensure enabled.
-
-### C. Google Cloud Console (authorized origins)
-
-Under your OAuth client, **Authorized JavaScript origins** must include:
-
-```
-https://xanderwiles.com
-```
-
-Redirect URI remains only:
-
-```
-https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback
-```
-
-### D. Optional — custom Supabase Auth domain (advanced)
-
-Supabase Pro supports custom auth domains (e.g. `auth.xanderwiles.com`). Not required for v1; default `*.supabase.co` callback works.
-
-### E. OAuth consent screen — authorized domains
-
-Add `xanderwiles.com` under **Authorized domains** on the Google OAuth consent screen.
+- **Origins:** `https://xanderwiles.com`
+- **Redirect:** `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback` only
 
 ---
 
 ## 13. Vercel Deployment
 
-### Integration with existing `build.js`
-
-The Group Availability app is **static** (no separate npm build). It will be copied with the rest of the site automatically.
-
-Ensure `build.js` `excludeList` does **not** exclude `pages/Group-Availability`.
-
-Env injection runs over all `.js` / `.html` in `deploy_out` — `supabase-config.js` will be processed.
-
-### Auth redirect after Google sign-in
+Static app copied by `build.js` — do not exclude `pages/Group-Availability`.
 
 ```javascript
 const redirectTo = `${window.location.origin}/pages/Group-Availability/event.html?slug=${slug}`;
-
-await supabase.auth.signInWithOAuth({
-  provider: 'google',
-  options: { redirectTo }
-});
+await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
 ```
-
-Supabase must have that redirect URL allowlisted (Section 12).
-
-### SPA routing
-
-If you later use clean URLs without `.html`, add a rewrite in root `vercel.json` similar to the journal app. For v1, query-param routing (`event.html?slug=abc`) avoids extra config.
 
 ---
 
 ## 14. Realtime Sync Strategy
 
-Subscribe on the event page:
+Subscribe on event page to `availability_slots`, `event_participants`, and `events` (for deadline/close changes).
 
-```javascript
-supabase
-  .channel(`event:${eventId}`)
-  .on('postgres_changes', {
-    event: '*',
-    schema: 'public',
-    table: 'availability_slots',
-    filter: `event_id=eq.${eventId}`
-  }, handleSlotChange)
-  .on('postgres_changes', {
-    event: '*',
-    schema: 'public',
-    table: 'event_participants',
-    filter: `event_id=eq.${eventId}`
-  }, handleParticipantChange)
-  .subscribe();
-```
+**Blind submission:** realtime updates for **other** participants’ slots are ignored in UI until `has_submitted_availability === true` for current user (still receive overlap counts if in overlap-only mode).
 
 ### Write path
 
-- User paints cell → update local state immediately (optimistic UI).
-- Debounce 300–500 ms → `upsert` or delete slot rows in Supabase.
-- On error → toast + revert cell.
-
-### Conflict handling
-
-Last write wins per `(participant_id, slot_start)` — unique constraint enforces one confidence per slot.
+1. Paint hour cell(s) — optimistic UI.
+2. Debounce 400 ms → upsert/delete slots.
+3. On first successful write batch → `UPDATE event_participants SET has_submitted_availability = true`.
+4. Unlock others’ grid view.
 
 ---
 
 ## 15. Availability Overlap Algorithm
 
-Pseudocode for “best times” panel:
-
 ```
 1. Load all slots for event_id
-2. Group by slot_start timestamp
-3. For each slot:
-     likely_count = participants with confidence 'likely'
-     maybe_count  = participants with confidence 'maybe'
-     total_participants = count from event_participants
-4. Score (example):
+2. Group by slot_start (hourly, event timezone labels)
+3. Per slot:
+     likely_count = count confidence 'likely'
+     maybe_count  = count confidence 'maybe'
      score = likely_count * 2 + maybe_count
-5. Sort slots by score desc, then likely_count desc
-6. Merge adjacent slots with same participant set into ranges
-7. Display top N ranges with labels
+4. Sort by score DESC, then likely_count DESC
+5. Merge adjacent hours with identical participant sets into ranges
+6. Display top ranges: "Sat 7 Jun, 6–9 pm — score 11 (4 green, 3 yellow)"
 ```
 
-Filters (UI toggles):
+**Visibility modes (organizer setting):**
 
-- **Green only** — ignore `maybe` slots in counts
-- **Everyone free** — `likely_count === total_participants`
-- **Threshold** — e.g. ≥ 80% with `ceil(0.8 * total)`
+| Mode | After blind unlock |
+|------|-------------------|
+| `all` | Full multi-user grid + overlap |
+| `overlap_only` | Overlap panel only (no per-person rows) |
+| `organizer_only` | Only organizer sees per-person rows; others see overlap only |
 
-Timezone: store UTC in DB; display in organizer’s or browser’s local timezone (see DECISIONS.md).
+**Timezone:** all slot labels rendered in **event `timezone`**, not browser local.
 
 ---
 
 ## 16. UI & Styling Specification
 
-Match your glassmorphism brief. Reference implementation patterns exist in `pages/Story-Weaver-Canvas/app.css` and site `assets/css/style.css`.
+### Branding
+
+- Title: **When To Hang**
+- Accent: cyan/teal `#38bdf8` — buttons, glows, links
 
 ### Background
 
-- Base: deep gradient (`#0a0a1a` → `#1a0a2e` → `#0d0d1f`).
-- 2–3 `.orb` elements: `filter: blur(80–120px)`, low opacity, `animation: drift 20–30s infinite alternate`.
+- Deep gradient (`#0a0a1a` → `#1a0a2e` → `#0d0d1f`)
+- 2–3 drifting blurred orbs
 
 ### Glass cards
 
@@ -877,21 +792,14 @@ Match your glassmorphism brief. Reference implementation patterns exist in `page
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-image: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05)) 1;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   border-radius: 16px;
 }
 ```
 
-### Typography
-
-- Font: `'Outfit', sans-serif` (already on main site).
-- Body text: `#f3f4f6` / `#e5e7eb`.
-
 ### Buttons
 
-- Neon gradient border or fill; `box-shadow` glow on `:hover`.
-- **No** `transform: translateY` lift on hover.
+- Cyan neon border/glow on hover — **no** `translateY` lift
 
 ```css
 .btn-primary:hover {
@@ -899,23 +807,17 @@ Match your glassmorphism brief. Reference implementation patterns exist in `page
 }
 ```
 
-### Calendar cells
+### Calendar
 
 | State | Color |
 |-------|-------|
-| Likely free | `#22c55e` (green), ~70% opacity on glass |
-| Maybe free | `#eab308` (yellow) |
-| Empty | transparent / subtle grid lines |
-| Overlap heat | blend green intensity by count |
+| Likely free | `#22c55e` |
+| Maybe free | `#eab308` |
+| Hour cells | min-height 44px for touch |
 
-### Sliders (if used for time range or filters)
+### Sliders (threshold filters, if added)
 
-- Track thicker than thumb (e.g. track `8px`, thumb `18px`).
-- Padding at track ends so thumb does not touch edges (`padding: 0 8px` on wrapper or use `calc()` width).
-
-### File upload (if added later)
-
-Style `<input type="file">` with same glass wrapper — hidden input + glass label button.
+- Track thicker than thumb; end padding so thumb doesn’t touch edge.
 
 ---
 
@@ -923,98 +825,108 @@ Style `<input type="file">` with same glass wrapper — hidden input + glass lab
 
 ```
 pages/Group-Availability/
-├── PLAN.md                    ← this file
-├── DECISIONS.md               ← open questions
-├── index.html                 ← landing + auth
-├── event.html                 ← main calendar + overlap
-├── create.html                ← create event form (or merge into index)
-├── styles.css                 ← glass UI + calendar grid
-├── supabase-config.js         ← process.env placeholders
+├── PLAN.md
+├── DECISIONS.md
+├── index.html              ← public landing + Google auth + dashboard
+├── create.html             ← create event form
+├── event.html              ← calendar + overlap + organizer controls
+├── styles.css
+├── supabase-config.js
 ├── js/
-│   ├── supabase-client.js     ← client factory (auth + guest headers)
-│   ├── auth.js                ← Google sign-in/out, session
-│   ├── api.js                 ← CRUD wrappers
-│   ├── calendar.js            ← grid render, paint interactions
-│   ├── overlap.js             ← best-times computation
-│   ├── realtime.js            ← subscriptions
-│   ├── guest.js               ← guest token + name flow
-│   └── utils.js               ← dates, debounce, slug copy
-├── favicon.ico                ← optional, match site icons
-└── site.webmanifest           ← optional PWA metadata
+│   ├── supabase-client.js
+│   ├── auth.js
+│   ├── api.js
+│   ├── calendar.js         ← hourly grid, touch paint
+│   ├── overlap.js
+│   ├── realtime.js
+│   ├── guest.js            ← token, name edit, merge hook
+│   ├── blind-gate.js       ← hide/show others until first save
+│   └── utils.js            ← timezone, debounce, slug helpers
+└── site.webmanifest        ← optional
 ```
 
 ---
 
 ## 18. Implementation Phases
 
-### Phase 1 — Foundation (MVP)
+### Phase 1 — MVP
 
-- [ ] Supabase project + schema + RLS deployed
-- [ ] `supabase-config.js` + build injection verified on Vercel
-- [ ] Google auth working on production domain
-- [ ] Create event (authenticated only)
-- [ ] Event page with share link copy
-- [ ] Guest name flow + guest_token
-- [ ] Paint calendar (green/yellow) + save slots
-- [ ] Basic overlap list (top 10 windows)
+- [ ] Supabase schema + RLS + Realtime
+- [ ] Env injection on Vercel
+- [ ] Google auth on production domain
+- [ ] Public landing with upfront Google sign-in
+- [ ] Create event (dates, timezone, slug, expiry, deadline)
+- [ ] Event page: hourly paint, green/yellow toolbar, touch-first
+- [ ] Blind submission gate
+- [ ] Multi-user grid when unlocked (`visibility_mode = all`)
+- [ ] Overlap ranking (green×2 + yellow×1)
+- [ ] Edit deadline display + `is_closed` read-only mode
+- [ ] Guest flow + localStorage return
+- [ ] Authenticated dashboard
 
 ### Phase 2 — Polish
 
-- [ ] Realtime updates when others edit
-- [ ] Participant list + response status
-- [ ] Mobile-responsive grid (horizontal scroll or stacked days)
-- [ ] Loading/error states, toasts
-- [ ] Favicon + nav integration (`assets/js/nav-loader.js`)
+- [ ] Realtime sync
+- [ ] Guest → Google merge
+- [ ] Organizer: change visibility mode, edit deadline, close event
+- [ ] Mobile polish (sticky toolbar, scroll UX)
+- [ ] Loading/error toasts
+- [ ] Favicon + PWA manifest
 
-### Phase 3 — Enhancements (post-MVP)
+### Phase 3 — Post-MVP
 
-- [ ] Edit event details (organizer)
-- [ ] Export overlap summary (copy text / ICS)
-- [ ] Guest → Google account merge
-- [ ] Edge Function for rate limiting / abuse prevention
+- [ ] Main site nav entry (`nav-loader.js`)
+- [ ] WhenToHang.com domain cutover
+- [ ] Export overlap summary (copy / ICS)
+- [ ] Scheduled purge of expired events (pg_cron or Edge Function)
+- [ ] Rate limiting if needed
 
 ---
 
 ## 19. Security Checklist
 
-- [ ] RLS enabled on all public tables
-- [ ] `service_role` key not in repo or client bundle
+- [ ] RLS on all tables
+- [ ] `service_role` never in client
 - [ ] `.env.local` gitignored
-- [ ] Guest tokens are UUID v4 (unguessable)
-- [ ] No PII beyond display name + email (Google) stored
-- [ ] Supabase redirect URLs restricted to your domains (no open `*`)
-- [ ] Rate limiting considered if spam becomes an issue (Supabase dashboard or Edge Function)
+- [ ] Guest tokens UUID v4
+- [ ] Slot writes blocked when event closed / past deadline (RLS + client)
+- [ ] Redirect URLs domain-restricted
+- [ ] No event password in v1 (link = access)
 
 ---
 
 ## 20. Testing Plan
 
-| Test | Steps | Expected |
-|------|-------|----------|
-| Google login | Sign in on production URL | Redirect back, session in `supabase.auth.getSession()` |
-| Create event | Authenticated user creates “Dinner” | Row in `events`, slug in URL |
-| Guest join | Open link, enter name, paint slots | Rows in `participants` + `availability_slots` |
-| Cross-device sync | Two browsers, same event | Realtime or refresh shows both |
-| Overlap | 3 users mark same slot green | Slot appears at top of overlap list |
-| RLS isolation | Guest A cannot delete Guest B slots | Postgres permission denied |
-| Build injection | Deploy without env vars | Console warning; client fails gracefully |
-| Mobile layout | iPhone Safari | Grid usable, glass readable |
+| Test | Expected |
+|------|----------|
+| Google login (any account) | Session established; dashboard visible |
+| Create event | No past dates; default London TZ; expiry = end + 7d |
+| Custom slug | Unique slug works; duplicate rejected |
+| Hourly paint | Only whole hours; 60-min slots in DB |
+| Blind gate | Others hidden until first save |
+| After save | All grids visible (mode `all`) |
+| Overlap score | 2 greens + 1 yellow = 5 points for that hour |
+| Edit deadline | Banner shown; edits blocked after deadline |
+| Close event | Read-only for all participants |
+| Guest same browser | Token restores participant |
+| Guest → Google merge | Slots follow Google account |
+| Mobile touch | 44px targets; paint without accidental scroll |
+| RLS | Guest A cannot edit Guest B |
+| Timezone | Labels match event TZ, not device TZ |
 
 ---
 
 ## Quick Reference — Setup Order
 
-1. Create Supabase project (production-minded).
-2. Run schema SQL (Section 8).
-3. Run RLS SQL (Section 9).
-4. Enable Realtime on tables.
-5. Create Google OAuth client → enable in Supabase.
-6. Set Site URL + Redirect URLs for `xanderwiles.com`.
-7. Add `SUPABASE_URL` + `SUPABASE_ANON_KEY` to `.env.local` and Vercel.
-8. Implement frontend in `pages/Group-Availability/`.
-9. Deploy via git push → Vercel build.
-10. Test Google login on live domain.
+1. Create Supabase project (`when-to-hang`, London region).
+2. Run schema (Section 8) + RLS (Section 9).
+3. Enable Realtime on three tables.
+4. Google OAuth → Supabase Google provider.
+5. Auth URLs for `xanderwiles.com`.
+6. `.env.local` + Vercel env vars.
+7. Build frontend in `pages/Group-Availability/`.
+8. Deploy → test Google login on live domain.
 
 ---
 
-*Answer the questions in `DECISIONS.md` before Phase 1 implementation begins.*
+*Product decisions are locked in `DECISIONS.md`. Ready for Phase 1 implementation.*

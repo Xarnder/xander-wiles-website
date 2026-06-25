@@ -6,6 +6,10 @@
         {
             "source": "/pages/journal/(.*)",
             "destination": "/pages/journal/index.html"
+        },
+        {
+            "source": "/pages/Group-Availability/event",
+            "destination": "/pages/Group-Availability/event.html"
         }
     ],
     "cleanUrls": true

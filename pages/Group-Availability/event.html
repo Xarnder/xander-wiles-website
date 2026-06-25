@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <base href="/pages/Group-Availability/">
+  <title>Event — When To Hang</title>
+  <link rel="icon" href="favicon-dark.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#0a0a1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="main-nav-placeholder"></div>
+  <script src="/assets/js/nav-loader.js"></script>
+
+  <div class="background-orbs" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="container">
+    <a class="back-link" href="index.html">← Home</a>
+
+    <div id="config-warning" class="alert" hidden>
+      Supabase is not configured. Add env vars and rebuild — see <code>PLAN.md</code>.
+    </div>
+
+    <div id="loading" class="loading-screen">Loading event…</div>
+
+    <div id="not-found" class="glass-card" style="padding: 32px; text-align: center;" hidden>
+      <h2>Event not found</h2>
+      <p id="not-found-detail" class="muted">Check the link or ask the organizer for a new one.</p>
+      <p style="margin-top: 16px;"><a class="back-link" href="index.html">← Back to home</a></p>
+    </div>
+
+    <div id="event-app" hidden>
+      <header class="event-header">
+        <div class="header-row">
+          <div>
+            <h1 id="event-title"></h1>
+            <p id="event-description" class="event-description muted" hidden></p>
+            <p id="event-meta" class="muted"></p>
+          </div>
+        </div>
+        <div id="status-bar"></div>
+        <div class="share-link-box glass-card">
+          <label class="share-link-label" for="share-url-input">Share link</label>
+          <div class="share-link-row">
+            <input type="text" id="share-url-input" class="share-url-input" readonly>
+            <button type="button" id="copy-link" class="btn btn-primary">Copy</button>
+          </div>
+        </div>
+        <p class="muted" style="margin-top: 8px;"><span id="participant-count">0 participants</span></p>
+      </header>
+
+      <section id="join-panel" class="join-card glass-card" hidden>
+        <h2>Join this event</h2>
+        <button type="button" id="google-join" class="btn btn-primary btn-google" style="width: 100%;">Sign in with Google</button>
+        <p class="join-divider">or continue as guest</p>
+        <form id="guest-form">
+          <label>
+            Your name
+            <input type="text" id="guest-name" required maxlength="60" placeholder="Alex">
+          </label>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Continue</button>
+        </form>
+      </section>
+
+      <div id="identity-bar" class="identity-bar glass-card" hidden>
+        <img id="identity-avatar" alt="" width="36" height="36" referrerpolicy="no-referrer" hidden>
+        <span id="identity-name"></span>
+        <button type="button" id="edit-name-btn" class="btn btn-ghost">Edit name</button>
+        <button type="button" id="merge-google" class="btn btn-ghost" hidden>Sign in to sync</button>
+        <div id="name-edit-row" class="name-edit-row" hidden>
+          <input type="text" id="name-edit-input" maxlength="60">
+          <button type="button" id="name-save-btn" class="btn btn-primary">Save</button>
+        </div>
+      </div>
+
+      <section id="paint-section" hidden>
+        <h2 class="section-title">Your availability</h2>
+        <p class="muted" style="margin-bottom: 12px;">Tap days on the calendar — green = likely free, yellow = might be free</p>
+
+        <div id="paint-toolbar" class="paint-toolbar glass-card">
+          <button type="button" class="btn btn-ghost active" data-brush="likely">Green — likely</button>
+          <button type="button" class="btn btn-ghost" data-brush="maybe">Yellow — maybe</button>
+          <button type="button" class="btn btn-ghost" data-brush="erase">Eraser</button>
+        </div>
+
+        <div id="paint-grid"></div>
+
+        <div id="time-range-panel" class="time-range-panel glass-card">
+          <h3 class="time-range-title">Your times</h3>
+          <p class="muted time-range-hint">Applies to every day you select above</p>
+          <div class="time-range-row">
+            <label>
+              From
+              <input type="time" id="time-start" step="3600" value="10:00">
+            </label>
+            <label>
+              To
+              <input type="time" id="time-end" step="3600" value="22:00">
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <p id="blind-gate" class="blind-gate glass-card" hidden></p>
+
+      <section id="overlap-section">
+        <div class="section-header-row">
+          <h2 class="section-title">Best times</h2>
+          <div class="overlap-actions">
+            <button type="button" id="copy-overlap" class="btn btn-ghost" disabled>Copy summary</button>
+            <button type="button" id="download-ics" class="btn btn-ghost" disabled>Download .ics</button>
+          </div>
+        </div>
+        <div id="overlap-list" class="overlap-list"></div>
+      </section>
+
+      <section id="multi-section" hidden>
+        <h2 class="section-title">Everyone's availability</h2>
+        <div id="multi-grid"></div>
+      </section>
+
+      <section id="organizer-panel" class="organizer-panel glass-card" hidden>
+        <h3>Organizer settings</h3>
+        <div class="org-grid">
+          <label>
+            Last edit deadline
+            <input type="datetime-local" id="org-edit-deadline">
+          </label>
+          <label>
+            Visibility
+            <select id="org-visibility">
+              <option value="all">Everyone sees grids</option>
+              <option value="overlap_only">Overlap only</option>
+              <option value="organizer_only">Organizer only</option>
+            </select>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="org-close">
+            <span>Close event (no more edits)</span>
+          </label>
+        </div>
+        <div class="form-actions" style="margin-top: 16px;">
+          <button type="button" id="org-save" class="btn btn-primary">Save settings</button>
+          <button type="button" id="org-delete" class="btn btn-ghost">Delete event</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="js/event-main.js"></script>
+</body>
+</html>

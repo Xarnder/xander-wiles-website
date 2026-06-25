@@ -128,6 +128,22 @@ function injectEnvVars(filePath) {
     let content = fs.readFileSync(filePath, 'utf8');
     let hasChanged = false;
 
+    // When To Hang — Supabase placeholders (publishable key or legacy anon)
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey =
+        process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+    if (supabaseUrl && content.includes('__SUPABASE_URL__')) {
+        content = content.replace(/url: '__SUPABASE_URL__'/, `url: ${JSON.stringify(supabaseUrl)}`);
+        hasChanged = true;
+        console.log(`  [${path.basename(filePath)}] Injected SUPABASE_URL`);
+    }
+    if (supabaseKey && content.includes('__SUPABASE_ANON_KEY__')) {
+        content = content.replace(/anonKey: '__SUPABASE_ANON_KEY__'/, `anonKey: ${JSON.stringify(supabaseKey)}`);
+        hasChanged = true;
+        console.log(`  [${path.basename(filePath)}] Injected Supabase client key`);
+    }
+
     // Pattern: process.env.VARIABLE_NAME
     // We also support "process.env.VARIABLE_NAME" or 'process.env.VARIABLE_NAME'
     const envRegex = /process\.env\.([A-Z0-9_]+)/g;
@@ -143,7 +159,7 @@ function injectEnvVars(filePath) {
             return JSON.stringify(value);
         } else {
             // Only warn if it starts with a prefix we expect to be public
-            if (varName.startsWith('PUBLIC_') || varName.includes('FIREBASE') || varName.includes('API_KEY')) {
+            if (varName.startsWith('PUBLIC_') || varName.includes('FIREBASE') || varName.includes('API_KEY') || varName.includes('SUPABASE')) {
                 console.warn(`  [${path.basename(filePath)}] WARNING: Variable ${varName} not found in environment!`);
             }
             return match; // Keep as is
@@ -156,5 +172,10 @@ function injectEnvVars(filePath) {
 }
 
 processDirectory(deployOut);
+
+fs.writeFileSync(
+    path.join(deployOut, 'serve.json'),
+    JSON.stringify({ cleanUrls: true }, null, 2)
+);
 
 console.log('Build complete! Result is in deploy_out');

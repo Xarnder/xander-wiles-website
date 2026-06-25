@@ -38,52 +38,61 @@
  * The above values will be the same _even if_ different values for `ENVIRONMENT` or `PUBLIC_BASE_URL` are set at runtime, as they are statically replaced in your code with their build time values.
  */
 declare module '$env/static/private' {
-	export const SVELTEKIT_FORK: string;
 	export const NODE_ENV: string;
-	export const npm_node_execpath: string;
-	export const LOGNAME: string;
+	export const COLORTERM: string;
 	export const OSLogRateLimit: string;
-	export const npm_config_cache: string;
-	export const HOME: string;
-	export const XPC_FLAGS: string;
+	export const npm_lifecycle_script: string;
+	export const npm_config_prefix: string;
+	export const SHLVL: string;
+	export const GEMINI_API_KEY: string;
+	export const XPC_SERVICE_NAME: string;
+	export const npm_config_npm_version: string;
+	export const LANG: string;
 	export const EDITOR: string;
 	export const npm_lifecycle_event: string;
-	export const npm_config_node_gyp: string;
+	export const XPC_FLAGS: string;
 	export const npm_command: string;
-	export const npm_lifecycle_script: string;
-	export const __CFBundleIdentifier: string;
-	export const npm_config_init_module: string;
-	export const npm_package_json: string;
-	export const PWD: string;
 	export const __CF_USER_TEXT_ENCODING: string;
-	export const SSH_AUTH_SOCK: string;
-	export const LANG: string;
-	export const SHELL: string;
-	export const COLOR: string;
+	export const npm_config_init_module: string;
 	export const npm_execpath: string;
-	export const TERM_PROGRAM_VERSION: string;
-	export const SHLVL: string;
-	export const TMPDIR: string;
-	export const npm_config_user_agent: string;
-	export const XPC_SERVICE_NAME: string;
-	export const npm_config_global_prefix: string;
-	export const PATH: string;
-	export const NODE: string;
-	export const TERM: string;
-	export const COLORTERM: string;
-	export const npm_config_globalconfig: string;
-	export const npm_config_prefix: string;
+	export const npm_config_userconfig: string;
+	export const SVELTEKIT_FORK: string;
+	export const npm_node_execpath: string;
 	export const _: string;
+	export const npm_package_json: string;
+	export const TERM_SESSION_ID: string;
+	export const PATH: string;
+	export const npm_config_node_gyp: string;
+	export const PWD: string;
+	export const SUPABASE_URL: string;
+	export const SSH_AUTH_SOCK: string;
+	export const npm_config_globalconfig: string;
+	export const VITE_FIREBASE_STORAGE_BUCKET: string;
+	export const VITE_FIREBASE_MESSAGING_SENDER_ID: string;
+	export const LOGNAME: string;
 	export const npm_config_local_prefix: string;
 	export const npm_package_name: string;
 	export const npm_config_noproxy: string;
-	export const TERM_SESSION_ID: string;
-	export const INIT_CWD: string;
-	export const npm_config_npm_version: string;
-	export const npm_config_userconfig: string;
+	export const SHELL: string;
+	export const COLOR: string;
+	export const npm_config_global_prefix: string;
 	export const USER: string;
+	export const __CFBundleIdentifier: string;
+	export const TERM: string;
+	export const TMPDIR: string;
+	export const SUPABASE_PUBLISHABLE_KEY: string;
+	export const VITE_FIREBASE_AUTH_DOMAIN: string;
+	export const INIT_CWD: string;
 	export const npm_package_version: string;
+	export const VITE_FIREBASE_API_KEY: string;
+	export const npm_config_user_agent: string;
+	export const VITE_FIREBASE_APP_ID: string;
+	export const HOME: string;
 	export const TERM_PROGRAM: string;
+	export const VITE_FIREBASE_PROJECT_ID: string;
+	export const NODE: string;
+	export const npm_config_cache: string;
+	export const TERM_PROGRAM_VERSION: string;
 }
 
 /**
@@ -120,7 +129,37 @@ declare module '$env/static/private' {
  * The above values will be the same _even if_ different values for `ENVIRONMENT` or `PUBLIC_BASE_URL` are set at runtime, as they are statically replaced in your code with their build time values.
  */
 declare module '$env/static/public' {
-	
+	export const PUBLIC_PROMPT_FIREBASE_AUTH_DOMAIN: string;
+	export const PUBLIC_WORK_FIREBASE_APP_ID: string;
+	export const PUBLIC_STORY_FIREBASE_APP_ID: string;
+	export const PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: string;
+	export const PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
+	export const PUBLIC_STORY_FIREBASE_API_KEY: string;
+	export const PUBLIC_STORY_FIREBASE_PROJECT_ID: string;
+	export const PUBLIC_STORY_FIREBASE_STORAGE_BUCKET: string;
+	export const PUBLIC_PROMPT_FIREBASE_MESSAGING_SENDER_ID: string;
+	export const PUBLIC_TODO_FIREBASE_API_KEY: string;
+	export const PUBLIC_SOCIAL_FIREBASE_AUTH_DOMAIN: string;
+	export const PUBLIC_WORK_FIREBASE_API_KEY: string;
+	export const PUBLIC_WORK_FIREBASE_STORAGE_BUCKET: string;
+	export const PUBLIC_TODO_FIREBASE_APP_ID: string;
+	export const PUBLIC_SOCIAL_FIREBASE_APP_ID: string;
+	export const PUBLIC_PROMPT_FIREBASE_PROJECT_ID: string;
+	export const PUBLIC_TODO_FIREBASE_AUTH_DOMAIN: string;
+	export const PUBLIC_PROMPT_FIREBASE_API_KEY: string;
+	export const PUBLIC_TODO_FIREBASE_MESSAGING_SENDER_ID: string;
+	export const PUBLIC_WORK_FIREBASE_MESSAGING_SENDER_ID: string;
+	export const PUBLIC_PROMPT_FIREBASE_APP_ID: string;
+	export const PUBLIC_YOUTUBE_API_KEY: string;
+	export const PUBLIC_SOCIAL_FIREBASE_MESSAGING_SENDER_ID: string;
+	export const PUBLIC_WORK_FIREBASE_PROJECT_ID: string;
+	export const PUBLIC_PROMPT_FIREBASE_STORAGE_BUCKET: string;
+	export const PUBLIC_STORY_FIREBASE_MESSAGING_SENDER_ID: string;
+	export const PUBLIC_WORK_FIREBASE_AUTH_DOMAIN: string;
+	export const PUBLIC_TODO_FIREBASE_STORAGE_BUCKET: string;
+	export const PUBLIC_SOCIAL_FIREBASE_PROJECT_ID: string;
+	export const PUBLIC_SOCIAL_FIREBASE_API_KEY: string;
+	export const PUBLIC_TODO_FIREBASE_PROJECT_ID: string;
 }
 
 /**
@@ -170,52 +209,61 @@ declare module '$env/static/public' {
  */
 declare module '$env/dynamic/private' {
 	export const env: {
-		SVELTEKIT_FORK: string;
 		NODE_ENV: string;
-		npm_node_execpath: string;
-		LOGNAME: string;
+		COLORTERM: string;
 		OSLogRateLimit: string;
-		npm_config_cache: string;
-		HOME: string;
-		XPC_FLAGS: string;
+		npm_lifecycle_script: string;
+		npm_config_prefix: string;
+		SHLVL: string;
+		GEMINI_API_KEY: string;
+		XPC_SERVICE_NAME: string;
+		npm_config_npm_version: string;
+		LANG: string;
 		EDITOR: string;
 		npm_lifecycle_event: string;
-		npm_config_node_gyp: string;
+		XPC_FLAGS: string;
 		npm_command: string;
-		npm_lifecycle_script: string;
-		__CFBundleIdentifier: string;
-		npm_config_init_module: string;
-		npm_package_json: string;
-		PWD: string;
 		__CF_USER_TEXT_ENCODING: string;
-		SSH_AUTH_SOCK: string;
-		LANG: string;
-		SHELL: string;
-		COLOR: string;
+		npm_config_init_module: string;
 		npm_execpath: string;
-		TERM_PROGRAM_VERSION: string;
-		SHLVL: string;
-		TMPDIR: string;
-		npm_config_user_agent: string;
-		XPC_SERVICE_NAME: string;
-		npm_config_global_prefix: string;
-		PATH: string;
-		NODE: string;
-		TERM: string;
-		COLORTERM: string;
-		npm_config_globalconfig: string;
-		npm_config_prefix: string;
+		npm_config_userconfig: string;
+		SVELTEKIT_FORK: string;
+		npm_node_execpath: string;
 		_: string;
+		npm_package_json: string;
+		TERM_SESSION_ID: string;
+		PATH: string;
+		npm_config_node_gyp: string;
+		PWD: string;
+		SUPABASE_URL: string;
+		SSH_AUTH_SOCK: string;
+		npm_config_globalconfig: string;
+		VITE_FIREBASE_STORAGE_BUCKET: string;
+		VITE_FIREBASE_MESSAGING_SENDER_ID: string;
+		LOGNAME: string;
 		npm_config_local_prefix: string;
 		npm_package_name: string;
 		npm_config_noproxy: string;
-		TERM_SESSION_ID: string;
-		INIT_CWD: string;
-		npm_config_npm_version: string;
-		npm_config_userconfig: string;
+		SHELL: string;
+		COLOR: string;
+		npm_config_global_prefix: string;
 		USER: string;
+		__CFBundleIdentifier: string;
+		TERM: string;
+		TMPDIR: string;
+		SUPABASE_PUBLISHABLE_KEY: string;
+		VITE_FIREBASE_AUTH_DOMAIN: string;
+		INIT_CWD: string;
 		npm_package_version: string;
+		VITE_FIREBASE_API_KEY: string;
+		npm_config_user_agent: string;
+		VITE_FIREBASE_APP_ID: string;
+		HOME: string;
 		TERM_PROGRAM: string;
+		VITE_FIREBASE_PROJECT_ID: string;
+		NODE: string;
+		npm_config_cache: string;
+		TERM_PROGRAM_VERSION: string;
 		[key: `PUBLIC_${string}`]: undefined;
 		[key: `${string}`]: string | undefined;
 	}
@@ -271,6 +319,37 @@ declare module '$env/dynamic/private' {
  */
 declare module '$env/dynamic/public' {
 	export const env: {
+		PUBLIC_PROMPT_FIREBASE_AUTH_DOMAIN: string;
+		PUBLIC_WORK_FIREBASE_APP_ID: string;
+		PUBLIC_STORY_FIREBASE_APP_ID: string;
+		PUBLIC_SOCIAL_FIREBASE_STORAGE_BUCKET: string;
+		PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
+		PUBLIC_STORY_FIREBASE_API_KEY: string;
+		PUBLIC_STORY_FIREBASE_PROJECT_ID: string;
+		PUBLIC_STORY_FIREBASE_STORAGE_BUCKET: string;
+		PUBLIC_PROMPT_FIREBASE_MESSAGING_SENDER_ID: string;
+		PUBLIC_TODO_FIREBASE_API_KEY: string;
+		PUBLIC_SOCIAL_FIREBASE_AUTH_DOMAIN: string;
+		PUBLIC_WORK_FIREBASE_API_KEY: string;
+		PUBLIC_WORK_FIREBASE_STORAGE_BUCKET: string;
+		PUBLIC_TODO_FIREBASE_APP_ID: string;
+		PUBLIC_SOCIAL_FIREBASE_APP_ID: string;
+		PUBLIC_PROMPT_FIREBASE_PROJECT_ID: string;
+		PUBLIC_TODO_FIREBASE_AUTH_DOMAIN: string;
+		PUBLIC_PROMPT_FIREBASE_API_KEY: string;
+		PUBLIC_TODO_FIREBASE_MESSAGING_SENDER_ID: string;
+		PUBLIC_WORK_FIREBASE_MESSAGING_SENDER_ID: string;
+		PUBLIC_PROMPT_FIREBASE_APP_ID: string;
+		PUBLIC_YOUTUBE_API_KEY: string;
+		PUBLIC_SOCIAL_FIREBASE_MESSAGING_SENDER_ID: string;
+		PUBLIC_WORK_FIREBASE_PROJECT_ID: string;
+		PUBLIC_PROMPT_FIREBASE_STORAGE_BUCKET: string;
+		PUBLIC_STORY_FIREBASE_MESSAGING_SENDER_ID: string;
+		PUBLIC_WORK_FIREBASE_AUTH_DOMAIN: string;
+		PUBLIC_TODO_FIREBASE_STORAGE_BUCKET: string;
+		PUBLIC_SOCIAL_FIREBASE_PROJECT_ID: string;
+		PUBLIC_SOCIAL_FIREBASE_API_KEY: string;
+		PUBLIC_TODO_FIREBASE_PROJECT_ID: string;
 		[key: `PUBLIC_${string}`]: string | undefined;
 	}
 }

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <base href="/pages/Group-Availability/">
+  <title>Create event — When To Hang</title>
+  <link rel="icon" href="favicon-dark.svg" type="image/svg+xml">
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#0a0a1a">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="main-nav-placeholder"></div>
+  <script src="/assets/js/nav-loader.js"></script>
+
+  <div class="background-orbs" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="container">
+    <a class="back-link" href="index.html">← Back</a>
+    <header class="app-header">
+      <h1>Create event</h1>
+      <p class="tagline">Set the dates and share the link with your group.</p>
+    </header>
+
+    <div id="config-warning" class="alert" hidden>
+      Supabase is not configured. See setup instructions in <code>PLAN.md</code>.
+    </div>
+
+    <form id="create-form" class="form-card glass-card">
+      <div class="form-grid">
+        <label>
+          Event title
+          <input type="text" name="title" required maxlength="120" placeholder="Dinner, games night…">
+        </label>
+
+        <label>
+          Description <span class="muted">(optional)</span>
+          <textarea name="description" maxlength="500" placeholder="Any details for your friends"></textarea>
+        </label>
+
+        <fieldset class="date-range-fieldset">
+          <legend>Event dates</legend>
+          <p class="muted date-range-hint">No limit on how long your event can run — pick any start and end date.</p>
+          <div class="date-range-row">
+            <label>
+              Start date
+              <input type="date" name="start_date" required>
+            </label>
+            <label>
+              End date
+              <input type="date" name="end_date" required>
+            </label>
+          </div>
+          <p id="date-span-preview" class="date-span-preview muted" aria-live="polite">—</p>
+        </fieldset>
+
+        <label>
+          Timezone <span class="muted">(everyone sees times in this zone)</span>
+          <select name="timezone" required></select>
+        </label>
+
+        <label>
+          Custom link <span class="muted">(optional, e.g. dinner-june)</span>
+          <input type="text" name="custom_slug" pattern="[a-zA-Z0-9-]+" maxlength="48" placeholder="auto-generated if blank">
+        </label>
+
+        <label>
+          Who can see individual grids
+          <select name="visibility_mode">
+            <option value="all" selected>Everyone (after they submit)</option>
+            <option value="overlap_only">Overlap summary only</option>
+            <option value="organizer_only">Organizer only</option>
+          </select>
+        </label>
+
+        <label>
+          Last edit deadline <span class="muted">(optional)</span>
+          <input type="datetime-local" name="edit_deadline">
+        </label>
+
+        <label>
+          Data deletion <span class="muted">(when this event is removed from the server)</span>
+          <input type="datetime-local" name="expires_at">
+        </label>
+
+        <p class="muted">Default: auto-delete 1 week after the last event day — <span id="expires-preview">—</span>. This does not limit how many days your event can span.</p>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Create &amp; share</button>
+        <a href="index.html" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <script type="module" src="js/create-main.js"></script>
+</body>
+</html>

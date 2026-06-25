@@ -1,0 +1,17 @@
+{
+  "name": "When To Hang",
+  "short_name": "When To Hang",
+  "description": "Find a time everyone is free",
+  "icons": [
+    {
+      "src": "favicon-dark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "theme_color": "#0a0a1a",
+  "background_color": "#0a0a1a",
+  "display": "standalone",
+  "start_url": "/pages/Group-Availability/index.html"
+}
