@@ -183,7 +183,9 @@ Important rules:
                         <h2>Phase 2 — Answer Questions</h2>
                     </div>
 
-                    <p class="section-intro">After reviewing <code>docs/<span data-feature-date></span>/feature-plan/01-questions-and-decisions.md</code>, answer directly
+                    <p class="section-intro">After reviewing
+                        <code>docs/<span data-feature-date></span>/feature-plan/01-questions-and-decisions.md</code>,
+                        answer directly
                         inside the markdown file.</p>
                     <p class="section-intro">Then use this prompt:</p>
 
@@ -242,21 +244,22 @@ Do not start coding until I approve the implementation step.</pre>
                         </button>
                         <div class="prompt-body">I do not understand this part:
 
-<textarea class="prompt-field prompt-field--block" rows="5"
-    placeholder="Paste the confusing section here"
-    data-default="[Paste the confusing section here]"
-    aria-label="Paste the confusing section here"></textarea>
+                            <textarea class="prompt-field prompt-field--block" rows="5"
+                                placeholder="Paste the confusing section here"
+                                data-default="[Paste the confusing section here]"
+                                aria-label="Paste the confusing section here"></textarea>
 
-Please explain it as if I am a junior developer.
+                            Please explain it as if I am a junior developer.
 
-Use:
+                            Use:
 
-- A simple explanation.
-- An analogy or metaphor.
-- A small concrete example.
-- Why this matters in production.
-- What could go wrong if we misunderstand it.
-- How this applies to our current codebase.</div>
+                            - A simple explanation.
+                            - An analogy or metaphor.
+                            - A small concrete example.
+                            - Why this matters in production.
+                            - What could go wrong if we misunderstand it.
+                            - How this applies to our current codebase.
+                        </div>
                     </div>
                 </section>
 
@@ -280,31 +283,32 @@ Use:
                         </button>
                         <div class="prompt-body">Start implementing the feature, but work in small, safe steps.
 
-Rules:
+                            Rules:
 
-- Only implement the first approved step.
-- Before editing files, restate what you are about to change.
-- Keep changes small and reviewable.
-- Do not refactor unrelated code.
-- Do not change public APIs unless the plan says to.
-- Do not change database schema without explaining the migration and rollback.
-- Do not introduce new packages unless you explain why they are needed.
-- Do not store secrets in code.
-- Do not weaken authentication, authorization, validation, or error handling.
-- Prefer clear, maintainable code over clever code.
-- After each step, explain:
-  1. What changed.
-  2. Why it changed.
-  3. Which files changed.
-  4. What tests should now be run.
-  5. What remains to be done.
+                            - Only implement the first approved step.
+                            - Before editing files, restate what you are about to change.
+                            - Keep changes small and reviewable.
+                            - Do not refactor unrelated code.
+                            - Do not change public APIs unless the plan says to.
+                            - Do not change database schema without explaining the migration and rollback.
+                            - Do not introduce new packages unless you explain why they are needed.
+                            - Do not store secrets in code.
+                            - Do not weaken authentication, authorization, validation, or error handling.
+                            - Prefer clear, maintainable code over clever code.
+                            - After each step, explain:
+                            1. What changed.
+                            2. Why it changed.
+                            3. Which files changed.
+                            4. What tests should now be run.
+                            5. What remains to be done.
 
-Implement only this step:
+                            Implement only this step:
 
-<textarea class="prompt-field prompt-field--block" rows="4"
-    placeholder="Describe the approved implementation step"
-    data-default="[Describe the approved implementation step]"
-    aria-label="Describe the approved implementation step"></textarea></div>
+                            <textarea class="prompt-field prompt-field--block" rows="4"
+                                placeholder="Describe the approved implementation step"
+                                data-default="[Describe the approved implementation step]"
+                                aria-label="Describe the approved implementation step"></textarea>
+                        </div>
                     </div>
 
                     <figure class="guide-figure">
@@ -521,25 +525,26 @@ Do not say it is production ready unless the evidence supports it.</pre>
                         </button>
                         <div class="prompt-body">Create a post-release monitoring checklist for this feature.
 
-Include:
+                            Include:
 
-- What user actions to test in production.
-- What logs to check.
-- What metrics to watch.
-- What errors would indicate a serious problem.
-- What database records should exist.
-- What analytics events should fire.
-- How to confirm no existing behaviour was broken.
-- What to check after 1 hour.
-- What to check after 24 hours.
+                            - What user actions to test in production.
+                            - What logs to check.
+                            - What metrics to watch.
+                            - What errors would indicate a serious problem.
+                            - What database records should exist.
+                            - What analytics events should fire.
+                            - How to confirm no existing behaviour was broken.
+                            - What to check after 1 hour.
+                            - What to check after 24 hours.
 
-Also create a simple rollback decision rule:
+                            Also create a simple rollback decision rule:
 
-If <input type="text" class="prompt-field prompt-field--inline"
-    placeholder="specific bad thing happens" data-default="[specific bad thing happens]"
-    aria-label="Specific bad thing that triggers rollback">, then we should <input type="text"
-    class="prompt-field prompt-field--inline" placeholder="specific rollback action"
-    data-default="[specific rollback action]" aria-label="Specific rollback action">.</div>
+                            If <input type="text" class="prompt-field prompt-field--inline"
+                                placeholder="specific bad thing happens" data-default="[specific bad thing happens]"
+                                aria-label="Specific bad thing that triggers rollback">, then we should <input
+                                type="text" class="prompt-field prompt-field--inline"
+                                placeholder="specific rollback action" data-default="[specific rollback action]"
+                                aria-label="Specific rollback action">.</div>
                     </div>
 
                     <figure class="guide-figure">
