@@ -263,6 +263,13 @@
   @apply hidden;
 }
 
+@media (max-width: 640px) {
+  .EasyMDEContainer .CodeMirror {
+    min-height: 180px !important;
+  }
+}
+
+
 /* --- Custom Scrollbar --- */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;

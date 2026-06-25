@@ -6,11 +6,12 @@ import { useToast } from '../context/ToastContext';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, onSnapshot } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
+import EasyMDE from 'easymde';
 import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
 import { format, parseISO, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, BookOpen, Hash, Type } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, BookOpen, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2 } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
@@ -83,6 +84,8 @@ export default function EntryEditor() {
     const [numericFields, setNumericFields] = useState([]);
     const [numericEntries, setNumericEntries] = useState({});
     const [entrySettingsLoaded, setEntrySettingsLoaded] = useState(false);
+    const [mdeInstance, setMdeInstance] = useState(null);
+    const [showFormatting, setShowFormatting] = useState(false);
 
     // Image State
     const [images, setImages] = useState([]); // Array of { url, path, size }
@@ -846,7 +849,7 @@ export default function EntryEditor() {
             spellChecker: false,
             status: false,
             placeholder: "Capture the moment...",
-            toolbar: ["bold", "italic", "heading", "|", "quote", "unordered-list", "ordered-list", "|", "link", "image", "|", "fullscreen", "side-by-side"],
+            toolbar: false,
         };
     }, []);
 
@@ -1101,7 +1104,7 @@ export default function EntryEditor() {
 
 
             {/* Content Container */}
-            <div className={`glass-card flex-1 p-6 md:p-8 overflow-hidden flex flex-col relative ${isEditing ? 'ring-2 ring-primary/30' : ''}`}>
+            <div className={`glass-card flex-1 p-4 sm:p-6 md:p-8 overflow-hidden flex flex-col relative ${isEditing ? 'ring-2 ring-primary/30' : ''}`}>
                 
                 {/* Word Progress Bar (Editor Mode Only) */}
                 {isEditing && (
@@ -1159,7 +1162,7 @@ export default function EntryEditor() {
                                 placeholder="Give this day a title..."
                                 readOnly={isInferredTitle}
                                 rows={1}
-                                className={`w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-2 p-0 resize-none overflow-hidden ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
+                                className={`w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-1 sm:mb-2 p-0 resize-none overflow-hidden ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
                             />
                             {isInferredTitle && (
                                 <div className="absolute -top-6 left-0 text-[10px] text-text-muted/60 uppercase tracking-widest flex items-center">
@@ -1169,46 +1172,10 @@ export default function EntryEditor() {
                             )}
                         </div>
 
-                        {/* Mood Picker */}
-                        <div className="flex items-center gap-4 mb-6 py-2 px-3 bg-white/5 rounded-xl border border-white/10 w-fit">
-                            <span className="text-[10px] text-text-muted uppercase tracking-widest font-bold">How's your mood?</span>
-                            <div className="flex items-center gap-1.5">
-                                {MOODS.map((m) => {
-                                    const Icon = m.icon;
-                                    const isSelected = mood === m.value;
-                                    return (
-                                        <button
-                                            key={m.value}
-                                            onClick={() => setMood(isSelected ? null : m.value)}
-                                            className={`p-1.5 rounded-lg transition-all duration-200 group/item relative ${
-                                                isSelected 
-                                                ? 'bg-white/10 scale-110 shadow-lg' 
-                                                : 'hover:bg-white/5 opacity-40 hover:opacity-100'
-                                            }`}
-                                            title={m.label}
-                                        >
-                                            <Icon 
-                                                className="w-5 h-5 transition-colors" 
-                                                style={{ color: isSelected ? m.color : 'white' }}
-                                            />
-                                            {isSelected && (
-                                                <div 
-                                                    className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full animate-bounce"
-                                                    style={{ backgroundColor: m.color }}
-                                                />
-                                            )}
-                                            <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-[10px] py-1 px-2 rounded opacity-0 group-hover/item:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                                                {m.label}
-                                            </span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
 
                         {/* Writing Prompt Callout */}
                         {showPrompts && (
-                            <div className="mb-6 p-4 rounded-xl bg-secondary/10 border border-secondary/20 animate-in slide-in-from-top duration-300 relative group">
+                            <div className="mb-3 sm:mb-6 p-3 sm:p-4 rounded-xl bg-secondary/10 border border-secondary/20 animate-in slide-in-from-top duration-300 relative group">
                                 <button 
                                     onClick={() => setShowPrompts(false)}
                                     className="absolute top-2 right-2 text-text-muted hover:text-white"
@@ -1216,13 +1183,13 @@ export default function EntryEditor() {
                                     <X className="w-4 h-4" />
                                 </button>
                                 <div className="flex items-start gap-3">
-                                    <Sparkles className="w-5 h-5 text-secondary shrink-0 mt-0.5" />
+                                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-secondary shrink-0 mt-0.5" />
                                     <div>
                                         <p className="text-[10px] text-secondary font-bold uppercase tracking-widest mb-1">Writing Prompt</p>
-                                        <p className="text-white italic text-lg leading-relaxed">{currentPrompt}</p>
+                                        <p className="text-white italic text-sm sm:text-base md:text-lg leading-relaxed">{currentPrompt}</p>
                                         <button 
                                             onClick={getRandomPrompt}
-                                            className="mt-3 text-xs text-secondary hover:text-white font-medium flex items-center transition-colors"
+                                            className="mt-2 sm:mt-3 text-xs text-secondary hover:text-white font-medium flex items-center transition-colors"
                                         >
                                             Try another one <ChevronRight className="w-3 h-3 ml-1" />
                                         </button>
@@ -1231,61 +1198,8 @@ export default function EntryEditor() {
                             </div>
                         )}
 
-                        {/* Tags Editor Area */}
-                        {availableTags.length > 0 && (
-                            <div className="mb-6">
-                                <label className="flex items-center text-sm font-medium text-text-muted mb-2">
-                                    <Tag className="w-4 h-4 mr-2" /> Tags
-                                </label>
-                                <div className="flex flex-wrap gap-2">
-                                    {availableTags.map(tag => {
-                                        const isSelected = selectedTags.includes(tag.id);
-                                        return (
-                                            <button
-                                                key={tag.id}
-                                                type="button"
-                                                onClick={() => {
-                                                    if (isSelected) {
-                                                        setSelectedTags(prev => prev.filter(id => id !== tag.id));
-                                                    } else {
-                                                        setSelectedTags(prev => [...prev, tag.id]);
-                                                    }
-                                                }}
-                                                className={`px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-2 transition-all duration-200 border ${isSelected
-                                                        ? 'bg-white/10 shadow-sm'
-                                                        : 'bg-transparent hover:bg-white/5 opacity-60 hover:opacity-100'
-                                                    }`}
-                                                style={{
-                                                    borderColor: isSelected ? tag.color : 'rgba(255,255,255,0.1)',
-                                                    color: isSelected ? tag.color : 'var(--text-muted)'
-                                                }}
-                                            >
-                                                <div
-                                                    className="w-2 h-2 rounded-full"
-                                                    style={{ backgroundColor: tag.color }}
-                                                />
-                                                {tag.name}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="mb-6 rounded-lg border border-secondary/20 bg-secondary/10 px-4 py-3 text-sm text-text-secondary">
-                            <div className="flex items-start gap-3">
-                                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />
-                                <div>
-                                    <p className="font-bold text-white">AI summary available after saving</p>
-                                    <p className="mt-1 text-xs leading-relaxed text-text-muted">
-                                        Save this entry, then switch to view mode to generate or review the private local AI summary.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
                         {/* Image Upload Area */}
-                        <div className="mb-4">
+                        <div className="mb-3 sm:mb-4">
                             {(images.length > 0 || uploading) && (
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
                                     {images.map((img, idx) => (
@@ -1374,12 +1288,12 @@ export default function EntryEditor() {
                                     />
                                     <label
                                         htmlFor="image-upload"
-                                        className={`flex flex-col items-center justify-center w-full ${(images.length > 0 || uploading) ? 'h-24' : 'h-32'} border-2 border-dashed border-white/10 rounded-lg transition-all ${uploading ? 'opacity-50 cursor-not-allowed bg-white/5' : 'cursor-pointer hover:border-primary/50 hover:bg-white/5'}`}
+                                        className={`flex flex-col items-center justify-center w-full ${(images.length > 0 || uploading) ? 'h-20 sm:h-24' : 'h-24 sm:h-32'} border-2 border-dashed border-white/10 rounded-lg transition-all ${uploading ? 'opacity-50 cursor-not-allowed bg-white/5' : 'cursor-pointer hover:border-primary/50 hover:bg-white/5'}`}
                                     >
                                         <div className="flex flex-col items-center text-text-muted group-hover:text-white">
-                                            <ImageIcon className="w-8 h-8 mb-2" />
-                                            <span className="text-sm font-medium">Click to upload images ({images.length + (uploading ? uploadQueueCount : 0)}/8)</span>
-                                            <span className="text-xs mt-1 text-text-muted/60">Max 200KB each (Auto-compressed)</span>
+                                            <ImageIcon className="w-6 h-6 sm:w-8 sm:h-8 mb-1.5 sm:mb-2" />
+                                            <span className="text-xs sm:text-sm font-medium">Click to upload images ({images.length + (uploading ? uploadQueueCount : 0)}/8)</span>
+                                            <span className="text-[10px] sm:text-xs mt-0.5 sm:mt-1 text-text-muted/60">Max 200KB each (Auto-compressed)</span>
                                         </div>
                                     </label>
                                 </div>
@@ -1387,8 +1301,8 @@ export default function EntryEditor() {
                         </div>
 
                         <div className="flex-1 overflow-auto custom-scrollbar -mr-4 pr-4">
-                            <div className="mb-6">
-                                <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
+                            <div className="mb-4 sm:mb-6">
+                                <div className="mb-1.5 sm:mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
                                     <BookOpen className="h-4 w-4 text-primary" />
                                     Main entry
                                 </div>
@@ -1396,21 +1310,191 @@ export default function EntryEditor() {
                                     value={content}
                                     onChange={setContent}
                                     options={mdeOptions}
+                                    getMdeInstance={setMdeInstance}
                                     className="prose-dark"
                                 />
                             </div>
 
+                            {/* Combined Mood Picker and Formatting Tool Row */}
+                            <div className="flex flex-col gap-2 mb-4 sm:mb-6">
+                                <div className="flex items-center gap-2 sm:gap-4 py-1 px-2.5 sm:py-2 sm:px-3 bg-white/5 rounded-xl border border-white/10 w-fit">
+                                    <span className="text-[10px] text-text-muted uppercase tracking-widest font-bold">How's your mood?</span>
+                                    <div className="flex items-center gap-1.5">
+                                        {MOODS.map((m) => {
+                                            const Icon = m.icon;
+                                            const isSelected = mood === m.value;
+                                            return (
+                                                <button
+                                                    key={m.value}
+                                                    type="button"
+                                                    onClick={() => setMood(isSelected ? null : m.value)}
+                                                    className={`p-1 sm:p-1.5 rounded-lg transition-all duration-200 group/item relative ${
+                                                        isSelected 
+                                                        ? 'bg-white/10 scale-110 shadow-lg' 
+                                                        : 'hover:bg-white/5 opacity-40 hover:opacity-100'
+                                                    }`}
+                                                    title={m.label}
+                                                >
+                                                    <Icon 
+                                                        className="w-4 h-4 sm:w-5 sm:h-5 transition-colors" 
+                                                        style={{ color: isSelected ? m.color : 'white' }}
+                                                    />
+                                                    {isSelected && (
+                                                        <div 
+                                                            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full animate-bounce"
+                                                            style={{ backgroundColor: m.color }}
+                                                        />
+                                                    )}
+                                                    <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-[10px] py-1 px-2 rounded opacity-0 group-hover/item:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                                        {m.label}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Divider */}
+                                    <div className="h-4 w-px bg-white/10" />
+
+                                    {/* Tiny 'T' button for formatting toggle */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowFormatting(!showFormatting)}
+                                        className={`p-1 sm:p-1.5 rounded-lg transition-all duration-200 relative ${
+                                            showFormatting 
+                                            ? 'bg-white/10 text-primary scale-110 shadow-lg' 
+                                            : 'hover:bg-white/5 text-text-muted hover:text-white'
+                                        }`}
+                                        title={showFormatting ? "Hide Formatting" : "Formatting Tools"}
+                                    >
+                                        <Type className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    </button>
+                                </div>
+
+                                {/* Collapsible Formatting Panel */}
+                                {showFormatting && (
+                                    <div className="flex flex-wrap items-center gap-1 p-1.5 bg-white/5 border border-white/10 rounded-lg animate-in fade-in slide-in-from-top duration-200 w-fit">
+                                        <button
+                                            type="button"
+                                            onClick={() => mdeInstance && EasyMDE.toggleBold(mdeInstance)}
+                                            className="p-2 hover:bg-white/10 rounded text-text-secondary hover:text-white transition-colors"
+                                            title="Bold"
+                                        >
+                                            <Bold className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => mdeInstance && EasyMDE.toggleItalic(mdeInstance)}
+                                            className="p-2 hover:bg-white/10 rounded text-text-secondary hover:text-white transition-colors"
+                                            title="Italic"
+                                        >
+                                            <Italic className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => mdeInstance && EasyMDE.toggleUnorderedList(mdeInstance)}
+                                            className="p-2 hover:bg-white/10 rounded text-text-secondary hover:text-white transition-colors"
+                                            title="Bullet List"
+                                        >
+                                            <List className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => mdeInstance && EasyMDE.toggleOrderedList(mdeInstance)}
+                                            className="p-2 hover:bg-white/10 rounded text-text-secondary hover:text-white transition-colors"
+                                            title="Numbered List"
+                                        >
+                                            <ListOrdered className="w-4 h-4" />
+                                        </button>
+                                        <div className="h-4 w-px bg-white/10 mx-1" />
+                                        <button
+                                            type="button"
+                                            onClick={() => mdeInstance && EasyMDE.toggleHeadingSmaller(mdeInstance)}
+                                            className="p-2 hover:bg-white/10 rounded text-text-secondary hover:text-white transition-colors"
+                                            title="Heading"
+                                        >
+                                            <Heading className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => mdeInstance && EasyMDE.toggleBlockquote(mdeInstance)}
+                                            className="p-2 hover:bg-white/10 rounded text-text-secondary hover:text-white transition-colors"
+                                            title="Quote"
+                                        >
+                                            <Quote className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => mdeInstance && EasyMDE.drawLink(mdeInstance)}
+                                            className="p-2 hover:bg-white/10 rounded text-text-secondary hover:text-white transition-colors"
+                                            title="Insert Link"
+                                        >
+                                            <Link2 className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => mdeInstance && EasyMDE.drawImage(mdeInstance)}
+                                            className="p-2 hover:bg-white/10 rounded text-text-secondary hover:text-white transition-colors"
+                                            title="Insert Image URL"
+                                        >
+                                            <ImageIcon className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Tags Editor Area moved under the main entry input box */}
+                            {availableTags.length > 0 && (
+                                <div className="mb-4 sm:mb-6">
+                                    <label className="flex items-center text-sm font-medium text-text-muted mb-2">
+                                        <Tag className="w-4 h-4 mr-2" /> Tags
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {availableTags.map(tag => {
+                                            const isSelected = selectedTags.includes(tag.id);
+                                            return (
+                                                <button
+                                                    key={tag.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (isSelected) {
+                                                            setSelectedTags(prev => prev.filter(id => id !== tag.id));
+                                                        } else {
+                                                            setSelectedTags(prev => [...prev, tag.id]);
+                                                        }
+                                                    }}
+                                                    className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium flex items-center gap-2 transition-all duration-200 border ${isSelected
+                                                            ? 'bg-white/10 shadow-sm'
+                                                            : 'bg-transparent hover:bg-white/5 opacity-60 hover:opacity-100'
+                                                        }`}
+                                                    style={{
+                                                        borderColor: isSelected ? tag.color : 'rgba(255,255,255,0.1)',
+                                                        color: isSelected ? tag.color : 'var(--text-muted)'
+                                                    }}
+                                                >
+                                                    <div
+                                                        className="w-2 h-2 rounded-full"
+                                                        style={{ backgroundColor: tag.color }}
+                                                    />
+                                                    {tag.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
                             {entrySections.length > 0 && (
-                                <div className="space-y-4">
+                                <div className="space-y-3 sm:space-y-4">
                                     {entrySections.map((section) => {
                                         const subEntry = subEntries[section.id] || {};
 
                                         return (
                                             <section
                                                 key={section.id}
-                                                className="rounded-xl border border-white/10 bg-white/5 p-4"
+                                                className="rounded-xl border border-white/10 bg-white/5 p-3 sm:p-4"
                                             >
-                                                <div className="mb-3 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
+                                                <div className="mb-2 sm:mb-3 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
                                                     <Type className="h-4 w-4 shrink-0 text-primary" />
                                                     <span className="min-w-0 truncate">{section.name}</span>
                                                 </div>
@@ -1420,7 +1504,7 @@ export default function EntryEditor() {
                                                         value={subEntry.title || ''}
                                                         onChange={(event) => updateSubEntry(section.id, 'title', event.target.value)}
                                                         placeholder={`${section.name} title`}
-                                                        className="mb-3 w-full min-w-0 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                                                        className="mb-2 w-full min-w-0 rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 sm:px-3 sm:py-2 text-sm sm:text-base text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
                                                     />
                                                 )}
 
@@ -1428,8 +1512,8 @@ export default function EntryEditor() {
                                                     value={subEntry.content || ''}
                                                     onChange={(event) => updateSubEntry(section.id, 'content', event.target.value)}
                                                     placeholder={`Write ${section.name.toLowerCase()}...`}
-                                                    rows={7}
-                                                    className="w-full min-w-0 resize-y rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                                                    rows={5}
+                                                    className="w-full min-w-0 resize-y rounded-lg border border-white/10 bg-black/20 px-2.5 py-2.5 sm:px-3 sm:py-3 text-sm sm:text-base text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
                                                 />
                                             </section>
                                         );
@@ -1438,15 +1522,15 @@ export default function EntryEditor() {
                             )}
 
                             {numericFields.length > 0 && (
-                                <div className={`${entrySections.length > 0 ? 'mt-4' : ''} grid gap-4 sm:grid-cols-2`}>
+                                <div className={`${entrySections.length > 0 ? 'mt-3 sm:mt-4' : ''} grid gap-3 sm:gap-4 sm:grid-cols-2`}>
                                     {numericFields.map((field) => (
                                         <section
                                             key={field.id}
-                                            className="rounded-xl border border-white/10 bg-white/5 p-4"
+                                            className="rounded-xl border border-white/10 bg-white/5 p-3 sm:p-4"
                                         >
                                             <label
                                                 htmlFor={`numeric-entry-${field.id}`}
-                                                className="mb-3 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted"
+                                                className="mb-2 sm:mb-3 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted"
                                             >
                                                 <Hash className="h-4 w-4 shrink-0 text-primary" />
                                                 <span className="min-w-0 truncate">{field.name}</span>
@@ -1459,15 +1543,28 @@ export default function EntryEditor() {
                                                 value={numericEntries[field.id] ?? ''}
                                                 onChange={(event) => updateNumericEntry(field.id, event.target.value)}
                                                 placeholder="0"
-                                                className="w-full min-w-0 rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-lg font-semibold text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                                                className="w-full min-w-0 rounded-lg border border-white/10 bg-black/20 px-2.5 py-2 sm:px-3 sm:py-3 text-base sm:text-lg font-semibold text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
                                             />
                                         </section>
                                     ))}
                                 </div>
                             )}
+
+                            {/* AI summary status message moved to the bottom of the scrollable area */}
+                            <div className="mt-4 sm:mt-6 mb-2 rounded-lg border border-secondary/20 bg-secondary/10 px-3 py-2 sm:px-4 sm:py-3 text-sm text-text-secondary">
+                                <div className="flex items-start gap-3">
+                                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-secondary" />
+                                    <div>
+                                        <p className="font-bold text-white">AI summary available after saving</p>
+                                        <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                                            Save this entry, then switch to view mode to generate or review the private local AI summary.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div className="mt-4 flex items-center justify-between text-[10px] text-text-muted uppercase tracking-widest font-bold border-t border-white/5 pt-4">
+                        <div className="mt-3 pt-3 sm:mt-4 sm:pt-4 flex items-center justify-between text-[10px] text-text-muted uppercase tracking-widest font-bold border-t border-white/5">
                             <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-1.5">
                                     <PenTool className="w-3 h-3" />
@@ -1555,16 +1652,6 @@ export default function EntryEditor() {
                                     </div>
                                 </div>
 
-                                {displayContent && (
-                                    <LocalSummaryPanel
-                                        entryText={displayContent}
-                                        wordCount={wordCount}
-                                        debugTargetId={`journal-ai-debug-${date}`}
-                                        savedSummaryRecord={localAiSummaryRecord}
-                                        onSummaryGenerated={handleLocalSummaryGenerated}
-                                    />
-                                )}
-
                                 <div className="markdown-content prose prose-invert max-w-none">
                                     {displayContent && (
                                         <ReactMarkdown>{displayContent}</ReactMarkdown>
@@ -1605,7 +1692,7 @@ export default function EntryEditor() {
                                                     className="rounded-xl border border-white/10 bg-white/5 p-4"
                                                 >
                                                     <div className="mb-2 flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
-                                                        <Hash className="h-4 w-4 shrink-0" />
+                                                        <Hash className="h-4 w-4 shrink-0 text-primary" />
                                                         <span className="min-w-0 truncate">{entry.field.name}</span>
                                                     </div>
                                                     <p className="m-0 text-3xl font-bold text-white">{entry.value}</p>
@@ -1622,6 +1709,19 @@ export default function EntryEditor() {
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Moved Private AI Section (LocalSummaryPanel) to the bottom */}
+                                {displayContent && (
+                                    <div className="mt-8">
+                                        <LocalSummaryPanel
+                                            entryText={displayContent}
+                                            wordCount={wordCount}
+                                            debugTargetId={`journal-ai-debug-${date}`}
+                                            savedSummaryRecord={localAiSummaryRecord}
+                                            onSummaryGenerated={handleLocalSummaryGenerated}
+                                        />
+                                    </div>
+                                )}
 
                                 {displayContent && (
                                     <div id={`journal-ai-debug-${date}`} className="mt-8" />
