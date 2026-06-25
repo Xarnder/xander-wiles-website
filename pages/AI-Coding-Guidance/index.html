@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production-Ready AI Coding Workflow</title>
+    <meta name="description"
+        content="A phased workflow for production-ready AI-assisted coding — planning, implementation, testing, and release.">
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#05050a">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preload" as="image" href="images/hero-workflow.webp" type="image/webp">
+</head>
+
+<body>
+    <div id="main-nav-placeholder"></div>
+    <script src="/assets/js/nav-loader.js"></script>
+
+    <div class="hero-fixed-bg" aria-hidden="true"></div>
+    <div class="background-overlay" aria-hidden="true"></div>
+
+    <div class="page-shell">
+        <header class="guide-hero">
+            <div class="guide-title-wrap">
+                <h1>Production-Ready AI Coding Workflow</h1>
+            </div>
+            <p class="guide-note">You do not need to run every phase on every development cycle. Pick the steps that
+                match the size and risk of the work — a small bug fix may only need a brief plan and a quick review,
+                while a major feature should use the full workflow.</p>
+        </header>
+
+        <div class="hero-reveal-gap" aria-hidden="true"></div>
+
+        <section id="core-rule" class="glass-card core-rule-featured">
+            <div class="section-header">
+                <span class="phase-badge phase-badge--core" aria-hidden="true">★</span>
+                <h2>Core Rule</h2>
+            </div>
+
+            <p class="section-intro">Do not start writing implementation code until the AI has:</p>
+
+            <ol class="rule-list">
+                <li><span class="rule-num">1</span> Inspected the existing codebase.</li>
+                <li><span class="rule-num">2</span> Written a clear implementation plan.</li>
+                <li><span class="rule-num">3</span> Identified unknowns, risks, and decisions.</li>
+                <li><span class="rule-num">4</span> Proposed a test strategy.</li>
+                <li><span class="rule-num">5</span> Listed files are likely to be changed.</li>
+                <li><span class="rule-num">6</span> Defined what “done” means.</li>
+            </ol>
+
+            <p class="callout">The AI should work in small, reviewable steps and should never make large hidden
+                changes.</p>
+
+            <figure class="guide-figure">
+                <img src="images/core-rule-checklist.webp"
+                    alt="Core rule checklist: six prerequisites before writing implementation code" width="1376"
+                    height="768" loading="lazy" decoding="async">
+            </figure>
+        </section>
+
+        <div class="guide-layout">
+            <aside class="guide-sidebar" aria-label="Table of contents">
+                <div class="sidebar-card">
+                    <h2>Contents</h2>
+                    <ul class="sidebar-nav">
+                        <li><a href="#core-rule"><span class="phase-num">★</span> Core Rule</a></li>
+                        <li><a href="#phase-1"><span class="phase-num">1</span> Project / Feature Brief</a></li>
+                        <li><a href="#phase-2"><span class="phase-num">2</span> Answer Questions</a></li>
+                        <li><a href="#phase-3"><span class="phase-num">3</span> Junior Developer Explanation</a></li>
+                        <li><a href="#phase-4"><span class="phase-num">4</span> Implementation in Small Steps</a></li>
+                        <li><a href="#phase-5"><span class="phase-num">5</span> Self-Review Before Testing</a></li>
+                        <li><a href="#phase-6"><span class="phase-num">6</span> Testing</a></li>
+                        <li><a href="#phase-7"><span class="phase-num">7</span> Production Release Checklist</a></li>
+                        <li><a href="#phase-8"><span class="phase-num">8</span> Post-Release Monitoring</a></li>
+                    </ul>
+                </div>
+            </aside>
+
+            <main class="guide-main">
+                <section id="phase-1" class="glass-card">
+                    <div class="section-header">
+                        <span class="phase-badge" aria-hidden="true">1</span>
+                        <h2>Phase 1 — Project / Feature Brief</h2>
+                    </div>
+
+                    <p class="section-intro">Use this prompt first.</p>
+
+                    <div class="prompt-label"><span>Prompt</span></div>
+                    <div class="prompt-block">
+                        <button type="button" class="copy-btn" aria-label="Copy prompt">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2m-6 12h8a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" />
+                            </svg>
+                            <span class="copy-label">Copy</span>
+                        </button>
+                        <div class="prompt-body">I want to build the following product / feature:
+
+<textarea class="prompt-field prompt-field--block" rows="4"
+    placeholder="Describe the product or feature here"
+    data-default="[Describe the product or feature here]"
+    aria-label="Describe the product or feature here"></textarea>
+
+Before writing any code, review the existing codebase and create a production-ready planning document.
+
+Create the following markdown files in a date sub-folder for this feature cycle (`docs/<span data-feature-date></span>/feature-plan/`):
+
+1. `docs/<span data-feature-date></span>/feature-plan/00-brief.md`
+2. `docs/<span data-feature-date></span>/feature-plan/01-questions-and-decisions.md`
+3. `docs/<span data-feature-date></span>/feature-plan/02-technical-plan.md`
+4. `docs/<span data-feature-date></span>/feature-plan/03-risk-and-safety-review.md`
+5. `docs/<span data-feature-date></span>/feature-plan/04-test-plan.md`
+6. `docs/<span data-feature-date></span>/feature-plan/05-release-checklist.md`
+
+The plan should include:
+
+- The user problem being solved.
+- The expected user flow.
+- The main technical approach.
+- Existing files, components, routes, database tables, APIs, or services that are relevant.
+- New files likely to be created.
+- Existing files likely to be changed.
+- Data model changes, if any.
+- API changes, if any.
+- Authentication and authorization considerations.
+- Security and privacy risks.
+- Performance risks.
+- Edge cases.
+- Accessibility considerations.
+- Manual tests.
+- Automated tests.
+- Rollback plan.
+- Definition of done.
+
+Important rules:
+
+- Do not write implementation code yet.
+- Do not make assumptions silently.
+- If there are open questions, put them in `docs/<span data-feature-date></span>/feature-plan/01-questions-and-decisions.md`.
+- For each question, explain why it matters and what could go wrong if we choose badly.
+- Where possible, recommend a sensible default decision.
+- Mark decisions as one of:
+  - `Needs user answer`
+  - `Recommended default`
+  - `Safe to decide now`
+- After creating the documents, stop and wait for me to answer the questions.</div>
+                    </div>
+
+                    <figure class="guide-figure">
+                        <img src="images/phase-1-planning-docs.webp"
+                            alt="Feature planning document structure with six markdown files" width="1376" height="768"
+                            loading="lazy" decoding="async">
+                    </figure>
+                </section>
+
+                <section id="phase-2" class="glass-card">
+                    <div class="section-header">
+                        <span class="phase-badge" aria-hidden="true">2</span>
+                        <h2>Phase 2 — Answer Questions</h2>
+                    </div>
+
+                    <p class="section-intro">After reviewing <code>docs/<span data-feature-date></span>/feature-plan/01-questions-and-decisions.md</code>, answer directly
+                        inside the markdown file.</p>
+                    <p class="section-intro">Then use this prompt:</p>
+
+                    <div class="prompt-label"><span>Prompt</span></div>
+                    <div class="prompt-block">
+                        <button type="button" class="copy-btn" aria-label="Copy prompt">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2m-6 12h8a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" />
+                            </svg>
+                            <span class="copy-label">Copy</span>
+                        </button>
+                        <pre>I have answered the questions in `docs/<span data-feature-date></span>/feature-plan/01-questions-and-decisions.md`.
+
+Please re-read:
+
+- `docs/<span data-feature-date></span>/feature-plan/00-brief.md`
+- `docs/<span data-feature-date></span>/feature-plan/01-questions-and-decisions.md`
+- `docs/<span data-feature-date></span>/feature-plan/02-technical-plan.md`
+- `docs/<span data-feature-date></span>/feature-plan/03-risk-and-safety-review.md`
+- `docs/<span data-feature-date></span>/feature-plan/04-test-plan.md`
+- `docs/<span data-feature-date></span>/feature-plan/05-release-checklist.md`
+
+Then update the technical plan, risk review, test plan, and release checklist based on my answers.
+
+Before coding, summarize:
+
+1. The final agreed scope.
+2. Any decisions I made.
+3. Any assumptions still remaining.
+4. The first small implementation step you recommend.
+5. The exact files you expect to edit first.
+
+Do not start coding until I approve the implementation step.</pre>
+                    </div>
+                </section>
+
+                <section id="phase-3" class="glass-card">
+                    <div class="section-header">
+                        <span class="phase-badge" aria-hidden="true">3</span>
+                        <h2>Phase 3 — Junior Developer Explanation</h2>
+                    </div>
+
+                    <p class="section-intro">Use this whenever you do not understand part of the plan.</p>
+
+                    <div class="prompt-label"><span>Prompt</span></div>
+                    <div class="prompt-block">
+                        <button type="button" class="copy-btn" aria-label="Copy prompt">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2m-6 12h8a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" />
+                            </svg>
+                            <span class="copy-label">Copy</span>
+                        </button>
+                        <div class="prompt-body">I do not understand this part:
+
+<textarea class="prompt-field prompt-field--block" rows="5"
+    placeholder="Paste the confusing section here"
+    data-default="[Paste the confusing section here]"
+    aria-label="Paste the confusing section here"></textarea>
+
+Please explain it as if I am a junior developer.
+
+Use:
+
+- A simple explanation.
+- An analogy or metaphor.
+- A small concrete example.
+- Why this matters in production.
+- What could go wrong if we misunderstand it.
+- How this applies to our current codebase.</div>
+                    </div>
+                </section>
+
+                <section id="phase-4" class="glass-card">
+                    <div class="section-header">
+                        <span class="phase-badge" aria-hidden="true">4</span>
+                        <h2>Phase 4 — Implementation in Small Steps</h2>
+                    </div>
+
+                    <p class="section-intro">Use this when you are ready to let the AI code.</p>
+
+                    <div class="prompt-label"><span>Prompt</span></div>
+                    <div class="prompt-block">
+                        <button type="button" class="copy-btn" aria-label="Copy prompt">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2m-6 12h8a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" />
+                            </svg>
+                            <span class="copy-label">Copy</span>
+                        </button>
+                        <div class="prompt-body">Start implementing the feature, but work in small, safe steps.
+
+Rules:
+
+- Only implement the first approved step.
+- Before editing files, restate what you are about to change.
+- Keep changes small and reviewable.
+- Do not refactor unrelated code.
+- Do not change public APIs unless the plan says to.
+- Do not change database schema without explaining the migration and rollback.
+- Do not introduce new packages unless you explain why they are needed.
+- Do not store secrets in code.
+- Do not weaken authentication, authorization, validation, or error handling.
+- Prefer clear, maintainable code over clever code.
+- After each step, explain:
+  1. What changed.
+  2. Why it changed.
+  3. Which files changed.
+  4. What tests should now be run.
+  5. What remains to be done.
+
+Implement only this step:
+
+<textarea class="prompt-field prompt-field--block" rows="4"
+    placeholder="Describe the approved implementation step"
+    data-default="[Describe the approved implementation step]"
+    aria-label="Describe the approved implementation step"></textarea></div>
+                    </div>
+
+                    <figure class="guide-figure">
+                        <img src="images/phase-4-small-steps.webp" alt="Implementation in small, safe, reviewable steps"
+                            width="1376" height="768" loading="lazy" decoding="async">
+                    </figure>
+                </section>
+
+                <section id="phase-5" class="glass-card">
+                    <div class="section-header">
+                        <span class="phase-badge" aria-hidden="true">5</span>
+                        <h2>Phase 5 — Self-Review Before Testing</h2>
+                    </div>
+
+                    <p class="section-intro">Run this after each implementation step.</p>
+
+                    <div class="prompt-label"><span>Prompt</span></div>
+                    <div class="prompt-block">
+                        <button type="button" class="copy-btn" aria-label="Copy prompt">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2m-6 12h8a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" />
+                            </svg>
+                            <span class="copy-label">Copy</span>
+                        </button>
+                        <pre>Review your own changes before we run tests.
+
+Check for:
+
+- TypeScript errors.
+- Lint issues.
+- Incorrect assumptions.
+- Security issues.
+- Missing validation.
+- Missing authorization checks.
+- Race conditions.
+- Poor error handling.
+- Broken loading states.
+- Broken empty states.
+- Broken mobile layout.
+- Accessibility issues.
+- Performance problems.
+- Unnecessary complexity.
+- Tests that should be added.
+
+Be critical. Look for bugs as if you are reviewing someone else's pull request.
+
+Return:
+
+1. Potential issues found.
+2. Fixes you recommend now.
+3. Fixes that can wait.
+4. Whether this is safe to test.</pre>
+                    </div>
+                </section>
+
+                <section id="phase-6" class="glass-card">
+                    <div class="section-header">
+                        <span class="phase-badge" aria-hidden="true">6</span>
+                        <h2>Phase 6 — Testing</h2>
+                    </div>
+
+                    <p class="section-intro">Use this prompt before accepting the feature.</p>
+
+                    <div class="prompt-label"><span>Prompt</span></div>
+                    <div class="prompt-block">
+                        <button type="button" class="copy-btn" aria-label="Copy prompt">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2m-6 12h8a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" />
+                            </svg>
+                            <span class="copy-label">Copy</span>
+                        </button>
+                        <pre>Create a complete test checklist for this feature.
+
+Include:
+
+## Automated tests
+
+- Unit tests.
+- Integration tests.
+- Component tests.
+- End-to-end tests.
+- API tests.
+- Database/migration tests, if relevant.
+- Permission/authentication tests.
+- Regression tests for existing behaviour.
+
+For each test, say:
+
+- What it proves.
+- What file it should live in.
+- What command should run it.
+- Whether it is essential before release.
+
+## Manual tests
+
+Include tests for:
+
+- Happy path.
+- Empty state.
+- Error state.
+- Slow network.
+- Invalid input.
+- Permission denied.
+- Mobile layout.
+- Refreshing the page.
+- Going back/forward in the browser.
+- Multiple users or sessions, if relevant.
+- Data persistence.
+- Accessibility using keyboard only.
+- Production-like environment.
+
+## Behind-the-UI tests
+
+List ways to verify the feature is working beyond just clicking the UI, such as:
+
+- Inspecting database rows.
+- Checking API responses.
+- Checking server logs.
+- Checking browser console logs.
+- Checking network requests.
+- Checking analytics events.
+- Checking background jobs.
+- Checking emails/webhooks, if relevant.
+- Checking error monitoring.
+
+End with a clear release confidence rating from 0–100%.</pre>
+                    </div>
+
+                    <figure class="guide-figure">
+                        <img src="images/phase-6-testing-pyramid.webp"
+                            alt="Testing pyramid covering automated, manual, and behind-the-UI tests" width="1376"
+                            height="768" loading="lazy" decoding="async">
+                    </figure>
+                </section>
+
+                <section id="phase-7" class="glass-card">
+                    <div class="section-header">
+                        <span class="phase-badge" aria-hidden="true">7</span>
+                        <h2>Phase 7 — Production Release Checklist</h2>
+                    </div>
+
+                    <p class="section-intro">Use this before deploying.</p>
+
+                    <div class="prompt-label"><span>Prompt</span></div>
+                    <div class="prompt-block">
+                        <button type="button" class="copy-btn" aria-label="Copy prompt">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2m-6 12h8a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" />
+                            </svg>
+                            <span class="copy-label">Copy</span>
+                        </button>
+                        <pre>Prepare a production release checklist.
+
+Include:
+
+- Final scope summary.
+- Files changed.
+- Database migrations.
+- Environment variables.
+- Feature flags.
+- Security review.
+- Privacy review.
+- Performance review.
+- Accessibility review.
+- Error handling review.
+- Logging/monitoring review.
+- Rollback plan.
+- Manual QA checklist.
+- Automated test results.
+- Known limitations.
+- Post-release checks.
+
+Also answer:
+
+1. What is the worst realistic failure mode?
+2. How would we detect it quickly?
+3. How would we roll back safely?
+4. Is this safe to release now?
+
+Give a release confidence score from 0–100%.
+Do not say it is production ready unless the evidence supports it.</pre>
+                    </div>
+
+                    <figure class="guide-figure">
+                        <img src="images/phase-7-release-checklist.webp"
+                            alt="Production release checklist with confidence scoring" width="1376" height="768"
+                            loading="lazy" decoding="async">
+                    </figure>
+                </section>
+
+                <section id="phase-8" class="glass-card">
+                    <div class="section-header">
+                        <span class="phase-badge" aria-hidden="true">8</span>
+                        <h2>Phase 8 — Post-Release Monitoring</h2>
+                    </div>
+
+                    <p class="section-intro">Use this after deployment.</p>
+
+                    <div class="prompt-label"><span>Prompt</span></div>
+                    <div class="prompt-block">
+                        <button type="button" class="copy-btn" aria-label="Copy prompt">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M8 16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2m-6 12h8a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" />
+                            </svg>
+                            <span class="copy-label">Copy</span>
+                        </button>
+                        <div class="prompt-body">Create a post-release monitoring checklist for this feature.
+
+Include:
+
+- What user actions to test in production.
+- What logs to check.
+- What metrics to watch.
+- What errors would indicate a serious problem.
+- What database records should exist.
+- What analytics events should fire.
+- How to confirm no existing behaviour was broken.
+- What to check after 1 hour.
+- What to check after 24 hours.
+
+Also create a simple rollback decision rule:
+
+If <input type="text" class="prompt-field prompt-field--inline"
+    placeholder="specific bad thing happens" data-default="[specific bad thing happens]"
+    aria-label="Specific bad thing that triggers rollback">, then we should <input type="text"
+    class="prompt-field prompt-field--inline" placeholder="specific rollback action"
+    data-default="[specific rollback action]" aria-label="Specific rollback action">.</div>
+                    </div>
+
+                    <figure class="guide-figure">
+                        <img src="images/phase-8-monitoring.webp"
+                            alt="Post-release monitoring dashboard with rollback decision rules" width="1376"
+                            height="768" loading="lazy" decoding="async">
+                    </figure>
+                </section>
+
+                <section class="glass-card epilogue">
+                    <p>A few extra improvements I would make to your original three prompts:</p>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

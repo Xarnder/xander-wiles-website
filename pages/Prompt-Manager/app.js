@@ -1580,8 +1580,7 @@ function createPromptCard(item, searchTerm = '') {
                     const val = inputs[idx++]?.textContent || '';
                     const trimmedVal = val.trim();
                     if (trimmedVal) return trimmedVal;
-                    if (p1) return p1.trim();
-                    return '___';
+                    return resolveVariablePlaceholder(p1);
                 });
                 copyToClipboard(processed, btn);
             } else {
@@ -1662,8 +1661,7 @@ function createPromptCard(item, searchTerm = '') {
                         allInputValues.push(trimmedVal);
                         return trimmedVal;
                     }
-                    if (p1) return p1.trim();
-                    return '___';
+                    return resolveVariablePlaceholder(p1);
                 });
                 fullPromptText = processed;
             } else {
@@ -1685,8 +1683,7 @@ function createPromptCard(item, searchTerm = '') {
                         allInputValues.push(trimmedVal);
                         return trimmedVal;
                     }
-                    if (p1) return p1.trim();
-                    return '___';
+                    return resolveVariablePlaceholder(p1);
                 });
             }
             fullPromptText += (fullPromptText ? "\n\n" : "") + processedCode;
@@ -1716,8 +1713,7 @@ function createPromptCard(item, searchTerm = '') {
                             allInputValues.push(trimmedVal);
                             return trimmedVal;
                         }
-                        if (p1) return p1.trim();
-                        return '___';
+                        return resolveVariablePlaceholder(p1);
                     });
                 }
                 fullPromptText += (fullPromptText ? "\n\n" : "") + blockContent;
@@ -2150,6 +2146,16 @@ if (updateCategoryColorsBtn) {
     });
 }
 
+function resolveVariablePlaceholder(p1) {
+    if (!p1) return '___';
+    let unescapedP1 = p1.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#039;/g, "'");
+    if (unescapedP1.includes('||')) {
+        const options = unescapedP1.split('||').map(o => o.trim());
+        return options[Math.floor(Math.random() * options.length)];
+    }
+    return p1.trim();
+}
+
 // Function to turn ___ or {{Name}} into interactive inputs
 function renderContentWithInputs(content, searchTerm = '') {
     // Escape HTML first
@@ -2163,7 +2169,28 @@ function renderContentWithInputs(content, searchTerm = '') {
     // Replace markers with interactive spans
     // Support both ___ and {{...}}
     const html = escaped.replace(/_{3,}|{{(.*?)}}/g, (match, p1) => {
-        const placeholder = p1 ? p1 : '...';
+        if (!p1) {
+            return `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="..."></span>`;
+        }
+
+        if (p1.includes('||')) {
+            const options = p1.split('||').map(opt => opt.trim());
+            const placeholder = options[0]; // Already escaped by the earlier escapeHTML
+            
+            let optionsHtml = '';
+            options.forEach(opt => {
+                optionsHtml += `<span class="suggestion-item">${opt}</span>`;
+            });
+
+            return `<span class="prompt-variable-wrapper" contenteditable="false">` +
+                   `<span contenteditable="plaintext-only" class="prompt-input has-suggestions" data-placeholder="${placeholder}"></span>` +
+                   `<span class="suggestions-toggle" contenteditable="false" title="Show suggestions">▾</span>` +
+                   `<span class="suggestions-menu hidden" contenteditable="false">` +
+                   `${optionsHtml}` +
+                   `</span></span>`;
+        }
+
+        const placeholder = p1;
         return `<span contenteditable="plaintext-only" class="prompt-input" data-placeholder="${placeholder}"></span>`;
     });
 
@@ -2456,6 +2483,12 @@ shortcutModal.innerHTML = `
                 <p>Use 3 or more underscores for a simple blank field.</p>
                 <span class="variable-example">Improve this code: ___</span>
             </div>
+
+            <div class="variable-type">
+                <strong>Variables with Suggestions</strong>
+                <p>Provide multiple options separated by <code>||</code>. Choose from a dropdown list or type a custom input. If left empty, copying the prompt randomly picks one of the suggestions.</p>
+                <span class="variable-example">Write a story about a {{Robot||Wizard||Dragon}}.</span>
+            </div>
         </div>
     </div>
 `;
@@ -2521,3 +2554,42 @@ function updateAutoArchiveDisplay() {
 if (autoArchiveSelect) autoArchiveSelect.addEventListener('change', updateAutoArchiveDisplay);
 if (autoArchiveValueInput) autoArchiveValueInput.addEventListener('input', updateAutoArchiveDisplay);
 if (autoArchiveUnitSelect) autoArchiveUnitSelect.addEventListener('change', updateAutoArchiveDisplay);
+
+// --- Variable Suggestions Event Delegation ---
+document.addEventListener('click', (e) => {
+    // Toggle menu visibility
+    const toggle = e.target.closest('.suggestions-toggle');
+    if (toggle) {
+        e.stopPropagation();
+        const wrapper = toggle.closest('.prompt-variable-wrapper');
+        const menu = wrapper.querySelector('.suggestions-menu');
+        
+        // Close all other menus
+        document.querySelectorAll('.suggestions-menu:not(.hidden)').forEach(m => {
+            if (m !== menu) m.classList.add('hidden');
+        });
+
+        menu.classList.toggle('hidden');
+        return;
+    }
+    
+    // Select an option
+    const suggestionItem = e.target.closest('.suggestion-item');
+    if (suggestionItem) {
+        e.stopPropagation();
+        const wrapper = suggestionItem.closest('.prompt-variable-wrapper');
+        const input = wrapper.querySelector('.prompt-input');
+        
+        input.textContent = suggestionItem.textContent;
+        // Trigger input event for any auto-resize or counters if applicable
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        wrapper.querySelector('.suggestions-menu').classList.add('hidden');
+        return;
+    }
+    
+    // Close menus if clicking outside
+    document.querySelectorAll('.suggestions-menu:not(.hidden)').forEach(m => {
+        m.classList.add('hidden');
+    });
+});

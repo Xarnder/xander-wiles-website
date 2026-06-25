@@ -34,8 +34,10 @@
             index: 0,
             activePane: 0,
             timer: null,
+            transitionTimer: null,
             transitioning: false,
-            eventsBound: false
+            eventsBound: false,
+            hovered: false
         }
     };
 
@@ -45,9 +47,13 @@
         mobileMenu: document.getElementById('mobileMenu'),
         mobileTopicNav: document.getElementById('mobileTopicNav'),
         carousel: document.querySelector('.idea-carousel'),
-        carouselSlides: Array.from(document.querySelectorAll('.carousel-slide')),
+        carouselStage: document.getElementById('carouselStage'),
+        carouselMeasure: document.getElementById('carouselMeasure'),
+        carouselSlides: Array.from(document.querySelectorAll('.carousel-slide[data-carousel-pane]')),
         carouselDots: document.getElementById('carouselDots'),
         carouselCounter: document.getElementById('carouselCounter'),
+        carouselPrev: document.getElementById('carouselPrev'),
+        carouselNext: document.getElementById('carouselNext'),
         heroSectionName: document.getElementById('heroSectionName'),
         ideaCount: document.getElementById('ideaCount'),
         sectionCount: document.getElementById('sectionCount'),
@@ -448,6 +454,8 @@
 
         if (!media || !images.length) {
             media?.setAttribute('hidden', '');
+            slide.classList.remove('has-media');
+            fitCarouselTitle(title);
             return;
         }
 
@@ -457,9 +465,169 @@
         const figure = document.createElement('figure');
         figure.className = 'carousel-media-frame';
         const img = createImageElement(images[0], item.title || 'Featured idea image');
+        img.addEventListener('load', () => {
+            if (!img.naturalWidth || !img.naturalHeight) return;
+            const ratio = img.naturalWidth / img.naturalHeight;
+            if (ratio > 1.05) figure.dataset.orientation = 'landscape';
+            else if (ratio < 0.95) figure.dataset.orientation = 'portrait';
+            else figure.dataset.orientation = 'square';
+        });
         img.addEventListener('click', () => openLightbox(images, 0, item.title));
         figure.appendChild(img);
         media.appendChild(figure);
+        fitCarouselTitle(title);
+    }
+
+    const CAROUSEL_TITLE_MIN_PX = 16;
+    const CAROUSEL_TITLE_MAX_LINES = 4;
+
+    function fitCarouselTitle(titleEl) {
+        if (!titleEl) return;
+
+        titleEl.style.fontSize = '';
+        const styles = getComputedStyle(titleEl);
+        let size = parseFloat(styles.fontSize);
+        if (!size) return;
+
+        const readLineHeight = () => {
+            const current = getComputedStyle(titleEl);
+            const lh = parseFloat(current.lineHeight);
+            return Number.isFinite(lh) ? lh : size * 0.95;
+        };
+
+        let lineHeight = readLineHeight();
+        let maxHeight = lineHeight * CAROUSEL_TITLE_MAX_LINES;
+
+        while (titleEl.scrollHeight > maxHeight + 1 && size > CAROUSEL_TITLE_MIN_PX) {
+            size -= 0.5;
+            titleEl.style.fontSize = `${size}px`;
+            lineHeight = readLineHeight();
+            maxHeight = lineHeight * CAROUSEL_TITLE_MAX_LINES;
+        }
+    }
+
+    function measureCarouselStageHeight() {
+        if (!el.carouselMeasure || !el.carouselStage) return 0;
+
+        const stageWidth = el.carouselStage.getBoundingClientRect().width;
+        if (stageWidth > 0) {
+            el.carouselMeasure.style.width = `${stageWidth}px`;
+        }
+
+        const slides = [...el.carouselMeasure.querySelectorAll('.carousel-slide-measure')];
+        if (!slides.length) return 0;
+
+        let maxHeight = 0;
+        slides.forEach((slide) => {
+            fitCarouselTitle(slide.querySelector('.carousel-title'));
+            maxHeight = Math.max(maxHeight, slide.offsetHeight, slide.scrollHeight);
+        });
+
+        return Math.ceil(maxHeight);
+    }
+
+    function lockCarouselStageHeight() {
+        if (!el.carouselStage) return;
+
+        let height = measureCarouselStageHeight();
+
+        if (!height) {
+            const active = el.carouselSlides[state.carousel.activePane] || el.carouselSlides[0];
+            if (active) {
+                fitCarouselTitle(active.querySelector('.carousel-title'));
+                height = Math.max(active.scrollHeight, active.offsetHeight);
+            }
+        }
+
+        height = Math.max(Math.ceil(height || 0), 280);
+        el.carouselStage.style.height = `${height}px`;
+        el.carouselStage.style.minHeight = `${height}px`;
+
+        const activeSlide = el.carouselSlides[state.carousel.activePane] || el.carouselSlides[0];
+        if (activeSlide) {
+            fitCarouselTitle(activeSlide.querySelector('.carousel-title'));
+        }
+    }
+
+    function clearCarouselStageHeight() {
+        if (!el.carouselStage) return;
+        el.carouselStage.style.height = '';
+        el.carouselStage.style.minHeight = '';
+    }
+
+    async function buildAndLockCarouselMeasure(pool) {
+        buildCarouselMeasure(pool);
+        await waitForCarouselMeasureImages();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        lockCarouselStageHeight();
+    }
+
+    function createCarouselMeasureSlide() {
+        const slide = document.createElement('article');
+        slide.className = 'carousel-slide-measure';
+        slide.innerHTML = `
+            <div class="carousel-media" hidden></div>
+            <div class="carousel-copy">
+                <span class="carousel-topic"></span>
+                <h2 class="carousel-title"></h2>
+                <p class="carousel-description"></p>
+                <a class="carousel-cta" href="#content">Browse all ideas</a>
+            </div>
+        `;
+        return slide;
+    }
+
+    function buildCarouselMeasure(pool) {
+        if (!el.carouselMeasure) return;
+
+        el.carouselMeasure.innerHTML = '';
+        pool.forEach((item) => {
+            const slide = createCarouselMeasureSlide();
+            fillCarouselSlide(slide, item);
+            el.carouselMeasure.appendChild(slide);
+        });
+    }
+
+    function waitForCarouselMeasureImages() {
+        if (!el.carouselMeasure) return Promise.resolve();
+
+        const images = [...el.carouselMeasure.querySelectorAll('img')];
+        if (!images.length) return Promise.resolve();
+
+        return Promise.all(images.map((img) => new Promise((resolve) => {
+            if (img.complete) {
+                resolve();
+                return;
+            }
+
+            img.addEventListener('load', resolve, { once: true });
+            img.addEventListener('error', resolve, { once: true });
+        })));
+    }
+
+    function resetCarouselSlideStates() {
+        if (state.carousel.transitionTimer) {
+            window.clearTimeout(state.carousel.transitionTimer);
+            state.carousel.transitionTimer = null;
+        }
+
+        state.carousel.transitioning = false;
+
+        el.carouselSlides.forEach((slide, index) => {
+            slide.classList.remove('is-entering', 'is-leaving');
+            slide.classList.toggle('is-active', index === state.carousel.activePane);
+            slide.toggleAttribute('aria-hidden', index !== state.carousel.activePane);
+        });
+
+        updateCarouselNavButtons();
+    }
+
+    function showCarouselItemInstant(item) {
+        if (!item) return;
+
+        resetCarouselSlideStates();
+        fillCarouselSlide(el.carouselSlides[state.carousel.activePane], item);
+        updateCarouselMeta();
     }
 
     function renderCarouselDots() {
@@ -496,46 +664,107 @@
         el.carouselDots.querySelectorAll('.carousel-dot').forEach((dot, index) => {
             dot.classList.toggle('is-active', index === state.carousel.index % visibleCount);
         });
+
+        updateCarouselNavButtons();
+    }
+
+    function updateCarouselNavButtons() {
+        const enabled = state.carousel.pool.length > 1;
+        if (el.carouselPrev) el.carouselPrev.disabled = !enabled;
+        if (el.carouselNext) el.carouselNext.disabled = !enabled;
+    }
+
+    function canUseCarouselKeyboard() {
+        if (el.carousel?.hidden || state.carousel.pool.length <= 1) return false;
+        if (!el.imageLightbox?.hidden) return false;
+        if (!document.getElementById('imageManager')?.hidden) return false;
+
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+            if (!el.carousel?.contains(active)) return false;
+        }
+
+        if (el.carousel?.contains(active)) return true;
+        return state.carousel.hovered;
+    }
+
+    function transitionToCarouselItem(item) {
+        return new Promise((resolve) => {
+            if (!item || state.carousel.transitioning || !el.carouselSlides.length) {
+                resolve(false);
+                return;
+            }
+
+            if (state.carousel.transitionTimer) {
+                window.clearTimeout(state.carousel.transitionTimer);
+                state.carousel.transitionTimer = null;
+            }
+
+            const incomingIndex = state.carousel.activePane === 0 ? 1 : 0;
+            const outgoingIndex = state.carousel.activePane;
+            const incoming = el.carouselSlides[incomingIndex];
+            const outgoing = el.carouselSlides[outgoingIndex];
+
+            state.carousel.transitioning = true;
+            updateCarouselNavButtons();
+
+            fillCarouselSlide(incoming, item);
+            incoming.classList.add('is-entering');
+            incoming.removeAttribute('aria-hidden');
+            outgoing.classList.add('is-leaving');
+            outgoing.setAttribute('aria-hidden', 'true');
+
+            state.carousel.transitionTimer = window.setTimeout(() => {
+                state.carousel.transitionTimer = null;
+                outgoing.classList.remove('is-active', 'is-leaving');
+                incoming.classList.remove('is-entering');
+                incoming.classList.add('is-active');
+                state.carousel.activePane = incomingIndex;
+                state.carousel.transitioning = false;
+                updateCarouselMeta();
+                resolve(true);
+            }, CAROUSEL_TRANSITION_MS);
+        });
+    }
+
+    async function stepCarousel(direction, { instant = false } = {}) {
+        if (!state.carousel.pool.length) return;
+        if (!instant && state.carousel.transitioning) return;
+
+        stopCarousel();
+
+        let nextIndex = state.carousel.index + direction;
+
+        if (nextIndex >= state.carousel.pool.length) {
+            const refreshed = await filterLoadableCarouselCandidates(getCarouselCandidates());
+            state.carousel.pool = shuffleArray(refreshed);
+            await buildAndLockCarouselMeasure(state.carousel.pool);
+            renderCarouselDots();
+            if (!state.carousel.pool.length) {
+                if (el.carousel) el.carousel.hidden = true;
+                updateCarouselNavButtons();
+                return;
+            }
+            nextIndex = 0;
+        } else if (nextIndex < 0) {
+            nextIndex = state.carousel.pool.length - 1;
+        }
+
+        state.carousel.index = nextIndex;
+        const item = state.carousel.pool[nextIndex];
+
+        if (instant) {
+            showCarouselItemInstant(item);
+            startCarousel();
+            return;
+        }
+
+        await transitionToCarouselItem(item);
+        startCarousel();
     }
 
     async function nextCarouselSlide() {
-        if (!state.carousel.pool.length || state.carousel.transitioning) return;
-
-        state.carousel.index += 1;
-        if (state.carousel.index >= state.carousel.pool.length) {
-            const refreshed = await filterLoadableCarouselCandidates(getCarouselCandidates());
-            state.carousel.pool = shuffleArray(refreshed);
-            state.carousel.index = 0;
-            renderCarouselDots();
-            if (!state.carousel.pool.length) {
-                state.carousel.transitioning = false;
-                if (el.carousel) el.carousel.hidden = true;
-                stopCarousel();
-                return;
-            }
-        }
-
-        const item = state.carousel.pool[state.carousel.index];
-        const incomingIndex = state.carousel.activePane === 0 ? 1 : 0;
-        const outgoingIndex = state.carousel.activePane;
-        const incoming = el.carouselSlides[incomingIndex];
-        const outgoing = el.carouselSlides[outgoingIndex];
-
-        state.carousel.transitioning = true;
-        fillCarouselSlide(incoming, item);
-        incoming.classList.add('is-entering');
-        incoming.removeAttribute('aria-hidden');
-        outgoing.classList.add('is-leaving');
-        outgoing.setAttribute('aria-hidden', 'true');
-
-        window.setTimeout(() => {
-            outgoing.classList.remove('is-active', 'is-leaving');
-            incoming.classList.remove('is-entering');
-            incoming.classList.add('is-active');
-            state.carousel.activePane = incomingIndex;
-            state.carousel.transitioning = false;
-            updateCarouselMeta();
-        }, CAROUSEL_TRANSITION_MS);
+        await stepCarousel(1);
     }
 
     function startCarousel() {
@@ -561,11 +790,16 @@
             el.carousel.hidden = !candidates.length;
         }
 
-        if (!candidates.length || !el.carouselSlides.length) return;
+        if (!candidates.length || !el.carouselSlides.length) {
+            clearCarouselStageHeight();
+            return;
+        }
 
         state.carousel.pool = shuffleArray(candidates);
         state.carousel.index = 0;
         state.carousel.activePane = 0;
+
+        await buildAndLockCarouselMeasure(state.carousel.pool);
 
         el.carouselSlides.forEach((slide, index) => {
             slide.classList.remove('is-entering', 'is-leaving');
@@ -575,6 +809,7 @@
 
         fillCarouselSlide(el.carouselSlides[0], state.carousel.pool[0]);
         fillCarouselSlide(el.carouselSlides[1], state.carousel.pool[Math.min(1, state.carousel.pool.length - 1)]);
+        lockCarouselStageHeight();
         renderCarouselDots();
         updateCarouselMeta();
         startCarousel();
@@ -582,12 +817,32 @@
         if (state.carousel.eventsBound) return;
 
         state.carousel.eventsBound = true;
-        el.carousel?.addEventListener('mouseenter', stopCarousel);
-        el.carousel?.addEventListener('mouseleave', startCarousel);
+        el.carousel?.addEventListener('mouseenter', () => {
+            state.carousel.hovered = true;
+            stopCarousel();
+        });
+        el.carousel?.addEventListener('mouseleave', () => {
+            state.carousel.hovered = false;
+            startCarousel();
+        });
         el.carousel?.addEventListener('focusin', stopCarousel);
         el.carousel?.addEventListener('focusout', (event) => {
             if (!el.carousel?.contains(event.relatedTarget)) startCarousel();
         });
+        el.carouselPrev?.addEventListener('click', () => stepCarousel(-1, { instant: true }));
+        el.carouselNext?.addEventListener('click', () => stepCarousel(1, { instant: true }));
+    }
+
+    let carouselResizeTimer = null;
+
+    function scheduleCarouselMeasureRefresh() {
+        if (!state.carousel.pool.length) return;
+
+        if (carouselResizeTimer) window.clearTimeout(carouselResizeTimer);
+        carouselResizeTimer = window.setTimeout(() => {
+            carouselResizeTimer = null;
+            buildAndLockCarouselMeasure(state.carousel.pool);
+        }, 150);
     }
 
     function summarizeSection(section) {
@@ -1028,11 +1283,24 @@
             if (!el.imageLightbox?.hidden && event.key === 'ArrowLeft') {
                 event.preventDefault();
                 stepLightbox(-1);
+                return;
             }
 
             if (!el.imageLightbox?.hidden && event.key === 'ArrowRight') {
                 event.preventDefault();
                 stepLightbox(1);
+                return;
+            }
+
+            if (canUseCarouselKeyboard() && event.key === 'ArrowLeft') {
+                event.preventDefault();
+                stepCarousel(-1, { instant: true });
+                return;
+            }
+
+            if (canUseCarouselKeyboard() && event.key === 'ArrowRight') {
+                event.preventDefault();
+                stepCarousel(1, { instant: true });
             }
         });
 
@@ -1056,6 +1324,7 @@
 
         window.addEventListener('resize', () => {
             if (window.innerWidth > 760) closeMobileMenu();
+            scheduleCarouselMeasureRefresh();
         });
     }
 

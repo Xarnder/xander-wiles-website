@@ -13,7 +13,8 @@
         selectedRow: null,
         ideaQuery: '',
         status: '',
-        busy: false
+        busy: false,
+        crop169: false
     };
 
     const el = {};
@@ -42,6 +43,7 @@
         if (el.managerAttach) el.managerAttach.disabled = busy;
         if (el.managerConnect) el.managerConnect.disabled = busy;
         if (el.managerFileInput) el.managerFileInput.disabled = busy;
+        if (el.managerCrop169) el.managerCrop169.disabled = busy;
         el.managerAttached?.querySelectorAll('button').forEach((button) => {
             button.disabled = busy;
         });
@@ -248,27 +250,65 @@
         return canvas.toDataURL('image/webp').startsWith('data:image/webp');
     }
 
-    async function convertFileToWebp(file) {
-        const bitmap = await createImageBitmap(file);
+    function drawBitmapToCanvas(bitmap) {
         const canvas = document.createElement('canvas');
         canvas.width = bitmap.width;
         canvas.height = bitmap.height;
         const context = canvas.getContext('2d');
         context.drawImage(bitmap, 0, 0);
-        bitmap.close();
+        return canvas;
+    }
 
-        const mime = supportsWebpEncoding() ? 'image/webp' : 'image/jpeg';
-        const blob = await new Promise((resolve, reject) => {
-            canvas.toBlob((result) => {
-                if (result) resolve(result);
-                else reject(new Error('Image conversion failed.'));
-            }, mime, 0.86);
-        });
+    function cropBitmapTo169(bitmap) {
+        const targetAspect = 16 / 9;
+        const srcAspect = bitmap.width / bitmap.height;
+        let cropW;
+        let cropH;
+        let cropX;
+        let cropY;
 
-        return {
-            blob,
-            extension: mime === 'image/webp' ? 'webp' : 'jpg'
-        };
+        if (srcAspect > targetAspect) {
+            cropH = bitmap.height;
+            cropW = Math.round(cropH * targetAspect);
+            cropX = Math.round((bitmap.width - cropW) / 2);
+            cropY = 0;
+        } else {
+            cropW = bitmap.width;
+            cropH = Math.round(cropW / targetAspect);
+            cropX = 0;
+            cropY = Math.round((bitmap.height - cropH) / 2);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = cropW;
+        canvas.height = cropH;
+        const context = canvas.getContext('2d');
+        context.drawImage(bitmap, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        return canvas;
+    }
+
+    async function convertFileToWebp(file, { crop169 = false } = {}) {
+        const bitmap = await createImageBitmap(file);
+
+        try {
+            const canvas = crop169 ? cropBitmapTo169(bitmap) : drawBitmapToCanvas(bitmap);
+            const mime = supportsWebpEncoding() ? 'image/webp' : 'image/jpeg';
+            const blob = await new Promise((resolve, reject) => {
+                canvas.toBlob((result) => {
+                    if (result) resolve(result);
+                    else reject(new Error('Image conversion failed.'));
+                }, mime, 0.86);
+            });
+
+            return {
+                blob,
+                extension: mime === 'image/webp' ? 'webp' : 'jpg',
+                width: canvas.width,
+                height: canvas.height
+            };
+        } finally {
+            bitmap.close();
+        }
     }
 
     function buildImagePath(row, extension) {
@@ -361,7 +401,11 @@
 
         const sizeKb = Math.max(1, Math.round(managerState.webpBlob.size / 1024));
         const type = managerState.webpBlob.type.includes('webp') ? 'WebP' : 'JPEG';
-        el.managerPreviewMeta.textContent = `${managerState.sourceFile?.name || 'Uploaded image'} → ${type}, ${sizeKb} KB`;
+        const cropNote = managerState.crop169 ? ' · cropped 16:9' : '';
+        const sizeNote = managerState.outputSize
+            ? ` · ${managerState.outputSize.width}×${managerState.outputSize.height}`
+            : '';
+        el.managerPreviewMeta.textContent = `${managerState.sourceFile?.name || 'Uploaded image'} → ${type}, ${sizeKb} KB${sizeNote}${cropNote}`;
     }
 
     function refreshManagerLists() {
@@ -482,7 +526,7 @@
             if (canUseFileSystem()) {
                 const dir = managerState.dirHandle || await connectProjectDirectory();
                 if (!dir) {
-                    setStatus('Connect the Home Design folder before removing images.', true);
+                    setStatus('Connect the Beutifully Living project folder before removing images.', true);
                     return;
                 }
 
@@ -528,7 +572,7 @@
                 }
 
                 managerState.selectedRow = atHome.findRowByIdeaId(row.ideaId) || row;
-                setStatus(`Downloaded updated files. Replace them in the Home Design folder and delete ${entry.path} manually.`);
+                setStatus(`Downloaded updated files. Replace them in the Beutifully Living folder and delete ${entry.path} manually.`);
             }
 
             refreshManagerLists();
@@ -607,20 +651,29 @@
         }
 
         setBusy(true);
-        setStatus('Converting image…');
+        setStatus(managerState.crop169 ? 'Cropping and converting image…' : 'Converting image…');
 
         try {
-            const converted = await convertFileToWebp(file);
+            const converted = await convertFileToWebp(file, { crop169: managerState.crop169 });
             managerState.sourceFile = file;
             managerState.webpBlob = converted.blob;
             managerState.extension = converted.extension;
+            managerState.outputSize = { width: converted.width, height: converted.height };
             updatePreview();
-            setStatus(supportsWebpEncoding() ? 'Image converted to WebP.' : 'WebP unavailable here — saved as JPEG instead.');
+            const cropMsg = managerState.crop169 ? ' (16:9 crop applied)' : '';
+            setStatus(supportsWebpEncoding()
+                ? `Image converted to WebP${cropMsg}.`
+                : `WebP unavailable here — saved as JPEG instead${cropMsg}.`);
         } catch (error) {
             setStatus(error?.message || 'Could not convert image.', true);
         } finally {
             setBusy(false);
         }
+    }
+
+    async function reprocessSourceImage() {
+        if (!managerState.sourceFile) return;
+        await handleFileSelection(managerState.sourceFile);
     }
 
     async function attachImage() {
@@ -646,7 +699,7 @@
             if (canUseFileSystem()) {
                 const dir = managerState.dirHandle || await connectProjectDirectory();
                 if (!dir) {
-                    setStatus('Connect the Home Design folder before saving.', true);
+                    setStatus('Connect the Beutifully Living project folder before saving.', true);
                     return;
                 }
 
@@ -681,12 +734,13 @@
                 }
 
                 managerState.selectedRow = atHome.findRowByIdeaId(row.ideaId) || row;
-                setStatus(`Downloaded image and updated ${MANIFEST_NAME}. Drop both into the Home Design folder.`);
+                setStatus(`Downloaded image and updated ${MANIFEST_NAME}. Drop both into the Beutifully Living folder.`);
                 refreshManagerLists();
             }
 
             managerState.sourceFile = null;
             managerState.webpBlob = null;
+            managerState.outputSize = null;
             updatePreview();
         } catch (error) {
             setStatus(error?.message || 'Could not save image.', true);
@@ -751,6 +805,11 @@
 
         el.managerDropzone?.addEventListener('click', () => el.managerFileInput?.click());
 
+        el.managerCrop169?.addEventListener('change', (event) => {
+            managerState.crop169 = event.target.checked;
+            if (managerState.sourceFile) reprocessSourceImage();
+        });
+
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && managerState.open) {
                 closeManager();
@@ -773,6 +832,7 @@
         el.managerDropzone = document.getElementById('imageManagerDropzone');
         el.managerPreview = document.getElementById('imageManagerPreview');
         el.managerPreviewMeta = document.getElementById('imageManagerPreviewMeta');
+        el.managerCrop169 = document.getElementById('imageManagerCrop169');
         el.managerSearch = document.getElementById('imageManagerSearch');
         el.managerWithImages = document.getElementById('imageManagerWithImages');
         el.managerResults = document.getElementById('imageManagerResults');

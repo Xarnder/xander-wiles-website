@@ -12,9 +12,9 @@
             }
         })();
     </script>
-    <title>Beautifully Living</title>
+    <title>Beutifully Living</title>
     <meta name="description"
-        content="A modern home design blog with ideas for kitchens, bedrooms, gardens, layout, and everyday living.">
+        content="Beutifully Living — a home design blog with ideas for kitchens, bedrooms, gardens, layout, and everyday living.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -33,18 +33,18 @@
 
 <!-- Other essential links -->
 <link rel="manifest" href="site.webmanifest">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#eb5e00" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
 </head>
 
 <body>
     <div class="site-shell">
         <header class="site-header">
             <a class="brand" href="#section/all">
-                <span class="brand-mark" aria-hidden="true">⌂</span>
+                <img class="brand-mark" src="icon.png" alt="" width="44" height="44" aria-hidden="true">
                 <span>
-                    <span class="eyebrow">Home design blog</span>
-                    <strong>At Home</strong>
+                    <span class="eyebrow">Design blog</span>
+                    <strong>Beutifully Living</strong>
                 </span>
             </a>
             <div class="header-actions">
@@ -81,9 +81,14 @@
             </div>
         </div>
 
-        <section class="idea-carousel" aria-label="Featured ideas" aria-roledescription="carousel">
+        <section class="idea-carousel" aria-label="Featured ideas" aria-roledescription="carousel" tabindex="0">
             <div class="carousel-glow" aria-hidden="true"></div>
-            <div class="carousel-stage">
+            <button id="carouselPrev" class="carousel-nav carousel-prev" type="button"
+                aria-label="Previous featured idea">‹</button>
+            <button id="carouselNext" class="carousel-nav carousel-next" type="button"
+                aria-label="Next featured idea">›</button>
+            <div class="carousel-stage" id="carouselStage">
+                <div id="carouselMeasure" class="carousel-measure" aria-hidden="true"></div>
                 <article class="carousel-slide is-active" data-carousel-pane="0">
                     <div class="carousel-media" hidden></div>
                     <div class="carousel-copy">
@@ -171,8 +176,8 @@
                     <div class="about-panel">
                         <span class="eyebrow">About</span>
                         <p>
-                            At Home is a collection of practical and aspirational design ideas — layout, materials,
-                            comfort, and the details that turn a house into somewhere you love.
+                            Beutifully Living is a collection of practical and aspirational design ideas — layout,
+                            materials, comfort, and the details that turn a house into somewhere you love.
                         </p>
                     </div>
                 </aside>
@@ -196,7 +201,7 @@
         </main>
 
         <footer class="site-footer">
-            <p>At Home — design ideas for living beautifully.</p>
+            <p>Beutifully Living — design ideas for living beautifully.</p>
             <button id="imageManagerTrigger" class="image-manager-trigger" type="button"
                 aria-label="Open image manager" title="Image manager">Image manager</button>
         </footer>
@@ -263,6 +268,10 @@
                         <p>Drop an image here or click to choose a file.</p>
                         <span>Any aspect ratio is fine. It will be converted to WebP before saving.</span>
                     </div>
+                    <label class="image-manager-crop">
+                        <input id="imageManagerCrop169" type="checkbox">
+                        <span>Crop to 16:9 before saving (center crop)</span>
+                    </label>
                     <img id="imageManagerPreview" class="image-manager-preview" alt="" hidden>
                     <p id="imageManagerPreviewMeta" class="image-manager-meta">No image selected yet.</p>
                 </section>

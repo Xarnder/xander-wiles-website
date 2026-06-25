@@ -1372,6 +1372,83 @@ select:focus {
     opacity: 0.5;
 }
 
+/* --- Variable Suggestions Dropdown --- */
+.prompt-variable-wrapper {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+    margin: 0 4px;
+}
+
+.prompt-variable-wrapper .prompt-input {
+    margin: 0;
+    border-radius: 4px 0 0 0;
+}
+
+.suggestions-toggle {
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 2px solid var(--glow-color);
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    padding: 0 8px;
+    margin: 0;
+    border-radius: 0 4px 0 0;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.suggestions-toggle:hover {
+    background: rgba(123, 44, 191, 0.2);
+    color: #4cc9f0;
+}
+
+.suggestions-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    background: rgba(15, 10, 25, 0.95);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    min-width: 150px;
+    max-width: 300px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    text-align: left;
+}
+
+.suggestions-menu.hidden {
+    display: none !important;
+}
+
+.suggestion-item {
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    color: var(--text-main);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: inherit;
+}
+
+.suggestion-item:hover {
+    background: rgba(123, 44, 191, 0.4);
+    color: #ffffff;
+}
+
 /* --- QoL Features --- */
 .counters {
     display: flex;
