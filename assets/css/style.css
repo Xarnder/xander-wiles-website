@@ -50,16 +50,24 @@ body.loading {
 
 /* --- Background Decorations --- */
 .background-overlay,
-.floating-shapes {
+.floating-shapes,
+#particle-canvas {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: -1;
     pointer-events: none;
     overflow: hidden;
-    /* Prevent animated orbs from causing scroll */
+}
+
+.background-overlay,
+.floating-shapes {
+    z-index: -1;
+}
+
+#particle-canvas {
+    z-index: 0;
 }
 
 .background-overlay {
@@ -122,6 +130,8 @@ body.loading {
 
 /* --- Main Layout & Card Styles --- */
 .app-container {
+    position: relative;
+    z-index: 1;
     width: 100%;
     max-width: 1200px;
     /* <<< CHANGED: Increased from 800px to allow wider grid */
@@ -1208,4 +1218,10 @@ input[type="range"]:focus::-moz-range-thumb {
 .login-loader .premium-loader {
     width: 60px;
     height: 90px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #particle-canvas {
+        display: none;
+    }
 }

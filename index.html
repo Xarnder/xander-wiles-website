@@ -65,6 +65,7 @@
 
     <!-- Background elements from your original design -->
     <div class="background-overlay"></div>
+    <canvas id="particle-canvas" aria-hidden="true"></canvas>
     <div class="floating-shapes">
         <div class="shape shape-1"></div>
         <div class="shape shape-2"></div>
@@ -137,12 +138,12 @@
         <!-- === Best Pages === -->
         <h2 class="section-title">Best Pages</h2>
         <div class="page-grid best-pages-grid">
-            <a href="/pages/Group-Availability/" class="page-card glass-card">
+            <!-- <a href="/pages/Group-Availability/" class="page-card glass-card">
                 <img src="/pages/Group-Availability/favicon-dark.svg" class="page-icon" alt="When To Hang Icon"
                     loading="lazy">
                 <h3>When To Hang</h3>
                 <p>Find a time everyone is free — collaborative availability scheduling.</p>
-            </a>
+            </a> -->
             <a href="https://www.shoutitoutgame.com" class="page-card glass-card">
                 <img src="/pages/Shout-It-Out/favicon-dark.svg" class="page-icon" alt="Shout It Out Icon"
                     loading="lazy">
@@ -551,6 +552,11 @@
         <!-- === GUIDES, DEMOS & MEMORIALS === -->
         <h2 class="section-title">Guides, Demos & More</h2>
         <div class="page-grid">
+            <a href="/pages/Countdown/" class="page-card glass-card">
+                <img src="/pages/Countdown/favicon-dark.svg" class="page-icon" alt="Countdown Icon" loading="lazy">
+                <h3>Countdown</h3>
+                <p>A mystery countdown — and beyond.</p>
+            </a>
             <a href="/pages/AI-Coding-Guidance/" class="page-card glass-card special-ai-coding-guidance-card">
                 <img src="/pages/AI-Coding-Guidance/favicon-dark.svg" class="page-icon" alt="AI Coding Guidance Icon"
                     loading="lazy">
@@ -815,6 +821,13 @@
                     <h3>Beutifully Living</h3>
                     <p>A home design blog with ideas for layout, materials, and everyday living.</p>
                 </a>
+                <a href="/pages/Group-Availability/" class="page-card glass-card">
+                    <img src="/pages/Group-Availability/favicon-dark.svg" class="page-icon" alt="Group Availability icon"
+                        loading="lazy">
+                    <h3>Group Availability</h3>
+                    <p>A tool for finding the best time for a group to get together.</p>
+                </a>
+                
 
 
 
@@ -827,6 +840,7 @@
         </div>
     </main>
 
+    <script src="assets/js/particle-background.js"></script>
     <script src="assets/js/main.js"></script>
     <script src="/assets/js/nav-loader.js"></script> <!-- ADD THIS LINE -->
 </body>

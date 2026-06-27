@@ -4,6 +4,11 @@
 
 document.addEventListener('DOMContentLoaded', () => {
 
+    const particleCanvas = document.getElementById('particle-canvas');
+    if (particleCanvas && typeof initParticleBackground === 'function') {
+        initParticleBackground(particleCanvas);
+    }
+
     // --- Unblur Profile Picture After Load (for homepage) ---
     const profilePic = document.querySelector('.profile-picture');
 
