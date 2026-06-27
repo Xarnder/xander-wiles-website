@@ -172,6 +172,9 @@ body {
     max-height: calc(100vh - 7rem);
     overflow-y: auto;
     padding-right: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
 }
 
 .guide-sidebar::-webkit-scrollbar {

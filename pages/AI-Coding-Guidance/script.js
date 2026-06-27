@@ -13,6 +13,26 @@ function applyFeatureDatePaths() {
     return slug;
 }
 
+function applyParentPath(value) {
+    let path = value.trim();
+    if (path && !path.endsWith('/')) {
+        path += '/';
+    }
+    document.querySelectorAll('[data-parent-path]').forEach((element) => {
+        element.textContent = path;
+    });
+}
+
+function applyFeatureName(value) {
+    let name = value.trim();
+    if (name && !name.endsWith('/')) {
+        name += '/';
+    }
+    document.querySelectorAll('[data-feature-name]').forEach((element) => {
+        element.textContent = name;
+    });
+}
+
 function fieldValue(field) {
     const value = field.value.trim();
     if (value) return value;
@@ -41,6 +61,22 @@ function getPromptText(root) {
 
 document.addEventListener('DOMContentLoaded', () => {
     applyFeatureDatePaths();
+
+    const parentPathInput = document.getElementById('parent-path-input');
+    if (parentPathInput) {
+        parentPathInput.addEventListener('input', (e) => {
+            applyParentPath(e.target.value);
+        });
+        applyParentPath(parentPathInput.value);
+    }
+
+    const featureNameInput = document.getElementById('feature-name-input');
+    if (featureNameInput) {
+        featureNameInput.addEventListener('input', (e) => {
+            applyFeatureName(e.target.value);
+        });
+        applyFeatureName(featureNameInput.value);
+    }
 
     const copyButtons = document.querySelectorAll('.copy-btn');
 
