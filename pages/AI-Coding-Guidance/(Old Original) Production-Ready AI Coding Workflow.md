@@ -60,11 +60,29 @@ Important rules:
 \- Do not make assumptions silently.  
 \- If there are open questions, put them in \`01-questions-and-decisions.md\`.  
 \- For each question, explain why it matters and what could go wrong if we choose badly.  
+\- Leave an input box under each question for me to type the answer.  
+\- For multiple-choice questions, include check boxes with a custom input box under it as well.  
 \- Where possible, recommend a sensible default decision.  
 \- Mark decisions as one of:  
   \- \`Needs user answer\`  
   \- \`Recommended default\`  
   \- \`Safe to decide now\`  
+\- Use the following strict formatting for questions and answers:
+
+  ### Question 1: [Short Title]
+  - **Status**: `Needs user answer`
+  - **Why it matters**: [Why it matters / what could go wrong]
+  - **Recommended Default**: [Default choice if applicable]
+  - **Your Answer**: <input type="text" placeholder="Type your answer here" style="width: 100%;">
+
+  ### Question 2: [Short Title (Multiple Choice)]
+  - **Status**: `Recommended default`
+  - **Why it matters**: [Why it matters / what could go wrong]
+  - **Options**:
+    - [ ] Option A
+    - [ ] Option B
+    - [ ] Custom/Other: <input type="text" placeholder="Type custom answer here">
+
 \- After creating the documents, stop and wait for me to answer the questions.
 
 ---
