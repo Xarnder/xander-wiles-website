@@ -2,6 +2,8 @@ import {
     DOM,
     updateCurrencyDisplays,
     renderCalendar,
+    renderChart,
+    renderGanttChart,
     applyWidgetOrder,
     applyWidgetTitles,
     applyDashboardDensity,
@@ -32,7 +34,15 @@ import {
     updateTcDailyHours,
     updateTcWorkingDaysPerWeek,
     updateTcSavedItemFilters,
-    updateActiveCutStatsPeriods
+    updateActiveCutStatsPeriods,
+    updateDefaultHourlyRate,
+    updateRatePreference,
+    updateDefaultCompany,
+    updateCompanyPreference,
+    updateDefaultProject,
+    updateProjectPreference,
+    updateDefaultStartTime,
+    updateStartTimePreference
 } from './state.js';
 import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings } from './api.js';
 
@@ -117,21 +127,35 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.stopBtn.addEventListener('click', stopTimer);
 
     // View Switcher Events
-    if (DOM.viewDashboardBtn && DOM.viewTimeCostBtn) {
+    if (DOM.viewDashboardBtn && DOM.viewTimeCostBtn && DOM.viewSettingsBtn) {
         DOM.viewDashboardBtn.addEventListener('click', () => {
             DOM.viewDashboardBtn.classList.add('active');
             DOM.viewTimeCostBtn.classList.remove('active');
+            DOM.viewSettingsBtn.classList.remove('active');
             DOM.dashboardView.classList.remove('hidden');
             DOM.timeCostView.classList.add('hidden');
+            DOM.settingsView.classList.add('hidden');
         });
 
         DOM.viewTimeCostBtn.addEventListener('click', () => {
             DOM.viewTimeCostBtn.classList.add('active');
             DOM.viewDashboardBtn.classList.remove('active');
+            DOM.viewSettingsBtn.classList.remove('active');
             DOM.timeCostView.classList.remove('hidden');
             DOM.dashboardView.classList.add('hidden');
+            DOM.settingsView.classList.add('hidden');
             renderTimeCostBreakdown(); // Initialize
             renderSavedTimeCostItems(); // Initialize
+        });
+
+        DOM.viewSettingsBtn.addEventListener('click', () => {
+            DOM.viewSettingsBtn.classList.add('active');
+            DOM.viewDashboardBtn.classList.remove('active');
+            DOM.viewTimeCostBtn.classList.remove('active');
+            DOM.settingsView.classList.remove('hidden');
+            DOM.dashboardView.classList.add('hidden');
+            DOM.timeCostView.classList.add('hidden');
+            initSettingsView(); // Initialize
         });
     }
 
@@ -276,8 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Settings Events
-    DOM.settingsBtn.addEventListener('click', () => {
+    function initSettingsView() {
         DOM.currencySelect.value = state.currentCurrency;
         DOM.showTitlesToggle.checked = state.showWidgetTitles;
         DOM.continueSessionToggle.checked = state.continueSessionOnClose;
@@ -287,13 +310,50 @@ document.addEventListener('DOMContentLoaded', () => {
         if (DOM.startOfWeekSelect) {
             DOM.startOfWeekSelect.value = state.startOfWeek.toString();
         }
+        if (DOM.defaultHourlyRateSettingInput) {
+            DOM.defaultHourlyRateSettingInput.value = state.defaultHourlyRate;
+        }
+        if (DOM.ratePreferenceSelect) {
+            DOM.ratePreferenceSelect.value = state.ratePreference;
+        }
+        if (DOM.defaultCompanySettingInput) {
+            DOM.defaultCompanySettingInput.value = state.defaultCompany;
+        }
+        if (DOM.companyPreferenceSelect) {
+            DOM.companyPreferenceSelect.value = state.companyPreference;
+        }
+        if (DOM.defaultProjectSettingInput) {
+            DOM.defaultProjectSettingInput.value = state.defaultProject;
+        }
+        if (DOM.projectPreferenceSelect) {
+            DOM.projectPreferenceSelect.value = state.projectPreference;
+        }
+        if (DOM.defaultStartTimeSettingInput) {
+            DOM.defaultStartTimeSettingInput.value = state.defaultStartTime;
+        }
+        if (DOM.startTimePreferenceSelect) {
+            DOM.startTimePreferenceSelect.value = state.startTimePreference;
+        }
         renderWidgetOrderList();
-        DOM.settingsModal.classList.remove('hidden');
+    }
+
+    // Settings Events
+    DOM.settingsBtn.addEventListener('click', () => {
+        if (DOM.viewSettingsBtn) {
+            DOM.viewSettingsBtn.click();
+        }
     });
 
-    DOM.closeSettingsBtn.addEventListener('click', () => {
-        DOM.settingsModal.classList.add('hidden');
-    });
+    if (DOM.toggleWidgetOrderBtn) {
+        DOM.toggleWidgetOrderBtn.addEventListener('click', () => {
+            const container = document.getElementById('widget-order-container');
+            const chevron = document.getElementById('widget-order-chevron');
+            if (container && chevron) {
+                const isHidden = container.classList.toggle('hidden');
+                chevron.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
+            }
+        });
+    }
 
     DOM.saveSettingsBtn.addEventListener('click', () => {
         updateCurrency(DOM.currencySelect.value);
@@ -313,14 +373,78 @@ document.addEventListener('DOMContentLoaded', () => {
         if (DOM.widgetSpacingSelect) {
             updateDashboardDensity(DOM.widgetSpacingSelect.value);
         }
+        if (DOM.defaultHourlyRateSettingInput) {
+            updateDefaultHourlyRate(DOM.defaultHourlyRateSettingInput.value);
+        }
+        if (DOM.ratePreferenceSelect) {
+            updateRatePreference(DOM.ratePreferenceSelect.value);
+        }
+        if (DOM.defaultCompanySettingInput) {
+            updateDefaultCompany(DOM.defaultCompanySettingInput.value);
+        }
+        if (DOM.companyPreferenceSelect) {
+            updateCompanyPreference(DOM.companyPreferenceSelect.value);
+        }
+        if (DOM.defaultProjectSettingInput) {
+            updateDefaultProject(DOM.defaultProjectSettingInput.value);
+        }
+        if (DOM.projectPreferenceSelect) {
+            updateProjectPreference(DOM.projectPreferenceSelect.value);
+        }
+        if (DOM.defaultStartTimeSettingInput) {
+            updateDefaultStartTime(DOM.defaultStartTimeSettingInput.value);
+        }
+        if (DOM.startTimePreferenceSelect) {
+            updateStartTimePreference(DOM.startTimePreferenceSelect.value);
+        }
+
+        // Update timer rate, company, and project inputs on settings save if not currently running
+        const timerIsRunning = localStorage.getItem('work_tracker_start') !== null;
+        if (!timerIsRunning) {
+            const lastSession = state.rawSessions && state.rawSessions[0];
+
+            if (DOM.hourlyRateInput) {
+                if (state.ratePreference === 'default_rate') {
+                    DOM.hourlyRateInput.value = state.defaultHourlyRate;
+                } else {
+                    if (lastSession && lastSession.rate != null) {
+                        DOM.hourlyRateInput.value = lastSession.rate;
+                    } else {
+                        DOM.hourlyRateInput.value = state.defaultHourlyRate;
+                    }
+                }
+            }
+
+            if (DOM.companyInput) {
+                if (state.companyPreference === 'default_value') {
+                    DOM.companyInput.value = state.defaultCompany;
+                } else {
+                    if (lastSession && lastSession.company != null) {
+                        DOM.companyInput.value = lastSession.company;
+                    } else {
+                        DOM.companyInput.value = state.defaultCompany;
+                    }
+                }
+            }
+
+            if (DOM.projectInput) {
+                if (state.projectPreference === 'default_value') {
+                    DOM.projectInput.value = state.defaultProject;
+                } else {
+                    if (lastSession && lastSession.project != null) {
+                        DOM.projectInput.value = lastSession.project;
+                    } else {
+                        DOM.projectInput.value = state.defaultProject;
+                    }
+                }
+            }
+        }
 
         applyWidgetOrder();
         applyWidgetTitles();
         applyDashboardDensity();
         updateCurrencyDisplays();
         renderDashboardData();
-
-        DOM.settingsModal.classList.add('hidden');
 
         import('./ui.js').then(module => {
             module.showAlert("Settings Saved", "Your settings have been saved.");
@@ -348,6 +472,157 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Helper function to open Session Modal for a specific date and populate default or previous time settings
+    function openAddSessionModal(selectedDate, usePreviousTimes = true) {
+        DOM.sessionModalTitle.textContent = "Add Session";
+        DOM.editSessionId.value = "";
+
+        const selectedMidnight = new Date(
+            selectedDate.getFullYear(),
+            selectedDate.getMonth(),
+            selectedDate.getDate()
+        );
+
+        let prevSession = null;
+        if (usePreviousTimes) {
+            let maxPrevMidnight = -1;
+            state.allSessions.forEach(session => {
+                const sessionStart = new Date(session.startTime);
+                const sessionMidnight = new Date(
+                    sessionStart.getFullYear(),
+                    sessionStart.getMonth(),
+                    sessionStart.getDate()
+                );
+                const time = sessionMidnight.getTime();
+                if (time < selectedMidnight.getTime()) {
+                    if (time > maxPrevMidnight) {
+                        maxPrevMidnight = time;
+                        prevSession = session;
+                    } else if (time === maxPrevMidnight) {
+                        if (!prevSession || new Date(session.startTime).getTime() > new Date(prevSession.startTime).getTime()) {
+                            prevSession = session;
+                        }
+                    }
+                }
+            });
+        }
+
+        let newStart, newEnd;
+        if (state.startTimePreference === 'default_value') {
+            let defaultHours = 9;
+            let defaultMinutes = 0;
+            if (state.defaultStartTime) {
+                const parts = state.defaultStartTime.split(':');
+                if (parts.length === 2) {
+                    defaultHours = parseInt(parts[0]) || 0;
+                    defaultMinutes = parseInt(parts[1]) || 0;
+                }
+            }
+            newStart = new Date(
+                selectedMidnight.getFullYear(),
+                selectedMidnight.getMonth(),
+                selectedMidnight.getDate(),
+                defaultHours,
+                defaultMinutes,
+                0, 0
+            );
+            const duration = (prevSession && prevSession.durationMs) ? prevSession.durationMs : (60 * 60 * 1000);
+            newEnd = new Date(newStart.getTime() + duration);
+        } else if (prevSession) {
+            const sStart = new Date(prevSession.startTime);
+            const sEnd = prevSession.endTime 
+                ? new Date(prevSession.endTime) 
+                : new Date(sStart.getTime() + (prevSession.durationMs || 0));
+
+            newStart = new Date(
+                selectedMidnight.getFullYear(),
+                selectedMidnight.getMonth(),
+                selectedMidnight.getDate(),
+                sStart.getHours(),
+                sStart.getMinutes(),
+                sStart.getSeconds(),
+                sStart.getMilliseconds()
+            );
+
+            const sStartMidnight = new Date(sStart.getFullYear(), sStart.getMonth(), sStart.getDate());
+            const sEndMidnight = new Date(sEnd.getFullYear(), sEnd.getMonth(), sEnd.getDate());
+            const dayDiff = Math.round((sEndMidnight.getTime() - sStartMidnight.getTime()) / (24 * 60 * 60 * 1000));
+
+            newEnd = new Date(
+                selectedMidnight.getFullYear(),
+                selectedMidnight.getMonth(),
+                selectedMidnight.getDate() + dayDiff,
+                sEnd.getHours(),
+                sEnd.getMinutes(),
+                sEnd.getSeconds(),
+                sEnd.getMilliseconds()
+            );
+        } else {
+            const now = new Date();
+            const oneHourAgo = new Date(now.getTime() - (60 * 60 * 1000));
+            newStart = new Date(
+                selectedMidnight.getFullYear(),
+                selectedMidnight.getMonth(),
+                selectedMidnight.getDate(),
+                oneHourAgo.getHours(),
+                oneHourAgo.getMinutes(),
+                0, 0
+            );
+            newEnd = new Date(
+                selectedMidnight.getFullYear(),
+                selectedMidnight.getMonth(),
+                selectedMidnight.getDate(),
+                now.getHours(),
+                now.getMinutes(),
+                0, 0
+            );
+        }
+
+        import('./utils.js').then(({ formatDateTimeLocal }) => {
+            DOM.sessionStart.value = formatDateTimeLocal(newStart);
+            DOM.sessionEnd.value = formatDateTimeLocal(newEnd);
+        });
+
+        if (state.ratePreference === 'default_rate') {
+            DOM.sessionRate.value = state.defaultHourlyRate;
+        } else {
+            DOM.sessionRate.value = (prevSession && prevSession.rate != null) ? prevSession.rate : (DOM.hourlyRateInput.value || state.defaultHourlyRate);
+        }
+
+        if (state.companyPreference === 'default_value') {
+            DOM.sessionCompany.value = state.defaultCompany;
+        } else {
+            DOM.sessionCompany.value = (prevSession && prevSession.company != null) ? prevSession.company : (DOM.companyInput.value || state.defaultCompany);
+        }
+
+        if (state.projectPreference === 'default_value') {
+            DOM.sessionProject.value = state.defaultProject;
+        } else {
+            DOM.sessionProject.value = (prevSession && prevSession.project != null) ? prevSession.project : (DOM.projectInput.value || state.defaultProject);
+        }
+        DOM.sessionFocused.checked = true;
+        DOM.sessionModal.classList.remove('modal-mode-edit');
+        DOM.sessionModal.classList.add('modal-mode-add');
+        DOM.sessionModal.classList.remove('hidden');
+    }
+
+    function openEditSessionModal(session) {
+        DOM.sessionModalTitle.textContent = "Edit Session";
+        DOM.editSessionId.value = session.id;
+
+        import('./utils.js').then(({ formatDateTimeLocal }) => {
+            DOM.sessionStart.value = formatDateTimeLocal(session.startTime);
+            DOM.sessionEnd.value = formatDateTimeLocal(session.endTime || (new Date(session.startTime).getTime() + (session.durationMs || 0)));
+            DOM.sessionRate.value = session.rate || 0;
+            DOM.sessionCompany.value = session.company || "";
+            DOM.sessionProject.value = session.project || "";
+            DOM.sessionFocused.checked = session.focused !== false;
+            DOM.sessionModal.classList.remove('modal-mode-add');
+            DOM.sessionModal.classList.add('modal-mode-edit');
+            DOM.sessionModal.classList.remove('hidden');
+        });
+    }
+
     // Calendar Events
     if (DOM.prevMonthBtn && DOM.nextMonthBtn) {
         DOM.prevMonthBtn.addEventListener('click', () => {
@@ -359,6 +634,411 @@ document.addEventListener('DOMContentLoaded', () => {
             state.currentCalendarDate.setMonth(state.currentCalendarDate.getMonth() + 1);
             renderCalendar();
         });
+    }
+
+    // Chart Weekly Navigation Events
+    if (DOM.prevWeekBtn && DOM.nextWeekBtn) {
+        DOM.prevWeekBtn.addEventListener('click', () => {
+            state.currentChartDate.setDate(state.currentChartDate.getDate() - 7);
+            renderChart();
+        });
+
+        DOM.nextWeekBtn.addEventListener('click', () => {
+            state.currentChartDate.setDate(state.currentChartDate.getDate() + 7);
+            renderChart();
+        });
+    }
+
+    // Timeline Weekly Navigation Events
+    if (DOM.prevTimelineWeekBtn && DOM.nextTimelineWeekBtn) {
+        DOM.prevTimelineWeekBtn.addEventListener('click', () => {
+            state.currentTimelineDate.setDate(state.currentTimelineDate.getDate() - 7);
+            renderGanttChart();
+        });
+
+        DOM.nextTimelineWeekBtn.addEventListener('click', () => {
+            state.currentTimelineDate.setDate(state.currentTimelineDate.getDate() + 7);
+            renderGanttChart();
+        });
+    }
+
+    function updateBatchSelectionUI() {
+        if (!DOM.batchSelectedLabel || !DOM.openBatchModalBtn) return;
+        const count = state.batchSelectedDates.length;
+        DOM.batchSelectedLabel.textContent = `${count} day${count === 1 ? '' : 's'} selected`;
+        DOM.openBatchModalBtn.disabled = count === 0;
+    }
+
+    if (DOM.toggleBatchModeBtn) {
+        DOM.toggleBatchModeBtn.addEventListener('click', () => {
+            state.batchModeEnabled = !state.batchModeEnabled;
+            if (state.batchModeEnabled) {
+                DOM.toggleBatchModeBtn.textContent = "Exit Batch Mode";
+                DOM.toggleBatchModeBtn.classList.add('active');
+                DOM.batchModeControls.style.display = "flex";
+            } else {
+                DOM.toggleBatchModeBtn.textContent = "Batch Edit";
+                DOM.toggleBatchModeBtn.classList.remove('active');
+                DOM.batchModeControls.style.display = "none";
+                state.batchSelectedDates = [];
+                updateBatchSelectionUI();
+            }
+            renderCalendar();
+        });
+    }
+
+    if (DOM.batchClearBtn) {
+        DOM.batchClearBtn.addEventListener('click', () => {
+            state.batchSelectedDates = [];
+            const cells = DOM.calendarGrid.querySelectorAll('.calendar-day.batch-selected');
+            cells.forEach(cell => cell.classList.remove('batch-selected'));
+            updateBatchSelectionUI();
+        });
+    }
+
+    if (DOM.calendarGrid) {
+        DOM.calendarGrid.addEventListener('click', (e) => {
+            const dayDiv = e.target.closest('.calendar-day:not(.empty)');
+            if (!dayDiv) return;
+
+            const dayNum = parseInt(dayDiv.dataset.day, 10);
+            if (isNaN(dayNum)) return;
+
+            const year = state.currentCalendarDate.getFullYear();
+            const month = state.currentCalendarDate.getMonth();
+
+            if (state.batchModeEnabled) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                if (state.batchSelectedDates.includes(dateStr)) {
+                    state.batchSelectedDates = state.batchSelectedDates.filter(d => d !== dateStr);
+                    dayDiv.classList.remove('batch-selected');
+                } else {
+                    state.batchSelectedDates.push(dateStr);
+                    dayDiv.classList.add('batch-selected');
+                }
+                updateBatchSelectionUI();
+            } else {
+                const daySessions = state.allSessions.filter(session => {
+                    const sStart = new Date(session.startTime);
+                    return sStart.getFullYear() === year &&
+                           sStart.getMonth() === month &&
+                           sStart.getDate() === dayNum;
+                });
+
+                if (daySessions.length > 0) {
+                    daySessions.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+                    const latestSession = daySessions[daySessions.length - 1];
+                    openEditSessionModal(latestSession);
+                } else {
+                    const selectedDate = new Date(year, month, dayNum);
+                    openAddSessionModal(selectedDate, true);
+                }
+            }
+        });
+    }
+
+    function setupCheckboxSync(checkbox, targetElement, secondTarget = null) {
+        if (!checkbox || !targetElement) return;
+        checkbox.addEventListener('change', () => {
+            const active = checkbox.checked;
+            targetElement.disabled = !active;
+            targetElement.style.opacity = active ? "1" : "0.5";
+            if (secondTarget) {
+                secondTarget.disabled = !active;
+                secondTarget.style.opacity = active ? "1" : "0.5";
+            }
+        });
+    }
+
+    setupCheckboxSync(DOM.batchUpdateStart, DOM.batchStart);
+    setupCheckboxSync(DOM.batchUpdateEnd, DOM.batchEnd);
+    setupCheckboxSync(DOM.batchUpdateRate, DOM.batchRate);
+    setupCheckboxSync(DOM.batchUpdateCompany, DOM.batchCompany, DOM.batchCompanySelect);
+    setupCheckboxSync(DOM.batchUpdateProject, DOM.batchProject, DOM.batchProjectSelect);
+
+    if (DOM.batchCompanySelect) {
+        DOM.batchCompanySelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                DOM.batchCompany.value = e.target.value;
+                e.target.value = "";
+            }
+        });
+    }
+    if (DOM.batchProjectSelect) {
+        DOM.batchProjectSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                DOM.batchProject.value = e.target.value;
+                e.target.value = "";
+            }
+        });
+    }
+
+    if (DOM.openBatchModalBtn) {
+        DOM.openBatchModalBtn.addEventListener('click', () => {
+            DOM.batchUpdateStart.checked = false;
+            DOM.batchStart.disabled = true;
+            DOM.batchStart.style.opacity = "0.5";
+            DOM.batchStart.value = "09:00";
+
+            DOM.batchUpdateEnd.checked = false;
+            DOM.batchEnd.disabled = true;
+            DOM.batchEnd.style.opacity = "0.5";
+            DOM.batchEnd.value = "17:00";
+
+            DOM.batchUpdateRate.checked = false;
+            DOM.batchRate.disabled = true;
+            DOM.batchRate.style.opacity = "0.5";
+            DOM.batchRate.value = DOM.hourlyRateInput.value || 20;
+
+            DOM.batchUpdateCompany.checked = false;
+            DOM.batchCompany.disabled = true;
+            DOM.batchCompany.style.opacity = "0.5";
+            DOM.batchCompany.value = "";
+            DOM.batchCompanySelect.disabled = true;
+            DOM.batchCompanySelect.style.opacity = "0.5";
+
+            DOM.batchUpdateProject.checked = false;
+            DOM.batchProject.disabled = true;
+            DOM.batchProject.style.opacity = "0.5";
+            DOM.batchProject.value = "";
+            DOM.batchProjectSelect.disabled = true;
+            DOM.batchProjectSelect.style.opacity = "0.5";
+
+            resetBatchSlider();
+
+            if (DOM.batchModalSubtitle) {
+                DOM.batchModalSubtitle.textContent = `Applying changes to ${state.batchSelectedDates.length} selected day${state.batchSelectedDates.length === 1 ? '' : 's'}.`;
+            }
+
+            DOM.batchModal.classList.remove('hidden');
+        });
+    }
+
+    if (DOM.closeBatchModalBtn) {
+        DOM.closeBatchModalBtn.addEventListener('click', () => {
+            DOM.batchModal.classList.add('hidden');
+        });
+    }
+
+    let isDragging = false;
+    let startX = 0;
+
+    function resetBatchSlider() {
+        if (!DOM.batchSliderHandle || !DOM.batchSliderProgress || !DOM.batchSliderText) return;
+        DOM.batchSliderHandle.style.left = "0px";
+        DOM.batchSliderHandle.style.transform = "none";
+        DOM.batchSliderProgress.style.width = "0px";
+        DOM.batchSliderText.textContent = "Swipe to Confirm";
+        DOM.batchSliderText.style.color = "var(--text-secondary)";
+        DOM.batchSliderHandle.style.background = "linear-gradient(135deg, var(--accent-blue), var(--accent-green))";
+        isDragging = false;
+    }
+
+    if (DOM.batchSliderHandle && DOM.batchSliderTrack) {
+        const handle = DOM.batchSliderHandle;
+        const track = DOM.batchSliderTrack;
+        const progress = DOM.batchSliderProgress;
+        const text = DOM.batchSliderText;
+
+        const getDragLimit = () => track.clientWidth - handle.clientWidth;
+
+        const startDrag = (e) => {
+            isDragging = true;
+            startX = (e.touches ? e.touches[0].clientX : e.clientX) - parseFloat(handle.style.left || 0);
+            handle.style.transition = "none";
+            progress.style.transition = "none";
+        };
+
+        const onDrag = (e) => {
+            if (!isDragging) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const limit = getDragLimit();
+            let x = clientX - startX;
+            if (x < 0) x = 0;
+            if (x > limit) x = limit;
+
+            handle.style.left = `${x}px`;
+            progress.style.width = `${x + handle.clientWidth / 2}px`;
+
+            if (x >= limit * 0.95) {
+                text.textContent = "Release to Confirm";
+                text.style.color = "#fff";
+            } else {
+                text.textContent = "Swipe to Confirm";
+                text.style.color = "var(--text-secondary)";
+            }
+        };
+
+        const endDrag = async () => {
+            if (!isDragging) return;
+            isDragging = false;
+            const limit = getDragLimit();
+            const x = parseFloat(handle.style.left || 0);
+
+            if (x >= limit * 0.95) {
+                handle.style.left = `${limit}px`;
+                progress.style.width = "100%";
+                text.textContent = "Saving...";
+                handle.style.background = "var(--accent-green)";
+                await saveBatchChanges();
+            } else {
+                handle.style.transition = "left 0.2s ease-out";
+                progress.style.transition = "width 0.2s ease-out";
+                handle.style.left = "0px";
+                progress.style.width = "0px";
+                text.textContent = "Swipe to Confirm";
+                text.style.color = "var(--text-secondary)";
+            }
+        };
+
+        handle.addEventListener('mousedown', startDrag);
+        window.addEventListener('mousemove', onDrag);
+        window.addEventListener('mouseup', endDrag);
+
+        handle.addEventListener('touchstart', startDrag);
+        window.addEventListener('touchmove', onDrag);
+        window.addEventListener('touchend', endDrag);
+    }
+
+    async function saveBatchChanges() {
+        const promises = [];
+        const module = await import('./api.js');
+
+        const updateStart = DOM.batchUpdateStart.checked;
+        const updateEnd = DOM.batchUpdateEnd.checked;
+        const updateRate = DOM.batchUpdateRate.checked;
+        const updateCompany = DOM.batchUpdateCompany.checked;
+        const updateProject = DOM.batchUpdateProject.checked;
+
+        if (!updateStart && !updateEnd && !updateRate && !updateCompany && !updateProject) {
+            import('./ui.js').then(uiModule => {
+                uiModule.showAlert("Select Actions", "Please check at least one checkbox field to apply batch changes.");
+                resetBatchSlider();
+            });
+            return;
+        }
+
+        const startVal = DOM.batchStart.value;
+        const endVal = DOM.batchEnd.value;
+        const rateVal = parseFloat(DOM.batchRate.value) || 0;
+        const companyVal = DOM.batchCompany.value.trim();
+        const projectVal = DOM.batchProject.value.trim();
+
+        if (updateStart && updateEnd) {
+            const [sh, sm] = startVal.split(':').map(Number);
+            const [eh, em] = endVal.split(':').map(Number);
+            if (eh * 60 + em <= sh * 60 + sm) {
+                import('./ui.js').then(uiModule => {
+                    uiModule.showAlert("Invalid Time", "End time must be strictly after start time.");
+                    resetBatchSlider();
+                });
+                return;
+            }
+        }
+
+        state.batchSelectedDates.forEach(dateStr => {
+            const [year, month, dayNum] = dateStr.split('-').map(Number);
+
+            const existingSessions = state.allSessions.filter(session => {
+                const sStart = new Date(session.startTime);
+                return sStart.getFullYear() === year &&
+                       sStart.getMonth() === (month - 1) &&
+                       sStart.getDate() === dayNum;
+            });
+
+            if (existingSessions.length > 0) {
+                existingSessions.forEach(session => {
+                    let sStart = new Date(session.startTime);
+                    let sEnd = session.endTime 
+                        ? new Date(session.endTime) 
+                        : new Date(sStart.getTime() + (session.durationMs || 0));
+
+                    if (updateStart) {
+                        const [h, m] = startVal.split(':').map(Number);
+                        sStart.setHours(h, m, 0, 0);
+                    }
+                    if (updateEnd) {
+                        const [h, m] = endVal.split(':').map(Number);
+                        sEnd.setHours(h, m, 0, 0);
+                        if (sEnd.getTime() <= sStart.getTime()) {
+                            sEnd.setDate(sEnd.getDate() + 1);
+                        }
+                    } else if (updateStart) {
+                        if (sEnd.getTime() <= sStart.getTime()) {
+                            sEnd.setTime(sStart.getTime() + (session.durationMs || 60 * 60 * 1000));
+                        }
+                    }
+
+                    const durationMs = sEnd.getTime() - sStart.getTime();
+                    const rate = updateRate ? rateVal : (session.rate != null ? session.rate : 20);
+                    const earnings = (durationMs / (1000 * 60 * 60)) * rate;
+
+                    const updatedData = {
+                        startTime: sStart.getTime(),
+                        endTime: sEnd.getTime(),
+                        durationMs: durationMs,
+                        rate: rate,
+                        earnings: earnings
+                    };
+                    if (updateCompany) updatedData.company = companyVal;
+                    if (updateProject) updatedData.project = projectVal;
+
+                    promises.push(module.updateSession(session.id, updatedData));
+                });
+            } else {
+                const sh = updateStart ? startVal.split(':').map(Number)[0] : 9;
+                const sm = updateStart ? startVal.split(':').map(Number)[1] : 0;
+                let eh = updateEnd ? endVal.split(':').map(Number)[0] : 17;
+                let em = updateEnd ? endVal.split(':').map(Number)[1] : 0;
+
+                if (updateStart && !updateEnd) {
+                    if (sh >= 17) {
+                        eh = (sh + 1) % 24;
+                    }
+                }
+
+                const sStart = new Date(year, month - 1, dayNum, sh, sm, 0, 0);
+                const sEnd = new Date(year, month - 1, dayNum, eh, em, 0, 0);
+                if (sEnd.getTime() <= sStart.getTime()) {
+                    sEnd.setDate(sEnd.getDate() + 1);
+                }
+
+                const durationMs = sEnd.getTime() - sStart.getTime();
+                const rate = updateRate ? rateVal : (state.tcHourlyRate || 20);
+                const earnings = (durationMs / (1000 * 60 * 60)) * rate;
+
+                const newSession = {
+                    startTime: sStart.getTime(),
+                    endTime: sEnd.getTime(),
+                    durationMs: durationMs,
+                    rate: rate,
+                    earnings: earnings,
+                    company: updateCompany ? companyVal : "",
+                    project: updateProject ? projectVal : "",
+                    focused: true
+                };
+
+                promises.push(module.addCustomSession(newSession));
+            }
+        });
+
+        try {
+            await Promise.all(promises);
+            DOM.batchModal.classList.add('hidden');
+            state.batchModeEnabled = false;
+            DOM.toggleBatchModeBtn.textContent = "Batch Edit";
+            DOM.toggleBatchModeBtn.classList.remove('active');
+            DOM.batchModeControls.style.display = "none";
+            state.batchSelectedDates = [];
+            
+            import('./ui.js').then(uiModule => {
+                uiModule.showAlert("Batch Successful", `Successfully applied changes to all selected days!`);
+                renderCalendar();
+            });
+        } catch (err) {
+            console.error("Batch update error:", err);
+            resetBatchSlider();
+        }
     }
 
     // Global Filter Events
@@ -428,28 +1108,33 @@ document.addEventListener('DOMContentLoaded', () => {
     // Session Modal Events
     if (DOM.addSessionBtn) {
         DOM.addSessionBtn.addEventListener('click', () => {
-            DOM.sessionModalTitle.textContent = "Add Session";
-            DOM.editSessionId.value = "";
-
-            const now = new Date();
-            const oneHourAgo = new Date(now.getTime() - (60 * 60 * 1000));
-
-            import('./utils.js').then(({ formatDateTimeLocal }) => {
-                DOM.sessionStart.value = formatDateTimeLocal(oneHourAgo);
-                DOM.sessionEnd.value = formatDateTimeLocal(now);
-            });
-
-            DOM.sessionRate.value = DOM.hourlyRateInput.value || 20;
-            DOM.sessionCompany.value = "";
-            DOM.sessionProject.value = "";
-            DOM.sessionFocused.checked = true;
-            DOM.sessionModal.classList.remove('hidden');
+            openAddSessionModal(new Date(), false);
         });
     }
 
     if (DOM.closeSessionModalBtn) {
         DOM.closeSessionModalBtn.addEventListener('click', () => {
             DOM.sessionModal.classList.add('hidden');
+        });
+    }
+
+    if (DOM.deleteSessionBtn) {
+        DOM.deleteSessionBtn.addEventListener('click', async () => {
+            const sessionId = DOM.editSessionId.value;
+            if (!sessionId) return;
+
+            import('./ui.js').then(async (uiModule) => {
+                const isConfirmed = await uiModule.showConfirm(
+                    "Delete Session",
+                    "Are you sure you want to permanently delete this work session?"
+                );
+                if (isConfirmed) {
+                    import('./api.js').then(async (apiModule) => {
+                        await apiModule.deleteSession(sessionId);
+                        DOM.sessionModal.classList.add('hidden');
+                    });
+                }
+            });
         });
     }
 

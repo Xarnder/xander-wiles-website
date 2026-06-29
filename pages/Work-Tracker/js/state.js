@@ -139,6 +139,10 @@ export const state = {
     currentCompany: '',
     currentProject: '',
     currentCalendarDate: new Date(),
+    currentChartDate: new Date(),
+    currentTimelineDate: new Date(),
+    batchModeEnabled: false,
+    batchSelectedDates: [],
     rawSessions: [],
     allSessions: [],
     globalFilterCompany: '',
@@ -148,6 +152,14 @@ export const state = {
     showWidgetTitles: localStorage.getItem('work_tracker_show_titles') !== 'false',
     startOfWeek: parseInt(localStorage.getItem('work_tracker_start_of_week')) || 0, // 0 = Sunday, 1 = Monday
     continueSessionOnClose: localStorage.getItem('work_tracker_continue_session') !== 'false', // default true
+    defaultHourlyRate: parseFloat(localStorage.getItem('work_tracker_default_rate')) || 20,
+    ratePreference: localStorage.getItem('work_tracker_rate_pref') || 'last_session',
+    defaultCompany: localStorage.getItem('work_tracker_default_company') || '',
+    companyPreference: localStorage.getItem('work_tracker_company_pref') || 'last_session',
+    defaultProject: localStorage.getItem('work_tracker_default_project') || '',
+    projectPreference: localStorage.getItem('work_tracker_project_pref') || 'last_session',
+    defaultStartTime: localStorage.getItem('work_tracker_default_start_time') || '09:00',
+    startTimePreference: localStorage.getItem('work_tracker_start_time_pref') || 'last_session',
     percentageCuts: loadPercentageCuts(),
     timeCostItems: [],
     tcHourlyRate: parseFloat(localStorage.getItem('work_tracker_tc_hourly_rate')) || 20,
@@ -274,4 +286,44 @@ export function updateTcCustomTimeScales(scales) {
 export function updateActiveCutStatsPeriods(periods) {
     state.activeCutStatsPeriods = periods;
     localStorage.setItem('work_tracker_active_periods', JSON.stringify(periods));
+}
+
+export function updateDefaultHourlyRate(rate) {
+    state.defaultHourlyRate = parseFloat(rate) || 20;
+    localStorage.setItem('work_tracker_default_rate', state.defaultHourlyRate);
+}
+
+export function updateRatePreference(pref) {
+    state.ratePreference = pref === 'default_rate' ? 'default_rate' : 'last_session';
+    localStorage.setItem('work_tracker_rate_pref', state.ratePreference);
+}
+
+export function updateDefaultCompany(company) {
+    state.defaultCompany = company || '';
+    localStorage.setItem('work_tracker_default_company', state.defaultCompany);
+}
+
+export function updateCompanyPreference(pref) {
+    state.companyPreference = pref === 'default_value' ? 'default_value' : 'last_session';
+    localStorage.setItem('work_tracker_company_pref', state.companyPreference);
+}
+
+export function updateDefaultProject(project) {
+    state.defaultProject = project || '';
+    localStorage.setItem('work_tracker_default_project', state.defaultProject);
+}
+
+export function updateProjectPreference(pref) {
+    state.projectPreference = pref === 'default_value' ? 'default_value' : 'last_session';
+    localStorage.setItem('work_tracker_project_pref', state.projectPreference);
+}
+
+export function updateDefaultStartTime(timeStr) {
+    state.defaultStartTime = timeStr || '09:00';
+    localStorage.setItem('work_tracker_default_start_time', state.defaultStartTime);
+}
+
+export function updateStartTimePreference(pref) {
+    state.startTimePreference = pref === 'default_value' ? 'default_value' : 'last_session';
+    localStorage.setItem('work_tracker_start_time_pref', state.startTimePreference);
 }

@@ -1,5 +1,5 @@
 import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds } from './state.js';
-import { formatDuration } from './utils.js';
+import { formatDuration, getStartOfWeekDate, getSessionTimeRange } from './utils.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
@@ -12,6 +12,8 @@ export const DOM = {
     timerDisplay: document.getElementById('timer'),
     hourlyRateInput: document.getElementById('hourly-rate'),
     timerStartTimeInput: document.getElementById('timer-start-time'),
+    timerInputContainer: document.getElementById('timer-input-container'),
+    timerLiveMeta: document.getElementById('timer-live-meta'),
     moneyCounterWidget: document.getElementById('widget-money-counter'),
     moneyCounterStatus: document.getElementById('money-counter-status'),
     moneyCounterTotal: document.getElementById('money-counter-total'),
@@ -35,6 +37,8 @@ export const DOM = {
     weeklyEarningsDisplay: document.getElementById('weekly-earnings'),
     monthlyHoursDisplay: document.getElementById('monthly-hours'),
     monthlyEarningsDisplay: document.getElementById('monthly-earnings'),
+    sixMonthsHoursDisplay: document.getElementById('six-months-hours'),
+    sixMonthsEarningsDisplay: document.getElementById('six-months-earnings'),
     percentageCutStatsWidget: document.getElementById('widget-cut-stats'),
     percentageCutStats: document.getElementById('percentage-cut-stats'),
     cutStatsTotalPercentage: document.getElementById('cut-stats-total-percentage'),
@@ -43,10 +47,25 @@ export const DOM = {
     calendarMonthYear: document.getElementById('calendar-month-year'),
     calendarGrid: document.querySelector('.calendar-grid'),
     weeklyChart: document.getElementById('weekly-chart'),
+    prevWeekBtn: document.getElementById('prev-week'),
+    nextWeekBtn: document.getElementById('next-week'),
+    chartWeekRange: document.getElementById('chart-week-range'),
+    prevTimelineWeekBtn: document.getElementById('prev-timeline-week'),
+    nextTimelineWeekBtn: document.getElementById('next-timeline-week'),
+    timelineWeekRange: document.getElementById('timeline-week-range'),
     settingsBtn: document.getElementById('settings-btn'),
-    closeSettingsBtn: document.getElementById('close-settings'),
-    settingsModal: document.getElementById('settings-modal'),
+    settingsView: document.getElementById('settings-view'),
+    viewSettingsBtn: document.getElementById('view-settings-btn'),
+    toggleWidgetOrderBtn: document.getElementById('toggle-widget-order-btn'),
     currencySelect: document.getElementById('currency-select'),
+    defaultHourlyRateSettingInput: document.getElementById('default-hourly-rate-input'),
+    ratePreferenceSelect: document.getElementById('rate-preference-select'),
+    defaultCompanySettingInput: document.getElementById('default-company-input'),
+    companyPreferenceSelect: document.getElementById('company-preference-select'),
+    defaultProjectSettingInput: document.getElementById('default-project-input'),
+    projectPreferenceSelect: document.getElementById('project-preference-select'),
+    defaultStartTimeSettingInput: document.getElementById('default-start-time-input'),
+    startTimePreferenceSelect: document.getElementById('start-time-preference-select'),
     startOfWeekSelect: document.getElementById('start-of-week-select'),
     widgetSpacingSelect: document.getElementById('widget-spacing-select'),
     saveSettingsBtn: document.getElementById('save-settings'),
@@ -89,6 +108,35 @@ export const DOM = {
     sessionProjectSelect: document.getElementById('session-project-select'),
     sessionFocused: document.getElementById('session-focused'),
     saveSessionBtn: document.getElementById('save-session-btn'),
+    deleteSessionBtn: document.getElementById('delete-session-btn'),
+
+    toggleBatchModeBtn: document.getElementById('toggle-batch-mode'),
+    batchModeControls: document.getElementById('batch-mode-controls'),
+    batchSelectedLabel: document.getElementById('batch-selected-label'),
+    openBatchModalBtn: document.getElementById('open-batch-modal-btn'),
+    batchClearBtn: document.getElementById('batch-clear-btn'),
+
+    batchModal: document.getElementById('batch-modal'),
+    closeBatchModalBtn: document.getElementById('close-batch-modal'),
+    batchModalSubtitle: document.getElementById('batch-modal-subtitle'),
+
+    batchUpdateStart: document.getElementById('batch-update-start'),
+    batchStart: document.getElementById('batch-start'),
+    batchUpdateEnd: document.getElementById('batch-update-end'),
+    batchEnd: document.getElementById('batch-end'),
+    batchUpdateRate: document.getElementById('batch-update-rate'),
+    batchRate: document.getElementById('batch-rate'),
+    batchUpdateCompany: document.getElementById('batch-update-company'),
+    batchCompany: document.getElementById('batch-company'),
+    batchCompanySelect: document.getElementById('batch-company-select'),
+    batchUpdateProject: document.getElementById('batch-update-project'),
+    batchProject: document.getElementById('batch-project'),
+    batchProjectSelect: document.getElementById('batch-project-select'),
+
+    batchSliderTrack: document.getElementById('batch-slider-track'),
+    batchSliderProgress: document.getElementById('batch-slider-progress'),
+    batchSliderHandle: document.getElementById('batch-slider-handle'),
+    batchSliderText: document.getElementById('batch-slider-text'),
     
     viewDashboardBtn: document.getElementById('view-dashboard-btn'),
     viewTimeCostBtn: document.getElementById('view-time-cost-btn'),
@@ -391,13 +439,43 @@ export function renderPercentageCutStats(totals) {
     });
 }
 
+export function toggleLiveIndicators(isLive) {
+    const indicators = document.querySelectorAll('.live-indicator');
+    indicators.forEach(indicator => {
+        if (isLive) {
+            indicator.classList.remove('hidden');
+        } else {
+            indicator.classList.add('hidden');
+        }
+    });
+}
+
 export function toggleTimerUI(isRunning) {
     if (isRunning) {
         DOM.startBtn.classList.add('hidden');
         DOM.stopBtn.classList.remove('hidden');
+        if (DOM.timerInputContainer) DOM.timerInputContainer.classList.add('hidden');
+        if (DOM.timerLiveMeta) {
+            DOM.timerLiveMeta.classList.remove('hidden');
+            const rateSpan = document.getElementById('live-meta-rate');
+            const companySpan = document.getElementById('live-meta-company');
+            const projectSpan = document.getElementById('live-meta-project');
+            const startSpan = document.getElementById('live-meta-start');
+            
+            if (rateSpan) rateSpan.textContent = (state.currentSessionRate || 0).toFixed(2);
+            if (companySpan) companySpan.textContent = state.currentCompany || 'None';
+            if (projectSpan) projectSpan.textContent = state.currentProject || 'None';
+            if (startSpan && state.startTime) {
+                const startDate = new Date(state.startTime);
+                startSpan.textContent = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + 
+                    ' (' + startDate.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ')';
+            }
+        }
     } else {
         DOM.startBtn.classList.remove('hidden');
         DOM.stopBtn.classList.add('hidden');
+        if (DOM.timerInputContainer) DOM.timerInputContainer.classList.remove('hidden');
+        if (DOM.timerLiveMeta) DOM.timerLiveMeta.classList.add('hidden');
     }
 
     DOM.hourlyRateInput.disabled = isRunning;
@@ -406,6 +484,9 @@ export function toggleTimerUI(isRunning) {
     if (DOM.companySelect) DOM.companySelect.disabled = isRunning;
     if (DOM.projectInput) DOM.projectInput.disabled = isRunning;
     if (DOM.projectSelect) DOM.projectSelect.disabled = isRunning;
+
+    toggleLiveIndicators(isRunning);
+    renderCalendar();
 }
 
 export function renderCalendar() {
@@ -456,9 +537,20 @@ export function renderCalendar() {
         const dayDiv = document.createElement('div');
         dayDiv.className = 'calendar-day';
         dayDiv.textContent = i;
+        dayDiv.dataset.day = i;
+
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+        if (state.batchModeEnabled && state.batchSelectedDates.includes(dateStr)) {
+            dayDiv.classList.add('batch-selected');
+        }
 
         if (todayDate.getDate() === i && todayDate.getMonth() === month && todayDate.getFullYear() === year) {
             dayDiv.classList.add('today');
+        }
+
+        const liveSessionDate = state.startTime ? new Date(state.startTime) : null;
+        if (liveSessionDate && liveSessionDate.getDate() === i && liveSessionDate.getMonth() === month && liveSessionDate.getFullYear() === year) {
+            dayDiv.classList.add('live-session-active');
         }
 
         if (dailyHours[i] && dailyHours[i] > 0) {
@@ -473,119 +565,133 @@ export function renderCalendar() {
     }
 }
 
+function formatWeekRange(startOfWeek) {
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+    const options = { month: 'short', day: 'numeric' };
+    const startStr = startOfWeek.toLocaleDateString('en-US', options);
+    const endStr = endOfWeek.toLocaleDateString('en-US', { ...options, year: 'numeric' });
+    
+    return `${startStr} - ${endStr}`;
+}
+
 export function renderChart() {
     if (!DOM.weeklyChart) return;
     DOM.weeklyChart.innerHTML = '';
 
-    import('./utils.js').then(({ getStartOfWeekDate, getSessionTimeRange }) => {
-        const daysArrBase = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const daysArr = [...daysArrBase.slice(state.startOfWeek), ...daysArrBase.slice(0, state.startOfWeek)];
+    const daysArrBase = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const daysArr = [...daysArrBase.slice(state.startOfWeek), ...daysArrBase.slice(0, state.startOfWeek)];
 
-        const now = new Date();
-        const startOfWeek = getStartOfWeekDate(now, state.startOfWeek);
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 7);
-        const startOfWeekMs = startOfWeek.getTime();
-        const endOfWeekMs = endOfWeek.getTime();
-        const weekData = Array(7).fill().map(() => []);
-        let maxDailyHours = 0;
+    const currentChartDate = state.currentChartDate || new Date();
+    const startOfWeek = getStartOfWeekDate(currentChartDate, state.startOfWeek);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+    const startOfWeekMs = startOfWeek.getTime();
+    const endOfWeekMs = endOfWeek.getTime();
 
-        state.allSessions.forEach(session => {
-            const range = getSessionTimeRange(session);
-            if (!range) return;
+    if (DOM.chartWeekRange) {
+        DOM.chartWeekRange.textContent = formatWeekRange(startOfWeek);
+    }
 
-            let segmentStartMs = Math.max(range.startMs, startOfWeekMs);
-            const segmentEndLimitMs = Math.min(range.endMs, endOfWeekMs);
-            if (segmentStartMs >= segmentEndLimitMs) return;
+    const weekData = Array(7).fill().map(() => []);
+    let maxDailyHours = 0;
 
-            while (segmentStartMs < segmentEndLimitMs) {
-                const segmentStart = new Date(segmentStartMs);
-                const nextDay = new Date(segmentStart);
-                nextDay.setHours(24, 0, 0, 0);
-                const segmentEndMs = Math.min(nextDay.getTime(), segmentEndLimitMs);
-                const segmentDurationMs = segmentEndMs - segmentStartMs;
-                const actualDay = segmentStart.getDay();
-                const dayIndex = (actualDay - state.startOfWeek + 7) % 7;
+    state.allSessions.forEach(session => {
+        const range = getSessionTimeRange(session);
+        if (!range) return;
 
-                weekData[dayIndex].push({
-                    hours: segmentDurationMs / (1000 * 60 * 60),
-                    durationMs: segmentDurationMs,
-                    company: session.company,
-                    project: session.project
-                });
+        let segmentStartMs = Math.max(range.startMs, startOfWeekMs);
+        const segmentEndLimitMs = Math.min(range.endMs, endOfWeekMs);
+        if (segmentStartMs >= segmentEndLimitMs) return;
 
-                segmentStartMs = segmentEndMs;
-            }
-        });
+        while (segmentStartMs < segmentEndLimitMs) {
+            const segmentStart = new Date(segmentStartMs);
+            const nextDay = new Date(segmentStart);
+            nextDay.setHours(24, 0, 0, 0);
+            const segmentEndMs = Math.min(nextDay.getTime(), segmentEndLimitMs);
+            const segmentDurationMs = segmentEndMs - segmentStartMs;
+            const actualDay = segmentStart.getDay();
+            const dayIndex = (actualDay - state.startOfWeek + 7) % 7;
 
-        weekData.forEach(daySessions => {
-            const dailyTotal = daySessions.reduce((sum, sessionObj) => sum + sessionObj.hours, 0);
-            if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
-        });
-
-        const scaleMax = Math.ceil(maxDailyHours > 0 ? maxDailyHours : 1);
-
-        // Y Axis Labels
-        const yAxisDiv = document.createElement('div');
-        yAxisDiv.className = 'chart-y-axis';
-
-        [1, 0.75, 0.5, 0.25, 0].forEach(ratio => {
-            const label = document.createElement('div');
-            const hours = scaleMax * ratio;
-            label.textContent = ratio === 0 ? '0h' : `${Number.isInteger(hours) ? hours : hours.toFixed(1)}h`;
-            yAxisDiv.appendChild(label);
-        });
-        DOM.weeklyChart.appendChild(yAxisDiv);
-
-        const gridDiv = document.createElement('div');
-        gridDiv.className = 'chart-grid-lines';
-        for (let i = 0; i <= 8; i++) {
-            const line = document.createElement('span');
-            line.className = i % 2 === 0 ? 'chart-grid-line chart-grid-line-major' : 'chart-grid-line';
-            line.style.bottom = `${(i / 8) * 100}%`;
-            gridDiv.appendChild(line);
-        }
-        DOM.weeklyChart.appendChild(gridDiv);
-
-        daysArr.forEach((label, index) => {
-            const colDiv = document.createElement('div');
-            colDiv.className = 'chart-day-column';
-            const areaDiv = document.createElement('div');
-            areaDiv.className = 'chart-bar-area';
-
-            weekData[index].forEach((sessionObj, sIndex) => {
-                const hrs = sessionObj.hours;
-                const bar = document.createElement('div');
-                bar.className = 'chart-sub-session';
-                bar.style.height = `${(hrs / scaleMax) * 100}%`;
-
-                // Determine color based on project or company
-                const identifier = sessionObj.project || sessionObj.company || 'default';
-                const color = getColorForIdentifier(identifier);
-                bar.style.background = `linear-gradient(180deg, ${color} 0%, ${adjustColorOpacity(color, 0.8)} 100%)`;
-
-                let titlePrefix = sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : '');
-                bar.title = `${titlePrefix}Session ${sIndex + 1}: ${formatDuration(sessionObj.durationMs)}`;
-
-                // Add persistent label if an identifier exists
-                if (identifier !== 'default') {
-                    const labelSpan = document.createElement('span');
-                    labelSpan.className = 'chart-bar-label';
-                    labelSpan.textContent = sessionObj.project || sessionObj.company;
-                    bar.appendChild(labelSpan);
-                }
-
-                areaDiv.appendChild(bar);
+            weekData[dayIndex].push({
+                hours: segmentDurationMs / (1000 * 60 * 60),
+                durationMs: segmentDurationMs,
+                company: session.company,
+                project: session.project
             });
 
-            const lblDiv = document.createElement('div');
-            lblDiv.className = 'chart-day-label';
-            lblDiv.textContent = label;
+            segmentStartMs = segmentEndMs;
+        }
+    });
 
-            colDiv.appendChild(areaDiv);
-            colDiv.appendChild(lblDiv);
-            DOM.weeklyChart.appendChild(colDiv);
+    weekData.forEach(daySessions => {
+        const dailyTotal = daySessions.reduce((sum, sessionObj) => sum + sessionObj.hours, 0);
+        if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
+    });
+
+    const scaleMax = Math.ceil(maxDailyHours > 0 ? maxDailyHours : 1);
+
+    // Y Axis Labels
+    const yAxisDiv = document.createElement('div');
+    yAxisDiv.className = 'chart-y-axis';
+
+    [1, 0.75, 0.5, 0.25, 0].forEach(ratio => {
+        const label = document.createElement('div');
+        const hours = scaleMax * ratio;
+        label.textContent = ratio === 0 ? '0h' : `${Number.isInteger(hours) ? hours : hours.toFixed(1)}h`;
+        yAxisDiv.appendChild(label);
+    });
+    DOM.weeklyChart.appendChild(yAxisDiv);
+
+    const gridDiv = document.createElement('div');
+    gridDiv.className = 'chart-grid-lines';
+    for (let i = 0; i <= 8; i++) {
+        const line = document.createElement('span');
+        line.className = i % 2 === 0 ? 'chart-grid-line chart-grid-line-major' : 'chart-grid-line';
+        line.style.bottom = `${(i / 8) * 100}%`;
+        gridDiv.appendChild(line);
+    }
+    DOM.weeklyChart.appendChild(gridDiv);
+
+    daysArr.forEach((label, index) => {
+        const colDiv = document.createElement('div');
+        colDiv.className = 'chart-day-column';
+        const areaDiv = document.createElement('div');
+        areaDiv.className = 'chart-bar-area';
+
+        weekData[index].forEach((sessionObj, sIndex) => {
+            const hrs = sessionObj.hours;
+            const bar = document.createElement('div');
+            bar.className = 'chart-sub-session';
+            bar.style.height = `${(hrs / scaleMax) * 100}%`;
+
+            // Determine color based on project or company
+            const identifier = sessionObj.project || sessionObj.company || 'default';
+            const color = getColorForIdentifier(identifier);
+            bar.style.background = `linear-gradient(180deg, ${color} 0%, ${adjustColorOpacity(color, 0.8)} 100%)`;
+
+            let titlePrefix = sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : '');
+            bar.title = `${titlePrefix}Session ${sIndex + 1}: ${formatDuration(sessionObj.durationMs)}`;
+
+            // Add persistent label if an identifier exists
+            if (identifier !== 'default') {
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'chart-bar-label';
+                labelSpan.textContent = sessionObj.project || sessionObj.company;
+                bar.appendChild(labelSpan);
+            }
+
+            areaDiv.appendChild(bar);
         });
+
+        const lblDiv = document.createElement('div');
+        lblDiv.className = 'chart-day-label';
+        lblDiv.textContent = label;
+
+        colDiv.appendChild(areaDiv);
+        colDiv.appendChild(lblDiv);
+        DOM.weeklyChart.appendChild(colDiv);
     });
 }
 
@@ -616,82 +722,128 @@ export function renderGanttChart() {
     if (!DOM.ganttChart) return;
     DOM.ganttChart.innerHTML = '';
 
-    // We cover a 24-hour period (0 to 24)
-    // Create the background grid (hour lines)
+    const currentTimelineDate = state.currentTimelineDate || new Date();
+    const startOfWeek = getStartOfWeekDate(currentTimelineDate, state.startOfWeek);
+
+    if (DOM.timelineWeekRange) {
+        DOM.timelineWeekRange.textContent = formatWeekRange(startOfWeek);
+    }
+
+    // Header Row for hour markers
+    const headerRow = document.createElement('div');
+    headerRow.className = 'gantt-header-row';
     for (let i = 0; i <= 24; i += 4) {
-        const marker = document.createElement('div');
-        marker.className = 'gantt-hour-marker';
-        marker.style.left = `${(i / 24) * 100}%`;
-
-        const label = document.createElement('span');
-        label.textContent = `${i}:00`;
-        marker.appendChild(label);
-
-        DOM.ganttChart.appendChild(marker);
+        const hourLabel = document.createElement('span');
+        hourLabel.className = 'gantt-header-hour';
+        hourLabel.style.left = `${(i / 24) * 100}%`;
+        hourLabel.textContent = `${i}:00`;
+        headerRow.appendChild(hourLabel);
     }
+    DOM.ganttChart.appendChild(headerRow);
 
-    // Calculate today's boundaries
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
+    const daysContainer = document.createElement('div');
+    daysContainer.className = 'gantt-days-container';
 
-    // Render completed sessions for today
-    const todaysSessions = state.allSessions.filter(session => {
-        const sessionTime = new Date(session.startTime);
-        return sessionTime >= startOfToday && sessionTime < endOfToday;
-    });
+    // Build rows for each of the 7 days of the week
+    for (let index = 0; index < 7; index++) {
+        const dayDate = new Date(startOfWeek);
+        dayDate.setDate(startOfWeek.getDate() + index);
 
-    todaysSessions.forEach(session => {
-        const sTime = new Date(session.startTime);
-        createGanttBlock(sTime, session.durationMs, session.project, session.company, false);
-    });
+        const dayRow = document.createElement('div');
+        dayRow.className = 'gantt-day-row';
 
-    // Render live active session if one is currently ticking
-    if (state.timerInterval && state.startTime) {
-        const liveStartMs = Math.max(state.startTime, startOfToday.getTime());
-        const activeDuration = Date.now() - liveStartMs;
-        if (activeDuration > 0) {
-            createGanttBlock(new Date(liveStartMs), activeDuration, state.currentProject, state.currentCompany, true);
+        const rowLabel = document.createElement('div');
+        rowLabel.className = 'gantt-day-row-label';
+        // Format e.g. "Sun 28"
+        rowLabel.textContent = dayDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+        dayRow.appendChild(rowLabel);
+
+        const rowContainer = document.createElement('div');
+        rowContainer.className = 'gantt-container';
+
+        // Add background hour lines to each row
+        for (let i = 0; i <= 24; i++) {
+            const marker = document.createElement('div');
+            const isMajor = i % 4 === 0;
+            marker.className = `gantt-hour-marker ${isMajor ? 'gantt-hour-marker-major' : 'gantt-hour-marker-minor'}`;
+            marker.style.left = `${(i / 24) * 100}%`;
+            rowContainer.appendChild(marker);
         }
+
+        // Calculate day boundaries
+        const startOfDay = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0, 0, 0, 0);
+        const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+        // Filter sessions for this day
+        const daySessions = state.allSessions.filter(session => {
+            const sessionTime = new Date(session.startTime);
+            return sessionTime >= startOfDay && sessionTime < endOfDay;
+        });
+
+        // Local helper to add a gantt block
+        const addGanttBlock = (startTimeObj, durationMs, project, company, isLive) => {
+            const msSinceMidnight = startTimeObj.getTime() - startOfDay.getTime();
+            const msInDay = 24 * 60 * 60 * 1000;
+
+            let leftPercent = (msSinceMidnight / msInDay) * 100;
+            let widthPercent = (durationMs / msInDay) * 100;
+
+            if (leftPercent + widthPercent > 100) {
+                widthPercent = 100 - leftPercent;
+            }
+
+            const block = document.createElement('div');
+            block.className = `gantt-block ${isLive ? 'gantt-live' : ''}`;
+            block.style.left = `${leftPercent}%`;
+            block.style.width = widthPercent > 0.5 ? `${widthPercent}%` : '0.5%';
+
+            const identifier = project || company || 'default';
+            const color = isLive ? 'rgba(255, 60, 60, 0.8)' : getColorForIdentifier(identifier);
+
+            block.style.backgroundColor = color;
+            block.style.boxShadow = `0 0 8px ${color}`;
+
+            let titlePrefix = project ? `[${project}] ` : (company ? `[${company}] ` : '');
+            block.title = `${titlePrefix}${formatDuration(durationMs)}${isLive ? ' (Live)' : ''}`;
+
+            if (widthPercent > 4) {
+                const label = document.createElement('span');
+                label.className = 'gantt-block-label';
+                const durationText = formatDuration(durationMs);
+                if (identifier !== 'default') {
+                    label.textContent = `${project || company} (${durationText})`;
+                } else {
+                    label.textContent = durationText;
+                }
+                block.appendChild(label);
+            }
+
+            rowContainer.appendChild(block);
+        };
+
+        // Render standard sessions
+        daySessions.forEach(session => {
+            const sTime = new Date(session.startTime);
+            addGanttBlock(sTime, session.durationMs, session.project, session.company, false);
+        });
+
+        // Render live active session if it falls on this day
+        if (state.timerInterval && state.startTime) {
+            const liveTime = new Date(state.startTime);
+            if (liveTime >= startOfDay && liveTime < endOfDay) {
+                const liveStartMs = Math.max(state.startTime, startOfDay.getTime());
+                const activeDuration = Date.now() - liveStartMs;
+                if (activeDuration > 0) {
+                    addGanttBlock(new Date(liveStartMs), activeDuration, state.currentProject, state.currentCompany, true);
+                }
+            }
+        }
+
+        dayRow.appendChild(rowContainer);
+        daysContainer.appendChild(dayRow);
     }
-}
 
-function createGanttBlock(startTimeObj, durationMs, project, company, isLive) {
-    const startOfToday = new Date(startTimeObj.getFullYear(), startTimeObj.getMonth(), startTimeObj.getDate(), 0, 0, 0, 0);
-    const msSinceMidnight = startTimeObj.getTime() - startOfToday.getTime();
-
-    const msInDay = 24 * 60 * 60 * 1000;
-
-    let leftPercent = (msSinceMidnight / msInDay) * 100;
-    let widthPercent = (durationMs / msInDay) * 100;
-
-    // Clamp if it goes over midnight
-    if (leftPercent + widthPercent > 100) {
-        widthPercent = 100 - leftPercent;
-    }
-
-    const block = document.createElement('div');
-    block.className = `gantt-block ${isLive ? 'gantt-live' : ''}`;
-    block.style.left = `${leftPercent}%`;
-    block.style.width = widthPercent > 0.5 ? `${widthPercent}%` : '0.5%'; // Minimum width for visibility
-
-    const identifier = project || company || 'default';
-    const color = isLive ? 'rgba(255, 60, 60, 0.8)' : getColorForIdentifier(identifier);
-
-    block.style.backgroundColor = color;
-    block.style.boxShadow = `0 0 8px ${color}`;
-
-    let titlePrefix = project ? `[${project}] ` : (company ? `[${company}] ` : '');
-    block.title = `${titlePrefix}${formatDuration(durationMs)}${isLive ? ' (Live)' : ''}`;
-
-    if (identifier !== 'default' && widthPercent > 4) { // Only show label if block is wide enough
-        const label = document.createElement('span');
-        label.className = 'gantt-block-label';
-        label.textContent = project || company;
-        block.appendChild(label);
-    }
-
-    DOM.ganttChart.appendChild(block);
+    DOM.ganttChart.appendChild(daysContainer);
 }
 
 export function updateDatalists() {
@@ -706,19 +858,43 @@ export function updateDatalists() {
     });
 
     DOM.companySelect.innerHTML = '<option value="">Or pick saved...</option>';
+    if (DOM.sessionCompanySelect) DOM.sessionCompanySelect.innerHTML = '<option value="">Or pick saved...</option>';
+    if (DOM.batchCompanySelect) DOM.batchCompanySelect.innerHTML = '<option value="">Or pick saved...</option>';
+
     Array.from(companies).sort().forEach(company => {
         const option = document.createElement('option');
         option.value = company;
         option.textContent = company;
         DOM.companySelect.appendChild(option);
+
+        if (DOM.sessionCompanySelect) {
+            const optCopy = option.cloneNode(true);
+            DOM.sessionCompanySelect.appendChild(optCopy);
+        }
+        if (DOM.batchCompanySelect) {
+            const optCopy = option.cloneNode(true);
+            DOM.batchCompanySelect.appendChild(optCopy);
+        }
     });
 
     DOM.projectSelect.innerHTML = '<option value="">Or pick saved...</option>';
+    if (DOM.sessionProjectSelect) DOM.sessionProjectSelect.innerHTML = '<option value="">Or pick saved...</option>';
+    if (DOM.batchProjectSelect) DOM.batchProjectSelect.innerHTML = '<option value="">Or pick saved...</option>';
+
     Array.from(projects).sort().forEach(project => {
         const option = document.createElement('option');
         option.value = project;
         option.textContent = project;
         DOM.projectSelect.appendChild(option);
+
+        if (DOM.sessionProjectSelect) {
+            const optCopy = option.cloneNode(true);
+            DOM.sessionProjectSelect.appendChild(optCopy);
+        }
+        if (DOM.batchProjectSelect) {
+            const optCopy = option.cloneNode(true);
+            DOM.batchProjectSelect.appendChild(optCopy);
+        }
     });
 }
 
@@ -788,6 +964,10 @@ async function prepareWidgetForExport(widget) {
     });
 
     widget.style.width = `${width}px`;
+    widget.style.background = '#121625';
+    widget.style.backdropFilter = 'none';
+    widget.style.webkitBackdropFilter = 'none';
+    widget.style.boxShadow = 'none';
     await waitForPaint();
     widget.style.height = `${Math.ceil(widget.scrollHeight)}px`;
     await waitForPaint();
@@ -977,7 +1157,7 @@ export function renderWidgetOrderList() {
         'widget-stats': 'Statistics',
         'widget-cut-stats': 'After Percentage Cuts',
         'widget-cuts': 'Percentage Cuts',
-        'widget-gantt': "Today's Timeline",
+        'widget-gantt': "Timeline",
         'widget-calendar': 'Calendar',
         'widget-chart': 'Weekly Breakdown',
         'widget-history': 'History List'

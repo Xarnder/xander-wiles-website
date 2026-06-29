@@ -2191,6 +2191,25 @@ button:active {
     box-shadow: inset 0 0 10px rgba(0, 212, 255, 0.2);
 }
 
+.calendar-day.today:hover {
+    background: rgba(0, 212, 255, 0.12);
+    border-color: rgba(0, 212, 255, 0.8);
+    box-shadow: inset 0 0 10px rgba(0, 212, 255, 0.3), 0 5px 15px rgba(0, 212, 255, 0.1);
+    z-index: 2;
+}
+
+.calendar-day:not(.empty) {
+    cursor: pointer;
+}
+
+.calendar-day:not(.empty):not(.has-work):hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 5px 15px rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    z-index: 2;
+}
+
 .calendar-day.has-work {
     background: rgba(0, 230, 118, 0.1);
     color: var(--text-primary);
@@ -2485,10 +2504,10 @@ button:active {
     border-color: rgba(0, 212, 255, 0.5);
 }
 
-/* Gantt Chart Widget */
 .gantt-widget {
     display: flex;
     flex-direction: column;
+    height: 100%;
 }
 
 .gantt-container {
@@ -2997,4 +3016,300 @@ button:active {
         color: #000 !important;
         border: 1px solid #666 !important;
     }
+}
+
+/* Batch Selected Day Styling */
+.calendar-day.batch-selected {
+    border: 2px solid var(--accent-blue) !important;
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.4), inset 0 0 8px rgba(0, 212, 255, 0.2) !important;
+    transform: scale(1.05);
+    z-index: 3;
+}
+
+/* Drag to Confirm Slider */
+.drag-slider-track {
+    position: relative;
+    width: 100%;
+    height: 50px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 25px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    cursor: pointer;
+}
+
+.drag-slider-progress {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, rgba(0, 212, 255, 0.2), rgba(0, 230, 118, 0.4));
+    transition: width 0.05s linear;
+}
+
+.drag-slider-handle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    cursor: grab;
+    z-index: 10;
+    transition: background 0.3s;
+}
+
+.drag-slider-handle:active {
+    cursor: grabbing;
+}
+
+.handle-arrow {
+    color: #fff;
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.drag-slider-text {
+    position: relative;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    pointer-events: none;
+    z-index: 5;
+    letter-spacing: 0.5px;
+}
+
+/* Add Session Modal Styling Override */
+#session-modal.modal-mode-add .modal-content {
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    background: linear-gradient(145deg, rgba(20, 26, 38, 0.95), rgba(15, 23, 42, 0.98));
+    box-shadow: 0 20px 40px rgba(0, 212, 255, 0.08), 0 0 15px rgba(0, 212, 255, 0.05);
+}
+
+/* Edit Session Modal Styling Override */
+#session-modal.modal-mode-edit .modal-content {
+    border: 1px solid rgba(0, 230, 118, 0.25);
+    background: linear-gradient(145deg, rgba(16, 32, 26, 0.95), rgba(15, 23, 42, 0.98));
+    box-shadow: 0 20px 40px rgba(0, 230, 118, 0.08), 0 0 15px rgba(0, 230, 118, 0.05);
+}
+
+/* Modal Mode Visibility for Delete Button */
+#session-modal.modal-mode-add #delete-session-btn {
+    display: none !important;
+}
+
+#session-modal.modal-mode-edit #delete-session-btn {
+    display: block !important;
+}
+
+/* Elevate Alert & Confirm Modals Z-Index to avoid overlap issues */
+#confirm-modal, #alert-modal {
+    z-index: 3000 !important;
+}
+
+/* Weekly Gantt Layout Styles */
+.gantt-weekly-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin-top: 10px;
+    flex: 1;
+}
+
+.gantt-header-row {
+    position: relative;
+    height: 18px;
+    margin-left: 60px;
+    margin-bottom: 6px;
+}
+
+.gantt-header-hour {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.gantt-days-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    justify-content: space-between;
+}
+
+.gantt-day-row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    flex: 1;
+}
+
+.gantt-day-row-label {
+    width: 50px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-align: right;
+    font-weight: 600;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.gantt-day-row .gantt-container {
+    flex: 1;
+    min-height: 36px;
+    margin-top: 0;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+}
+
+.gantt-day-row .gantt-block {
+    top: 4px;
+    bottom: 4px;
+    height: auto;
+    border-radius: 4px;
+}
+
+.gantt-day-row .gantt-block-label {
+    font-size: 0.65rem;
+}
+
+.gantt-day-row .gantt-hour-marker-minor {
+    background: rgba(255, 255, 255, 0.015);
+}
+
+.gantt-day-row .gantt-hour-marker-major {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+/* Live Indicator Styles */
+@media (max-width: 600px) {
+  .view-switcher {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+  .view-switcher button {
+    flex: 1 1 45%;
+    min-width: 0;
+    margin: 4px 0;
+  }
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+  .card {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto 16px;
+    padding: 24px;
+  }
+  .input-group {
+    flex-direction: column;
+    width: 100%;
+    margin-bottom: 12px;
+  }
+  .input-group label,
+  .input-group input,
+  .input-group select {
+    width: 100%;
+  }
+  body {
+    overflow-x: hidden;
+  }
+}
+
+.live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--accent-red);
+    background: rgba(255, 23, 68, 0.12);
+    border: 1px solid rgba(255, 23, 68, 0.3);
+    padding: 2px 8px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: var(--font-family);
+    vertical-align: middle;
+}
+
+.live-indicator.hidden {
+    display: none !important;
+}
+
+.live-dot {
+    width: 6px;
+    height: 6px;
+    background-color: var(--accent-red);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent-red);
+    animation: live-pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes live-pulse {
+    0% {
+        transform: scale(0.8);
+        opacity: 0.5;
+        box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.7);
+    }
+    70% {
+        transform: scale(1.2);
+        opacity: 1;
+        box-shadow: 0 0 0 6px rgba(255, 23, 68, 0);
+    }
+    100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+        box-shadow: 0 0 0 0 rgba(255, 23, 68, 0);
+    }
+}
+
+/* Live Calendar Day Pulse */
+.calendar-day.live-session-active {
+    animation: calendar-live-pulse 2.5s infinite ease-in-out;
+    border: 1px solid rgba(255, 23, 68, 0.6) !important;
+}
+
+@keyframes calendar-live-pulse {
+    0% {
+        background-color: rgba(255, 23, 68, 0.04);
+        box-shadow: inset 0 0 8px rgba(255, 23, 68, 0.1);
+        border-color: rgba(255, 23, 68, 0.4);
+    }
+    50% {
+        background-color: rgba(255, 255, 255, 0.08);
+        box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.3);
+    }
+    100% {
+        background-color: rgba(255, 23, 68, 0.04);
+        box-shadow: inset 0 0 8px rgba(255, 23, 68, 0.1);
+        border-color: rgba(255, 23, 68, 0.4);
+    }
+}
+
+/* Custom Icon SVGs styling */
+.icon-svg {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    vertical-align: middle;
 }

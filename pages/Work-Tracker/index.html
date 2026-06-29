@@ -67,24 +67,6 @@
                             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
                         </svg>
                     </button>
-                    <button id="export-csv-btn" class="btn-text" title="Export as CSV">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                            <polyline points="14 2 14 8 20 8"></polyline>
-                            <line x1="8" y1="13" x2="16" y2="13"></line>
-                            <line x1="8" y1="17" x2="16" y2="17"></line>
-                            <polyline points="10 9 9 9 8 9"></polyline>
-                        </svg>
-                    </button>
-                    <button id="export-btn" class="btn-text" title="Export as PDF">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                    </button>
                     <button id="settings-btn" class="btn-text">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -102,38 +84,61 @@
             <div class="view-switcher">
                 <button id="view-dashboard-btn" class="btn-outline active">Dashboard</button>
                 <button id="view-time-cost-btn" class="btn-outline">Time Cost</button>
+                <button id="view-settings-btn" class="btn-outline">Settings</button>
             </div>
 
             <div id="dashboard-view">
                 <div class="dashboard-grid">
                     <!-- Timer Card -->
                 <section class="card timer-widget" id="widget-timer">
-                    <h2 class="widget-title">Timer</h2>
-                    <div class="input-group">
-                        <label for="hourly-rate">Hourly Rate (<span class="currency-symbol">£</span>)</label>
-                        <input type="number" id="hourly-rate" value="20" min="0">
+                    <h2 class="widget-title" style="display: flex; align-items: center; gap: 8px;">Timer <span class="live-indicator hidden"><span class="live-dot"></span>Live</span></h2>
+                    <div id="timer-input-container">
+                        <div class="input-group">
+                            <label for="hourly-rate">Hourly Rate (<span class="currency-symbol">£</span>)</label>
+                            <input type="number" id="hourly-rate" value="20" min="0">
+                        </div>
+
+                        <div class="input-group">
+                            <label for="company-input">Company</label>
+                            <input type="text" id="company-input" placeholder="e.g. Acme Corp" style="margin-bottom: 8px;">
+                            <select id="company-select" class="touch-picker">
+                                <option value="">Or pick saved...</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="project-input">Project</label>
+                            <input type="text" id="project-input" placeholder="e.g. Website Redesign"
+                                style="margin-bottom: 8px;">
+                            <select id="project-select" class="touch-picker">
+                                <option value="">Or pick saved...</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group timer-start-group">
+                            <label for="timer-start-time">Start Time</label>
+                            <input type="datetime-local" id="timer-start-time">
+                        </div>
                     </div>
 
-                    <div class="input-group">
-                        <label for="company-input">Company</label>
-                        <input type="text" id="company-input" placeholder="e.g. Acme Corp" style="margin-bottom: 8px;">
-                        <select id="company-select" class="touch-picker">
-                            <option value="">Or pick saved...</option>
-                        </select>
-                    </div>
-
-                    <div class="input-group">
-                        <label for="project-input">Project</label>
-                        <input type="text" id="project-input" placeholder="e.g. Website Redesign"
-                            style="margin-bottom: 8px;">
-                        <select id="project-select" class="touch-picker">
-                            <option value="">Or pick saved...</option>
-                        </select>
-                    </div>
-
-                    <div class="input-group timer-start-group">
-                        <label for="timer-start-time">Start Time</label>
-                        <input type="datetime-local" id="timer-start-time">
+                    <!-- Live Session Metadata Display (shown only when running) -->
+                    <div id="timer-live-meta" class="hidden" style="margin-bottom: 20px;">
+                        <div class="live-meta-item" style="margin-bottom: 12px; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 8px;">
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;">Hourly Rate</span>
+                            <strong style="color: var(--accent-green); font-size: 1rem;"><span class="currency-symbol">£</span><span id="live-meta-rate">0.00</span>/hr</strong>
+                        </div>
+                        <div class="live-meta-item" style="margin-bottom: 12px; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 8px;">
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;">Company</span>
+                            <strong id="live-meta-company" style="color: #fff; font-size: 0.95rem;">-</strong>
+                        </div>
+                        <div class="live-meta-item" style="margin-bottom: 12px; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 8px;">
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;">Project</span>
+                            <strong id="live-meta-project" style="color: #fff; font-size: 0.95rem;">-</strong>
+                        </div>
+                        <div class="live-meta-item" style="margin-bottom: 12px; display: flex; justify-content: space-between; padding-bottom: 8px;">
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;">Start Time</span>
+                            <strong id="live-meta-start" style="color: #fff; font-size: 0.95rem;">-</strong>
+                        </div>
                     </div>
 
                     <div class="timer-display">
@@ -150,13 +155,12 @@
                 <!-- Live Money Counter -->
                 <section class="card money-counter-widget" id="widget-money-counter">
                     <div class="money-counter-header">
-                        <h2 class="widget-title" style="margin: 0;">Live Money Counter</h2>
+                        <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Live Money Counter <span class="live-indicator hidden"><span class="live-dot"></span>Live</span></h2>
                         <div class="money-counter-header-actions">
                             <div class="money-counter-mode-toggle" role="group" aria-label="Live money counter amount mode">
                                 <button type="button" class="money-counter-mode-btn active" data-money-counter-mode="before">Before</button>
                                 <button type="button" class="money-counter-mode-btn" data-money-counter-mode="after">After Cuts</button>
                             </div>
-                            <span id="money-counter-status" class="money-counter-status">Idle</span>
                         </div>
                     </div>
                     <div class="money-counter-total" id="money-counter-total"><span class="currency-symbol">£</span>0.00</div>
@@ -224,8 +228,16 @@
                             <span class="value" id="monthly-earnings" style="font-size: 1.4rem;"><span
                                     class="currency-symbol">£</span>0.00</span>
                         </div>
-                    </div>
 
+                        <!-- Six Months Stats -->
+                        <div class="stat-item">
+                            <span class="label">This 6 Months' Hours</span>
+                            <span class="value" id="six-months-hours">0h</span>
+                            <span class="label" style="margin-top: 10px;">This 6 Months' Earnings</span>
+                            <span class="value" id="six-months-earnings" style="font-size: 1.4rem;"><span
+                                     class="currency-symbol">£</span>0.00</span>
+                        </div>
+                    </div>
                 </section>
 
                 <!-- Percentage Cut Results -->
@@ -257,12 +269,25 @@
 
                 <!-- Calendar -->
                 <section class="card calendar-widget" id="widget-calendar">
-                    <h2 class="widget-title">Calendar</h2>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Calendar <span class="live-indicator hidden"><span class="live-dot"></span>Live</span></h2>
+                        <button id="toggle-batch-mode" class="btn-outline" style="font-size: 0.8rem; padding: 5px 10px; border-radius: 6px; cursor: pointer;">Batch Edit</button>
+                    </div>
+                    <div id="batch-mode-controls" style="display: none; justify-content: space-between; align-items: center; background: rgba(0, 212, 255, 0.05); border: 1px dashed rgba(0, 212, 255, 0.3); border-radius: 8px; padding: 10px 12px; margin-bottom: 15px; box-shadow: inset 0 0 10px rgba(0, 212, 255, 0.05);">
+                        <span id="batch-selected-label" style="font-size: 0.85rem; color: var(--text-secondary);">0 days selected</span>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="open-batch-modal-btn" class="btn-primary" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 6px;" disabled>Edit Selected</button>
+                            <button id="batch-clear-btn" class="btn-text" style="font-size: 0.8rem; padding: 6px 10px;">Clear</button>
+                        </div>
+                    </div>
                     <div class="calendar-header">
-                        <button id="prev-month" class="btn-outline">&larr;</button>
-                        <h3 id="calendar-month-year" style="margin: 0; font-weight: 400; font-size: 1.2rem;">Loading...
-                        </h3>
-                        <button id="next-month" class="btn-outline">&rarr;</button>
+                        <button id="prev-month" class="btn-outline" style="display: flex; align-items: center; justify-content: center; padding: 8px 12px; cursor: pointer;">
+                            <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M1.19,58.79l54.18,52.09c2.47,2.37,6.58.62,6.58-2.8v-26.39c0-2.15,1.74-3.89,3.89-3.89h51.44c2.15,0,3.89-1.74,3.89-3.89v-35.86c0-2.15-1.74-3.89-3.89-3.89h-51.44c-2.15,0-3.89-1.74-3.89-3.89V3.89c0-3.42-4.11-5.17-6.58-2.8L1.19,53.18c-1.59,1.53-1.59,4.07,0,5.6Z" fill="currentColor"/></svg>
+                        </button>
+                        <h3 id="calendar-month-year" style="margin: 0; font-weight: 400; font-size: 1.2rem;">Loading...</h3>
+                        <button id="next-month" class="btn-outline" style="display: flex; align-items: center; justify-content: center; padding: 8px 12px; cursor: pointer;">
+                            <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M119.97,53.18L65.79,1.09c-2.47-2.37-6.58-.62-6.58,2.8v26.39c0,2.15-1.74,3.89-3.89,3.89H3.89c-2.15,0-3.89,1.74-3.89,3.89v35.86c0,2.15,1.74,3.89,3.89,3.89h51.44c2.15,0,3.89,1.74,3.89,3.89v26.39c0,3.42,4.11,5.17,6.58,2.8l54.18-52.09c1.59-1.53,1.59-4.07,0-5.6Z" fill="currentColor"/></svg>
+                        </button>
                     </div>
                     <div class="calendar-grid">
                         <!-- Calendar days will be injected via JS -->
@@ -271,17 +296,39 @@
 
                 <!-- Weekly Bar Chart -->
                 <section class="card chart-widget" id="widget-chart">
-                    <h2 class="widget-title">Weekly Breakdown</h2>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Weekly Breakdown <span class="live-indicator hidden"><span class="live-dot"></span>Live</span></h2>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button id="prev-week" class="btn-outline" style="font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M1.19,58.79l54.18,52.09c2.47,2.37,6.58.62,6.58-2.8v-26.39c0-2.15,1.74-3.89,3.89-3.89h51.44c2.15,0,3.89-1.74,3.89-3.89v-35.86c0-2.15-1.74-3.89-3.89-3.89h-51.44c-2.15,0-3.89-1.74-3.89-3.89V3.89c0-3.42-4.11-5.17-6.58-2.8L1.19,53.18c-1.59,1.53-1.59,4.07,0,5.6Z" fill="currentColor"/></svg>
+                            </button>
+                            <span id="chart-week-range" style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;"></span>
+                            <button id="next-week" class="btn-outline" style="font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M119.97,53.18L65.79,1.09c-2.47-2.37-6.58-.62-6.58,2.8v26.39c0,2.15-1.74,3.89-3.89,3.89H3.89c-2.15,0-3.89,1.74-3.89,3.89v35.86c0,2.15,1.74,3.89,3.89,3.89h51.44c2.15,0,3.89,1.74,3.89,3.89v26.39c0,3.42,4.11,5.17,6.58,2.8l54.18-52.09c1.59-1.53,1.59-4.07,0-5.6Z" fill="currentColor"/></svg>
+                            </button>
+                        </div>
+                    </div>
                     <div id="weekly-chart" class="chart-container">
                         <!-- Chart bars will be injected via JS -->
                     </div>
                 </section>
 
-                <!-- Daily Gantt Chart -->
+                <!-- Weekly Gantt Chart -->
                 <section class="card gantt-widget" id="widget-gantt">
-                    <h2 class="widget-title">Today's Timeline</h2>
-                    <div class="gantt-container" id="gantt-chart">
-                        <!-- Timeline markers and session blocks injected via JS -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Timeline <span class="live-indicator hidden"><span class="live-dot"></span>Live</span></h2>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button id="prev-timeline-week" class="btn-outline" style="font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M1.19,58.79l54.18,52.09c2.47,2.37,6.58.62,6.58-2.8v-26.39c0-2.15,1.74-3.89,3.89-3.89h51.44c2.15,0,3.89-1.74,3.89-3.89v-35.86c0-2.15-1.74-3.89-3.89-3.89h-51.44c-2.15,0-3.89-1.74-3.89-3.89V3.89c0-3.42-4.11-5.17-6.58-2.8L1.19,53.18c-1.59,1.53-1.59,4.07,0,5.6Z" fill="currentColor"/></svg>
+                            </button>
+                            <span id="timeline-week-range" style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;"></span>
+                            <button id="next-timeline-week" class="btn-outline" style="font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M119.97,53.18L65.79,1.09c-2.47-2.37-6.58-.62-6.58,2.8v26.39c0,2.15-1.74,3.89-3.89,3.89H3.89c-2.15,0-3.89,1.74-3.89,3.89v35.86c0,2.15,1.74,3.89,3.89,3.89h51.44c2.15,0,3.89,1.74,3.89,3.89v26.39c0,3.42,4.11,5.17,6.58,2.8l54.18-52.09c1.59-1.53,1.59-4.07,0-5.6Z" fill="currentColor"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="gantt-chart" class="gantt-weekly-wrapper">
+                        <!-- Timeline markers and daily rows injected via JS -->
                     </div>
                 </section>
 
@@ -448,12 +495,11 @@
             </div>
         </div>
 
-        <!-- Settings Modal -->
-        <div id="settings-modal" class="modal-overlay hidden">
-            <div class="modal-content card">
+        <!-- Settings View -->
+        <div id="settings-view" class="hidden">
+            <div class="card" style="max-width: 520px; margin: 0 auto 30px;">
                 <div class="modal-header">
                     <h2>Settings</h2>
-                    <button id="close-settings" class="btn-text">&times;</button>
                 </div>
 
                 <div class="input-group">
@@ -485,10 +531,70 @@
                 </div>
 
                 <div class="input-group">
-                    <label>Widget Order</label>
-                    <ul id="widget-order-list" class="sortable-list">
-                        <!-- List items will be injected by JS -->
-                    </ul>
+                    <label for="default-hourly-rate-input">Default Hourly Rate (<span class="currency-symbol">£</span>)</label>
+                    <input type="number" id="default-hourly-rate-input" min="0" value="20" class="currency-dropdown">
+                </div>
+
+                <div class="input-group">
+                    <label for="rate-preference-select">New Session Rate Auto-fill</label>
+                    <select id="rate-preference-select" class="currency-dropdown">
+                        <option value="last_session">Use Last Session's Rate</option>
+                        <option value="default_rate">Use Default Hourly Rate</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="default-company-input">Default Company</label>
+                    <input type="text" id="default-company-input" class="currency-dropdown" placeholder="e.g. Acme Corp">
+                </div>
+
+                <div class="input-group">
+                    <label for="company-preference-select">New Session Company Auto-fill</label>
+                    <select id="company-preference-select" class="currency-dropdown">
+                        <option value="last_session">Use Last Session's Company</option>
+                        <option value="default_value">Use Default Company</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="default-project-input">Default Project</label>
+                    <input type="text" id="default-project-input" class="currency-dropdown" placeholder="e.g. Website development">
+                </div>
+
+                <div class="input-group">
+                    <label for="project-preference-select">New Session Project Auto-fill</label>
+                    <select id="project-preference-select" class="currency-dropdown">
+                        <option value="last_session">Use Last Session's Project</option>
+                        <option value="default_value">Use Default Project</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="default-start-time-input">Default Start Time</label>
+                    <input type="time" id="default-start-time-input" class="currency-dropdown" value="09:00">
+                </div>
+
+                <div class="input-group">
+                    <label for="start-time-preference-select">New Session Start Time Auto-fill</label>
+                    <select id="start-time-preference-select" class="currency-dropdown">
+                        <option value="last_session">Use Last Session's Start Time</option>
+                        <option value="default_value">Use Default Start Time</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <button id="toggle-widget-order-btn" class="btn-outline" type="button" style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; margin-bottom: 8px; cursor: pointer;">
+                        <span>Reorder Widgets</span>
+                        <span id="widget-order-chevron" style="transition: transform 0.3s; display: inline-flex; align-items: center; justify-content: center; width: 12px; height: 12px;">
+                            <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 111.97 121.16"><path d="M58.79,119.97l52.09-54.18c2.37-2.47.62-6.58-2.8-6.58h-26.39c-2.15,0-3.89-1.74-3.89-3.89V3.89c0-2.15-1.74-3.89-3.89-3.89h-35.86c-2.15,0-3.89,1.74-3.89,3.89v51.44c0,2.15-1.74,3.89-3.89,3.89H3.89c-3.42,0-5.17,4.11-2.8,6.58l52.09,54.18c1.53,1.59,4.07,1.59,5.6,0Z" fill="currentColor"/></svg>
+                        </span>
+                    </button>
+                    <div id="widget-order-container" class="hidden" style="transition: all 0.3s ease; width: 100%;">
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 8px;">Drag and drop to rearrange dashboard widgets.</p>
+                        <ul id="widget-order-list" class="sortable-list">
+                            <!-- List items will be injected by JS -->
+                        </ul>
+                    </div>
                 </div>
 
                 <div class="input-group"
@@ -504,8 +610,22 @@
                         style="width: 20px; height: 20px; cursor: pointer;">
                 </div>
 
-                <div class="settings-footer">
-                    <button id="save-settings" class="btn-primary">Save Changes</button>
+                <div class="input-group" style="margin-top: 25px; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 20px;">
+                    <label style="margin-bottom: 8px;">Data Export</label>
+                    <div style="display: flex; gap: 12px; margin-top: 8px; width: 100%;">
+                        <button id="export-csv-btn" class="btn-outline" type="button" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; font-size: 0.9rem; cursor: pointer;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            Export CSV
+                        </button>
+                        <button id="export-btn" class="btn-outline" type="button" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 16px; font-size: 0.9rem; cursor: pointer;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            Export PDF
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-footer" style="margin-top: 20px;">
+                    <button id="save-settings" class="btn-primary" style="width: 100%;">Save Changes</button>
                 </div>
             </div>
         </div>
@@ -584,8 +704,9 @@
                         style="width: 20px; height: 20px; cursor: pointer;">
                 </div>
 
-                <div class="settings-footer">
-                    <button id="save-session-btn" class="btn-primary">Save Session</button>
+                <div class="settings-footer" style="display: flex; gap: 10px; width: 100%;">
+                    <button id="delete-session-btn" class="btn-outline btn-delete-modal" style="border-color: var(--accent-red); color: var(--accent-red); margin-right: auto; padding: 10px 18px; display: none;">Delete</button>
+                    <button id="save-session-btn" class="btn-primary" style="flex: 1;">Save Session</button>
                 </div>
             </div>
         </div>
@@ -617,6 +738,86 @@
 
                 <div class="settings-footer">
                     <button id="save-tc-item-btn" class="btn-primary">Save Item</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Batch Session Modal -->
+        <div id="batch-modal" class="modal-overlay hidden">
+            <div class="modal-content card" style="max-height: 90vh; overflow-y: auto;">
+                <div class="modal-header">
+                    <h2>Batch Edit Sessions</h2>
+                    <button id="close-batch-modal" class="btn-text">&times;</button>
+                </div>
+                
+                <p id="batch-modal-subtitle" style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 20px; text-align: center;"></p>
+
+                <!-- Checkbox + Start Time -->
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                        <input type="checkbox" id="batch-update-start" style="width: 18px; height: 18px; cursor: pointer;">
+                        <label for="batch-update-start" style="margin-bottom: 0; font-weight: 500; cursor: pointer;">Batch Set Start Time</label>
+                    </div>
+                    <input type="time" id="batch-start" disabled
+                        style="width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(255, 255, 255, 0.05); color: var(--text-primary); font-family: 'Outfit', sans-serif; opacity: 0.5;">
+                </div>
+
+                <!-- Checkbox + End Time -->
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                        <input type="checkbox" id="batch-update-end" style="width: 18px; height: 18px; cursor: pointer;">
+                        <label for="batch-update-end" style="margin-bottom: 0; font-weight: 500; cursor: pointer;">Batch Set End Time</label>
+                    </div>
+                    <input type="time" id="batch-end" disabled
+                        style="width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(255, 255, 255, 0.05); color: var(--text-primary); font-family: 'Outfit', sans-serif; opacity: 0.5;">
+                </div>
+
+                <!-- Checkbox + Hourly Rate -->
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                        <input type="checkbox" id="batch-update-rate" style="width: 18px; height: 18px; cursor: pointer;">
+                        <label for="batch-update-rate" style="margin-bottom: 0; font-weight: 500; cursor: pointer;">Batch Set Hourly Rate</label>
+                    </div>
+                    <input type="number" id="batch-rate" disabled value="20" min="0"
+                        style="width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(255, 255, 255, 0.05); color: var(--text-primary); font-family: 'Outfit', sans-serif; opacity: 0.5;">
+                </div>
+
+                <!-- Checkbox + Company -->
+                <div class="input-group" style="margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                        <input type="checkbox" id="batch-update-company" style="width: 18px; height: 18px; cursor: pointer;">
+                        <label for="batch-update-company" style="margin-bottom: 0; font-weight: 500; cursor: pointer;">Batch Set Company</label>
+                    </div>
+                    <input type="text" id="batch-company" disabled placeholder="e.g. Acme Corp"
+                        style="width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(255, 255, 255, 0.05); color: var(--text-primary); font-family: 'Outfit', sans-serif; opacity: 0.5; margin-bottom: 8px;">
+                    <select id="batch-company-select" class="touch-picker" disabled style="opacity: 0.5; width: 100%;">
+                        <option value="">Or pick saved...</option>
+                    </select>
+                </div>
+
+                <!-- Checkbox + Project -->
+                <div class="input-group" style="margin-bottom: 25px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                        <input type="checkbox" id="batch-update-project" style="width: 18px; height: 18px; cursor: pointer;">
+                        <label for="batch-update-project" style="margin-bottom: 0; font-weight: 500; cursor: pointer;">Batch Set Project</label>
+                    </div>
+                    <input type="text" id="batch-project" disabled placeholder="e.g. Website Redesign"
+                        style="width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(255, 255, 255, 0.05); color: var(--text-primary); font-family: 'Outfit', sans-serif; opacity: 0.5; margin-bottom: 8px;">
+                    <select id="batch-project-select" class="touch-picker" disabled style="opacity: 0.5; width: 100%;">
+                        <option value="">Or pick saved...</option>
+                    </select>
+                </div>
+
+                <!-- Drag to Confirm Slider -->
+                <div class="batch-slider-container" style="margin-top: 15px; margin-bottom: 10px;">
+                    <label style="display: block; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px; text-align: center;">Drag to Save Changes</label>
+                    <div class="drag-slider-track" id="batch-slider-track">
+                        <div class="drag-slider-progress" id="batch-slider-progress"></div>
+                        <div class="drag-slider-handle" id="batch-slider-handle">
+                            <span class="handle-arrow">&rarr;</span>
+                        </div>
+                        <span class="drag-slider-text" id="batch-slider-text">Swipe to Confirm</span>
+                    </div>
                 </div>
             </div>
         </div>

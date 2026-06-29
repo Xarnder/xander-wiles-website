@@ -298,6 +298,8 @@ export function renderDashboardData() {
     let totalWeeklyEarnings = 0;
     let totalMonthlyMs = 0;
     let totalMonthlyEarnings = 0;
+    let totalSixMonthsMs = 0;
+    let totalSixMonthsEarnings = 0;
 
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -305,6 +307,7 @@ export function renderDashboardData() {
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
     state.allSessions.forEach((data) => {
         const dateObj = new Date(data.startTime);
@@ -325,6 +328,11 @@ export function renderDashboardData() {
         if (dateObj >= startOfMonth) {
             totalMonthlyMs += data.durationMs;
             totalMonthlyEarnings += data.earnings;
+        }
+
+        if (dateObj >= startOfSixMonths) {
+            totalSixMonthsMs += data.durationMs;
+            totalSixMonthsEarnings += data.earnings;
         }
 
         const item = document.createElement('div');
@@ -410,6 +418,8 @@ export function renderDashboardData() {
                 DOM.sessionCompany.value = data.company || "";
                 DOM.sessionProject.value = data.project || "";
                 DOM.sessionFocused.checked = data.focused !== false;
+                DOM.sessionModal.classList.remove('modal-mode-add');
+                DOM.sessionModal.classList.add('modal-mode-edit');
                 DOM.sessionModal.classList.remove('hidden');
             });
         });
@@ -425,6 +435,14 @@ export function renderDashboardData() {
 
     DOM.monthlyHoursDisplay.textContent = formatDuration(totalMonthlyMs);
     renderStatsEarnings(DOM.monthlyEarningsDisplay, totalMonthlyEarnings);
+
+    if (DOM.sixMonthsHoursDisplay) {
+        DOM.sixMonthsHoursDisplay.textContent = formatDuration(totalSixMonthsMs);
+    }
+    if (DOM.sixMonthsEarningsDisplay) {
+        renderStatsEarnings(DOM.sixMonthsEarningsDisplay, totalSixMonthsEarnings);
+    }
+
     state.lastStatsTotals = {
         daily: totalDailyEarnings,
         weekly: totalWeeklyEarnings,
@@ -476,6 +494,48 @@ export function applyGlobalFilters() {
 
             return matchCompany && matchProject;
         });
+    }
+
+    // Auto-populate timer rate based on preference if not currently running
+    const isRunning = localStorage.getItem('work_tracker_start') !== null;
+    if (!isRunning) {
+        const lastSession = state.rawSessions && state.rawSessions[0];
+
+        if (DOM.hourlyRateInput) {
+            if (state.ratePreference === 'default_rate') {
+                DOM.hourlyRateInput.value = state.defaultHourlyRate;
+            } else {
+                if (lastSession && lastSession.rate != null) {
+                    DOM.hourlyRateInput.value = lastSession.rate;
+                } else {
+                    DOM.hourlyRateInput.value = state.defaultHourlyRate;
+                }
+            }
+        }
+
+        if (DOM.companyInput) {
+            if (state.companyPreference === 'default_value') {
+                DOM.companyInput.value = state.defaultCompany;
+            } else {
+                if (lastSession && lastSession.company != null) {
+                    DOM.companyInput.value = lastSession.company;
+                } else {
+                    DOM.companyInput.value = state.defaultCompany;
+                }
+            }
+        }
+
+        if (DOM.projectInput) {
+            if (state.projectPreference === 'default_value') {
+                DOM.projectInput.value = state.defaultProject;
+            } else {
+                if (lastSession && lastSession.project != null) {
+                    DOM.projectInput.value = lastSession.project;
+                } else {
+                    DOM.projectInput.value = state.defaultProject;
+                }
+            }
+        }
     }
 
     renderDashboardData();
