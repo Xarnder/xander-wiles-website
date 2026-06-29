@@ -31,6 +31,14 @@
 </head>
 
 <body class="loading">
+    <script>
+      (function () {
+        var hash = location.hash;
+        if (!hash || (hash.indexOf('access_token=') === -1 && hash.indexOf('error=') === -1)) return;
+        if (location.pathname.indexOf('/pages/Group-Availability/') !== -1) return;
+        location.replace(location.origin + '/pages/Group-Availability/auth-callback.html' + hash);
+      })();
+    </script>
     <!-- Premium Loading Overlay -->
     <div id="loading-overlay">
         <svg class="premium-loader" viewBox="0 -25 100 125">

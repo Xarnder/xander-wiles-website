@@ -1,4 +1,5 @@
 import { isSupabaseConfigured } from '../supabase-config.js';
+import { recoverOAuthRedirectFromSiteRoot } from './oauth-recover.js';
 import { getSession, signInWithGoogle, signOut, onAuthStateChange, profileFromSession, applyAvatarImage } from './auth.js';
 import { fetchDashboardEvents, deleteEvent } from './api.js';
 import { APP_BASE, eventUrl, showToast, formatDbError, navigateToEvent } from './utils.js';
@@ -119,6 +120,8 @@ async function refresh(session) {
 }
 
 function init() {
+  if (recoverOAuthRedirectFromSiteRoot()) return;
+
   if (!isSupabaseConfigured()) {
     els.configWarning.hidden = false;
     els.googleBtn.disabled = true;

@@ -1,4 +1,5 @@
 import { isSupabaseConfigured } from '../supabase-config.js';
+import { recoverOAuthRedirectFromSiteRoot } from './oauth-recover.js';
 import { getSession, signInWithGoogle, onAuthStateChange, profileFromSession, applyAvatarImage } from './auth.js';
 import { getActiveClient } from './supabase-client.js';
 import {
@@ -635,6 +636,8 @@ function updateShareLink() {
 }
 
 async function bootEvent() {
+  if (recoverOAuthRedirectFromSiteRoot()) return;
+
   const ctx = getEventContextFromLocation();
   slug = ctx.slug;
 

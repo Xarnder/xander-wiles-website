@@ -10,6 +10,10 @@
         {
             "source": "/pages/Group-Availability/event",
             "destination": "/pages/Group-Availability/event.html"
+        },
+        {
+            "source": "/pages/Group-Availability/auth-callback",
+            "destination": "/pages/Group-Availability/auth-callback.html"
         }
     ],
     "cleanUrls": true

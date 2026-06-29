@@ -1,6 +1,12 @@
 import { getAuthClient } from './supabase-client.js';
 import { APP_BASE } from './utils.js';
 
+const AUTH_CALLBACK = `${APP_BASE}/auth-callback.html`;
+
+export function oauthCallbackUrl() {
+  return `${window.location.origin}${AUTH_CALLBACK}`;
+}
+
 export async function getSession() {
   const client = getAuthClient();
   if (!client) return null;
@@ -20,7 +26,13 @@ export function onAuthStateChange(callback) {
 export async function signInWithGoogle(redirectPath) {
   const client = getAuthClient();
   if (!client) throw new Error('Supabase is not configured');
-  const redirectTo = `${window.location.origin}${redirectPath || APP_BASE + '/index.html'}`;
+
+  const returnPath = redirectPath || `${APP_BASE}/index.html`;
+  const returnTo = `${window.location.origin}${returnPath}`;
+  const redirectTo = oauthCallbackUrl();
+
+  sessionStorage.setItem('wth_auth_return', returnTo);
+
   const { error } = await client.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo },

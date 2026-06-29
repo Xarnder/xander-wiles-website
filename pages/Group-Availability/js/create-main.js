@@ -1,4 +1,5 @@
 import { isSupabaseConfigured } from '../supabase-config.js';
+import { recoverOAuthRedirectFromSiteRoot } from './oauth-recover.js';
 import { getSession, signInWithGoogle, profileFromSession } from './auth.js';
 import { createEvent } from './api.js';
 import {
@@ -55,6 +56,8 @@ function updateExpiresPreview() {
 }
 
 async function init() {
+  if (recoverOAuthRedirectFromSiteRoot()) return;
+
   if (!isSupabaseConfigured()) {
     configWarning.hidden = false;
     form.querySelector('button[type=submit]').disabled = true;
