@@ -141,6 +141,7 @@ async function init() {
         {
           title: form.title.value,
           description: form.description.value,
+          location: form.location.value,
           startDate,
           endDate,
           timezone: form.timezone.value,

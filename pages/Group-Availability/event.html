@@ -46,11 +46,12 @@
           <div>
             <h1 id="event-title"></h1>
             <p id="event-description" class="event-description muted" hidden></p>
+            <p id="event-location" class="event-location" hidden></p>
             <p id="event-meta" class="muted"></p>
           </div>
         </div>
         <div id="status-bar"></div>
-        <div class="share-link-box glass-card">
+        <div id="share-link-box" class="share-link-box glass-card" hidden>
           <label class="share-link-label" for="share-url-input">Share link</label>
           <div class="share-link-row">
             <input type="text" id="share-url-input" class="share-url-input" readonly>
@@ -60,38 +61,57 @@
         <p class="muted" style="margin-top: 8px;"><span id="participant-count">0 participants</span></p>
       </header>
 
-      <section id="join-panel" class="join-card glass-card" hidden>
-        <h2>Join this event</h2>
-        <button type="button" id="google-join" class="btn btn-primary btn-google" style="width: 100%;">Sign in with Google</button>
-        <p class="join-divider">or continue as guest</p>
-        <form id="guest-form">
-          <label>
-            Your name
-            <input type="text" id="guest-name" required maxlength="60" placeholder="Alex">
+      <section id="identity-bar" class="identity-bar glass-card" hidden aria-labelledby="identity-section-title">
+        <h2 id="identity-section-title" class="section-title identity-section-title">Your profile</h2>
+
+        <div id="identity-google-view" class="identity-profile-row" hidden>
+          <img id="identity-avatar" alt="" width="36" height="36" referrerpolicy="no-referrer" hidden>
+          <span id="identity-display-name" class="identity-display-name"></span>
+        </div>
+
+        <div id="identity-guest-display" class="identity-profile-row" hidden>
+          <span id="guest-display-name" class="identity-display-name"></span>
+          <button type="button" id="edit-name-btn" class="btn btn-ghost">Edit</button>
+        </div>
+
+        <div id="identity-guest-edit" class="identity-name-form" hidden>
+          <label class="guest-name-field" for="guest-name-input">
+            <span class="guest-name-label">Your name</span>
+            <input type="text" id="guest-name-input" maxlength="60" placeholder="Alex" autocomplete="name">
           </label>
-          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Continue</button>
-        </form>
+          <div class="identity-form-actions">
+            <button type="button" id="guest-save-name" class="btn btn-primary">Save name</button>
+            <button type="button" id="name-cancel-btn" class="btn btn-ghost">Cancel</button>
+            <button type="button" id="google-join" class="btn btn-ghost btn-google-opt">Sign in with Google</button>
+          </div>
+        </div>
       </section>
 
-      <div id="identity-bar" class="identity-bar glass-card" hidden>
-        <img id="identity-avatar" alt="" width="36" height="36" referrerpolicy="no-referrer" hidden>
-        <span id="identity-name"></span>
-        <button type="button" id="edit-name-btn" class="btn btn-ghost">Edit name</button>
-        <button type="button" id="merge-google" class="btn btn-ghost" hidden>Sign in to sync</button>
-        <div id="name-edit-row" class="name-edit-row" hidden>
-          <input type="text" id="name-edit-input" maxlength="60">
-          <button type="button" id="name-save-btn" class="btn btn-primary">Save</button>
-        </div>
-      </div>
-
-      <section id="paint-section" hidden>
+      <section id="paint-section">
         <h2 class="section-title">Your availability</h2>
-        <p class="muted" style="margin-bottom: 12px;">Tap days on the calendar — green = likely free, yellow = might be free</p>
+        <p class="muted" style="margin-bottom: 12px;">Tap days on the calendar — green = likely free, yellow = might be free. Press <strong>Save</strong> when you are done.</p>
 
         <div id="paint-toolbar" class="paint-toolbar glass-card">
-          <button type="button" class="btn btn-ghost active" data-brush="likely">Green — likely</button>
-          <button type="button" class="btn btn-ghost" data-brush="maybe">Yellow — maybe</button>
-          <button type="button" class="btn btn-ghost" data-brush="erase">Eraser</button>
+          <div class="paint-toolbar-main">
+            <div class="paint-brush-group" role="group" aria-label="Paint mode">
+              <button type="button" class="btn btn-ghost brush-btn active" data-brush="likely" aria-pressed="true">
+                <span class="brush-swatch brush-swatch-likely" aria-hidden="true"></span>
+                Likely
+              </button>
+              <button type="button" class="btn btn-ghost brush-btn" data-brush="maybe" aria-pressed="false">
+                <span class="brush-swatch brush-swatch-maybe" aria-hidden="true"></span>
+                Maybe
+              </button>
+              <button type="button" class="btn btn-ghost brush-btn" data-brush="erase" aria-pressed="false">
+                <span class="brush-swatch brush-swatch-erase" aria-hidden="true"></span>
+                Eraser
+              </button>
+            </div>
+            <p id="brush-indicator" class="brush-indicator" aria-live="polite">
+              Selected: <strong>Likely free</strong>
+            </p>
+            <button type="button" id="save-availability" class="btn btn-primary save-availability-btn" hidden disabled>Save</button>
+          </div>
         </div>
 
         <div id="paint-grid"></div>
@@ -114,7 +134,7 @@
 
       <p id="blind-gate" class="blind-gate glass-card" hidden></p>
 
-      <section id="overlap-section">
+      <section id="overlap-section" tabindex="-1">
         <div class="section-header-row">
           <h2 class="section-title">Best times</h2>
           <div class="overlap-actions">
@@ -123,6 +143,11 @@
           </div>
         </div>
         <div id="overlap-list" class="overlap-list"></div>
+        <div id="overlap-pagination" class="overlap-pagination" hidden tabindex="0" aria-label="Best times pages">
+          <button type="button" id="overlap-prev" class="btn btn-ghost overlap-nav-btn" aria-label="Previous best times">←</button>
+          <span id="overlap-page-info" class="overlap-page-info"></span>
+          <button type="button" id="overlap-next" class="btn btn-ghost overlap-nav-btn" aria-label="Next best times">→</button>
+        </div>
       </section>
 
       <section id="multi-section" hidden>
@@ -133,6 +158,10 @@
       <section id="organizer-panel" class="organizer-panel glass-card" hidden>
         <h3>Organizer settings</h3>
         <div class="org-grid">
+          <label class="org-full-width">
+            Location <span class="muted">(shown to everyone with the link)</span>
+            <input type="text" id="org-location" maxlength="200" placeholder="e.g. The Crown Pub, 12 High Street, London">
+          </label>
           <label>
             Last edit deadline
             <input type="datetime-local" id="org-edit-deadline">

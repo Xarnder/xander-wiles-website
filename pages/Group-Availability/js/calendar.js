@@ -194,6 +194,7 @@ export function buildDayCalendar(container, event, dayMap, options) {
     brush = 'likely',
     onChange,
     readOnly = false,
+    separateMonths = false,
   } = options;
 
   const inRange = new Set(enumerateDates(event.start_date, event.end_date));
@@ -203,14 +204,16 @@ export function buildDayCalendar(container, event, dayMap, options) {
 
   container.innerHTML = '';
   const root = document.createElement('div');
-  root.className = 'day-calendar-compact glass-card';
+  root.className = separateMonths ? 'day-calendar-months-grid' : 'day-calendar-compact glass-card';
 
   const paintSurface = document.createElement('div');
-  paintSurface.className = 'day-calendar-paint-surface';
+  paintSurface.className = separateMonths
+    ? 'day-calendar-paint-surface day-calendar-paint-surface--separate'
+    : 'day-calendar-paint-surface';
 
   for (const { year, month } of monthsInRange(event.start_date, event.end_date)) {
     const monthBlock = document.createElement('section');
-    monthBlock.className = 'day-calendar-month';
+    monthBlock.className = separateMonths ? 'day-calendar-month glass-card' : 'day-calendar-month';
 
     const title = document.createElement('h3');
     title.className = 'month-title';
@@ -282,7 +285,8 @@ export function buildDayCalendar(container, event, dayMap, options) {
   };
 }
 
-export function buildMultiDayCalendar(container, event, participants, slotsByParticipant) {
+export function buildMultiDayCalendar(container, event, participants, slotsByParticipant, options = {}) {
+  const { canRemoveGuest, onRemoveGuest } = options;
   container.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'multi-day-calendar';
@@ -306,8 +310,19 @@ export function buildMultiDayCalendar(container, event, participants, slotsByPar
       header.appendChild(img);
     }
     const name = document.createElement('span');
+    name.className = 'participant-grid-name';
     name.textContent = p.display_name + (p.is_organizer ? ' (organizer)' : '');
     header.appendChild(name);
+
+    if (canRemoveGuest?.(p)) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'btn btn-ghost btn-danger participant-remove-btn';
+      removeBtn.textContent = 'Remove guest';
+      removeBtn.addEventListener('click', () => onRemoveGuest?.(p));
+      header.appendChild(removeBtn);
+    }
+
     section.appendChild(header);
 
     if (!days.size) {

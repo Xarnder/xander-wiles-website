@@ -17,6 +17,7 @@ CREATE TABLE public.events (
   slug             text NOT NULL UNIQUE,
   title            text NOT NULL,
   description      text,
+  location         text,
   organizer_id     uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
   start_date       date NOT NULL,
   end_date         date NOT NULL,
@@ -196,6 +197,31 @@ CREATE POLICY "slots_update_auth"
     )
   );
 
+CREATE POLICY "slots_update_guest"
+  ON public.availability_slots FOR UPDATE TO anon
+  USING (
+    public.event_allows_edits(event_id)
+    AND EXISTS (
+      SELECT 1 FROM public.event_participants p
+      WHERE p.id = participant_id
+        AND p.guest_token = coalesce(
+          current_setting('request.headers', true)::json->>'x-guest-token',
+          ''
+        )
+    )
+  )
+  WITH CHECK (
+    public.event_allows_edits(event_id)
+    AND EXISTS (
+      SELECT 1 FROM public.event_participants p
+      WHERE p.id = participant_id
+        AND p.guest_token = coalesce(
+          current_setting('request.headers', true)::json->>'x-guest-token',
+          ''
+        )
+    )
+  );
+
 CREATE POLICY "slots_delete_auth"
   ON public.availability_slots FOR DELETE TO authenticated
   USING (
@@ -271,3 +297,7 @@ GRANT EXECUTE ON FUNCTION public.merge_guest_to_user(uuid, text) TO authenticate
 ALTER PUBLICATION supabase_realtime ADD TABLE public.availability_slots;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.event_participants;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.events;
+
+-- ============================================================
+-- Existing projects: run supabase/migrate-existing.sql in SQL Editor
+-- ============================================================

@@ -137,6 +137,7 @@ export async function createEvent(payload, profile) {
     slug,
     title: payload.title.trim(),
     description: payload.description?.trim() || null,
+    location: payload.location?.trim() || null,
     organizer_id: profile.id,
     start_date: payload.startDate,
     end_date: payload.endDate,
@@ -237,6 +238,12 @@ export async function updateEvent(eventId, patch) {
 export async function deleteEvent(eventId) {
   const client = getAuthClient();
   const { error } = await client.from('events').delete().eq('id', eventId);
+  if (error) throw error;
+}
+
+export async function deleteParticipant(participantId) {
+  const client = getAuthClient();
+  const { error } = await client.from('event_participants').delete().eq('id', participantId);
   if (error) throw error;
 }
 

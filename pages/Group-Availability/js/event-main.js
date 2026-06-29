@@ -12,6 +12,7 @@ import {
   markSubmitted,
   updateEvent,
   deleteEvent,
+  deleteParticipant,
   mergeGuestToUser,
 } from './api.js';
 import {
@@ -29,7 +30,6 @@ import { BLIND_GATE_MESSAGE, filterSlotsForViewer } from './blind-gate.js';
 import { formatOverlapSummary, overlapToIcs, downloadTextFile } from './export.js';
 import {
   APP_BASE,
-  debounce,
   eventAllowsEdits,
   formatDateRange,
   formatDeadlineCountdown,
@@ -56,44 +56,62 @@ const els = {
   configWarning: document.getElementById('config-warning'),
   title: document.getElementById('event-title'),
   meta: document.getElementById('event-meta'),
+  eventLocation: document.getElementById('event-location'),
   statusBar: document.getElementById('status-bar'),
   copyLink: document.getElementById('copy-link'),
+  shareLinkBox: document.getElementById('share-link-box'),
   shareUrlInput: document.getElementById('share-url-input'),
   participantCount: document.getElementById('participant-count'),
-  joinPanel: document.getElementById('join-panel'),
-  guestForm: document.getElementById('guest-form'),
-  guestName: document.getElementById('guest-name'),
-  googleJoin: document.getElementById('google-join'),
   identityBar: document.getElementById('identity-bar'),
-  identityName: document.getElementById('identity-name'),
+  identityGoogleView: document.getElementById('identity-google-view'),
+  identityGuestDisplay: document.getElementById('identity-guest-display'),
+  identityGuestEdit: document.getElementById('identity-guest-edit'),
+  identityDisplayName: document.getElementById('identity-display-name'),
+  guestDisplayName: document.getElementById('guest-display-name'),
+  guestNameInput: document.getElementById('guest-name-input'),
+  guestSaveName: document.getElementById('guest-save-name'),
+  googleJoin: document.getElementById('google-join'),
   identityAvatar: document.getElementById('identity-avatar'),
-  mergeGoogle: document.getElementById('merge-google'),
+  editNameBtn: document.getElementById('edit-name-btn'),
+  nameCancelBtn: document.getElementById('name-cancel-btn'),
   paintSection: document.getElementById('paint-section'),
+  overlapSection: document.getElementById('overlap-section'),
   paintGrid: document.getElementById('paint-grid'),
   timeStart: document.getElementById('time-start'),
   timeEnd: document.getElementById('time-end'),
   timeRangePanel: document.getElementById('time-range-panel'),
   toolbar: document.getElementById('paint-toolbar'),
+  brushIndicator: document.getElementById('brush-indicator'),
+  saveAvailability: document.getElementById('save-availability'),
   blindGate: document.getElementById('blind-gate'),
   multiSection: document.getElementById('multi-section'),
   multiGrid: document.getElementById('multi-grid'),
   overlapList: document.getElementById('overlap-list'),
   organizerPanel: document.getElementById('organizer-panel'),
   editDeadlineInput: document.getElementById('org-edit-deadline'),
+  orgLocationInput: document.getElementById('org-location'),
   visibilitySelect: document.getElementById('org-visibility'),
   closeToggle: document.getElementById('org-close'),
   saveOrgBtn: document.getElementById('org-save'),
   deleteBtn: document.getElementById('org-delete'),
-  editNameBtn: document.getElementById('edit-name-btn'),
-  nameEditRow: document.getElementById('name-edit-row'),
-  nameEditInput: document.getElementById('name-edit-input'),
-  nameSaveBtn: document.getElementById('name-save-btn'),
   copyOverlapBtn: document.getElementById('copy-overlap'),
   downloadIcsBtn: document.getElementById('download-ics'),
+  overlapPagination: document.getElementById('overlap-pagination'),
+  overlapPrev: document.getElementById('overlap-prev'),
+  overlapNext: document.getElementById('overlap-next'),
+  overlapPageInfo: document.getElementById('overlap-page-info'),
   eventDescription: document.getElementById('event-description'),
 };
 
 let countdownTimer = null;
+
+const OVERLAP_PAGE_SIZE = 7;
+
+const BRUSH_LABELS = {
+  likely: 'Likely free',
+  maybe: 'Maybe free',
+  erase: 'Eraser',
+};
 
 let state = {
   event: null,
@@ -105,8 +123,14 @@ let state = {
   slots: [],
   paintController: null,
   brush: 'likely',
-  pendingSave: false,
+  hasUnsavedChanges: false,
+  isSaving: false,
+  overlapRanges: [],
+  overlapPage: 0,
+  editingGuestName: false,
 };
+
+let lastSavedSnapshot = '';
 
 function client() {
   return getActiveClient({ session: state.session, guestToken: state.guestToken });
@@ -152,6 +176,165 @@ function renderStatus() {
   els.statusBar.innerHTML = parts.join(' ') || '<span class="muted">Open for responses</span>';
 }
 
+function updateOrganizerUi() {
+  const show = isOrganizer();
+  if (els.shareLinkBox) els.shareLinkBox.hidden = !show;
+  if (els.organizerPanel) els.organizerPanel.hidden = !show;
+  if (show && state.event) {
+    if (els.orgLocationInput) els.orgLocationInput.value = state.event.location || '';
+    els.editDeadlineInput.value = state.event.edit_deadline
+      ? toLocalInputValue(state.event.edit_deadline, state.event.timezone)
+      : '';
+    els.visibilitySelect.value = state.event.visibility_mode;
+    els.closeToggle.checked = state.event.is_closed;
+  }
+}
+
+function renderEventHeader() {
+  if (!state.event) return;
+
+  els.title.textContent = state.event.title;
+
+  if (els.eventDescription) {
+    if (state.event.description) {
+      els.eventDescription.textContent = state.event.description;
+      els.eventDescription.hidden = false;
+    } else {
+      els.eventDescription.hidden = true;
+    }
+  }
+
+  const location = state.event.location?.trim();
+  if (els.eventLocation) {
+    if (location) {
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+      els.eventLocation.innerHTML = `<span class="event-location-label">Location</span> <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(location)}</a>`;
+      els.eventLocation.hidden = false;
+    } else {
+      els.eventLocation.hidden = true;
+      els.eventLocation.textContent = '';
+    }
+  }
+
+  els.meta.textContent = `${formatDateRange(state.event.start_date, state.event.end_date, state.event.timezone)} · ${state.event.timezone.replace(/_/g, ' ')}`;
+}
+
+function isGoogleParticipant() {
+  return Boolean(state.session && state.participant?.user_id);
+}
+
+function isGuestParticipant() {
+  return Boolean(state.participant && !state.participant.user_id);
+}
+
+function setEventSectionsEnabled(enabled) {
+  if (els.paintSection) els.paintSection.hidden = !enabled;
+  if (els.overlapSection) els.overlapSection.hidden = !enabled;
+  if (!enabled) {
+    if (els.multiSection) els.multiSection.hidden = true;
+    if (els.blindGate) els.blindGate.hidden = true;
+  }
+}
+
+function hideAllIdentityPanels() {
+  if (els.identityGoogleView) els.identityGoogleView.hidden = true;
+  if (els.identityGuestDisplay) els.identityGuestDisplay.hidden = true;
+  if (els.identityGuestEdit) els.identityGuestEdit.hidden = true;
+}
+
+function showGuestDisplayMode() {
+  hideAllIdentityPanels();
+  if (els.guestDisplayName) {
+    els.guestDisplayName.textContent = state.participant?.display_name || '';
+  }
+  if (els.identityGuestDisplay) els.identityGuestDisplay.hidden = false;
+}
+
+function showGuestEditMode({ setup = false } = {}) {
+  hideAllIdentityPanels();
+  if (els.guestNameInput) {
+    els.guestNameInput.value = setup ? '' : state.participant?.display_name || '';
+  }
+  if (els.nameCancelBtn) els.nameCancelBtn.hidden = setup;
+  if (els.googleJoin) els.googleJoin.hidden = setup;
+  if (els.guestSaveName) els.guestSaveName.hidden = false;
+  if (els.identityGuestEdit) els.identityGuestEdit.hidden = false;
+  els.guestNameInput?.focus();
+}
+
+function renderIdentityUi() {
+  els.identityBar.hidden = false;
+
+  if (isGoogleParticipant()) {
+    state.editingGuestName = false;
+    hideAllIdentityPanels();
+    if (els.identityGoogleView) els.identityGoogleView.hidden = false;
+    if (els.identityDisplayName) {
+      els.identityDisplayName.textContent = state.participant.display_name;
+    }
+    applyAvatarImage(els.identityAvatar, state.participant.avatar_url || state.profile?.avatarUrl);
+    setEventSectionsEnabled(true);
+    return;
+  }
+
+  if (isGuestParticipant()) {
+    if (state.editingGuestName) {
+      showGuestEditMode({ setup: false });
+    } else {
+      showGuestDisplayMode();
+    }
+    setEventSectionsEnabled(true);
+    return;
+  }
+
+  state.editingGuestName = false;
+  showGuestEditMode({ setup: true });
+  setEventSectionsEnabled(false);
+}
+
+function startGuestNameEdit() {
+  if (!isGuestParticipant()) return;
+  state.editingGuestName = true;
+  renderIdentityUi();
+}
+
+function cancelGuestNameEdit() {
+  if (!isGuestParticipant()) return;
+  state.editingGuestName = false;
+  renderIdentityUi();
+}
+
+function updateBrushIndicator() {
+  if (!els.brushIndicator) return;
+  const label = BRUSH_LABELS[state.brush] || state.brush;
+  els.brushIndicator.innerHTML = `Selected: <strong>${escapeHtml(label)}</strong>`;
+  els.toolbar?.querySelectorAll('[data-brush]').forEach((btn) => {
+    const active = btn.dataset.brush === state.brush;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
+function renderOverlapPagination() {
+  const total = state.overlapRanges.length;
+  const totalPages = Math.max(1, Math.ceil(total / OVERLAP_PAGE_SIZE));
+
+  if (state.overlapPage >= totalPages) state.overlapPage = totalPages - 1;
+  if (state.overlapPage < 0) state.overlapPage = 0;
+
+  const showPagination = total > OVERLAP_PAGE_SIZE;
+  if (els.overlapPagination) els.overlapPagination.hidden = !showPagination;
+
+  if (!showPagination) return;
+
+  const page = state.overlapPage + 1;
+  if (els.overlapPageInfo) {
+    els.overlapPageInfo.textContent = `Page ${page} of ${totalPages} · use ← →`;
+  }
+  if (els.overlapPrev) els.overlapPrev.disabled = state.overlapPage <= 0;
+  if (els.overlapNext) els.overlapNext.disabled = state.overlapPage >= totalPages - 1;
+}
+
 function renderOverlap() {
   const disableExport = () => {
     if (els.copyOverlapBtn) els.copyOverlapBtn.disabled = true;
@@ -160,25 +343,39 @@ function renderOverlap() {
 
   if (!state.participant) {
     disableExport();
-    els.overlapList.innerHTML = '<p class="muted">Join the event to mark your availability.</p>';
+    state.overlapRanges = [];
+    state.overlapPage = 0;
+    if (els.overlapPagination) els.overlapPagination.hidden = true;
+    els.overlapList.innerHTML = '<p class="muted">Enter your name above to mark your availability.</p>';
     return;
   }
   if (!state.participant.has_submitted_availability) {
     disableExport();
+    state.overlapRanges = [];
+    state.overlapPage = 0;
+    if (els.overlapPagination) els.overlapPagination.hidden = true;
     els.overlapList.innerHTML =
       '<p class="muted">Submit your availability to see the best overlapping times.</p>';
     return;
   }
 
-  const ranges = computeOverlap(state.event, state.participants, viewerSlots());
+  state.overlapRanges = computeOverlap(state.event, state.participants, viewerSlots());
+  const ranges = state.overlapRanges;
   const canExport = ranges.length > 0;
   if (els.copyOverlapBtn) els.copyOverlapBtn.disabled = !canExport;
   if (els.downloadIcsBtn) els.downloadIcsBtn.disabled = !canExport;
   if (!ranges.length) {
+    state.overlapPage = 0;
+    if (els.overlapPagination) els.overlapPagination.hidden = true;
     els.overlapList.innerHTML = '<p class="muted">No overlapping availability yet.</p>';
     return;
   }
-  els.overlapList.innerHTML = ranges
+
+  renderOverlapPagination();
+  const start = state.overlapPage * OVERLAP_PAGE_SIZE;
+  const pageRanges = ranges.slice(start, start + OVERLAP_PAGE_SIZE);
+
+  els.overlapList.innerHTML = pageRanges
     .map(
       (r) => `
     <div class="overlap-item glass-card">
@@ -199,7 +396,42 @@ function escapeHtml(s) {
     .replace(/>/g, '&gt;');
 }
 
+function canOrganizerRemoveGuest(participant) {
+  return isOrganizer() && !participant.user_id && !participant.is_organizer;
+}
+
+async function handleRemoveGuest(participant) {
+  if (!canOrganizerRemoveGuest(participant)) return;
+
+  const name = participant.display_name || 'this guest';
+  const confirmed = await confirmAction({
+    title: 'Remove guest?',
+    message: `${name} and all of their availability will be permanently removed. They can rejoin the event with a new name if needed.`,
+    highlight: name,
+    confirmLabel: 'Remove guest',
+    cancelLabel: 'Keep guest',
+  });
+  if (!confirmed) return;
+
+  try {
+    await deleteParticipant(participant.id);
+    await reloadData();
+    renderMultiGrid();
+    renderOverlap();
+    showToast(`${name} removed`);
+  } catch (err) {
+    console.error(err);
+    showToast(formatDbError(err), 'error');
+  }
+}
+
 function renderMultiGrid() {
+  if (!state.participant) {
+    els.multiSection.hidden = true;
+    els.blindGate.hidden = true;
+    return;
+  }
+
   const canSee = canSeeIndividualGrids(state.event, state.participant, state.session);
   if (!canSee) {
     els.multiSection.hidden = true;
@@ -214,7 +446,10 @@ function renderMultiGrid() {
   els.blindGate.hidden = true;
   els.multiSection.hidden = false;
   const maps = slotsToParticipantMaps(viewerSlots(), state.event);
-  buildMultiDayCalendar(els.multiGrid, state.event, state.participants, maps);
+  buildMultiDayCalendar(els.multiGrid, state.event, state.participants, maps, {
+    canRemoveGuest: canOrganizerRemoveGuest,
+    onRemoveGuest: handleRemoveGuest,
+  });
 }
 
 function setTimeInputs(startHour, endHour, readOnly) {
@@ -232,12 +467,51 @@ function buildSlotMapFromUi() {
   return expandDaysToSlotMap(dayMap, startHour, endHour);
 }
 
+function serializeSlotMap(slotMap) {
+  return JSON.stringify([...slotMap.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+}
+
+function captureSavedSnapshot() {
+  lastSavedSnapshot = serializeSlotMap(buildSlotMapFromUi());
+  state.hasUnsavedChanges = false;
+  updateSaveButton();
+}
+
+function markLocalChange() {
+  const dirty = serializeSlotMap(buildSlotMapFromUi()) !== lastSavedSnapshot;
+  state.hasUnsavedChanges = dirty;
+  updateSaveButton();
+}
+
+function updateSaveButton() {
+  if (!els.saveAvailability) return;
+  const canEdit = Boolean(state.participant && eventAllowsEdits(state.event));
+  els.saveAvailability.hidden = !canEdit;
+  els.saveAvailability.disabled = !state.hasUnsavedChanges || state.isSaving;
+  els.saveAvailability.classList.toggle('save-flash', state.hasUnsavedChanges && !state.isSaving);
+  els.saveAvailability.textContent = state.isSaving ? 'Saving…' : 'Save';
+}
+
 function renderPaintGrid() {
-  if (!state.participant) return;
+  const readOnly = !state.participant || !eventAllowsEdits(state.event);
+
+  if (!state.participant) {
+    setTimeInputs(10, 22, true);
+    if (els.timeRangePanel) els.timeRangePanel.hidden = true;
+    if (state.paintController) state.paintController.destroy();
+    state.paintController = buildDayCalendar(els.paintGrid, state.event, new Map(), {
+      brush: state.brush,
+      readOnly: true,
+      separateMonths: true,
+      onChange: () => {},
+    });
+    updateSaveButton();
+    return;
+  }
+
   const maps = slotsToParticipantMaps(state.slots, state.event);
   const myMap = maps.get(state.participant.id) || new Map();
   const { days, startHour, endHour } = slotsToDaySelection(myMap);
-  const readOnly = !eventAllowsEdits(state.event);
 
   setTimeInputs(startHour, endHour, readOnly);
   if (els.timeRangePanel) els.timeRangePanel.hidden = false;
@@ -246,24 +520,28 @@ function renderPaintGrid() {
   state.paintController = buildDayCalendar(els.paintGrid, state.event, days, {
     brush: state.brush,
     readOnly,
-    onChange: scheduleSave,
+    separateMonths: true,
+    onChange: readOnly ? () => {} : markLocalChange,
   });
+  if (!readOnly) captureSavedSnapshot();
+  else updateSaveButton();
 }
 
-const scheduleSave = debounce(async () => {
+async function saveAvailability() {
   if (!state.participant || !eventAllowsEdits(state.event)) return;
+  if (!state.hasUnsavedChanges || state.isSaving) return;
+
   const startHour = parseTimeInput(els.timeStart?.value);
   const endHour = parseTimeInput(els.timeEnd?.value);
   if (endHour <= startHour) {
     showToast('End time must be after start time', 'error');
     return;
   }
-  await onSlotsChanged(buildSlotMapFromUi());
-}, 400);
 
-const onSlotsChanged = async (slotMap) => {
-  if (!state.participant || !eventAllowsEdits(state.event)) return;
-  state.pendingSave = true;
+  const slotMap = buildSlotMapFromUi();
+  state.isSaving = true;
+  updateSaveButton();
+
   try {
     await syncSlots(state.event, state.participant.id, slotMap, client());
     if (!state.participant.has_submitted_availability) {
@@ -274,16 +552,18 @@ const onSlotsChanged = async (slotMap) => {
     } else {
       await reloadSlots();
     }
+    captureSavedSnapshot();
     renderOverlap();
     renderMultiGrid();
     showToast('Saved');
   } catch (err) {
     console.error(err);
-    showToast(err.message || 'Save failed', 'error');
+    showToast(formatDbError(err), 'error');
   } finally {
-    state.pendingSave = false;
+    state.isSaving = false;
+    updateSaveButton();
   }
-};
+}
 
 async function reloadSlots() {
   state.slots = await fetchSlots(state.event.id, client());
@@ -295,29 +575,21 @@ async function reloadData() {
   els.participantCount.textContent = `${state.participants.length} participant${state.participants.length === 1 ? '' : 's'}`;
 }
 
-function showMainUi() {
-  els.joinPanel.hidden = true;
-  els.paintSection.hidden = false;
-  els.identityBar.hidden = false;
-  els.identityName.textContent = state.participant.display_name;
-  applyAvatarImage(
-    els.identityAvatar,
-    state.participant.avatar_url || state.profile?.avatarUrl
-  );
-  els.mergeGoogle.hidden = Boolean(state.session);
-
+function showGuestSetupUi() {
+  renderIdentityUi();
   renderPaintGrid();
   renderMultiGrid();
   renderOverlap();
+}
 
-  if (isOrganizer()) {
-    els.organizerPanel.hidden = false;
-    els.editDeadlineInput.value = state.event.edit_deadline
-      ? toLocalInputValue(state.event.edit_deadline, state.event.timezone)
-      : '';
-    els.visibilitySelect.value = state.event.visibility_mode;
-    els.closeToggle.checked = state.event.is_closed;
-  }
+function showJoinedUi() {
+  state.editingGuestName = false;
+  renderIdentityUi();
+  updateOrganizerUi();
+  updateBrushIndicator();
+  renderPaintGrid();
+  renderMultiGrid();
+  renderOverlap();
 }
 
 function toLocalInputValue(iso, timeZone) {
@@ -407,51 +679,46 @@ async function bootEvent() {
 
     state.guestToken = getGuestToken(state.event.id);
 
-    els.title.textContent = state.event.title;
-    if (els.eventDescription) {
-      if (state.event.description) {
-        els.eventDescription.textContent = state.event.description;
-        els.eventDescription.hidden = false;
-      } else {
-        els.eventDescription.hidden = true;
-      }
-    }
-    els.meta.textContent = `${formatDateRange(state.event.start_date, state.event.end_date, state.event.timezone)} · ${state.event.timezone.replace(/_/g, ' ')}`;
+    renderEventHeader();
     renderStatus();
     startCountdownTimer();
 
     await reloadData();
 
-    if (state.session) {
-      await ensureParticipant();
-      showMainUi();
-    } else if (state.guestToken) {
-      await ensureParticipant();
-      showMainUi();
-    } else {
-      els.joinPanel.hidden = false;
-      els.paintSection.hidden = true;
-      renderOverlap();
-    }
-
     els.loading.hidden = true;
     els.app.hidden = false;
+
+    if (state.session) {
+      await ensureParticipant();
+      showJoinedUi();
+    } else if (state.guestToken) {
+      await ensureParticipant();
+      showJoinedUi();
+    } else {
+      showGuestSetupUi();
+    }
+
+    updateOrganizerUi();
 
     subscribeToEvent(state.event.id, client(), {
       onSlots: async () => {
         await reloadSlots();
-        if (state.participant) {
-          renderPaintGrid();
-          renderMultiGrid();
-          renderOverlap();
-        }
+        if (!state.hasUnsavedChanges) renderPaintGrid();
+        renderMultiGrid();
+        renderOverlap();
       },
       onParticipants: reloadData,
       onEvent: (ev) => {
         state.event = ev;
+        renderEventHeader();
         renderStatus();
         startCountdownTimer();
-        renderPaintGrid();
+        if (!state.hasUnsavedChanges || !eventAllowsEdits(ev)) {
+          if (!eventAllowsEdits(ev)) state.hasUnsavedChanges = false;
+          renderPaintGrid();
+        } else {
+          updateSaveButton();
+        }
         renderMultiGrid();
         renderOverlap();
       },
@@ -469,15 +736,86 @@ function setupToolbar() {
   els.toolbar.querySelectorAll('[data-brush]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.brush = btn.dataset.brush;
-      els.toolbar.querySelectorAll('[data-brush]').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
+      updateBrushIndicator();
       state.paintController?.setBrush(state.brush);
     });
   });
+  updateBrushIndicator();
 
-  const onTimeInput = () => scheduleSave();
-  els.timeStart?.addEventListener('change', onTimeInput);
-  els.timeEnd?.addEventListener('change', onTimeInput);
+  els.timeStart?.addEventListener('change', markLocalChange);
+  els.timeEnd?.addEventListener('change', markLocalChange);
+
+  els.saveAvailability?.addEventListener('click', () => {
+    saveAvailability();
+  });
+}
+
+function setupOverlapPagination() {
+  els.overlapPrev?.addEventListener('click', () => {
+    if (state.overlapPage <= 0) return;
+    state.overlapPage -= 1;
+    renderOverlap();
+  });
+
+  els.overlapNext?.addEventListener('click', () => {
+    const totalPages = Math.ceil(state.overlapRanges.length / OVERLAP_PAGE_SIZE);
+    if (state.overlapPage >= totalPages - 1) return;
+    state.overlapPage += 1;
+    renderOverlap();
+  });
+
+  els.overlapPagination?.addEventListener('keydown', (e) => {
+    if (els.overlapPagination?.hidden) return;
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      els.overlapPrev?.click();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      els.overlapNext?.click();
+    }
+  });
+}
+
+async function saveGuestName() {
+  const name = els.guestNameInput?.value.trim();
+  if (!name) {
+    showToast('Enter your name to continue', 'error');
+    els.guestNameInput?.focus();
+    return;
+  }
+
+  if (!state.participant) {
+    const token = createGuestToken();
+    setGuestToken(state.event.id, token);
+    localStorage.setItem(`wth_guest_name_${state.event.id}`, name);
+    state.guestToken = token;
+    await ensureParticipant();
+    await reloadData();
+    showJoinedUi();
+    showToast('Name saved');
+    return;
+  }
+
+  if (!isGuestParticipant()) return;
+
+  const db = client();
+  const { data, error } = await db
+    .from('event_participants')
+    .update({ display_name: name })
+    .eq('id', state.participant.id)
+    .select()
+    .single();
+    if (error) {
+      showToast(formatDbError(error), 'error');
+      return;
+    }
+  state.participant = data;
+  localStorage.setItem(`wth_guest_name_${state.event.id}`, name);
+  state.editingGuestName = false;
+  showJoinedUi();
+  await reloadData();
+  renderMultiGrid();
+  showToast('Name updated');
 }
 
 function setupJoin() {
@@ -485,21 +823,26 @@ function setupJoin() {
     await signInWithGoogle(`${APP_BASE}/event?slug=${encodeURIComponent(slug)}`);
   });
 
-  els.guestForm?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const name = els.guestName.value.trim();
-    if (!name) return;
-    const token = createGuestToken();
-    setGuestToken(state.event.id, token);
-    localStorage.setItem(`wth_guest_name_${state.event.id}`, name);
-    state.guestToken = token;
-    await ensureParticipant();
-    await reloadData();
-    showMainUi();
+  els.guestSaveName?.addEventListener('click', () => {
+    saveGuestName();
   });
 
-  els.mergeGoogle?.addEventListener('click', async () => {
-    await signInWithGoogle(`${APP_BASE}/event?slug=${encodeURIComponent(slug)}`);
+  els.guestNameInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveGuestName();
+    } else if (e.key === 'Escape' && state.editingGuestName) {
+      e.preventDefault();
+      cancelGuestNameEdit();
+    }
+  });
+
+  els.editNameBtn?.addEventListener('click', () => {
+    startGuestNameEdit();
+  });
+
+  els.nameCancelBtn?.addEventListener('click', () => {
+    cancelGuestNameEdit();
   });
 
   els.copyLink?.addEventListener('click', async () => {
@@ -526,38 +869,11 @@ function setupJoin() {
     showToast('Calendar file downloaded');
   });
 
-  els.editNameBtn?.addEventListener('click', () => {
-    els.nameEditRow.hidden = false;
-    els.nameEditInput.value = state.participant?.display_name || '';
-  });
-
-  els.nameSaveBtn?.addEventListener('click', async () => {
-    const name = els.nameEditInput.value.trim();
-    if (!name || !state.participant) return;
-    const db = client();
-    const { data, error } = await db
-      .from('event_participants')
-      .update({ display_name: name })
-      .eq('id', state.participant.id)
-      .select()
-      .single();
-    if (error) {
-      showToast(error.message, 'error');
-      return;
-    }
-    state.participant = data;
-    localStorage.setItem(`wth_guest_name_${state.event.id}`, name);
-    els.identityName.textContent = name;
-    els.nameEditRow.hidden = true;
-    await reloadData();
-    renderMultiGrid();
-    showToast('Name updated');
-  });
-
   els.saveOrgBtn?.addEventListener('click', async () => {
     if (!isOrganizer()) return;
     try {
       const patch = {
+        location: els.orgLocationInput?.value.trim() || null,
         visibility_mode: els.visibilitySelect.value,
         is_closed: els.closeToggle.checked,
         edit_deadline: els.editDeadlineInput.value
@@ -565,12 +881,13 @@ function setupJoin() {
           : null,
       };
       state.event = await updateEvent(state.event.id, patch);
+      renderEventHeader();
       renderStatus();
       renderPaintGrid();
       renderMultiGrid();
       showToast('Event settings saved');
     } catch (err) {
-      showToast(err.message || 'Save failed', 'error');
+      showToast(formatDbError(err), 'error');
     }
   });
 
@@ -589,12 +906,13 @@ function setupJoin() {
       await deleteEvent(state.event.id);
       window.location.href = `${APP_BASE}/index.html`;
     } catch (err) {
-      showToast(err.message || 'Delete failed', 'error');
+      showToast(formatDbError(err), 'error');
     }
   });
 }
 
 setupToolbar();
+setupOverlapPagination();
 setupJoin();
 bootEvent();
 
@@ -605,6 +923,10 @@ onAuthStateChange(async (session) => {
   if (session && !state.participant?.user_id) {
     await ensureParticipant();
     await reloadData();
-    showMainUi();
+    showJoinedUi();
+  } else if (session) {
+    updateOrganizerUi();
+  } else if (!session && !state.participant && state.event) {
+    showGuestSetupUi();
   }
 });

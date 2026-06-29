@@ -309,6 +309,13 @@ export function formatDbError(err) {
   if (code === '42P01' || msg.includes('does not exist')) {
     return 'Database tables are missing. Run pages/Group-Availability/supabase/schema.sql in the Supabase SQL Editor.';
   }
+  if (
+    code === 'PGRST204' ||
+    msg.includes("'location' column") ||
+    msg.includes('column events.location')
+  ) {
+    return "Database needs updating: run pages/Group-Availability/supabase/migrate-existing.sql in the Supabase SQL Editor, wait a few seconds, then reload this page.";
+  }
   if (code === '42501' || msg.includes('row-level security')) {
     return 'Permission denied. Sign in again, or check Supabase RLS policies.';
   }
