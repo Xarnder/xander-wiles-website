@@ -205,6 +205,12 @@ function hasOrganizerAccess() {
   return isOrganizer() && !isGuestPreviewActive();
 }
 
+/** Organizers in admin mode can see all responses without submitting first. */
+function canViewGroupResults() {
+  if (hasOrganizerAccess()) return true;
+  return Boolean(state.participant?.has_submitted_availability);
+}
+
 function updateGuestPreviewUi() {
   const previewing = isGuestPreviewActive();
   const canPreview = isOrganizer();
@@ -226,6 +232,7 @@ function updateGuestPreviewUi() {
 }
 
 function viewerSlots() {
+  if (hasOrganizerAccess()) return state.slots;
   return filterSlotsForViewer(state.slots, state.participant);
 }
 
@@ -727,7 +734,7 @@ function renderOverlap() {
     els.overlapList.innerHTML = '<p class="muted">Enter your name above to mark your availability.</p>';
     return;
   }
-  if (!state.participant.has_submitted_availability) {
+  if (!canViewGroupResults()) {
     disableExport();
     state.overlapRanges = [];
     state.overlapPage = 0;
@@ -779,7 +786,7 @@ function renderHeatMap() {
 
   els.heatmapSection.hidden = false;
 
-  if (!state.participant.has_submitted_availability) {
+  if (!canViewGroupResults()) {
     els.heatmapGrid.innerHTML =
       '<p class="muted">Submit your availability to see which days work best for the group.</p>';
     if (els.heatmapLegend) els.heatmapLegend.hidden = true;
@@ -918,10 +925,14 @@ function renderMultiGrid() {
   const canSee = canSeeIndividualGrids(state.event, state.participant, state.session);
   if (!canSee) {
     els.multiSection.hidden = true;
-    els.blindGate.hidden = !state.participant || state.participant.has_submitted_availability;
-    if (!state.participant?.has_submitted_availability) {
-      els.blindGate.hidden = false;
-      els.blindGate.textContent = BLIND_GATE_MESSAGE;
+    if (hasOrganizerAccess()) {
+      els.blindGate.hidden = true;
+    } else {
+      els.blindGate.hidden = !state.participant || state.participant.has_submitted_availability;
+      if (!state.participant?.has_submitted_availability) {
+        els.blindGate.hidden = false;
+        els.blindGate.textContent = BLIND_GATE_MESSAGE;
+      }
     }
     return;
   }
@@ -1542,7 +1553,7 @@ function setupJoin() {
   });
 
   els.copyOverlapBtn?.addEventListener('click', async () => {
-    if (!state.participant?.has_submitted_availability) return;
+    if (!canViewGroupResults()) return;
     const ranges = computeOverlap(state.event, state.participants, viewerSlots());
     const text = formatOverlapSummary(state.event, ranges);
     await copyToClipboard(text);
@@ -1550,7 +1561,7 @@ function setupJoin() {
   });
 
   els.downloadIcsBtn?.addEventListener('click', () => {
-    if (!state.participant?.has_submitted_availability) return;
+    if (!canViewGroupResults()) return;
     const ranges = computeOverlap(state.event, state.participants, viewerSlots());
     if (!ranges.length) return;
     const ics = overlapToIcs(state.event, ranges);
