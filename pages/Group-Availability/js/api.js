@@ -44,6 +44,27 @@ export async function fetchSlots(eventId, client) {
   return data || [];
 }
 
+export async function fetchParticipantSlots(eventId, participantId, client) {
+  const db = client || getAuthClient();
+  const { data, error } = await db
+    .from('availability_slots')
+    .select('*')
+    .eq('event_id', eventId)
+    .eq('participant_id', participantId);
+  if (error) throw error;
+  return data || [];
+}
+
+async function deleteSlotsByIds(db, ids) {
+  if (!ids.length) return;
+  const chunkSize = 100;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { error } = await db.from('availability_slots').delete().in('id', chunk);
+    if (error) throw error;
+  }
+}
+
 export async function findAuthParticipant(eventId, userId, client) {
   const db = client || getAuthClient();
   const { data, error } = await db
@@ -185,8 +206,8 @@ export async function markSubmitted(participantId, client) {
 
 export async function syncSlots(event, participantId, slotMap, client) {
   const db = client || getAuthClient();
-  const existing = await fetchSlots(event.id, db);
-  const mine = existing.filter((s) => s.participant_id === participantId);
+  const mine = await fetchParticipantSlots(event.id, participantId, db);
+  const mineByStart = new Map(mine.map((s) => [s.slot_start, s]));
   const desired = new Map();
 
   for (const [key, confidence] of slotMap.entries()) {
@@ -199,7 +220,7 @@ export async function syncSlots(event, participantId, slotMap, client) {
   const toUpsert = [];
 
   for (const [iso, confidence] of desired.entries()) {
-    const prev = mine.find((s) => s.slot_start === iso);
+    const prev = mineByStart.get(iso);
     if (!prev || prev.confidence !== confidence) {
       toUpsert.push({
         participant_id: participantId,
@@ -210,10 +231,10 @@ export async function syncSlots(event, participantId, slotMap, client) {
     }
   }
 
-  for (const row of toDelete) {
-    const { error } = await db.from('availability_slots').delete().eq('id', row.id);
-    if (error) throw error;
-  }
+  await deleteSlotsByIds(
+    db,
+    toDelete.map((row) => row.id)
+  );
 
   if (toUpsert.length) {
     const { error } = await db.from('availability_slots').upsert(toUpsert, {

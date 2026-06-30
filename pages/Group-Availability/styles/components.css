@@ -988,6 +988,9 @@ textarea {
 
 .best-day-score {
   --score-pct: 0%;
+  --score-ring-fill: var(--accent-brass);
+  --score-ring-track: color-mix(in srgb, var(--border-paper) 70%, var(--surface-paper-inset));
+  position: relative;
   flex-shrink: 0;
   width: 72px;
   height: 72px;
@@ -996,24 +999,34 @@ textarea {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.35), transparent 55%),
-    conic-gradient(
-      var(--accent-brass-light) 0 var(--score-pct),
-      color-mix(in srgb, var(--border-paper) 65%, transparent) var(--score-pct) 100%
-    );
+  color: var(--text-ink);
+  background: conic-gradient(
+    var(--score-ring-fill) 0 var(--score-pct),
+    var(--score-ring-track) var(--score-pct) 100%
+  );
   border: 2px solid var(--accent-brass-light);
   box-shadow: var(--shadow-raised);
 }
 
+.best-day-score::before {
+  content: '';
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--surface-paper-raised) 0%, var(--surface-paper-inset) 100%);
+  box-shadow: var(--shadow-inset);
+}
+
 .best-day-score.is-perfect {
+  --score-ring-fill: var(--color-likely-dark);
+  --score-ring-track: color-mix(in srgb, var(--color-likely-dark) 22%, var(--surface-paper-inset));
   border-color: var(--color-likely);
-  background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.35), transparent 55%),
-    conic-gradient(
-      var(--color-likely-light) 0 var(--score-pct),
-      color-mix(in srgb, var(--color-likely) 25%, var(--border-paper)) var(--score-pct) 100%
-    );
+}
+
+.best-day-score-value,
+.best-day-score-label {
+  position: relative;
+  z-index: 1;
 }
 
 .best-day-score-value {
@@ -1028,6 +1041,24 @@ textarea {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.85;
+}
+
+[data-theme="dark"] .best-day-score {
+  --score-ring-fill: var(--accent-brass);
+  --score-ring-track: #1e293b;
+  border-color: var(--accent-brass-light);
+  color: var(--text-ink);
+}
+
+[data-theme="dark"] .best-day-score.is-perfect {
+  --score-ring-fill: #15803d;
+  --score-ring-track: #1a2e22;
+  border-color: #22c55e;
+  color: #ecfdf5;
+}
+
+[data-theme="dark"] .best-day-score.is-perfect .best-day-score-value {
+  color: #ecfdf5;
 }
 
 .best-day-picker-wrap {

@@ -54,6 +54,7 @@ import {
   slotsToDaySelection,
   hourToTimeInput,
   parseTimeInput,
+  localSlotToUtc,
   syncEventUrl,
   eventUrl,
 } from './utils.js';
@@ -846,13 +847,32 @@ function getEffectiveBestDayDate() {
   return getTopDayDateStr(state.rankedDays);
 }
 
-function selectBestDay(dateStr, { scrollIntoView = false } = {}) {
+function scrollPickerChipIntoView(dateStr) {
+  if (!els.bestDayPicker || !dateStr) return;
+  const chip = els.bestDayPicker.querySelector(`[data-date-str="${dateStr}"]`);
+  if (!chip) return;
+
+  const picker = els.bestDayPicker;
+  const chipLeft = chip.offsetLeft;
+  const chipRight = chipLeft + chip.offsetWidth;
+  const viewLeft = picker.scrollLeft;
+  const viewRight = viewLeft + picker.clientWidth;
+
+  if (chipLeft < viewLeft) {
+    picker.scrollLeft = Math.max(0, chipLeft - 8);
+  } else if (chipRight > viewRight) {
+    picker.scrollLeft = chipRight - picker.clientWidth + 8;
+  }
+}
+
+function selectBestDay(dateStr, { scrollPicker = false } = {}) {
   if (!dateStr) return;
+  const changed = state.selectedBestDay !== dateStr;
   state.selectedBestDay = dateStr;
   renderBestDay();
   renderOverlap();
-  if (scrollIntoView && els.bestDaySection) {
-    els.bestDaySection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (scrollPicker && changed) {
+    scrollPickerChipIntoView(dateStr);
   }
 }
 
@@ -936,6 +956,7 @@ function renderBestDay() {
 
   if (els.bestDayPicker) {
     const maxScore = ranked[0]?.score || 1;
+    const pickerScrollLeft = els.bestDayPicker.scrollLeft;
     els.bestDayPicker.innerHTML = ranked
       .map((day) => {
         const selected = day.dateStr === dateStr;
@@ -957,9 +978,7 @@ function renderBestDay() {
       </button>`;
       })
       .join('');
-
-    const selectedChip = els.bestDayPicker.querySelector('.best-day-chip.is-selected');
-    selectedChip?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+    els.bestDayPicker.scrollLeft = pickerScrollLeft;
   }
 }
 
@@ -1464,7 +1483,7 @@ async function saveAvailability(options = {}) {
       els.blindGate.hidden = true;
       await reloadData();
     } else {
-      await reloadSlots();
+      applyLocalSlotsFromMap(state.participant.id, slotMap);
     }
     captureSavedSnapshot();
     renderOverlap();
@@ -1488,6 +1507,33 @@ async function saveAvailability(options = {}) {
 
 async function reloadSlots() {
   state.slots = await fetchSlots(state.event.id, client());
+}
+
+function applyLocalSlotsFromMap(participantId, slotMap) {
+  if (!state.event) return;
+
+  const others = state.slots.filter((s) => s.participant_id !== participantId);
+  const existingMine = state.slots.filter((s) => s.participant_id === participantId);
+  const existingByStart = new Map(existingMine.map((s) => [s.slot_start, s]));
+  const mine = [];
+
+  for (const [key, confidence] of slotMap.entries()) {
+    const [dateStr, hourStr] = key.split('|');
+    const iso = localSlotToUtc(dateStr, parseInt(hourStr, 10), state.event.timezone);
+    const existing = existingByStart.get(iso);
+    mine.push(
+      existing
+        ? { ...existing, confidence }
+        : {
+            participant_id: participantId,
+            event_id: state.event.id,
+            slot_start: iso,
+            confidence,
+          }
+    );
+  }
+
+  state.slots = [...others, ...mine];
 }
 
 async function reloadData() {
@@ -1791,7 +1837,7 @@ function setupBestDayInteractions() {
   els.overlapList?.addEventListener('click', (e) => {
     const item = e.target.closest('.overlap-item-selectable[data-date-str]');
     if (!item) return;
-    selectBestDay(item.dataset.dateStr, { scrollIntoView: true });
+    selectBestDay(item.dataset.dateStr, { scrollPicker: true });
   });
 
   els.bestDayPicker?.addEventListener('click', (e) => {
