@@ -226,9 +226,22 @@ export function buildShareUrl(slug) {
 
 /** Private guest edit link — includes secret token; send only to that person. */
 export function buildGuestEditUrl(slug, guestToken) {
-  const base = buildShareUrl(slug);
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : SHARE_ORIGIN;
+  const base = `${origin}${eventUrl(slug)}`;
   const sep = base.includes('?') ? '&' : '?';
   return `${base}${sep}guest=${encodeURIComponent(guestToken)}`;
+}
+
+export function readGuestTokenFromLocation() {
+  try {
+    const token = new URLSearchParams(window.location.search).get('guest')?.trim();
+    return token || null;
+  } catch {
+    return null;
+  }
 }
 
 function readGuestTokenFromUrl(params) {

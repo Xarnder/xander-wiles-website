@@ -1,7 +1,7 @@
 import { isSupabaseConfigured } from '../supabase-config.js';
 import { recoverOAuthRedirectFromSiteRoot } from './oauth-recover.js';
 import { getSession, signInWithGoogle, onAuthStateChange, profileFromSession, applyAvatarImage } from './auth.js';
-import { getActiveClient } from './supabase-client.js';
+import { getActiveClient, getGuestClient } from './supabase-client.js';
 import {
   fetchEventBySlug,
   fetchEventById,
@@ -9,6 +9,7 @@ import {
   fetchSlots,
   joinAsAuthUser,
   joinAsGuest,
+  findGuestParticipant,
   syncSlots,
   markSubmitted,
   updateEvent,
@@ -26,6 +27,9 @@ import {
   getGuestViewParticipantId,
   setGuestViewParticipantId,
   clearGuestViewParticipantId,
+  stashGuestTokenFromUrl,
+  takePendingGuestToken,
+  clearPendingGuestToken,
 } from './guest.js';
 import { buildDayCalendar, buildMultiDayCalendar, buildGroupHeatCalendar } from './calendar.js';
 import { computeDayAvailabilityCounts, heatColor, heatIntensity } from './heatmap.js';
@@ -51,6 +55,7 @@ import {
   buildShareUrl,
   buildGuestEditUrl,
   stripGuestParamFromUrl,
+  readGuestTokenFromLocation,
   formatDbError,
   clearEventNavStorage,
   expandDaysToSlotMap,
@@ -62,7 +67,13 @@ import {
   eventUrl,
 } from './utils.js';
 
+const initialGuestToken = readGuestTokenFromLocation();
+if (initialGuestToken) {
+  stashGuestTokenFromUrl(getEventContextFromLocation().slug, initialGuestToken);
+}
+
 let slug = null;
+let eventBootComplete = false;
 
 const els = {
   loading: document.getElementById('loading'),
@@ -1647,8 +1658,8 @@ function toLocalInputValue(iso, timeZone) {
   return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
 }
 
-async function ensureParticipant() {
-  if (state.session && state.profile) {
+async function ensureParticipant({ preferGuest = false } = {}) {
+  if (state.session && state.profile && !preferGuest) {
     state.guestMode = null;
     state.participant = await joinAsAuthUser(state.event, state.profile, client());
     const guestTok = getGuestToken(state.event.id);
@@ -1731,12 +1742,40 @@ async function handleCopyGuestPersonalLink() {
   else showToast('Could not copy — select the link and copy manually', 'error');
 }
 
+function resolveGuestLinkToken(ctx) {
+  return (
+    ctx.guestToken ||
+    readGuestTokenFromLocation() ||
+    takePendingGuestToken(ctx.slug || slug)
+  );
+}
+
+async function restoreGuestFromLink(guestToken) {
+  const guestClient = getGuestClient(guestToken);
+  const existing = await findGuestParticipant(state.event.id, guestToken, guestClient);
+  if (!existing) return false;
+
+  state.guestMode = 'edit';
+  state.guestToken = guestToken;
+  state.participant = existing;
+  setGuestToken(state.event.id, guestToken);
+  localStorage.setItem(`wth_guest_name_${state.event.id}`, existing.display_name);
+  setParticipantId(state.event.id, existing.id);
+  clearGuestViewParticipantId(state.event.id);
+  clearPendingGuestToken();
+  return true;
+}
+
 async function bootEvent() {
   initChrome({ homeHref: 'index.html', homeLabel: '← Home' });
   if (recoverOAuthRedirectFromSiteRoot()) return;
 
   const ctx = getEventContextFromLocation();
   slug = ctx.slug;
+  const guestLinkToken = resolveGuestLinkToken(ctx);
+  if (guestLinkToken) {
+    stashGuestTokenFromUrl(slug || ctx.slug, guestLinkToken);
+  }
 
   if (!slug && !ctx.eventId) {
     els.loading.hidden = true;
@@ -1774,34 +1813,58 @@ async function bootEvent() {
 
     clearEventNavStorage();
 
-    if (ctx.guestToken) {
-      setGuestToken(state.event.id, ctx.guestToken);
+    const openedViaGuestLink = Boolean(guestLinkToken);
+
+    if (guestLinkToken) {
+      setGuestToken(state.event.id, guestLinkToken);
       clearGuestViewParticipantId(state.event.id);
+      state.guestToken = guestLinkToken;
       stripGuestParamFromUrl();
+    } else {
+      state.guestToken = getGuestToken(state.event.id);
     }
 
     if (slug) syncEventUrl(slug);
 
     updateShareLink();
 
-    state.guestToken = getGuestToken(state.event.id);
-
     renderEventHeader();
     renderStatus();
     startCountdownTimer();
+
+    if (openedViaGuestLink && state.guestToken) {
+      const restored = await restoreGuestFromLink(state.guestToken);
+      if (!restored) {
+        clearGuestToken(state.event.id);
+        state.guestToken = null;
+        state.guestMode = null;
+        els.loading.hidden = true;
+        els.app.hidden = false;
+        showGuestSetupUi();
+        showToast('This private edit link is invalid or expired. Ask the organizer for a new one.', 'error');
+        updateOrganizerUi();
+        return;
+      }
+    }
 
     await reloadData();
 
     els.loading.hidden = true;
     els.app.hidden = false;
 
-    if (state.session) {
+    if (openedViaGuestLink && state.participant) {
+      showJoinedUi();
+    } else if (state.session) {
       await ensureParticipant();
       showJoinedUi();
     } else if (state.guestToken) {
       state.guestMode = 'edit';
-      await ensureParticipant();
-      showJoinedUi();
+      await ensureParticipant({ preferGuest: true });
+      if (!state.participant) {
+        showGuestSetupUi();
+      } else {
+        showJoinedUi();
+      }
     } else {
       const viewId = getGuestViewParticipantId(state.event.id);
       if (viewId && enterGuestViewMode(viewId)) {
@@ -1850,6 +1913,8 @@ async function bootEvent() {
     els.notFound.hidden = false;
     document.getElementById('not-found-detail').textContent = formatDbError(err);
     showToast(formatDbError(err), 'error');
+  } finally {
+    eventBootComplete = true;
   }
 }
 
@@ -2177,16 +2242,16 @@ setupUnloadGuard();
 bootEvent();
 
 onAuthStateChange(async (session) => {
-  if (!state.event) return;
+  if (!state.event || !eventBootComplete) return;
   state.session = session;
   state.profile = session ? profileFromSession(session) : null;
-  if (session && !state.participant?.user_id) {
+  if (session && !state.participant?.user_id && !state.guestToken) {
     await ensureParticipant();
     await reloadData();
     showJoinedUi();
   } else if (session) {
     updateOrganizerUi();
-  } else if (!session && !state.participant && state.event) {
+  } else if (!session && !state.participant && state.event && !state.guestToken) {
     leaveGuestViewMode();
     showGuestSetupUi();
   }
