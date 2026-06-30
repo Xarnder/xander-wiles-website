@@ -56,9 +56,35 @@
           <span id="identity-display-name" class="identity-display-name"></span>
         </div>
 
+        <div id="identity-guest-view" class="identity-guest-view" hidden>
+          <p class="identity-view-badge">Viewing results only</p>
+          <p class="identity-view-name">Viewing as <strong id="guest-view-display-name"></strong></p>
+          <p class="muted identity-view-hint">You can see the group results and your submitted days, but you can't change anything from this browser. Ask the organizer to remove you if you need to edit and resubmit.</p>
+          <div class="identity-form-actions">
+            <button type="button" id="guest-switch-person" class="btn btn-ghost">Switch person</button>
+            <button type="button" id="google-join-view" class="btn btn-ghost btn-google-opt">Sign in with Google</button>
+          </div>
+        </div>
+
         <div id="identity-guest-display" class="identity-profile-row" hidden>
           <span id="guest-display-name" class="identity-display-name"></span>
           <button type="button" id="edit-name-btn" class="btn btn-ghost">Edit</button>
+        </div>
+
+        <div id="identity-guest-setup" class="identity-guest-setup" hidden>
+          <p class="muted identity-setup-lead">Join to mark when you're free, or view results if you've already responded.</p>
+          <div id="identity-returning-block" class="identity-returning-block" hidden>
+            <p class="identity-block-label">Already submitted?</p>
+            <p class="muted identity-block-hint">Pick your name to view results. This device can't edit your submission — only view.</p>
+            <label class="guest-view-field" for="guest-view-select">
+              <span class="guest-name-label">Select your name</span>
+              <select id="guest-view-select" class="guest-view-select">
+                <option value="">Choose…</option>
+              </select>
+            </label>
+            <button type="button" id="guest-view-results" class="btn btn-primary">View results</button>
+          </div>
+          <p id="identity-setup-divider" class="identity-setup-divider muted" hidden>or join as someone new</p>
         </div>
 
         <div id="identity-guest-edit" class="identity-name-form" hidden>
@@ -67,7 +93,7 @@
             <input type="text" id="guest-name-input" maxlength="60" placeholder="Alex" autocomplete="name">
           </label>
           <div class="identity-form-actions">
-            <button type="button" id="guest-save-name" class="btn btn-primary">Save name</button>
+            <button type="button" id="guest-save-name" class="btn btn-primary">Continue</button>
             <button type="button" id="name-cancel-btn" class="btn btn-ghost">Cancel</button>
             <button type="button" id="google-join" class="btn btn-ghost btn-google-opt">Sign in with Google</button>
           </div>
@@ -100,7 +126,7 @@
       <section id="paint-section">
         <div class="section-heading panel">
           <h2 class="section-title">Your availability</h2>
-          <p class="section-lead muted">Tap days on the calendar — green = likely free, yellow = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong>.</p>
+          <p id="paint-section-lead" class="section-lead muted">Tap days on the calendar — green = likely free, yellow = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong>.</p>
         </div>
 
         <div id="paint-toolbar" class="paint-toolbar panel">

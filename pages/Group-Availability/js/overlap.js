@@ -74,7 +74,14 @@ function mergeAdjacent(scored, event) {
     }
   }
   if (cur) ranges.push(formatRange(cur, event));
-  ranges.sort((a, b) => b.score - a.score || b.likely - a.likely);
+  ranges.sort(
+    (a, b) =>
+      b.score - a.score ||
+      b.likely - a.likely ||
+      a.startDateStr.localeCompare(b.startDateStr) ||
+      a.startHour - b.startHour ||
+      (a.utc || '').localeCompare(b.utc || '')
+  );
   return ranges.slice(0, 20);
 }
 
@@ -102,6 +109,7 @@ function formatRange(cur, event) {
     startHour: cur.hour,
     endDateStr: cur.endDateStr,
     endHour: cur.endHour,
+    utc: cur.utc,
   };
 }
 

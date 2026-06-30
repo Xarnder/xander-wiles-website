@@ -22,6 +22,9 @@ import {
   createGuestToken,
   clearGuestToken,
   setParticipantId,
+  getGuestViewParticipantId,
+  setGuestViewParticipantId,
+  clearGuestViewParticipantId,
 } from './guest.js';
 import { buildDayCalendar, buildMultiDayCalendar, buildGroupHeatCalendar } from './calendar.js';
 import { computeDayAvailabilityCounts, heatColor, heatIntensity } from './heatmap.js';
@@ -71,6 +74,15 @@ const els = {
   identityBar: document.getElementById('identity-bar'),
   identityGoogleView: document.getElementById('identity-google-view'),
   identityGuestDisplay: document.getElementById('identity-guest-display'),
+  identityGuestSetup: document.getElementById('identity-guest-setup'),
+  identityReturningBlock: document.getElementById('identity-returning-block'),
+  identitySetupDivider: document.getElementById('identity-setup-divider'),
+  guestViewSelect: document.getElementById('guest-view-select'),
+  guestViewResultsBtn: document.getElementById('guest-view-results'),
+  identityGuestView: document.getElementById('identity-guest-view'),
+  guestViewDisplayName: document.getElementById('guest-view-display-name'),
+  guestSwitchPersonBtn: document.getElementById('guest-switch-person'),
+  googleJoinView: document.getElementById('google-join-view'),
   identityGuestEdit: document.getElementById('identity-guest-edit'),
   identityDisplayName: document.getElementById('identity-display-name'),
   guestDisplayName: document.getElementById('guest-display-name'),
@@ -81,6 +93,7 @@ const els = {
   editNameBtn: document.getElementById('edit-name-btn'),
   nameCancelBtn: document.getElementById('name-cancel-btn'),
   paintSection: document.getElementById('paint-section'),
+  paintSectionLead: document.getElementById('paint-section-lead'),
   overlapSection: document.getElementById('overlap-section'),
   paintGrid: document.getElementById('paint-grid'),
   timeStart: document.getElementById('time-start'),
@@ -158,6 +171,7 @@ let state = {
   profile: null,
   participant: null,
   guestToken: null,
+  guestMode: null,
   participants: [],
   slots: [],
   paintController: null,
@@ -478,10 +492,104 @@ function setEventSectionsEnabled(enabled) {
   }
 }
 
+function isGuestViewOnly() {
+  return state.guestMode === 'view';
+}
+
+function isGuestEditMode() {
+  return (
+    Boolean(state.participant && !state.participant.user_id) &&
+    state.guestMode === 'edit' &&
+    Boolean(state.guestToken)
+  );
+}
+
+function canEditAvailability() {
+  if (!state.participant || !eventAllowsEdits(state.event)) return false;
+  if (isGuestPreviewActive()) return false;
+  if (isGuestViewOnly()) return false;
+  if (state.participant.user_id) return Boolean(state.session);
+  return isGuestEditMode();
+}
+
+function canEditGuestProfile() {
+  return isGuestEditMode() && !state.participant?.has_submitted_availability;
+}
+
+function submittedParticipants() {
+  return state.participants
+    .filter((p) => p.has_submitted_availability)
+    .sort((a, b) => a.display_name.localeCompare(b.display_name));
+}
+
+function populateGuestViewSelect() {
+  if (!els.guestViewSelect) return;
+  const submitted = submittedParticipants();
+  const options = ['<option value="">Choose…</option>'];
+  for (const p of submitted) {
+    options.push(
+      `<option value="${escapeHtml(p.id)}">${escapeHtml(p.display_name)}</option>`
+    );
+  }
+  els.guestViewSelect.innerHTML = options.join('');
+
+  const showReturning = submitted.length > 0;
+  if (els.identityReturningBlock) els.identityReturningBlock.hidden = !showReturning;
+  if (els.identitySetupDivider) els.identitySetupDivider.hidden = !showReturning;
+}
+
+function enterGuestViewMode(participantId) {
+  const participant = state.participants.find((p) => p.id === participantId);
+  if (!participant?.has_submitted_availability) {
+    showToast('That person has not submitted yet', 'error');
+    return false;
+  }
+
+  state.participant = participant;
+  state.guestMode = 'view';
+  state.guestToken = null;
+  state.editingGuestName = false;
+  setGuestViewParticipantId(state.event.id, participant.id);
+  return true;
+}
+
+function leaveGuestViewMode() {
+  state.participant = null;
+  state.guestMode = null;
+  state.editingGuestName = false;
+  if (state.event) clearGuestViewParticipantId(state.event.id);
+}
+
+function updatePaintSectionLead() {
+  if (!els.paintSectionLead) return;
+  if (isGuestViewOnly()) {
+    els.paintSectionLead.innerHTML =
+      'Your submitted availability <strong>(read-only)</strong>. You cannot change days from this browser.';
+    return;
+  }
+  if (!canEditAvailability()) {
+    els.paintSectionLead.textContent =
+      'Mark when you are free once you join above. Results appear after you save.';
+    return;
+  }
+  els.paintSectionLead.innerHTML =
+    'Tap days on the calendar — green = likely free, yellow = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong>.';
+}
+
 function hideAllIdentityPanels() {
   if (els.identityGoogleView) els.identityGoogleView.hidden = true;
   if (els.identityGuestDisplay) els.identityGuestDisplay.hidden = true;
   if (els.identityGuestEdit) els.identityGuestEdit.hidden = true;
+  if (els.identityGuestSetup) els.identityGuestSetup.hidden = true;
+  if (els.identityGuestView) els.identityGuestView.hidden = true;
+}
+
+function showGuestViewMode() {
+  hideAllIdentityPanels();
+  if (els.guestViewDisplayName) {
+    els.guestViewDisplayName.textContent = state.participant?.display_name || '';
+  }
+  if (els.identityGuestView) els.identityGuestView.hidden = false;
 }
 
 function showGuestDisplayMode() {
@@ -489,11 +597,16 @@ function showGuestDisplayMode() {
   if (els.guestDisplayName) {
     els.guestDisplayName.textContent = state.participant?.display_name || '';
   }
+  if (els.editNameBtn) els.editNameBtn.hidden = !canEditGuestProfile();
   if (els.identityGuestDisplay) els.identityGuestDisplay.hidden = false;
 }
 
 function showGuestEditMode({ setup = false } = {}) {
   hideAllIdentityPanels();
+  if (setup && els.identityGuestSetup) {
+    populateGuestViewSelect();
+    els.identityGuestSetup.hidden = false;
+  }
   if (els.guestNameInput) {
     els.guestNameInput.value = setup ? '' : state.participant?.display_name || '';
   }
@@ -501,7 +614,7 @@ function showGuestEditMode({ setup = false } = {}) {
   if (els.googleJoin) els.googleJoin.hidden = setup;
   if (els.guestSaveName) els.guestSaveName.hidden = false;
   if (els.identityGuestEdit) els.identityGuestEdit.hidden = false;
-  els.guestNameInput?.focus();
+  if (!setup) els.guestNameInput?.focus();
 }
 
 function renderIdentityUi() {
@@ -516,34 +629,57 @@ function renderIdentityUi() {
     }
     applyAvatarImage(els.identityAvatar, state.participant.avatar_url || state.profile?.avatarUrl);
     setEventSectionsEnabled(true);
+    updatePaintSectionLead();
     return;
   }
 
-  if (isGuestParticipant()) {
+  if (isGuestViewOnly()) {
+    state.editingGuestName = false;
+    showGuestViewMode();
+    setEventSectionsEnabled(true);
+    updatePaintSectionLead();
+    return;
+  }
+
+  if (isGuestEditMode()) {
     if (state.editingGuestName) {
       showGuestEditMode({ setup: false });
     } else {
       showGuestDisplayMode();
     }
     setEventSectionsEnabled(true);
+    updatePaintSectionLead();
     return;
   }
 
   state.editingGuestName = false;
   showGuestEditMode({ setup: true });
   setEventSectionsEnabled(false);
+  updatePaintSectionLead();
 }
 
 function startGuestNameEdit() {
-  if (!isGuestParticipant()) return;
+  if (!canEditGuestProfile()) return;
   state.editingGuestName = true;
   renderIdentityUi();
 }
 
 function cancelGuestNameEdit() {
-  if (!isGuestParticipant()) return;
+  if (!isGuestEditMode()) return;
   state.editingGuestName = false;
   renderIdentityUi();
+}
+
+function startGuestViewFromSelect() {
+  const participantId = els.guestViewSelect?.value;
+  if (!participantId) {
+    showToast('Select your name from the list', 'error');
+    els.guestViewSelect?.focus();
+    return;
+  }
+  if (!enterGuestViewMode(participantId)) return;
+  showJoinedUi();
+  showToast('Showing results (read-only)');
 }
 
 function updateBrushIndicator() {
@@ -699,10 +835,17 @@ async function handleRemoveGuest(participant) {
 
   try {
     await deleteParticipant(participant.id);
+    if (state.participant?.id === participant.id) {
+      leaveGuestViewMode();
+    }
     await reloadData();
-    renderMultiGrid();
-    renderOverlap();
-    renderHeatMap();
+    if (!state.participant) {
+      showGuestSetupUi();
+    } else {
+      renderMultiGrid();
+      renderOverlap();
+      renderHeatMap();
+    }
     showToast(`${name} removed`);
   } catch (err) {
     console.error(err);
@@ -851,7 +994,7 @@ function setTimeRangeEditing(editing) {
 }
 
 function startTimeRangeEdit() {
-  if (!state.participant || !eventAllowsEdits(state.event)) return;
+  if (!canEditAvailability()) return;
   setTimeRangeEditing(true);
   setTimeInputs(state.appliedTimeStart, state.appliedTimeEnd, false);
   els.timeStart?.focus();
@@ -908,7 +1051,7 @@ function clearAutoSaveTimer() {
 function scheduleAutoSave() {
   clearAutoSaveTimer();
   if (!state.hasUnsavedChanges || state.isSaving) return;
-  if (!state.participant || !eventAllowsEdits(state.event)) return;
+  if (!canEditAvailability()) return;
 
   autoSaveTimer = setTimeout(() => {
     autoSaveTimer = null;
@@ -935,7 +1078,8 @@ function markLocalChange() {
 
 function updateSaveButton() {
   if (!els.saveAvailability) return;
-  const canEdit = Boolean(state.participant && eventAllowsEdits(state.event));
+  const canEdit = canEditAvailability();
+  if (els.toolbar) els.toolbar.hidden = !canEdit;
   els.saveAvailability.hidden = !canEdit;
   els.saveAvailability.disabled = !state.hasUnsavedChanges || state.isSaving;
   els.saveAvailability.classList.toggle('save-flash', state.hasUnsavedChanges && !state.isSaving);
@@ -943,7 +1087,7 @@ function updateSaveButton() {
 }
 
 function renderPaintGrid() {
-  const readOnly = !state.participant || !eventAllowsEdits(state.event);
+  const readOnly = !canEditAvailability();
 
   if (!state.participant) {
     state.appliedTimeStart = 10;
@@ -989,7 +1133,7 @@ function renderPaintGrid() {
 
 async function saveAvailability(options = {}) {
   const { auto = false } = options;
-  if (!state.participant || !eventAllowsEdits(state.event)) return;
+  if (!canEditAvailability()) return;
   if (!state.hasUnsavedChanges || state.isSaving) return;
 
   const startHour = parseTimeInput(els.timeStart?.value);
@@ -1042,6 +1186,17 @@ async function reloadData() {
   state.participants = await fetchParticipants(state.event.id, client());
   state.slots = await fetchSlots(state.event.id, client());
   els.participantCount.textContent = `${state.participants.length} participant${state.participants.length === 1 ? '' : 's'}`;
+
+  if (isGuestViewOnly() && state.participant) {
+    const fresh = state.participants.find((p) => p.id === state.participant.id);
+    if (!fresh?.has_submitted_availability) {
+      leaveGuestViewMode();
+      showGuestSetupUi();
+      showToast('That person is no longer available to view', 'error');
+      return;
+    }
+    state.participant = fresh;
+  }
 }
 
 function showGuestSetupUi() {
@@ -1057,6 +1212,7 @@ function showJoinedUi() {
   renderIdentityUi();
   updateOrganizerUi();
   updateBrushIndicator();
+  updatePaintSectionLead();
   renderPaintGrid();
   renderMultiGrid();
   renderOverlap();
@@ -1080,6 +1236,7 @@ function toLocalInputValue(iso, timeZone) {
 
 async function ensureParticipant() {
   if (state.session && state.profile) {
+    state.guestMode = null;
     state.participant = await joinAsAuthUser(state.event, state.profile, client());
     const guestTok = getGuestToken(state.event.id);
     if (guestTok) {
@@ -1093,6 +1250,7 @@ async function ensureParticipant() {
       }
     }
   } else if (state.guestToken) {
+    state.guestMode = 'edit';
     const name = localStorage.getItem(`wth_guest_name_${state.event.id}`) || 'Guest';
     state.participant = await joinAsGuest(state.event, name, state.guestToken);
   }
@@ -1166,10 +1324,17 @@ async function bootEvent() {
       await ensureParticipant();
       showJoinedUi();
     } else if (state.guestToken) {
+      state.guestMode = 'edit';
       await ensureParticipant();
       showJoinedUi();
     } else {
-      showGuestSetupUi();
+      const viewId = getGuestViewParticipantId(state.event.id);
+      if (viewId && enterGuestViewMode(viewId)) {
+        showJoinedUi();
+      } else {
+        if (viewId) clearGuestViewParticipantId(state.event.id);
+        showGuestSetupUi();
+      }
     }
 
     updateOrganizerUi();
@@ -1273,8 +1438,10 @@ async function saveGuestName() {
   if (!state.participant) {
     const token = createGuestToken();
     setGuestToken(state.event.id, token);
+    clearGuestViewParticipantId(state.event.id);
     localStorage.setItem(`wth_guest_name_${state.event.id}`, name);
     state.guestToken = token;
+    state.guestMode = 'edit';
     await ensureParticipant();
     await reloadData();
     showJoinedUi();
@@ -1282,7 +1449,7 @@ async function saveGuestName() {
     return;
   }
 
-  if (!isGuestParticipant()) return;
+  if (!isGuestEditMode() || !canEditGuestProfile()) return;
 
   const db = client();
   const { data, error } = await db
@@ -1307,6 +1474,26 @@ async function saveGuestName() {
 function setupJoin() {
   els.googleJoin?.addEventListener('click', async () => {
     await signInWithGoogle(`${APP_BASE}/event?slug=${encodeURIComponent(slug)}`);
+  });
+
+  els.googleJoinView?.addEventListener('click', async () => {
+    await signInWithGoogle(`${APP_BASE}/event?slug=${encodeURIComponent(slug)}`);
+  });
+
+  els.guestViewResultsBtn?.addEventListener('click', () => {
+    startGuestViewFromSelect();
+  });
+
+  els.guestViewSelect?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      startGuestViewFromSelect();
+    }
+  });
+
+  els.guestSwitchPersonBtn?.addEventListener('click', () => {
+    leaveGuestViewMode();
+    showGuestSetupUi();
   });
 
   els.guestSaveName?.addEventListener('click', () => {
@@ -1408,6 +1595,7 @@ onAuthStateChange(async (session) => {
   } else if (session) {
     updateOrganizerUi();
   } else if (!session && !state.participant && state.event) {
+    leaveGuestViewMode();
     showGuestSetupUi();
   }
 });

@@ -25,3 +25,29 @@ export function setParticipantId(eventId, participantId) {
 export function getParticipantId(eventId) {
   return localStorage.getItem(`${PARTICIPANT_KEY_PREFIX}${eventId}`);
 }
+
+const GUEST_VIEW_KEY_PREFIX = 'wth_guest_view_';
+
+export function getGuestViewParticipantId(eventId) {
+  try {
+    return sessionStorage.getItem(`${GUEST_VIEW_KEY_PREFIX}${eventId}`);
+  } catch {
+    return null;
+  }
+}
+
+export function setGuestViewParticipantId(eventId, participantId) {
+  try {
+    sessionStorage.setItem(`${GUEST_VIEW_KEY_PREFIX}${eventId}`, participantId);
+  } catch {
+    /* private browsing */
+  }
+}
+
+export function clearGuestViewParticipantId(eventId) {
+  try {
+    sessionStorage.removeItem(`${GUEST_VIEW_KEY_PREFIX}${eventId}`);
+  } catch {
+    /* ignore */
+  }
+}
