@@ -7,7 +7,32 @@ import {
 } from './utils.js';
 import { heatColor, heatTextColor } from './heatmap.js';
 
-const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const WEEKDAYS = [
+  { short: 'Mo', label: 'Monday' },
+  { short: 'Tu', label: 'Tuesday' },
+  { short: 'We', label: 'Wednesday' },
+  { short: 'Th', label: 'Thursday' },
+  { short: 'Fr', label: 'Friday' },
+  { short: 'Sa', label: 'Saturday' },
+  { short: 'Su', label: 'Sunday' },
+];
+
+const CONFIDENCE_LABELS = {
+  likely: 'likely free',
+  maybe: 'maybe free',
+};
+
+function formatDayAriaLabel(dateKey, event, confidence) {
+  const dateLabel = new Intl.DateTimeFormat('en-GB', {
+    timeZone: event.timezone,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date(`${dateKey}T12:00:00`));
+
+  if (!confidence) return `${dateLabel}, not marked`;
+  return `${dateLabel}, ${CONFIDENCE_LABELS[confidence] || confidence}`;
+}
 
 function isWeekendDateKey(dateKey, timeZone) {
   const weekday = new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'short' }).format(
@@ -17,9 +42,10 @@ function isWeekendDateKey(dateKey, timeZone) {
 }
 
 function appendWeekdayHeader(weekdayRow) {
-  WEEKDAYS.forEach((label, index) => {
+  WEEKDAYS.forEach((day, index) => {
     const span = document.createElement('span');
-    span.textContent = label;
+    span.textContent = day.short;
+    span.setAttribute('aria-label', day.label);
     if (index >= 5) span.classList.add('weekend');
     weekdayRow.appendChild(span);
   });
@@ -116,15 +142,7 @@ function createDayCell(dateKey, state, event, readOnly, inRange) {
     cell.dataset.confidence = conf;
   }
 
-  cell.setAttribute(
-    'aria-label',
-    new Intl.DateTimeFormat('en-GB', {
-      timeZone: event.timezone,
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-    }).format(new Date(`${dateKey}T12:00:00`))
-  );
+  cell.setAttribute('aria-label', formatDayAriaLabel(dateKey, event, conf));
 
   if (readOnly || !eventAllowsEdits(event)) {
     cell.disabled = true;
@@ -163,11 +181,15 @@ function attachPaintHandlers(root, state, event, getPaintMode, onChange, readOnl
     if (mode === 'erase') {
       state.delete(dateKey);
       cell.className = 'day-cell in-range';
-      cell.dataset.confidence = '';
+      if (isWeekendDateKey(dateKey, event.timezone)) cell.classList.add('weekend');
+      delete cell.dataset.confidence;
+      cell.setAttribute('aria-label', formatDayAriaLabel(dateKey, event, null));
     } else {
       state.set(dateKey, mode);
       cell.className = `day-cell in-range ${mode}`;
+      if (isWeekendDateKey(dateKey, event.timezone)) cell.classList.add('weekend');
       cell.dataset.confidence = mode;
+      cell.setAttribute('aria-label', formatDayAriaLabel(dateKey, event, mode));
     }
     notifyChangeDebounced();
   }

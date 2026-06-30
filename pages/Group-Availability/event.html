@@ -7,7 +7,7 @@
   <title>Event — Group Availability</title>
   <link rel="icon" href="favicon-dark.svg" type="image/svg+xml">
   <link rel="manifest" href="site.webmanifest">
-  <meta name="theme-color" content="#c9b896">
+  <meta name="theme-color" content="#eef4ff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <script>
     (function () {
@@ -59,7 +59,7 @@
         <div id="identity-guest-view" class="identity-guest-view" hidden>
           <p class="identity-view-badge">Viewing results only</p>
           <p class="identity-view-name">Viewing as <strong id="guest-view-display-name"></strong></p>
-          <p class="muted identity-view-hint">You can see the group results and your submitted days, but you can't change anything from this browser. Ask the organizer to remove you if you need to edit and resubmit.</p>
+          <p class="muted identity-view-hint">You can see group results and your submitted days, but you can't edit from this browser. To edit again, sign in with Google (same name) or ask the organizer to remove you so you can rejoin.</p>
           <div class="identity-form-actions">
             <button type="button" id="guest-switch-person" class="btn btn-ghost">Switch person</button>
             <button type="button" id="google-join-view" class="btn btn-ghost btn-google-opt">Sign in with Google</button>
@@ -120,8 +120,9 @@
         <div id="share-link-box" class="share-link-box panel" hidden>
           <label class="share-link-label" for="share-url-input">Share link</label>
           <div class="share-link-row">
-            <input type="text" id="share-url-input" class="share-url-input" readonly>
-            <button type="button" id="copy-link" class="btn btn-primary">Copy</button>
+            <input type="text" id="share-url-input" class="share-url-input" readonly aria-label="Event share link">
+            <button type="button" id="share-link" class="btn btn-ghost" hidden>Share</button>
+            <button type="button" id="copy-link" class="btn btn-primary">Copy link</button>
           </div>
         </div>
         <p class="muted" style="margin-top: 8px;"><span id="participant-count">0 participants</span></p>
@@ -130,21 +131,21 @@
       <section id="paint-section">
         <div class="section-heading panel">
           <h2 class="section-title">Your availability</h2>
-          <p id="paint-section-lead" class="section-lead muted">Tap days on the calendar — green = likely free, yellow = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong>.</p>
+          <p id="paint-section-lead" class="section-lead muted">Tap days on the calendar — green = likely free, orange = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong> (Ctrl+S). Keys <strong>1</strong>/<strong>2</strong>/<strong>3</strong> switch brushes.</p>
         </div>
 
         <div id="paint-toolbar" class="paint-toolbar panel">
           <div class="paint-toolbar-main">
             <div class="paint-brush-group" role="group" aria-label="Paint mode">
-              <button type="button" class="btn btn-ghost brush-btn active" data-brush="likely" aria-pressed="true">
+              <button type="button" class="btn btn-ghost brush-btn active" data-brush="likely" aria-pressed="true" title="Likely free (key 1)">
                 <span class="brush-swatch brush-swatch-likely" aria-hidden="true"></span>
                 Likely
               </button>
-              <button type="button" class="btn btn-ghost brush-btn" data-brush="maybe" aria-pressed="false">
+              <button type="button" class="btn btn-ghost brush-btn" data-brush="maybe" aria-pressed="false" title="Maybe free (key 2)">
                 <span class="brush-swatch brush-swatch-maybe" aria-hidden="true"></span>
                 Maybe
               </button>
-              <button type="button" class="btn btn-ghost brush-btn" data-brush="erase" aria-pressed="false">
+              <button type="button" class="btn btn-ghost brush-btn" data-brush="erase" aria-pressed="false" title="Eraser (key 3 or E)">
                 <span class="brush-swatch brush-swatch-erase" aria-hidden="true"></span>
                 Eraser
               </button>
@@ -152,7 +153,7 @@
             <p id="brush-indicator" class="brush-indicator" aria-live="polite">
               Selected: <strong>Likely free</strong>
             </p>
-            <button type="button" id="save-availability" class="btn btn-primary save-availability-btn" hidden disabled>Save</button>
+            <button type="button" id="save-availability" class="btn btn-primary save-availability-btn" hidden disabled title="Save now (Ctrl+S)">Save</button>
           </div>
         </div>
 
@@ -188,9 +189,67 @@
 
       <p id="blind-gate" class="blind-gate panel" hidden></p>
 
+      <section id="best-day-section" class="section-block-end" hidden>
+        <div class="section-heading panel">
+          <h2 class="section-title">Best day</h2>
+          <p class="section-lead muted">See who's likely free, maybe free, or not free on the group's strongest day. Pick another day or tap a time in Best times below.</p>
+        </div>
+        <div id="best-day-panel" class="best-day-panel panel">
+          <div class="best-day-hero">
+            <div class="best-day-hero-text">
+              <span id="best-day-kicker" class="best-day-kicker">Top pick</span>
+              <h3 id="best-day-date" class="best-day-date">—</h3>
+              <p id="best-day-stats" class="best-day-stats muted"></p>
+            </div>
+            <div id="best-day-score" class="best-day-score" aria-hidden="true">
+              <span class="best-day-score-value">0</span>
+              <span class="best-day-score-label">pts</span>
+            </div>
+          </div>
+
+          <div class="best-day-picker-wrap">
+            <p class="best-day-picker-label">Choose a day</p>
+            <div id="best-day-picker" class="best-day-picker" role="listbox" aria-label="Choose a day to inspect"></div>
+          </div>
+
+          <div class="best-day-grid">
+            <div class="best-day-column best-day-column-likely">
+              <div class="best-day-column-head">
+                <span class="best-day-column-icon" aria-hidden="true"></span>
+                <h4 class="best-day-column-title">Likely free</h4>
+                <span id="best-day-likely-count" class="best-day-column-count">0</span>
+              </div>
+              <ul id="best-day-likely-list" class="best-day-people"></ul>
+            </div>
+            <div class="best-day-column best-day-column-maybe">
+              <div class="best-day-column-head">
+                <span class="best-day-column-icon" aria-hidden="true"></span>
+                <h4 class="best-day-column-title">Maybe free</h4>
+                <span id="best-day-maybe-count" class="best-day-column-count">0</span>
+              </div>
+              <ul id="best-day-maybe-list" class="best-day-people"></ul>
+            </div>
+            <div class="best-day-column best-day-column-unavailable">
+              <div class="best-day-column-head">
+                <span class="best-day-column-icon" aria-hidden="true"></span>
+                <h4 class="best-day-column-title">Not free</h4>
+                <span id="best-day-unavailable-count" class="best-day-column-count">0</span>
+              </div>
+              <ul id="best-day-unavailable-list" class="best-day-people"></ul>
+            </div>
+          </div>
+
+          <div id="best-day-awaiting" class="best-day-awaiting" hidden>
+            <p class="best-day-awaiting-label muted">Still waiting on</p>
+            <ul id="best-day-awaiting-list" class="best-day-people best-day-people-inline"></ul>
+          </div>
+        </div>
+      </section>
+
       <section id="overlap-section" class="section-block-end" tabindex="-1">
         <div class="section-heading panel">
           <h2 class="section-title">Best times</h2>
+          <p class="section-lead muted">Ranked time windows — tap one to inspect that day above.</p>
         </div>
         <div id="overlap-list" class="overlap-list"></div>
         <div class="overlap-actions overlap-actions-below">

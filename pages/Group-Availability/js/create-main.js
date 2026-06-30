@@ -117,7 +117,7 @@ async function init() {
     const session = await getSession();
     if (!session) {
       showToast('Please sign in again', 'error');
-      window.location.href = `${APP_BASE}/`;
+      window.location.href = `${APP_BASE}/index.html`;
       return;
     }
     const profile = profileFromSession(session);

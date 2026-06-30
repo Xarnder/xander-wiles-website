@@ -43,7 +43,7 @@ function lerpRgb(from, to, t) {
 }
 
 const HEAT_RED = [220, 38, 38];
-const HEAT_YELLOW = [234, 179, 8];
+const HEAT_ORANGE = [194, 65, 12];
 const HEAT_GREEN = [34, 197, 94];
 
 export function heatColor(intensity) {
@@ -51,13 +51,13 @@ export function heatColor(intensity) {
 
   const t = Math.max(0, Math.min(1, intensity));
   const [r, g, b] =
-    t < 0.5 ? lerpRgb(HEAT_RED, HEAT_YELLOW, t * 2) : lerpRgb(HEAT_YELLOW, HEAT_GREEN, (t - 0.5) * 2);
+    t < 0.5 ? lerpRgb(HEAT_RED, HEAT_ORANGE, t * 2) : lerpRgb(HEAT_ORANGE, HEAT_GREEN, (t - 0.5) * 2);
 
   return `rgb(${r}, ${g}, ${b})`;
 }
 
 export function heatTextColor(intensity) {
-  if (intensity >= 0.55) return '#052e16';
-  if (intensity > 0) return '#422006';
+  if (intensity >= 0.55) return '#ecfdf5';
+  if (intensity > 0) return '#fff7ed';
   return 'var(--muted)';
 }

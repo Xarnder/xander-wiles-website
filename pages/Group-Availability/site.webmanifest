@@ -10,8 +10,8 @@
       "purpose": "any"
     }
   ],
-  "theme_color": "#c9b896",
-  "background_color": "#c9b896",
+  "theme_color": "#eef4ff",
+  "background_color": "#eef4ff",
   "display": "standalone",
   "start_url": "/pages/Group-Availability/index.html"
 }

@@ -2,8 +2,8 @@ const STORAGE_KEY = 'wth-theme';
 const THEMES = ['light', 'dark'];
 
 const META_COLORS = {
-  light: '#c9b896',
-  dark: '#2a2318',
+  light: '#eef4ff',
+  dark: '#0a0a0f',
 };
 
 export function getTheme() {

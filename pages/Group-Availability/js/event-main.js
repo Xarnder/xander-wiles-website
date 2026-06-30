@@ -29,6 +29,7 @@ import {
 import { buildDayCalendar, buildMultiDayCalendar, buildGroupHeatCalendar } from './calendar.js';
 import { computeDayAvailabilityCounts, heatColor, heatIntensity } from './heatmap.js';
 import { computeOverlap, slotsToParticipantMaps, canSeeIndividualGrids } from './overlap.js';
+import { computeRankedDays, getTopDayDateStr } from './best-day.js';
 import { subscribeToEvent } from './realtime.js';
 import { confirmAction } from './confirm-modal.js';
 import { BLIND_GATE_MESSAGE, filterSlotsForViewer } from './blind-gate.js';
@@ -44,6 +45,7 @@ import {
   computeDefaultExpiresAt,
   copyToClipboard,
   showToast,
+  shareOrCopyUrl,
   getEventContextFromLocation,
   buildShareUrl,
   formatDbError,
@@ -68,6 +70,7 @@ const els = {
   eventLocation: document.getElementById('event-location'),
   statusBar: document.getElementById('status-bar'),
   copyLink: document.getElementById('copy-link'),
+  shareLink: document.getElementById('share-link'),
   shareLinkBox: document.getElementById('share-link-box'),
   shareUrlInput: document.getElementById('share-url-input'),
   participantCount: document.getElementById('participant-count'),
@@ -98,6 +101,21 @@ const els = {
   paintSection: document.getElementById('paint-section'),
   paintSectionLead: document.getElementById('paint-section-lead'),
   overlapSection: document.getElementById('overlap-section'),
+  bestDaySection: document.getElementById('best-day-section'),
+  bestDayPanel: document.getElementById('best-day-panel'),
+  bestDayKicker: document.getElementById('best-day-kicker'),
+  bestDayDate: document.getElementById('best-day-date'),
+  bestDayStats: document.getElementById('best-day-stats'),
+  bestDayScore: document.getElementById('best-day-score'),
+  bestDayPicker: document.getElementById('best-day-picker'),
+  bestDayLikelyList: document.getElementById('best-day-likely-list'),
+  bestDayMaybeList: document.getElementById('best-day-maybe-list'),
+  bestDayUnavailableList: document.getElementById('best-day-unavailable-list'),
+  bestDayLikelyCount: document.getElementById('best-day-likely-count'),
+  bestDayMaybeCount: document.getElementById('best-day-maybe-count'),
+  bestDayUnavailableCount: document.getElementById('best-day-unavailable-count'),
+  bestDayAwaiting: document.getElementById('best-day-awaiting'),
+  bestDayAwaitingList: document.getElementById('best-day-awaiting-list'),
   paintGrid: document.getElementById('paint-grid'),
   timeStart: document.getElementById('time-start'),
   timeEnd: document.getElementById('time-end'),
@@ -183,6 +201,8 @@ let state = {
   isSaving: false,
   overlapRanges: [],
   overlapPage: 0,
+  rankedDays: [],
+  selectedBestDay: null,
   editingGuestName: false,
   timeRangeEditing: false,
   orgEditing: false,
@@ -193,6 +213,9 @@ let state = {
 
 let lastSavedSnapshot = '';
 let autoSaveTimer = null;
+let autoSaveDeadline = null;
+let autoSaveTicker = null;
+let lastSavedAt = null;
 
 const AUTO_SAVE_MS = 20000;
 
@@ -253,6 +276,45 @@ function startCountdownTimer() {
   }, 30000);
 }
 
+function renderSaveStatusChip() {
+  if (!canEditAvailability()) return '';
+
+  if (state.isSaving) {
+    return '<span class="save-status save-status-saving">Saving…</span>';
+  }
+
+  if (state.hasUnsavedChanges) {
+    if (autoSaveDeadline) {
+      const secs = Math.max(0, Math.ceil((autoSaveDeadline - Date.now()) / 1000));
+      return `<span class="save-status save-status-dirty">Unsaved · auto-saves in ${secs}s</span>`;
+    }
+    return '<span class="save-status save-status-dirty">Unsaved changes</span>';
+  }
+
+  if (lastSavedAt) {
+    return '<span class="save-status save-status-saved">All changes saved</span>';
+  }
+
+  return '';
+}
+
+function startAutoSaveTicker() {
+  if (autoSaveTicker) return;
+  autoSaveTicker = setInterval(() => {
+    if (!state.hasUnsavedChanges || !canEditAvailability()) {
+      stopAutoSaveTicker();
+      return;
+    }
+    renderStatus();
+  }, 1000);
+}
+
+function stopAutoSaveTicker() {
+  if (!autoSaveTicker) return;
+  clearInterval(autoSaveTicker);
+  autoSaveTicker = null;
+}
+
 function renderStatus() {
   const ev = state.event;
   const parts = [];
@@ -268,6 +330,10 @@ function renderStatus() {
   if (!eventAllowsEdits(ev)) {
     parts.push('<span class="muted">Editing is disabled</span>');
   }
+
+  const saveChip = renderSaveStatusChip();
+  if (saveChip) parts.push(saveChip);
+
   els.statusBar.innerHTML = parts.join(' ') || '<span class="muted">Open for responses</span>';
 }
 
@@ -419,7 +485,7 @@ async function saveOrgSettings() {
 function updateOrganizerUi() {
   const show = hasOrganizerAccess();
   updateGuestPreviewUi();
-  if (els.shareLinkBox) els.shareLinkBox.hidden = !show;
+  updateShareUi();
   if (els.organizerPanel) els.organizerPanel.hidden = !show;
   if (isGuestPreviewActive()) {
     renderMultiGrid();
@@ -494,6 +560,7 @@ function isGuestParticipant() {
 
 function setEventSectionsEnabled(enabled) {
   if (els.paintSection) els.paintSection.hidden = !enabled;
+  if (els.bestDaySection) els.bestDaySection.hidden = !enabled;
   if (els.overlapSection) els.overlapSection.hidden = !enabled;
   if (els.heatmapSection) els.heatmapSection.hidden = !enabled;
   if (!enabled) {
@@ -626,7 +693,7 @@ function updatePaintSectionLead() {
     return;
   }
   els.paintSectionLead.innerHTML =
-    'Tap days on the calendar — green = likely free, yellow = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong>.';
+    'Tap days on the calendar — green = likely free, orange = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong> (Ctrl+S). Keys <strong>1</strong>/<strong>2</strong>/<strong>3</strong> switch brushes.';
 }
 
 function hideAllIdentityPanels() {
@@ -752,6 +819,150 @@ function updateBrushIndicator() {
   });
 }
 
+function participantInitial(name) {
+  const trimmed = String(name || '?').trim();
+  return trimmed ? trimmed[0].toUpperCase() : '?';
+}
+
+function renderBestDayPeopleList(container, people) {
+  if (!container) return;
+  if (!people.length) {
+    container.innerHTML = '<li class="best-day-empty muted">No one</li>';
+    return;
+  }
+  container.innerHTML = people
+    .map(
+      (p) => `
+    <li class="best-day-person">
+      <span class="best-day-person-avatar" aria-hidden="true">${escapeHtml(participantInitial(p.display_name))}</span>
+      <span class="best-day-person-name">${escapeHtml(p.display_name)}</span>
+    </li>`
+    )
+    .join('');
+}
+
+function getEffectiveBestDayDate() {
+  if (state.selectedBestDay) return state.selectedBestDay;
+  return getTopDayDateStr(state.rankedDays);
+}
+
+function selectBestDay(dateStr, { scrollIntoView = false } = {}) {
+  if (!dateStr) return;
+  state.selectedBestDay = dateStr;
+  renderBestDay();
+  renderOverlap();
+  if (scrollIntoView && els.bestDaySection) {
+    els.bestDaySection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function renderBestDay() {
+  if (!els.bestDaySection) return;
+
+  if (!state.participant || !canViewGroupResults()) {
+    els.bestDaySection.hidden = true;
+    return;
+  }
+
+  state.rankedDays = computeRankedDays(state.event, state.participants, viewerSlots());
+  const ranked = state.rankedDays;
+  const hasAnyResponse = ranked.some((d) => d.respondedCount > 0);
+
+  if (!hasAnyResponse) {
+    els.bestDaySection.hidden = false;
+    if (els.bestDayDate) els.bestDayDate.textContent = 'No responses yet';
+    if (els.bestDayKicker) els.bestDayKicker.textContent = 'Waiting';
+    if (els.bestDayStats) els.bestDayStats.textContent = 'Once people save their availability, the best day will appear here.';
+    if (els.bestDayScore) els.bestDayScore.hidden = true;
+    if (els.bestDayPicker) els.bestDayPicker.innerHTML = '';
+    renderBestDayPeopleList(els.bestDayLikelyList, []);
+    renderBestDayPeopleList(els.bestDayMaybeList, []);
+    renderBestDayPeopleList(els.bestDayUnavailableList, []);
+    if (els.bestDayAwaiting) els.bestDayAwaiting.hidden = true;
+    return;
+  }
+
+  if (state.selectedBestDay && !ranked.some((d) => d.dateStr === state.selectedBestDay)) {
+    state.selectedBestDay = null;
+  }
+
+  const dateStr = getEffectiveBestDayDate();
+  if (!dateStr) {
+    els.bestDaySection.hidden = true;
+    return;
+  }
+
+  els.bestDaySection.hidden = false;
+  if (els.bestDayScore) els.bestDayScore.hidden = false;
+
+  const breakdown = ranked.find((d) => d.dateStr === dateStr) || ranked[0];
+  const topDate = getTopDayDateStr(ranked);
+  const isTopDay = dateStr === topDate;
+
+  if (els.bestDayKicker) {
+    els.bestDayKicker.textContent = isTopDay && !state.selectedBestDay ? 'Top pick' : 'Selected day';
+    els.bestDayKicker.classList.toggle('is-top', isTopDay && !state.selectedBestDay);
+  }
+  if (els.bestDayDate) els.bestDayDate.textContent = breakdown.label;
+  if (els.bestDayStats) {
+    const parts = [];
+    if (breakdown.likelyCount) parts.push(`${breakdown.likelyCount} likely`);
+    if (breakdown.maybeCount) parts.push(`${breakdown.maybeCount} maybe`);
+    if (breakdown.notFreeCount) parts.push(`${breakdown.notFreeCount} not free`);
+    els.bestDayStats.textContent = parts.join(' · ') || 'No one marked this day yet';
+  }
+  if (els.bestDayScore) {
+    const valueEl = els.bestDayScore.querySelector('.best-day-score-value');
+    if (valueEl) valueEl.textContent = String(breakdown.score);
+    const maxScore = ranked[0]?.score || 1;
+    const pct = maxScore ? Math.round((breakdown.score / maxScore) * 100) : 0;
+    els.bestDayScore.style.setProperty('--score-pct', `${pct}%`);
+    els.bestDayScore.classList.toggle('is-perfect', breakdown.score === maxScore && breakdown.score > 0);
+  }
+
+  if (els.bestDayLikelyCount) els.bestDayLikelyCount.textContent = String(breakdown.likelyCount);
+  if (els.bestDayMaybeCount) els.bestDayMaybeCount.textContent = String(breakdown.maybeCount);
+  if (els.bestDayUnavailableCount) els.bestDayUnavailableCount.textContent = String(breakdown.notFreeCount);
+
+  renderBestDayPeopleList(els.bestDayLikelyList, breakdown.likely);
+  renderBestDayPeopleList(els.bestDayMaybeList, breakdown.maybe);
+  renderBestDayPeopleList(els.bestDayUnavailableList, breakdown.notFree);
+
+  if (els.bestDayAwaiting) {
+    const showAwaiting = breakdown.awaiting.length > 0;
+    els.bestDayAwaiting.hidden = !showAwaiting;
+    if (showAwaiting) renderBestDayPeopleList(els.bestDayAwaitingList, breakdown.awaiting);
+  }
+
+  if (els.bestDayPicker) {
+    const maxScore = ranked[0]?.score || 1;
+    els.bestDayPicker.innerHTML = ranked
+      .map((day) => {
+        const selected = day.dateStr === dateStr;
+        const isTop = day.dateStr === topDate;
+        const barPct = maxScore ? Math.round((day.score / maxScore) * 100) : 0;
+        return `
+      <button
+        type="button"
+        class="best-day-chip${selected ? ' is-selected' : ''}${isTop ? ' is-top' : ''}"
+        data-date-str="${escapeHtml(day.dateStr)}"
+        role="option"
+        aria-selected="${selected ? 'true' : 'false'}"
+        title="${escapeHtml(day.label)} — ${day.score} pts"
+      >
+        ${isTop ? '<span class="best-day-chip-star" aria-hidden="true">★</span>' : ''}
+        <span class="best-day-chip-label">${escapeHtml(day.shortLabel)}</span>
+        <span class="best-day-chip-score">${day.score} pt${day.score === 1 ? '' : 's'}</span>
+        <span class="best-day-chip-bar" style="width:${barPct}%"></span>
+      </button>`;
+      })
+      .join('');
+
+    const selectedChip = els.bestDayPicker.querySelector('.best-day-chip.is-selected');
+    selectedChip?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+  }
+}
+
 function renderOverlapPagination() {
   const total = state.overlapRanges.length;
   const totalPages = Math.max(1, Math.ceil(total / OVERLAP_PAGE_SIZE));
@@ -782,8 +993,11 @@ function renderOverlap() {
     disableExport();
     state.overlapRanges = [];
     state.overlapPage = 0;
+    state.rankedDays = [];
+    state.selectedBestDay = null;
     if (els.overlapPagination) els.overlapPagination.hidden = true;
     els.overlapList.innerHTML = '<p class="muted">Enter your name above to mark your availability.</p>';
+    renderBestDay();
     return;
   }
   if (!canViewGroupResults()) {
@@ -793,6 +1007,7 @@ function renderOverlap() {
     if (els.overlapPagination) els.overlapPagination.hidden = true;
     els.overlapList.innerHTML =
       '<p class="muted">Submit your availability to see the best overlapping times.</p>';
+    renderBestDay();
     return;
   }
 
@@ -805,8 +1020,12 @@ function renderOverlap() {
     state.overlapPage = 0;
     if (els.overlapPagination) els.overlapPagination.hidden = true;
     els.overlapList.innerHTML = '<p class="muted">No overlapping availability yet.</p>';
+    renderBestDay();
     return;
   }
+
+  renderBestDay();
+  const activeDay = getEffectiveBestDayDate();
 
   renderOverlapPagination();
   const start = state.overlapPage * OVERLAP_PAGE_SIZE;
@@ -817,15 +1036,22 @@ function renderOverlap() {
     .map((r) => {
       const intensity = heatIntensity(r.score, maxScore);
       const barColor = heatColor(intensity);
+      const daySelected = activeDay && r.startDateStr === activeDay;
       return `
-    <div class="overlap-item panel">
+    <button
+      type="button"
+      class="overlap-item panel overlap-item-selectable${daySelected ? ' is-day-selected' : ''}"
+      data-date-str="${escapeHtml(r.startDateStr)}"
+      aria-pressed="${daySelected ? 'true' : 'false'}"
+      title="Show who is free on this day"
+    >
       <span class="overlap-heat-bar" style="background:${barColor}" title="${r.score} points — ${Math.round(intensity * 100)}% of best"></span>
       <div class="overlap-score">${r.score} pts</div>
       <div class="overlap-item-body">
         <strong class="overlap-item-label">${escapeHtml(r.label)}</strong>
         <span class="overlap-item-detail muted">${escapeHtml(r.detail)}</span>
       </div>
-    </div>`;
+    </button>`;
     })
     .join('');
 }
@@ -1109,6 +1335,8 @@ function clearAutoSaveTimer() {
     clearTimeout(autoSaveTimer);
     autoSaveTimer = null;
   }
+  autoSaveDeadline = null;
+  stopAutoSaveTicker();
 }
 
 function scheduleAutoSave() {
@@ -1116,8 +1344,13 @@ function scheduleAutoSave() {
   if (!state.hasUnsavedChanges || state.isSaving) return;
   if (!canEditAvailability()) return;
 
+  autoSaveDeadline = Date.now() + AUTO_SAVE_MS;
+  startAutoSaveTicker();
+  renderStatus();
+
   autoSaveTimer = setTimeout(() => {
     autoSaveTimer = null;
+    autoSaveDeadline = null;
     if (state.hasUnsavedChanges && !state.isSaving) {
       saveAvailability({ auto: true });
     }
@@ -1127,8 +1360,10 @@ function scheduleAutoSave() {
 function captureSavedSnapshot() {
   lastSavedSnapshot = serializeSlotMap(buildSlotMapFromUi());
   state.hasUnsavedChanges = false;
+  lastSavedAt = Date.now();
   clearAutoSaveTimer();
   updateSaveButton();
+  renderStatus();
 }
 
 function markLocalChange() {
@@ -1136,7 +1371,10 @@ function markLocalChange() {
   state.hasUnsavedChanges = dirty;
   updateSaveButton();
   if (dirty) scheduleAutoSave();
-  else clearAutoSaveTimer();
+  else {
+    clearAutoSaveTimer();
+    renderStatus();
+  }
 }
 
 function updateSaveButton() {
@@ -1215,10 +1453,12 @@ async function saveAvailability(options = {}) {
   const slotMap = buildSlotMapFromUi();
   state.isSaving = true;
   updateSaveButton();
+  renderStatus();
 
   try {
+    const wasFirstSave = !state.participant.has_submitted_availability;
     await syncSlots(state.event, state.participant.id, slotMap, client());
-    if (!state.participant.has_submitted_availability) {
+    if (wasFirstSave) {
       await markSubmitted(state.participant.id, client());
       state.participant.has_submitted_availability = true;
       els.blindGate.hidden = true;
@@ -1230,13 +1470,18 @@ async function saveAvailability(options = {}) {
     renderOverlap();
     renderHeatMap();
     renderMultiGrid();
-    showToast(auto ? 'Saved automatically' : 'Saved');
+    if (wasFirstSave) {
+      showToast('Saved! Group results are unlocked below.');
+    } else {
+      showToast(auto ? 'Saved automatically' : 'Saved');
+    }
   } catch (err) {
     console.error(err);
     showToast(formatDbError(err), 'error');
   } finally {
     state.isSaving = false;
     updateSaveButton();
+    renderStatus();
     if (state.hasUnsavedChanges) scheduleAutoSave();
   }
 }
@@ -1274,6 +1519,7 @@ function showJoinedUi() {
   state.editingGuestName = false;
   renderIdentityUi();
   updateOrganizerUi();
+  updateShareUi();
   updateBrushIndicator();
   updatePaintSectionLead();
   renderPaintGrid();
@@ -1326,6 +1572,36 @@ function updateShareLink() {
   if (els.shareUrlInput) els.shareUrlInput.value = url;
 }
 
+function updateShareUi() {
+  const show = Boolean(state.participant) && !isGuestPreviewActive() && !isGuestViewOnly();
+  if (els.shareLinkBox) els.shareLinkBox.hidden = !show;
+  if (els.shareLink) {
+    els.shareLink.hidden = typeof navigator.share !== 'function';
+  }
+  if (show) updateShareLink();
+}
+
+async function handleShareLink() {
+  const url = buildShareUrl(slug);
+  const title = state.event?.title || 'Group Availability';
+  const text = `Mark when you're free for ${title}`;
+  const result = await shareOrCopyUrl({ url, title, text });
+  if (result === 'share') showToast('Link shared');
+  else if (result === 'copy') showToast('Link copied');
+  else if (result === 'failed') showToast('Could not share or copy the link', 'error');
+}
+
+async function handleCopyLink() {
+  const url = buildShareUrl(slug);
+  if (els.shareUrlInput) {
+    els.shareUrlInput.focus();
+    els.shareUrlInput.select();
+  }
+  const ok = await copyToClipboard(url);
+  if (ok) showToast('Link copied');
+  else showToast('Could not copy — select the link and copy manually', 'error');
+}
+
 async function bootEvent() {
   initChrome({ homeHref: 'index.html', homeLabel: '← Home' });
   if (recoverOAuthRedirectFromSiteRoot()) return;
@@ -1337,7 +1613,7 @@ async function bootEvent() {
     els.loading.hidden = true;
     els.notFound.hidden = false;
     document.getElementById('not-found-detail').textContent =
-      'No event ID in the link. Open an event from your dashboard or use the full share URL.';
+      'No event in this link. Open an event from your dashboard or ask the organizer for the full share URL.';
     return;
   }
 
@@ -1441,12 +1717,59 @@ async function bootEvent() {
   }
 }
 
+function isTypingTarget(target) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+}
+
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    if (isTypingTarget(e.target)) return;
+
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      if (!canEditAvailability() || !state.hasUnsavedChanges) return;
+      e.preventDefault();
+      saveAvailability();
+      return;
+    }
+
+    if (!canEditAvailability()) return;
+
+    const key = e.key.toLowerCase();
+    if (key === '1') {
+      e.preventDefault();
+      selectBrush('likely');
+    } else if (key === '2') {
+      e.preventDefault();
+      selectBrush('maybe');
+    } else if (key === '3' || key === 'e') {
+      e.preventDefault();
+      selectBrush('erase');
+    }
+  });
+}
+
+function setupUnloadGuard() {
+  window.addEventListener('beforeunload', (e) => {
+    if (state.hasUnsavedChanges && !state.isSaving && canEditAvailability()) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+}
+
+function selectBrush(brush) {
+  if (!['likely', 'maybe', 'erase'].includes(brush)) return;
+  if (!canEditAvailability()) return;
+  state.brush = brush;
+  updateBrushIndicator();
+  state.paintController?.setBrush(state.brush);
+}
+
 function setupToolbar() {
   els.toolbar.querySelectorAll('[data-brush]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      state.brush = btn.dataset.brush;
-      updateBrushIndicator();
-      state.paintController?.setBrush(state.brush);
+      selectBrush(btn.dataset.brush);
     });
   });
   updateBrushIndicator();
@@ -1461,6 +1784,20 @@ function setupToolbar() {
 
   els.saveAvailability?.addEventListener('click', () => {
     saveAvailability();
+  });
+}
+
+function setupBestDayInteractions() {
+  els.overlapList?.addEventListener('click', (e) => {
+    const item = e.target.closest('.overlap-item-selectable[data-date-str]');
+    if (!item) return;
+    selectBestDay(item.dataset.dateStr, { scrollIntoView: true });
+  });
+
+  els.bestDayPicker?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.best-day-chip[data-date-str]');
+    if (!chip) return;
+    selectBestDay(chip.dataset.dateStr);
   });
 }
 
@@ -1616,18 +1953,25 @@ function setupJoin() {
 
   els.orgStartDate?.addEventListener('change', syncOrgEndDateMin);
 
-  els.copyLink?.addEventListener('click', async () => {
-    const url = buildShareUrl(slug);
-    await copyToClipboard(url);
-    showToast('Link copied');
+  els.copyLink?.addEventListener('click', () => {
+    handleCopyLink();
+  });
+
+  els.shareLink?.addEventListener('click', () => {
+    handleShareLink();
+  });
+
+  els.shareUrlInput?.addEventListener('focus', () => {
+    els.shareUrlInput?.select();
   });
 
   els.copyOverlapBtn?.addEventListener('click', async () => {
     if (!canViewGroupResults()) return;
     const ranges = computeOverlap(state.event, state.participants, viewerSlots());
     const text = formatOverlapSummary(state.event, ranges);
-    await copyToClipboard(text);
-    showToast('Overlap summary copied');
+    const ok = await copyToClipboard(text);
+    if (ok) showToast('Overlap summary copied');
+    else showToast('Could not copy summary', 'error');
   });
 
   els.downloadIcsBtn?.addEventListener('click', () => {
@@ -1661,8 +2005,11 @@ function setupJoin() {
 }
 
 setupToolbar();
+setupBestDayInteractions();
 setupOverlapPagination();
 setupJoin();
+setupKeyboardShortcuts();
+setupUnloadGuard();
 bootEvent();
 
 onAuthStateChange(async (session) => {

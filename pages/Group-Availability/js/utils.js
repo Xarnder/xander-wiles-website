@@ -331,8 +331,52 @@ export function formatDbError(err) {
   return msg;
 }
 
-export function copyToClipboard(text) {
-  return navigator.clipboard?.writeText(text);
+export async function copyToClipboard(text) {
+  const value = String(text ?? '');
+  if (!value) return false;
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy copy */
+  }
+
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = value;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Native share sheet when available, otherwise copy to clipboard.
+ * @returns {'share'|'copy'|'cancelled'|'failed'}
+ */
+export async function shareOrCopyUrl({ url, title = '', text = '' } = {}) {
+  if (!url) return 'failed';
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ url, title, text });
+      return 'share';
+    } catch (err) {
+      if (err?.name === 'AbortError') return 'cancelled';
+    }
+  }
+
+  return (await copyToClipboard(url)) ? 'copy' : 'failed';
 }
 
 export function showToast(message, type = 'info') {
@@ -341,6 +385,9 @@ export function showToast(message, type = 'info') {
     el = document.createElement('div');
     el.id = 'wth-toast';
     el.className = 'toast';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.setAttribute('aria-atomic', 'true');
     document.body.appendChild(el);
   }
   el.textContent = message;

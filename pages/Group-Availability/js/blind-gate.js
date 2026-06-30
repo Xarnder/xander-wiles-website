@@ -1,7 +1,7 @@
 /** Blind submission: hide others until current user has saved at least once. */
 
 export const BLIND_GATE_MESSAGE =
-  'Save your availability to see how everyone else responded.';
+  'Save your availability once to unlock group results — best times, heatmap, and everyone\'s calendars.';
 
 export function shouldBlindOthers(participant) {
   return !participant?.has_submitted_availability;

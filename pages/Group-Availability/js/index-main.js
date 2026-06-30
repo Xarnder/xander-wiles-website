@@ -2,7 +2,7 @@ import { isSupabaseConfigured } from '../supabase-config.js';
 import { recoverOAuthRedirectFromSiteRoot } from './oauth-recover.js';
 import { getSession, signInWithGoogle, signOut, onAuthStateChange, profileFromSession, applyAvatarImage } from './auth.js';
 import { fetchDashboardEvents, deleteEvent } from './api.js';
-import { APP_BASE, eventUrl, showToast, formatDbError, navigateToEvent } from './utils.js';
+import { APP_BASE, eventUrl, showToast, formatDbError, navigateToEvent, copyToClipboard, buildShareUrl } from './utils.js';
 import { navigateToGuestPreview } from './guest-preview.js';
 import { confirmAction } from './confirm-modal.js';
 import { initChrome } from './theme.js';
@@ -23,7 +23,15 @@ let currentUserId = null;
 
 function renderDashboard(events, userId) {
   if (!events.length) {
-    els.dashboard.innerHTML = '<p class="muted">No events yet. Create one to get started.</p>';
+    els.dashboard.innerHTML = `
+      <div class="empty-dashboard panel">
+        <h2 class="empty-dashboard-title">No events yet</h2>
+        <p class="muted empty-dashboard-lead">Create an event, share the link, and everyone marks when they're free.</p>
+        <button type="button" id="empty-create-btn" class="btn btn-primary">Create your first event</button>
+      </div>`;
+    document.getElementById('empty-create-btn')?.addEventListener('click', () => {
+      window.location.href = `${APP_BASE}/create.html`;
+    });
     return;
   }
 
@@ -48,6 +56,7 @@ function renderDashboard(events, userId) {
       <div class="dashboard-view-actions">
         <button type="button" class="btn btn-ghost dashboard-view-admin" data-event-slug="${slugAttr}" data-event-id="${idAttr}">View as admin</button>
         <button type="button" class="btn btn-ghost dashboard-preview-guest" data-event-slug="${slugAttr}" data-event-id="${idAttr}">Preview as guest</button>
+        <button type="button" class="btn btn-ghost dashboard-copy-link" data-event-slug="${slugAttr}">Copy link</button>
       </div>
       <div class="dashboard-item-actions">
         <button type="button" class="btn btn-ghost dashboard-delete" data-event-id="${idAttr}" data-event-title="${title}">Delete</button>
@@ -123,6 +132,21 @@ function renderDashboard(events, userId) {
       const eventSlug = btn.dataset.eventSlug || null;
       const eventId = btn.dataset.eventId || null;
       navigateToGuestPreview(eventSlug, eventSlug ? null : eventId);
+    });
+  });
+
+  els.dashboard.querySelectorAll('.dashboard-copy-link').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const eventSlug = btn.dataset.eventSlug;
+      if (!eventSlug) {
+        showToast('No share link for this event', 'error');
+        return;
+      }
+      const ok = await copyToClipboard(buildShareUrl(eventSlug));
+      if (ok) showToast('Link copied');
+      else showToast('Could not copy link', 'error');
     });
   });
 }

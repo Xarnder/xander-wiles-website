@@ -104,7 +104,7 @@ function formatRange(cur, event) {
     maybe: cur.maybe,
     total: cur.total,
     label: timePart,
-    detail: `${cur.likely} green, ${cur.maybe} yellow`,
+    detail: `${cur.likely} green, ${cur.maybe} orange`,
     startDateStr: cur.dateStr,
     startHour: cur.hour,
     endDateStr: cur.endDateStr,
