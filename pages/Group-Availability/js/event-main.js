@@ -74,7 +74,10 @@ const els = {
   identityBar: document.getElementById('identity-bar'),
   identityGoogleView: document.getElementById('identity-google-view'),
   identityGuestDisplay: document.getElementById('identity-guest-display'),
-  identityGuestSetup: document.getElementById('identity-guest-setup'),
+  identityGuestSetupFlow: document.getElementById('identity-guest-setup-flow'),
+  identitySetupLead: document.getElementById('identity-setup-lead'),
+  identityJoinHeading: document.getElementById('identity-join-heading'),
+  guestNameDuplicateHint: document.getElementById('guest-name-duplicate-hint'),
   identityReturningBlock: document.getElementById('identity-returning-block'),
   identitySetupDivider: document.getElementById('identity-setup-divider'),
   guestViewSelect: document.getElementById('guest-view-select'),
@@ -520,7 +523,50 @@ function canEditAvailability() {
 }
 
 function canEditGuestProfile() {
-  return isGuestEditMode() && !state.participant?.has_submitted_availability;
+  return isGuestEditMode();
+}
+
+function normalizeGuestName(name) {
+  return String(name || '')
+    .trim()
+    .toLowerCase();
+}
+
+function findSubmittedParticipantByName(name) {
+  const key = normalizeGuestName(name);
+  if (!key) return null;
+  return submittedParticipants().find((p) => normalizeGuestName(p.display_name) === key) || null;
+}
+
+function updateGuestNameDuplicateHint() {
+  if (!els.guestNameDuplicateHint) return null;
+
+  const name = els.guestNameInput?.value.trim();
+  if (!name || state.participant) {
+    els.guestNameDuplicateHint.hidden = true;
+    return null;
+  }
+
+  const match = findSubmittedParticipantByName(name);
+  if (match) {
+    els.guestNameDuplicateHint.hidden = false;
+    els.guestNameDuplicateHint.textContent = `"${match.display_name}" has already submitted — select your name from the list below instead of joining again.`;
+    return match;
+  }
+
+  els.guestNameDuplicateHint.hidden = true;
+  return null;
+}
+
+function setGuestSetupFlowLayout({ fullSetup, nameFormOnly }) {
+  const showFlow = fullSetup || nameFormOnly;
+  if (els.identityGuestSetupFlow) els.identityGuestSetupFlow.hidden = !showFlow;
+  if (els.identitySetupLead) els.identitySetupLead.hidden = !fullSetup;
+  if (els.identityJoinHeading) els.identityJoinHeading.hidden = !fullSetup;
+  if (els.identitySetupDivider) els.identitySetupDivider.hidden = !fullSetup;
+  if (els.identityReturningBlock) els.identityReturningBlock.hidden = !fullSetup;
+  if (els.guestNameDuplicateHint && !fullSetup) els.guestNameDuplicateHint.hidden = true;
+  if (els.identityGuestEdit) els.identityGuestEdit.hidden = !showFlow;
 }
 
 function submittedParticipants() {
@@ -587,7 +633,7 @@ function hideAllIdentityPanels() {
   if (els.identityGoogleView) els.identityGoogleView.hidden = true;
   if (els.identityGuestDisplay) els.identityGuestDisplay.hidden = true;
   if (els.identityGuestEdit) els.identityGuestEdit.hidden = true;
-  if (els.identityGuestSetup) els.identityGuestSetup.hidden = true;
+  if (els.identityGuestSetupFlow) els.identityGuestSetupFlow.hidden = true;
   if (els.identityGuestView) els.identityGuestView.hidden = true;
 }
 
@@ -610,17 +656,23 @@ function showGuestDisplayMode() {
 
 function showGuestEditMode({ setup = false } = {}) {
   hideAllIdentityPanels();
-  if (setup && els.identityGuestSetup) {
+  if (setup) {
     populateGuestViewSelect();
-    els.identityGuestSetup.hidden = false;
-  }
-  if (els.guestNameInput) {
-    els.guestNameInput.value = setup ? '' : state.participant?.display_name || '';
+    setGuestSetupFlowLayout({ fullSetup: true, nameFormOnly: false });
+    if (els.guestNameInput) els.guestNameInput.value = '';
+    updateGuestNameDuplicateHint();
+  } else {
+    setGuestSetupFlowLayout({ fullSetup: false, nameFormOnly: true });
+    if (els.guestNameInput) {
+      els.guestNameInput.value = state.participant?.display_name || '';
+    }
   }
   if (els.nameCancelBtn) els.nameCancelBtn.hidden = setup;
   if (els.googleJoin) els.googleJoin.hidden = setup;
-  if (els.guestSaveName) els.guestSaveName.hidden = false;
-  if (els.identityGuestEdit) els.identityGuestEdit.hidden = false;
+  if (els.guestSaveName) {
+    els.guestSaveName.hidden = false;
+    els.guestSaveName.textContent = setup ? 'Continue' : 'Save name';
+  }
   if (!setup) els.guestNameInput?.focus();
 }
 
@@ -666,7 +718,7 @@ function renderIdentityUi() {
 }
 
 function startGuestNameEdit() {
-  if (!canEditGuestProfile()) return;
+  if (!isGuestEditMode()) return;
   state.editingGuestName = true;
   renderIdentityUi();
 }
@@ -1447,6 +1499,14 @@ async function saveGuestName() {
   }
 
   if (!state.participant) {
+    const duplicate = findSubmittedParticipantByName(name);
+    if (duplicate) {
+      showToast(`"${duplicate.display_name}" already submitted — select your name below`, 'error');
+      updateGuestNameDuplicateHint();
+      els.guestViewSelect?.focus();
+      return;
+    }
+
     const token = createGuestToken();
     setGuestToken(state.event.id, token);
     clearGuestViewParticipantId(state.event.id);
@@ -1460,7 +1520,13 @@ async function saveGuestName() {
     return;
   }
 
-  if (!isGuestEditMode() || !canEditGuestProfile()) return;
+  if (!isGuestEditMode()) return;
+
+  const duplicate = findSubmittedParticipantByName(name);
+  if (duplicate && duplicate.id !== state.participant.id) {
+    showToast(`"${duplicate.display_name}" is already taken — pick a different name`, 'error');
+    return;
+  }
 
   const db = client();
   const { data, error } = await db
@@ -1509,6 +1575,10 @@ function setupJoin() {
 
   els.guestSaveName?.addEventListener('click', () => {
     saveGuestName();
+  });
+
+  els.guestNameInput?.addEventListener('input', () => {
+    updateGuestNameDuplicateHint();
   });
 
   els.guestNameInput?.addEventListener('keydown', (e) => {

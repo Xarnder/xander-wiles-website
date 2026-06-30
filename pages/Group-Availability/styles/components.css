@@ -580,6 +580,57 @@ textarea {
   box-shadow: inset 0 1px 3px rgba(63, 51, 31, 0.12);
 }
 
+.identity-join-heading {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-ink);
+}
+
+.guest-name-duplicate-hint {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--alert-border);
+  background: var(--alert-bg);
+  color: var(--alert-text);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.identity-setup-divider {
+  margin: 20px 0 16px;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text-ink);
+  position: relative;
+}
+
+.identity-setup-divider::before,
+.identity-setup-divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: calc(50% - 7.5rem);
+  height: 1px;
+  background: var(--border-paper-dark);
+}
+
+.identity-setup-divider::before {
+  left: 0;
+}
+
+.identity-setup-divider::after {
+  right: 0;
+}
+
+.identity-setup-divider span {
+  display: inline-block;
+  padding: 0 12px;
+  background: var(--surface-paper);
+}
+
 .identity-block-label {
   margin: 0;
   font-weight: 700;
@@ -590,13 +641,6 @@ textarea {
   margin: 0;
   font-size: 0.85rem;
   line-height: 1.4;
-}
-
-.identity-setup-divider {
-  margin: 0;
-  text-align: center;
-  font-size: 0.85rem;
-  font-weight: 600;
 }
 
 .guest-view-field {

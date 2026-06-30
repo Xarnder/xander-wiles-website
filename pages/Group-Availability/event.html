@@ -71,10 +71,27 @@
           <button type="button" id="edit-name-btn" class="btn btn-ghost">Edit</button>
         </div>
 
-        <div id="identity-guest-setup" class="identity-guest-setup" hidden>
-          <p class="muted identity-setup-lead">Join to mark when you're free, or view results if you've already responded.</p>
+        <div id="identity-guest-setup-flow" class="identity-guest-setup" hidden>
+          <p id="identity-setup-lead" class="muted identity-setup-lead">Join to mark when you're free, or view results if you've already responded.</p>
+
+          <p id="identity-join-heading" class="identity-join-heading">Join as someone new</p>
+          <p id="guest-name-duplicate-hint" class="guest-name-duplicate-hint muted" hidden></p>
+
+          <div id="identity-guest-edit" class="identity-name-form" hidden>
+            <label class="guest-name-field" for="guest-name-input">
+              <span class="guest-name-label">Your name</span>
+              <input type="text" id="guest-name-input" maxlength="60" placeholder="Alex" autocomplete="name">
+            </label>
+            <div class="identity-form-actions">
+              <button type="button" id="guest-save-name" class="btn btn-primary">Continue</button>
+              <button type="button" id="name-cancel-btn" class="btn btn-ghost">Cancel</button>
+              <button type="button" id="google-join" class="btn btn-ghost btn-google-opt">Sign in with Google</button>
+            </div>
+          </div>
+
+          <p id="identity-setup-divider" class="identity-setup-divider" hidden><span>Already submitted?</span></p>
+
           <div id="identity-returning-block" class="identity-returning-block" hidden>
-            <p class="identity-block-label">Already submitted?</p>
             <p class="muted identity-block-hint">Pick your name to view results. This device can't edit your submission — only view.</p>
             <label class="guest-view-field" for="guest-view-select">
               <span class="guest-name-label">Select your name</span>
@@ -83,19 +100,6 @@
               </select>
             </label>
             <button type="button" id="guest-view-results" class="btn btn-primary">View results</button>
-          </div>
-          <p id="identity-setup-divider" class="identity-setup-divider muted" hidden>or join as someone new</p>
-        </div>
-
-        <div id="identity-guest-edit" class="identity-name-form" hidden>
-          <label class="guest-name-field" for="guest-name-input">
-            <span class="guest-name-label">Your name</span>
-            <input type="text" id="guest-name-input" maxlength="60" placeholder="Alex" autocomplete="name">
-          </label>
-          <div class="identity-form-actions">
-            <button type="button" id="guest-save-name" class="btn btn-primary">Continue</button>
-            <button type="button" id="name-cancel-btn" class="btn btn-ghost">Cancel</button>
-            <button type="button" id="google-join" class="btn btn-ghost btn-google-opt">Sign in with Google</button>
           </div>
         </div>
       </section>
