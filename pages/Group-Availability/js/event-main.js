@@ -600,12 +600,24 @@ function isGuestViewOnly() {
 function isGuestEditMode() {
   return (
     Boolean(state.participant && !state.participant.user_id) &&
-    state.guestMode === 'edit' &&
+    state.guestMode !== 'view' &&
     Boolean(state.guestToken)
   );
 }
 
+function ensureGuestEditState() {
+  if (
+    state.participant &&
+    !state.participant.user_id &&
+    state.guestToken &&
+    state.guestMode !== 'view'
+  ) {
+    state.guestMode = 'edit';
+  }
+}
+
 function canEditAvailability() {
+  ensureGuestEditState();
   if (!state.participant || !eventAllowsEdits(state.event)) return false;
   if (isGuestPreviewActive()) return false;
   if (isGuestViewOnly()) return false;
@@ -769,6 +781,7 @@ function showGuestEditMode({ setup = false } = {}) {
 
 function renderIdentityUi() {
   els.identityBar.hidden = false;
+  ensureGuestEditState();
 
   if (isGoogleParticipant()) {
     state.editingGuestName = false;
@@ -792,6 +805,18 @@ function renderIdentityUi() {
   }
 
   if (isGuestEditMode()) {
+    if (state.editingGuestName) {
+      showGuestEditMode({ setup: false });
+    } else {
+      showGuestDisplayMode();
+    }
+    setEventSectionsEnabled(true);
+    updatePaintSectionLead();
+    return;
+  }
+
+  if (state.participant && !state.participant.user_id && state.guestToken) {
+    ensureGuestEditState();
     if (state.editingGuestName) {
       showGuestEditMode({ setup: false });
     } else {
@@ -1480,9 +1505,9 @@ function shouldRefreshPaintGrid() {
 }
 
 function updateSaveButton() {
-  if (!els.saveAvailability) return;
   const canEdit = canEditAvailability();
   if (els.toolbar) els.toolbar.hidden = !canEdit;
+  if (!els.saveAvailability) return;
   els.saveAvailability.hidden = !canEdit;
   els.saveAvailability.disabled = !state.hasUnsavedChanges || state.isSaving;
   els.saveAvailability.classList.toggle('save-flash', state.hasUnsavedChanges && !state.isSaving);
@@ -1653,6 +1678,7 @@ function showGuestSetupUi() {
 
 function showJoinedUi() {
   state.editingGuestName = false;
+  ensureGuestEditState();
   renderIdentityUi();
   updateOrganizerUi();
   updateShareUi();
@@ -1763,12 +1789,14 @@ async function handleCopyGuestPersonalLink() {
   else showToast('Could not copy — select the link and copy manually', 'error');
 }
 
-function resolveGuestLinkToken(ctx) {
-  return (
-    ctx.guestToken ||
-    readGuestTokenFromLocation() ||
-    takePendingGuestToken(ctx.slug || slug)
-  );
+function resolveGuestTokenInUrl(ctx) {
+  return ctx.guestToken || readGuestTokenFromLocation() || null;
+}
+
+function resolveRecoveryGuestToken(ctx) {
+  const fromUrl = resolveGuestTokenInUrl(ctx);
+  if (fromUrl) return fromUrl;
+  return takePendingGuestToken(ctx.slug || slug);
 }
 
 async function restoreGuestFromLink(guestToken) {
@@ -1793,9 +1821,10 @@ async function bootEvent() {
 
   const ctx = getEventContextFromLocation();
   slug = ctx.slug;
-  const guestLinkToken = resolveGuestLinkToken(ctx);
-  if (guestLinkToken) {
-    stashGuestTokenFromUrl(slug || ctx.slug, guestLinkToken);
+  const guestInUrl = Boolean(resolveGuestTokenInUrl(ctx));
+  const recoveryToken = guestInUrl ? resolveRecoveryGuestToken(ctx) : null;
+  if (recoveryToken && guestInUrl) {
+    stashGuestTokenFromUrl(slug || ctx.slug, recoveryToken);
   }
 
   if (!slug && !ctx.eventId) {
@@ -1834,12 +1863,16 @@ async function bootEvent() {
 
     clearEventNavStorage();
 
-    const openedViaGuestLink = Boolean(guestLinkToken);
+    const openedViaGuestLink = guestInUrl;
 
-    if (guestLinkToken) {
-      setGuestToken(state.event.id, guestLinkToken);
+    if (!guestInUrl) {
+      clearPendingGuestToken();
+    }
+
+    if (openedViaGuestLink && recoveryToken) {
+      setGuestToken(state.event.id, recoveryToken);
       clearGuestViewParticipantId(state.event.id);
-      state.guestToken = guestLinkToken;
+      state.guestToken = recoveryToken;
       stripGuestParamFromUrl();
     } else {
       state.guestToken = getGuestToken(state.event.id);
@@ -1857,8 +1890,10 @@ async function bootEvent() {
       const restored = await restoreGuestFromLink(state.guestToken);
       if (!restored) {
         clearGuestToken(state.event.id);
+        clearPendingGuestToken();
         state.guestToken = null;
         state.guestMode = null;
+        state.participant = null;
         els.loading.hidden = true;
         els.app.hidden = false;
         showGuestSetupUi();
@@ -2069,11 +2104,13 @@ async function saveGuestName() {
     const token = createGuestToken();
     setGuestToken(state.event.id, token);
     clearGuestViewParticipantId(state.event.id);
+    clearPendingGuestToken();
     localStorage.setItem(`wth_guest_name_${state.event.id}`, name);
     state.guestToken = token;
     state.guestMode = 'edit';
-    await ensureParticipant();
+    await ensureParticipant({ preferGuest: true });
     await reloadData();
+    ensureGuestEditState();
     showJoinedUi();
     showToast('Name saved');
     return;

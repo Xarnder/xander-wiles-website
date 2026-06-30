@@ -151,7 +151,13 @@ function createDayCell(dateKey, state, event, readOnly, inRange) {
 }
 
 function attachPaintHandlers(root, state, event, getPaintMode, onChange, readOnly, inRange) {
-  if (readOnly || !eventAllowsEdits(event)) return () => {};
+  const noopHandlers = {
+    cleanup() {},
+    flushChange() {},
+    isPainting: () => false,
+  };
+
+  if (readOnly || !eventAllowsEdits(event)) return noopHandlers;
 
   let painting = false;
   let activePointerId = null;
