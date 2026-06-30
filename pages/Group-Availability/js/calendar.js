@@ -3,7 +3,6 @@ import {
   formatHourRangeLabel,
   eventAllowsEdits,
   slotsToDaySelection,
-  debounce,
 } from './utils.js';
 import { heatColor, heatTextColor } from './heatmap.js';
 
@@ -158,15 +157,12 @@ function attachPaintHandlers(root, state, event, getPaintMode, onChange, readOnl
   let activePointerId = null;
   let strokeAction = null;
 
-  const PAINT_CHANGE_DEBOUNCE_MS = 150;
-
-  const notifyChangeDebounced = debounce(() => {
+  function notifyChange() {
     onChange?.(new Map(state));
-  }, PAINT_CHANGE_DEBOUNCE_MS);
+  }
 
   function flushChange() {
-    notifyChangeDebounced.cancel();
-    onChange?.(new Map(state));
+    notifyChange();
   }
 
   function resolveStrokeAction(dateKey, brushMode) {
@@ -191,7 +187,7 @@ function attachPaintHandlers(root, state, event, getPaintMode, onChange, readOnl
       cell.dataset.confidence = mode;
       cell.setAttribute('aria-label', formatDayAriaLabel(dateKey, event, mode));
     }
-    notifyChangeDebounced();
+    notifyChange();
   }
 
   function paintAt(cell) {
@@ -252,13 +248,17 @@ function attachPaintHandlers(root, state, event, getPaintMode, onChange, readOnl
   document.addEventListener('pointerup', endPaint);
   document.addEventListener('pointercancel', endPaint);
 
-  return () => {
-    root.removeEventListener('pointerdown', onPointerDown);
-    root.removeEventListener('pointermove', onPointerMove);
-    root.removeEventListener('pointerup', onPointerUp);
-    root.removeEventListener('pointercancel', onPointerUp);
-    document.removeEventListener('pointerup', endPaint);
-    document.removeEventListener('pointercancel', endPaint);
+  return {
+    cleanup() {
+      root.removeEventListener('pointerdown', onPointerDown);
+      root.removeEventListener('pointermove', onPointerMove);
+      root.removeEventListener('pointerup', onPointerUp);
+      root.removeEventListener('pointercancel', onPointerUp);
+      document.removeEventListener('pointerup', endPaint);
+      document.removeEventListener('pointercancel', endPaint);
+    },
+    flushChange,
+    isPainting: () => painting,
   };
 }
 
@@ -273,7 +273,7 @@ export function buildDayCalendar(container, event, dayMap, options) {
   const inRange = new Set(enumerateDates(event.start_date, event.end_date));
   const state = new Map(dayMap);
   let paintMode = brush;
-  let detachPaint = () => {};
+  let paintHandlers = null;
 
   container.innerHTML = '';
   const root = document.createElement('div');
@@ -317,7 +317,7 @@ export function buildDayCalendar(container, event, dayMap, options) {
   root.appendChild(paintSurface);
   container.appendChild(root);
 
-  detachPaint = attachPaintHandlers(
+  paintHandlers = attachPaintHandlers(
     paintSurface,
     state,
     event,
@@ -348,8 +348,15 @@ export function buildDayCalendar(container, event, dayMap, options) {
         }
       });
     },
+    flushChange() {
+      paintHandlers?.flushChange();
+    },
+    isPainting() {
+      return paintHandlers?.isPainting() ?? false;
+    },
     destroy() {
-      detachPaint();
+      paintHandlers?.cleanup();
+      paintHandlers = null;
     },
   };
 }

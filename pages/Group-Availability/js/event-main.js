@@ -1465,6 +1465,20 @@ function markLocalChange() {
   }
 }
 
+function syncDirtyFromUi() {
+  state.paintController?.flushChange?.();
+  const dirty = serializeSlotMap(buildSlotMapFromUi()) !== lastSavedSnapshot;
+  state.hasUnsavedChanges = dirty;
+  return dirty;
+}
+
+function shouldRefreshPaintGrid() {
+  if (state.isSaving) return false;
+  if (state.hasUnsavedChanges) return false;
+  if (state.paintController?.isPainting?.()) return false;
+  return true;
+}
+
 function updateSaveButton() {
   if (!els.saveAvailability) return;
   const canEdit = canEditAvailability();
@@ -1516,14 +1530,14 @@ function renderPaintGrid() {
     separateMonths: true,
     onChange: readOnly ? () => {} : markLocalChange,
   });
-  if (!readOnly) captureSavedSnapshot();
+  if (!readOnly && !state.hasUnsavedChanges) captureSavedSnapshot();
   else updateSaveButton();
 }
 
 async function saveAvailability(options = {}) {
   const { auto = false } = options;
   if (!canEditAvailability()) return;
-  if (!state.hasUnsavedChanges || state.isSaving) return;
+  if (state.isSaving) return;
 
   const startHour = parseTimeInput(els.timeStart?.value);
   const endHour = parseTimeInput(els.timeEnd?.value);
@@ -1532,27 +1546,34 @@ async function saveAvailability(options = {}) {
     return;
   }
 
+  const dirty = syncDirtyFromUi();
+  const slotMap = buildSlotMapFromUi();
+  const isFirstSubmit = !state.participant?.has_submitted_availability;
+  const hasSlots = slotMap.size > 0;
+
+  if (!dirty && !(isFirstSubmit && hasSlots)) return;
+
   clearAutoSaveTimer();
 
   state.appliedTimeStart = startHour;
   state.appliedTimeEnd = endHour;
   updateTimeRangeSummary();
 
-  const slotMap = buildSlotMapFromUi();
+  const saveSlotMap = slotMap;
   state.isSaving = true;
   updateSaveButton();
   renderStatus();
 
   try {
     const wasFirstSave = !state.participant.has_submitted_availability;
-    await syncSlots(state.event, state.participant.id, slotMap, client());
+    await syncSlots(state.event, state.participant.id, saveSlotMap, client());
     if (wasFirstSave) {
       await markSubmitted(state.participant.id, client());
       state.participant.has_submitted_availability = true;
       els.blindGate.hidden = true;
       await reloadData();
     } else {
-      applyLocalSlotsFromMap(state.participant.id, slotMap);
+      applyLocalSlotsFromMap(state.participant.id, saveSlotMap);
     }
     captureSavedSnapshot();
     renderOverlap();
@@ -1880,7 +1901,7 @@ async function bootEvent() {
     subscribeToEvent(state.event.id, client(), {
       onSlots: async () => {
         await reloadSlots();
-        if (!state.hasUnsavedChanges) renderPaintGrid();
+        if (shouldRefreshPaintGrid()) renderPaintGrid();
         renderMultiGrid();
         renderOverlap();
         renderHeatMap();
@@ -1896,9 +1917,9 @@ async function bootEvent() {
         renderEventHeader();
         renderStatus();
         startCountdownTimer();
-        if (!state.hasUnsavedChanges || !eventAllowsEdits(ev)) {
+        if (!shouldRefreshPaintGrid() || !eventAllowsEdits(ev)) {
           if (!eventAllowsEdits(ev)) state.hasUnsavedChanges = false;
-          renderPaintGrid();
+          if (shouldRefreshPaintGrid()) renderPaintGrid();
         } else {
           updateSaveButton();
         }
