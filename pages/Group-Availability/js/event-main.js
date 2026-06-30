@@ -15,6 +15,7 @@ import {
   deleteEvent,
   deleteParticipant,
   mergeGuestToUser,
+  issueGuestEditLink,
 } from './api.js';
 import {
   getGuestToken,
@@ -48,6 +49,8 @@ import {
   shareOrCopyUrl,
   getEventContextFromLocation,
   buildShareUrl,
+  buildGuestEditUrl,
+  stripGuestParamFromUrl,
   formatDbError,
   clearEventNavStorage,
   expandDaysToSlotMap,
@@ -74,6 +77,9 @@ const els = {
   shareLink: document.getElementById('share-link'),
   shareLinkBox: document.getElementById('share-link-box'),
   shareUrlInput: document.getElementById('share-url-input'),
+  guestPersonalLinkBox: document.getElementById('guest-personal-link-box'),
+  guestPersonalLinkInput: document.getElementById('guest-personal-link-input'),
+  guestPersonalLinkCopy: document.getElementById('guest-personal-link-copy'),
   participantCount: document.getElementById('participant-count'),
   identityBar: document.getElementById('identity-bar'),
   identityGoogleView: document.getElementById('identity-google-view'),
@@ -175,6 +181,12 @@ const els = {
   heatmapLegend: document.getElementById('heatmap-legend'),
   heatmapLegendDetail: document.getElementById('heatmap-legend-detail'),
   eventDescription: document.getElementById('event-description'),
+  guestEditLinkModal: document.getElementById('guest-edit-link-modal'),
+  guestEditLinkTitle: document.getElementById('guest-edit-link-title'),
+  guestEditLinkDesc: document.getElementById('guest-edit-link-desc'),
+  guestEditLinkInput: document.getElementById('guest-edit-link-input'),
+  guestEditLinkCopy: document.getElementById('guest-edit-link-copy'),
+  guestEditLinkClose: document.getElementById('guest-edit-link-close'),
 };
 
 let countdownTimer = null;
@@ -1124,6 +1136,50 @@ function canOrganizerRemoveGuest(participant) {
   return hasOrganizerAccess() && !participant.user_id && !participant.is_organizer;
 }
 
+function canOrganizerIssueEditLink(participant) {
+  return hasOrganizerAccess() && !participant.user_id && !participant.is_organizer;
+}
+
+async function handleIssueGuestEditLink(participant) {
+  if (!canOrganizerIssueEditLink(participant)) return;
+
+  const name = participant.display_name || 'Guest';
+  try {
+    const token = await issueGuestEditLink(participant.id, client());
+    const url = buildGuestEditUrl(slug, token);
+    showGuestEditLinkModal(name, url);
+  } catch (err) {
+    console.error(err);
+    showToast(formatDbError(err), 'error');
+  }
+}
+
+function showGuestEditLinkModal(participantName, url) {
+  if (!els.guestEditLinkModal) return;
+
+  if (els.guestEditLinkTitle) {
+    els.guestEditLinkTitle.textContent = `Private edit link for ${participantName}`;
+  }
+  if (els.guestEditLinkDesc) {
+    els.guestEditLinkDesc.textContent =
+      'Send this link only to them. It opens their existing submission so they can edit on a new device. Generating a new link revokes edit access on their old browser.';
+  }
+  if (els.guestEditLinkInput) {
+    els.guestEditLinkInput.value = url;
+  }
+
+  els.guestEditLinkModal.hidden = false;
+  document.body.classList.add('confirm-open');
+  els.guestEditLinkInput?.focus();
+  els.guestEditLinkInput?.select();
+}
+
+function closeGuestEditLinkModal() {
+  if (!els.guestEditLinkModal) return;
+  els.guestEditLinkModal.hidden = true;
+  document.body.classList.remove('confirm-open');
+}
+
 async function handleRemoveGuest(participant) {
   if (!canOrganizerRemoveGuest(participant)) return;
 
@@ -1203,6 +1259,8 @@ function renderMultiSectionCalendars() {
   buildMultiDayCalendar(els.multiGrid, state.event, others, maps, {
     canRemoveGuest: canOrganizerRemoveGuest,
     onRemoveGuest: handleRemoveGuest,
+    canIssueEditLink: canOrganizerIssueEditLink,
+    onIssueEditLink: handleIssueGuestEditLink,
   });
 }
 
@@ -1608,6 +1666,9 @@ async function ensureParticipant() {
     state.guestMode = 'edit';
     const name = localStorage.getItem(`wth_guest_name_${state.event.id}`) || 'Guest';
     state.participant = await joinAsGuest(state.event, name, state.guestToken);
+    if (state.participant?.display_name) {
+      localStorage.setItem(`wth_guest_name_${state.event.id}`, state.participant.display_name);
+    }
   }
   if (state.participant) setParticipantId(state.event.id, state.participant.id);
 }
@@ -1618,13 +1679,24 @@ function updateShareLink() {
   if (els.shareUrlInput) els.shareUrlInput.value = url;
 }
 
+function updateGuestPersonalLink() {
+  if (!slug || !state.guestToken) return;
+  if (els.guestPersonalLinkInput) {
+    els.guestPersonalLinkInput.value = buildGuestEditUrl(slug, state.guestToken);
+  }
+}
+
 function updateShareUi() {
-  const show = Boolean(state.participant) && !isGuestPreviewActive() && !isGuestViewOnly();
-  if (els.shareLinkBox) els.shareLinkBox.hidden = !show;
+  const joined = Boolean(state.participant) && !isGuestPreviewActive() && !isGuestViewOnly();
+  if (els.shareLinkBox) els.shareLinkBox.hidden = !joined;
   if (els.shareLink) {
     els.shareLink.hidden = typeof navigator.share !== 'function';
   }
-  if (show) updateShareLink();
+  if (joined) updateShareLink();
+
+  const showPersonal = joined && isGuestEditMode() && Boolean(state.guestToken);
+  if (els.guestPersonalLinkBox) els.guestPersonalLinkBox.hidden = !showPersonal;
+  if (showPersonal) updateGuestPersonalLink();
 }
 
 async function handleShareLink() {
@@ -1645,6 +1717,17 @@ async function handleCopyLink() {
   }
   const ok = await copyToClipboard(url);
   if (ok) showToast('Link copied');
+  else showToast('Could not copy — select the link and copy manually', 'error');
+}
+
+async function handleCopyGuestPersonalLink() {
+  const url = els.guestPersonalLinkInput?.value || buildGuestEditUrl(slug, state.guestToken);
+  if (els.guestPersonalLinkInput) {
+    els.guestPersonalLinkInput.focus();
+    els.guestPersonalLinkInput.select();
+  }
+  const ok = await copyToClipboard(url);
+  if (ok) showToast('Private link copied — save it somewhere safe');
   else showToast('Could not copy — select the link and copy manually', 'error');
 }
 
@@ -1690,6 +1773,13 @@ async function bootEvent() {
     }
 
     clearEventNavStorage();
+
+    if (ctx.guestToken) {
+      setGuestToken(state.event.id, ctx.guestToken);
+      clearGuestViewParticipantId(state.event.id);
+      stripGuestParamFromUrl();
+    }
+
     if (slug) syncEventUrl(slug);
 
     updateShareLink();
@@ -2003,12 +2093,40 @@ function setupJoin() {
     handleCopyLink();
   });
 
+  els.guestPersonalLinkCopy?.addEventListener('click', () => {
+    handleCopyGuestPersonalLink();
+  });
+
+  els.guestPersonalLinkInput?.addEventListener('focus', () => {
+    els.guestPersonalLinkInput?.select();
+  });
+
   els.shareLink?.addEventListener('click', () => {
     handleShareLink();
   });
 
   els.shareUrlInput?.addEventListener('focus', () => {
     els.shareUrlInput?.select();
+  });
+
+  els.guestEditLinkCopy?.addEventListener('click', async () => {
+    const url = els.guestEditLinkInput?.value;
+    if (!url) return;
+    const ok = await copyToClipboard(url);
+    if (ok) showToast('Edit link copied');
+    else showToast('Could not copy — select the link and copy manually', 'error');
+  });
+
+  els.guestEditLinkClose?.addEventListener('click', closeGuestEditLinkModal);
+
+  els.guestEditLinkModal?.addEventListener('click', (e) => {
+    if (e.target === els.guestEditLinkModal) closeGuestEditLinkModal();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && els.guestEditLinkModal && !els.guestEditLinkModal.hidden) {
+      closeGuestEditLinkModal();
+    }
   });
 
   els.copyOverlapBtn?.addEventListener('click', async () => {

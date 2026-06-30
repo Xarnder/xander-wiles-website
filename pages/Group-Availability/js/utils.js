@@ -224,41 +224,58 @@ export function buildShareUrl(slug) {
   return `${SHARE_ORIGIN}${eventUrl(slug)}`;
 }
 
+/** Private guest edit link — includes secret token; send only to that person. */
+export function buildGuestEditUrl(slug, guestToken) {
+  const base = buildShareUrl(slug);
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}guest=${encodeURIComponent(guestToken)}`;
+}
+
+function readGuestTokenFromUrl(params) {
+  const token = params.get('guest')?.trim();
+  return token || null;
+}
+
 function normalizeSlug(value) {
   if (!value || value === 'undefined' || value === 'null') return null;
   const trimmed = String(value).trim();
   return trimmed || null;
 }
 
-/** Read slug / event id from URL, path, or sessionStorage (survives cleanUrl redirects) */
+/** Read slug / event id / guest edit token from URL, path, or sessionStorage */
 export function getEventContextFromLocation() {
   const params = new URLSearchParams(window.location.search);
+  const guestToken = readGuestTokenFromUrl(params);
 
   const fromQuery = normalizeSlug(params.get('slug'));
-  if (fromQuery) return { slug: fromQuery, eventId: null };
+  if (fromQuery) return { slug: fromQuery, eventId: null, guestToken };
 
   const pathMatch = window.location.pathname.match(/\/Group-Availability\/event\/([^/]+)\/?$/);
   if (pathMatch) {
-    return { slug: normalizeSlug(decodeURIComponent(pathMatch[1])), eventId: null };
+    return {
+      slug: normalizeSlug(decodeURIComponent(pathMatch[1])),
+      eventId: null,
+      guestToken,
+    };
   }
 
   const eventId = params.get('id');
-  if (eventId) return { slug: null, eventId };
+  if (eventId) return { slug: null, eventId, guestToken };
 
   try {
     const navSlug = sessionStorage.getItem('wth_nav_slug');
-    if (navSlug) return { slug: normalizeSlug(navSlug), eventId: null };
+    if (navSlug) return { slug: normalizeSlug(navSlug), eventId: null, guestToken };
 
     const navId = sessionStorage.getItem('wth_nav_event_id');
-    if (navId) return { slug: null, eventId: navId };
+    if (navId) return { slug: null, eventId: navId, guestToken };
 
     const pending = sessionStorage.getItem('wth_pending_slug');
-    if (pending) return { slug: normalizeSlug(pending), eventId: null };
+    if (pending) return { slug: normalizeSlug(pending), eventId: null, guestToken };
   } catch {
     /* ignore */
   }
 
-  return { slug: null, eventId: null };
+  return { slug: null, eventId: null, guestToken };
 }
 
 export function getEventSlugFromLocation() {
@@ -300,6 +317,14 @@ export function navigateToEvent(slug, eventId = null) {
   }
 }
 
+export function stripGuestParamFromUrl() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('guest')) return;
+  url.searchParams.delete('guest');
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, '', next);
+}
+
 export function syncEventUrl(slug) {
   if (!slug) return;
   let target = eventUrl(slug);
@@ -324,6 +349,9 @@ export function formatDbError(err) {
     msg.includes('column events.location')
   ) {
     return "Database needs updating: run pages/Group-Availability/supabase/migrate-existing.sql in the Supabase SQL Editor, wait a few seconds, then reload this page.";
+  }
+  if (msg.includes('issue_guest_edit_link')) {
+    return 'Database needs updating: run pages/Group-Availability/supabase/migrate-guest-edit-link.sql in the Supabase SQL Editor, wait a few seconds, then reload this page.';
   }
   if (code === '42501' || msg.includes('row-level security')) {
     return 'Permission denied. Sign in again, or check Supabase RLS policies.';

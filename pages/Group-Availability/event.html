@@ -59,7 +59,7 @@
         <div id="identity-guest-view" class="identity-guest-view" hidden>
           <p class="identity-view-badge">Viewing results only</p>
           <p class="identity-view-name">Viewing as <strong id="guest-view-display-name"></strong></p>
-          <p class="muted identity-view-hint">You can see group results and your submitted days, but you can't edit from this browser. To edit again, sign in with Google (same name) or ask the organizer to remove you so you can rejoin.</p>
+          <p class="muted identity-view-hint">You can see group results and your submitted days, but you can't edit from this browser. Ask the organizer for a private edit link, sign in with Google (same account), or have them remove you so you can rejoin.</p>
           <div class="identity-form-actions">
             <button type="button" id="guest-switch-person" class="btn btn-ghost">Switch person</button>
             <button type="button" id="google-join-view" class="btn btn-ghost btn-google-opt">Sign in with Google</button>
@@ -92,7 +92,7 @@
           <p id="identity-setup-divider" class="identity-setup-divider" hidden><span>Already submitted?</span></p>
 
           <div id="identity-returning-block" class="identity-returning-block" hidden>
-            <p class="muted identity-block-hint">Pick your name to view results. This device can't edit your submission — only view.</p>
+            <p class="muted identity-block-hint">Pick your name to view results. To edit on this device, ask the organizer for your private edit link.</p>
             <label class="guest-view-field" for="guest-view-select">
               <span class="guest-name-label">Select your name</span>
               <select id="guest-view-select" class="guest-view-select">
@@ -123,6 +123,14 @@
             <input type="text" id="share-url-input" class="share-url-input" readonly aria-label="Event share link">
             <button type="button" id="share-link" class="btn btn-ghost" hidden>Share</button>
             <button type="button" id="copy-link" class="btn btn-primary">Copy link</button>
+          </div>
+        </div>
+        <div id="guest-personal-link-box" class="guest-personal-link-box panel" hidden>
+          <label class="share-link-label" for="guest-personal-link-input">Your private edit link</label>
+          <p class="guest-personal-link-hint muted">Save this somewhere safe (bookmarks, notes) so you can return and edit your availability later — even on another device. <strong>Do not share this link</strong>; anyone with it can change your submission.</p>
+          <div class="share-link-row">
+            <input type="text" id="guest-personal-link-input" class="share-url-input" readonly aria-label="Your private edit link">
+            <button type="button" id="guest-personal-link-copy" class="btn btn-primary">Copy link</button>
           </div>
         </div>
         <p class="muted" style="margin-top: 8px;"><span id="participant-count">0 participants</span></p>
@@ -384,6 +392,20 @@
           </div>
         </div>
       </section>
+    </div>
+  </div>
+
+  <div id="guest-edit-link-modal" class="confirm-overlay" hidden>
+    <div class="confirm-dialog panel guest-edit-link-dialog" role="dialog" aria-modal="true" aria-labelledby="guest-edit-link-title" aria-describedby="guest-edit-link-desc">
+      <h2 id="guest-edit-link-title" class="confirm-title">Private edit link</h2>
+      <p id="guest-edit-link-desc" class="confirm-message muted"></p>
+      <div class="share-link-row guest-edit-link-row">
+        <input type="text" id="guest-edit-link-input" class="share-url-input" readonly aria-label="Private guest edit link">
+        <button type="button" id="guest-edit-link-copy" class="btn btn-primary">Copy link</button>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" id="guest-edit-link-close" class="btn btn-ghost">Close</button>
+      </div>
     </div>
   </div>
 

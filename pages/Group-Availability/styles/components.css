@@ -1464,11 +1464,31 @@ button.overlap-item-selectable:focus-visible {
   min-width: 0;
 }
 
-.participant-remove-btn {
+.participant-grid-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
   margin-left: auto;
+}
+
+.participant-edit-link-btn,
+.participant-remove-btn {
   padding: 6px 12px;
   min-height: 36px;
   font-size: 0.82rem;
+}
+
+.guest-edit-link-dialog {
+  max-width: 520px;
+  text-align: left;
+}
+
+.guest-edit-link-dialog .confirm-title {
+  text-align: center;
+}
+
+.guest-edit-link-row {
+  margin: 16px 0 8px;
 }
 
 .organizer-panel {
@@ -1693,6 +1713,26 @@ button.overlap-item-selectable:focus-visible {
   background:
     linear-gradient(145deg, var(--surface-accent-wash-strong) 0%, transparent 50%),
     linear-gradient(180deg, var(--surface-paper-raised) 0%, var(--surface-paper) 100%);
+}
+
+.guest-personal-link-box {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--color-maybe) 12%, transparent) 0%, transparent 55%),
+    linear-gradient(180deg, var(--surface-paper-raised) 0%, var(--surface-paper) 100%);
+  border-color: color-mix(in srgb, var(--color-maybe) 28%, var(--border-paper));
+}
+
+.guest-personal-link-hint {
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.guest-personal-link-hint strong {
+  color: var(--text-ink);
+  font-weight: 700;
 }
 
 .share-link-label {

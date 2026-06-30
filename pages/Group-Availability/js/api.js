@@ -27,7 +27,9 @@ export async function fetchParticipants(eventId, client) {
   const db = client || getAuthClient();
   const { data, error } = await db
     .from('event_participants')
-    .select('*')
+    .select(
+      'id, event_id, user_id, display_name, avatar_url, is_organizer, has_submitted_availability, created_at'
+    )
     .eq('event_id', eventId)
     .order('created_at', { ascending: true });
   if (error) throw error;
@@ -266,6 +268,15 @@ export async function deleteParticipant(participantId) {
   const client = getAuthClient();
   const { error } = await client.from('event_participants').delete().eq('id', participantId);
   if (error) throw error;
+}
+
+export async function issueGuestEditLink(participantId, client) {
+  const db = client || getAuthClient();
+  const { data, error } = await db.rpc('issue_guest_edit_link', {
+    p_participant_id: participantId,
+  });
+  if (error) throw error;
+  return data;
 }
 
 export async function mergeGuestToUser(eventId, guestToken) {

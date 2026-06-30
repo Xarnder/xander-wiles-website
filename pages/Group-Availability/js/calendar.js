@@ -355,7 +355,7 @@ export function buildDayCalendar(container, event, dayMap, options) {
 }
 
 export function buildMultiDayCalendar(container, event, participants, slotsByParticipant, options = {}) {
-  const { canRemoveGuest, onRemoveGuest } = options;
+  const { canRemoveGuest, onRemoveGuest, canIssueEditLink, onIssueEditLink } = options;
   container.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'multi-day-calendar';
@@ -383,13 +383,32 @@ export function buildMultiDayCalendar(container, event, participants, slotsByPar
     name.textContent = p.display_name + (p.is_organizer ? ' (organizer)' : '');
     header.appendChild(name);
 
-    if (canRemoveGuest?.(p)) {
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'btn btn-ghost btn-danger participant-remove-btn';
-      removeBtn.textContent = 'Remove guest';
-      removeBtn.addEventListener('click', () => onRemoveGuest?.(p));
-      header.appendChild(removeBtn);
+    const showEditLink = canIssueEditLink?.(p);
+    const showRemove = canRemoveGuest?.(p);
+    if (showEditLink || showRemove) {
+      const actions = document.createElement('div');
+      actions.className = 'participant-grid-actions';
+
+      if (showEditLink) {
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'btn btn-ghost participant-edit-link-btn';
+        editBtn.textContent = 'Edit link';
+        editBtn.title = 'Generate a private link so this guest can edit on another device';
+        editBtn.addEventListener('click', () => onIssueEditLink?.(p));
+        actions.appendChild(editBtn);
+      }
+
+      if (showRemove) {
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-ghost btn-danger participant-remove-btn';
+        removeBtn.textContent = 'Remove guest';
+        removeBtn.addEventListener('click', () => onRemoveGuest?.(p));
+        actions.appendChild(removeBtn);
+      }
+
+      header.appendChild(actions);
     }
 
     section.appendChild(header);
