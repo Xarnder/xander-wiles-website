@@ -296,7 +296,10 @@ export function navigateToEvent(slug, eventId = null) {
 
 export function syncEventUrl(slug) {
   if (!slug) return;
-  const target = `${eventUrl(slug)}`;
+  let target = eventUrl(slug);
+  if (new URLSearchParams(window.location.search).get('preview') === 'guest') {
+    target = `${target}${target.includes('?') ? '&' : '?'}preview=guest`;
+  }
   const current = `${window.location.pathname}${window.location.search}`;
   if (current !== target) {
     window.history.replaceState({}, '', target);

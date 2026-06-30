@@ -121,6 +121,11 @@ export function canSeeIndividualGrids(event, currentParticipant, session) {
   if (!currentParticipant?.has_submitted_availability) return false;
   if (event.visibility_mode === 'overlap_only') return false;
   if (event.visibility_mode === 'organizer_only') {
+    if (typeof window !== 'undefined') {
+      const previewGuest =
+        new URLSearchParams(window.location.search).get('preview') === 'guest';
+      if (previewGuest) return false;
+    }
     return Boolean(session && event.organizer_id === session.user.id);
   }
   return true;

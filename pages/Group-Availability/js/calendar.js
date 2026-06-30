@@ -1,4 +1,5 @@
 import { enumerateDates, formatHourRangeLabel, eventAllowsEdits, slotsToDaySelection } from './utils.js';
+import { heatColor, heatTextColor } from './heatmap.js';
 
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -296,7 +297,7 @@ export function buildMultiDayCalendar(container, event, participants, slotsByPar
     const { days, startHour, endHour } = slotsToDaySelection(slots);
 
     const section = document.createElement('div');
-    section.className = 'participant-calendar-section glass-card';
+    section.className = 'participant-calendar-section';
 
     const header = document.createElement('div');
     header.className = 'participant-grid-header';
@@ -337,7 +338,8 @@ export function buildMultiDayCalendar(container, event, participants, slotsByPar
       section.appendChild(timeNote);
 
       const calHost = document.createElement('div');
-      buildDayCalendar(calHost, event, days, { readOnly: true });
+      calHost.className = 'participant-calendar-host';
+      buildDayCalendar(calHost, event, days, { readOnly: true, separateMonths: true });
       section.appendChild(calHost);
     }
 
@@ -345,4 +347,107 @@ export function buildMultiDayCalendar(container, event, participants, slotsByPar
   }
 
   container.appendChild(wrap);
+}
+
+function createHeatDayCell(dateKey, count, max, event, inRange) {
+  const cell = document.createElement('div');
+  cell.className = 'day-cell heat-cell';
+
+  if (!dateKey) {
+    cell.classList.add('empty');
+    cell.setAttribute('aria-hidden', 'true');
+    return cell;
+  }
+
+  cell.dataset.date = dateKey;
+  const dayNum = parseInt(dateKey.slice(8, 10), 10);
+  const dayLabel = new Intl.DateTimeFormat('en-GB', {
+    timeZone: event.timezone,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date(`${dateKey}T12:00:00`));
+
+  if (!inRange.has(dateKey)) {
+    cell.classList.add('out-of-range');
+    cell.textContent = String(dayNum);
+    cell.setAttribute('aria-label', 'Outside event range');
+    return cell;
+  }
+
+  cell.classList.add('in-range');
+  const intensity = max > 0 && count > 0 ? count / max : 0;
+  cell.style.background = heatColor(intensity);
+  cell.style.color = heatTextColor(intensity);
+  cell.style.borderColor = intensity > 0 ? heatColor(intensity) : 'rgba(255,255,255,0.08)';
+
+  const peopleLabel = count === 1 ? '1 person' : `${count} people`;
+  cell.setAttribute(
+    'aria-label',
+    count > 0 ? `${dayLabel}: ${peopleLabel} available` : `${dayLabel}: no availability`
+  );
+  cell.title = count > 0 ? `${peopleLabel} available` : 'No availability';
+
+  const num = document.createElement('span');
+  num.className = 'heat-day-num';
+  num.textContent = String(dayNum);
+  cell.appendChild(num);
+
+  if (count > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'heat-day-count';
+    badge.textContent = String(count);
+    cell.appendChild(badge);
+  }
+
+  return cell;
+}
+
+export function buildGroupHeatCalendar(container, event, byDate, max) {
+  const inRange = new Set(enumerateDates(event.start_date, event.end_date));
+
+  container.innerHTML = '';
+  const root = document.createElement('div');
+  root.className = 'day-calendar-months-grid';
+
+  const paintSurface = document.createElement('div');
+  paintSurface.className = 'day-calendar-paint-surface day-calendar-paint-surface--separate';
+
+  for (const { year, month } of monthsInRange(event.start_date, event.end_date)) {
+    const monthBlock = document.createElement('section');
+    monthBlock.className = 'day-calendar-month glass-card';
+
+    const title = document.createElement('h3');
+    title.className = 'month-title';
+    title.textContent = monthTitle(year, month, event.timezone);
+    monthBlock.appendChild(title);
+
+    const weekdayRow = document.createElement('div');
+    weekdayRow.className = 'day-calendar-weekdays';
+    for (const label of WEEKDAYS) {
+      const span = document.createElement('span');
+      span.textContent = label;
+      weekdayRow.appendChild(span);
+    }
+    monthBlock.appendChild(weekdayRow);
+
+    const weeksEl = document.createElement('div');
+    weeksEl.className = 'day-calendar-weeks';
+
+    for (const week of weeksForMonth(year, month)) {
+      const row = document.createElement('div');
+      row.className = 'day-calendar-week';
+      for (const dateKey of week) {
+        const count = dateKey ? byDate.get(dateKey) || 0 : 0;
+        row.appendChild(createHeatDayCell(dateKey, count, max, event, inRange));
+      }
+      weeksEl.appendChild(row);
+    }
+
+    monthBlock.appendChild(weeksEl);
+    paintSurface.appendChild(monthBlock);
+  }
+
+  root.appendChild(paintSurface);
+  container.appendChild(root);
 }

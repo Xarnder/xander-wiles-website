@@ -3,6 +3,7 @@ import { recoverOAuthRedirectFromSiteRoot } from './oauth-recover.js';
 import { getSession, signInWithGoogle, signOut, onAuthStateChange, profileFromSession, applyAvatarImage } from './auth.js';
 import { fetchDashboardEvents, deleteEvent } from './api.js';
 import { APP_BASE, eventUrl, showToast, formatDbError, navigateToEvent } from './utils.js';
+import { navigateToGuestPreview } from './guest-preview.js';
 import { confirmAction } from './confirm-modal.js';
 
 const els = {
@@ -42,7 +43,10 @@ function renderDashboard(events, userId) {
       </a>
       ${
         isOrganizer
-          ? `<button type="button" class="btn btn-ghost dashboard-delete" data-event-id="${escapeHtml(ev.id)}" data-event-title="${title}">Delete</button>`
+          ? `<div class="dashboard-item-actions">
+              <button type="button" class="btn btn-ghost dashboard-preview-guest" data-event-slug="${escapeHtml(slug)}" data-event-id="${escapeHtml(ev.id)}">Preview as guest</button>
+              <button type="button" class="btn btn-ghost dashboard-delete" data-event-id="${escapeHtml(ev.id)}" data-event-title="${title}">Delete</button>
+            </div>`
           : ''
       }
     </div>`;
@@ -84,6 +88,16 @@ function renderDashboard(events, userId) {
         showToast(formatDbError(err), 'error');
         btn.disabled = false;
       }
+    });
+  });
+
+  els.dashboard.querySelectorAll('.dashboard-preview-guest').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const eventSlug = btn.dataset.eventSlug || null;
+      const eventId = btn.dataset.eventId || null;
+      navigateToGuestPreview(eventSlug, eventSlug ? null : eventId);
     });
   });
 }

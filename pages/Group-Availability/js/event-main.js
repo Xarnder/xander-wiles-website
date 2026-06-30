@@ -23,17 +23,20 @@ import {
   clearGuestToken,
   setParticipantId,
 } from './guest.js';
-import { buildDayCalendar, buildMultiDayCalendar } from './calendar.js';
+import { buildDayCalendar, buildMultiDayCalendar, buildGroupHeatCalendar } from './calendar.js';
+import { computeDayAvailabilityCounts } from './heatmap.js';
 import { computeOverlap, slotsToParticipantMaps, canSeeIndividualGrids } from './overlap.js';
 import { subscribeToEvent } from './realtime.js';
 import { confirmAction } from './confirm-modal.js';
 import { BLIND_GATE_MESSAGE, filterSlotsForViewer } from './blind-gate.js';
 import { formatOverlapSummary, overlapToIcs, downloadTextFile } from './export.js';
+import { isGuestPreviewActive, navigateToGuestPreview, exitGuestPreview } from './guest-preview.js';
 import {
   APP_BASE,
   eventAllowsEdits,
   formatDateRange,
   formatDeadlineCountdown,
+  computeDefaultExpiresAt,
   copyToClipboard,
   showToast,
   getEventContextFromLocation,
@@ -81,16 +84,31 @@ const els = {
   timeStart: document.getElementById('time-start'),
   timeEnd: document.getElementById('time-end'),
   timeRangePanel: document.getElementById('time-range-panel'),
+  timeRangeSummary: document.getElementById('time-range-summary'),
+  timeRangeBody: document.getElementById('time-range-body'),
+  timeRangeEdit: document.getElementById('time-range-edit'),
+  timeRangeSave: document.getElementById('time-range-save'),
+  timeRangeCancel: document.getElementById('time-range-cancel'),
   toolbar: document.getElementById('paint-toolbar'),
   brushIndicator: document.getElementById('brush-indicator'),
   saveAvailability: document.getElementById('save-availability'),
   blindGate: document.getElementById('blind-gate'),
   multiSection: document.getElementById('multi-section'),
+  multiSectionPanel: document.getElementById('multi-section-panel'),
+  multiSectionSummary: document.getElementById('multi-section-summary'),
+  multiSectionBody: document.getElementById('multi-section-body'),
+  multiSectionToggle: document.getElementById('multi-section-toggle'),
   multiGrid: document.getElementById('multi-grid'),
+  refreshAvailability: document.getElementById('refresh-availability'),
+  organizerViewBar: document.getElementById('organizer-view-bar'),
+  organizerViewLabel: document.getElementById('organizer-view-label'),
+  toggleGuestPreview: document.getElementById('toggle-guest-preview'),
   overlapList: document.getElementById('overlap-list'),
   organizerPanel: document.getElementById('organizer-panel'),
   editDeadlineInput: document.getElementById('org-edit-deadline'),
   orgLocationInput: document.getElementById('org-location'),
+  orgStartDate: document.getElementById('org-start-date'),
+  orgEndDate: document.getElementById('org-end-date'),
   visibilitySelect: document.getElementById('org-visibility'),
   closeToggle: document.getElementById('org-close'),
   saveOrgBtn: document.getElementById('org-save'),
@@ -101,6 +119,10 @@ const els = {
   overlapPrev: document.getElementById('overlap-prev'),
   overlapNext: document.getElementById('overlap-next'),
   overlapPageInfo: document.getElementById('overlap-page-info'),
+  heatmapSection: document.getElementById('heatmap-section'),
+  heatmapGrid: document.getElementById('heatmap-grid'),
+  heatmapLegend: document.getElementById('heatmap-legend'),
+  heatmapLegendDetail: document.getElementById('heatmap-legend-detail'),
   eventDescription: document.getElementById('event-description'),
 };
 
@@ -129,6 +151,10 @@ let state = {
   overlapRanges: [],
   overlapPage: 0,
   editingGuestName: false,
+  timeRangeEditing: false,
+  appliedTimeStart: 10,
+  appliedTimeEnd: 22,
+  multiSectionExpanded: false,
 };
 
 let lastSavedSnapshot = '';
@@ -139,6 +165,30 @@ function client() {
 
 function isOrganizer() {
   return state.session && state.event?.organizer_id === state.session.user.id;
+}
+
+function hasOrganizerAccess() {
+  return isOrganizer() && !isGuestPreviewActive();
+}
+
+function updateGuestPreviewUi() {
+  const previewing = isGuestPreviewActive();
+  const canPreview = isOrganizer();
+
+  if (els.organizerViewBar) {
+    els.organizerViewBar.hidden = !canPreview;
+    els.organizerViewBar.classList.toggle('is-guest-mode', previewing);
+    els.organizerViewBar.classList.toggle('is-admin-mode', !previewing);
+  }
+  if (els.organizerViewLabel) {
+    els.organizerViewLabel.textContent = previewing ? 'Showing as Guest' : 'Showing as Admin';
+    els.organizerViewLabel.classList.toggle('is-guest', previewing);
+    els.organizerViewLabel.classList.toggle('is-admin', !previewing);
+  }
+  if (els.toggleGuestPreview) {
+    els.toggleGuestPreview.textContent = previewing ? 'Back to admin' : 'View as guest';
+    els.toggleGuestPreview.hidden = !canPreview;
+  }
 }
 
 function viewerSlots() {
@@ -178,11 +228,20 @@ function renderStatus() {
 }
 
 function updateOrganizerUi() {
-  const show = isOrganizer();
+  const show = hasOrganizerAccess();
+  updateGuestPreviewUi();
   if (els.shareLinkBox) els.shareLinkBox.hidden = !show;
   if (els.organizerPanel) els.organizerPanel.hidden = !show;
+  if (isGuestPreviewActive()) {
+    renderMultiGrid();
+  }
   if (show && state.event) {
     if (els.orgLocationInput) els.orgLocationInput.value = state.event.location || '';
+    if (els.orgStartDate) els.orgStartDate.value = state.event.start_date;
+    if (els.orgEndDate) {
+      els.orgEndDate.value = state.event.end_date;
+      els.orgEndDate.min = state.event.start_date;
+    }
     els.editDeadlineInput.value = state.event.edit_deadline
       ? toLocalInputValue(state.event.edit_deadline, state.event.timezone)
       : '';
@@ -231,6 +290,7 @@ function isGuestParticipant() {
 function setEventSectionsEnabled(enabled) {
   if (els.paintSection) els.paintSection.hidden = !enabled;
   if (els.overlapSection) els.overlapSection.hidden = !enabled;
+  if (els.heatmapSection) els.heatmapSection.hidden = !enabled;
   if (!enabled) {
     if (els.multiSection) els.multiSection.hidden = true;
     if (els.blindGate) els.blindGate.hidden = true;
@@ -390,6 +450,44 @@ function renderOverlap() {
     .join('');
 }
 
+function renderHeatMap() {
+  if (!state.participant) {
+    if (els.heatmapSection) els.heatmapSection.hidden = true;
+    return;
+  }
+
+  els.heatmapSection.hidden = false;
+
+  if (!state.participant.has_submitted_availability) {
+    els.heatmapGrid.innerHTML =
+      '<p class="muted">Submit your availability to see which days work best for the group.</p>';
+    if (els.heatmapLegend) els.heatmapLegend.hidden = true;
+    return;
+  }
+
+  const { byDate, max, submittedCount } = computeDayAvailabilityCounts(
+    state.participants,
+    viewerSlots(),
+    state.event
+  );
+
+  if (!submittedCount || max === 0) {
+    els.heatmapGrid.innerHTML = '<p class="muted">No group availability yet.</p>';
+    if (els.heatmapLegend) els.heatmapLegend.hidden = true;
+    return;
+  }
+
+  buildGroupHeatCalendar(els.heatmapGrid, state.event, byDate, max);
+
+  if (els.heatmapLegend) {
+    els.heatmapLegend.hidden = false;
+  }
+  if (els.heatmapLegendDetail) {
+    const maxLabel = max === 1 ? '1 person' : `${max} people`;
+    els.heatmapLegendDetail.textContent = `· up to ${maxLabel} on a day · ${submittedCount} responded`;
+  }
+}
+
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -398,7 +496,7 @@ function escapeHtml(s) {
 }
 
 function canOrganizerRemoveGuest(participant) {
-  return isOrganizer() && !participant.user_id && !participant.is_organizer;
+  return hasOrganizerAccess() && !participant.user_id && !participant.is_organizer;
 }
 
 async function handleRemoveGuest(participant) {
@@ -419,11 +517,67 @@ async function handleRemoveGuest(participant) {
     await reloadData();
     renderMultiGrid();
     renderOverlap();
+    renderHeatMap();
     showToast(`${name} removed`);
   } catch (err) {
     console.error(err);
     showToast(formatDbError(err), 'error');
   }
+}
+
+function otherParticipants() {
+  if (!state.participant) return state.participants;
+  return state.participants.filter((p) => p.id !== state.participant.id);
+}
+
+function updateMultiSectionSummary() {
+  if (!els.multiSectionSummary) return;
+  const others = otherParticipants();
+  if (!others.length) {
+    els.multiSectionSummary.textContent = "You're the only participant so far";
+    return;
+  }
+  const responded = others.filter((p) => p.has_submitted_availability).length;
+  const countLabel = others.length === 1 ? '1 other person' : `${others.length} other people`;
+  if (responded === 0) {
+    els.multiSectionSummary.textContent = `${countLabel} · none have submitted yet`;
+  } else if (responded === others.length) {
+    els.multiSectionSummary.textContent = `${countLabel} · all submitted`;
+  } else {
+    els.multiSectionSummary.textContent = `${countLabel} · ${responded} submitted`;
+  }
+}
+
+function setMultiSectionExpanded(expanded) {
+  state.multiSectionExpanded = expanded;
+  if (els.multiSectionPanel) {
+    els.multiSectionPanel.classList.toggle('is-collapsed', !expanded);
+    els.multiSectionPanel.classList.toggle('is-expanded', expanded);
+  }
+  if (els.multiSectionBody) els.multiSectionBody.hidden = !expanded;
+  if (els.multiSectionToggle) {
+    els.multiSectionToggle.textContent = expanded ? 'Hide' : 'Show';
+    els.multiSectionToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  }
+}
+
+function renderMultiSectionCalendars() {
+  const others = otherParticipants();
+  if (!others.length) {
+    els.multiGrid.innerHTML = '<p class="muted">You\'re the only participant so far.</p>';
+    return;
+  }
+  const maps = slotsToParticipantMaps(viewerSlots(), state.event);
+  buildMultiDayCalendar(els.multiGrid, state.event, others, maps, {
+    canRemoveGuest: canOrganizerRemoveGuest,
+    onRemoveGuest: handleRemoveGuest,
+  });
+}
+
+function toggleMultiSection() {
+  const next = !state.multiSectionExpanded;
+  setMultiSectionExpanded(next);
+  if (next) renderMultiSectionCalendars();
 }
 
 function renderMultiGrid() {
@@ -446,19 +600,106 @@ function renderMultiGrid() {
 
   els.blindGate.hidden = true;
   els.multiSection.hidden = false;
-  const maps = slotsToParticipantMaps(viewerSlots(), state.event);
-  buildMultiDayCalendar(els.multiGrid, state.event, state.participants, maps, {
-    canRemoveGuest: canOrganizerRemoveGuest,
-    onRemoveGuest: handleRemoveGuest,
-  });
+  updateMultiSectionSummary();
+  if (state.multiSectionExpanded) {
+    renderMultiSectionCalendars();
+  } else {
+    setMultiSectionExpanded(false);
+    if (els.multiGrid) els.multiGrid.innerHTML = '';
+  }
+}
+
+async function refreshEveryoneAvailability() {
+  if (!state.event || els.refreshAvailability?.disabled) return;
+
+  const btn = els.refreshAvailability;
+  const prevLabel = btn?.textContent || 'Refresh';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Refreshing…';
+  }
+
+  try {
+    await reloadData();
+    renderMultiGrid();
+    renderOverlap();
+    renderHeatMap();
+    showToast('Availability updated');
+  } catch (err) {
+    console.error(err);
+    showToast(formatDbError(err), 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  }
+}
+
+function syncOrgEndDateMin() {
+  if (!els.orgStartDate || !els.orgEndDate) return;
+  els.orgEndDate.min = els.orgStartDate.value;
+  if (els.orgEndDate.value && els.orgEndDate.value < els.orgStartDate.value) {
+    els.orgEndDate.value = els.orgStartDate.value;
+  }
+}
+
+function formatTimeSummary(startHour, endHour) {
+  return `${hourToTimeInput(startHour)} – ${hourToTimeInput(endHour)} · applies to every day you select`;
+}
+
+function updateTimeRangeSummary() {
+  if (!els.timeRangeSummary) return;
+  els.timeRangeSummary.textContent = formatTimeSummary(state.appliedTimeStart, state.appliedTimeEnd);
+}
+
+function setTimeRangeEditing(editing) {
+  state.timeRangeEditing = editing;
+  if (els.timeRangePanel) {
+    els.timeRangePanel.classList.toggle('is-collapsed', !editing);
+    els.timeRangePanel.classList.toggle('is-editing', editing);
+  }
+  if (els.timeRangeBody) els.timeRangeBody.hidden = !editing;
+  if (els.timeRangeEdit) els.timeRangeEdit.hidden = editing;
+  if (els.timeRangeSave) els.timeRangeSave.hidden = !editing;
+  if (els.timeRangeCancel) els.timeRangeCancel.hidden = !editing;
+}
+
+function startTimeRangeEdit() {
+  if (!state.participant || !eventAllowsEdits(state.event)) return;
+  setTimeRangeEditing(true);
+  setTimeInputs(state.appliedTimeStart, state.appliedTimeEnd, false);
+  els.timeStart?.focus();
+}
+
+function cancelTimeRangeEdit() {
+  setTimeInputs(state.appliedTimeStart, state.appliedTimeEnd, true);
+  setTimeRangeEditing(false);
+}
+
+function applyTimeRangeEdit() {
+  const startHour = parseTimeInput(els.timeStart?.value);
+  const endHour = parseTimeInput(els.timeEnd?.value);
+  if (endHour <= startHour) {
+    showToast('End time must be after start time', 'error');
+    return;
+  }
+
+  state.appliedTimeStart = startHour;
+  state.appliedTimeEnd = endHour;
+  setTimeInputs(startHour, endHour, true);
+  updateTimeRangeSummary();
+  setTimeRangeEditing(false);
+  markLocalChange();
 }
 
 function setTimeInputs(startHour, endHour, readOnly) {
   if (!els.timeStart || !els.timeEnd) return;
   els.timeStart.value = hourToTimeInput(startHour);
   els.timeEnd.value = hourToTimeInput(endHour);
-  els.timeStart.disabled = readOnly;
-  els.timeEnd.disabled = readOnly;
+  const locked = readOnly || !state.timeRangeEditing;
+  els.timeStart.disabled = locked;
+  els.timeEnd.disabled = locked;
 }
 
 function buildSlotMapFromUi() {
@@ -497,8 +738,13 @@ function renderPaintGrid() {
   const readOnly = !state.participant || !eventAllowsEdits(state.event);
 
   if (!state.participant) {
+    state.appliedTimeStart = 10;
+    state.appliedTimeEnd = 22;
     setTimeInputs(10, 22, true);
+    updateTimeRangeSummary();
+    setTimeRangeEditing(false);
     if (els.timeRangePanel) els.timeRangePanel.hidden = true;
+    if (els.timeRangeEdit) els.timeRangeEdit.hidden = true;
     if (state.paintController) state.paintController.destroy();
     state.paintController = buildDayCalendar(els.paintGrid, state.event, new Map(), {
       brush: state.brush,
@@ -514,8 +760,13 @@ function renderPaintGrid() {
   const myMap = maps.get(state.participant.id) || new Map();
   const { days, startHour, endHour } = slotsToDaySelection(myMap);
 
+  state.appliedTimeStart = startHour;
+  state.appliedTimeEnd = endHour;
   setTimeInputs(startHour, endHour, readOnly);
+  updateTimeRangeSummary();
+  setTimeRangeEditing(false);
   if (els.timeRangePanel) els.timeRangePanel.hidden = false;
+  if (els.timeRangeEdit) els.timeRangeEdit.hidden = readOnly;
 
   if (state.paintController) state.paintController.destroy();
   state.paintController = buildDayCalendar(els.paintGrid, state.event, days, {
@@ -539,6 +790,10 @@ async function saveAvailability() {
     return;
   }
 
+  state.appliedTimeStart = startHour;
+  state.appliedTimeEnd = endHour;
+  updateTimeRangeSummary();
+
   const slotMap = buildSlotMapFromUi();
   state.isSaving = true;
   updateSaveButton();
@@ -555,6 +810,7 @@ async function saveAvailability() {
     }
     captureSavedSnapshot();
     renderOverlap();
+    renderHeatMap();
     renderMultiGrid();
     showToast('Saved');
   } catch (err) {
@@ -581,6 +837,7 @@ function showGuestSetupUi() {
   renderPaintGrid();
   renderMultiGrid();
   renderOverlap();
+  renderHeatMap();
 }
 
 function showJoinedUi() {
@@ -591,6 +848,7 @@ function showJoinedUi() {
   renderPaintGrid();
   renderMultiGrid();
   renderOverlap();
+  renderHeatMap();
 }
 
 function toLocalInputValue(iso, timeZone) {
@@ -709,8 +967,14 @@ async function bootEvent() {
         if (!state.hasUnsavedChanges) renderPaintGrid();
         renderMultiGrid();
         renderOverlap();
+        renderHeatMap();
       },
-      onParticipants: reloadData,
+      onParticipants: async () => {
+        await reloadData();
+        renderMultiGrid();
+        renderOverlap();
+        renderHeatMap();
+      },
       onEvent: (ev) => {
         state.event = ev;
         renderEventHeader();
@@ -724,6 +988,7 @@ async function bootEvent() {
         }
         renderMultiGrid();
         renderOverlap();
+        renderHeatMap();
       },
     });
   } catch (err) {
@@ -745,8 +1010,9 @@ function setupToolbar() {
   });
   updateBrushIndicator();
 
-  els.timeStart?.addEventListener('change', markLocalChange);
-  els.timeEnd?.addEventListener('change', markLocalChange);
+  els.timeRangeEdit?.addEventListener('click', startTimeRangeEdit);
+  els.timeRangeSave?.addEventListener('click', applyTimeRangeEdit);
+  els.timeRangeCancel?.addEventListener('click', cancelTimeRangeEdit);
 
   els.saveAvailability?.addEventListener('click', () => {
     saveAvailability();
@@ -848,6 +1114,23 @@ function setupJoin() {
     cancelGuestNameEdit();
   });
 
+  els.refreshAvailability?.addEventListener('click', () => {
+    refreshEveryoneAvailability();
+  });
+
+  els.toggleGuestPreview?.addEventListener('click', () => {
+    if (!isOrganizer()) return;
+    if (isGuestPreviewActive()) {
+      exitGuestPreview(slug, state.event?.id || null);
+    } else {
+      navigateToGuestPreview(slug, state.event?.id || null);
+    }
+  });
+
+  els.multiSectionToggle?.addEventListener('click', toggleMultiSection);
+
+  els.orgStartDate?.addEventListener('change', syncOrgEndDateMin);
+
   els.copyLink?.addEventListener('click', async () => {
     const url = buildShareUrl(slug);
     await copyToClipboard(url);
@@ -873,21 +1156,44 @@ function setupJoin() {
   });
 
   els.saveOrgBtn?.addEventListener('click', async () => {
-    if (!isOrganizer()) return;
+    if (!hasOrganizerAccess()) return;
     try {
+      const startDate = els.orgStartDate?.value;
+      const endDate = els.orgEndDate?.value;
+      if (!startDate || !endDate) {
+        showToast('Enter a start and end date', 'error');
+        return;
+      }
+      if (endDate < startDate) {
+        showToast('End date must be on or after start date', 'error');
+        return;
+      }
+
       const patch = {
         location: els.orgLocationInput?.value.trim() || null,
+        start_date: startDate,
+        end_date: endDate,
         visibility_mode: els.visibilitySelect.value,
         is_closed: els.closeToggle.checked,
         edit_deadline: els.editDeadlineInput.value
           ? new Date(els.editDeadlineInput.value).toISOString()
           : null,
       };
+
+      if (endDate > state.event.end_date) {
+        const newExpires = computeDefaultExpiresAt(endDate, state.event.timezone);
+        if (new Date(state.event.expires_at) < new Date(newExpires)) {
+          patch.expires_at = newExpires;
+        }
+      }
+
       state.event = await updateEvent(state.event.id, patch);
       renderEventHeader();
       renderStatus();
       renderPaintGrid();
       renderMultiGrid();
+      renderOverlap();
+      renderHeatMap();
       showToast('Event settings saved');
     } catch (err) {
       showToast(formatDbError(err), 'error');
@@ -895,7 +1201,7 @@ function setupJoin() {
   });
 
   els.deleteBtn?.addEventListener('click', async () => {
-    if (!isOrganizer()) return;
+    if (!hasOrganizerAccess()) return;
     const title = state.event?.title || 'this event';
     const confirmed = await confirmAction({
       title: 'Delete event?',

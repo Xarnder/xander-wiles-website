@@ -41,6 +41,11 @@
     </div>
 
     <div id="event-app" hidden>
+      <div id="organizer-view-bar" class="organizer-view-bar glass-card" hidden>
+        <span id="organizer-view-label" class="organizer-view-label">Showing as Admin</span>
+        <button type="button" id="toggle-guest-preview" class="btn btn-ghost organizer-view-toggle">View as guest</button>
+      </div>
+
       <header class="event-header">
         <div class="header-row">
           <div>
@@ -48,6 +53,9 @@
             <p id="event-description" class="event-description muted" hidden></p>
             <p id="event-location" class="event-location" hidden></p>
             <p id="event-meta" class="muted"></p>
+          </div>
+          <div class="header-actions">
+            <button type="button" id="refresh-availability" class="btn btn-ghost header-action-btn">Refresh</button>
           </div>
         </div>
         <div id="status-bar"></div>
@@ -116,18 +124,30 @@
 
         <div id="paint-grid"></div>
 
-        <div id="time-range-panel" class="time-range-panel glass-card">
-          <h3 class="time-range-title">Your times</h3>
-          <p class="muted time-range-hint">Applies to every day you select above</p>
-          <div class="time-range-row">
-            <label>
-              From
-              <input type="time" id="time-start" step="3600" value="10:00">
-            </label>
-            <label>
-              To
-              <input type="time" id="time-end" step="3600" value="22:00">
-            </label>
+        <div id="time-range-panel" class="time-range-panel glass-card is-collapsed">
+          <div class="time-range-header">
+            <div class="time-range-header-text">
+              <h3 class="time-range-title">Your times</h3>
+              <p id="time-range-summary" class="time-range-summary muted">10:00 – 22:00 · applies to every day you select</p>
+            </div>
+            <button type="button" id="time-range-edit" class="btn btn-ghost time-range-edit-btn">Edit</button>
+          </div>
+          <div id="time-range-body" class="time-range-body" hidden>
+            <p class="muted time-range-hint">Applies to every day you select above</p>
+            <div class="time-range-row">
+              <label>
+                From
+                <input type="time" id="time-start" step="3600" value="10:00">
+              </label>
+              <label>
+                To
+                <input type="time" id="time-end" step="3600" value="22:00">
+              </label>
+            </div>
+            <div class="time-range-actions">
+              <button type="button" id="time-range-save" class="btn btn-primary" hidden>Save times</button>
+              <button type="button" id="time-range-cancel" class="btn btn-ghost" hidden>Cancel</button>
+            </div>
           </div>
         </div>
       </section>
@@ -150,9 +170,31 @@
         </div>
       </section>
 
+      <section id="heatmap-section" hidden>
+        <h2 class="section-title">Best for everyone</h2>
+        <p class="muted heatmap-hint">Each day is coloured by how many people are free — red is fewest, bright green is most (scaled to this event).</p>
+        <div id="heatmap-legend" class="heatmap-legend" hidden>
+          <span class="heatmap-legend-label">Fewer</span>
+          <div class="heatmap-legend-scale" aria-hidden="true"></div>
+          <span class="heatmap-legend-label">More</span>
+          <span id="heatmap-legend-detail" class="heatmap-legend-detail muted"></span>
+        </div>
+        <div id="heatmap-grid"></div>
+      </section>
+
       <section id="multi-section" hidden>
-        <h2 class="section-title">Everyone's availability</h2>
-        <div id="multi-grid"></div>
+        <div id="multi-section-panel" class="multi-section-panel glass-card is-collapsed">
+          <div class="multi-section-header">
+            <div class="multi-section-header-text">
+              <h2 class="section-title multi-section-title">Everyone's availability</h2>
+              <p id="multi-section-summary" class="multi-section-summary muted">Other people's calendars</p>
+            </div>
+            <button type="button" id="multi-section-toggle" class="btn btn-ghost multi-section-toggle-btn" aria-expanded="false">Show</button>
+          </div>
+          <div id="multi-section-body" class="multi-section-body" hidden>
+            <div id="multi-grid"></div>
+          </div>
+        </div>
       </section>
 
       <section id="organizer-panel" class="organizer-panel glass-card" hidden>
@@ -161,6 +203,14 @@
           <label class="org-full-width">
             Location <span class="muted">(shown to everyone with the link)</span>
             <input type="text" id="org-location" maxlength="200" placeholder="e.g. The Crown Pub, 12 High Street, London">
+          </label>
+          <label>
+            First selectable date
+            <input type="date" id="org-start-date">
+          </label>
+          <label>
+            Last selectable date
+            <input type="date" id="org-end-date">
           </label>
           <label>
             Last edit deadline

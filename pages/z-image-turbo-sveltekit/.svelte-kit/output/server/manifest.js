@@ -10,7 +10,7 @@ return {
 	assets: new Set(["onnx/ort-wasm-simd-threaded.asyncify.wasm","onnx/ort-wasm-simd-threaded.jsep.wasm","onnx/ort-wasm-simd-threaded.jspi.wasm","onnx/ort-wasm-simd-threaded.wasm"]),
 	mimeTypes: {".wasm":"application/wasm"},
 	_: {
-		client: {start:"_app/immutable/entry/start.CpmE96VM.js",app:"_app/immutable/entry/app.5kGSH2LF.js",imports:["_app/immutable/entry/start.CpmE96VM.js","_app/immutable/chunks/g1zEfqFt.js","_app/immutable/chunks/DOCO80rQ.js","_app/immutable/entry/app.5kGSH2LF.js","_app/immutable/chunks/DOCO80rQ.js","_app/immutable/chunks/70L5jeyE.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
+		client: {start:"_app/immutable/entry/start.D5f4ve1M.js",app:"_app/immutable/entry/app.mj3f-LqY.js",imports:["_app/immutable/entry/start.D5f4ve1M.js","_app/immutable/chunks/CLUqKz__.js","_app/immutable/chunks/DOCO80rQ.js","_app/immutable/entry/app.mj3f-LqY.js","_app/immutable/chunks/DOCO80rQ.js","_app/immutable/chunks/70L5jeyE.js"],stylesheets:[],fonts:[],uses_env_dynamic_public:false},
 		nodes: [
 			__memo(() => import('./nodes/0.js')),
 			__memo(() => import('./nodes/1.js'))
