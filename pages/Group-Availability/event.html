@@ -4,72 +4,51 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <base href="/pages/Group-Availability/">
-  <title>Event — When To Hang</title>
+  <title>Event — Group Availability</title>
   <link rel="icon" href="favicon-dark.svg" type="image/svg+xml">
   <link rel="manifest" href="site.webmanifest">
-  <meta name="theme-color" content="#0a0a1a">
+  <meta name="theme-color" content="#c9b896">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="stylesheet" href="/assets/css/style.css">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('wth-theme');
+        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/calendar.css">
 </head>
 <body>
-  <div id="main-nav-placeholder"></div>
-  <script src="/assets/js/nav-loader.js"></script>
-
-  <div class="background-orbs" aria-hidden="true">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-  </div>
-
   <div class="container">
-    <a class="back-link" href="index.html">← Home</a>
-
     <div id="config-warning" class="alert" hidden>
       Supabase is not configured. Add env vars and rebuild — see <code>PLAN.md</code>.
     </div>
 
     <div id="loading" class="loading-screen">Loading event…</div>
 
-    <div id="not-found" class="glass-card" style="padding: 32px; text-align: center;" hidden>
+    <div id="not-found" class="panel not-found-panel" hidden>
       <h2>Event not found</h2>
       <p id="not-found-detail" class="muted">Check the link or ask the organizer for a new one.</p>
-      <p style="margin-top: 16px;"><a class="back-link" href="index.html">← Back to home</a></p>
+      <p style="margin-top: 16px;">
+        <button type="button" class="btn btn-ghost btn-nav" data-nav-href="index.html">← Back to home</button>
+      </p>
     </div>
 
     <div id="event-app" hidden>
-      <div id="organizer-view-bar" class="organizer-view-bar glass-card" hidden>
+      <div id="organizer-view-bar" class="organizer-view-bar panel" hidden>
         <span id="organizer-view-label" class="organizer-view-label">Showing as Admin</span>
         <button type="button" id="toggle-guest-preview" class="btn btn-ghost organizer-view-toggle">View as guest</button>
       </div>
 
-      <header class="event-header">
-        <div class="header-row">
-          <div>
-            <h1 id="event-title"></h1>
-            <p id="event-description" class="event-description muted" hidden></p>
-            <p id="event-location" class="event-location" hidden></p>
-            <p id="event-meta" class="muted"></p>
-          </div>
-          <div class="header-actions">
-            <button type="button" id="refresh-availability" class="btn btn-ghost header-action-btn">Refresh</button>
-          </div>
-        </div>
-        <div id="status-bar"></div>
-        <div id="share-link-box" class="share-link-box glass-card" hidden>
-          <label class="share-link-label" for="share-url-input">Share link</label>
-          <div class="share-link-row">
-            <input type="text" id="share-url-input" class="share-url-input" readonly>
-            <button type="button" id="copy-link" class="btn btn-primary">Copy</button>
-          </div>
-        </div>
-        <p class="muted" style="margin-top: 8px;"><span id="participant-count">0 participants</span></p>
-      </header>
-
-      <section id="identity-bar" class="identity-bar glass-card" hidden aria-labelledby="identity-section-title">
+      <section id="identity-bar" class="identity-bar panel" hidden aria-labelledby="identity-section-title">
         <h2 id="identity-section-title" class="section-title identity-section-title">Your profile</h2>
 
         <div id="identity-google-view" class="identity-profile-row" hidden>
@@ -95,11 +74,36 @@
         </div>
       </section>
 
-      <section id="paint-section">
-        <h2 class="section-title">Your availability</h2>
-        <p class="muted" style="margin-bottom: 12px;">Tap days on the calendar — green = likely free, yellow = might be free. Press <strong>Save</strong> when you are done.</p>
+      <header class="event-header panel">
+        <div class="header-row">
+          <div>
+            <h1 id="event-title"></h1>
+            <p id="event-description" class="event-description muted" hidden></p>
+            <div id="event-location" class="event-location" hidden></div>
+            <p id="event-meta" class="muted"></p>
+          </div>
+          <div class="header-actions">
+            <button type="button" id="refresh-availability" class="btn btn-ghost header-action-btn">Refresh</button>
+          </div>
+        </div>
+        <div id="status-bar"></div>
+        <div id="share-link-box" class="share-link-box panel" hidden>
+          <label class="share-link-label" for="share-url-input">Share link</label>
+          <div class="share-link-row">
+            <input type="text" id="share-url-input" class="share-url-input" readonly>
+            <button type="button" id="copy-link" class="btn btn-primary">Copy</button>
+          </div>
+        </div>
+        <p class="muted" style="margin-top: 8px;"><span id="participant-count">0 participants</span></p>
+      </header>
 
-        <div id="paint-toolbar" class="paint-toolbar glass-card">
+      <section id="paint-section">
+        <div class="section-heading panel">
+          <h2 class="section-title">Your availability</h2>
+          <p class="section-lead muted">Tap days on the calendar — green = likely free, yellow = might be free. Changes save automatically after 20 seconds, or press <strong>Save</strong>.</p>
+        </div>
+
+        <div id="paint-toolbar" class="paint-toolbar panel">
           <div class="paint-toolbar-main">
             <div class="paint-brush-group" role="group" aria-label="Paint mode">
               <button type="button" class="btn btn-ghost brush-btn active" data-brush="likely" aria-pressed="true">
@@ -122,9 +126,9 @@
           </div>
         </div>
 
-        <div id="paint-grid"></div>
+        <div id="paint-grid" class="day-calendar-host"></div>
 
-        <div id="time-range-panel" class="time-range-panel glass-card is-collapsed">
+        <div id="time-range-panel" class="time-range-panel panel is-collapsed section-block-end">
           <div class="time-range-header">
             <div class="time-range-header-text">
               <h3 class="time-range-title">Your times</h3>
@@ -152,17 +156,17 @@
         </div>
       </section>
 
-      <p id="blind-gate" class="blind-gate glass-card" hidden></p>
+      <p id="blind-gate" class="blind-gate panel" hidden></p>
 
-      <section id="overlap-section" tabindex="-1">
-        <div class="section-header-row">
+      <section id="overlap-section" class="section-block-end" tabindex="-1">
+        <div class="section-heading panel">
           <h2 class="section-title">Best times</h2>
-          <div class="overlap-actions">
-            <button type="button" id="copy-overlap" class="btn btn-ghost" disabled>Copy summary</button>
-            <button type="button" id="download-ics" class="btn btn-ghost" disabled>Download .ics</button>
-          </div>
         </div>
         <div id="overlap-list" class="overlap-list"></div>
+        <div class="overlap-actions overlap-actions-below">
+          <button type="button" id="copy-overlap" class="btn btn-ghost" disabled>Copy summary</button>
+          <button type="button" id="download-ics" class="btn btn-ghost" disabled>Download .ics</button>
+        </div>
         <div id="overlap-pagination" class="overlap-pagination" hidden tabindex="0" aria-label="Best times pages">
           <button type="button" id="overlap-prev" class="btn btn-ghost overlap-nav-btn" aria-label="Previous best times">←</button>
           <span id="overlap-page-info" class="overlap-page-info"></span>
@@ -171,19 +175,21 @@
       </section>
 
       <section id="heatmap-section" hidden>
-        <h2 class="section-title">Best for everyone</h2>
-        <p class="muted heatmap-hint">Each day is coloured by how many people are free — red is fewest, bright green is most (scaled to this event).</p>
-        <div id="heatmap-legend" class="heatmap-legend" hidden>
+        <div class="section-heading panel">
+          <h2 class="section-title">Best for everyone</h2>
+          <p class="section-lead muted heatmap-hint">Each day is coloured by how many people are free — red is fewest, bright green is most (scaled to this event).</p>
+        </div>
+        <div id="heatmap-legend" class="heatmap-legend panel" hidden>
           <span class="heatmap-legend-label">Fewer</span>
           <div class="heatmap-legend-scale" aria-hidden="true"></div>
           <span class="heatmap-legend-label">More</span>
           <span id="heatmap-legend-detail" class="heatmap-legend-detail muted"></span>
         </div>
-        <div id="heatmap-grid"></div>
+        <div id="heatmap-grid" class="day-calendar-host"></div>
       </section>
 
       <section id="multi-section" hidden>
-        <div id="multi-section-panel" class="multi-section-panel glass-card is-collapsed">
+        <div id="multi-section-panel" class="multi-section-panel panel is-collapsed">
           <div class="multi-section-header">
             <div class="multi-section-header-text">
               <h2 class="section-title multi-section-title">Everyone's availability</h2>
@@ -197,41 +203,96 @@
         </div>
       </section>
 
-      <section id="organizer-panel" class="organizer-panel glass-card" hidden>
-        <h3>Organizer settings</h3>
-        <div class="org-grid">
-          <label class="org-full-width">
-            Location <span class="muted">(shown to everyone with the link)</span>
-            <input type="text" id="org-location" maxlength="200" placeholder="e.g. The Crown Pub, 12 High Street, London">
-          </label>
-          <label>
-            First selectable date
-            <input type="date" id="org-start-date">
-          </label>
-          <label>
-            Last selectable date
-            <input type="date" id="org-end-date">
-          </label>
-          <label>
-            Last edit deadline
-            <input type="datetime-local" id="org-edit-deadline">
-          </label>
-          <label>
-            Visibility
-            <select id="org-visibility">
-              <option value="all">Everyone sees grids</option>
-              <option value="overlap_only">Overlap only</option>
-              <option value="organizer_only">Organizer only</option>
-            </select>
-          </label>
-          <label class="checkbox-row">
-            <input type="checkbox" id="org-close">
-            <span>Close event (no more edits)</span>
-          </label>
+      <section id="organizer-panel" class="organizer-panel time-range-panel panel is-collapsed" hidden>
+        <div class="time-range-header">
+          <div class="time-range-header-text">
+            <h3 class="time-range-title">Organizer settings</h3>
+            <p id="org-settings-summary" class="time-range-summary muted">—</p>
+          </div>
+          <button type="button" id="org-edit" class="btn btn-ghost time-range-edit-btn">Edit</button>
         </div>
-        <div class="form-actions" style="margin-top: 16px;">
-          <button type="button" id="org-save" class="btn btn-primary">Save settings</button>
-          <button type="button" id="org-delete" class="btn btn-ghost">Delete event</button>
+
+        <div id="org-settings-view" class="org-settings-view">
+          <dl class="org-view-grid">
+            <div class="org-view-row">
+              <dt>Event name</dt>
+              <dd id="org-view-title">—</dd>
+            </div>
+            <div class="org-view-row">
+              <dt>Description</dt>
+              <dd id="org-view-description" class="muted">—</dd>
+            </div>
+            <div class="org-view-row">
+              <dt>Location</dt>
+              <dd id="org-view-location">—</dd>
+            </div>
+            <div class="org-view-row">
+              <dt>Selectable dates</dt>
+              <dd id="org-view-dates">—</dd>
+            </div>
+            <div class="org-view-row">
+              <dt>Last edit deadline</dt>
+              <dd id="org-view-deadline">—</dd>
+            </div>
+            <div class="org-view-row">
+              <dt>Visibility</dt>
+              <dd id="org-view-visibility">—</dd>
+            </div>
+            <div class="org-view-row">
+              <dt>Event status</dt>
+              <dd id="org-view-status">—</dd>
+            </div>
+          </dl>
+          <p class="org-share-note muted">Renaming the event does not change the share link.</p>
+          <div class="org-panel-footer">
+            <button type="button" id="org-delete" class="btn btn-ghost dashboard-delete">Delete event</button>
+          </div>
+        </div>
+
+        <div id="org-settings-body" class="time-range-body" hidden>
+          <div class="org-grid">
+            <label class="org-full-width">
+              Event name
+              <input type="text" id="org-title" maxlength="120" required placeholder="Dinner, games night…">
+            </label>
+            <label class="org-full-width">
+              Description <span class="muted">(optional)</span>
+              <textarea id="org-description" maxlength="500" placeholder="Any details for your friends" rows="3"></textarea>
+            </label>
+            <p class="org-share-note muted org-full-width">Renaming the event does not change the share link.</p>
+            <label class="org-full-width">
+              Location <span class="muted">(shown to everyone with the link)</span>
+              <input type="text" id="org-location" maxlength="200" placeholder="e.g. The Crown Pub, 12 High Street, London">
+            </label>
+            <label>
+              First selectable date
+              <input type="date" id="org-start-date">
+            </label>
+            <label>
+              Last selectable date
+              <input type="date" id="org-end-date">
+            </label>
+            <label>
+              Last edit deadline
+              <input type="datetime-local" id="org-edit-deadline">
+            </label>
+            <label>
+              Visibility
+              <select id="org-visibility">
+                <option value="all">Everyone sees grids</option>
+                <option value="overlap_only">Overlap only</option>
+                <option value="organizer_only">Organizer only</option>
+              </select>
+            </label>
+            <label class="checkbox-row org-full-width">
+              <input type="checkbox" id="org-close">
+              <span>Close event (no more edits)</span>
+            </label>
+          </div>
+          <div class="time-range-actions">
+            <button type="button" id="org-save" class="btn btn-primary" hidden>Save settings</button>
+            <button type="button" id="org-cancel" class="btn btn-ghost" hidden>Cancel</button>
+          </div>
         </div>
       </section>
     </div>

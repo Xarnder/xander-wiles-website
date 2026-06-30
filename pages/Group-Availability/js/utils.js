@@ -1,13 +1,19 @@
 export const APP_BASE = '/pages/Group-Availability';
+export const APP_NAME = 'Group Availability';
 /** Canonical origin for share links (always production, even when developing locally). */
 export const SHARE_ORIGIN = 'https://xanderwiles.com';
 
 export function debounce(fn, ms = 400) {
   let t;
-  return (...args) => {
+  const debounced = (...args) => {
     clearTimeout(t);
     t = setTimeout(() => fn(...args), ms);
   };
+  debounced.cancel = () => {
+    clearTimeout(t);
+    t = undefined;
+  };
+  return debounced;
 }
 
 export function generateSlug(length = 8) {

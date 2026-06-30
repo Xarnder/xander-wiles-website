@@ -60,7 +60,7 @@ export function overlapToIcs(event, ranges) {
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//When To Hang//EN',
+    'PRODID:-//Group Availability//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     ...events,

@@ -1,6 +1,6 @@
 {
-  "name": "When To Hang",
-  "short_name": "When To Hang",
+  "name": "Group Availability",
+  "short_name": "Group Availability",
   "description": "Find a time everyone is free",
   "icons": [
     {
@@ -10,8 +10,8 @@
       "purpose": "any"
     }
   ],
-  "theme_color": "#0a0a1a",
-  "background_color": "#0a0a1a",
+  "theme_color": "#c9b896",
+  "background_color": "#c9b896",
   "display": "standalone",
   "start_url": "/pages/Group-Availability/index.html"
 }

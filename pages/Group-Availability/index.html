@@ -4,31 +4,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <base href="/pages/Group-Availability/">
-  <title>When To Hang — Find a time everyone is free</title>
+  <title>Group Availability — Find a time everyone is free</title>
   <link rel="icon" href="favicon-dark.svg" type="image/svg+xml">
   <link rel="manifest" href="site.webmanifest">
-  <meta name="theme-color" content="#0a0a1a">
+  <meta name="theme-color" content="#c9b896">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="When To Hang">
-  <link rel="stylesheet" href="/assets/css/style.css">
+  <meta name="apple-mobile-web-app-title" content="Group Availability">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('wth-theme');
+        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/calendar.css">
 </head>
 <body>
-  <div id="main-nav-placeholder"></div>
-  <script src="/assets/js/nav-loader.js"></script>
-
-  <div class="background-orbs" aria-hidden="true">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-  </div>
-
   <div class="container">
-    <header class="app-header">
-      <h1>When To Hang</h1>
+    <header class="app-header panel">
+      <h1>Group Availability</h1>
       <p class="tagline">Mark when you're free. See when everyone else is too.</p>
     </header>
 
@@ -36,7 +38,7 @@
       Supabase is not configured. Add <code>SUPABASE_URL</code> and <code>SUPABASE_PUBLISHABLE_KEY</code> to <code>.env.local</code> (local) or Vercel environment variables, then run <code>npm run build</code> and serve <code>deploy_out</code>.
     </div>
 
-    <section id="signed-out" class="hero-card glass-card">
+    <section id="signed-out" class="hero-card panel">
       <ul class="feature-list">
         <li>Paint hourly availability — green for likely, yellow for maybe</li>
         <li>Blind submission so nobody anchors on others first</li>
@@ -50,7 +52,7 @@
     </section>
 
     <section id="signed-in" hidden>
-      <div class="identity-bar glass-card" style="margin-bottom: 20px;">
+      <div class="identity-bar panel" style="margin-bottom: 20px;">
         <img id="user-avatar" alt="" width="36" height="36" referrerpolicy="no-referrer" hidden>
         <span>Hi, <strong id="user-name"></strong></span>
         <button type="button" id="signout-btn" class="btn btn-ghost" style="margin-left: auto;">Sign out</button>
@@ -60,7 +62,9 @@
         <button type="button" id="create-event-btn" class="btn btn-primary">Create event</button>
       </div>
 
-      <h2 class="section-title">Your events</h2>
+      <div class="section-heading panel">
+        <h2 class="section-title">Your events</h2>
+      </div>
       <div id="dashboard-list" class="dashboard-list"></div>
     </section>
   </div>

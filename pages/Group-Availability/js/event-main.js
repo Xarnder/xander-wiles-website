@@ -24,15 +24,17 @@ import {
   setParticipantId,
 } from './guest.js';
 import { buildDayCalendar, buildMultiDayCalendar, buildGroupHeatCalendar } from './calendar.js';
-import { computeDayAvailabilityCounts } from './heatmap.js';
+import { computeDayAvailabilityCounts, heatColor, heatIntensity } from './heatmap.js';
 import { computeOverlap, slotsToParticipantMaps, canSeeIndividualGrids } from './overlap.js';
 import { subscribeToEvent } from './realtime.js';
 import { confirmAction } from './confirm-modal.js';
 import { BLIND_GATE_MESSAGE, filterSlotsForViewer } from './blind-gate.js';
 import { formatOverlapSummary, overlapToIcs, downloadTextFile } from './export.js';
 import { isGuestPreviewActive, navigateToGuestPreview, exitGuestPreview } from './guest-preview.js';
+import { initChrome } from './theme.js';
 import {
   APP_BASE,
+  APP_NAME,
   eventAllowsEdits,
   formatDateRange,
   formatDeadlineCountdown,
@@ -105,13 +107,27 @@ const els = {
   toggleGuestPreview: document.getElementById('toggle-guest-preview'),
   overlapList: document.getElementById('overlap-list'),
   organizerPanel: document.getElementById('organizer-panel'),
+  orgSettingsSummary: document.getElementById('org-settings-summary'),
+  orgSettingsView: document.getElementById('org-settings-view'),
+  orgSettingsBody: document.getElementById('org-settings-body'),
+  orgEdit: document.getElementById('org-edit'),
+  orgCancel: document.getElementById('org-cancel'),
+  orgViewTitle: document.getElementById('org-view-title'),
+  orgViewDescription: document.getElementById('org-view-description'),
+  orgViewLocation: document.getElementById('org-view-location'),
+  orgViewDates: document.getElementById('org-view-dates'),
+  orgViewDeadline: document.getElementById('org-view-deadline'),
+  orgViewVisibility: document.getElementById('org-view-visibility'),
+  orgViewStatus: document.getElementById('org-view-status'),
   editDeadlineInput: document.getElementById('org-edit-deadline'),
+  orgTitleInput: document.getElementById('org-title'),
+  orgDescriptionInput: document.getElementById('org-description'),
   orgLocationInput: document.getElementById('org-location'),
   orgStartDate: document.getElementById('org-start-date'),
   orgEndDate: document.getElementById('org-end-date'),
   visibilitySelect: document.getElementById('org-visibility'),
   closeToggle: document.getElementById('org-close'),
-  saveOrgBtn: document.getElementById('org-save'),
+  orgSave: document.getElementById('org-save'),
   deleteBtn: document.getElementById('org-delete'),
   copyOverlapBtn: document.getElementById('copy-overlap'),
   downloadIcsBtn: document.getElementById('download-ics'),
@@ -152,12 +168,16 @@ let state = {
   overlapPage: 0,
   editingGuestName: false,
   timeRangeEditing: false,
+  orgEditing: false,
   appliedTimeStart: 10,
   appliedTimeEnd: 22,
   multiSectionExpanded: false,
 };
 
 let lastSavedSnapshot = '';
+let autoSaveTimer = null;
+
+const AUTO_SAVE_MS = 20000;
 
 function client() {
   return getActiveClient({ session: state.session, guestToken: state.guestToken });
@@ -227,6 +247,151 @@ function renderStatus() {
   els.statusBar.innerHTML = parts.join(' ') || '<span class="muted">Open for responses</span>';
 }
 
+const VISIBILITY_LABELS = {
+  all: 'Everyone sees grids',
+  overlap_only: 'Overlap only',
+  organizer_only: 'Organizer only',
+};
+
+function formatOrgDeadlineDisplay(iso, timeZone) {
+  if (!iso) return 'No deadline';
+  const d = new Date(iso);
+  return d.toLocaleString('en-GB', {
+    timeZone,
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+function syncOrgFormFromEvent() {
+  if (!state.event) return;
+  const ev = state.event;
+  if (els.orgTitleInput) els.orgTitleInput.value = ev.title || '';
+  if (els.orgDescriptionInput) els.orgDescriptionInput.value = ev.description || '';
+  if (els.orgLocationInput) els.orgLocationInput.value = ev.location || '';
+  if (els.orgStartDate) els.orgStartDate.value = ev.start_date;
+  if (els.orgEndDate) {
+    els.orgEndDate.value = ev.end_date;
+    els.orgEndDate.min = ev.start_date;
+  }
+  if (els.editDeadlineInput) {
+    els.editDeadlineInput.value = ev.edit_deadline
+      ? toLocalInputValue(ev.edit_deadline, ev.timezone)
+      : '';
+  }
+  if (els.visibilitySelect) els.visibilitySelect.value = ev.visibility_mode;
+  if (els.closeToggle) els.closeToggle.checked = ev.is_closed;
+}
+
+function updateOrgSettingsView() {
+  if (!state.event) return;
+  const ev = state.event;
+  const title = ev.title || 'Untitled event';
+  const dates = formatDateRange(ev.start_date, ev.end_date, ev.timezone);
+
+  if (els.orgSettingsSummary) {
+    els.orgSettingsSummary.textContent = `${title} · ${dates}`;
+  }
+  if (els.orgViewTitle) els.orgViewTitle.textContent = title;
+  if (els.orgViewDescription) {
+    els.orgViewDescription.textContent = ev.description?.trim() || 'None';
+  }
+  if (els.orgViewLocation) {
+    els.orgViewLocation.textContent = ev.location?.trim() || 'None';
+  }
+  if (els.orgViewDates) els.orgViewDates.textContent = dates;
+  if (els.orgViewDeadline) {
+    els.orgViewDeadline.textContent = formatOrgDeadlineDisplay(ev.edit_deadline, ev.timezone);
+  }
+  if (els.orgViewVisibility) {
+    els.orgViewVisibility.textContent = VISIBILITY_LABELS[ev.visibility_mode] || ev.visibility_mode;
+  }
+  if (els.orgViewStatus) {
+    els.orgViewStatus.textContent = ev.is_closed ? 'Closed — no more edits' : 'Open for responses';
+  }
+}
+
+function setOrgEditing(editing) {
+  state.orgEditing = editing;
+  if (els.organizerPanel) {
+    els.organizerPanel.classList.toggle('is-collapsed', !editing);
+    els.organizerPanel.classList.toggle('is-editing', editing);
+  }
+  if (els.orgSettingsView) els.orgSettingsView.hidden = editing;
+  if (els.orgSettingsBody) els.orgSettingsBody.hidden = !editing;
+  if (els.orgEdit) els.orgEdit.hidden = editing;
+  if (els.orgSave) els.orgSave.hidden = !editing;
+  if (els.orgCancel) els.orgCancel.hidden = !editing;
+}
+
+function startOrgEdit() {
+  if (!hasOrganizerAccess()) return;
+  syncOrgFormFromEvent();
+  setOrgEditing(true);
+  els.orgTitleInput?.focus();
+}
+
+function cancelOrgEdit() {
+  syncOrgFormFromEvent();
+  setOrgEditing(false);
+}
+
+async function saveOrgSettings() {
+  if (!hasOrganizerAccess()) return;
+  try {
+    const startDate = els.orgStartDate?.value;
+    const endDate = els.orgEndDate?.value;
+    if (!startDate || !endDate) {
+      showToast('Enter a start and end date', 'error');
+      return;
+    }
+    if (endDate < startDate) {
+      showToast('End date must be on or after start date', 'error');
+      return;
+    }
+
+    const title = els.orgTitleInput?.value.trim();
+    if (!title) {
+      showToast('Enter an event name', 'error');
+      els.orgTitleInput?.focus();
+      return;
+    }
+
+    const patch = {
+      title,
+      description: els.orgDescriptionInput?.value.trim() || null,
+      location: els.orgLocationInput?.value.trim() || null,
+      start_date: startDate,
+      end_date: endDate,
+      visibility_mode: els.visibilitySelect.value,
+      is_closed: els.closeToggle.checked,
+      edit_deadline: els.editDeadlineInput.value
+        ? new Date(els.editDeadlineInput.value).toISOString()
+        : null,
+    };
+
+    if (endDate > state.event.end_date) {
+      const newExpires = computeDefaultExpiresAt(endDate, state.event.timezone);
+      if (new Date(state.event.expires_at) < new Date(newExpires)) {
+        patch.expires_at = newExpires;
+      }
+    }
+
+    state.event = await updateEvent(state.event.id, patch);
+    setOrgEditing(false);
+    updateOrgSettingsView();
+    renderEventHeader();
+    renderStatus();
+    renderPaintGrid();
+    renderMultiGrid();
+    renderOverlap();
+    renderHeatMap();
+    showToast('Event settings saved');
+  } catch (err) {
+    showToast(formatDbError(err), 'error');
+  }
+}
+
 function updateOrganizerUi() {
   const show = hasOrganizerAccess();
   updateGuestPreviewUi();
@@ -236,17 +401,14 @@ function updateOrganizerUi() {
     renderMultiGrid();
   }
   if (show && state.event) {
-    if (els.orgLocationInput) els.orgLocationInput.value = state.event.location || '';
-    if (els.orgStartDate) els.orgStartDate.value = state.event.start_date;
-    if (els.orgEndDate) {
-      els.orgEndDate.value = state.event.end_date;
-      els.orgEndDate.min = state.event.start_date;
+    updateOrgSettingsView();
+    if (!state.orgEditing) {
+      setOrgEditing(false);
+      syncOrgFormFromEvent();
     }
-    els.editDeadlineInput.value = state.event.edit_deadline
-      ? toLocalInputValue(state.event.edit_deadline, state.event.timezone)
-      : '';
-    els.visibilitySelect.value = state.event.visibility_mode;
-    els.closeToggle.checked = state.event.is_closed;
+  }
+  if (!show) {
+    setOrgEditing(false);
   }
 }
 
@@ -254,6 +416,7 @@ function renderEventHeader() {
   if (!state.event) return;
 
   els.title.textContent = state.event.title;
+  document.title = `${state.event.title} — ${APP_NAME}`;
 
   if (els.eventDescription) {
     if (state.event.description) {
@@ -268,7 +431,25 @@ function renderEventHeader() {
   if (els.eventLocation) {
     if (location) {
       const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
-      els.eventLocation.innerHTML = `<span class="event-location-label">Location</span> <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(location)}</a>`;
+      els.eventLocation.replaceChildren();
+
+      const wrap = document.createElement('div');
+      wrap.className = 'event-location-wrap';
+
+      const label = document.createElement('span');
+      label.className = 'event-location-label';
+      label.textContent = 'Location';
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-ghost btn-location';
+      btn.textContent = location;
+      btn.addEventListener('click', () => {
+        window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+      });
+
+      wrap.append(label, btn);
+      els.eventLocation.append(wrap);
       els.eventLocation.hidden = false;
     } else {
       els.eventLocation.hidden = true;
@@ -435,18 +616,22 @@ function renderOverlap() {
   renderOverlapPagination();
   const start = state.overlapPage * OVERLAP_PAGE_SIZE;
   const pageRanges = ranges.slice(start, start + OVERLAP_PAGE_SIZE);
+  const maxScore = ranges[0]?.score || 1;
 
   els.overlapList.innerHTML = pageRanges
-    .map(
-      (r) => `
-    <div class="overlap-item glass-card">
+    .map((r) => {
+      const intensity = heatIntensity(r.score, maxScore);
+      const barColor = heatColor(intensity);
+      return `
+    <div class="overlap-item panel">
+      <span class="overlap-heat-bar" style="background:${barColor}" title="${r.score} points — ${Math.round(intensity * 100)}% of best"></span>
       <div class="overlap-score">${r.score} pts</div>
-      <div>
-        <strong>${escapeHtml(r.label)}</strong>
-        <span class="muted">${escapeHtml(r.detail)}</span>
+      <div class="overlap-item-body">
+        <strong class="overlap-item-label">${escapeHtml(r.label)}</strong>
+        <span class="overlap-item-detail muted">${escapeHtml(r.detail)}</span>
       </div>
-    </div>`
-    )
+    </div>`;
+    })
     .join('');
 }
 
@@ -713,9 +898,30 @@ function serializeSlotMap(slotMap) {
   return JSON.stringify([...slotMap.entries()].sort((a, b) => a[0].localeCompare(b[0])));
 }
 
+function clearAutoSaveTimer() {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+  }
+}
+
+function scheduleAutoSave() {
+  clearAutoSaveTimer();
+  if (!state.hasUnsavedChanges || state.isSaving) return;
+  if (!state.participant || !eventAllowsEdits(state.event)) return;
+
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = null;
+    if (state.hasUnsavedChanges && !state.isSaving) {
+      saveAvailability({ auto: true });
+    }
+  }, AUTO_SAVE_MS);
+}
+
 function captureSavedSnapshot() {
   lastSavedSnapshot = serializeSlotMap(buildSlotMapFromUi());
   state.hasUnsavedChanges = false;
+  clearAutoSaveTimer();
   updateSaveButton();
 }
 
@@ -723,6 +929,8 @@ function markLocalChange() {
   const dirty = serializeSlotMap(buildSlotMapFromUi()) !== lastSavedSnapshot;
   state.hasUnsavedChanges = dirty;
   updateSaveButton();
+  if (dirty) scheduleAutoSave();
+  else clearAutoSaveTimer();
 }
 
 function updateSaveButton() {
@@ -766,7 +974,7 @@ function renderPaintGrid() {
   updateTimeRangeSummary();
   setTimeRangeEditing(false);
   if (els.timeRangePanel) els.timeRangePanel.hidden = false;
-  if (els.timeRangeEdit) els.timeRangeEdit.hidden = readOnly;
+  if (els.timeRangeEdit) els.timeRangeEdit.hidden = readOnly || state.timeRangeEditing;
 
   if (state.paintController) state.paintController.destroy();
   state.paintController = buildDayCalendar(els.paintGrid, state.event, days, {
@@ -779,16 +987,19 @@ function renderPaintGrid() {
   else updateSaveButton();
 }
 
-async function saveAvailability() {
+async function saveAvailability(options = {}) {
+  const { auto = false } = options;
   if (!state.participant || !eventAllowsEdits(state.event)) return;
   if (!state.hasUnsavedChanges || state.isSaving) return;
 
   const startHour = parseTimeInput(els.timeStart?.value);
   const endHour = parseTimeInput(els.timeEnd?.value);
   if (endHour <= startHour) {
-    showToast('End time must be after start time', 'error');
+    if (!auto) showToast('End time must be after start time', 'error');
     return;
   }
+
+  clearAutoSaveTimer();
 
   state.appliedTimeStart = startHour;
   state.appliedTimeEnd = endHour;
@@ -812,13 +1023,14 @@ async function saveAvailability() {
     renderOverlap();
     renderHeatMap();
     renderMultiGrid();
-    showToast('Saved');
+    showToast(auto ? 'Saved automatically' : 'Saved');
   } catch (err) {
     console.error(err);
     showToast(formatDbError(err), 'error');
   } finally {
     state.isSaving = false;
     updateSaveButton();
+    if (state.hasUnsavedChanges) scheduleAutoSave();
   }
 }
 
@@ -894,6 +1106,7 @@ function updateShareLink() {
 }
 
 async function bootEvent() {
+  initChrome({ homeHref: 'index.html', homeLabel: '← Home' });
   if (recoverOAuthRedirectFromSiteRoot()) return;
 
   const ctx = getEventContextFromLocation();
@@ -1013,6 +1226,10 @@ function setupToolbar() {
   els.timeRangeEdit?.addEventListener('click', startTimeRangeEdit);
   els.timeRangeSave?.addEventListener('click', applyTimeRangeEdit);
   els.timeRangeCancel?.addEventListener('click', cancelTimeRangeEdit);
+
+  els.orgEdit?.addEventListener('click', startOrgEdit);
+  els.orgSave?.addEventListener('click', () => saveOrgSettings());
+  els.orgCancel?.addEventListener('click', cancelOrgEdit);
 
   els.saveAvailability?.addEventListener('click', () => {
     saveAvailability();
@@ -1153,51 +1370,6 @@ function setupJoin() {
     const safeTitle = (state.event.title || 'event').replace(/[^\w-]+/g, '-').slice(0, 40);
     downloadTextFile(`${safeTitle}-best-times.ics`, ics, 'text/calendar');
     showToast('Calendar file downloaded');
-  });
-
-  els.saveOrgBtn?.addEventListener('click', async () => {
-    if (!hasOrganizerAccess()) return;
-    try {
-      const startDate = els.orgStartDate?.value;
-      const endDate = els.orgEndDate?.value;
-      if (!startDate || !endDate) {
-        showToast('Enter a start and end date', 'error');
-        return;
-      }
-      if (endDate < startDate) {
-        showToast('End date must be on or after start date', 'error');
-        return;
-      }
-
-      const patch = {
-        location: els.orgLocationInput?.value.trim() || null,
-        start_date: startDate,
-        end_date: endDate,
-        visibility_mode: els.visibilitySelect.value,
-        is_closed: els.closeToggle.checked,
-        edit_deadline: els.editDeadlineInput.value
-          ? new Date(els.editDeadlineInput.value).toISOString()
-          : null,
-      };
-
-      if (endDate > state.event.end_date) {
-        const newExpires = computeDefaultExpiresAt(endDate, state.event.timezone);
-        if (new Date(state.event.expires_at) < new Date(newExpires)) {
-          patch.expires_at = newExpires;
-        }
-      }
-
-      state.event = await updateEvent(state.event.id, patch);
-      renderEventHeader();
-      renderStatus();
-      renderPaintGrid();
-      renderMultiGrid();
-      renderOverlap();
-      renderHeatMap();
-      showToast('Event settings saved');
-    } catch (err) {
-      showToast(formatDbError(err), 'error');
-    }
   });
 
   els.deleteBtn?.addEventListener('click', async () => {

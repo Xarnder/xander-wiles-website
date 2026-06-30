@@ -1,7 +1,29 @@
-import { enumerateDates, formatHourRangeLabel, eventAllowsEdits, slotsToDaySelection } from './utils.js';
+import {
+  enumerateDates,
+  formatHourRangeLabel,
+  eventAllowsEdits,
+  slotsToDaySelection,
+  debounce,
+} from './utils.js';
 import { heatColor, heatTextColor } from './heatmap.js';
 
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+function isWeekendDateKey(dateKey, timeZone) {
+  const weekday = new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'short' }).format(
+    new Date(`${dateKey}T12:00:00`)
+  );
+  return weekday === 'Sat' || weekday === 'Sun';
+}
+
+function appendWeekdayHeader(weekdayRow) {
+  WEEKDAYS.forEach((label, index) => {
+    const span = document.createElement('span');
+    span.textContent = label;
+    if (index >= 5) span.classList.add('weekend');
+    weekdayRow.appendChild(span);
+  });
+}
 
 function pad2(n) {
   return String(n).padStart(2, '0');
@@ -80,10 +102,14 @@ function createDayCell(dateKey, state, event, readOnly, inRange) {
     cell.classList.add('out-of-range');
     cell.disabled = true;
     cell.setAttribute('aria-label', 'Outside event range');
+    if (isWeekendDateKey(dateKey, event.timezone)) cell.classList.add('weekend');
     return cell;
   }
 
   cell.classList.add('in-range');
+  if (isWeekendDateKey(dateKey, event.timezone)) {
+    cell.classList.add('weekend');
+  }
   const conf = state.get(dateKey);
   if (conf) {
     cell.classList.add(conf);
@@ -112,6 +138,25 @@ function attachPaintHandlers(root, state, event, getPaintMode, onChange, readOnl
 
   let painting = false;
   let activePointerId = null;
+  let strokeAction = null;
+
+  const PAINT_CHANGE_DEBOUNCE_MS = 150;
+
+  const notifyChangeDebounced = debounce(() => {
+    onChange?.(new Map(state));
+  }, PAINT_CHANGE_DEBOUNCE_MS);
+
+  function flushChange() {
+    notifyChangeDebounced.cancel();
+    onChange?.(new Map(state));
+  }
+
+  function resolveStrokeAction(dateKey, brushMode) {
+    if (brushMode === 'erase') return 'erase';
+    const existing = state.get(dateKey);
+    if (existing === 'likely' || existing === 'maybe') return 'erase';
+    return brushMode;
+  }
 
   function applyDay(cell, dateKey, mode) {
     if (!inRange.has(dateKey)) return;
@@ -124,13 +169,14 @@ function attachPaintHandlers(root, state, event, getPaintMode, onChange, readOnl
       cell.className = `day-cell in-range ${mode}`;
       cell.dataset.confidence = mode;
     }
-    onChange?.(new Map(state));
+    notifyChangeDebounced();
   }
 
   function paintAt(cell) {
     const key = cell?.dataset?.date;
     if (!key || !cell.classList.contains('in-range')) return;
-    applyDay(cell, key, getPaintMode());
+    if (!strokeAction) strokeAction = resolveStrokeAction(key, getPaintMode());
+    applyDay(cell, key, strokeAction);
   }
 
   function paintFromPoint(clientX, clientY) {
@@ -141,9 +187,12 @@ function attachPaintHandlers(root, state, event, getPaintMode, onChange, readOnl
 
   function endPaint(e) {
     if (activePointerId !== null && e.pointerId !== activePointerId) return;
+    const wasPainting = painting;
     painting = false;
     activePointerId = null;
+    strokeAction = null;
     root.classList.remove('is-painting');
+    if (wasPainting) flushChange();
   }
 
   function onPointerDown(e) {
@@ -152,6 +201,7 @@ function attachPaintHandlers(root, state, event, getPaintMode, onChange, readOnl
     e.preventDefault();
     painting = true;
     activePointerId = e.pointerId;
+    strokeAction = resolveStrokeAction(cell.dataset.date, getPaintMode());
     root.classList.add('is-painting');
     root.setPointerCapture(e.pointerId);
     paintAt(cell);
@@ -205,7 +255,7 @@ export function buildDayCalendar(container, event, dayMap, options) {
 
   container.innerHTML = '';
   const root = document.createElement('div');
-  root.className = separateMonths ? 'day-calendar-months-grid' : 'day-calendar-compact glass-card';
+  root.className = separateMonths ? 'day-calendar-months-grid' : 'day-calendar-compact panel';
 
   const paintSurface = document.createElement('div');
   paintSurface.className = separateMonths
@@ -214,7 +264,7 @@ export function buildDayCalendar(container, event, dayMap, options) {
 
   for (const { year, month } of monthsInRange(event.start_date, event.end_date)) {
     const monthBlock = document.createElement('section');
-    monthBlock.className = separateMonths ? 'day-calendar-month glass-card' : 'day-calendar-month';
+    monthBlock.className = separateMonths ? 'day-calendar-month panel' : 'day-calendar-month';
 
     const title = document.createElement('h3');
     title.className = 'month-title';
@@ -223,11 +273,7 @@ export function buildDayCalendar(container, event, dayMap, options) {
 
     const weekdayRow = document.createElement('div');
     weekdayRow.className = 'day-calendar-weekdays';
-    for (const label of WEEKDAYS) {
-      const span = document.createElement('span');
-      span.textContent = label;
-      weekdayRow.appendChild(span);
-    }
+    appendWeekdayHeader(weekdayRow);
     monthBlock.appendChild(weekdayRow);
 
     const weeksEl = document.createElement('div');
@@ -338,7 +384,7 @@ export function buildMultiDayCalendar(container, event, participants, slotsByPar
       section.appendChild(timeNote);
 
       const calHost = document.createElement('div');
-      calHost.className = 'participant-calendar-host';
+      calHost.className = 'participant-calendar-host day-calendar-host';
       buildDayCalendar(calHost, event, days, { readOnly: true, separateMonths: true });
       section.appendChild(calHost);
     }
@@ -376,6 +422,9 @@ function createHeatDayCell(dateKey, count, max, event, inRange) {
   }
 
   cell.classList.add('in-range');
+  if (isWeekendDateKey(dateKey, event.timezone)) {
+    cell.classList.add('weekend');
+  }
   const intensity = max > 0 && count > 0 ? count / max : 0;
   cell.style.background = heatColor(intensity);
   cell.style.color = heatTextColor(intensity);
@@ -415,7 +464,7 @@ export function buildGroupHeatCalendar(container, event, byDate, max) {
 
   for (const { year, month } of monthsInRange(event.start_date, event.end_date)) {
     const monthBlock = document.createElement('section');
-    monthBlock.className = 'day-calendar-month glass-card';
+    monthBlock.className = 'day-calendar-month panel';
 
     const title = document.createElement('h3');
     title.className = 'month-title';
@@ -424,11 +473,7 @@ export function buildGroupHeatCalendar(container, event, byDate, max) {
 
     const weekdayRow = document.createElement('div');
     weekdayRow.className = 'day-calendar-weekdays';
-    for (const label of WEEKDAYS) {
-      const span = document.createElement('span');
-      span.textContent = label;
-      weekdayRow.appendChild(span);
-    }
+    appendWeekdayHeader(weekdayRow);
     monthBlock.appendChild(weekdayRow);
 
     const weeksEl = document.createElement('div');

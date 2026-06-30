@@ -7,7 +7,7 @@ function getModal() {
   modalRoot.id = 'confirm-modal-root';
   modalRoot.innerHTML = `
     <div class="confirm-overlay" hidden>
-      <div class="confirm-dialog glass-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-desc">
+      <div class="confirm-dialog panel" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-desc">
         <div class="confirm-icon-wrap" aria-hidden="true">
           <svg class="confirm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
             <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z" stroke-linecap="round" stroke-linejoin="round"/>

@@ -1,6 +1,7 @@
 import { isSupabaseConfigured } from '../supabase-config.js';
 import { getAuthClient } from './supabase-client.js';
 import { APP_BASE } from './utils.js';
+import { initChrome } from './theme.js';
 
 const DEFAULT_RETURN = `${APP_BASE}/index.html`;
 
@@ -29,3 +30,5 @@ async function finishSignIn() {
 }
 
 finishSignIn();
+
+initChrome();

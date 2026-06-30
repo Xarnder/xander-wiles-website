@@ -14,6 +14,7 @@ import {
   countEventDays,
   formatDateRange,
 } from './utils.js';
+import { initChrome } from './theme.js';
 
 const form = document.getElementById('create-form');
 const configWarning = document.getElementById('config-warning');
@@ -56,6 +57,7 @@ function updateExpiresPreview() {
 }
 
 async function init() {
+  initChrome({ homeHref: 'index.html', homeLabel: '← Back' });
   if (recoverOAuthRedirectFromSiteRoot()) return;
 
   if (!isSupabaseConfigured()) {

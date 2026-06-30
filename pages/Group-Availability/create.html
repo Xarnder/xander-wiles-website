@@ -4,29 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <base href="/pages/Group-Availability/">
-  <title>Create event — When To Hang</title>
+  <title>Create event — Group Availability</title>
   <link rel="icon" href="favicon-dark.svg" type="image/svg+xml">
   <link rel="manifest" href="site.webmanifest">
-  <meta name="theme-color" content="#0a0a1a">
-  <link rel="stylesheet" href="/assets/css/style.css">
+  <meta name="theme-color" content="#c9b896">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('wth-theme');
+        document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/calendar.css">
 </head>
 <body>
-  <div id="main-nav-placeholder"></div>
-  <script src="/assets/js/nav-loader.js"></script>
-
-  <div class="background-orbs" aria-hidden="true">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-  </div>
-
   <div class="container">
-    <a class="back-link" href="index.html">← Back</a>
-    <header class="app-header">
+    <header class="app-header panel">
       <h1>Create event</h1>
       <p class="tagline">Set the dates and share the link with your group.</p>
     </header>
@@ -35,7 +36,7 @@
       Supabase is not configured. See setup instructions in <code>PLAN.md</code>.
     </div>
 
-    <form id="create-form" class="form-card glass-card">
+    <form id="create-form" class="form-card panel">
       <div class="form-grid">
         <label>
           Event title

@@ -5,6 +5,7 @@ import { fetchDashboardEvents, deleteEvent } from './api.js';
 import { APP_BASE, eventUrl, showToast, formatDbError, navigateToEvent } from './utils.js';
 import { navigateToGuestPreview } from './guest-preview.js';
 import { confirmAction } from './confirm-modal.js';
+import { initChrome } from './theme.js';
 
 const els = {
   configWarning: document.getElementById('config-warning'),
@@ -31,29 +32,43 @@ function renderDashboard(events, userId) {
       const isOrganizer = ev.organizer_id === userId;
       const title = escapeHtml(ev.title);
       const slug = ev.slug || '';
-      return `
-    <div class="dashboard-item glass-card">
-      <a class="dashboard-item-main" href="${slug ? eventUrl(slug) : `${APP_BASE}/event?id=${encodeURIComponent(ev.id)}`}" data-event-slug="${escapeHtml(slug)}" data-event-id="${escapeHtml(ev.id)}">
+      const slugAttr = escapeHtml(slug);
+      const idAttr = escapeHtml(ev.id);
+
+      if (isOrganizer) {
+        return `
+    <div class="dashboard-item panel dashboard-item--organizer">
+      <div class="dashboard-item-main dashboard-item-main--static">
         <div>
           <strong>${title}</strong>
           <span class="muted">${escapeHtml(ev.start_date)} → ${escapeHtml(ev.end_date)}</span>
-          ${isOrganizer ? '<span class="dashboard-badge">Organizer</span>' : ''}
+          <span class="dashboard-badge">Organizer</span>
+        </div>
+      </div>
+      <div class="dashboard-view-actions">
+        <button type="button" class="btn btn-ghost dashboard-view-admin" data-event-slug="${slugAttr}" data-event-id="${idAttr}">View as admin</button>
+        <button type="button" class="btn btn-ghost dashboard-preview-guest" data-event-slug="${slugAttr}" data-event-id="${idAttr}">Preview as guest</button>
+      </div>
+      <div class="dashboard-item-actions">
+        <button type="button" class="btn btn-ghost dashboard-delete" data-event-id="${idAttr}" data-event-title="${title}">Delete</button>
+      </div>
+    </div>`;
+      }
+
+      return `
+    <div class="dashboard-item panel">
+      <a class="dashboard-item-main" href="${slug ? eventUrl(slug) : `${APP_BASE}/event?id=${encodeURIComponent(ev.id)}`}" data-event-slug="${slugAttr}" data-event-id="${idAttr}">
+        <div>
+          <strong>${title}</strong>
+          <span class="muted">${escapeHtml(ev.start_date)} → ${escapeHtml(ev.end_date)}</span>
         </div>
         <span class="chevron">→</span>
       </a>
-      ${
-        isOrganizer
-          ? `<div class="dashboard-item-actions">
-              <button type="button" class="btn btn-ghost dashboard-preview-guest" data-event-slug="${escapeHtml(slug)}" data-event-id="${escapeHtml(ev.id)}">Preview as guest</button>
-              <button type="button" class="btn btn-ghost dashboard-delete" data-event-id="${escapeHtml(ev.id)}" data-event-title="${title}">Delete</button>
-            </div>`
-          : ''
-      }
     </div>`;
     })
     .join('');
 
-  els.dashboard.querySelectorAll('.dashboard-item-main').forEach((link) => {
+  els.dashboard.querySelectorAll('a.dashboard-item-main').forEach((link) => {
     link.addEventListener('click', (e) => {
       const s = link.dataset.eventSlug;
       const id = link.dataset.eventId;
@@ -88,6 +103,16 @@ function renderDashboard(events, userId) {
         showToast(formatDbError(err), 'error');
         btn.disabled = false;
       }
+    });
+  });
+
+  els.dashboard.querySelectorAll('.dashboard-view-admin').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const eventSlug = btn.dataset.eventSlug || null;
+      const eventId = btn.dataset.eventId || null;
+      navigateToEvent(eventSlug, eventSlug ? null : eventId);
     });
   });
 
@@ -134,6 +159,7 @@ async function refresh(session) {
 }
 
 function init() {
+  initChrome();
   if (recoverOAuthRedirectFromSiteRoot()) return;
 
   if (!isSupabaseConfigured()) {
