@@ -309,6 +309,7 @@ export function renderDashboardData() {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
+    // Calculate totals across all sessions
     state.allSessions.forEach((data) => {
         const dateObj = new Date(data.startTime);
 
@@ -334,7 +335,24 @@ export function renderDashboardData() {
             totalSixMonthsMs += data.durationMs;
             totalSixMonthsEarnings += data.earnings;
         }
+    });
 
+    // Pagination bounds check
+    const pageSize = 5;
+    const maxPages = Math.ceil(state.allSessions.length / pageSize);
+    if (state.historyPage >= maxPages && maxPages > 0) {
+        state.historyPage = maxPages - 1;
+    }
+    if (state.historyPage < 0) {
+        state.historyPage = 0;
+    }
+
+    // Slice to the current page of sessions
+    const paginatedSessions = state.allSessions.slice(state.historyPage * pageSize, (state.historyPage + 1) * pageSize);
+
+    // Render the active page sessions
+    paginatedSessions.forEach((data) => {
+        const dateObj = new Date(data.startTime);
         const item = document.createElement('div');
         item.className = 'history-item';
         const formattedTime = formatDuration(data.durationMs);
@@ -427,6 +445,42 @@ export function renderDashboardData() {
         DOM.historyList.appendChild(item);
     });
 
+    // Render pagination controls
+    if (DOM.historyPagination) {
+        DOM.historyPagination.innerHTML = "";
+        if (state.allSessions.length > pageSize) {
+            DOM.historyPagination.style.display = 'flex';
+
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'history-pagination-btn';
+            prevBtn.textContent = '← Prev';
+            prevBtn.disabled = state.historyPage === 0;
+            prevBtn.addEventListener('click', () => {
+                state.historyPage--;
+                renderDashboardData();
+            });
+
+            const pageInfo = document.createElement('span');
+            pageInfo.className = 'history-pagination-info';
+            pageInfo.textContent = `Page ${state.historyPage + 1} of ${maxPages}`;
+
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'history-pagination-btn';
+            nextBtn.textContent = 'Next →';
+            nextBtn.disabled = state.historyPage >= maxPages - 1;
+            nextBtn.addEventListener('click', () => {
+                state.historyPage++;
+                renderDashboardData();
+            });
+
+            DOM.historyPagination.appendChild(prevBtn);
+            DOM.historyPagination.appendChild(pageInfo);
+            DOM.historyPagination.appendChild(nextBtn);
+        } else {
+            DOM.historyPagination.style.display = 'none';
+        }
+    }
+
     DOM.dailyHoursDisplay.textContent = formatDuration(totalDailyMs);
     renderStatsEarnings(DOM.dailyEarningsDisplay, totalDailyEarnings);
 
@@ -478,6 +532,7 @@ export function loadHistory() {
 }
 
 export function applyGlobalFilters() {
+    state.historyPage = 0;
     if (!state.globalFilterCompany && !state.globalFilterProject) {
         state.allSessions = [...state.rawSessions];
     } else {

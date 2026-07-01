@@ -17,8 +17,12 @@ export const DOM = {
     moneyCounterWidget: document.getElementById('widget-money-counter'),
     moneyCounterStatus: document.getElementById('money-counter-status'),
     moneyCounterTotal: document.getElementById('money-counter-total'),
+    moneyCounterTime: document.getElementById('money-counter-time'),
     moneyCounterModeLabel: document.getElementById('money-counter-mode-label'),
     moneyCounterModeButtons: document.querySelectorAll('.money-counter-mode-btn'),
+    moneyCounterGapSlider: document.getElementById('settings-money-counter-gap-slider'),
+    moneyCounterGapValue: document.getElementById('settings-money-counter-gap-value'),
+    moneyCounterStage: document.getElementById('money-counter-stage'),
     moneyStack20p: document.getElementById('money-stack-20p'),
     moneyStack1: document.getElementById('money-stack-1'),
     moneyStack10: document.getElementById('money-stack-10'),
@@ -31,6 +35,7 @@ export const DOM = {
     projectSelect: document.getElementById('project-select'),
     liveEarningsDisplay: document.getElementById('live-earnings'),
     historyList: document.getElementById('history-list'),
+    historyPagination: document.getElementById('history-pagination'),
     dailyHoursDisplay: document.getElementById('daily-hours'),
     dailyEarningsDisplay: document.getElementById('daily-earnings'),
     weeklyHoursDisplay: document.getElementById('weekly-hours'),
@@ -215,10 +220,19 @@ export function updateCurrencyDisplays() {
         const elapsedMs = now - state.startTime;
         const hoursFloat = elapsedMs / (1000 * 60 * 60);
         const earned = hoursFloat * state.currentSessionRate;
-        DOM.liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${earned.toFixed(2)}`;
+        const after = getAmountAfterPercentageCuts(earned);
+        DOM.liveEarningsDisplay.innerHTML = `
+            <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>${earned.toFixed(2)}</span>
+            <span class="cut-divider">|</span>
+            <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>${after.toFixed(2)}</span>
+        `;
         renderLiveMoneyCounter(earned, true);
     } else {
-        DOM.liveEarningsDisplay.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>0.00`;
+        DOM.liveEarningsDisplay.innerHTML = `
+            <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
+            <span class="cut-divider">|</span>
+            <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
+        `;
         renderLiveMoneyCounter(0, false);
     }
 }
@@ -230,13 +244,28 @@ const moneyCounterStackCounts = {
 };
 
 function createMoneyPieces(count, type) {
-    const visibleCount = Math.min(count, type === 'note' ? 18 : 24);
+    const isNote = type.includes('note');
+    const visibleCount = Math.min(count, isNote ? 18 : 24);
     const overflow = Math.max(count - visibleCount, 0);
-    const label = type.includes('note') ? '£10' : type.includes('coin-large') ? '£1' : '20p';
+    const label = isNote ? '£10' : type.includes('coin-large') ? '£1' : '20p';
     let html = '';
 
     for (let i = 0; i < visibleCount; i++) {
-        html += `<span class="money-piece ${type}" style="--i:${i};"><em>${label}</em></span>`;
+        let rot = 0;
+        let dx = 0;
+        let dy = 0;
+        
+        if (isNote) {
+            rot = 0;
+            dx = 0;
+            dy = 0;
+        } else {
+            rot = (((i * 3) % 7) - 3) * 0.4; // -1.2 to +1.2 degrees
+            dx = (((i * 5) % 5) - 2) * 0.4;  // -0.8px to +0.8px
+            dy = (((i * 7) % 5) - 2) * 0.4;  // -0.8px to +0.8px
+        }
+
+        html += `<span class="money-piece ${type}" style="--i:${i}; --rot:${rot}deg; --dx:${dx}px; --dy:${dy}px;"><em>${label}</em></span>`;
     }
 
     if (overflow > 0) {
@@ -249,8 +278,76 @@ function createMoneyPieces(count, type) {
 function renderMoneyStack(container, count, type, key) {
     if (!container || moneyCounterStackCounts[key] === count) return;
 
+    const currentCount = moneyCounterStackCounts[key] || 0;
     moneyCounterStackCounts[key] = count;
-    container.innerHTML = createMoneyPieces(count, type);
+    
+    const visibleLimit = type.includes('note') ? 18 : 24;
+    const currentVisible = Math.min(currentCount, visibleLimit);
+    const newVisible = Math.min(count, visibleLimit);
+
+    // If resetting, count decreased, or list was empty, rebuild completely
+    if (count < currentCount || newVisible < currentVisible || currentVisible === 0) {
+        container.innerHTML = createMoneyPieces(count, type);
+        return;
+    }
+
+    // If count increased, append new pieces
+    if (newVisible > currentVisible) {
+        // Remove existing +overflow if present so new items can be appended at the end
+        const overflowEl = container.querySelector('.money-stack-more');
+        if (overflowEl) {
+            overflowEl.remove();
+        }
+
+        // Generate and append new pieces
+        const label = type.includes('note') ? '£10' : type.includes('coin-large') ? '£1' : '20p';
+        for (let i = currentVisible; i < newVisible; i++) {
+            let rot = 0;
+            let dx = 0;
+            let dy = 0;
+            
+            if (type.includes('note')) {
+                rot = 0;
+                dx = 0;
+                dy = 0;
+            } else {
+                rot = (((i * 3) % 7) - 3) * 0.4;
+                dx = (((i * 5) % 5) - 2) * 0.4;
+                dy = (((i * 7) % 5) - 2) * 0.4;
+            }
+            
+            const tempSpan = document.createElement('span');
+            tempSpan.className = `money-piece ${type}`;
+            tempSpan.style.cssText = `--i:${i}; --rot:${rot}deg; --dx:${dx}px; --dy:${dy}px;`;
+            
+            // Stagger animation if multiple items are added at once
+            const staggerDelay = (i - currentVisible) * 0.08;
+            tempSpan.style.animationDelay = `${staggerDelay}s`;
+            
+            // Retain fallback label internally
+            const emEl = document.createElement('em');
+            emEl.textContent = label;
+            tempSpan.appendChild(emEl);
+            
+            container.appendChild(tempSpan);
+        }
+    }
+
+    // Add back/update the overflow count if needed
+    const overflow = Math.max(count - newVisible, 0);
+    const existingOverflowEl = container.querySelector('.money-stack-more');
+    if (overflow > 0) {
+        if (existingOverflowEl) {
+            existingOverflowEl.textContent = `+${overflow}`;
+        } else {
+            const overflowEl = document.createElement('span');
+            overflowEl.className = 'money-stack-more';
+            overflowEl.textContent = `+${overflow}`;
+            container.appendChild(overflowEl);
+        }
+    } else if (existingOverflowEl) {
+        existingOverflowEl.remove();
+    }
 }
 
 export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.startTime)) {
@@ -276,6 +373,19 @@ export function renderLiveMoneyCounter(earned = 0, isRunning = Boolean(state.sta
         DOM.moneyCounterTotal.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${displayEarned.toFixed(2)}`;
     }
 
+    if (DOM.moneyCounterTime) {
+        if (isRunning && state.startTime) {
+            const elapsedMs = Date.now() - state.startTime;
+            const totalSeconds = Math.floor(elapsedMs / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            DOM.moneyCounterTime.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        } else {
+            DOM.moneyCounterTime.textContent = '00:00:00';
+        }
+    }
+
     if (DOM.moneyCounterModeLabel) {
         DOM.moneyCounterModeLabel.textContent = state.moneyCounterMode === 'after'
             ? 'After percentage cuts'
@@ -297,6 +407,13 @@ export function renderMoneyCounterModeControls() {
         button.classList.toggle('active', isActive);
         button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
+
+    if (DOM.moneyCounterGapSlider && DOM.moneyCounterGapValue && DOM.moneyCounterStage) {
+        const gapVal = state.moneyCounterGap !== undefined ? state.moneyCounterGap : 1.0;
+        DOM.moneyCounterGapSlider.value = gapVal;
+        DOM.moneyCounterGapValue.textContent = gapVal.toFixed(1);
+        DOM.moneyCounterStage.style.setProperty('--stack-gap-scale', gapVal);
+    }
 
     if (state.startTime) {
         const elapsedMs = Date.now() - state.startTime;

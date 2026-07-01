@@ -116,6 +116,11 @@ function loadMoneyCounterMode() {
     return localStorage.getItem('work_tracker_money_counter_mode') === 'after' ? 'after' : 'before';
 }
 
+function loadMoneyCounterGap() {
+    const saved = localStorage.getItem('work_tracker_money_counter_gap');
+    return saved !== null ? parseFloat(saved) : 1.0;
+}
+
 function loadTcMatrixSelectedItemIds() {
     try {
         const saved = JSON.parse(localStorage.getItem('work_tracker_tc_matrix_selected_items')) || [];
@@ -167,6 +172,7 @@ export const state = {
     tcWorkingDaysPerWeek: loadTcWorkingDaysPerWeek(),
     dashboardDensity: loadDashboardDensity(),
     moneyCounterMode: loadMoneyCounterMode(),
+    moneyCounterGap: loadMoneyCounterGap(),
     tcCustomTimeScales: loadTcCustomTimeScales(),
     tcSavedItemFilters: {
         search: '',
@@ -177,7 +183,8 @@ export const state = {
     tcMatrixSelectedItemIds: loadTcMatrixSelectedItemIds(),
     tcMatrixSelectionInitialized: loadTcMatrixSelectionInitialized(),
     activeCutStatsPeriods: loadActiveCutStatsPeriods(),
-    lastStatsTotals: { daily: 0, weekly: 0, monthly: 0 }
+    lastStatsTotals: { daily: 0, weekly: 0, monthly: 0 },
+    historyPage: 0
 };
 
 export function updateCurrency(newCurrency) {
@@ -213,6 +220,11 @@ export function updateDashboardDensity(density) {
 export function updateMoneyCounterMode(mode) {
     state.moneyCounterMode = mode === 'after' ? 'after' : 'before';
     localStorage.setItem('work_tracker_money_counter_mode', state.moneyCounterMode);
+}
+
+export function updateMoneyCounterGap(gap) {
+    state.moneyCounterGap = parseFloat(gap) || 1.0;
+    localStorage.setItem('work_tracker_money_counter_gap', state.moneyCounterGap);
 }
 
 export function createPercentageCut(name = '', percentage = 0) {

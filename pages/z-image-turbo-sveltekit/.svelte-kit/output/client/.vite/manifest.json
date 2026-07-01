@@ -1,6 +1,6 @@
 {
   ".svelte-kit/generated/client-optimized/app.js": {
-    "file": "_app/immutable/entry/app.Bo545qZm.js",
+    "file": "_app/immutable/entry/app.AbGT6scb.js",
     "name": "entry/app",
     "src": ".svelte-kit/generated/client-optimized/app.js",
     "isEntry": true,
@@ -27,7 +27,7 @@
     ]
   },
   ".svelte-kit/generated/client-optimized/nodes/1.js": {
-    "file": "_app/immutable/nodes/1.C2NY5O_c.js",
+    "file": "_app/immutable/nodes/1.DVBqNoIb.js",
     "name": "nodes/1",
     "src": ".svelte-kit/generated/client-optimized/nodes/1.js",
     "isEntry": true,
@@ -35,7 +35,7 @@
     "imports": [
       "_DOCO80rQ.js",
       "_70L5jeyE.js",
-      "_-KL3Ed3z.js"
+      "_k_aOJJG_.js"
     ]
   },
   ".svelte-kit/generated/client-optimized/nodes/2.js": {
@@ -61,13 +61,6 @@
     "src": ".svelte-kit/generated/shared/error-template.js",
     "isDynamicEntry": true
   },
-  "_-KL3Ed3z.js": {
-    "file": "_app/immutable/chunks/-KL3Ed3z.js",
-    "name": "entry",
-    "imports": [
-      "_DOCO80rQ.js"
-    ]
-  },
   "_70L5jeyE.js": {
     "file": "_app/immutable/chunks/70L5jeyE.js",
     "name": "index",
@@ -79,13 +72,20 @@
     "file": "_app/immutable/chunks/DOCO80rQ.js",
     "name": "scheduler"
   },
+  "_k_aOJJG_.js": {
+    "file": "_app/immutable/chunks/k_aOJJG_.js",
+    "name": "entry",
+    "imports": [
+      "_DOCO80rQ.js"
+    ]
+  },
   "node_modules/@sveltejs/kit/src/runtime/client/entry.js": {
-    "file": "_app/immutable/entry/start.CKgG1Ve2.js",
+    "file": "_app/immutable/entry/start.DZWJstnd.js",
     "name": "entry/start",
     "src": "node_modules/@sveltejs/kit/src/runtime/client/entry.js",
     "isEntry": true,
     "imports": [
-      "_-KL3Ed3z.js"
+      "_k_aOJJG_.js"
     ]
   },
   "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm": {

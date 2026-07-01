@@ -29,6 +29,7 @@ import {
     updateContinueSession,
     updateDashboardDensity,
     updateMoneyCounterMode,
+    updateMoneyCounterGap,
     updatePercentageCuts,
     updateTcHourlyRate,
     updateTcDailyHours,
@@ -334,6 +335,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (DOM.startTimePreferenceSelect) {
             DOM.startTimePreferenceSelect.value = state.startTimePreference;
         }
+        if (DOM.moneyCounterGapSlider && DOM.moneyCounterGapValue) {
+            DOM.moneyCounterGapSlider.value = state.moneyCounterGap;
+            DOM.moneyCounterGapValue.textContent = state.moneyCounterGap.toFixed(1);
+        }
         renderWidgetOrderList();
     }
 
@@ -396,6 +401,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (DOM.startTimePreferenceSelect) {
             updateStartTimePreference(DOM.startTimePreferenceSelect.value);
+        }
+        if (DOM.moneyCounterGapSlider) {
+            updateMoneyCounterGap(parseFloat(DOM.moneyCounterGapSlider.value));
+            if (DOM.moneyCounterStage) {
+                DOM.moneyCounterStage.style.setProperty('--stack-gap-scale', state.moneyCounterGap);
+            }
         }
 
         // Update timer rate, company, and project inputs on settings save if not currently running
@@ -471,6 +482,19 @@ document.addEventListener('DOMContentLoaded', () => {
             renderMoneyCounterModeControls();
         });
     });
+
+    if (DOM.moneyCounterGapSlider) {
+        DOM.moneyCounterGapSlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            updateMoneyCounterGap(val);
+            if (DOM.moneyCounterGapValue) {
+                DOM.moneyCounterGapValue.textContent = val.toFixed(1);
+            }
+            if (DOM.moneyCounterStage) {
+                DOM.moneyCounterStage.style.setProperty('--stack-gap-scale', val);
+            }
+        });
+    }
 
     // Helper function to open Session Modal for a specific date and populate default or previous time settings
     function openAddSessionModal(selectedDate, usePreviousTimes = true) {

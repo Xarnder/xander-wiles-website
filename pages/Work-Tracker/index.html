@@ -164,6 +164,7 @@
                         </div>
                     </div>
                     <div class="money-counter-total" id="money-counter-total"><span class="currency-symbol">£</span>0.00</div>
+                    <div class="money-counter-time" id="money-counter-time">00:00:00</div>
                     <div class="money-counter-mode-label" id="money-counter-mode-label">Before percentage cuts</div>
                     <div class="money-counter-stage" id="money-counter-stage" aria-live="polite">
                         <div class="money-stack money-stack-coin-small" data-denomination="20p">
@@ -343,6 +344,7 @@
                     <div id="history-list" class="history-list">
                         <p class="loading-text">Loading history...</p>
                     </div>
+                    <div id="history-pagination" class="history-pagination"></div>
                 </section>
             </div>
             </div>
@@ -528,6 +530,11 @@
                         <option value="comfortable">Comfortable</option>
                         <option value="spacious">Spacious</option>
                     </select>
+                </div>
+
+                <div class="input-group">
+                    <label for="settings-money-counter-gap-slider">Money Counter Stack Gap (<span id="settings-money-counter-gap-value">1.0</span>x)</label>
+                    <input type="range" id="settings-money-counter-gap-slider" min="0.5" max="2.5" step="0.1" value="1.0" class="money-counter-gap-slider">
                 </div>
 
                 <div class="input-group">

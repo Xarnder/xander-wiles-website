@@ -333,11 +333,29 @@ body.dashboard-density-spacious .cut-stat-layer {
 }
 
 .highlight-text {
-    color: var(--accent-green);
-    font-size: 1.4rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
     margin-top: 15px;
-    font-weight: 600;
-    text-shadow: 0 0 10px rgba(0, 230, 118, 0.4);
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+}
+
+.highlight-text .before-cut {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.highlight-text .after-cut {
+    color: var(--accent-green);
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(0, 230, 118, 0.35);
+}
+
+.highlight-text .cut-divider {
+    color: rgba(255, 255, 255, 0.15);
+    font-weight: 300;
 }
 
 .money-counter-widget {
@@ -368,6 +386,79 @@ body.dashboard-density-spacious .cut-stat-layer {
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 10px;
+}
+
+.money-counter-gap-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.money-counter-gap-control label {
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.money-counter-gap-control span {
+    color: var(--accent-green, #00e676);
+    font-variant-numeric: tabular-nums;
+}
+
+.money-counter-gap-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 60px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.money-counter-gap-slider:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.money-counter-gap-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent-green, #00e676);
+    box-shadow: 0 0 6px rgba(0, 230, 118, 0.5);
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.money-counter-gap-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.8);
+}
+
+.money-counter-gap-slider::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent-green, #00e676);
+    box-shadow: 0 0 6px rgba(0, 230, 118, 0.5);
+    transition: transform 0.1s, box-shadow 0.1s;
+    cursor: pointer;
+}
+
+.money-counter-gap-slider::-moz-range-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 10px rgba(0, 230, 118, 0.8);
 }
 
 .money-counter-mode-toggle {
@@ -427,8 +518,17 @@ body.dashboard-density-spacious .cut-stat-layer {
     font-size: clamp(2.1rem, 7vw, 4.3rem);
     font-weight: 800;
     line-height: 0.95;
-    margin: 6px 0 20px;
+    margin: 6px 0 10px;
     text-shadow: 0 0 22px rgba(0, 230, 118, 0.28);
+}
+
+.money-counter-time {
+    color: var(--text-secondary);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0 0 15px;
+    letter-spacing: 0.5px;
+    font-variant-numeric: tabular-nums;
 }
 
 .money-counter-mode-label {
@@ -436,7 +536,7 @@ body.dashboard-density-spacious .cut-stat-layer {
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0;
-    margin: -10px 0 18px;
+    margin: 0 0 18px;
     text-transform: uppercase;
 }
 
@@ -444,7 +544,7 @@ body.dashboard-density-spacious .cut-stat-layer {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
-    min-height: 250px;
+    min-height: 420px;
     perspective: 900px;
 }
 
@@ -452,123 +552,175 @@ body.dashboard-density-spacious .cut-stat-layer {
     position: relative;
     display: flex;
     min-width: 0;
-    min-height: 250px;
+    min-height: 420px;
     align-items: flex-end;
     justify-content: center;
     transform-style: preserve-3d;
+    cursor: pointer;
+    --active-gap-scale: var(--stack-gap-scale, 1.0);
+}
+
+.money-stack:hover {
+    --active-gap-scale: calc(var(--stack-gap-scale, 1.0) * 1.8) !important;
+}
+
+.money-counter-widget:active .money-stack {
+    --active-gap-scale: calc(var(--stack-gap-scale, 1.0) * 1.8) !important;
 }
 
 .money-stack-pieces {
     position: absolute;
-    bottom: 60px;
+    bottom: 80px;
     left: 50%;
-    width: 96px;
-    height: 168px;
+    width: 160px;
+    height: 280px;
     transform: translateX(-50%) rotateX(62deg);
     transform-origin: center bottom;
     transform-style: preserve-3d;
 }
 
 .money-stack-coin-small .money-stack-pieces {
-    width: 70px;
+    width: 110px;
 }
 
 .money-stack-coin-large .money-stack-pieces {
-    width: 86px;
+    width: 130px;
 }
 
 .money-stack-note .money-stack-pieces {
-    width: 122px;
+    width: 200px;
 }
 
 .money-piece {
     position: absolute;
     left: 50%;
-    bottom: calc(var(--i) * 4px);
     display: grid;
     place-items: center;
-    transform: translateX(-50%) translateZ(calc(var(--i) * 1.8px));
     transform-origin: center;
     will-change: transform;
+    transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .money-piece em {
-    font-style: normal;
-    font-weight: 900;
-    letter-spacing: 0;
-    transform: rotateX(-62deg);
+    display: none;
+}
+
+@keyframes coinDrop {
+    0% {
+        transform: translate(calc(-50% + var(--dx, 0px)), -180px) translateZ(calc((var(--i) * var(--piece-gap-z) + 120px) * var(--active-gap-scale, 1))) rotateZ(calc(var(--rot, 0deg) - 25deg)) rotateY(-30deg);
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        transform: translate(calc(-50% + var(--dx, 0px)), var(--dy, 0px)) translateZ(calc(var(--i) * var(--piece-gap-z) * var(--active-gap-scale, 1))) rotateZ(var(--rot, 0deg));
+        opacity: 1;
+    }
+}
+
+@keyframes noteDrop {
+    0% {
+        transform: translate(calc(-50% + var(--dx, 0px)), -220px) translateZ(calc((var(--i) * var(--piece-gap-z) + 140px) * var(--active-gap-scale, 1))) rotateZ(calc(var(--rot, 0deg) + 35deg)) rotateX(-15deg);
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        transform: translate(calc(-50% + var(--dx, 0px)), var(--dy, 0px)) translateZ(calc(var(--i) * var(--piece-gap-z) * var(--active-gap-scale, 1))) rotateZ(var(--rot, 0deg));
+        opacity: 1;
+    }
+}
+
+@keyframes wobblePiece {
+    0% {
+        transform: translateZ(6px) rotateZ(-4deg) rotateY(-7deg) rotateX(-3.5deg);
+    }
+    50% {
+        transform: translateZ(0px) rotateZ(0deg) rotateY(0deg) rotateX(0deg);
+    }
+    100% {
+        transform: translateZ(6px) rotateZ(4deg) rotateY(7deg) rotateX(3.5deg);
+    }
 }
 
 .money-piece.coin {
+    --piece-gap-z: calc(2.2px * var(--coin-scale, 1.2));
     border-radius: 50%;
-    box-shadow:
-        inset -8px -10px 12px rgba(0, 0, 0, 0.28),
-        inset 7px 8px 10px rgba(255, 255, 255, 0.35),
-        0 7px 0 rgba(98, 71, 25, 0.72),
-        0 14px 20px rgba(0, 0, 0, 0.32);
+    bottom: calc(var(--i) * 5px * var(--coin-scale, 1.2) * var(--active-gap-scale, 1));
+    transform: translate(calc(-50% + var(--dx, 0px)), var(--dy, 0px)) translateZ(calc(var(--i) * var(--piece-gap-z) * var(--active-gap-scale, 1))) rotateZ(var(--rot, 0deg));
+    animation: coinDrop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.2) both;
+}
+
+.money-stack-pieces .money-piece.coin:last-child {
+    animation: 
+        coinDrop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.2) both, 
+        wobblePiece 4s ease-in-out infinite alternate 0.5s;
+    animation-composition: replace, add;
 }
 
 .money-piece.coin-small {
-    width: 46px;
-    height: 46px;
-    background: linear-gradient(145deg, #d9a956, #8a5e24 56%, #f4d182);
-    color: #331e0a;
-    font-size: 0.68rem;
+    --coin-scale: 1.2;
+    width: 92px;
+    height: 92px;
+    background: url('/assets/images/Cash-Images/20p.webp') no-repeat center/contain;
+    background-color: transparent;
 }
 
 .money-piece.coin-large {
-    width: 58px;
-    height: 58px;
-    background:
-        radial-gradient(circle at 50% 50%, #f5cf65 0 34%, #d4dce3 35% 55%, #f0c052 56% 100%);
-    color: #2c2409;
-    font-size: 0.78rem;
+    --coin-scale: 1.7;
+    width: 116px;
+    height: 116px;
+    background: url('/assets/images/Cash-Images/1_Pound.webp') no-repeat center/contain;
+    background-color: transparent;
 }
 
 .money-piece.note {
-    width: 92px;
-    height: 44px;
-    border-radius: 7px;
-    background:
-        linear-gradient(90deg, rgba(255,255,255,0.24), transparent 22% 78%, rgba(255,255,255,0.18)),
-        linear-gradient(135deg, #d87687, #9b2448 54%, #f3a0a9);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    color: #fff3f6;
-    font-size: 0.74rem;
-    box-shadow:
-        0 3px 0 rgba(77, 12, 30, 0.72),
-        0 12px 20px rgba(0, 0, 0, 0.28);
+    --piece-gap-z: calc(1.4px * 2);
+    width: 184px;
+    height: 88px;
+    bottom: calc(var(--i) * 3px * 2 * var(--active-gap-scale, 1));
+    transform: translate(calc(-50% + var(--dx, 0px)), var(--dy, 0px)) translateZ(calc(var(--i) * var(--piece-gap-z) * var(--active-gap-scale, 1))) rotateZ(var(--rot, 0deg));
+    background: url('/assets/images/Cash-Images/10_Pound_Single_Note.webp') no-repeat center/contain;
+    background-color: transparent;
+    border: none;
+    animation: noteDrop 0.55s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.money-stack-pieces .money-piece.note:last-child {
+    animation: 
+        noteDrop 0.55s cubic-bezier(0.23, 1, 0.32, 1) both, 
+        wobblePiece 4s ease-in-out infinite alternate 0.6s;
+    animation-composition: replace, add;
 }
 
 .money-stack-base {
-    position: absolute;
-    bottom: 46px;
-    left: 50%;
-    width: 84px;
-    height: 20px;
-    border-radius: 50%;
-    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.42) 66%, transparent 72%);
-    transform: translateX(-50%);
+    display: none;
 }
 
 .money-stack-coin-small .money-stack-base {
-    width: 68px;
+    width: 120px;
+    height: 30px;
 }
 
 .money-stack-coin-large .money-stack-base {
-    width: 82px;
+    width: 145px;
+    height: 35px;
 }
 
 .money-stack-note .money-stack-base {
-    width: 116px;
+    width: 220px;
+    height: 40px;
 }
 
 .money-stack-label {
-    position: relative;
-    z-index: 2;
+    position: absolute;
+    bottom: 0;
+    left: 0;
     width: 100%;
-    padding-top: 202px;
     text-align: center;
+    z-index: 5;
 }
 
 .money-stack-label span {
@@ -590,16 +742,25 @@ body.dashboard-density-spacious .cut-stat-layer {
 .money-stack-more {
     position: absolute;
     left: 50%;
-    bottom: 4px;
-    z-index: 5;
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    bottom: 12px;
+    z-index: 10;
+    border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 999px;
-    background: rgba(0, 0, 0, 0.38);
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
     color: var(--text-primary);
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 800;
-    padding: 4px 7px;
-    transform: translateX(36px) rotateX(-62deg);
+    padding: 4px 8px;
+    transform: translateX(45px) rotateX(-62deg);
+}
+
+.money-stack-coin-large .money-stack-more {
+    transform: translateX(58px) rotateX(-62deg);
+}
+
+.money-stack-note .money-stack-more {
+    transform: translateX(92px) rotateX(-62deg);
 }
 
 /* Condensed Light Buttons */
@@ -727,7 +888,7 @@ button:active {
 
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 20px;
     text-align: center;
 }
@@ -820,11 +981,7 @@ button:active {
     align-items: center;
     margin-top: 0;
     margin-bottom: 18px;
-    position: sticky;
-    top: 0;
-    z-index: 2;
     padding-bottom: 10px;
-    background: rgba(15, 17, 28, 0.98);
     gap: 15px;
     flex-wrap: wrap;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -853,6 +1010,11 @@ button:active {
     font-family: var(--font-family);
 }
 
+.period-toggle-btn::before {
+    content: none;
+    display: none;
+}
+
 .period-toggle-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-primary);
@@ -870,7 +1032,6 @@ button:active {
     top: 0;
     z-index: 1;
     padding: 0 0 2px;
-    background: rgba(15, 17, 28, 0.98);
     color: var(--text-secondary);
     font-size: 0.78rem;
     font-weight: 700;
@@ -1043,6 +1204,50 @@ button:active {
 .history-list::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
     border-radius: 3px;
+}
+
+.history-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.history-pagination-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    font-family: var(--font-family);
+}
+
+.history-pagination-btn::before {
+    content: none;
+    display: none;
+}
+
+.history-pagination-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.history-pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.history-pagination-info {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
 }
 
 .history-item {
@@ -1902,19 +2107,25 @@ button:active {
 
     .money-counter-stage {
         grid-template-columns: 1fr;
-        gap: 8px;
+        gap: 20px;
     }
 
     .money-stack {
-        min-height: 210px;
+        min-height: 380px;
     }
 
     .money-stack-pieces {
-        height: 138px;
+        height: 240px;
+        bottom: 70px;
     }
 
     .money-stack-label {
-        padding-top: 164px;
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        text-align: center;
+        z-index: 5;
     }
 
     .tc-custom-scale-form {
@@ -2314,7 +2525,6 @@ button:active {
     gap: 8px;
     margin-top: auto;
     padding-top: 18px;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
     flex-wrap: wrap;
     width: 100%;
     box-sizing: border-box;
