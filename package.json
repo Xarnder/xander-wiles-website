@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "scripts": {
     "build": "node build.js",
-    "dev": "npx serve ."
+    "dev": "npx serve .",
+    "seed:home-design": "node pages/Home-Design/scripts/seed-firestore.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "firebase-admin": "^14.1.0"
   }
 }

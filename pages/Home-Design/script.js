@@ -155,11 +155,12 @@
 
     function attachImagesToRow(row, index = 0) {
         const legacyKey = ideaKey(row.section, row.title, row.level > 1 ? row.parentItem : '');
-        const ideaId = clean(row.idea_id) || `idea-${String(index + 1).padStart(4, '0')}`;
+        const ideaId = clean(row.idea_id) || row.ideaId || `idea-${String(index + 1).padStart(4, '0')}`;
         return {
             ...row,
             ideaId,
             ideaKey: legacyKey,
+            sortIndex: Number.isFinite(row.sortIndex) ? row.sortIndex : index,
             images: parseImageList(row.images).join('|')
         };
     }
@@ -238,26 +239,19 @@
         return rows;
     }
 
-    function rowsToObjects(csvRows) {
-        if (!csvRows.length) return { rows: [] };
-
-        const headers = csvRows[0].map((header) => clean(header));
-        const rows = csvRows.slice(1).map((cells, index) => {
-            const row = {};
-            headers.forEach((header, headerIndex) => {
-                row[header] = clean(cells[headerIndex]);
-            });
-
+    function firestoreRowsToObjects(firestoreRows) {
+        const rows = firestoreRows.map((row, index) => {
             const parsed = {
-                idea_id: row.idea_id || '',
+                idea_id: row.idea_id || row.ideaId || '',
                 section: row.section || 'More ideas',
                 subsection: row.subsection || '',
                 level: Number.parseInt(row.level, 10) || 1,
-                parentItem: row.parent_item || '',
+                parentItem: row.parent_item || row.parentItem || '',
                 title: row.title || '',
                 description: row.description || '',
-                fullText: row.full_text || '',
-                images: row.images || ''
+                fullText: row.full_text || row.fullText || '',
+                images: row.images || '',
+                sortIndex: Number.isFinite(row.sortIndex) ? row.sortIndex : index
             };
 
             return attachImagesToRow(parsed, index);
@@ -1064,6 +1058,11 @@
             card.classList.add('has-media');
         }
 
+        const adminHost = fragment.querySelector('.idea-admin-host');
+        if (adminHost && window.AtHomeAdmin?.buildAdminControls) {
+            adminHost.innerHTML = window.AtHomeAdmin.buildAdminControls(item.ideaId);
+        }
+
         renderIdeaMedia(media, images, caption);
         setText(topic, item.subsection && item.subsection !== DEFAULT_SUBSECTION ? item.subsection : item.section);
         setText(title, item.title || item.fullText);
@@ -1178,37 +1177,27 @@
         console.info('[AtHome] Link images in idea-images.json using idea_id from the CSV.');
     }
 
-    async function loadContent() {
-        try {
-            const dataUrl = new URL(DATA_FILE, window.location.href);
-            dataUrl.searchParams.set('v', Date.now().toString());
+    function applyContentRows(firestoreRows) {
+        const { rows } = firestoreRowsToObjects(firestoreRows);
 
-            const [response, imageManifest] = await Promise.all([
-                fetch(dataUrl.href, { cache: 'no-store' }),
-                loadImageManifest()
-            ]);
-            if (!response.ok) throw new Error(`Request failed with ${response.status}`);
+        state.imageManifest = {};
+        state.rows = rows;
+        state.sections = buildSections(rows);
+        updateRouteFromHash();
+        render();
+        initCarousel();
+        maybeLogIdeaKeys();
+        window.dispatchEvent(new CustomEvent('athome:ready'));
+    }
 
-            const text = await response.text();
-            const { rows } = rowsToObjects(parseCsv(text));
+    function showLoadError(message) {
+        console.error('[AtHome] Could not load content', message);
+        el.sectionFeed.innerHTML = '';
 
-            state.imageManifest = migrateImageManifest(imageManifest, rows);
-            state.rows = rows;
-            state.sections = buildSections(rows);
-            updateRouteFromHash();
-            render();
-            initCarousel();
-            maybeLogIdeaKeys();
-            window.dispatchEvent(new CustomEvent('athome:ready'));
-        } catch (error) {
-            console.error('[AtHome] Could not load content', error);
-            el.sectionFeed.innerHTML = '';
-
-            const empty = document.createElement('div');
-            empty.className = 'empty-state';
-            empty.innerHTML = '<h3>Unable to load ideas</h3><p>Please refresh the page to try again.</p>';
-            el.sectionFeed.appendChild(empty);
-        }
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.innerHTML = `<h3>Unable to load ideas</h3><p>${message || 'Please refresh the page to try again.'}</p>`;
+        el.sectionFeed.appendChild(empty);
     }
 
     function applyTheme(theme) {
@@ -1341,7 +1330,7 @@
     }
 
     function exportCsvText(rows = state.rows) {
-        const headers = ['idea_id', 'section', 'subsection', 'level', 'parent_item', 'title', 'description', 'full_text', 'images'];
+        const headers = ['idea_id', 'section', 'subsection', 'level', 'parent_item', 'title', 'description', 'full_text', 'images', 'sort_index'];
         const lines = [headers.join(',')];
 
         rows.forEach((row) => {
@@ -1354,7 +1343,8 @@
                 row.title,
                 row.description,
                 row.fullText,
-                row.images
+                row.images,
+                row.sortIndex ?? ''
             ].map(escapeCsvField).join(','));
         });
 
@@ -1370,13 +1360,13 @@
         const seen = new Set();
 
         manifestPaths.forEach((path) => {
-            entries.push({ path, source: 'manifest' });
+            entries.push({ path, source: 'firestore' });
             seen.add(path);
         });
 
         csvPaths.forEach((path) => {
             if (seen.has(path)) return;
-            entries.push({ path, source: 'csv' });
+            entries.push({ path, source: 'firestore' });
             seen.add(path);
         });
 
@@ -1398,10 +1388,39 @@
         return state.rows.find((row) => row.ideaId === ideaId) || null;
     }
 
+    function refresh() {
+        render();
+        initCarousel();
+    }
+
+    function bindDataEvents() {
+        window.addEventListener('athome:data', (event) => {
+            const rows = event.detail?.rows || [];
+            if (!rows.length) {
+                showLoadError('No ideas found yet. Run the Firestore seed script if this is a new project.');
+                return;
+            }
+            applyContentRows(rows);
+        });
+
+        window.addEventListener('athome:error', (event) => {
+            const error = event.detail?.error;
+            showLoadError(error?.message || 'Could not connect to Firebase.');
+        });
+
+        window.addEventListener('athome:auth', () => {
+            refresh();
+        });
+
+        window.addEventListener('athome:edit-mode', () => {
+            refresh();
+        });
+    }
+
     function init() {
         initTheme();
         bindEvents();
-        loadContent();
+        bindDataEvents();
 
         window.AtHome = {
             getRows: () => state.rows,
@@ -1414,6 +1433,7 @@
             findRowByIdeaId,
             slugify,
             ideaKey,
+            refresh,
             DATA_FILE
         };
     }

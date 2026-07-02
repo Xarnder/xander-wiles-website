@@ -23,6 +23,7 @@ pages/XR_Viewer/assets/Make_Human.glb
 .env.local
 .env.*
 !.env.example
+secrets/
 
 .vercel
 

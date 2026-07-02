@@ -59,6 +59,15 @@
                     </span>
                     <span class="theme-toggle-label">Dark</span>
                 </button>
+                <div class="auth-cluster" id="authCluster">
+                    <div id="authGuest" class="auth-guest">
+                        <button id="authSignIn" class="button secondary auth-sign-in" type="button">Sign in</button>
+                    </div>
+                    <div id="authSignedIn" class="auth-signed-in" hidden>
+                        <span id="authStatus" class="auth-status" aria-live="polite"></span>
+                        <button id="authSignOut" class="button secondary auth-sign-out" type="button">Sign out</button>
+                    </div>
+                </div>
                 <button id="mobileMenuToggle" class="mobile-menu-toggle" type="button" aria-expanded="false"
                     aria-controls="mobileMenu" aria-label="Open menu">
                     <span aria-hidden="true"></span>
@@ -153,17 +162,35 @@
             </section>
 
             <section class="controls" aria-label="Browse">
-                <div class="search-field">
-                    <span aria-hidden="true">⌕</span>
-                    <input id="searchInput" type="search"
-                        placeholder="Search kitchens, bedrooms, lighting, storage, garden...">
-                </div>
-                <div id="topics">
-                    <div class="controls-head">
-                        <span class="eyebrow">Browse by topic</span>
-                        <span id="visibleCount" class="meta-label"></span>
+                <div id="adminBar" class="admin-bar" hidden>
+                    <div class="admin-bar-main">
+                        <span class="eyebrow">Owner</span>
+                        <button id="adminEditToggle" class="admin-edit-toggle" type="button"
+                            aria-pressed="false" aria-label="Toggle idea editing controls">
+                            <span class="admin-edit-toggle-track" aria-hidden="true">
+                                <span class="admin-edit-toggle-thumb"></span>
+                            </span>
+                            <span class="admin-edit-toggle-label">Edit ideas</span>
+                        </button>
                     </div>
-                    <nav id="sectionChips" class="section-chips" aria-label="Topics"></nav>
+                    <div id="adminBarActions" class="admin-bar-actions" hidden>
+                        <button id="adminAddIdea" class="button primary" type="button">Add idea</button>
+                        <button id="adminExportCsv" class="button secondary" type="button">Export CSV</button>
+                    </div>
+                </div>
+                <div class="controls-browse">
+                    <div class="search-field">
+                        <span aria-hidden="true">⌕</span>
+                        <input id="searchInput" type="search"
+                            placeholder="Search kitchens, bedrooms, lighting, storage, garden...">
+                    </div>
+                    <div id="topics">
+                        <div class="controls-head">
+                            <span class="eyebrow">Browse by topic</span>
+                            <span id="visibleCount" class="meta-label"></span>
+                        </div>
+                        <nav id="sectionChips" class="section-chips" aria-label="Topics"></nav>
+                    </div>
                 </div>
             </section>
 
@@ -203,8 +230,55 @@
         <footer class="site-footer">
             <p>Beutifully Living — design ideas for living beautifully.</p>
             <button id="imageManagerTrigger" class="image-manager-trigger" type="button"
-                aria-label="Open image manager" title="Image manager">Image manager</button>
+                aria-label="Open image manager" title="Image manager" hidden>Image manager</button>
         </footer>
+    </div>
+
+    <div id="ideaEditor" class="idea-editor" hidden>
+        <div id="ideaEditorBackdrop" class="idea-editor-backdrop"></div>
+        <section class="idea-editor-panel" role="dialog" aria-modal="true" aria-labelledby="ideaEditorTitle">
+            <header class="idea-editor-head">
+                <div>
+                    <span class="eyebrow">Admin</span>
+                    <h2 id="ideaEditorTitle">Edit idea</h2>
+                </div>
+                <button id="ideaEditorClose" class="idea-editor-close" type="button" aria-label="Close editor">×</button>
+            </header>
+            <form id="ideaEditorForm" class="idea-editor-form">
+                <label>
+                    <span>Section</span>
+                    <input name="section" type="text" required placeholder="Kitchen">
+                </label>
+                <label>
+                    <span>Subsection</span>
+                    <input name="subsection" type="text" placeholder="Layout">
+                </label>
+                <label>
+                    <span>Title</span>
+                    <input name="title" type="text" required>
+                </label>
+                <label>
+                    <span>Description</span>
+                    <textarea name="description" rows="3"></textarea>
+                </label>
+                <label>
+                    <span>Full text</span>
+                    <textarea name="fullText" rows="3"></textarea>
+                </label>
+                <label>
+                    <span>Parent item (for child ideas)</span>
+                    <input name="parentItem" type="text" placeholder="Parent idea title">
+                </label>
+                <label>
+                    <span>Level</span>
+                    <input name="level" type="number" min="1" value="1">
+                </label>
+                <footer class="idea-editor-foot">
+                    <button id="ideaEditorCancel" class="button secondary" type="button">Cancel</button>
+                    <button id="ideaEditorSave" class="button primary" type="submit">Save idea</button>
+                </footer>
+            </form>
+        </section>
     </div>
 
     <template id="sectionTemplate">
@@ -236,6 +310,7 @@
             <div class="idea-media" hidden></div>
             <div class="idea-card-top">
                 <span class="idea-topic"></span>
+                <div class="idea-admin-host"></div>
             </div>
             <h4 class="idea-title"></h4>
             <p class="idea-description"></p>
@@ -251,10 +326,9 @@
         <section class="image-manager-panel" role="dialog" aria-modal="true" aria-labelledby="imageManagerTitle">
             <header class="image-manager-head">
                 <div>
-                    <span class="eyebrow">Local editor</span>
+                    <span class="eyebrow">Cloud editor</span>
                     <h2 id="imageManagerTitle">Image manager</h2>
-                    <p>Upload an image, convert it to WebP, then attach it to an idea. Writes directly to
-                        <code>idea-images.json</code> and <code>images/</code>.</p>
+                    <p>Upload an image, convert it to WebP, then attach it to an idea. Images are saved to Firebase Storage.</p>
                 </div>
                 <button id="imageManagerClose" class="image-manager-close" type="button"
                     aria-label="Close image manager">×</button>
@@ -299,7 +373,6 @@
             <footer class="image-manager-foot">
                 <p id="imageManagerStatus" class="image-manager-status"></p>
                 <div class="image-manager-actions">
-                    <button id="imageManagerConnect" class="button secondary" type="button">Connect project folder</button>
                     <button id="imageManagerAttach" class="button primary" type="button">Convert &amp; attach</button>
                 </div>
             </footer>
@@ -318,7 +391,7 @@
     </div>
 
     <script src="script.js"></script>
-    <script src="image-manager.js"></script>
+    <script type="module" src="bootstrap.js"></script>
 </body>
 
 </html>
