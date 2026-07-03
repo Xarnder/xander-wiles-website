@@ -46,6 +46,9 @@ function getPromptText(root) {
         if (child.nodeType === Node.TEXT_NODE) {
             text += child.textContent;
         } else if (child.nodeType === Node.ELEMENT_NODE) {
+            if (child.classList.contains('hidden') || child.closest('.hidden')) {
+                return;
+            }
             if (child.matches('.prompt-field')) {
                 text += fieldValue(child);
             } else if (child.tagName === 'BR') {
@@ -64,19 +67,95 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const parentPathInput = document.getElementById('parent-path-input');
     if (parentPathInput) {
+        const savedParentPath = localStorage.getItem('setting-parent-path');
+        if (savedParentPath !== null) {
+            parentPathInput.value = savedParentPath;
+        }
         parentPathInput.addEventListener('input', (e) => {
             applyParentPath(e.target.value);
+            localStorage.setItem('setting-parent-path', e.target.value);
         });
         applyParentPath(parentPathInput.value);
     }
 
     const featureNameInput = document.getElementById('feature-name-input');
     if (featureNameInput) {
+        const savedFeatureName = localStorage.getItem('setting-feature-name');
+        if (savedFeatureName !== null) {
+            featureNameInput.value = savedFeatureName;
+        }
         featureNameInput.addEventListener('input', (e) => {
             applyFeatureName(e.target.value);
+            localStorage.setItem('setting-feature-name', e.target.value);
         });
         applyFeatureName(featureNameInput.value);
     }
+
+    // File visibility toggles
+    const fileToggles = document.querySelectorAll('.file-toggle-item input[type="checkbox"]');
+
+    function formatList(items) {
+        if (items.length === 0) return '';
+        if (items.length === 1) return items[0];
+        if (items.length === 2) return `${items[0]} and ${items[1]}`;
+        return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+    }
+
+    function updateDynamicUpdateList() {
+        const listEl = document.getElementById('dynamic-update-list');
+        if (!listEl) return;
+
+        const items = [];
+        if (document.getElementById('toggle-technical')?.checked) {
+            items.push('technical plan');
+        }
+        if (document.getElementById('toggle-risk')?.checked) {
+            items.push('risk review');
+        }
+        if (document.getElementById('toggle-test')?.checked) {
+            items.push('test plan');
+        }
+        if (document.getElementById('toggle-release')?.checked) {
+            items.push('release checklist');
+        }
+
+        if (items.length > 0) {
+            listEl.textContent = `Then update the ${formatList(items)} based on my answers.`;
+            listEl.classList.remove('hidden');
+        } else {
+            listEl.textContent = '';
+            listEl.classList.add('hidden');
+        }
+    }
+
+    function updateFileVisibility(fileKey, isChecked) {
+        const targetElements = document.querySelectorAll(`[data-file-toggle="${fileKey}"]`);
+        targetElements.forEach((el) => {
+            if (isChecked) {
+                el.classList.remove('hidden');
+            } else {
+                el.classList.add('hidden');
+            }
+        });
+        updateDynamicUpdateList();
+    }
+
+    fileToggles.forEach((checkbox) => {
+        const fileKey = checkbox.dataset.file;
+        const savedState = localStorage.getItem(`toggle-file-${fileKey}`);
+        
+        if (savedState !== null) {
+            checkbox.checked = savedState === 'true';
+        }
+        
+        updateFileVisibility(fileKey, checkbox.checked);
+
+        checkbox.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            updateFileVisibility(fileKey, isChecked);
+            localStorage.setItem(`toggle-file-${fileKey}`, isChecked);
+        });
+    });
 
     const copyButtons = document.querySelectorAll('.copy-btn');
 
@@ -141,4 +220,47 @@ document.addEventListener('DOMContentLoaded', () => {
             link.classList.add('active');
         });
     });
+
+    // Junior Developer Explainer Drawer
+    const juniorTrigger = document.getElementById('junior-dev-trigger');
+    const juniorClose = document.getElementById('junior-dev-close');
+    const juniorDrawer = document.getElementById('junior-dev-drawer');
+
+    if (juniorTrigger && juniorDrawer) {
+        juniorTrigger.addEventListener('click', () => {
+            juniorDrawer.classList.toggle('open');
+        });
+    }
+
+    if (juniorClose && juniorDrawer) {
+        juniorClose.addEventListener('click', () => {
+            juniorDrawer.classList.remove('open');
+        });
+    }
+
+    // Close drawer when clicking outside of it
+    document.addEventListener('click', (e) => {
+        if (juniorDrawer && juniorDrawer.classList.contains('open')) {
+            if (!juniorDrawer.contains(e.target) && e.target !== juniorTrigger && !juniorTrigger.contains(e.target)) {
+                juniorDrawer.classList.remove('open');
+            }
+        }
+    });
+
+    // Core Rule Section Collapsible Toggle
+    const coreRuleToggle = document.getElementById('core-rule-toggle');
+    const coreRuleContent = document.getElementById('core-rule-content');
+
+    if (coreRuleToggle && coreRuleContent) {
+        coreRuleToggle.addEventListener('click', () => {
+            const isHidden = coreRuleContent.classList.toggle('hidden');
+            coreRuleToggle.textContent = isHidden ? 'Show Details' : 'Hide Details';
+        });
+    }
+
+    // Initialize particle background if element and function exist
+    const particleCanvas = document.getElementById('particle-canvas');
+    if (particleCanvas && typeof initParticleBackground === 'function') {
+        initParticleBackground(particleCanvas, { hue: 280 }); // Match the violet theme
+    }
 });
