@@ -962,18 +962,18 @@ export function createTaskElement(task, sourceListId, number) {
         : '';
 
     el.innerHTML = `
-        <div class="task-top-row">
+        <div class="task-main-row">
             ${checkboxHtml}
             ${numberHtml}
-            <div class="task-actions">${actionsHtml}</div>
+            <div class="task-content-wrapper">
+                <div class="task-text">${aiModifiedIconHtml}${escapeHtml(task.text)} ${linkedIconHtml} ${nestedIndicatorHtml}</div>
+                ${summaryHtml}
+                ${nestedHtml}
+                ${recentCompletedHtml}
+                ${imagesHtml}
+            </div>
         </div>
-        <div class="task-content-wrapper">
-            <div class="task-text">${aiModifiedIconHtml}${escapeHtml(task.text)} ${linkedIconHtml} ${nestedIndicatorHtml}</div>
-            ${summaryHtml}
-            ${nestedHtml}
-            ${recentCompletedHtml}
-            ${imagesHtml}
-        </div>
+        <div class="task-actions">${actionsHtml}</div>
     `;
 
     // Expand/Reveal actions logic

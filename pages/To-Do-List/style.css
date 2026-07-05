@@ -1771,7 +1771,8 @@ body {
 
 .task-list {
     padding: 10px;
-    overflow-y: auto;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
     flex-grow: 1;
     min-height: 50px;
     -webkit-overflow-scrolling: touch;
@@ -1801,12 +1802,13 @@ body {
 /* TASK CARDS */
 .task-card {
     background: var(--card-bg);
-    padding: 4px 8px;
+    padding: 6px 8px;
     margin-bottom: 8px;
     border-radius: 8px;
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
     cursor: grab;
     transition: box-shadow 0.2s, border-color 0.2s;
     /* Removed transform transition */
@@ -1910,13 +1912,10 @@ body {
     min-width: 18px;
 }
 
-.task-top-row {
-    display: contents;
-}
-
-.task-card.show-actions .task-top-row {
+.task-main-row {
     display: flex;
-    align-items: center;
+    flex-direction: row;
+    align-items: flex-start;
     gap: 8px;
     width: 100%;
 }
@@ -2034,10 +2033,6 @@ body {
 }
 
 /* REVEAL LOGIC (Unified for Desktop Click and Mobile Touch) */
-.task-card.show-actions {
-    flex-wrap: wrap;
-}
-
 .task-card.show-actions .task-actions {
     display: flex;
     flex-direction: row;
@@ -2046,11 +2041,8 @@ body {
     gap: 8px;
     opacity: 1;
     pointer-events: auto;
-}
-
-.task-card.show-actions .task-content-wrapper {
-    flex-basis: 100%;
     width: 100%;
+    margin-top: 8px;
 }
 
 /* MOBILE SPECIFIC REFINEMENTS */
