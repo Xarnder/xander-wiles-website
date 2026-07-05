@@ -72,8 +72,21 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentIndex = 0;
     let currentView = 'split'; // 'split' or 'grid'
 
+    const NON_ESSENTIAL_CATEGORY = 'Non Essential';
+
     // Cache for preloaded images to prevent garbage collection
     const preloadCache = new Map();
+
+    function getImagePath(item) {
+        const folder = item.category === NON_ESSENTIAL_CATEGORY
+            ? 'assets/special_objects_webp'
+            : 'assets/objects_webp';
+        return `${folder}/${item.name}.webp`;
+    }
+
+    function isNonEssential(item) {
+        return item.category === NON_ESSENTIAL_CATEGORY;
+    }
 
     // --- Loading Bar Logic ---
     function updateLoadingStatus(message, percent) {
@@ -197,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const checkPromises = items.map(item => {
             return new Promise((resolve) => {
                 const img = new Image();
-                img.src = `assets/objects_webp/${item.name}.webp`;
+                img.src = getImagePath(item);
 
                 img.onload = () => {
                     item.imageVerified = true;
@@ -241,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item && item.imageVerified && !preloadCache.has(item.id)) {
                 // console.log(`Debug: Preloading image for ${item.name}`);
                 const img = new Image();
-                img.src = `assets/objects_webp/${item.name}.webp`;
+                img.src = getImagePath(item);
                 preloadCache.set(item.id, img);
             }
         });
@@ -295,6 +308,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function createSectionHeader(category) {
+        const header = document.createElement('div');
+        header.className = 'checklist-section-header';
+        if (category === NON_ESSENTIAL_CATEGORY) {
+            header.classList.add('non-essential-section');
+        }
+        header.innerHTML = `
+            <span class="section-title">${category}</span>
+            ${category === NON_ESSENTIAL_CATEGORY ? '<span class="section-badge">Nice to have</span>' : ''}
+        `;
+        return header;
+    }
+
+    function appendListItemsWithSections(container, useSkeleton = false) {
+        let lastCategory = null;
+
+        itemsToRender.forEach((item, index) => {
+            if (item.category !== lastCategory) {
+                container.appendChild(createSectionHeader(item.category));
+                lastCategory = item.category;
+            }
+
+            const itemElement = useSkeleton
+                ? createListItemElementWithSkeleton(item, index)
+                : createListItemElement(item, index);
+
+            container.appendChild(itemElement);
+        });
+    }
+
     // --- SKELETON RENDERING (shows layout with shimmer while images load) ---
     function renderListViewWithSkeletons() {
         checklistContainer.innerHTML = '';
@@ -304,10 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const fragment = document.createDocumentFragment();
-        itemsToRender.forEach((item, index) => {
-            const itemElement = createListItemElementWithSkeleton(item, index);
-            fragment.appendChild(itemElement);
-        });
+        appendListItemsWithSections(fragment, true);
         checklistContainer.appendChild(fragment);
         updateListHighlight();
     }
@@ -315,6 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function createListItemElementWithSkeleton(item, index) {
         const div = document.createElement('div');
         div.className = 'checklist-item';
+        if (isNonEssential(item)) div.classList.add('non-essential-item');
         div.dataset.id = item.id;
         div.dataset.index = index;
 
@@ -382,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
         itemsToRender.forEach(item => {
             const isChecked = checkedItems.has(item.id);
             const gridItem = document.createElement('div');
-            gridItem.className = `grid-item ${isChecked ? 'checked' : ''}`;
+            gridItem.className = `grid-item ${isChecked ? 'checked' : ''}${isNonEssential(item) ? ' non-essential-item' : ''}`;
             gridItem.dataset.id = item.id;
 
             gridItem.innerHTML = `
@@ -408,10 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const fragment = document.createDocumentFragment();
-        itemsToRender.forEach((item, index) => {
-            const itemElement = createListItemElement(item, index);
-            fragment.appendChild(itemElement);
-        });
+        appendListItemsWithSections(fragment, false);
         checklistContainer.appendChild(fragment);
         updateListHighlight();
     }
@@ -424,14 +462,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const item = itemsToRender[currentIndex];
         const isChecked = checkedItems.has(item.id);
-        const webpPath = `assets/objects_webp/${item.name}.webp`;
+        const webpPath = getImagePath(item);
 
         carouselView.innerHTML = `
-            <img src="${webpPath}" class="carousel-item-image" alt="${item.name}" 
+            <img src="${webpPath}" class="carousel-item-image${isNonEssential(item) ? ' non-essential-image' : ''}" alt="${item.name}" 
                 onload="this.classList.add('loaded');"
                 onerror="createImageFallback(this, 'carousel');">
             <h2 class="carousel-item-title">${item.name}</h2>
-            <p class="carousel-item-category">${item.category}</p>
+            <p class="carousel-item-category">${item.category}${isNonEssential(item) ? ' · Nice to have' : ''}</p>
             <label class="carousel-item-checkbox-label">
                 <input type="checkbox" class="carousel-item-checkbox" data-id="${item.id}" ${isChecked ? 'checked' : ''}>
                 <span>${isChecked ? 'Completed' : 'Mark as Complete'}</span>
@@ -459,10 +497,10 @@ document.addEventListener('DOMContentLoaded', () => {
         itemsToRender.forEach(item => {
             const isChecked = checkedItems.has(item.id);
             const gridItem = document.createElement('div');
-            gridItem.className = `grid-item ${isChecked ? 'checked' : ''}`;
+            gridItem.className = `grid-item ${isChecked ? 'checked' : ''}${isNonEssential(item) ? ' non-essential-item' : ''}`;
             gridItem.dataset.id = item.id;
 
-            const webpPath = `assets/objects_webp/${item.name}.webp`;
+            const webpPath = getImagePath(item);
 
             gridItem.innerHTML = `
                 <img src="${webpPath}" class="grid-item-image" alt="${item.name}" loading="lazy"
@@ -484,13 +522,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function createListItemElement(item, index) {
         const div = document.createElement('div');
         div.className = 'checklist-item';
+        if (isNonEssential(item)) div.classList.add('non-essential-item');
         div.dataset.id = item.id;
         div.dataset.index = index;
 
         const isChecked = checkedItems.has(item.id);
         if (isChecked) div.classList.add('checked');
 
-        const webpPath = `assets/objects_webp/${item.name}.webp`;
+        const webpPath = getImagePath(item);
 
         div.innerHTML = `
             <img src="${webpPath}" class="list-item-thumb" alt="${item.name}" loading="lazy"
