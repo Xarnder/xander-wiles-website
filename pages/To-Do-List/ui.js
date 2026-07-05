@@ -217,12 +217,12 @@ export function renderBoard() {
                 input.value = focusedValue;
                 input.focus();
                 if (input.setSelectionRange) input.setSelectionRange(selectionStart, selectionEnd);
-                // Also trigger oninput logic to enable submit button
-                if (input.nextElementSibling && input.nextElementSibling.tagName === 'BUTTON') {
-                    input.nextElementSibling.disabled = !input.value.trim();
-                }
             }
         }
+    }
+
+    if (window.onBoardRendered) {
+        window.onBoardRendered();
     }
 }
 
@@ -453,8 +453,8 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     let addFormHtml = isOrphan ? '' : `
         <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
             <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                <input type="text" class="add-task-input" placeholder="+ Add ${getTerm(true)}" name="taskText" oninput="this.nextElementSibling.disabled = !this.value.trim()" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
-                <button type="submit" class="btn primary" disabled>+</button>
+                <input type="text" class="add-task-input" placeholder="Type an idea to add" name="taskText" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
+                <button type="submit" class="btn primary">+</button>
             </form>
         </div>`;
 
@@ -2361,4 +2361,14 @@ export function showRecentAutoMovedTasks() {
 
     recentTasks.sort((a, b) => b.timeMs - a.timeMs);
     showAutomationReport(recentTasks, "Recent Automations", "Tasks moved by Time Automation in the last 24 hours:");
+}
+
+export function flashInputBox(input) {
+    if (!input) return;
+    input.classList.remove('input-alert-flash');
+    void input.offsetWidth; // Trigger reflow
+    input.classList.add('input-alert-flash');
+    setTimeout(() => {
+        input.classList.remove('input-alert-flash');
+    }, 3000);
 }

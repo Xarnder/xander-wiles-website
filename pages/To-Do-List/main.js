@@ -44,8 +44,14 @@ if ('serviceWorker' in navigator) {
 // --- SPLASH SCREEN TIMEOUT REMOVED ---
 
 // --- EXPOSE TO WINDOW FOR INLINE HTML ---
-// This is critical for onclick="..." to work
 window.handleAddTask = function (e, listId) {
+    e.preventDefault();
+    const input = e.target.elements.taskText;
+    if (input && !input.value.trim()) {
+        UI.flashInputBox(input);
+        return;
+    }
+
     API.handleAddTask(e, listId).then((newCount) => {
         if (newCount === null) return; // Silent return if add was skipped/invalid
         console.log("DEBUG: handleAddTask finished. New Count:", newCount, "Limit:", state.appData.settings.backupFreq);
@@ -374,6 +380,9 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('disable-important-pinning-toggle')) document.getElementById('disable-important-pinning-toggle').checked = !!state.appData.settings.disableImportantPinning;
             if (document.getElementById('time-automation-confirm-toggle')) document.getElementById('time-automation-confirm-toggle').checked = state.appData.settings.timeAutomationConfirm !== false;
             if (document.getElementById('daily-reset-time-input')) document.getElementById('daily-reset-time-input').value = state.appData.settings.dailyResetTime || '04:00';
+            if (document.getElementById('auto-add-time-input')) {
+                document.getElementById('auto-add-time-input').value = state.appData.settings.autoAddIdleTime !== undefined ? state.appData.settings.autoAddIdleTime : 30;
+            }
             if (document.getElementById('main-nav-placeholder')) {
                 document.getElementById('main-nav-placeholder').style.display = state.appData.settings.showSiteHeader ? 'block' : 'none';
             }
@@ -595,6 +604,11 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSettingListener('time-automation-confirm-toggle', 'timeAutomationConfirm', true);
     setupSettingListener('sort-select', 'sortMode', false);
     setupSettingListener('daily-reset-time-input', 'dailyResetTime', false);
+    setupSettingListener('auto-add-time-input', 'autoAddIdleTime', false, (val) => {
+        let parsed = parseInt(val);
+        if (isNaN(parsed) || parsed < 5) parsed = 5;
+        return parsed;
+    });
     setupSettingListener('fancy-speed-select', 'fancySpeed', false, (val) => {
         document.documentElement.style.setProperty('--fancy-speed-mult', val);
         return val;
@@ -1934,3 +1948,230 @@ document.getElementById('edit-list-save-desc-btn').onclick = () => {
         });
     }
 };
+
+// --- AUTO-ADD IDEAS / COUNTDOWN TIMER ---
+const activeCountdownTimers = new Map(); // listId -> { debounceTimeoutId, countdownIntervalId, totalMs, remainingMs, countdownActive, text }
+
+function getAutoAddIdleTimeMs() {
+    const seconds = (state.appData && state.appData.settings && state.appData.settings.autoAddIdleTime !== undefined)
+        ? state.appData.settings.autoAddIdleTime
+        : 30;
+    return seconds * 1000;
+}
+
+function getOrCreateCountdownBar(listCol) {
+    const container = listCol.querySelector('.add-task-container');
+    if (!container) return null;
+    let barContainer = container.querySelector('.add-task-countdown-bar-container');
+    if (!barContainer) {
+        barContainer = document.createElement('div');
+        barContainer.className = 'add-task-countdown-bar-container';
+        barContainer.innerHTML = '<div class="add-task-countdown-bar"></div>';
+        container.appendChild(barContainer);
+    }
+    return barContainer;
+}
+
+function resetTimerForList(listId) {
+    const timerData = activeCountdownTimers.get(listId);
+    if (timerData) {
+        if (timerData.debounceTimeoutId) clearTimeout(timerData.debounceTimeoutId);
+        if (timerData.countdownIntervalId) clearInterval(timerData.countdownIntervalId);
+        activeCountdownTimers.delete(listId);
+    }
+    const listCol = document.querySelector(`.list-column[data-list-id="${listId}"]`);
+    if (listCol) {
+        const barContainer = listCol.querySelector('.add-task-countdown-bar-container');
+        if (barContainer) barContainer.style.display = 'none';
+    }
+}
+
+function startCountdownForList(input, listId) {
+    // Clear any existing debounce/countdown first
+    const existing = activeCountdownTimers.get(listId);
+    if (existing) {
+        if (existing.debounceTimeoutId) clearTimeout(existing.debounceTimeoutId);
+        if (existing.countdownIntervalId) clearInterval(existing.countdownIntervalId);
+    }
+
+    const value = input.value;
+    if (!value.trim()) {
+        resetTimerForList(listId);
+        return;
+    }
+
+    const listCol = input.closest('.list-column');
+    if (!listCol) return;
+
+    const barContainer = getOrCreateCountdownBar(listCol);
+    if (barContainer) {
+        barContainer.style.display = 'block';
+        const bar = barContainer.querySelector('.add-task-countdown-bar');
+        if (bar) {
+            bar.style.transform = 'scaleX(1)';
+        }
+    }
+
+    const totalMs = getAutoAddIdleTimeMs();
+    const timerData = {
+        listId: listId,
+        text: value,
+        debounceTimeoutId: null,
+        countdownIntervalId: null,
+        totalMs: totalMs,
+        remainingMs: totalMs,
+        countdownActive: true
+    };
+    activeCountdownTimers.set(listId, timerData);
+
+    timerData.countdownIntervalId = setInterval(() => {
+        timerData.remainingMs -= 100;
+        
+        // Find bar in DOM
+        const currentListCol = document.querySelector(`.list-column[data-list-id="${listId}"]`);
+        if (currentListCol) {
+            const currentBarContainer = currentListCol.querySelector('.add-task-countdown-bar-container');
+            if (currentBarContainer) {
+                const bar = currentBarContainer.querySelector('.add-task-countdown-bar');
+                if (bar) {
+                    const percentage = Math.max(0, (timerData.remainingMs / timerData.totalMs) * 100);
+                    bar.style.transform = `scaleX(${percentage / 100})`;
+                }
+            }
+        }
+
+        if (timerData.remainingMs <= 0) {
+            clearInterval(timerData.countdownIntervalId);
+            activeCountdownTimers.delete(listId);
+
+            if (currentListCol) {
+                const currentBarContainer = currentListCol.querySelector('.add-task-countdown-bar-container');
+                if (currentBarContainer) currentBarContainer.style.display = 'none';
+
+                const form = currentListCol.querySelector('.add-task-form');
+                if (form) {
+                    const mockEvent = {
+                        preventDefault: () => {},
+                        target: form
+                    };
+                    API.handleAddTask(mockEvent, listId).then((newCount) => {
+                        if (newCount !== null) {
+                            const term = Utils.getTerm(true, true);
+                            Utils.showToast(`${term} automatically added`, "success");
+                        }
+                    });
+                }
+            }
+        }
+    }, 100);
+}
+
+// Event Delegation for input events
+document.addEventListener('input', (e) => {
+    const input = e.target;
+    if (input && input.tagName === 'INPUT' && input.name === 'taskText') {
+        const listCol = input.closest('.list-column');
+        if (!listCol) return;
+        const listId = listCol.dataset.listId;
+        if (!listId) return;
+
+        // Clear existing timers
+        resetTimerForList(listId);
+
+        const value = input.value;
+        if (!value.trim()) return;
+
+        // Set up debounce timer to start the countdown after 1.5 seconds of inactivity
+        const totalMs = getAutoAddIdleTimeMs();
+        const timerData = {
+            listId: listId,
+            text: value,
+            debounceTimeoutId: setTimeout(() => {
+                startCountdownForList(input, listId);
+            }, 1500),
+            countdownIntervalId: null,
+            totalMs: totalMs,
+            remainingMs: totalMs,
+            countdownActive: false
+        };
+        activeCountdownTimers.set(listId, timerData);
+    }
+});
+
+// Focus/Blur Delegation
+document.addEventListener('focusin', (e) => {
+    const input = e.target;
+    if (input && input.tagName === 'INPUT' && input.name === 'taskText') {
+        const listCol = input.closest('.list-column');
+        if (!listCol) return;
+        const listId = listCol.dataset.listId;
+        if (listId) {
+            resetTimerForList(listId);
+        }
+    }
+});
+
+document.addEventListener('focusout', (e) => {
+    const input = e.target;
+    if (input && input.tagName === 'INPUT' && input.name === 'taskText') {
+        const listCol = input.closest('.list-column');
+        if (!listCol) return;
+        const listId = listCol.dataset.listId;
+        if (listId && input.value.trim()) {
+            startCountdownForList(input, listId);
+        }
+    }
+});
+
+// Intercept form submission to clear timers
+document.addEventListener('submit', (e) => {
+    const form = e.target;
+    if (form && form.classList.contains('add-task-form')) {
+        const listCol = form.closest('.list-column');
+        if (listCol) {
+            const listId = listCol.dataset.listId;
+            if (listId) {
+                resetTimerForList(listId);
+            }
+        }
+    }
+});
+
+// Hook into board rendering
+window.onBoardRendered = function() {
+    const activeListCols = Array.from(document.querySelectorAll('.list-column'));
+    const activeListIds = activeListCols.map(col => col.dataset.listId).filter(Boolean);
+
+    for (const [listId, timerData] of activeCountdownTimers.entries()) {
+        if (!activeListIds.includes(listId)) {
+            // Cancel timer if list is no longer rendered
+            if (timerData.debounceTimeoutId) clearTimeout(timerData.debounceTimeoutId);
+            if (timerData.countdownIntervalId) clearInterval(timerData.countdownIntervalId);
+            activeCountdownTimers.delete(listId);
+        } else {
+            // Restore text and bar state in the newly rendered list
+            const listCol = activeListCols.find(col => col.dataset.listId === listId);
+            if (listCol) {
+                const input = listCol.querySelector('.add-task-input');
+                if (input) {
+                    input.value = timerData.text;
+                    if (input.nextElementSibling && input.nextElementSibling.tagName === 'BUTTON') {
+                        input.nextElementSibling.disabled = !input.value.trim();
+                    }
+                    if (timerData.countdownActive) {
+                        const barContainer = getOrCreateCountdownBar(listCol);
+                        if (barContainer) {
+                            barContainer.style.display = 'block';
+                            const bar = barContainer.querySelector('.add-task-countdown-bar');
+                            if (bar) {
+                                const percentage = Math.max(0, (timerData.remainingMs / timerData.totalMs) * 100);
+                                bar.style.transform = `scaleX(${percentage / 100})`;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
+

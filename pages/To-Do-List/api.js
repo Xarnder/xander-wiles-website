@@ -25,6 +25,9 @@ export function handleAddTask(e, listId) {
 
     if (!state.currentUser) return Promise.resolve(null);
 
+    // Clear input box synchronously to prevent reactive rendering race conditions
+    input.value = '';
+
     const newId = 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
     const newTask = {
         text: text,
@@ -68,7 +71,6 @@ export function handleAddTask(e, listId) {
     // API just updates the data.
 
     return batch.commit().then(() => {
-        input.value = '';
         input.focus();
         return newCount; // Return new count for UI to decide on popup
     }).catch(e => handleSyncError(e));
@@ -368,6 +370,13 @@ let automationConfirmationOpen = false;
 export async function processAutomatedLists() {
     if (!state.currentUser) return;
     if (automationConfirmationOpen) return;
+
+    // Do not run automation moves or show the confirmation modal if there is text in any add task/idea input box
+    if (typeof document !== 'undefined') {
+        const hasTextInAddInput = Array.from(document.querySelectorAll('input[name="taskText"]'))
+            .some(input => input.value && input.value.trim() !== '');
+        if (hasTextInAddInput) return;
+    }
 
     const now = Date.now();
     const pendingMoves = [];
