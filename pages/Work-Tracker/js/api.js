@@ -1,8 +1,8 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
 import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek } from './state.js';
-import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts } from './ui.js';
-import { getStartOfWeekDate, formatDuration, getSessionOverlapMs } from './utils.js';
+import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown } from './ui.js';
+import { getStartOfWeekDate, formatDuration, getSessionOverlapMs, getMonthlyStatsConfig, STATS_PERIOD_MODES } from './utils.js';
 
 function getPercentageCutsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
@@ -306,7 +306,7 @@ export function renderDashboardData() {
     const startOfWeek = getStartOfWeekDate(now, state.startOfWeek);
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthlyStatsConfig = getMonthlyStatsConfig(state.statsPeriodMode, now);
     const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
     // Calculate totals across all sessions
@@ -326,7 +326,15 @@ export function renderDashboardData() {
             totalWeeklyEarnings += (Number(data.earnings) || 0) * overlapRatio;
         }
 
-        if (dateObj >= startOfMonth) {
+        if (state.statsPeriodMode === STATS_PERIOD_MODES.ROLLING) {
+            const monthlyOverlapMs = getSessionOverlapMs(data, monthlyStatsConfig.start, monthlyStatsConfig.end);
+            if (monthlyOverlapMs > 0) {
+                const sessionDurationMs = Number(data.durationMs) || monthlyOverlapMs;
+                const overlapRatio = sessionDurationMs > 0 ? monthlyOverlapMs / sessionDurationMs : 1;
+                totalMonthlyMs += monthlyOverlapMs;
+                totalMonthlyEarnings += (Number(data.earnings) || 0) * overlapRatio;
+            }
+        } else if (dateObj >= monthlyStatsConfig.start) {
             totalMonthlyMs += data.durationMs;
             totalMonthlyEarnings += data.earnings;
         }
@@ -503,6 +511,10 @@ export function renderDashboardData() {
         monthly: totalMonthlyEarnings
     };
     renderPercentageCutStats(state.lastStatsTotals);
+
+    renderCustomStatsPeriods();
+
+    renderWorkPatternBreakdown();
 
     renderCalendar();
     renderChart();

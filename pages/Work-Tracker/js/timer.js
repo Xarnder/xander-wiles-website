@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert, renderGanttChart, renderLiveMoneyCounter, getAmountAfterPercentageCuts } from './ui.js';
+import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert, renderGanttChart, renderLiveMoneyCounter, getAmountAfterPercentageCuts, renderWorkPatternBreakdown } from './ui.js';
 import { saveSession } from './api.js';
 
 export function updateTimerDisplay(elapsedMs) {
@@ -63,6 +63,7 @@ export function startTimer() {
     toggleTimerUI(true);
     updateTimerDisplay(Date.now() - state.startTime);
     renderGanttChart();
+    renderWorkPatternBreakdown();
 
     state.timerInterval = setInterval(() => {
         updateTimerDisplay(Date.now() - state.startTime);

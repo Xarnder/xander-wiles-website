@@ -16,7 +16,10 @@ import {
     renderSavedTimeCostItems,
     renderTcCutsSummary,
     renderPercentageCutStats,
-    renderMoneyCounterModeControls
+    renderMoneyCounterModeControls,
+    renderStatsPeriodModeControls,
+    renderCustomStatsPeriodsSettings,
+    renderSettingsDefaultFields
 } from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
@@ -36,6 +39,9 @@ import {
     updateTcWorkingDaysPerWeek,
     updateTcSavedItemFilters,
     updateActiveCutStatsPeriods,
+    updateStatsPeriodMode,
+    createCustomStatsPeriod,
+    updateCustomStatsPeriods,
     updateDefaultHourlyRate,
     updateRatePreference,
     updateDefaultCompany,
@@ -71,6 +77,8 @@ document.addEventListener('DOMContentLoaded', () => {
     applyWidgetTitles();
     applyDashboardDensity();
     renderMoneyCounterModeControls();
+    renderStatsPeriodModeControls();
+    renderSettingsDefaultFields();
     setupWidgetImageExports();
 
     // Initialize period toggle active classes and click handlers from state
@@ -105,6 +113,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (state.lastStatsTotals) {
                 renderPercentageCutStats(state.lastStatsTotals);
             }
+        });
+    });
+
+    DOM.statsPeriodModeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const nextMode = button.dataset.statsPeriodMode;
+            if (!nextMode || nextMode === state.statsPeriodMode) return;
+
+            updateStatsPeriodMode(nextMode);
+            renderStatsPeriodModeControls();
+            renderDashboardData();
         });
     });
 
@@ -340,6 +359,62 @@ document.addEventListener('DOMContentLoaded', () => {
             DOM.moneyCounterGapValue.textContent = state.moneyCounterGap.toFixed(1);
         }
         renderWidgetOrderList();
+        renderCustomStatsPeriodsSettings();
+        renderSettingsDefaultFields();
+    }
+
+    [DOM.ratePreferenceSelect, DOM.companyPreferenceSelect, DOM.projectPreferenceSelect, DOM.startTimePreferenceSelect]
+        .filter(Boolean)
+        .forEach(select => {
+            select.addEventListener('change', renderSettingsDefaultFields);
+        });
+
+    if (DOM.customStatsPeriodForm) {
+        DOM.customStatsPeriodForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+
+            const amount = parseFloat(DOM.customStatsPeriodAmount?.value || '');
+            const unit = DOM.customStatsPeriodUnit?.value || 'days';
+
+            if (!Number.isFinite(amount) || amount <= 0) {
+                DOM.customStatsPeriodAmount?.reportValidity();
+                return;
+            }
+
+            const alreadyExists = state.customStatsPeriods.some(
+                period => period.amount === amount && period.unit === unit
+            );
+
+            if (alreadyExists) {
+                import('./ui.js').then(module => {
+                    module.showAlert('Duplicate Duration', 'That custom statistics duration already exists.');
+                });
+                return;
+            }
+
+            updateCustomStatsPeriods([
+                ...state.customStatsPeriods,
+                createCustomStatsPeriod(amount, unit)
+            ]);
+            renderCustomStatsPeriodsSettings();
+            renderDashboardData();
+
+            if (DOM.customStatsPeriodAmount) {
+                DOM.customStatsPeriodAmount.value = '';
+            }
+        });
+    }
+
+    if (DOM.customStatsPeriodsList) {
+        DOM.customStatsPeriodsList.addEventListener('click', (event) => {
+            const removeBtn = event.target.closest('.custom-stats-period-remove');
+            if (!removeBtn) return;
+
+            const periodId = removeBtn.dataset.periodId;
+            updateCustomStatsPeriods(state.customStatsPeriods.filter(period => period.id !== periodId));
+            renderCustomStatsPeriodsSettings();
+            renderDashboardData();
+        });
     }
 
     // Settings Events

@@ -1,5 +1,5 @@
 import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds } from './state.js';
-import { formatDuration, getStartOfWeekDate, getSessionTimeRange } from './utils.js';
+import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay } from './utils.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
@@ -42,6 +42,34 @@ export const DOM = {
     weeklyEarningsDisplay: document.getElementById('weekly-earnings'),
     monthlyHoursDisplay: document.getElementById('monthly-hours'),
     monthlyEarningsDisplay: document.getElementById('monthly-earnings'),
+    monthlyHoursLabel: document.getElementById('monthly-hours-label'),
+    monthlyEarningsLabel: document.getElementById('monthly-earnings-label'),
+    statsPeriodModeHint: document.getElementById('stats-period-mode-hint'),
+    cutStatsPeriodModeHint: document.getElementById('cut-stats-period-mode-hint'),
+    statsPeriodModeButtons: document.querySelectorAll('.stats-period-mode-btn'),
+    customStatsScroll: document.getElementById('custom-stats-scroll'),
+    customStatsGrid: document.getElementById('custom-stats-grid'),
+    customStatsPeriodsList: document.getElementById('custom-stats-periods-list'),
+    customStatsPeriodForm: document.getElementById('custom-stats-period-form'),
+    customStatsPeriodAmount: document.getElementById('custom-stats-period-amount'),
+    customStatsPeriodUnit: document.getElementById('custom-stats-period-unit'),
+    workPatternPeriodHint: document.getElementById('work-pattern-period-hint'),
+    workPatternAvgDaysWeek: document.getElementById('work-pattern-avg-days-week'),
+    workPatternAvgHoursWeek: document.getElementById('work-pattern-avg-hours-week'),
+    workPatternDaysWorked: document.getElementById('work-pattern-days-worked'),
+    workPatternAvgHoursDay: document.getElementById('work-pattern-avg-hours-day'),
+    workPatternAvgStart: document.getElementById('work-pattern-avg-start'),
+    workPatternAvgEnd: document.getElementById('work-pattern-avg-end'),
+    workPatternEarliestStart: document.getElementById('work-pattern-earliest-start'),
+    workPatternEarliestStartDay: document.getElementById('work-pattern-earliest-start-day'),
+    workPatternLatestEnd: document.getElementById('work-pattern-latest-end'),
+    workPatternLatestEndDay: document.getElementById('work-pattern-latest-end-day'),
+    workPatternAvgEarningsBefore: document.getElementById('work-pattern-avg-earnings-before'),
+    workPatternAvgEarningsAfter: document.getElementById('work-pattern-avg-earnings-after'),
+    settingsDefaultRate: document.getElementById('settings-default-rate'),
+    settingsDefaultCompany: document.getElementById('settings-default-company'),
+    settingsDefaultProject: document.getElementById('settings-default-project'),
+    settingsDefaultStartTime: document.getElementById('settings-default-start-time'),
     sixMonthsHoursDisplay: document.getElementById('six-months-hours'),
     sixMonthsEarningsDisplay: document.getElementById('six-months-earnings'),
     percentageCutStatsWidget: document.getElementById('widget-cut-stats'),
@@ -424,6 +452,244 @@ export function renderMoneyCounterModeControls() {
     }
 }
 
+export function renderStatsPeriodModeControls() {
+    const monthlyConfig = getMonthlyStatsConfig(state.statsPeriodMode);
+
+    DOM.statsPeriodModeButtons.forEach(button => {
+        const isActive = button.dataset.statsPeriodMode === state.statsPeriodMode;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+
+    if (DOM.statsPeriodModeHint) {
+        DOM.statsPeriodModeHint.textContent = monthlyConfig.hint;
+    }
+
+    if (DOM.cutStatsPeriodModeHint) {
+        DOM.cutStatsPeriodModeHint.textContent = `Monthly totals use ${monthlyConfig.shortLabel.toLowerCase()}.`;
+    }
+
+    if (DOM.workPatternPeriodHint) {
+        DOM.workPatternPeriodHint.textContent = `Breakdown for ${monthlyConfig.shortLabel.toLowerCase()}.`;
+    }
+
+    if (DOM.monthlyHoursLabel) {
+        DOM.monthlyHoursLabel.textContent = monthlyConfig.hoursLabel;
+    }
+
+    if (DOM.monthlyEarningsLabel) {
+        DOM.monthlyEarningsLabel.textContent = monthlyConfig.earningsLabel;
+    }
+}
+
+function renderStatEarningsDisplay(displayEl, beforeAmount) {
+    if (!displayEl) return;
+
+    const before = Number(beforeAmount) || 0;
+    const after = getAmountAfterPercentageCuts(before);
+
+    if (!state.percentageCuts.length) {
+        displayEl.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}`;
+        return;
+    }
+
+    displayEl.innerHTML = `
+        <span class="stats-earnings-after"><span class="currency-symbol">${state.currentCurrency}</span>${after.toFixed(2)}</span>
+        <span class="stats-earnings-before">Before cuts <span class="currency-symbol">${state.currentCurrency}</span>${before.toFixed(2)}</span>
+    `;
+}
+
+export function renderCustomStatsPeriods() {
+    if (!DOM.customStatsGrid || !DOM.customStatsScroll) return;
+
+    DOM.customStatsGrid.innerHTML = '';
+
+    if (!state.customStatsPeriods.length) {
+        DOM.customStatsScroll.classList.add('hidden');
+        return;
+    }
+
+    DOM.customStatsScroll.classList.remove('hidden');
+    const now = new Date();
+
+    state.customStatsPeriods.forEach((period) => {
+        const config = getCustomStatsPeriodConfig(period, now);
+        const { totalMs, totalEarnings } = calculateRollingPeriodTotals(state.allSessions, config.start, config.end);
+
+        const item = document.createElement('div');
+        item.className = 'stat-item stat-item-custom';
+
+        const hoursLabel = document.createElement('span');
+        hoursLabel.className = 'label';
+        hoursLabel.textContent = config.hoursLabel;
+
+        const hoursValue = document.createElement('span');
+        hoursValue.className = 'value';
+        hoursValue.textContent = formatDuration(totalMs);
+
+        const earningsLabel = document.createElement('span');
+        earningsLabel.className = 'label';
+        earningsLabel.style.marginTop = '10px';
+        earningsLabel.textContent = config.earningsLabel;
+
+        const earningsValue = document.createElement('span');
+        earningsValue.className = 'value';
+        earningsValue.style.fontSize = '1.4rem';
+        renderStatEarningsDisplay(earningsValue, totalEarnings);
+
+        item.appendChild(hoursLabel);
+        item.appendChild(hoursValue);
+        item.appendChild(earningsLabel);
+        item.appendChild(earningsValue);
+        DOM.customStatsGrid.appendChild(item);
+    });
+}
+
+function getAnalyticsSessions() {
+    const sessions = [...state.allSessions];
+
+    if (state.startTime) {
+        const elapsedMs = Date.now() - state.startTime;
+        sessions.unshift({
+            startTime: state.startTime,
+            endTime: Date.now(),
+            durationMs: elapsedMs,
+            earnings: (elapsedMs / (1000 * 60 * 60)) * (state.currentSessionRate || 0)
+        });
+    }
+
+    return sessions;
+}
+
+function formatAverageHours(hours) {
+    if (!Number.isFinite(hours)) return '—';
+    return formatDuration(Math.round(hours * 60 * 60 * 1000));
+}
+
+function formatAverageDays(days) {
+    if (!Number.isFinite(days)) return '—';
+    const rounded = Math.round(days * 10) / 10;
+    return `${rounded} ${rounded === 1 ? 'day' : 'days'}`;
+}
+
+function formatAverageEarnings(amount) {
+    if (!Number.isFinite(amount)) return '—';
+    return `${state.currentCurrency}${amount.toFixed(2)}`;
+}
+
+function setWorkPatternDayLabel(element, dayKey) {
+    if (!element) return;
+    element.textContent = dayKey ? formatWorkPatternDay(dayKey) : '—';
+}
+
+export function renderSettingsDefaultFields() {
+    const showRateDefault = DOM.ratePreferenceSelect?.value === 'default_rate';
+    const showCompanyDefault = DOM.companyPreferenceSelect?.value === 'default_value';
+    const showProjectDefault = DOM.projectPreferenceSelect?.value === 'default_value';
+    const showStartTimeDefault = DOM.startTimePreferenceSelect?.value === 'default_value';
+
+    DOM.settingsDefaultRate?.classList.toggle('hidden', !showRateDefault);
+    DOM.settingsDefaultCompany?.classList.toggle('hidden', !showCompanyDefault);
+    DOM.settingsDefaultProject?.classList.toggle('hidden', !showProjectDefault);
+    DOM.settingsDefaultStartTime?.classList.toggle('hidden', !showStartTimeDefault);
+}
+
+export function renderWorkPatternBreakdown() {
+    const monthlyConfig = getMonthlyStatsConfig(state.statsPeriodMode);
+    const analytics = computeWorkPatternAnalytics(
+        getAnalyticsSessions(),
+        monthlyConfig.start,
+        monthlyConfig.end,
+        getAmountAfterPercentageCuts
+    );
+
+    if (DOM.workPatternAvgDaysWeek) {
+        DOM.workPatternAvgDaysWeek.textContent = formatAverageDays(analytics.avgDaysPerWeek);
+    }
+
+    if (DOM.workPatternAvgHoursWeek) {
+        DOM.workPatternAvgHoursWeek.textContent = formatAverageHours(analytics.avgHoursPerWeek);
+    }
+
+    if (DOM.workPatternDaysWorked) {
+        DOM.workPatternDaysWorked.textContent = analytics.daysWorked > 0
+            ? String(analytics.daysWorked)
+            : '—';
+    }
+
+    if (DOM.workPatternAvgHoursDay) {
+        DOM.workPatternAvgHoursDay.textContent = formatAverageHours(analytics.avgHoursPerDay);
+    }
+
+    if (DOM.workPatternAvgEarningsBefore) {
+        DOM.workPatternAvgEarningsBefore.textContent = formatAverageEarnings(analytics.avgEarningsBefore);
+    }
+
+    if (DOM.workPatternAvgEarningsAfter) {
+        DOM.workPatternAvgEarningsAfter.textContent = formatAverageEarnings(analytics.avgEarningsAfter);
+    }
+
+    if (DOM.workPatternAvgStart) {
+        DOM.workPatternAvgStart.textContent = formatAverageClockTime(analytics.avgFirstStartMinutes);
+    }
+
+    if (DOM.workPatternAvgEnd) {
+        DOM.workPatternAvgEnd.textContent = formatAverageClockTime(analytics.avgLastEndMinutes);
+    }
+
+    if (DOM.workPatternEarliestStart) {
+        DOM.workPatternEarliestStart.textContent = formatClockTimeFromMs(analytics.earliestStartMs);
+    }
+
+    setWorkPatternDayLabel(DOM.workPatternEarliestStartDay, analytics.earliestStartDayKey);
+
+    if (DOM.workPatternLatestEnd) {
+        DOM.workPatternLatestEnd.textContent = formatClockTimeFromMs(analytics.latestEndMs);
+    }
+
+    setWorkPatternDayLabel(DOM.workPatternLatestEndDay, analytics.latestEndDayKey);
+}
+
+export function renderCustomStatsPeriodsSettings() {
+    if (!DOM.customStatsPeriodsList) return;
+
+    DOM.customStatsPeriodsList.innerHTML = '';
+
+    if (!state.customStatsPeriods.length) {
+        const empty = document.createElement('li');
+        empty.className = 'custom-stats-period-empty';
+        empty.textContent = 'No custom durations yet.';
+        DOM.customStatsPeriodsList.appendChild(empty);
+        return;
+    }
+
+    state.customStatsPeriods.forEach((period) => {
+        const item = document.createElement('li');
+        item.className = 'custom-stats-period-item';
+
+        const copy = document.createElement('div');
+        const label = document.createElement('div');
+        label.className = 'custom-stats-period-label';
+        label.textContent = `Last ${formatStatsPeriodUnit(period.amount, period.unit)}`;
+
+        const meta = document.createElement('div');
+        meta.className = 'custom-stats-period-meta';
+        meta.textContent = 'Rolling window shown below the default statistics.';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn-outline btn-small custom-stats-period-remove';
+        removeBtn.dataset.periodId = period.id;
+        removeBtn.textContent = 'Remove';
+
+        copy.appendChild(label);
+        copy.appendChild(meta);
+        item.appendChild(copy);
+        item.appendChild(removeBtn);
+        DOM.customStatsPeriodsList.appendChild(item);
+    });
+}
+
 function formatMoney(amount) {
     return `${state.currentCurrency}${amount.toFixed(2)}`;
 }
@@ -519,10 +785,12 @@ export function renderPercentageCutStats(totals) {
         const grid = document.createElement('div');
         grid.className = 'cut-stat-grid';
 
+        const monthlyConfig = getMonthlyStatsConfig(state.statsPeriodMode);
+
         [
             { label: 'Today', key: 'daily' },
             { label: 'This Week', key: 'weekly' },
-            { label: 'This Month', key: 'monthly' }
+            { label: monthlyConfig.cutStatsLabel, key: 'monthly' }
         ].forEach(period => {
             if (!state.activeCutStatsPeriods.includes(period.key)) return;
 
@@ -1272,6 +1540,7 @@ export function renderWidgetOrderList() {
         'widget-timer': 'Timer & Controls',
         'widget-money-counter': 'Live Money Counter',
         'widget-stats': 'Statistics',
+        'widget-work-pattern': 'Work Pattern',
         'widget-cut-stats': 'After Percentage Cuts',
         'widget-cuts': 'Percentage Cuts',
         'widget-gantt': "Timeline",

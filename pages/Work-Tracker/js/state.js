@@ -1,4 +1,4 @@
-const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-money-counter', 'widget-stats', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
+const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-money-counter', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
 
 function createCutId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -73,6 +73,43 @@ function loadPercentageCuts() {
         return sanitizePercentageCuts(JSON.parse(localStorage.getItem('work_tracker_percentage_cuts')) || []);
     } catch (e) {
         console.warn('Debug: Could not parse percentage cuts from storage', e);
+        return [];
+    }
+}
+
+function loadStatsPeriodMode() {
+    const saved = localStorage.getItem('work_tracker_stats_period_mode');
+    return saved === 'rolling' ? 'rolling' : 'calendar';
+}
+
+function createStatsPeriodId() {
+    return `stats-period-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function sanitizeCustomStatsPeriods(periods) {
+    if (!Array.isArray(periods)) return [];
+
+    const allowedUnits = ['minutes', 'hours', 'days', 'weeks', 'months', 'years'];
+
+    return periods
+        .map((period) => {
+            const amount = Number(period.amount);
+            const unit = allowedUnits.includes(period.unit) ? period.unit : 'days';
+
+            return {
+                id: period.id || createStatsPeriodId(),
+                amount: Number.isFinite(amount) ? Math.min(Math.max(amount, 0), 100000) : 0,
+                unit
+            };
+        })
+        .filter(period => period.amount > 0);
+}
+
+function loadCustomStatsPeriods() {
+    try {
+        return sanitizeCustomStatsPeriods(JSON.parse(localStorage.getItem('work_tracker_custom_stats_periods')) || []);
+    } catch (e) {
+        console.warn('Debug: Could not parse custom stats periods from storage', e);
         return [];
     }
 }
@@ -174,6 +211,7 @@ export const state = {
     moneyCounterMode: loadMoneyCounterMode(),
     moneyCounterGap: loadMoneyCounterGap(),
     tcCustomTimeScales: loadTcCustomTimeScales(),
+    customStatsPeriods: loadCustomStatsPeriods(),
     tcSavedItemFilters: {
         search: '',
         dateStatus: 'all',
@@ -182,6 +220,7 @@ export const state = {
     },
     tcMatrixSelectedItemIds: loadTcMatrixSelectedItemIds(),
     tcMatrixSelectionInitialized: loadTcMatrixSelectionInitialized(),
+    statsPeriodMode: loadStatsPeriodMode(),
     activeCutStatsPeriods: loadActiveCutStatsPeriods(),
     lastStatsTotals: { daily: 0, weekly: 0, monthly: 0 },
     historyPage: 0
@@ -295,9 +334,28 @@ export function updateTcCustomTimeScales(scales) {
     return state.tcCustomTimeScales;
 }
 
+export function createCustomStatsPeriod(amount = 1, unit = 'days') {
+    return sanitizeCustomStatsPeriods([{ amount, unit }])[0] || {
+        id: createStatsPeriodId(),
+        amount: 1,
+        unit: 'days'
+    };
+}
+
+export function updateCustomStatsPeriods(periods) {
+    state.customStatsPeriods = sanitizeCustomStatsPeriods(periods);
+    localStorage.setItem('work_tracker_custom_stats_periods', JSON.stringify(state.customStatsPeriods));
+    return state.customStatsPeriods;
+}
+
 export function updateActiveCutStatsPeriods(periods) {
     state.activeCutStatsPeriods = periods;
     localStorage.setItem('work_tracker_active_periods', JSON.stringify(periods));
+}
+
+export function updateStatsPeriodMode(mode) {
+    state.statsPeriodMode = mode === 'rolling' ? 'rolling' : 'calendar';
+    localStorage.setItem('work_tracker_stats_period_mode', state.statsPeriodMode);
 }
 
 export function updateDefaultHourlyRate(rate) {
