@@ -1269,6 +1269,106 @@ button:active {
     text-shadow: none;
 }
 
+.stats-hours-effective {
+    display: block;
+}
+
+.stats-hours-gross,
+.history-gross-duration {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+    font-weight: 600;
+    line-height: 1.35;
+    margin-top: 6px;
+    text-shadow: none;
+}
+
+/* Breaks Widget */
+.breaks-widget {
+    border-color: rgba(255, 152, 0, 0.25);
+    background: linear-gradient(135deg, rgba(255, 152, 0, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+}
+
+.breaks-summary {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.breaks-summary-item {
+    flex: 1;
+    background: rgba(255, 152, 0, 0.08);
+    border: 1px solid rgba(255, 152, 0, 0.2);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+
+.breaks-summary-item .label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+
+.breaks-summary-item .value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #ff9800;
+}
+
+.breaks-hint {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0 0 16px;
+    line-height: 1.45;
+}
+
+.btn-break,
+.btn-break-save {
+    border-color: rgba(255, 152, 0, 0.45) !important;
+    color: #ff9800 !important;
+}
+
+.btn-break-save {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%) !important;
+    color: #fff !important;
+    border: none !important;
+}
+
+.break-history-item {
+    border-color: rgba(255, 152, 0, 0.18);
+    background: rgba(255, 152, 0, 0.04);
+}
+
+.break-history-item strong {
+    color: #ff9800 !important;
+}
+
+.history-badge-break {
+    background: rgba(255, 152, 0, 0.15);
+    border-color: rgba(255, 152, 0, 0.35);
+    color: #ffb74d;
+}
+
+.gantt-block.gantt-break {
+    z-index: 3;
+    border: 1px dashed rgba(255, 255, 255, 0.35);
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.08) 6px,
+        transparent 6px,
+        transparent 12px
+    );
+}
+
+.break-modal-content {
+    border-color: rgba(255, 152, 0, 0.25);
+}
+
 .cut-stats {
     display: flex;
     flex-direction: column;
@@ -2721,6 +2821,102 @@ button:active {
 }
 
 /* Calendar Styling */
+.calendar-widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.calendar-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.calendar-mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.22);
+    flex-shrink: 0;
+}
+
+.calendar-mode-btn {
+    min-height: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1;
+    padding: 7px 10px;
+    text-transform: none;
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-family);
+}
+
+.calendar-mode-btn::before {
+    display: none;
+}
+
+.calendar-mode-btn.active {
+    background: rgba(0, 212, 255, 0.18);
+    color: var(--accent-blue);
+    box-shadow: 0 0 14px rgba(0, 212, 255, 0.16);
+}
+
+.calendar-mode-break .calendar-mode-btn[data-calendar-mode="break"].active {
+    background: rgba(255, 152, 0, 0.18);
+    color: #ff9800;
+    box-shadow: 0 0 14px rgba(255, 152, 0, 0.16);
+}
+
+.calendar-mode-break .calendar-mode-btn[data-calendar-mode="work"].active {
+    background: rgba(0, 212, 255, 0.18);
+    color: var(--accent-blue);
+    box-shadow: 0 0 14px rgba(0, 212, 255, 0.16);
+}
+
+.batch-mode-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(0, 212, 255, 0.06);
+    border: 1px solid rgba(0, 212, 255, 0.18);
+    flex-wrap: wrap;
+}
+
+.batch-mode-controls.batch-mode-break {
+    background: rgba(255, 152, 0, 0.06);
+    border-color: rgba(255, 152, 0, 0.18);
+}
+
+.batch-selected-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.batch-mode-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .calendar {
     display: flex;
     flex-direction: column;
@@ -2796,12 +2992,33 @@ button:active {
     cursor: pointer;
 }
 
-.calendar-day:not(.empty):not(.has-work):hover {
+.calendar-day:not(.empty):not(.has-work):not(.has-break):hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.15);
     box-shadow: 0 5px 15px rgba(255, 255, 255, 0.05);
     color: var(--text-primary);
     z-index: 2;
+}
+
+.calendar-day.has-break {
+    background: rgba(255, 152, 0, 0.1);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 152, 0, 0.2);
+    cursor: pointer;
+}
+
+.calendar-day.has-break:hover {
+    background: rgba(255, 152, 0, 0.2);
+    box-shadow: 0 5px 15px rgba(255, 152, 0, 0.2);
+    border-color: rgba(255, 152, 0, 0.4);
+    z-index: 2;
+}
+
+.break-hours-indicator {
+    font-size: 0.75rem;
+    color: #ff9800;
+    margin-top: 4px;
+    font-weight: 700;
 }
 
 .calendar-day.has-work {
@@ -2970,6 +3187,24 @@ button:active {
     display: flex;
     gap: 12px;
     width: 100%;
+    margin-top: 20px;
+}
+
+.csv-export-settings {
+    margin-bottom: 4px;
+}
+
+.csv-export-period-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 12px;
+    align-items: end;
+}
+
+@media (max-width: 640px) {
+    .csv-export-period-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 .settings-export-btn {
@@ -3723,6 +3958,11 @@ button:active {
     box-shadow: 0 0 12px rgba(0, 212, 255, 0.4), inset 0 0 8px rgba(0, 212, 255, 0.2) !important;
     transform: scale(1.05);
     z-index: 3;
+}
+
+.calendar-day.batch-selected.batch-selected-break {
+    border-color: #ff9800 !important;
+    box-shadow: 0 0 12px rgba(255, 152, 0, 0.4), inset 0 0 8px rgba(255, 152, 0, 0.2) !important;
 }
 
 /* Drag to Confirm Slider */

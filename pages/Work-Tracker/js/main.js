@@ -19,7 +19,10 @@ import {
     renderMoneyCounterModeControls,
     renderStatsPeriodModeControls,
     renderCustomStatsPeriodsSettings,
-    renderSettingsDefaultFields
+    renderSettingsDefaultFields,
+    renderCsvExportCompanySelect,
+    renderCalendarEditModeControls,
+    updateBatchModalForMode
 } from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
@@ -49,7 +52,10 @@ import {
     updateDefaultProject,
     updateProjectPreference,
     updateDefaultStartTime,
-    updateStartTimePreference
+    updateStartTimePreference,
+    updateCsvExportPeriod,
+    updateCsvExportCompany,
+    updateCalendarEditMode
 } from './state.js';
 import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings } from './api.js';
 
@@ -80,6 +86,17 @@ document.addEventListener('DOMContentLoaded', () => {
     renderStatsPeriodModeControls();
     renderSettingsDefaultFields();
     setupWidgetImageExports();
+    renderCalendarEditModeControls();
+
+    DOM.calendarModeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const mode = button.dataset.calendarMode;
+            if (mode === state.calendarEditMode) return;
+            updateCalendarEditMode(mode);
+            renderCalendarEditModeControls();
+            renderCalendar();
+        });
+    });
 
     // Initialize period toggle active classes and click handlers from state
     const toggleBtns = document.querySelectorAll('.period-toggle-btn');
@@ -358,6 +375,13 @@ document.addEventListener('DOMContentLoaded', () => {
             DOM.moneyCounterGapSlider.value = state.moneyCounterGap;
             DOM.moneyCounterGapValue.textContent = state.moneyCounterGap.toFixed(1);
         }
+        if (DOM.csvExportFrom) {
+            DOM.csvExportFrom.value = state.csvExportPeriodFrom;
+        }
+        if (DOM.csvExportTo) {
+            DOM.csvExportTo.value = state.csvExportPeriodTo;
+        }
+        renderCsvExportCompanySelect();
         renderWidgetOrderList();
         renderCustomStatsPeriodsSettings();
         renderSettingsDefaultFields();
@@ -484,7 +508,49 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Update timer rate, company, and project inputs on settings save if not currently running
+        if (DOM.csvExportCompanySelect) {
+            updateCsvExportCompany(DOM.csvExportCompanySelect.value);
+        }
+
+        const csvFrom = DOM.csvExportFrom?.value || '';
+        const csvTo = DOM.csvExportTo?.value || '';
+        if (csvFrom || csvTo) {
+            if (!csvFrom || !csvTo) {
+                import('./ui.js').then(module => {
+                    module.showAlert('Invalid CSV Period', 'Please set both the custom period start and end dates, or clear both.');
+                });
+                return;
+            }
+
+            import('./utils.js').then(({ parseCsvExportDate }) => {
+                const fromDate = parseCsvExportDate(csvFrom);
+                const toDate = parseCsvExportDate(csvTo);
+
+                if (!fromDate || !toDate) {
+                    import('./ui.js').then(module => {
+                        module.showAlert('Invalid CSV Period', 'Please enter valid custom period dates.');
+                    });
+                    return;
+                }
+
+                if (toDate < fromDate) {
+                    import('./ui.js').then(module => {
+                        module.showAlert('Invalid CSV Period', 'The custom period end date must be on or after the start date.');
+                    });
+                    return;
+                }
+
+                updateCsvExportPeriod(csvFrom, csvTo);
+                finishSettingsSave();
+            });
+            return;
+        }
+
+        updateCsvExportPeriod('', '');
+        finishSettingsSave();
+    });
+
+    function finishSettingsSave() {
         const timerIsRunning = localStorage.getItem('work_tracker_start') !== null;
         if (!timerIsRunning) {
             const lastSession = state.rawSessions && state.rawSessions[0];
@@ -535,7 +601,15 @@ document.addEventListener('DOMContentLoaded', () => {
         import('./ui.js').then(module => {
             module.showAlert("Settings Saved", "Your settings have been saved.");
         });
-    });
+    }
+
+    if (DOM.csvExportClearPeriodBtn) {
+        DOM.csvExportClearPeriodBtn.addEventListener('click', () => {
+            if (DOM.csvExportFrom) DOM.csvExportFrom.value = '';
+            if (DOM.csvExportTo) DOM.csvExportTo.value = '';
+            updateCsvExportPeriod('', '');
+        });
+    }
 
     if (DOM.addPercentageCutBtn) {
         DOM.addPercentageCutBtn.addEventListener('click', () => {
@@ -774,12 +848,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (state.batchModeEnabled) {
                 DOM.toggleBatchModeBtn.textContent = "Exit Batch Mode";
                 DOM.toggleBatchModeBtn.classList.add('active');
-                DOM.batchModeControls.style.display = "flex";
+                DOM.batchModeControls?.classList.remove('hidden');
             } else {
-                DOM.toggleBatchModeBtn.textContent = "Batch Edit";
-                DOM.toggleBatchModeBtn.classList.remove('active');
-                DOM.batchModeControls.style.display = "none";
                 state.batchSelectedDates = [];
+                renderCalendarEditModeControls();
+                DOM.toggleBatchModeBtn.classList.remove('active');
+                DOM.batchModeControls?.classList.add('hidden');
                 updateBatchSelectionUI();
             }
             renderCalendar();
@@ -790,7 +864,10 @@ document.addEventListener('DOMContentLoaded', () => {
         DOM.batchClearBtn.addEventListener('click', () => {
             state.batchSelectedDates = [];
             const cells = DOM.calendarGrid.querySelectorAll('.calendar-day.batch-selected');
-            cells.forEach(cell => cell.classList.remove('batch-selected'));
+            cells.forEach(cell => {
+                cell.classList.remove('batch-selected');
+                cell.classList.remove('batch-selected-break');
+            });
             updateBatchSelectionUI();
         });
     }
@@ -805,17 +882,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const year = state.currentCalendarDate.getFullYear();
             const month = state.currentCalendarDate.getMonth();
+            const isBreakMode = state.calendarEditMode === 'break';
 
             if (state.batchModeEnabled) {
                 const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                 if (state.batchSelectedDates.includes(dateStr)) {
                     state.batchSelectedDates = state.batchSelectedDates.filter(d => d !== dateStr);
                     dayDiv.classList.remove('batch-selected');
+                    dayDiv.classList.remove('batch-selected-break');
                 } else {
                     state.batchSelectedDates.push(dateStr);
                     dayDiv.classList.add('batch-selected');
+                    if (isBreakMode) {
+                        dayDiv.classList.add('batch-selected-break');
+                    }
                 }
                 updateBatchSelectionUI();
+            } else if (isBreakMode) {
+                const dayBreaks = state.allBreaks.filter((breakItem) => {
+                    const bStart = new Date(breakItem.startTime);
+                    return bStart.getFullYear() === year &&
+                           bStart.getMonth() === month &&
+                           bStart.getDate() === dayNum;
+                });
+
+                if (dayBreaks.length > 0) {
+                    dayBreaks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+                    openEditBreakModal(dayBreaks[dayBreaks.length - 1]);
+                } else {
+                    openAddBreakModal(new Date(year, month, dayNum), true);
+                }
             } else {
                 const daySessions = state.allSessions.filter(session => {
                     const sStart = new Date(session.startTime);
@@ -854,6 +950,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupCheckboxSync(DOM.batchUpdateRate, DOM.batchRate);
     setupCheckboxSync(DOM.batchUpdateCompany, DOM.batchCompany, DOM.batchCompanySelect);
     setupCheckboxSync(DOM.batchUpdateProject, DOM.batchProject, DOM.batchProjectSelect);
+    setupCheckboxSync(DOM.batchUpdateLabel, DOM.batchLabel);
 
     if (DOM.batchCompanySelect) {
         DOM.batchCompanySelect.addEventListener('change', (e) => {
@@ -903,10 +1000,17 @@ document.addEventListener('DOMContentLoaded', () => {
             DOM.batchProjectSelect.disabled = true;
             DOM.batchProjectSelect.style.opacity = "0.5";
 
+            DOM.batchUpdateLabel.checked = false;
+            DOM.batchLabel.disabled = true;
+            DOM.batchLabel.style.opacity = "0.5";
+            DOM.batchLabel.value = "";
+
             resetBatchSlider();
+            updateBatchModalForMode();
 
             if (DOM.batchModalSubtitle) {
-                DOM.batchModalSubtitle.textContent = `Applying changes to ${state.batchSelectedDates.length} selected day${state.batchSelectedDates.length === 1 ? '' : 's'}.`;
+                const itemLabel = state.calendarEditMode === 'break' ? 'breaks' : 'sessions';
+                DOM.batchModalSubtitle.textContent = `Applying changes to ${state.batchSelectedDates.length} selected day${state.batchSelectedDates.length === 1 ? '' : 's'}. Days without existing ${itemLabel} will have new ones created.`;
             }
 
             DOM.batchModal.classList.remove('hidden');
@@ -1000,6 +1104,134 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function saveBatchChanges() {
+        if (state.calendarEditMode === 'break') {
+            await saveBatchBreakChanges();
+            return;
+        }
+        await saveBatchWorkChanges();
+    }
+
+    async function saveBatchBreakChanges() {
+        const promises = [];
+        const module = await import('./api.js');
+
+        const updateStart = DOM.batchUpdateStart.checked;
+        const updateEnd = DOM.batchUpdateEnd.checked;
+        const updateLabel = DOM.batchUpdateLabel.checked;
+
+        if (!updateStart && !updateEnd && !updateLabel) {
+            import('./ui.js').then(uiModule => {
+                uiModule.showAlert("Select Actions", "Please check at least one checkbox field to apply batch changes.");
+                resetBatchSlider();
+            });
+            return;
+        }
+
+        const startVal = DOM.batchStart.value;
+        const endVal = DOM.batchEnd.value;
+        const labelVal = DOM.batchLabel.value.trim();
+
+        if (updateStart && updateEnd) {
+            const [sh, sm] = startVal.split(':').map(Number);
+            const [eh, em] = endVal.split(':').map(Number);
+            if (eh * 60 + em <= sh * 60 + sm) {
+                import('./ui.js').then(uiModule => {
+                    uiModule.showAlert("Invalid Time", "End time must be strictly after start time.");
+                    resetBatchSlider();
+                });
+                return;
+            }
+        }
+
+        state.batchSelectedDates.forEach(dateStr => {
+            const [year, month, dayNum] = dateStr.split('-').map(Number);
+
+            const existingBreaks = state.allBreaks.filter((breakItem) => {
+                const bStart = new Date(breakItem.startTime);
+                return bStart.getFullYear() === year &&
+                       bStart.getMonth() === (month - 1) &&
+                       bStart.getDate() === dayNum;
+            });
+
+            if (existingBreaks.length > 0) {
+                existingBreaks.forEach((breakItem) => {
+                    let bStart = new Date(breakItem.startTime);
+                    let bEnd = breakItem.endTime
+                        ? new Date(breakItem.endTime)
+                        : new Date(bStart.getTime() + (breakItem.durationMs || 0));
+
+                    if (updateStart) {
+                        const [h, m] = startVal.split(':').map(Number);
+                        bStart.setHours(h, m, 0, 0);
+                    }
+                    if (updateEnd) {
+                        const [h, m] = endVal.split(':').map(Number);
+                        bEnd.setHours(h, m, 0, 0);
+                        if (bEnd.getTime() <= bStart.getTime()) {
+                            bEnd.setDate(bEnd.getDate() + 1);
+                        }
+                    } else if (updateStart) {
+                        if (bEnd.getTime() <= bStart.getTime()) {
+                            bEnd.setTime(bStart.getTime() + (breakItem.durationMs || 30 * 60 * 1000));
+                        }
+                    }
+
+                    const durationMs = bEnd.getTime() - bStart.getTime();
+                    const updatedData = {
+                        startTime: bStart.getTime(),
+                        endTime: bEnd.getTime(),
+                        durationMs
+                    };
+                    if (updateLabel) updatedData.label = labelVal;
+
+                    promises.push(module.updateBreak(breakItem.id, updatedData));
+                });
+            } else {
+                const sh = updateStart ? startVal.split(':').map(Number)[0] : 12;
+                const sm = updateStart ? startVal.split(':').map(Number)[1] : 0;
+                let eh = updateEnd ? endVal.split(':').map(Number)[0] : 12;
+                let em = updateEnd ? endVal.split(':').map(Number)[1] : 30;
+
+                if (updateStart && !updateEnd) {
+                    eh = sh;
+                    em = (sm + 30) % 60;
+                    if (sm + 30 >= 60) {
+                        eh = (sh + 1) % 24;
+                    }
+                }
+
+                const bStart = new Date(year, month - 1, dayNum, sh, sm, 0, 0);
+                const bEnd = new Date(year, month - 1, dayNum, eh, em, 0, 0);
+                if (bEnd.getTime() <= bStart.getTime()) {
+                    bEnd.setDate(bEnd.getDate() + 1);
+                }
+
+                const durationMs = bEnd.getTime() - bStart.getTime();
+                const newBreak = {
+                    startTime: bStart.getTime(),
+                    endTime: bEnd.getTime(),
+                    durationMs,
+                    label: updateLabel ? labelVal : ""
+                };
+
+                promises.push(module.addCustomBreak(newBreak));
+            }
+        });
+
+        try {
+            await Promise.all(promises);
+            DOM.batchModal.classList.add('hidden');
+            exitBatchMode();
+            import('./ui.js').then(uiModule => {
+                uiModule.showAlert("Batch Successful", "Successfully applied break changes to all selected days!");
+            });
+        } catch (err) {
+            console.error("Batch break update error:", err);
+            resetBatchSlider();
+        }
+    }
+
+    async function saveBatchWorkChanges() {
         const promises = [];
         const module = await import('./api.js');
 
@@ -1124,15 +1356,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await Promise.all(promises);
             DOM.batchModal.classList.add('hidden');
-            state.batchModeEnabled = false;
-            DOM.toggleBatchModeBtn.textContent = "Batch Edit";
-            DOM.toggleBatchModeBtn.classList.remove('active');
-            DOM.batchModeControls.style.display = "none";
-            state.batchSelectedDates = [];
-            
+            exitBatchMode();
             import('./ui.js').then(uiModule => {
-                uiModule.showAlert("Batch Successful", `Successfully applied changes to all selected days!`);
-                renderCalendar();
+                uiModule.showAlert("Batch Successful", "Successfully applied changes to all selected days!");
             });
         } catch (err) {
             console.error("Batch update error:", err);
@@ -1302,6 +1528,191 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function openEditBreakModal(breakItem) {
+        import('./utils.js').then(({ formatDateTimeLocal }) => {
+            DOM.breakModalTitle.textContent = "Edit Break";
+            DOM.editBreakId.value = breakItem.id;
+            DOM.breakStart.value = formatDateTimeLocal(breakItem.startTime);
+            DOM.breakEnd.value = formatDateTimeLocal(breakItem.endTime || (new Date(breakItem.startTime).getTime() + (breakItem.durationMs || 0)));
+            DOM.breakLabel.value = breakItem.label || "";
+            DOM.breakModal.classList.remove('modal-mode-add');
+            DOM.breakModal.classList.add('modal-mode-edit');
+            if (DOM.deleteBreakBtn) {
+                DOM.deleteBreakBtn.style.display = 'block';
+            }
+            DOM.breakModal.classList.remove('hidden');
+        });
+    }
+
+    function openAddBreakModal(selectedDate = new Date(), usePreviousTimes = true) {
+        DOM.breakModalTitle.textContent = "Add Break";
+        DOM.editBreakId.value = "";
+        DOM.breakLabel.value = "";
+
+        const selectedMidnight = new Date(
+            selectedDate.getFullYear(),
+            selectedDate.getMonth(),
+            selectedDate.getDate()
+        );
+
+        let prevBreak = null;
+        if (usePreviousTimes) {
+            let maxPrevMidnight = -1;
+            state.allBreaks.forEach((breakItem) => {
+                const breakStart = new Date(breakItem.startTime);
+                const breakMidnight = new Date(
+                    breakStart.getFullYear(),
+                    breakStart.getMonth(),
+                    breakStart.getDate()
+                );
+                const time = breakMidnight.getTime();
+                if (time < selectedMidnight.getTime()) {
+                    if (time > maxPrevMidnight) {
+                        maxPrevMidnight = time;
+                        prevBreak = breakItem;
+                    } else if (time === maxPrevMidnight) {
+                        if (!prevBreak || new Date(breakItem.startTime).getTime() > new Date(prevBreak.startTime).getTime()) {
+                            prevBreak = breakItem;
+                        }
+                    }
+                }
+            });
+        }
+
+        let newStart;
+        let newEnd;
+
+        if (prevBreak) {
+            const bStart = new Date(prevBreak.startTime);
+            const bEnd = prevBreak.endTime
+                ? new Date(prevBreak.endTime)
+                : new Date(bStart.getTime() + (prevBreak.durationMs || 0));
+
+            newStart = new Date(
+                selectedMidnight.getFullYear(),
+                selectedMidnight.getMonth(),
+                selectedMidnight.getDate(),
+                bStart.getHours(),
+                bStart.getMinutes(),
+                bStart.getSeconds(),
+                bStart.getMilliseconds()
+            );
+
+            const bStartMidnight = new Date(bStart.getFullYear(), bStart.getMonth(), bStart.getDate());
+            const bEndMidnight = new Date(bEnd.getFullYear(), bEnd.getMonth(), bEnd.getDate());
+            const dayDiff = Math.round((bEndMidnight.getTime() - bStartMidnight.getTime()) / (24 * 60 * 60 * 1000));
+
+            newEnd = new Date(
+                selectedMidnight.getFullYear(),
+                selectedMidnight.getMonth(),
+                selectedMidnight.getDate() + dayDiff,
+                bEnd.getHours(),
+                bEnd.getMinutes(),
+                bEnd.getSeconds(),
+                bEnd.getMilliseconds()
+            );
+        } else {
+            newStart = new Date(
+                selectedMidnight.getFullYear(),
+                selectedMidnight.getMonth(),
+                selectedMidnight.getDate(),
+                12, 0, 0, 0
+            );
+            newEnd = new Date(newStart.getTime() + (30 * 60 * 1000));
+        }
+
+        import('./utils.js').then(({ formatDateTimeLocal }) => {
+            DOM.breakStart.value = formatDateTimeLocal(newStart);
+            DOM.breakEnd.value = formatDateTimeLocal(newEnd);
+            DOM.breakModal.classList.remove('modal-mode-edit');
+            DOM.breakModal.classList.add('modal-mode-add');
+            if (DOM.deleteBreakBtn) {
+                DOM.deleteBreakBtn.style.display = 'none';
+            }
+            DOM.breakModal.classList.remove('hidden');
+        });
+    }
+
+    function exitBatchMode() {
+        state.batchModeEnabled = false;
+        state.batchSelectedDates = [];
+        DOM.batchModeControls?.classList.add('hidden');
+        renderCalendarEditModeControls();
+        updateBatchSelectionUI();
+        renderCalendar();
+    }
+
+    if (DOM.addBreakBtn) {
+        DOM.addBreakBtn.addEventListener('click', () => {
+            openAddBreakModal(new Date());
+        });
+    }
+
+    if (DOM.closeBreakModalBtn) {
+        DOM.closeBreakModalBtn.addEventListener('click', () => {
+            DOM.breakModal.classList.add('hidden');
+        });
+    }
+
+    if (DOM.deleteBreakBtn) {
+        DOM.deleteBreakBtn.addEventListener('click', async () => {
+            const breakId = DOM.editBreakId.value;
+            if (!breakId) return;
+
+            import('./ui.js').then(async (uiModule) => {
+                const isConfirmed = await uiModule.showConfirm(
+                    "Delete Break",
+                    "Are you sure you want to permanently delete this break?"
+                );
+                if (isConfirmed) {
+                    import('./api.js').then(async (apiModule) => {
+                        await apiModule.deleteBreak(breakId);
+                        DOM.breakModal.classList.add('hidden');
+                    });
+                }
+            });
+        });
+    }
+
+    if (DOM.saveBreakBtn) {
+        DOM.saveBreakBtn.addEventListener('click', () => {
+            const startStr = DOM.breakStart.value;
+            const endStr = DOM.breakEnd.value;
+
+            if (!startStr || !endStr) {
+                import('./ui.js').then(module => module.showAlert("Invalid Input", "Please provide both start and end times."));
+                return;
+            }
+
+            const startTime = new Date(startStr).getTime();
+            const endTime = new Date(endStr).getTime();
+
+            if (endTime <= startTime) {
+                import('./ui.js').then(module => module.showAlert("Invalid Input", "End time must be after start time."));
+                return;
+            }
+
+            const durationMs = endTime - startTime;
+            const breakData = {
+                startTime,
+                endTime,
+                durationMs,
+                label: DOM.breakLabel.value.trim()
+            };
+
+            const breakId = DOM.editBreakId.value;
+
+            import('./api.js').then(module => {
+                if (breakId) {
+                    module.updateBreak(breakId, breakData);
+                } else {
+                    module.addCustomBreak(breakData);
+                }
+                DOM.breakModal.classList.add('hidden');
+            });
+        });
+    }
+
     // Export PDF Event - Prints the currently filtered dashboard
     if (DOM.exportBtn) {
         DOM.exportBtn.addEventListener('click', () => {
@@ -1316,80 +1727,256 @@ document.addEventListener('DOMContentLoaded', () => {
     // Export CSV Event - Downloads currently filtered sessions as a .csv file
     if (DOM.exportCsvBtn) {
         DOM.exportCsvBtn.addEventListener('click', () => {
-            if (!state.allSessions || state.allSessions.length === 0) {
-                import('./ui.js').then(module => module.showAlert("No Data", "There are no sessions to export."));
-                return;
-            }
+            import('./utils.js').then(({ filterSessionsForCsvExport, CSV_UNASSIGNED_COMPANY }) => {
+                const sessions = filterSessionsForCsvExport(
+                    state.rawSessions.length ? state.rawSessions : state.allSessions,
+                    state.csvExportCompany
+                );
 
-            // Define CSV headers
-            const headers = [
-                "Date",
-                "Start Time",
-                "End Time",
-                "Duration (Hours)",
-                "Rate",
-                "Earnings",
-                "Company",
-                "Project",
-                "Focused"
-            ];
-
-            // Safely escape values containing commas or double-quotes
-            function escapeCSV(val) {
-                if (val === null || val === undefined) return "";
-                const str = String(val);
-                if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-                    return `"${str.replace(/"/g, '""')}"`;
+                if (!sessions.length) {
+                    import('./ui.js').then(module => {
+                        const companyLabel = state.csvExportCompany === CSV_UNASSIGNED_COMPANY
+                            ? 'Unassigned'
+                            : state.csvExportCompany || 'the selected filter';
+                        module.showAlert(
+                            "No Data",
+                            state.csvExportCompany
+                                ? `There are no sessions to export for ${companyLabel}.`
+                                : "There are no sessions to export."
+                        );
+                    });
+                    return;
                 }
-                return str;
-            }
 
-            // Build rows
-            const rows = [headers.join(",")];
+                runCsvExport(sessions);
+            });
+        });
+    }
 
-            state.allSessions.forEach(session => {
-                const startDate = new Date(session.startTime);
-                const endDate = new Date(session.endTime);
+    function runCsvExport(sessions) {
+        import('./utils.js').then(({
+            getEffectiveSessionMetrics,
+            getSessionBreakPeriods,
+            computeMonthlyTotals,
+            computeMonthlyTotalsByCompany,
+            computeCustomPeriodTotals,
+            computeCustomPeriodTotalsByCompany,
+            computeCompanyTotalsAll,
+            formatDurationDetailed,
+            formatCsvDate,
+            formatCsvTime,
+            formatCsvDateTime,
+            msToDecimalHours,
+            escapeCsvValue,
+            getSessionEndTime,
+            toTimestampMs,
+            CSV_UNASSIGNED_COMPANY
+        }) => {
+                const currency = state.currentCurrency;
+                const breaks = state.allBreaks;
 
-                const dateStr = startDate.toLocaleDateString();
-                const startTimeStr = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const endTimeStr = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const durationHrs = (session.durationMs / (1000 * 60 * 60)).toFixed(2);
-
-                const isFocusedStr = session.focused === false ? "False" : "True";
-
-                const rowData = [
-                    dateStr,
-                    startTimeStr,
-                    endTimeStr,
-                    durationHrs,
-                    session.rate,
-                    session.earnings.toFixed(2),
-                    session.company || "",
-                    session.project || "",
-                    isFocusedStr
+                const summaryMetricHeaders = [
+                    "Total Net Duration",
+                    "Total Net Duration (Hours)",
+                    `Total Net Earnings (${currency})`
                 ];
 
-                rows.push(rowData.map(escapeCSV).join(","));
-            });
+                function formatSummaryMetrics(totalNetMs, totalNetEarnings) {
+                    return [
+                        formatDurationDetailed(totalNetMs),
+                        msToDecimalHours(totalNetMs),
+                        totalNetEarnings.toFixed(2)
+                    ];
+                }
 
-            // Trigger download
-            const csvData = rows.join("\n");
-            const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
+                function appendCsvSection(title, headers, dataRows) {
+                    if (!dataRows.length) return;
+                    rows.push("");
+                    rows.push([title].map(escapeCsvValue).join(","));
+                    rows.push(headers.map(escapeCsvValue).join(","));
+                    dataRows.forEach((row) => {
+                        rows.push(row.map(escapeCsvValue).join(","));
+                    });
+                }
 
-            // Format fallback timestamp for the filename
-            const now = new Date();
-            const dateStr = now.toISOString().split('T')[0];
+                const sessionHeaders = [
+                    "Date",
+                    "Start Time",
+                    "End Time",
+                    `Net Earnings (${currency})`,
+                    "Net Duration",
+                    "Net Duration (Hours)",
+                    `Hourly Rate (${currency})`,
+                    "Company",
+                    "Project",
+                    "Focused",
+                    "Break Count",
+                    "Total Break Time",
+                    "Original Session Duration Before Breaks",
+                    `Original Session Earnings Before Breaks (${currency})`
+                ];
 
-            a.href = url;
-            a.download = `Work_Tracker_Export_${dateStr}.csv`;
-            a.style.display = "none";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+                const rows = [sessionHeaders.map(escapeCsvValue).join(",")];
+
+                const sortedSessions = [...sessions].sort(
+                    (a, b) => toTimestampMs(b.startTime) - toTimestampMs(a.startTime)
+                );
+
+                const sessionBreakRows = [];
+
+                sortedSessions.forEach(session => {
+                    const metrics = getEffectiveSessionMetrics(session, breaks);
+                    const breakPeriods = getSessionBreakPeriods(session, breaks);
+                    const endMs = getSessionEndTime(session);
+                    const focused = session.focused === false ? "No" : "Yes";
+                    const sessionDate = formatCsvDate(session.startTime);
+                    const sessionStart = formatCsvTime(session.startTime);
+                    const sessionEnd = formatCsvTime(endMs);
+
+                    const rowData = [
+                        sessionDate,
+                        sessionStart,
+                        sessionEnd,
+                        metrics.effectiveEarnings.toFixed(2),
+                        formatDurationDetailed(metrics.effectiveDurationMs),
+                        msToDecimalHours(metrics.effectiveDurationMs),
+                        Number(session.rate || 0).toFixed(2),
+                        session.company || "",
+                        session.project || "",
+                        focused,
+                        breakPeriods.length,
+                        breakPeriods.length > 0
+                            ? formatDurationDetailed(metrics.breakMs)
+                            : "",
+                        formatDurationDetailed(metrics.grossDurationMs),
+                        metrics.grossEarnings.toFixed(2)
+                    ];
+
+                    rows.push(rowData.map(escapeCsvValue).join(","));
+
+                    breakPeriods.forEach((period, index) => {
+                        sessionBreakRows.push([
+                            sessionDate,
+                            sessionStart,
+                            sessionEnd,
+                            index + 1,
+                            formatCsvDateTime(period.startMs),
+                            formatCsvDateTime(period.endMs),
+                            period.label,
+                            formatDurationDetailed(period.durationMs),
+                            msToDecimalHours(period.durationMs)
+                        ]);
+                    });
+                });
+
+                if (sessionBreakRows.length > 0) {
+                    rows.push("");
+                    rows.push(["Session Breaks"].map(escapeCsvValue).join(","));
+
+                    const sessionBreakHeaders = [
+                        "Session Date",
+                        "Session Start Time",
+                        "Session End Time",
+                        "Break #",
+                        "Break Start",
+                        "Break End",
+                        "Break Label",
+                        "Break Duration",
+                        "Break Duration (Hours)"
+                    ];
+                    rows.push(sessionBreakHeaders.map(escapeCsvValue).join(","));
+                    sessionBreakRows.forEach((breakRow) => {
+                        rows.push(breakRow.map(escapeCsvValue).join(","));
+                    });
+                }
+
+                appendCsvSection(
+                    "Totals by Company",
+                    ["Company", ...summaryMetricHeaders],
+                    computeCompanyTotalsAll(sessions, breaks).map((entry) => [
+                        entry.company,
+                        ...formatSummaryMetrics(entry.totalNetMs, entry.totalNetEarnings)
+                    ])
+                );
+
+                const monthlyTotals = computeMonthlyTotals(sessions, breaks);
+                appendCsvSection(
+                    "Monthly Totals",
+                    ["Month", "Period Start", "Period End", ...summaryMetricHeaders],
+                    monthlyTotals.map((month) => [
+                        month.label,
+                        month.periodStart,
+                        month.periodEnd,
+                        ...formatSummaryMetrics(month.totalNetMs, month.totalNetEarnings)
+                    ])
+                );
+
+                appendCsvSection(
+                    "Monthly Totals by Company",
+                    ["Month", "Period Start", "Period End", "Company", ...summaryMetricHeaders],
+                    computeMonthlyTotalsByCompany(sessions, breaks).map((entry) => [
+                        entry.month,
+                        entry.periodStart,
+                        entry.periodEnd,
+                        entry.company,
+                        ...formatSummaryMetrics(entry.totalNetMs, entry.totalNetEarnings)
+                    ])
+                );
+
+                const customPeriodTotals = computeCustomPeriodTotals(
+                    sessions,
+                    breaks,
+                    state.csvExportPeriodFrom,
+                    state.csvExportPeriodTo
+                );
+                if (customPeriodTotals) {
+                    appendCsvSection(
+                        "Custom Period Totals",
+                        ["Period", "Period Start", "Period End", ...summaryMetricHeaders],
+                        [[
+                            customPeriodTotals.label,
+                            customPeriodTotals.periodStart,
+                            customPeriodTotals.periodEnd,
+                            ...formatSummaryMetrics(customPeriodTotals.totalNetMs, customPeriodTotals.totalNetEarnings)
+                        ]]
+                    );
+
+                    appendCsvSection(
+                        "Custom Period Totals by Company",
+                        ["Period", "Period Start", "Period End", "Company", ...summaryMetricHeaders],
+                        computeCustomPeriodTotalsByCompany(
+                            sessions,
+                            breaks,
+                            state.csvExportPeriodFrom,
+                            state.csvExportPeriodTo
+                        ).map((entry) => [
+                            entry.label,
+                            entry.periodStart,
+                            entry.periodEnd,
+                            entry.company,
+                            ...formatSummaryMetrics(entry.totalNetMs, entry.totalNetEarnings)
+                        ])
+                    );
+                }
+
+                const csvData = `\uFEFF${rows.join("\n")}`;
+                const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+
+                const now = new Date();
+                const fileDate = now.toISOString().split('T')[0];
+                const companySuffix = state.csvExportCompany
+                    ? `_${state.csvExportCompany === CSV_UNASSIGNED_COMPANY ? 'Unassigned' : state.csvExportCompany}`.replace(/[^\w.-]+/g, '_')
+                    : '';
+
+                a.href = url;
+                a.download = `Work_Tracker_Export_${fileDate}${companySuffix}.csv`;
+                a.style.display = "none";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
         });
     }
 

@@ -2,7 +2,7 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, d
 import { db } from './config.js';
 import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown } from './ui.js';
-import { getStartOfWeekDate, formatDuration, getSessionOverlapMs, getMonthlyStatsConfig, STATS_PERIOD_MODES } from './utils.js';
+import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs } from './utils.js';
 
 function getPercentageCutsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
@@ -16,6 +16,21 @@ function serializePercentageCuts(cuts) {
         basis: cut.basis,
         order: index
     }));
+}
+
+function renderStatsHoursDisplay(displayEl, effectiveMs, grossMs, breakMs) {
+    if (!displayEl) return;
+
+    const effectiveText = formatDuration(effectiveMs);
+    if (!breakMs || breakMs <= 0 || effectiveMs === grossMs) {
+        displayEl.innerHTML = effectiveText;
+        return;
+    }
+
+    displayEl.innerHTML = `
+        <span class="stats-hours-effective">${effectiveText}</span>
+        <span class="stats-hours-gross">${formatDuration(grossMs)} gross · ${formatDuration(breakMs)} breaks</span>
+    `;
 }
 
 function renderStatsEarnings(displayEl, beforeAmount) {
@@ -84,6 +99,39 @@ export async function deleteSession(sessionId) {
     } catch (e) {
         console.error("Debug: Error deleting document: ", e);
         showAlert("Error", "There was an error deleting this session.");
+    }
+}
+
+export async function addCustomBreak(breakData) {
+    try {
+        await addDoc(collection(db, "users", state.currentUser.uid, "breaks"), {
+            ...breakData,
+            createdAt: serverTimestamp()
+        });
+        console.log("Debug: Break saved to Firebase");
+    } catch (e) {
+        console.error("Debug: Error adding break document: ", e);
+        showAlert("Save Error", "Error saving break! Please check your internet connection.");
+    }
+}
+
+export async function updateBreak(breakId, breakData) {
+    try {
+        await updateDoc(doc(db, "users", state.currentUser.uid, "breaks", breakId), breakData);
+        console.log("Debug: Break updated in Firebase");
+    } catch (e) {
+        console.error("Debug: Error updating break document: ", e);
+        showAlert("Update Error", "Error updating break! Please check your internet connection.");
+    }
+}
+
+export async function deleteBreak(breakId) {
+    try {
+        await deleteDoc(doc(db, "users", state.currentUser.uid, "breaks", breakId));
+        console.log("Debug: Break deleted", breakId);
+    } catch (e) {
+        console.error("Debug: Error deleting break document: ", e);
+        showAlert("Error", "There was an error deleting this break.");
     }
 }
 
@@ -291,14 +339,25 @@ export function loadTimeCostSettings() {
 
 export function renderDashboardData() {
     DOM.historyList.innerHTML = "";
+    if (DOM.breakHistoryList) {
+        DOM.breakHistoryList.innerHTML = "";
+    }
 
     let totalDailyMs = 0;
+    let totalDailyGrossMs = 0;
+    let totalDailyBreakMs = 0;
     let totalDailyEarnings = 0;
     let totalWeeklyMs = 0;
+    let totalWeeklyGrossMs = 0;
+    let totalWeeklyBreakMs = 0;
     let totalWeeklyEarnings = 0;
     let totalMonthlyMs = 0;
+    let totalMonthlyGrossMs = 0;
+    let totalMonthlyBreakMs = 0;
     let totalMonthlyEarnings = 0;
     let totalSixMonthsMs = 0;
+    let totalSixMonthsGrossMs = 0;
+    let totalSixMonthsBreakMs = 0;
     let totalSixMonthsEarnings = 0;
 
     const now = new Date();
@@ -308,42 +367,56 @@ export function renderDashboardData() {
     endOfWeek.setDate(startOfWeek.getDate() + 7);
     const monthlyStatsConfig = getMonthlyStatsConfig(state.statsPeriodMode, now);
     const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    const breaks = state.allBreaks;
 
-    // Calculate totals across all sessions
-    state.allSessions.forEach((data) => {
-        const dateObj = new Date(data.startTime);
+    const dailyTotals = calculateCalendarPeriodTotals(
+        state.allSessions.filter((session) => new Date(session.startTime) >= startOfDay),
+        startOfDay,
+        breaks
+    );
+    totalDailyMs = dailyTotals.totalMs;
+    totalDailyGrossMs = dailyTotals.totalGrossMs;
+    totalDailyBreakMs = dailyTotals.totalBreakMs;
+    totalDailyEarnings = dailyTotals.totalEarnings;
 
-        if (dateObj >= startOfDay) {
-            totalDailyMs += data.durationMs;
-            totalDailyEarnings += data.earnings;
-        }
+    const weeklyTotals = calculateRollingPeriodTotals(state.allSessions, startOfWeek, endOfWeek, breaks);
+    totalWeeklyMs = weeklyTotals.totalMs;
+    totalWeeklyGrossMs = weeklyTotals.totalGrossMs;
+    totalWeeklyBreakMs = weeklyTotals.totalBreakMs;
+    totalWeeklyEarnings = weeklyTotals.totalEarnings;
 
-        const weeklyOverlapMs = getSessionOverlapMs(data, startOfWeek, endOfWeek);
-        if (weeklyOverlapMs > 0) {
-            const sessionDurationMs = Number(data.durationMs) || weeklyOverlapMs;
-            const overlapRatio = sessionDurationMs > 0 ? weeklyOverlapMs / sessionDurationMs : 1;
-            totalWeeklyMs += weeklyOverlapMs;
-            totalWeeklyEarnings += (Number(data.earnings) || 0) * overlapRatio;
-        }
+    if (state.statsPeriodMode === STATS_PERIOD_MODES.ROLLING) {
+        const monthlyTotals = calculateRollingPeriodTotals(
+            state.allSessions,
+            monthlyStatsConfig.start,
+            monthlyStatsConfig.end,
+            breaks
+        );
+        totalMonthlyMs = monthlyTotals.totalMs;
+        totalMonthlyGrossMs = monthlyTotals.totalGrossMs;
+        totalMonthlyBreakMs = monthlyTotals.totalBreakMs;
+        totalMonthlyEarnings = monthlyTotals.totalEarnings;
+    } else {
+        const monthlyTotals = calculateCalendarPeriodTotals(
+            state.allSessions.filter((session) => new Date(session.startTime) >= monthlyStatsConfig.start),
+            monthlyStatsConfig.start,
+            breaks
+        );
+        totalMonthlyMs = monthlyTotals.totalMs;
+        totalMonthlyGrossMs = monthlyTotals.totalGrossMs;
+        totalMonthlyBreakMs = monthlyTotals.totalBreakMs;
+        totalMonthlyEarnings = monthlyTotals.totalEarnings;
+    }
 
-        if (state.statsPeriodMode === STATS_PERIOD_MODES.ROLLING) {
-            const monthlyOverlapMs = getSessionOverlapMs(data, monthlyStatsConfig.start, monthlyStatsConfig.end);
-            if (monthlyOverlapMs > 0) {
-                const sessionDurationMs = Number(data.durationMs) || monthlyOverlapMs;
-                const overlapRatio = sessionDurationMs > 0 ? monthlyOverlapMs / sessionDurationMs : 1;
-                totalMonthlyMs += monthlyOverlapMs;
-                totalMonthlyEarnings += (Number(data.earnings) || 0) * overlapRatio;
-            }
-        } else if (dateObj >= monthlyStatsConfig.start) {
-            totalMonthlyMs += data.durationMs;
-            totalMonthlyEarnings += data.earnings;
-        }
-
-        if (dateObj >= startOfSixMonths) {
-            totalSixMonthsMs += data.durationMs;
-            totalSixMonthsEarnings += data.earnings;
-        }
-    });
+    const sixMonthTotals = calculateCalendarPeriodTotals(
+        state.allSessions.filter((session) => new Date(session.startTime) >= startOfSixMonths),
+        startOfSixMonths,
+        breaks
+    );
+    totalSixMonthsMs = sixMonthTotals.totalMs;
+    totalSixMonthsGrossMs = sixMonthTotals.totalGrossMs;
+    totalSixMonthsBreakMs = sixMonthTotals.totalBreakMs;
+    totalSixMonthsEarnings = sixMonthTotals.totalEarnings;
 
     // Pagination bounds check
     const pageSize = 5;
@@ -364,6 +437,13 @@ export function renderDashboardData() {
         const item = document.createElement('div');
         item.className = 'history-item';
         const formattedTime = formatDuration(data.durationMs);
+        const sessionMetrics = getEffectiveSessionMetrics(data, state.allBreaks);
+        const displayDuration = sessionMetrics.breakMs > 0
+            ? formatDuration(sessionMetrics.effectiveDurationMs)
+            : formattedTime;
+        const grossDurationHtml = sessionMetrics.breakMs > 0
+            ? `<small class="history-gross-duration">${formatDuration(sessionMetrics.grossDurationMs)} gross · ${formatDuration(sessionMetrics.breakMs)} breaks</small>`
+            : '';
         const endDateObj = data.endTime ? new Date(data.endTime) : new Date(data.startTime + data.durationMs);
         const timeFormat = { hour: '2-digit', minute: '2-digit' };
         const startTimeStr = dateObj.toLocaleTimeString([], timeFormat);
@@ -372,7 +452,9 @@ export function renderDashboardData() {
         const endDateStr = endDateObj.toLocaleDateString();
         const startDateTimeStr = `${startDateStr} ${startTimeStr}`;
         const endDateTimeStr = startDateStr === endDateStr ? endTimeStr : `${endDateStr} ${endTimeStr}`;
-        const sessionEarnings = Number(data.earnings) || 0;
+        const sessionEarnings = sessionMetrics.breakMs > 0
+            ? sessionMetrics.effectiveEarnings
+            : (Number(data.earnings) || 0);
         const afterCutsEarnings = getAmountAfterPercentageCuts(sessionEarnings);
         const afterCutsHtml = state.percentageCuts.length
             ? `<small class="history-after-cuts">After cuts ${state.currentCurrency}${afterCutsEarnings.toFixed(2)}</small>`
@@ -394,7 +476,8 @@ export function renderDashboardData() {
                         <span>Started ${startDateTimeStr}</span>
                         <span>Ended ${endDateTimeStr}</span>
                     </span>
-                    <strong>${formattedTime}</strong>
+                    <strong>${displayDuration}</strong>
+                    ${grossDurationHtml}
                     <div class="history-badges">
                         ${companyHtml}
                         ${projectHtml}
@@ -489,17 +572,17 @@ export function renderDashboardData() {
         }
     }
 
-    DOM.dailyHoursDisplay.textContent = formatDuration(totalDailyMs);
+    DOM.dailyHoursDisplay && renderStatsHoursDisplay(DOM.dailyHoursDisplay, totalDailyMs, totalDailyGrossMs, totalDailyBreakMs);
     renderStatsEarnings(DOM.dailyEarningsDisplay, totalDailyEarnings);
 
-    DOM.weeklyHoursDisplay.textContent = formatDuration(totalWeeklyMs);
+    DOM.weeklyHoursDisplay && renderStatsHoursDisplay(DOM.weeklyHoursDisplay, totalWeeklyMs, totalWeeklyGrossMs, totalWeeklyBreakMs);
     renderStatsEarnings(DOM.weeklyEarningsDisplay, totalWeeklyEarnings);
 
-    DOM.monthlyHoursDisplay.textContent = formatDuration(totalMonthlyMs);
+    DOM.monthlyHoursDisplay && renderStatsHoursDisplay(DOM.monthlyHoursDisplay, totalMonthlyMs, totalMonthlyGrossMs, totalMonthlyBreakMs);
     renderStatsEarnings(DOM.monthlyEarningsDisplay, totalMonthlyEarnings);
 
     if (DOM.sixMonthsHoursDisplay) {
-        DOM.sixMonthsHoursDisplay.textContent = formatDuration(totalSixMonthsMs);
+        renderStatsHoursDisplay(DOM.sixMonthsHoursDisplay, totalSixMonthsMs, totalSixMonthsGrossMs, totalSixMonthsBreakMs);
     }
     if (DOM.sixMonthsEarningsDisplay) {
         renderStatsEarnings(DOM.sixMonthsEarningsDisplay, totalSixMonthsEarnings);
@@ -515,6 +598,8 @@ export function renderDashboardData() {
     renderCustomStatsPeriods();
 
     renderWorkPatternBreakdown();
+
+    renderBreakHistory();
 
     renderCalendar();
     renderChart();
@@ -541,6 +626,175 @@ export function loadHistory() {
     }, (error) => {
         console.error("Debug: Snapshot error", error);
     });
+}
+
+export function loadBreaks() {
+    const q = query(
+        collection(db, "users", state.currentUser.uid, "breaks"),
+        orderBy("startTime", "desc")
+    );
+
+    onSnapshot(q, (querySnapshot) => {
+        state.rawBreaks = [];
+
+        querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            state.rawBreaks.push({ id: docSnap.id, ...data });
+        });
+
+        state.allBreaks = [...state.rawBreaks];
+        renderDashboardData();
+        console.log("Debug: Breaks updated from Firebase");
+    }, (error) => {
+        console.error("Debug: Breaks snapshot error", error);
+    });
+}
+
+function renderBreakHistory() {
+    if (!DOM.breakHistoryList) return;
+
+    DOM.breakHistoryList.innerHTML = "";
+
+    const pageSize = 5;
+    const maxPages = Math.ceil(state.allBreaks.length / pageSize);
+    if (state.breakHistoryPage >= maxPages && maxPages > 0) {
+        state.breakHistoryPage = maxPages - 1;
+    }
+    if (state.breakHistoryPage < 0) {
+        state.breakHistoryPage = 0;
+    }
+
+    const paginatedBreaks = state.allBreaks.slice(
+        state.breakHistoryPage * pageSize,
+        (state.breakHistoryPage + 1) * pageSize
+    );
+
+    if (!state.allBreaks.length) {
+        DOM.breakHistoryList.innerHTML = '<p class="loading-text">No breaks recorded yet.</p>';
+    }
+
+    paginatedBreaks.forEach((data) => {
+        const dateObj = new Date(data.startTime);
+        const item = document.createElement('div');
+        item.className = 'history-item break-history-item';
+
+        const endDateObj = data.endTime ? new Date(data.endTime) : new Date(data.startTime + data.durationMs);
+        const timeFormat = { hour: '2-digit', minute: '2-digit' };
+        const startTimeStr = dateObj.toLocaleTimeString([], timeFormat);
+        const endTimeStr = endDateObj.toLocaleTimeString([], timeFormat);
+        const startDateStr = dateObj.toLocaleDateString();
+        const endDateStr = endDateObj.toLocaleDateString();
+        const startDateTimeStr = `${startDateStr} ${startTimeStr}`;
+        const endDateTimeStr = startDateStr === endDateStr ? endTimeStr : `${endDateStr} ${endTimeStr}`;
+        const labelHtml = data.label
+            ? `<span class="history-badge history-badge-break">${data.label}</span>`
+            : `<span class="history-badge history-badge-break">Break</span>`;
+
+        item.innerHTML = `
+            <div class="history-item-content">
+                <div>
+                    <span class="history-date">
+                        <span>Started ${startDateTimeStr}</span>
+                        <span>Ended ${endDateTimeStr}</span>
+                    </span>
+                    <strong>${formatDuration(data.durationMs)}</strong>
+                    <div class="history-badges">
+                        ${labelHtml}
+                    </div>
+                </div>
+            </div>
+            <div class="history-item-actions" style="display: flex; gap: 8px;">
+                <button class="btn-edit btn-edit-break" data-id="${data.id}" title="Edit Break">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
+                <button class="btn-delete btn-delete-break" data-id="${data.id}" title="Delete Break">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        item.querySelector('.btn-delete-break').addEventListener('click', async () => {
+            const isConfirmed = await showConfirm("Delete Break", "Are you sure you want to permanently delete this break?");
+            if (isConfirmed) {
+                await deleteBreak(data.id);
+            }
+        });
+
+        item.querySelector('.btn-edit-break').addEventListener('click', () => {
+            import('./utils.js').then(({ formatDateTimeLocal }) => {
+                DOM.breakModalTitle.textContent = "Edit Break";
+                DOM.editBreakId.value = data.id;
+                DOM.breakStart.value = formatDateTimeLocal(data.startTime);
+                DOM.breakEnd.value = formatDateTimeLocal(data.endTime);
+                DOM.breakLabel.value = data.label || "";
+                DOM.breakModal.classList.remove('modal-mode-add');
+                DOM.breakModal.classList.add('modal-mode-edit');
+                if (DOM.deleteBreakBtn) {
+                    DOM.deleteBreakBtn.style.display = 'block';
+                }
+                DOM.breakModal.classList.remove('hidden');
+            });
+        });
+
+        DOM.breakHistoryList.appendChild(item);
+    });
+
+    if (DOM.breakHistoryPagination) {
+        DOM.breakHistoryPagination.innerHTML = "";
+        if (state.allBreaks.length > pageSize) {
+            DOM.breakHistoryPagination.style.display = 'flex';
+
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'history-pagination-btn';
+            prevBtn.textContent = '← Prev';
+            prevBtn.disabled = state.breakHistoryPage === 0;
+            prevBtn.addEventListener('click', () => {
+                state.breakHistoryPage--;
+                renderBreakHistory();
+            });
+
+            const pageInfo = document.createElement('span');
+            pageInfo.className = 'history-pagination-info';
+            pageInfo.textContent = `Page ${state.breakHistoryPage + 1} of ${maxPages}`;
+
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'history-pagination-btn';
+            nextBtn.textContent = 'Next →';
+            nextBtn.disabled = state.breakHistoryPage >= maxPages - 1;
+            nextBtn.addEventListener('click', () => {
+                state.breakHistoryPage++;
+                renderBreakHistory();
+            });
+
+            DOM.breakHistoryPagination.appendChild(prevBtn);
+            DOM.breakHistoryPagination.appendChild(pageInfo);
+            DOM.breakHistoryPagination.appendChild(nextBtn);
+        } else {
+            DOM.breakHistoryPagination.style.display = 'none';
+        }
+    }
+
+    if (DOM.breakTodayTotal) {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(startOfDay);
+        endOfDay.setDate(endOfDay.getDate() + 1);
+
+        let todayBreakMs = 0;
+        state.allBreaks.forEach((breakItem) => {
+            todayBreakMs += getBreakOverlapMs([breakItem], startOfDay, endOfDay);
+        });
+
+        DOM.breakTodayTotal.textContent = todayBreakMs > 0 ? formatDuration(todayBreakMs) : '0m';
+    }
 }
 
 export function applyGlobalFilters() {

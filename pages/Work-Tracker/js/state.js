@@ -1,4 +1,4 @@
-const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-money-counter', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
+const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-breaks', 'widget-money-counter', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
 
 function createCutId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -185,8 +185,12 @@ export const state = {
     currentTimelineDate: new Date(),
     batchModeEnabled: false,
     batchSelectedDates: [],
+    calendarEditMode: localStorage.getItem('work_tracker_calendar_edit_mode') === 'break' ? 'break' : 'work',
     rawSessions: [],
     allSessions: [],
+    rawBreaks: [],
+    allBreaks: [],
+    breakHistoryPage: 0,
     globalFilterCompany: '',
     globalFilterProject: '',
     currentCurrency: localStorage.getItem('work_tracker_currency') || '£',
@@ -223,7 +227,10 @@ export const state = {
     statsPeriodMode: loadStatsPeriodMode(),
     activeCutStatsPeriods: loadActiveCutStatsPeriods(),
     lastStatsTotals: { daily: 0, weekly: 0, monthly: 0 },
-    historyPage: 0
+    historyPage: 0,
+    csvExportPeriodFrom: localStorage.getItem('work_tracker_csv_export_from') || '',
+    csvExportPeriodTo: localStorage.getItem('work_tracker_csv_export_to') || '',
+    csvExportCompany: localStorage.getItem('work_tracker_csv_export_company') || ''
 };
 
 export function updateCurrency(newCurrency) {
@@ -396,4 +403,21 @@ export function updateDefaultStartTime(timeStr) {
 export function updateStartTimePreference(pref) {
     state.startTimePreference = pref === 'default_value' ? 'default_value' : 'last_session';
     localStorage.setItem('work_tracker_start_time_pref', state.startTimePreference);
+}
+
+export function updateCsvExportPeriod(from, to) {
+    state.csvExportPeriodFrom = from || '';
+    state.csvExportPeriodTo = to || '';
+    localStorage.setItem('work_tracker_csv_export_from', state.csvExportPeriodFrom);
+    localStorage.setItem('work_tracker_csv_export_to', state.csvExportPeriodTo);
+}
+
+export function updateCsvExportCompany(company) {
+    state.csvExportCompany = company || '';
+    localStorage.setItem('work_tracker_csv_export_company', state.csvExportCompany);
+}
+
+export function updateCalendarEditMode(mode) {
+    state.calendarEditMode = mode === 'break' ? 'break' : 'work';
+    localStorage.setItem('work_tracker_calendar_edit_mode', state.calendarEditMode);
 }

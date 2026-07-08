@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isValidTimestamp(value) {
+      return value is number && value > 0;
+    }
+
+    function isValidTimeRange(data) {
+      return isValidTimestamp(data.startTime)
+        && isValidTimestamp(data.endTime)
+        && data.endTime > data.startTime
+        && data.durationMs is number
+        && data.durationMs > 0;
+    }
+
+    function isValidWorkSession() {
+      return isValidTimeRange(request.resource.data)
+        && request.resource.data.rate is number
+        && request.resource.data.rate >= 0
+        && request.resource.data.earnings is number
+        && request.resource.data.earnings >= 0
+        && (!('company' in request.resource.data) || request.resource.data.company is string)
+        && (!('project' in request.resource.data) || request.resource.data.project is string)
+        && (!('focused' in request.resource.data) || request.resource.data.focused is bool);
+    }
+
+    function isValidBreak() {
+      return isValidTimeRange(request.resource.data)
+        && (!('label' in request.resource.data) || request.resource.data.label is string);
+    }
+
+    match /users/{userId} {
+
+      match /sessions/{sessionId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidWorkSession();
+        allow delete: if isOwner(userId);
+      }
+
+      match /breaks/{breakId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidBreak();
+        allow delete: if isOwner(userId);
+      }
+
+      match /timeCostItems/{itemId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /settings/{settingId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+  }
+}

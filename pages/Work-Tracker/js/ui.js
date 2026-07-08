@@ -1,5 +1,5 @@
-import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds } from './state.js';
-import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay } from './utils.js';
+import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds, updateCsvExportCompany } from './state.js';
+import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getBreakOverlapMs, CSV_UNASSIGNED_COMPANY } from './utils.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
@@ -119,6 +119,10 @@ export const DOM = {
     ganttChart: document.getElementById('gantt-chart'),
     exportBtn: document.getElementById('export-btn'),
     exportCsvBtn: document.getElementById('export-csv-btn'),
+    csvExportFrom: document.getElementById('csv-export-from'),
+    csvExportTo: document.getElementById('csv-export-to'),
+    csvExportCompanySelect: document.getElementById('csv-export-company'),
+    csvExportClearPeriodBtn: document.getElementById('csv-export-clear-period'),
     filterBtn: document.getElementById('filter-btn'),
     filterModal: document.getElementById('filter-modal'),
     closeFilterBtn: document.getElementById('close-filter'),
@@ -143,15 +147,34 @@ export const DOM = {
     saveSessionBtn: document.getElementById('save-session-btn'),
     deleteSessionBtn: document.getElementById('delete-session-btn'),
 
+    addBreakBtn: document.getElementById('add-break-btn'),
+    breakHistoryList: document.getElementById('break-history-list'),
+    breakHistoryPagination: document.getElementById('break-history-pagination'),
+    breakTodayTotal: document.getElementById('break-today-total'),
+    breakModal: document.getElementById('break-modal'),
+    breakModalTitle: document.getElementById('break-modal-title'),
+    closeBreakModalBtn: document.getElementById('close-break-modal'),
+    editBreakId: document.getElementById('edit-break-id'),
+    breakStart: document.getElementById('break-start'),
+    breakEnd: document.getElementById('break-end'),
+    breakLabel: document.getElementById('break-label'),
+    saveBreakBtn: document.getElementById('save-break-btn'),
+    deleteBreakBtn: document.getElementById('delete-break-btn'),
+
     toggleBatchModeBtn: document.getElementById('toggle-batch-mode'),
+    calendarModeButtons: document.querySelectorAll('.calendar-mode-btn'),
+    calendarWidget: document.getElementById('widget-calendar'),
     batchModeControls: document.getElementById('batch-mode-controls'),
     batchSelectedLabel: document.getElementById('batch-selected-label'),
     openBatchModalBtn: document.getElementById('open-batch-modal-btn'),
     batchClearBtn: document.getElementById('batch-clear-btn'),
 
     batchModal: document.getElementById('batch-modal'),
+    batchModalTitle: document.getElementById('batch-modal-title'),
     closeBatchModalBtn: document.getElementById('close-batch-modal'),
     batchModalSubtitle: document.getElementById('batch-modal-subtitle'),
+    batchWorkFields: document.getElementById('batch-work-fields'),
+    batchBreakFields: document.getElementById('batch-break-fields'),
 
     batchUpdateStart: document.getElementById('batch-update-start'),
     batchStart: document.getElementById('batch-start'),
@@ -165,6 +188,8 @@ export const DOM = {
     batchUpdateProject: document.getElementById('batch-update-project'),
     batchProject: document.getElementById('batch-project'),
     batchProjectSelect: document.getElementById('batch-project-select'),
+    batchUpdateLabel: document.getElementById('batch-update-label'),
+    batchLabel: document.getElementById('batch-label'),
 
     batchSliderTrack: document.getElementById('batch-slider-track'),
     batchSliderProgress: document.getElementById('batch-slider-progress'),
@@ -514,7 +539,12 @@ export function renderCustomStatsPeriods() {
 
     state.customStatsPeriods.forEach((period) => {
         const config = getCustomStatsPeriodConfig(period, now);
-        const { totalMs, totalEarnings } = calculateRollingPeriodTotals(state.allSessions, config.start, config.end);
+        const { totalMs, totalGrossMs, totalBreakMs, totalEarnings } = calculateRollingPeriodTotals(
+            state.allSessions,
+            config.start,
+            config.end,
+            state.allBreaks
+        );
 
         const item = document.createElement('div');
         item.className = 'stat-item stat-item-custom';
@@ -526,6 +556,13 @@ export function renderCustomStatsPeriods() {
         const hoursValue = document.createElement('span');
         hoursValue.className = 'value';
         hoursValue.textContent = formatDuration(totalMs);
+        if (totalBreakMs > 0 && totalGrossMs !== totalMs) {
+            const grossNote = document.createElement('span');
+            grossNote.className = 'stats-hours-gross';
+            grossNote.textContent = `${formatDuration(totalGrossMs)} gross · ${formatDuration(totalBreakMs)} breaks`;
+            hoursValue.appendChild(document.createElement('br'));
+            hoursValue.appendChild(grossNote);
+        }
 
         const earningsLabel = document.createElement('span');
         earningsLabel.className = 'label';
@@ -594,13 +631,103 @@ export function renderSettingsDefaultFields() {
     DOM.settingsDefaultStartTime?.classList.toggle('hidden', !showStartTimeDefault);
 }
 
+export function renderCsvExportCompanySelect() {
+    if (!DOM.csvExportCompanySelect) return;
+
+    const companies = new Set();
+    let hasUnassigned = false;
+
+    (state.rawSessions || []).forEach((session) => {
+        const company = String(session.company || '').trim();
+        if (company) {
+            companies.add(company);
+        } else {
+            hasUnassigned = true;
+        }
+    });
+
+    const previousValue = state.csvExportCompany || DOM.csvExportCompanySelect.value || '';
+
+    DOM.csvExportCompanySelect.innerHTML = '';
+
+    const allOption = document.createElement('option');
+    allOption.value = '';
+    allOption.textContent = 'All Companies';
+    DOM.csvExportCompanySelect.appendChild(allOption);
+
+    if (hasUnassigned) {
+        const unassignedOption = document.createElement('option');
+        unassignedOption.value = CSV_UNASSIGNED_COMPANY;
+        unassignedOption.textContent = 'Unassigned';
+        DOM.csvExportCompanySelect.appendChild(unassignedOption);
+    }
+
+    Array.from(companies)
+        .sort((a, b) => a.localeCompare(b))
+        .forEach((company) => {
+            const option = document.createElement('option');
+            option.value = company;
+            option.textContent = company;
+            DOM.csvExportCompanySelect.appendChild(option);
+        });
+
+    const hasPreviousValue = [...DOM.csvExportCompanySelect.options].some(
+        (option) => option.value === previousValue
+    );
+
+    if (hasPreviousValue) {
+        DOM.csvExportCompanySelect.value = previousValue;
+    } else {
+        DOM.csvExportCompanySelect.value = '';
+        if (previousValue) {
+            updateCsvExportCompany('');
+        }
+    }
+}
+
+export function renderCalendarEditModeControls() {
+    const isBreakMode = state.calendarEditMode === 'break';
+
+    DOM.calendarModeButtons.forEach((button) => {
+        button.classList.toggle('active', button.dataset.calendarMode === state.calendarEditMode);
+    });
+
+    if (DOM.calendarWidget) {
+        DOM.calendarWidget.classList.toggle('calendar-mode-break', isBreakMode);
+        DOM.calendarWidget.classList.toggle('calendar-mode-work', !isBreakMode);
+    }
+
+    if (DOM.toggleBatchModeBtn && !state.batchModeEnabled) {
+        DOM.toggleBatchModeBtn.textContent = isBreakMode ? 'Batch Edit Breaks' : 'Batch Edit';
+    }
+
+    if (DOM.batchModeControls) {
+        DOM.batchModeControls.classList.toggle('batch-mode-break', isBreakMode);
+        DOM.batchModeControls.classList.toggle('batch-mode-work', !isBreakMode);
+    }
+}
+
+export function updateBatchModalForMode() {
+    const isBreakMode = state.calendarEditMode === 'break';
+
+    if (DOM.batchModalTitle) {
+        DOM.batchModalTitle.textContent = isBreakMode ? 'Batch Edit Breaks' : 'Batch Edit Sessions';
+    }
+
+    DOM.batchWorkFields?.classList.toggle('hidden', isBreakMode);
+    DOM.batchBreakFields?.classList.toggle('hidden', !isBreakMode);
+    DOM.batchModal?.classList.toggle('batch-modal-break', isBreakMode);
+    DOM.batchModal?.classList.toggle('batch-modal-work', !isBreakMode);
+}
+
 export function renderWorkPatternBreakdown() {
     const monthlyConfig = getMonthlyStatsConfig(state.statsPeriodMode);
     const analytics = computeWorkPatternAnalytics(
         getAnalyticsSessions(),
         monthlyConfig.start,
         monthlyConfig.end,
-        getAmountAfterPercentageCuts
+        getAmountAfterPercentageCuts,
+        state.allBreaks
     );
 
     if (DOM.workPatternAvgDaysWeek) {
@@ -877,7 +1004,10 @@ export function toggleTimerUI(isRunning) {
 export function renderCalendar() {
     if (!DOM.calendarGrid || !DOM.calendarMonthYear) return;
 
+    renderCalendarEditModeControls();
     DOM.calendarGrid.innerHTML = '';
+
+    const isBreakMode = state.calendarEditMode === 'break';
 
     // Inject Days of Week Header
     const daysArrBase = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -902,13 +1032,30 @@ export function renderCalendar() {
     const todayDate = new Date();
 
     const dailyHours = {};
+    const dailyGrossHours = {};
+    const dailyBreakHours = {};
+
     state.allSessions.forEach(session => {
         const sessionDate = new Date(session.startTime);
         if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
             const dayNum = sessionDate.getDate();
-            const hours = session.durationMs / (1000 * 60 * 60);
+            const metrics = getEffectiveSessionMetrics(session, state.allBreaks);
+            const grossHours = metrics.grossDurationMs / (1000 * 60 * 60);
+            const netHours = metrics.effectiveDurationMs / (1000 * 60 * 60);
             if (!dailyHours[dayNum]) dailyHours[dayNum] = 0;
-            dailyHours[dayNum] += hours;
+            if (!dailyGrossHours[dayNum]) dailyGrossHours[dayNum] = 0;
+            dailyHours[dayNum] += netHours;
+            dailyGrossHours[dayNum] += grossHours;
+        }
+    });
+
+    state.allBreaks.forEach((breakItem) => {
+        const breakDate = new Date(breakItem.startTime);
+        if (breakDate.getFullYear() === year && breakDate.getMonth() === month) {
+            const dayNum = breakDate.getDate();
+            const breakHours = (Number(breakItem.durationMs) || 0) / (1000 * 60 * 60);
+            if (!dailyBreakHours[dayNum]) dailyBreakHours[dayNum] = 0;
+            dailyBreakHours[dayNum] += breakHours;
         }
     });
 
@@ -927,6 +1074,9 @@ export function renderCalendar() {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
         if (state.batchModeEnabled && state.batchSelectedDates.includes(dateStr)) {
             dayDiv.classList.add('batch-selected');
+            if (isBreakMode) {
+                dayDiv.classList.add('batch-selected-break');
+            }
         }
 
         if (todayDate.getDate() === i && todayDate.getMonth() === month && todayDate.getFullYear() === year) {
@@ -934,15 +1084,29 @@ export function renderCalendar() {
         }
 
         const liveSessionDate = state.startTime ? new Date(state.startTime) : null;
-        if (liveSessionDate && liveSessionDate.getDate() === i && liveSessionDate.getMonth() === month && liveSessionDate.getFullYear() === year) {
+        if (!isBreakMode && liveSessionDate && liveSessionDate.getDate() === i && liveSessionDate.getMonth() === month && liveSessionDate.getFullYear() === year) {
             dayDiv.classList.add('live-session-active');
         }
 
-        if (dailyHours[i] && dailyHours[i] > 0) {
+        if (isBreakMode) {
+            if (dailyBreakHours[i] && dailyBreakHours[i] > 0) {
+                dayDiv.classList.add('has-break');
+                const breakLabel = document.createElement('div');
+                breakLabel.className = 'break-hours-indicator';
+                breakLabel.textContent = `${dailyBreakHours[i].toFixed(1)}h break`;
+                dayDiv.appendChild(breakLabel);
+            }
+        } else if (dailyHours[i] && dailyHours[i] > 0) {
             dayDiv.classList.add('has-work');
             const hourLabel = document.createElement('div');
             hourLabel.className = 'work-hours-indicator';
-            hourLabel.textContent = `${dailyHours[i].toFixed(1)}h`;
+            const hasBreaks = dailyGrossHours[i] && Math.abs(dailyGrossHours[i] - dailyHours[i]) > 0.05;
+            hourLabel.textContent = hasBreaks
+                ? `${dailyHours[i].toFixed(1)}h net`
+                : `${dailyHours[i].toFixed(1)}h`;
+            if (hasBreaks) {
+                hourLabel.title = `${dailyGrossHours[i].toFixed(1)}h gross`;
+            }
             dayDiv.appendChild(hourLabel);
         }
 
@@ -995,16 +1159,20 @@ export function renderChart() {
             const nextDay = new Date(segmentStart);
             nextDay.setHours(24, 0, 0, 0);
             const segmentEndMs = Math.min(nextDay.getTime(), segmentEndLimitMs);
-            const segmentDurationMs = segmentEndMs - segmentStartMs;
+            const grossSegmentDurationMs = segmentEndMs - segmentStartMs;
+            const breakMs = getBreakOverlapMs(state.allBreaks, segmentStartMs, segmentEndMs);
+            const segmentDurationMs = Math.max(0, grossSegmentDurationMs - breakMs);
             const actualDay = segmentStart.getDay();
             const dayIndex = (actualDay - state.startOfWeek + 7) % 7;
 
-            weekData[dayIndex].push({
-                hours: segmentDurationMs / (1000 * 60 * 60),
-                durationMs: segmentDurationMs,
-                company: session.company,
-                project: session.project
-            });
+            if (segmentDurationMs > 0) {
+                weekData[dayIndex].push({
+                    hours: segmentDurationMs / (1000 * 60 * 60),
+                    durationMs: segmentDurationMs,
+                    company: session.company,
+                    project: session.project
+                });
+            }
 
             segmentStartMs = segmentEndMs;
         }
@@ -1166,7 +1334,7 @@ export function renderGanttChart() {
         });
 
         // Local helper to add a gantt block
-        const addGanttBlock = (startTimeObj, durationMs, project, company, isLive) => {
+        const addGanttBlock = (startTimeObj, durationMs, project, company, isLive, blockType = 'work') => {
             const msSinceMidnight = startTimeObj.getTime() - startOfDay.getTime();
             const msInDay = 24 * 60 * 60 * 1000;
 
@@ -1178,24 +1346,33 @@ export function renderGanttChart() {
             }
 
             const block = document.createElement('div');
-            block.className = `gantt-block ${isLive ? 'gantt-live' : ''}`;
+            block.className = `gantt-block ${isLive ? 'gantt-live' : ''} ${blockType === 'break' ? 'gantt-break' : ''}`;
             block.style.left = `${leftPercent}%`;
             block.style.width = widthPercent > 0.5 ? `${widthPercent}%` : '0.5%';
 
-            const identifier = project || company || 'default';
-            const color = isLive ? 'rgba(255, 60, 60, 0.8)' : getColorForIdentifier(identifier);
+            let color;
+            if (blockType === 'break') {
+                color = 'rgba(255, 152, 0, 0.85)';
+            } else {
+                const identifier = project || company || 'default';
+                color = isLive ? 'rgba(255, 60, 60, 0.8)' : getColorForIdentifier(identifier);
+            }
 
             block.style.backgroundColor = color;
             block.style.boxShadow = `0 0 8px ${color}`;
 
-            let titlePrefix = project ? `[${project}] ` : (company ? `[${company}] ` : '');
+            let titlePrefix = blockType === 'break'
+                ? 'Break: '
+                : (project ? `[${project}] ` : (company ? `[${company}] ` : ''));
             block.title = `${titlePrefix}${formatDuration(durationMs)}${isLive ? ' (Live)' : ''}`;
 
             if (widthPercent > 4) {
                 const label = document.createElement('span');
                 label.className = 'gantt-block-label';
                 const durationText = formatDuration(durationMs);
-                if (identifier !== 'default') {
+                if (blockType === 'break') {
+                    label.textContent = durationText;
+                } else if ((project || company) && (project || company) !== 'default') {
                     label.textContent = `${project || company} (${durationText})`;
                 } else {
                     label.textContent = durationText;
@@ -1206,10 +1383,22 @@ export function renderGanttChart() {
             rowContainer.appendChild(block);
         };
 
+        const dayBreaks = state.allBreaks.filter(breakItem => {
+            const range = getSessionTimeRange(breakItem);
+            if (!range) return false;
+            return range.startMs < endOfDay.getTime() && range.endMs > startOfDay.getTime();
+        });
+
         // Render standard sessions
         daySessions.forEach(session => {
             const sTime = new Date(session.startTime);
-            addGanttBlock(sTime, session.durationMs, session.project, session.company, false);
+            addGanttBlock(sTime, session.durationMs, session.project, session.company, false, 'work');
+        });
+
+        // Render breaks for this day
+        dayBreaks.forEach(breakItem => {
+            const sTime = new Date(breakItem.startTime);
+            addGanttBlock(sTime, breakItem.durationMs, null, null, false, 'break');
         });
 
         // Render live active session if it falls on this day
@@ -1219,7 +1408,7 @@ export function renderGanttChart() {
                 const liveStartMs = Math.max(state.startTime, startOfDay.getTime());
                 const activeDuration = Date.now() - liveStartMs;
                 if (activeDuration > 0) {
-                    addGanttBlock(new Date(liveStartMs), activeDuration, state.currentProject, state.currentCompany, true);
+                    addGanttBlock(new Date(liveStartMs), activeDuration, state.currentProject, state.currentCompany, true, 'work');
                 }
             }
         }
@@ -1538,6 +1727,7 @@ export function renderWidgetOrderList() {
 
     const labels = {
         'widget-timer': 'Timer & Controls',
+        'widget-breaks': 'Breaks',
         'widget-money-counter': 'Live Money Counter',
         'widget-stats': 'Statistics',
         'widget-work-pattern': 'Work Pattern',
