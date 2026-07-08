@@ -190,7 +190,11 @@ export const state = {
     allSessions: [],
     rawBreaks: [],
     allBreaks: [],
-    breakHistoryPage: 0,
+    breaksViewDate: (() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return today.getTime();
+    })(),
     globalFilterCompany: '',
     globalFilterProject: '',
     currentCurrency: localStorage.getItem('work_tracker_currency') || '£',
@@ -420,4 +424,28 @@ export function updateCsvExportCompany(company) {
 export function updateCalendarEditMode(mode) {
     state.calendarEditMode = mode === 'break' ? 'break' : 'work';
     localStorage.setItem('work_tracker_calendar_edit_mode', state.calendarEditMode);
+}
+
+export function getBreaksViewDate() {
+    return new Date(state.breaksViewDate);
+}
+
+export function setBreaksViewDate(date) {
+    const normalized = new Date(date);
+    normalized.setHours(0, 0, 0, 0);
+    state.breaksViewDate = normalized.getTime();
+}
+
+export function shiftBreaksViewDate(dayOffset) {
+    const next = getBreaksViewDate();
+    next.setDate(next.getDate() + dayOffset);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (next.getTime() > today.getTime()) {
+        setBreaksViewDate(today);
+        return;
+    }
+
+    setBreaksViewDate(next);
 }

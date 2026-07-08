@@ -1,8 +1,8 @@
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
-import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek } from './state.js';
+import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown } from './ui.js';
-import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs } from './utils.js';
+import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay } from './utils.js';
 
 function getPercentageCutsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
@@ -650,42 +650,93 @@ export function loadBreaks() {
     });
 }
 
-function renderBreakHistory() {
+function formatBreaksDayHeading(viewDate) {
+    const today = getStartOfDay();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (isSameCalendarDay(viewDate, today)) return 'Today';
+    if (isSameCalendarDay(viewDate, yesterday)) return 'Yesterday';
+    if (isSameCalendarDay(viewDate, tomorrow)) return 'Tomorrow';
+
+    return viewDate.toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        year: viewDate.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
+    });
+}
+
+function formatBreaksDaySummaryLabel(viewDate) {
+    const today = getStartOfDay();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (isSameCalendarDay(viewDate, today)) return "Today's Breaks";
+    if (isSameCalendarDay(viewDate, yesterday)) return "Yesterday's Breaks";
+
+    return `${viewDate.toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+    })} Breaks`;
+}
+
+export function renderBreakHistory() {
     if (!DOM.breakHistoryList) return;
 
-    DOM.breakHistoryList.innerHTML = "";
+    const viewDate = getBreaksViewDate();
+    const today = getStartOfDay();
+    const dayStart = getStartOfDay(viewDate);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+    const dayBreaks = getBreaksForDay(state.allBreaks, viewDate);
 
-    const pageSize = 5;
-    const maxPages = Math.ceil(state.allBreaks.length / pageSize);
-    if (state.breakHistoryPage >= maxPages && maxPages > 0) {
-        state.breakHistoryPage = maxPages - 1;
-    }
-    if (state.breakHistoryPage < 0) {
-        state.breakHistoryPage = 0;
-    }
+    DOM.breakHistoryList.innerHTML = '';
 
-    const paginatedBreaks = state.allBreaks.slice(
-        state.breakHistoryPage * pageSize,
-        (state.breakHistoryPage + 1) * pageSize
-    );
-
-    if (!state.allBreaks.length) {
-        DOM.breakHistoryList.innerHTML = '<p class="loading-text">No breaks recorded yet.</p>';
+    if (DOM.breaksViewDateLabel) {
+        DOM.breaksViewDateLabel.textContent = formatBreaksDayHeading(viewDate);
     }
 
-    paginatedBreaks.forEach((data) => {
+    if (DOM.breakDayTotalLabel) {
+        DOM.breakDayTotalLabel.textContent = formatBreaksDaySummaryLabel(viewDate);
+    }
+
+    if (DOM.breaksTodayBtn) {
+        DOM.breaksTodayBtn.classList.toggle('hidden', isSameCalendarDay(viewDate, today));
+    }
+
+    if (DOM.breaksNextDayBtn) {
+        DOM.breaksNextDayBtn.disabled = isSameCalendarDay(viewDate, today);
+    }
+
+    if (!dayBreaks.length) {
+        const emptyMessage = isSameCalendarDay(viewDate, today)
+            ? 'No breaks recorded for today.'
+            : `No breaks recorded for ${formatBreaksDayHeading(viewDate).toLowerCase()}.`;
+        DOM.breakHistoryList.innerHTML = `<p class="loading-text">${emptyMessage}</p>`;
+    }
+
+    const timeFormat = { hour: '2-digit', minute: '2-digit' };
+
+    dayBreaks.forEach((data) => {
         const dateObj = new Date(data.startTime);
         const item = document.createElement('div');
         item.className = 'history-item break-history-item';
 
         const endDateObj = data.endTime ? new Date(data.endTime) : new Date(data.startTime + data.durationMs);
-        const timeFormat = { hour: '2-digit', minute: '2-digit' };
         const startTimeStr = dateObj.toLocaleTimeString([], timeFormat);
         const endTimeStr = endDateObj.toLocaleTimeString([], timeFormat);
         const startDateStr = dateObj.toLocaleDateString();
         const endDateStr = endDateObj.toLocaleDateString();
-        const startDateTimeStr = `${startDateStr} ${startTimeStr}`;
-        const endDateTimeStr = startDateStr === endDateStr ? endTimeStr : `${endDateStr} ${endTimeStr}`;
+        const startDateTimeStr = isSameCalendarDay(dateObj, viewDate)
+            ? startTimeStr
+            : `${startDateStr} ${startTimeStr}`;
+        const endDateTimeStr = startDateStr === endDateStr
+            ? (isSameCalendarDay(endDateObj, viewDate) ? endTimeStr : `${endDateStr} ${endTimeStr}`)
+            : `${endDateStr} ${endTimeStr}`;
         const labelHtml = data.label
             ? `<span class="history-badge history-badge-break">${data.label}</span>`
             : `<span class="history-badge history-badge-break">Break</span>`;
@@ -747,53 +798,13 @@ function renderBreakHistory() {
         DOM.breakHistoryList.appendChild(item);
     });
 
-    if (DOM.breakHistoryPagination) {
-        DOM.breakHistoryPagination.innerHTML = "";
-        if (state.allBreaks.length > pageSize) {
-            DOM.breakHistoryPagination.style.display = 'flex';
-
-            const prevBtn = document.createElement('button');
-            prevBtn.className = 'history-pagination-btn';
-            prevBtn.textContent = '← Prev';
-            prevBtn.disabled = state.breakHistoryPage === 0;
-            prevBtn.addEventListener('click', () => {
-                state.breakHistoryPage--;
-                renderBreakHistory();
-            });
-
-            const pageInfo = document.createElement('span');
-            pageInfo.className = 'history-pagination-info';
-            pageInfo.textContent = `Page ${state.breakHistoryPage + 1} of ${maxPages}`;
-
-            const nextBtn = document.createElement('button');
-            nextBtn.className = 'history-pagination-btn';
-            nextBtn.textContent = 'Next →';
-            nextBtn.disabled = state.breakHistoryPage >= maxPages - 1;
-            nextBtn.addEventListener('click', () => {
-                state.breakHistoryPage++;
-                renderBreakHistory();
-            });
-
-            DOM.breakHistoryPagination.appendChild(prevBtn);
-            DOM.breakHistoryPagination.appendChild(pageInfo);
-            DOM.breakHistoryPagination.appendChild(nextBtn);
-        } else {
-            DOM.breakHistoryPagination.style.display = 'none';
-        }
-    }
-
     if (DOM.breakTodayTotal) {
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(startOfDay);
-        endOfDay.setDate(endOfDay.getDate() + 1);
-
-        let todayBreakMs = 0;
-        state.allBreaks.forEach((breakItem) => {
-            todayBreakMs += getBreakOverlapMs([breakItem], startOfDay, endOfDay);
+        let dayBreakMs = 0;
+        dayBreaks.forEach((breakItem) => {
+            dayBreakMs += getBreakOverlapMs([breakItem], dayStart, dayEnd);
         });
 
-        DOM.breakTodayTotal.textContent = todayBreakMs > 0 ? formatDuration(todayBreakMs) : '0m';
+        DOM.breakTodayTotal.textContent = dayBreakMs > 0 ? formatDuration(dayBreakMs) : '0m';
     }
 }
 

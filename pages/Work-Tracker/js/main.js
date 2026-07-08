@@ -55,9 +55,13 @@ import {
     updateStartTimePreference,
     updateCsvExportPeriod,
     updateCsvExportCompany,
-    updateCalendarEditMode
+    updateCalendarEditMode,
+    getBreaksViewDate,
+    setBreaksViewDate,
+    shiftBreaksViewDate
 } from './state.js';
-import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings } from './api.js';
+import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory } from './api.js';
+import { getCalendarDateKey } from './utils.js';
 
 let percentageCutsSaveTimeout = null;
 
@@ -874,18 +878,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (DOM.calendarGrid) {
         DOM.calendarGrid.addEventListener('click', (e) => {
-            const dayDiv = e.target.closest('.calendar-day:not(.empty)');
+            const dayDiv = e.target.closest('.calendar-day:not(.empty):not(.outside-month)');
             if (!dayDiv) return;
 
-            const dayNum = parseInt(dayDiv.dataset.day, 10);
-            if (isNaN(dayNum)) return;
+            const dateStr = dayDiv.dataset.date;
+            if (!dateStr) return;
 
-            const year = state.currentCalendarDate.getFullYear();
-            const month = state.currentCalendarDate.getMonth();
+            const [selectedYear, selectedMonth, dayNum] = dateStr.split('-').map(Number);
+            if (!selectedYear || !selectedMonth || !dayNum) return;
+
             const isBreakMode = state.calendarEditMode === 'break';
 
             if (state.batchModeEnabled) {
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                 if (state.batchSelectedDates.includes(dateStr)) {
                     state.batchSelectedDates = state.batchSelectedDates.filter(d => d !== dateStr);
                     dayDiv.classList.remove('batch-selected');
@@ -900,24 +904,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateBatchSelectionUI();
             } else if (isBreakMode) {
                 const dayBreaks = state.allBreaks.filter((breakItem) => {
-                    const bStart = new Date(breakItem.startTime);
-                    return bStart.getFullYear() === year &&
-                           bStart.getMonth() === month &&
-                           bStart.getDate() === dayNum;
+                    return getCalendarDateKey(new Date(breakItem.startTime)) === dateStr;
                 });
 
                 if (dayBreaks.length > 0) {
                     dayBreaks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
                     openEditBreakModal(dayBreaks[dayBreaks.length - 1]);
                 } else {
-                    openAddBreakModal(new Date(year, month, dayNum), true);
+                    openAddBreakModal(new Date(selectedYear, selectedMonth - 1, dayNum), true);
                 }
             } else {
                 const daySessions = state.allSessions.filter(session => {
-                    const sStart = new Date(session.startTime);
-                    return sStart.getFullYear() === year &&
-                           sStart.getMonth() === month &&
-                           sStart.getDate() === dayNum;
+                    return getCalendarDateKey(new Date(session.startTime)) === dateStr;
                 });
 
                 if (daySessions.length > 0) {
@@ -925,8 +923,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const latestSession = daySessions[daySessions.length - 1];
                     openEditSessionModal(latestSession);
                 } else {
-                    const selectedDate = new Date(year, month, dayNum);
-                    openAddSessionModal(selectedDate, true);
+                    openAddSessionModal(new Date(selectedYear, selectedMonth - 1, dayNum), true);
                 }
             }
         });
@@ -1644,7 +1641,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (DOM.addBreakBtn) {
         DOM.addBreakBtn.addEventListener('click', () => {
-            openAddBreakModal(new Date());
+            openAddBreakModal(getBreaksViewDate());
+        });
+    }
+
+    if (DOM.breaksPrevDayBtn) {
+        DOM.breaksPrevDayBtn.addEventListener('click', () => {
+            shiftBreaksViewDate(-1);
+            renderBreakHistory();
+        });
+    }
+
+    if (DOM.breaksNextDayBtn) {
+        DOM.breaksNextDayBtn.addEventListener('click', () => {
+            shiftBreaksViewDate(1);
+            renderBreakHistory();
+        });
+    }
+
+    if (DOM.breaksTodayBtn) {
+        DOM.breaksTodayBtn.addEventListener('click', () => {
+            setBreaksViewDate(new Date());
+            renderBreakHistory();
         });
     }
 

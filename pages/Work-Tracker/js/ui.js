@@ -1,5 +1,5 @@
 import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds, updateCsvExportCompany } from './state.js';
-import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getBreakOverlapMs, CSV_UNASSIGNED_COMPANY } from './utils.js';
+import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getBreakOverlapMs, getCalendarDateKey, CSV_UNASSIGNED_COMPANY } from './utils.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
@@ -78,11 +78,13 @@ export const DOM = {
     prevMonthBtn: document.getElementById('prev-month'),
     nextMonthBtn: document.getElementById('next-month'),
     calendarMonthYear: document.getElementById('calendar-month-year'),
+    calendarLegend: document.getElementById('calendar-legend'),
     calendarGrid: document.querySelector('.calendar-grid'),
     weeklyChart: document.getElementById('weekly-chart'),
     prevWeekBtn: document.getElementById('prev-week'),
     nextWeekBtn: document.getElementById('next-week'),
     chartWeekRange: document.getElementById('chart-week-range'),
+    chartWeekTotal: document.getElementById('chart-week-total'),
     prevTimelineWeekBtn: document.getElementById('prev-timeline-week'),
     nextTimelineWeekBtn: document.getElementById('next-timeline-week'),
     timelineWeekRange: document.getElementById('timeline-week-range'),
@@ -148,8 +150,12 @@ export const DOM = {
     deleteSessionBtn: document.getElementById('delete-session-btn'),
 
     addBreakBtn: document.getElementById('add-break-btn'),
+    breaksPrevDayBtn: document.getElementById('breaks-prev-day-btn'),
+    breaksNextDayBtn: document.getElementById('breaks-next-day-btn'),
+    breaksTodayBtn: document.getElementById('breaks-today-btn'),
+    breaksViewDateLabel: document.getElementById('breaks-view-date-label'),
+    breakDayTotalLabel: document.getElementById('break-day-total-label'),
     breakHistoryList: document.getElementById('break-history-list'),
-    breakHistoryPagination: document.getElementById('break-history-pagination'),
     breakTodayTotal: document.getElementById('break-today-total'),
     breakModal: document.getElementById('break-modal'),
     breakModalTitle: document.getElementById('break-modal-title'),
@@ -698,7 +704,7 @@ export function renderCalendarEditModeControls() {
     }
 
     if (DOM.toggleBatchModeBtn && !state.batchModeEnabled) {
-        DOM.toggleBatchModeBtn.textContent = isBreakMode ? 'Batch Edit Breaks' : 'Batch Edit';
+        DOM.toggleBatchModeBtn.textContent = 'Batch Edit';
     }
 
     if (DOM.batchModeControls) {
@@ -1009,6 +1015,10 @@ export function renderCalendar() {
 
     const isBreakMode = state.calendarEditMode === 'break';
 
+    if (DOM.calendarLegend) {
+        DOM.calendarLegend.classList.toggle('is-hidden', isBreakMode);
+    }
+
     // Inject Days of Week Header
     const daysArrBase = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const daysArrLabel = [...daysArrBase.slice(state.startOfWeek), ...daysArrBase.slice(0, state.startOfWeek)];
@@ -1019,6 +1029,13 @@ export function renderCalendar() {
         headerLabel.textContent = dayName;
         DOM.calendarGrid.appendChild(headerLabel);
     });
+
+    const weekTotalHeader = document.createElement('div');
+    weekTotalHeader.className = 'calendar-week-total-header day-label';
+    weekTotalHeader.textContent = 'Σ';
+    weekTotalHeader.title = 'Weekly total';
+    weekTotalHeader.setAttribute('aria-label', 'Weekly total');
+    DOM.calendarGrid.appendChild(weekTotalHeader);
 
     const year = state.currentCalendarDate.getFullYear();
     const month = state.currentCalendarDate.getMonth();
@@ -1037,80 +1054,123 @@ export function renderCalendar() {
 
     state.allSessions.forEach(session => {
         const sessionDate = new Date(session.startTime);
-        if (sessionDate.getFullYear() === year && sessionDate.getMonth() === month) {
-            const dayNum = sessionDate.getDate();
-            const metrics = getEffectiveSessionMetrics(session, state.allBreaks);
-            const grossHours = metrics.grossDurationMs / (1000 * 60 * 60);
-            const netHours = metrics.effectiveDurationMs / (1000 * 60 * 60);
-            if (!dailyHours[dayNum]) dailyHours[dayNum] = 0;
-            if (!dailyGrossHours[dayNum]) dailyGrossHours[dayNum] = 0;
-            dailyHours[dayNum] += netHours;
-            dailyGrossHours[dayNum] += grossHours;
-        }
+        const dateKey = getCalendarDateKey(sessionDate);
+        const metrics = getEffectiveSessionMetrics(session, state.allBreaks);
+        const grossHours = metrics.grossDurationMs / (1000 * 60 * 60);
+        const netHours = metrics.effectiveDurationMs / (1000 * 60 * 60);
+        if (!dailyHours[dateKey]) dailyHours[dateKey] = 0;
+        if (!dailyGrossHours[dateKey]) dailyGrossHours[dateKey] = 0;
+        dailyHours[dateKey] += netHours;
+        dailyGrossHours[dateKey] += grossHours;
     });
 
     state.allBreaks.forEach((breakItem) => {
         const breakDate = new Date(breakItem.startTime);
-        if (breakDate.getFullYear() === year && breakDate.getMonth() === month) {
-            const dayNum = breakDate.getDate();
-            const breakHours = (Number(breakItem.durationMs) || 0) / (1000 * 60 * 60);
-            if (!dailyBreakHours[dayNum]) dailyBreakHours[dayNum] = 0;
-            dailyBreakHours[dayNum] += breakHours;
-        }
+        const dateKey = getCalendarDateKey(breakDate);
+        const breakHours = (Number(breakItem.durationMs) || 0) / (1000 * 60 * 60);
+        if (!dailyBreakHours[dateKey]) dailyBreakHours[dateKey] = 0;
+        dailyBreakHours[dateKey] += breakHours;
     });
 
-    for (let x = 0; x < firstDayIndex; x++) {
-        const emptyDiv = document.createElement('div');
-        emptyDiv.className = 'calendar-day empty';
-        DOM.calendarGrid.appendChild(emptyDiv);
-    }
+    const gridStartDate = new Date(year, month, 1 - firstDayIndex);
+    const totalWeeks = Math.ceil((firstDayIndex + daysInMonth) / 7);
+    const todayKey = getCalendarDateKey(todayDate);
 
-    for (let i = 1; i <= daysInMonth; i++) {
-        const dayDiv = document.createElement('div');
-        dayDiv.className = 'calendar-day';
-        dayDiv.textContent = i;
-        dayDiv.dataset.day = i;
+    for (let week = 0; week < totalWeeks; week++) {
+        let weekNetHours = 0;
+        let weekGrossHours = 0;
+        let weekBreakHours = 0;
 
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-        if (state.batchModeEnabled && state.batchSelectedDates.includes(dateStr)) {
-            dayDiv.classList.add('batch-selected');
-            if (isBreakMode) {
-                dayDiv.classList.add('batch-selected-break');
+        for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+            const cellDate = new Date(gridStartDate);
+            cellDate.setDate(gridStartDate.getDate() + (week * 7) + dayOfWeek);
+
+            const dateKey = getCalendarDateKey(cellDate);
+            const dayNum = cellDate.getDate();
+            const isCurrentMonth = cellDate.getMonth() === month && cellDate.getFullYear() === year;
+            const netHours = dailyHours[dateKey] || 0;
+            const grossHours = dailyGrossHours[dateKey] || 0;
+            const breakHours = dailyBreakHours[dateKey] || 0;
+
+            weekNetHours += netHours;
+            weekGrossHours += grossHours;
+            weekBreakHours += breakHours;
+
+            const dayDiv = document.createElement('div');
+            dayDiv.className = 'calendar-day';
+            if (!isCurrentMonth) {
+                dayDiv.classList.add('outside-month');
             }
+            dayDiv.textContent = dayNum;
+            dayDiv.dataset.date = dateKey;
+            dayDiv.dataset.day = dayNum;
+
+            if (isCurrentMonth && state.batchModeEnabled && state.batchSelectedDates.includes(dateKey)) {
+                dayDiv.classList.add('batch-selected');
+                if (isBreakMode) {
+                    dayDiv.classList.add('batch-selected-break');
+                }
+            }
+
+            if (dateKey === todayKey) {
+                dayDiv.classList.add('today');
+            }
+
+            const liveSessionDate = state.startTime ? new Date(state.startTime) : null;
+            if (!isBreakMode && liveSessionDate && getCalendarDateKey(liveSessionDate) === dateKey) {
+                dayDiv.classList.add('live-session-active');
+            }
+
+            if (isBreakMode) {
+                if (breakHours > 0) {
+                    dayDiv.classList.add('has-break');
+                    const breakLabel = document.createElement('div');
+                    breakLabel.className = 'break-hours-indicator';
+                    breakLabel.textContent = `${breakHours.toFixed(1)}h`;
+                    dayDiv.appendChild(breakLabel);
+                }
+            } else if (netHours > 0) {
+                dayDiv.classList.add('has-work');
+                const hourLabel = document.createElement('div');
+                hourLabel.className = 'work-hours-indicator';
+                const hasBreakTime = breakHours > 0 || (grossHours > 0 && Math.abs(grossHours - netHours) > 0.05);
+                hourLabel.textContent = `${netHours.toFixed(1)}h`;
+                if (hasBreakTime) {
+                    hourLabel.title = `${grossHours.toFixed(1)}h gross`;
+                    const breakDot = document.createElement('span');
+                    breakDot.className = 'calendar-break-dot';
+                    breakDot.setAttribute('aria-label', 'Includes break time');
+                    dayDiv.appendChild(breakDot);
+                }
+                dayDiv.appendChild(hourLabel);
+            }
+
+            DOM.calendarGrid.appendChild(dayDiv);
         }
 
-        if (todayDate.getDate() === i && todayDate.getMonth() === month && todayDate.getFullYear() === year) {
-            dayDiv.classList.add('today');
-        }
-
-        const liveSessionDate = state.startTime ? new Date(state.startTime) : null;
-        if (!isBreakMode && liveSessionDate && liveSessionDate.getDate() === i && liveSessionDate.getMonth() === month && liveSessionDate.getFullYear() === year) {
-            dayDiv.classList.add('live-session-active');
-        }
+        const weekTotalDiv = document.createElement('div');
+        weekTotalDiv.className = 'calendar-week-total';
 
         if (isBreakMode) {
-            if (dailyBreakHours[i] && dailyBreakHours[i] > 0) {
-                dayDiv.classList.add('has-break');
-                const breakLabel = document.createElement('div');
-                breakLabel.className = 'break-hours-indicator';
-                breakLabel.textContent = `${dailyBreakHours[i].toFixed(1)}h break`;
-                dayDiv.appendChild(breakLabel);
+            if (weekBreakHours > 0) {
+                weekTotalDiv.classList.add('has-break-total');
+                weekTotalDiv.textContent = `${weekBreakHours.toFixed(1)}h`;
+            } else {
+                weekTotalDiv.classList.add('is-empty');
+                weekTotalDiv.textContent = '—';
             }
-        } else if (dailyHours[i] && dailyHours[i] > 0) {
-            dayDiv.classList.add('has-work');
-            const hourLabel = document.createElement('div');
-            hourLabel.className = 'work-hours-indicator';
-            const hasBreaks = dailyGrossHours[i] && Math.abs(dailyGrossHours[i] - dailyHours[i]) > 0.05;
-            hourLabel.textContent = hasBreaks
-                ? `${dailyHours[i].toFixed(1)}h net`
-                : `${dailyHours[i].toFixed(1)}h`;
-            if (hasBreaks) {
-                hourLabel.title = `${dailyGrossHours[i].toFixed(1)}h gross`;
+        } else if (weekNetHours > 0) {
+            weekTotalDiv.classList.add('has-work-total');
+            weekTotalDiv.textContent = `${weekNetHours.toFixed(1)}h`;
+            if (Math.abs(weekGrossHours - weekNetHours) > 0.05) {
+                weekTotalDiv.title = `${weekGrossHours.toFixed(1)}h gross`;
             }
-            dayDiv.appendChild(hourLabel);
+        } else {
+            weekTotalDiv.classList.add('is-empty');
+            weekTotalDiv.textContent = '—';
         }
 
-        DOM.calendarGrid.appendChild(dayDiv);
+        DOM.calendarGrid.appendChild(weekTotalDiv);
     }
 }
 
@@ -1182,6 +1242,17 @@ export function renderChart() {
         const dailyTotal = daySessions.reduce((sum, sessionObj) => sum + sessionObj.hours, 0);
         if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
     });
+
+    const weeklyNetMs = weekData.reduce(
+        (sum, daySessions) => sum + daySessions.reduce((daySum, sessionObj) => daySum + sessionObj.durationMs, 0),
+        0
+    );
+
+    if (DOM.chartWeekTotal) {
+        DOM.chartWeekTotal.textContent = weeklyNetMs > 0
+            ? `${formatDuration(weeklyNetMs)} net total`
+            : '0h net total';
+    }
 
     const scaleMax = Math.ceil(maxDailyHours > 0 ? maxDailyHours : 1);
 

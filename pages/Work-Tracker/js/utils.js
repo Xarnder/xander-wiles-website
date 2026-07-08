@@ -130,10 +130,32 @@ function getDayKeyFromMs(ms) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+export function getCalendarDateKey(date) {
+    return getDayKeyFromMs(date instanceof Date ? date.getTime() : date);
+}
+
 function getStartOfDayMs(ms) {
     const date = new Date(ms);
     date.setHours(0, 0, 0, 0);
     return date.getTime();
+}
+
+export function getStartOfDay(date = new Date()) {
+    return new Date(getStartOfDayMs(date instanceof Date ? date.getTime() : date));
+}
+
+export function isSameCalendarDay(a, b) {
+    return getStartOfDayMs(a instanceof Date ? a.getTime() : a) === getStartOfDayMs(b instanceof Date ? b.getTime() : b);
+}
+
+export function getBreaksForDay(breaks, day) {
+    const dayStart = getStartOfDay(day);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    return breaks
+        .filter((breakItem) => getBreakOverlapMs([breakItem], dayStart, dayEnd) > 0)
+        .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
 }
 
 export function computeWorkPatternAnalytics(sessions, windowStart, windowEnd, afterCutsFn = (amount) => amount, breaks = []) {

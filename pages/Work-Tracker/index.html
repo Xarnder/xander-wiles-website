@@ -154,14 +154,29 @@
 
                 <!-- Breaks Widget -->
                 <section class="card breaks-widget" id="widget-breaks">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div class="breaks-widget-header">
                         <h2 class="widget-title" style="margin: 0;">Breaks</h2>
-                        <button id="add-break-btn" class="btn-outline btn-break" style="padding: 6px 14px; font-size: 0.9rem;">+
-                            Add Break</button>
+                        <button id="add-break-btn" class="btn-outline btn-break btn-small" type="button">+ Add Break</button>
+                    </div>
+                    <div class="breaks-day-nav" aria-label="Break day navigation">
+                        <button id="breaks-prev-day-btn" class="breaks-day-nav-btn btn-outline" type="button" aria-label="Previous day">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                        </button>
+                        <div class="breaks-day-nav-center">
+                            <span id="breaks-view-date-label" class="breaks-day-nav-date">Today</span>
+                            <button id="breaks-today-btn" class="breaks-today-btn btn-text hidden" type="button">Jump to Today</button>
+                        </div>
+                        <button id="breaks-next-day-btn" class="breaks-day-nav-btn btn-outline" type="button" aria-label="Next day" disabled>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
                     </div>
                     <div class="breaks-summary">
                         <div class="breaks-summary-item">
-                            <span class="label">Today's Breaks</span>
+                            <span class="label" id="break-day-total-label">Today's Breaks</span>
                             <span class="value" id="break-today-total">0m</span>
                         </div>
                     </div>
@@ -169,7 +184,6 @@
                     <div id="break-history-list" class="history-list break-history-list">
                         <p class="loading-text">Loading breaks...</p>
                     </div>
-                    <div id="break-history-pagination" class="history-pagination"></div>
                 </section>
 
                 <!-- Live Money Counter -->
@@ -280,6 +294,7 @@
                         <div class="work-pattern-header-copy">
                             <h2 class="widget-title" style="margin: 0;">Work Pattern</h2>
                             <p class="stats-period-mode-hint" id="work-pattern-period-hint"></p>
+                            <p class="stats-period-mode-hint">Hours and earnings use net session time with breaks subtracted. Start and end times show actual session boundaries.</p>
                         </div>
                         <div class="stats-period-mode-toggle" role="group" aria-label="Work pattern period">
                             <button type="button" class="stats-period-mode-btn active" data-stats-period-mode="calendar" title="Totals since the 1st of this calendar month">Month to Date</button>
@@ -295,7 +310,7 @@
                             <span class="work-pattern-subtext" aria-hidden="true"></span>
                         </div>
                         <div class="work-pattern-stat">
-                            <span class="label">Avg Hours / Week</span>
+                            <span class="label">Avg Net Hours / Week</span>
                             <span class="value" id="work-pattern-avg-hours-week">—</span>
                             <span class="work-pattern-subtext" aria-hidden="true"></span>
                         </div>
@@ -305,7 +320,7 @@
                             <span class="work-pattern-subtext" aria-hidden="true"></span>
                         </div>
                         <div class="work-pattern-stat">
-                            <span class="label">Avg Hours / Day</span>
+                            <span class="label">Avg Net Hours / Day</span>
                             <span class="value" id="work-pattern-avg-hours-day">—</span>
                             <span class="work-pattern-subtext">On days you worked</span>
                         </div>
@@ -349,6 +364,7 @@
                         <div class="cut-stats-header-copy">
                             <h2 class="widget-title" style="margin: 0;">After Percentage Cuts <span id="cut-stats-total-percentage" style="color: var(--accent-blue); font-weight: 700; font-size: 1.15rem; margin-left: 5px;"></span></h2>
                             <p class="stats-period-mode-hint" id="cut-stats-period-mode-hint"></p>
+                            <p class="stats-period-mode-hint">Using net totals and including breaks.</p>
                         </div>
                         <div class="cut-stats-header-actions">
                             <div class="stats-period-mode-toggle" role="group" aria-label="Monthly statistics period">
@@ -407,6 +423,10 @@
                             <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M119.97,53.18L65.79,1.09c-2.47-2.37-6.58-.62-6.58,2.8v26.39c0,2.15-1.74,3.89-3.89,3.89H3.89c-2.15,0-3.89,1.74-3.89,3.89v35.86c0,2.15,1.74,3.89,3.89,3.89h51.44c2.15,0,3.89,1.74,3.89,3.89v26.39c0,3.42,4.11,5.17,6.58,2.8l54.18-52.09c1.59-1.53,1.59-4.07,0-5.6Z" fill="currentColor"/></svg>
                         </button>
                     </div>
+                    <p class="calendar-legend" id="calendar-legend">
+                        <span class="calendar-legend-dot" aria-hidden="true"></span>
+                        Blue dot means the day includes break time
+                    </p>
                     <div class="calendar-grid">
                         <!-- Calendar days will be injected via JS -->
                     </div>
@@ -416,12 +436,15 @@
                 <section class="card chart-widget" id="widget-chart">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h2 class="widget-title" style="margin: 0; display: flex; align-items: center; gap: 8px;">Weekly Breakdown <span class="live-indicator hidden"><span class="live-dot"></span>Live</span></h2>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <button id="prev-week" class="btn-outline" style="font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                        <div class="chart-week-nav">
+                            <button id="prev-week" class="btn-outline chart-week-nav-btn" type="button" aria-label="Previous week">
                                 <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M1.19,58.79l54.18,52.09c2.47,2.37,6.58.62,6.58-2.8v-26.39c0-2.15,1.74-3.89,3.89-3.89h51.44c2.15,0,3.89-1.74,3.89-3.89v-35.86c0-2.15-1.74-3.89-3.89-3.89h-51.44c-2.15,0-3.89-1.74-3.89-3.89V3.89c0-3.42-4.11-5.17-6.58-2.8L1.19,53.18c-1.59,1.53-1.59,4.07,0,5.6Z" fill="currentColor"/></svg>
                             </button>
-                            <span id="chart-week-range" style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;"></span>
-                            <button id="next-week" class="btn-outline" style="font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                            <div class="chart-week-meta">
+                                <span id="chart-week-range" class="chart-week-range"></span>
+                                <span id="chart-week-total" class="chart-week-total"></span>
+                            </div>
+                            <button id="next-week" class="btn-outline chart-week-nav-btn" type="button" aria-label="Next week">
                                 <svg class="icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 121.16 111.97"><path d="M119.97,53.18L65.79,1.09c-2.47-2.37-6.58-.62-6.58,2.8v26.39c0,2.15-1.74,3.89-3.89,3.89H3.89c-2.15,0-3.89,1.74-3.89,3.89v35.86c0,2.15,1.74,3.89,3.89,3.89h51.44c2.15,0,3.89,1.74,3.89,3.89v26.39c0,3.42,4.11,5.17,6.58,2.8l54.18-52.09c1.59-1.53,1.59-4.07,0-5.6Z" fill="currentColor"/></svg>
                             </button>
                         </div>
