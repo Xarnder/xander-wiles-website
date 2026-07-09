@@ -68,6 +68,22 @@ function loadWidgetOrder() {
     }
 }
 
+function loadDisabledWidgets() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('work_tracker_disabled_widgets')) || [];
+        if (!Array.isArray(saved)) return [];
+        return saved.filter(id => DEFAULT_WIDGET_ORDER.includes(id));
+    } catch (e) {
+        console.warn('Debug: Could not parse disabled widgets from storage', e);
+        return [];
+    }
+}
+
+function loadTargetShiftHours() {
+    const saved = parseFloat(localStorage.getItem('work_tracker_target_shift_hours'));
+    return Number.isFinite(saved) && saved >= 0 ? saved : 8;
+}
+
 function loadPercentageCuts() {
     try {
         return sanitizePercentageCuts(JSON.parse(localStorage.getItem('work_tracker_percentage_cuts')) || []);
@@ -199,6 +215,8 @@ export const state = {
     globalFilterProject: '',
     currentCurrency: localStorage.getItem('work_tracker_currency') || '£',
     widgetOrder: loadWidgetOrder(),
+    disabledWidgets: loadDisabledWidgets(),
+    targetShiftHours: loadTargetShiftHours(),
     showWidgetTitles: localStorage.getItem('work_tracker_show_titles') !== 'false',
     startOfWeek: parseInt(localStorage.getItem('work_tracker_start_of_week')) || 0, // 0 = Sunday, 1 = Monday
     continueSessionOnClose: localStorage.getItem('work_tracker_continue_session') !== 'false', // default true
@@ -245,6 +263,17 @@ export function updateCurrency(newCurrency) {
 export function updateWidgetOrder(newOrder) {
     state.widgetOrder = newOrder;
     localStorage.setItem('work_tracker_widget_order', JSON.stringify(newOrder));
+}
+
+export function updateDisabledWidgets(disabledWidgets) {
+    state.disabledWidgets = disabledWidgets.filter(id => DEFAULT_WIDGET_ORDER.includes(id));
+    localStorage.setItem('work_tracker_disabled_widgets', JSON.stringify(state.disabledWidgets));
+}
+
+export function updateTargetShiftHours(hours) {
+    const parsed = parseFloat(hours);
+    state.targetShiftHours = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    localStorage.setItem('work_tracker_target_shift_hours', String(state.targetShiftHours));
 }
 
 export function updateWidgetTitles(showTitles) {

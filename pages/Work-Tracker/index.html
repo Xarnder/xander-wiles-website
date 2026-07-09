@@ -143,6 +143,7 @@
 
                     <div class="timer-display">
                         <span id="timer">00:00:00</span>
+                        <div id="timer-shift-remaining" class="timer-shift-remaining hidden"></div>
                         <div id="live-earnings" class="highlight-text"><span class="currency-symbol">£</span>0.00</div>
                     </div>
 
@@ -690,6 +691,12 @@
                         <label for="continue-session-toggle">Continue Session on Tab Close</label>
                         <input type="checkbox" id="continue-session-toggle" class="settings-checkbox">
                     </div>
+
+                    <div class="input-group">
+                        <label for="target-shift-hours-input">Target Shift Length (hours per day)</label>
+                        <input type="number" id="target-shift-hours-input" class="currency-dropdown" min="0" max="24" step="0.25" value="8">
+                        <p class="settings-help-text">Set to 0 to disable. While a session is running, the timer shows time left until your target shift end.</p>
+                    </div>
                 </section>
 
                 <section class="settings-section">
@@ -757,7 +764,7 @@
                             </span>
                         </button>
                         <div id="widget-order-container" class="hidden settings-collapse-panel">
-                            <p class="settings-help-text">Drag and drop to rearrange dashboard widgets.</p>
+                            <p class="settings-help-text">Drag to reorder. Toggle off to hide a widget from the dashboard.</p>
                             <ul id="widget-order-list" class="sortable-list"></ul>
                         </div>
                     </div>
@@ -827,9 +834,9 @@
                     </div>
                 </section>
 
-                <div class="settings-footer">
-                    <button id="save-settings" class="btn-primary" style="width: 100%;">Save Changes</button>
-                </div>
+            </div>
+            <div class="settings-footer settings-footer-sticky">
+                <button id="save-settings" class="btn-primary" type="button">Save Changes</button>
             </div>
         </div>
 

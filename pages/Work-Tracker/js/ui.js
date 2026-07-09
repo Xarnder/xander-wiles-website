@@ -1,5 +1,5 @@
 import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds, updateCsvExportCompany } from './state.js';
-import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getBreakOverlapMs, getCalendarDateKey, CSV_UNASSIGNED_COMPANY } from './utils.js';
+import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getEffectiveSessionOverlapMs, getBreakOverlapMs, getCalendarDateKey, formatRelativeSessionAge, CSV_UNASSIGNED_COMPANY, accumulateDailySessionHours, accumulateDailyBreakHours, forEachSessionDaySegment } from './utils.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
@@ -10,6 +10,7 @@ export const DOM = {
     startBtn: document.getElementById('start-btn'),
     stopBtn: document.getElementById('stop-btn'),
     timerDisplay: document.getElementById('timer'),
+    timerShiftRemaining: document.getElementById('timer-shift-remaining'),
     hourlyRateInput: document.getElementById('hourly-rate'),
     timerStartTimeInput: document.getElementById('timer-start-time'),
     timerInputContainer: document.getElementById('timer-input-container'),
@@ -118,6 +119,7 @@ export const DOM = {
     percentageCutList: document.getElementById('percentage-cut-list'),
     showTitlesToggle: document.getElementById('show-titles-toggle'),
     continueSessionToggle: document.getElementById('continue-session-toggle'),
+    targetShiftHoursInput: document.getElementById('target-shift-hours-input'),
     ganttChart: document.getElementById('gantt-chart'),
     exportBtn: document.getElementById('export-btn'),
     exportCsvBtn: document.getElementById('export-csv-btn'),
@@ -1005,6 +1007,10 @@ export function toggleTimerUI(isRunning) {
 
     toggleLiveIndicators(isRunning);
     renderCalendar();
+    if (!isRunning) {
+        updateShiftRemainingDisplay(0);
+        renderChart();
+    }
 }
 
 export function renderCalendar() {
@@ -1048,29 +1054,8 @@ export function renderCalendar() {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const todayDate = new Date();
 
-    const dailyHours = {};
-    const dailyGrossHours = {};
-    const dailyBreakHours = {};
-
-    state.allSessions.forEach(session => {
-        const sessionDate = new Date(session.startTime);
-        const dateKey = getCalendarDateKey(sessionDate);
-        const metrics = getEffectiveSessionMetrics(session, state.allBreaks);
-        const grossHours = metrics.grossDurationMs / (1000 * 60 * 60);
-        const netHours = metrics.effectiveDurationMs / (1000 * 60 * 60);
-        if (!dailyHours[dateKey]) dailyHours[dateKey] = 0;
-        if (!dailyGrossHours[dateKey]) dailyGrossHours[dateKey] = 0;
-        dailyHours[dateKey] += netHours;
-        dailyGrossHours[dateKey] += grossHours;
-    });
-
-    state.allBreaks.forEach((breakItem) => {
-        const breakDate = new Date(breakItem.startTime);
-        const dateKey = getCalendarDateKey(breakDate);
-        const breakHours = (Number(breakItem.durationMs) || 0) / (1000 * 60 * 60);
-        if (!dailyBreakHours[dateKey]) dailyBreakHours[dateKey] = 0;
-        dailyBreakHours[dateKey] += breakHours;
-    });
+    const { dailyHours, dailyGrossHours } = accumulateDailySessionHours(state.allSessions, state.allBreaks);
+    const dailyBreakHours = accumulateDailyBreakHours(state.allBreaks);
 
     const gridStartDate = new Date(year, month, 1 - firstDayIndex);
     const totalWeeks = Math.ceil((firstDayIndex + daysInMonth) / 7);
@@ -1116,9 +1101,20 @@ export function renderCalendar() {
                 dayDiv.classList.add('today');
             }
 
-            const liveSessionDate = state.startTime ? new Date(state.startTime) : null;
-            if (!isBreakMode && liveSessionDate && getCalendarDateKey(liveSessionDate) === dateKey) {
+            const cellDayStart = new Date(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate(), 0, 0, 0, 0);
+            const cellDayEnd = new Date(cellDayStart);
+            cellDayEnd.setDate(cellDayEnd.getDate() + 1);
+            const liveOverlapsDay = !isBreakMode
+                && state.timerInterval
+                && state.startTime
+                && state.startTime < cellDayEnd.getTime()
+                && Date.now() > cellDayStart.getTime();
+            if (liveOverlapsDay) {
                 dayDiv.classList.add('live-session-active');
+                const liveLabel = document.createElement('div');
+                liveLabel.className = 'calendar-live-label';
+                liveLabel.textContent = 'Live';
+                dayDiv.appendChild(liveLabel);
             }
 
             if (isBreakMode) {
@@ -1243,6 +1239,38 @@ export function renderChart() {
         if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
     });
 
+    if (state.timerInterval && state.startTime) {
+        let segmentStartMs = Math.max(state.startTime, startOfWeekMs);
+        const segmentEndLimitMs = Math.min(Date.now(), endOfWeekMs);
+        if (segmentStartMs < segmentEndLimitMs) {
+            while (segmentStartMs < segmentEndLimitMs) {
+                const segmentStart = new Date(segmentStartMs);
+                const nextDay = new Date(segmentStart);
+                nextDay.setHours(24, 0, 0, 0);
+                const segmentEndMs = Math.min(nextDay.getTime(), segmentEndLimitMs);
+                const grossSegmentDurationMs = segmentEndMs - segmentStartMs;
+                const breakMs = getBreakOverlapMs(state.allBreaks, segmentStartMs, segmentEndMs);
+                const segmentDurationMs = Math.max(0, grossSegmentDurationMs - breakMs);
+                const actualDay = segmentStart.getDay();
+                const dayIndex = (actualDay - state.startOfWeek + 7) % 7;
+
+                if (segmentDurationMs > 0) {
+                    weekData[dayIndex].push({
+                        hours: segmentDurationMs / (1000 * 60 * 60),
+                        durationMs: segmentDurationMs,
+                        company: state.currentCompany,
+                        project: state.currentProject,
+                        isLive: true
+                    });
+                    const dailyTotal = weekData[dayIndex].reduce((sum, sessionObj) => sum + sessionObj.hours, 0);
+                    if (dailyTotal > maxDailyHours) maxDailyHours = dailyTotal;
+                }
+
+                segmentStartMs = segmentEndMs;
+            }
+        }
+    }
+
     const weeklyNetMs = weekData.reduce(
         (sum, daySessions) => sum + daySessions.reduce((daySum, sessionObj) => daySum + sessionObj.durationMs, 0),
         0
@@ -1254,7 +1282,34 @@ export function renderChart() {
             : '0h net total';
     }
 
-    const scaleMax = Math.ceil(maxDailyHours > 0 ? maxDailyHours : 1);
+    const weekEndLimitMs = Math.min(endOfWeekMs, Date.now());
+    let totalSessionMs = 0;
+    let sessionCount = 0;
+
+    state.allSessions.forEach((session) => {
+        const overlapMs = getEffectiveSessionOverlapMs(session, state.allBreaks, startOfWeekMs, weekEndLimitMs);
+        if (overlapMs > 0) {
+            totalSessionMs += overlapMs;
+            sessionCount += 1;
+        }
+    });
+
+    if (state.timerInterval && state.startTime) {
+        const liveOverlapStart = Math.max(state.startTime, startOfWeekMs);
+        const liveOverlapEnd = Math.min(Date.now(), weekEndLimitMs);
+        if (liveOverlapEnd > liveOverlapStart) {
+            const breakMs = getBreakOverlapMs(state.allBreaks, liveOverlapStart, liveOverlapEnd);
+            const liveNetMs = Math.max(0, liveOverlapEnd - liveOverlapStart - breakMs);
+            if (liveNetMs > 0) {
+                totalSessionMs += liveNetMs;
+                sessionCount += 1;
+            }
+        }
+    }
+
+    const avgSessionMs = sessionCount > 0 ? totalSessionMs / sessionCount : 0;
+    const avgSessionHours = avgSessionMs / (1000 * 60 * 60);
+    const scaleMax = Math.ceil(Math.max(maxDailyHours, avgSessionHours, 1));
 
     // Y Axis Labels
     const yAxisDiv = document.createElement('div');
@@ -1276,6 +1331,20 @@ export function renderChart() {
         line.style.bottom = `${(i / 8) * 100}%`;
         gridDiv.appendChild(line);
     }
+
+    if (sessionCount > 0 && avgSessionHours > 0) {
+        const avgLine = document.createElement('div');
+        avgLine.className = 'chart-avg-line';
+        avgLine.style.bottom = `${(avgSessionHours / scaleMax) * 100}%`;
+
+        const avgLabel = document.createElement('span');
+        avgLabel.className = 'chart-avg-label';
+        avgLabel.textContent = `Avg ${formatDuration(avgSessionMs)}`;
+        avgLine.appendChild(avgLabel);
+
+        gridDiv.appendChild(avgLine);
+    }
+
     DOM.weeklyChart.appendChild(gridDiv);
 
     daysArr.forEach((label, index) => {
@@ -1287,23 +1356,33 @@ export function renderChart() {
         weekData[index].forEach((sessionObj, sIndex) => {
             const hrs = sessionObj.hours;
             const bar = document.createElement('div');
-            bar.className = 'chart-sub-session';
+            bar.className = `chart-sub-session${sessionObj.isLive ? ' chart-sub-session-live' : ''}`;
             bar.style.height = `${(hrs / scaleMax) * 100}%`;
 
             // Determine color based on project or company
             const identifier = sessionObj.project || sessionObj.company || 'default';
             const color = getColorForIdentifier(identifier);
-            bar.style.background = `linear-gradient(180deg, ${color} 0%, ${adjustColorOpacity(color, 0.8)} 100%)`;
+            if (!sessionObj.isLive) {
+                bar.style.background = `linear-gradient(180deg, ${color} 0%, ${adjustColorOpacity(color, 0.8)} 100%)`;
+            }
 
             let titlePrefix = sessionObj.project ? `[${sessionObj.project}] ` : (sessionObj.company ? `[${sessionObj.company}] ` : '');
-            bar.title = `${titlePrefix}Session ${sIndex + 1}: ${formatDuration(sessionObj.durationMs)}`;
+            const livePrefix = sessionObj.isLive ? 'Live · ' : '';
+            bar.title = `${livePrefix}${titlePrefix}Session ${sIndex + 1}: ${formatDuration(sessionObj.durationMs)}`;
 
             // Add persistent label if an identifier exists
-            if (identifier !== 'default') {
+            if (identifier !== 'default' && !sessionObj.isLive) {
                 const labelSpan = document.createElement('span');
                 labelSpan.className = 'chart-bar-label';
                 labelSpan.textContent = sessionObj.project || sessionObj.company;
                 bar.appendChild(labelSpan);
+            }
+
+            if (sessionObj.isLive) {
+                const liveLabel = document.createElement('span');
+                liveLabel.className = 'chart-bar-label chart-bar-label-live';
+                liveLabel.textContent = 'Live';
+                bar.appendChild(liveLabel);
             }
 
             areaDiv.appendChild(bar);
@@ -1394,15 +1473,10 @@ export function renderGanttChart() {
             rowContainer.appendChild(marker);
         }
 
-        // Calculate day boundaries
         const startOfDay = new Date(dayDate.getFullYear(), dayDate.getMonth(), dayDate.getDate(), 0, 0, 0, 0);
         const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
-
-        // Filter sessions for this day
-        const daySessions = state.allSessions.filter(session => {
-            const sessionTime = new Date(session.startTime);
-            return sessionTime >= startOfDay && sessionTime < endOfDay;
-        });
+        const dayStartMs = startOfDay.getTime();
+        const dayEndMs = endOfDay.getTime();
 
         // Local helper to add a gantt block
         const addGanttBlock = (startTimeObj, durationMs, project, company, isLive, blockType = 'work') => {
@@ -1457,27 +1531,50 @@ export function renderGanttChart() {
         const dayBreaks = state.allBreaks.filter(breakItem => {
             const range = getSessionTimeRange(breakItem);
             if (!range) return false;
-            return range.startMs < endOfDay.getTime() && range.endMs > startOfDay.getTime();
+            return range.startMs < dayEndMs && range.endMs > dayStartMs;
         });
 
-        // Render standard sessions
-        daySessions.forEach(session => {
-            const sTime = new Date(session.startTime);
-            addGanttBlock(sTime, session.durationMs, session.project, session.company, false, 'work');
+        // Render standard sessions (split at midnight)
+        state.allSessions.forEach(session => {
+            forEachSessionDaySegment(session, state.allBreaks, startOfDay, endOfDay, (segment) => {
+                if (segment.grossMs <= 0) return;
+                addGanttBlock(
+                    new Date(segment.segmentStartMs),
+                    segment.grossMs,
+                    session.project,
+                    session.company,
+                    false,
+                    'work'
+                );
+            });
         });
 
-        // Render breaks for this day
+        // Render breaks for this day (split at midnight)
         dayBreaks.forEach(breakItem => {
-            const sTime = new Date(breakItem.startTime);
-            addGanttBlock(sTime, breakItem.durationMs, null, null, false, 'break');
+            const range = getSessionTimeRange(breakItem);
+            if (!range) return;
+
+            let segmentStartMs = Math.max(range.startMs, dayStartMs);
+            const segmentEndLimitMs = Math.min(range.endMs, dayEndMs);
+            while (segmentStartMs < segmentEndLimitMs) {
+                const segmentStart = new Date(segmentStartMs);
+                const nextDay = new Date(segmentStart);
+                nextDay.setHours(24, 0, 0, 0);
+                const segmentEndMs = Math.min(nextDay.getTime(), segmentEndLimitMs);
+                const segmentDurationMs = segmentEndMs - segmentStartMs;
+                if (segmentDurationMs > 0) {
+                    addGanttBlock(new Date(segmentStartMs), segmentDurationMs, null, null, false, 'break');
+                }
+                segmentStartMs = segmentEndMs;
+            }
         });
 
-        // Render live active session if it falls on this day
+        // Render live active session if it overlaps this day
         if (state.timerInterval && state.startTime) {
-            const liveTime = new Date(state.startTime);
-            if (liveTime >= startOfDay && liveTime < endOfDay) {
-                const liveStartMs = Math.max(state.startTime, startOfDay.getTime());
-                const activeDuration = Date.now() - liveStartMs;
+            const liveEndMs = Date.now();
+            if (state.startTime < dayEndMs && liveEndMs > dayStartMs) {
+                const liveStartMs = Math.max(state.startTime, dayStartMs);
+                const activeDuration = liveEndMs - liveStartMs;
                 if (activeDuration > 0) {
                     addGanttBlock(new Date(liveStartMs), activeDuration, state.currentProject, state.currentCompany, true, 'work');
                 }
@@ -1550,6 +1647,45 @@ export function applyWidgetOrder() {
             el.style.order = index;
         }
     });
+}
+
+export function applyWidgetVisibility() {
+    const DEFAULT_WIDGET_IDS = [
+        'widget-timer', 'widget-breaks', 'widget-money-counter', 'widget-stats',
+        'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt',
+        'widget-calendar', 'widget-chart', 'widget-history'
+    ];
+
+    DEFAULT_WIDGET_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const isDisabled = state.disabledWidgets.includes(id);
+        el.classList.toggle('hidden', isDisabled);
+        el.setAttribute('aria-hidden', isDisabled ? 'true' : 'false');
+    });
+}
+
+export function updateShiftRemainingDisplay(elapsedMs) {
+    if (!DOM.timerShiftRemaining) return;
+
+    const targetHours = Number(state.targetShiftHours) || 0;
+    if (!state.startTime || targetHours <= 0) {
+        DOM.timerShiftRemaining.classList.add('hidden');
+        DOM.timerShiftRemaining.textContent = '';
+        return;
+    }
+
+    const targetMs = targetHours * 60 * 60 * 1000;
+    const remainingMs = targetMs - elapsedMs;
+    DOM.timerShiftRemaining.classList.remove('hidden');
+
+    if (remainingMs > 0) {
+        DOM.timerShiftRemaining.textContent = `${formatDuration(remainingMs)} left until target shift end`;
+        DOM.timerShiftRemaining.classList.remove('is-over-target');
+    } else {
+        DOM.timerShiftRemaining.textContent = `${formatDuration(Math.abs(remainingMs))} over target shift`;
+        DOM.timerShiftRemaining.classList.add('is-over-target');
+    }
 }
 
 export function applyWidgetTitles() {
@@ -1829,8 +1965,18 @@ export function renderWidgetOrderList() {
                     <line x1="3" y1="18" x2="3.01" y2="18"></line>
                 </svg>
             </div>
-            <span>${labels[id]}</span>
+            <span class="widget-order-label">${labels[id]}</span>
+            <label class="widget-visibility-toggle" title="Show on dashboard">
+                <input type="checkbox" class="widget-visibility-checkbox" data-widget-id="${id}" ${state.disabledWidgets.includes(id) ? '' : 'checked'}>
+                <span>Show</span>
+            </label>
         `;
+
+        const visibilityCheckbox = li.querySelector('.widget-visibility-checkbox');
+        if (visibilityCheckbox) {
+            visibilityCheckbox.addEventListener('mousedown', (event) => event.stopPropagation());
+            visibilityCheckbox.addEventListener('click', (event) => event.stopPropagation());
+        }
 
         li.addEventListener('dragstart', handleDragStart);
         li.addEventListener('dragenter', handleDragEnter);

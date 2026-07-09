@@ -2,7 +2,7 @@ import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, d
 import { db } from './config.js';
 import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown } from './ui.js';
-import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay } from './utils.js';
+import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge } from './utils.js';
 
 function getPercentageCutsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
@@ -362,6 +362,8 @@ export function renderDashboardData() {
 
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setDate(startOfDay.getDate() + 1);
     const startOfWeek = getStartOfWeekDate(now, state.startOfWeek);
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 7);
@@ -369,11 +371,7 @@ export function renderDashboardData() {
     const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1);
     const breaks = state.allBreaks;
 
-    const dailyTotals = calculateCalendarPeriodTotals(
-        state.allSessions.filter((session) => new Date(session.startTime) >= startOfDay),
-        startOfDay,
-        breaks
-    );
+    const dailyTotals = calculateCalendarPeriodTotals(state.allSessions, startOfDay, breaks, endOfDay);
     totalDailyMs = dailyTotals.totalMs;
     totalDailyGrossMs = dailyTotals.totalGrossMs;
     totalDailyBreakMs = dailyTotals.totalBreakMs;
@@ -398,9 +396,10 @@ export function renderDashboardData() {
         totalMonthlyEarnings = monthlyTotals.totalEarnings;
     } else {
         const monthlyTotals = calculateCalendarPeriodTotals(
-            state.allSessions.filter((session) => new Date(session.startTime) >= monthlyStatsConfig.start),
+            state.allSessions,
             monthlyStatsConfig.start,
-            breaks
+            breaks,
+            monthlyStatsConfig.end
         );
         totalMonthlyMs = monthlyTotals.totalMs;
         totalMonthlyGrossMs = monthlyTotals.totalGrossMs;
@@ -408,11 +407,7 @@ export function renderDashboardData() {
         totalMonthlyEarnings = monthlyTotals.totalEarnings;
     }
 
-    const sixMonthTotals = calculateCalendarPeriodTotals(
-        state.allSessions.filter((session) => new Date(session.startTime) >= startOfSixMonths),
-        startOfSixMonths,
-        breaks
-    );
+    const sixMonthTotals = calculateCalendarPeriodTotals(state.allSessions, startOfSixMonths, breaks, now);
     totalSixMonthsMs = sixMonthTotals.totalMs;
     totalSixMonthsGrossMs = sixMonthTotals.totalGrossMs;
     totalSixMonthsBreakMs = sixMonthTotals.totalBreakMs;
@@ -469,12 +464,18 @@ export function renderDashboardData() {
             focusHtml = `<span class="history-badge history-badge-multitasking">Multitasking</span>`;
         }
 
+        const relativeAge = formatRelativeSessionAge(data.startTime);
+        const relativeAgeHtml = relativeAge
+            ? `<span class="history-relative-age">${relativeAge}</span>`
+            : '';
+
         item.innerHTML = `
             <div class="history-item-content">
                 <div>
                     <span class="history-date">
                         <span>Started ${startDateTimeStr}</span>
                         <span>Ended ${endDateTimeStr}</span>
+                        ${relativeAgeHtml}
                     </span>
                     <strong>${displayDuration}</strong>
                     ${grossDurationHtml}

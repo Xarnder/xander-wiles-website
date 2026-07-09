@@ -144,6 +144,22 @@ export function getStartOfDay(date = new Date()) {
     return new Date(getStartOfDayMs(date instanceof Date ? date.getTime() : date));
 }
 
+export function formatRelativeSessionAge(startTime) {
+    const start = new Date(startTime);
+    if (Number.isNaN(start.getTime())) return '';
+
+    const today = getStartOfDay();
+    const startDay = getStartOfDay(start);
+    const diffDays = Math.round((today.getTime() - startDay.getTime()) / 86400000);
+
+    if (diffDays <= 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 14) return '1 week ago';
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    return start.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export function isSameCalendarDay(a, b) {
     return getStartOfDayMs(a instanceof Date ? a.getTime() : a) === getStartOfDayMs(b instanceof Date ? b.getTime() : b);
 }
@@ -540,6 +556,100 @@ export function getEffectiveSessionOverlapMs(session, breaks, windowStart, windo
     return Math.max(0, grossOverlapMs - breakMs);
 }
 
+function forEachDaySegments(startMs, endMs, windowStartMs, windowEndMs, onSegment) {
+    const overlapStart = Math.max(startMs, windowStartMs);
+    const overlapEnd = Math.min(endMs, windowEndMs);
+    if (overlapEnd <= overlapStart) return;
+
+    let segmentStartMs = overlapStart;
+    while (segmentStartMs < overlapEnd) {
+        const segmentStart = new Date(segmentStartMs);
+        const nextDay = new Date(segmentStart);
+        nextDay.setHours(24, 0, 0, 0);
+        const segmentEndMs = Math.min(nextDay.getTime(), overlapEnd);
+
+        onSegment({
+            dayKey: getDayKeyFromMs(segmentStartMs),
+            segmentStartMs,
+            segmentEndMs,
+            durationMs: segmentEndMs - segmentStartMs
+        });
+
+        segmentStartMs = segmentEndMs;
+    }
+}
+
+export function forEachSessionDaySegment(session, breaks, windowStart, windowEnd, onSegment) {
+    const range = getSessionTimeRange(session);
+    if (!range) return;
+
+    const windowStartMs = windowStart != null ? toTimestampMs(windowStart) : -Infinity;
+    const windowEndMs = windowEnd != null ? toTimestampMs(windowEnd) : Infinity;
+    if (windowStart != null && !Number.isFinite(windowStartMs)) return;
+    if (windowEnd != null && !Number.isFinite(windowEndMs)) return;
+
+    const sessionDurationMs = Number(session.durationMs) || (range.endMs - range.startMs);
+
+    forEachDaySegments(range.startMs, range.endMs, windowStartMs, windowEndMs, (segment) => {
+        const breakMs = getBreakOverlapMs(breaks, segment.segmentStartMs, segment.segmentEndMs);
+        const netMs = Math.max(0, segment.durationMs - breakMs);
+        const grossRatio = sessionDurationMs > 0 ? segment.durationMs / sessionDurationMs : 0;
+        const grossEarnings = (Number(session.earnings) || 0) * grossRatio;
+        const effectiveRatio = segment.durationMs > 0 ? netMs / segment.durationMs : 0;
+
+        onSegment({
+            ...segment,
+            grossMs: segment.durationMs,
+            netMs,
+            breakMs,
+            grossEarnings,
+            netEarnings: grossEarnings * effectiveRatio
+        });
+    });
+}
+
+export function accumulateDailySessionHours(sessions, breaks = []) {
+    const dailyHours = {};
+    const dailyGrossHours = {};
+
+    sessions.forEach((session) => {
+        forEachSessionDaySegment(session, breaks, null, null, (segment) => {
+            if (segment.netMs <= 0 && segment.grossMs <= 0) return;
+            dailyHours[segment.dayKey] = (dailyHours[segment.dayKey] || 0) + segment.netMs / 3600000;
+            dailyGrossHours[segment.dayKey] = (dailyGrossHours[segment.dayKey] || 0) + segment.grossMs / 3600000;
+        });
+    });
+
+    return { dailyHours, dailyGrossHours };
+}
+
+export function accumulateDailyBreakHours(breaks = []) {
+    const dailyBreakHours = {};
+
+    breaks.forEach((breakItem) => {
+        const range = getSessionTimeRange(breakItem);
+        if (!range) return;
+
+        forEachDaySegments(range.startMs, range.endMs, -Infinity, Infinity, (segment) => {
+            const hours = segment.durationMs / 3600000;
+            dailyBreakHours[segment.dayKey] = (dailyBreakHours[segment.dayKey] || 0) + hours;
+        });
+    });
+
+    return dailyBreakHours;
+}
+
+export function sessionOverlapsDay(session, day) {
+    const range = getSessionTimeRange(session);
+    if (!range) return false;
+
+    const dayStart = getStartOfDay(day);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setDate(dayEnd.getDate() + 1);
+
+    return range.startMs < dayEnd.getTime() && range.endMs > dayStart.getTime();
+}
+
 export function calculateRollingPeriodTotals(sessions, start, end, breaks = []) {
     let totalMs = 0;
     let totalGrossMs = 0;
@@ -566,26 +676,8 @@ export function calculateRollingPeriodTotals(sessions, start, end, breaks = []) 
     return { totalMs, totalGrossMs, totalEarnings, totalGrossEarnings, totalBreakMs };
 }
 
-export function calculateCalendarPeriodTotals(sessions, periodStart, breaks = []) {
-    let totalMs = 0;
-    let totalGrossMs = 0;
-    let totalEarnings = 0;
-    let totalGrossEarnings = 0;
-    let totalBreakMs = 0;
-
-    sessions.forEach((session) => {
-        const dateObj = new Date(session.startTime);
-        if (dateObj < periodStart) return;
-
-        const metrics = getEffectiveSessionMetrics(session, breaks);
-        totalGrossMs += metrics.grossDurationMs;
-        totalMs += metrics.effectiveDurationMs;
-        totalBreakMs += metrics.breakMs;
-        totalGrossEarnings += metrics.grossEarnings;
-        totalEarnings += metrics.effectiveEarnings;
-    });
-
-    return { totalMs, totalGrossMs, totalEarnings, totalGrossEarnings, totalBreakMs };
+export function calculateCalendarPeriodTotals(sessions, periodStart, breaks = [], periodEnd = new Date()) {
+    return calculateRollingPeriodTotals(sessions, periodStart, periodEnd, breaks);
 }
 
 const CSV_MONTH_NAMES = [

@@ -5,6 +5,7 @@ import {
     renderChart,
     renderGanttChart,
     applyWidgetOrder,
+    applyWidgetVisibility,
     applyWidgetTitles,
     applyDashboardDensity,
     renderWidgetOrderList,
@@ -30,6 +31,8 @@ import {
     state,
     updateCurrency,
     updateWidgetOrder,
+    updateDisabledWidgets,
+    updateTargetShiftHours,
     updateWidgetTitles,
     updateStartOfWeek,
     updateContinueSession,
@@ -61,7 +64,7 @@ import {
     shiftBreaksViewDate
 } from './state.js';
 import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory } from './api.js';
-import { getCalendarDateKey } from './utils.js';
+import { getBreaksForDay, sessionOverlapsDay } from './utils.js';
 
 let percentageCutsSaveTimeout = null;
 
@@ -84,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DOM.currencySelect.value = state.currentCurrency;
     renderPercentageCutList();
     applyWidgetOrder();
+    applyWidgetVisibility();
     applyWidgetTitles();
     applyDashboardDensity();
     renderMoneyCounterModeControls();
@@ -379,6 +383,9 @@ document.addEventListener('DOMContentLoaded', () => {
             DOM.moneyCounterGapSlider.value = state.moneyCounterGap;
             DOM.moneyCounterGapValue.textContent = state.moneyCounterGap.toFixed(1);
         }
+        if (DOM.targetShiftHoursInput) {
+            DOM.targetShiftHoursInput.value = state.targetShiftHours;
+        }
         if (DOM.csvExportFrom) {
             DOM.csvExportFrom.value = state.csvExportPeriodFrom;
         }
@@ -476,8 +483,20 @@ document.addEventListener('DOMContentLoaded', () => {
         items.forEach(item => newOrder.push(item.dataset.id));
 
         updateWidgetOrder(newOrder);
+
+        const disabledWidgets = [];
+        DOM.widgetOrderList.querySelectorAll('.widget-visibility-checkbox').forEach((checkbox) => {
+            if (!checkbox.checked) {
+                disabledWidgets.push(checkbox.dataset.widgetId);
+            }
+        });
+        updateDisabledWidgets(disabledWidgets);
+
         updateWidgetTitles(DOM.showTitlesToggle.checked);
         updateContinueSession(DOM.continueSessionToggle.checked);
+        if (DOM.targetShiftHoursInput) {
+            updateTargetShiftHours(DOM.targetShiftHoursInput.value);
+        }
         if (DOM.widgetSpacingSelect) {
             updateDashboardDensity(DOM.widgetSpacingSelect.value);
         }
@@ -597,6 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         applyWidgetOrder();
+        applyWidgetVisibility();
         applyWidgetTitles();
         applyDashboardDensity();
         updateCurrencyDisplays();
@@ -903,20 +923,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 updateBatchSelectionUI();
             } else if (isBreakMode) {
-                const dayBreaks = state.allBreaks.filter((breakItem) => {
-                    return getCalendarDateKey(new Date(breakItem.startTime)) === dateStr;
-                });
+                const selectedDate = new Date(selectedYear, selectedMonth - 1, dayNum);
+                const dayBreaks = getBreaksForDay(state.allBreaks, selectedDate);
 
                 if (dayBreaks.length > 0) {
-                    dayBreaks.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
                     openEditBreakModal(dayBreaks[dayBreaks.length - 1]);
                 } else {
-                    openAddBreakModal(new Date(selectedYear, selectedMonth - 1, dayNum), true);
+                    openAddBreakModal(selectedDate, true);
                 }
             } else {
-                const daySessions = state.allSessions.filter(session => {
-                    return getCalendarDateKey(new Date(session.startTime)) === dateStr;
-                });
+                const selectedDate = new Date(selectedYear, selectedMonth - 1, dayNum);
+                const daySessions = state.allSessions.filter((session) => sessionOverlapsDay(session, selectedDate));
 
                 if (daySessions.length > 0) {
                     daySessions.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());

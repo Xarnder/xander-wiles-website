@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert, renderGanttChart, renderLiveMoneyCounter, getAmountAfterPercentageCuts, renderWorkPatternBreakdown } from './ui.js';
+import { DOM, toggleTimerUI, updateCurrencyDisplays, showAlert, renderGanttChart, renderLiveMoneyCounter, getAmountAfterPercentageCuts, renderWorkPatternBreakdown, updateShiftRemainingDisplay, renderChart } from './ui.js';
 import { saveSession } from './api.js';
 
 export function updateTimerDisplay(elapsedMs) {
@@ -20,6 +20,7 @@ export function updateTimerDisplay(elapsedMs) {
         <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>${afterCuts.toFixed(2)}</span>
     `;
     renderLiveMoneyCounter(earned, Boolean(state.startTime));
+    updateShiftRemainingDisplay(elapsedMs);
 
     document.title = `${formattedTime} - Work Tracker`;
 }
@@ -63,11 +64,14 @@ export function startTimer() {
     toggleTimerUI(true);
     updateTimerDisplay(Date.now() - state.startTime);
     renderGanttChart();
+    renderChart();
     renderWorkPatternBreakdown();
 
     state.timerInterval = setInterval(() => {
-        updateTimerDisplay(Date.now() - state.startTime);
+        const elapsedMs = Date.now() - state.startTime;
+        updateTimerDisplay(elapsedMs);
         renderGanttChart();
+        renderChart();
     }, 1000);
 }
 
@@ -122,10 +126,14 @@ export function checkRestorableSession() {
 
         toggleTimerUI(true);
         updateTimerDisplay(Date.now() - state.startTime);
+        renderGanttChart();
+        renderChart();
 
         state.timerInterval = setInterval(() => {
-            updateTimerDisplay(Date.now() - state.startTime);
+            const elapsedMs = Date.now() - state.startTime;
+            updateTimerDisplay(elapsedMs);
             renderGanttChart();
+            renderChart();
         }, 1000);
     }
 }
