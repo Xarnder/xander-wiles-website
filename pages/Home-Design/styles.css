@@ -766,6 +766,7 @@ html[data-theme="light"] .theme-toggle-thumb {
     grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
     gap: 20px;
     min-width: 0;
+    align-items: start;
 }
 
 .controls-browse #topics {
@@ -776,12 +777,17 @@ html[data-theme="light"] .theme-toggle-thumb {
     display: flex;
     align-items: center;
     gap: 10px;
+    height: 52px;
     min-height: 52px;
+    max-height: 52px;
+    flex-shrink: 0;
+    align-self: start;
     padding: 0 16px;
     border: 1px solid var(--line);
     border-radius: 14px;
     background: var(--surface);
     transition: background 280ms ease, border-color 280ms ease;
+    box-sizing: border-box;
 }
 
 .search-field span {
@@ -792,10 +798,17 @@ html[data-theme="light"] .theme-toggle-thumb {
 .search-field input {
     width: 100%;
     min-width: 0;
+    min-height: 0;
+    height: auto;
     border: 0;
     outline: 0;
+    padding: 0;
     color: var(--ink);
     background: transparent;
+    font-size: 1rem;
+    line-height: 1.25;
+    -webkit-appearance: none;
+    appearance: none;
 }
 
 .search-field input::placeholder {
@@ -1935,7 +1948,9 @@ body.manager-open {
     }
 
     .search-field {
+        height: 48px;
         min-height: 48px;
+        max-height: 48px;
         padding: 0 12px;
     }
 
@@ -2412,6 +2427,13 @@ body.editor-open {
     color: var(--muted);
 }
 
+.idea-editor-form .field-hint {
+    font-size: 0.78rem;
+    color: var(--muted);
+    opacity: 0.85;
+}
+
+.picker-select,
 .idea-editor-form input,
 .idea-editor-form textarea {
     width: 100%;
@@ -2421,6 +2443,159 @@ body.editor-open {
     background: var(--surface);
     color: var(--ink);
     font: inherit;
+    font-size: 16px;
+    min-height: 44px;
+    touch-action: manipulation;
+}
+
+.picker-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 40px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23888' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    background-size: 12px 8px;
+    cursor: pointer;
+}
+
+.picker-custom {
+    margin-top: 8px;
+}
+
+.picker-custom[hidden] {
+    display: none !important;
+}
+
+.idea-editor-form textarea {
+    min-height: auto;
+}
+
+.idea-editor-hierarchy {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.idea-editor-hierarchy[hidden] {
+    display: none;
+}
+
+.idea-editor-hierarchy-head {
+    display: grid;
+    gap: 4px;
+}
+
+.idea-children-list {
+    display: grid;
+    gap: 10px;
+}
+
+.idea-children-empty {
+    margin: 0;
+    font-size: 0.84rem;
+    color: var(--muted);
+}
+
+.idea-child-item {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+}
+
+.idea-child-copy {
+    display: grid;
+    gap: 4px;
+}
+
+.idea-child-copy strong {
+    font-size: 0.92rem;
+    color: var(--ink);
+}
+
+.idea-child-copy span {
+    font-size: 0.84rem;
+    color: var(--muted);
+}
+
+.idea-child-actions,
+.related-child-admin {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.idea-add-child-btn {
+    width: 100%;
+    justify-content: center;
+}
+
+.child-idea-editor {
+    z-index: 140;
+}
+
+.child-idea-editor-panel {
+    width: min(480px, 100%);
+}
+
+.child-idea-parent-label {
+    margin: 6px 0 0;
+    font-size: 0.84rem;
+    color: var(--muted);
+}
+
+.child-idea-editor-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.child-idea-promote,
+.child-idea-delete {
+    flex: 1 1 180px;
+}
+
+.child-idea-delete {
+    color: #e85d5d;
+}
+
+.related-list-item {
+    gap: 10px;
+}
+
+.related-list-body {
+    display: grid;
+    gap: 2px;
+}
+
+body.athome-edit-mode .related-list li {
+    padding: 10px 10px 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+}
+
+@media (max-width: 760px) {
+    .idea-child-item {
+        gap: 12px;
+    }
+
+    .idea-child-actions,
+    .related-child-admin {
+        width: 100%;
+    }
+
+    .idea-child-actions .idea-manage-btn,
+    .related-child-admin .idea-manage-btn {
+        flex: 1 1 auto;
+        min-height: 40px;
+    }
 }
 
 @media (max-width: 760px) {

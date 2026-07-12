@@ -304,12 +304,31 @@
             section.rows.forEach((item) => {
                 if (item.level <= 1 || !item.parentItem) return;
 
-                const parent = parentsByTitle.get(normaliseKey(item.parentItem));
-                if (parent) {
-                    parent.children.push(item);
-                } else {
+                let parent = parentsByTitle.get(normaliseKey(item.parentItem));
+                if (!parent) {
+                    const parentRow = rows.find((row) => (
+                        normaliseKey(row.title) === normaliseKey(item.parentItem)
+                        && (Number.parseInt(row.level, 10) <= 1 || !row.parentItem)
+                    ));
+
+                    if (parentRow) {
+                        const parentSection = sectionMap.get(parentRow.section || 'More ideas');
+                        const parentItem = parentSection?.rows.find((row) => (
+                            normaliseKey(row.title) === normaliseKey(parentRow.title)
+                            && normaliseKey(row.section) === normaliseKey(parentRow.section)
+                        ));
+
+                        if (parentItem) {
+                            parentItem.children.push(item);
+                            return;
+                        }
+                    }
+
                     section.roots.push(item);
+                    return;
                 }
+
+                parent.children.push(item);
             });
 
             section.roots.forEach((item) => {
@@ -1074,12 +1093,29 @@
             relatedList.innerHTML = '';
             children.forEach((child) => {
                 const li = document.createElement('li');
+                li.className = 'related-list-item';
+
+                const body = document.createElement('div');
+                body.className = 'related-list-body';
+
                 const strong = document.createElement('strong');
                 const span = document.createElement('span');
                 strong.textContent = child.title;
                 span.textContent = child.description || child.fullText || '';
-                li.append(strong);
-                if (span.textContent) li.append(span);
+                body.append(strong);
+                if (span.textContent) body.append(span);
+
+                li.append(body);
+
+                if (window.AtHomeAdmin?.buildChildControls) {
+                    const controls = window.AtHomeAdmin.buildChildControls(child, item);
+                    if (controls) {
+                        const adminWrap = document.createElement('div');
+                        adminWrap.innerHTML = controls;
+                        li.append(adminWrap.firstElementChild);
+                    }
+                }
+
                 relatedList.appendChild(li);
             });
         }

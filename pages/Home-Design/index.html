@@ -245,13 +245,23 @@
                 <button id="ideaEditorClose" class="idea-editor-close" type="button" aria-label="Close editor">×</button>
             </header>
             <form id="ideaEditorForm" class="idea-editor-form">
-                <label>
+                <label class="picker-field">
                     <span>Section</span>
-                    <input name="section" type="text" required placeholder="Kitchen">
+                    <select id="ideaSectionSelect" class="picker-select" aria-label="Choose section">
+                        <option value="">Choose a topic…</option>
+                    </select>
+                    <input name="section" class="picker-custom" type="text" hidden
+                        placeholder="Type new topic name" autocomplete="off" autocapitalize="words">
+                    <span class="field-hint">Choose an existing topic or add a new one</span>
                 </label>
-                <label>
+                <label class="picker-field">
                     <span>Subsection</span>
-                    <input name="subsection" type="text" placeholder="Layout">
+                    <select id="ideaSubsectionSelect" class="picker-select" aria-label="Choose subsection">
+                        <option value="">Choose a subsection…</option>
+                    </select>
+                    <input name="subsection" class="picker-custom" type="text" hidden
+                        placeholder="Type new subsection name" autocomplete="off" autocapitalize="words">
+                    <span class="field-hint">Options update when you change the section</span>
                 </label>
                 <label>
                     <span>Title</span>
@@ -265,17 +275,58 @@
                     <span>Full text</span>
                     <textarea name="fullText" rows="3"></textarea>
                 </label>
-                <label>
-                    <span>Parent item (for child ideas)</span>
-                    <input name="parentItem" type="text" placeholder="Parent idea title">
-                </label>
-                <label>
-                    <span>Level</span>
-                    <input name="level" type="number" min="1" value="1">
-                </label>
+                <input type="hidden" name="level" value="1">
+                <input type="hidden" name="parentItem" value="">
+                <section id="ideaEditorHierarchy" class="idea-editor-hierarchy" hidden>
+                    <div class="idea-editor-hierarchy-head">
+                        <span class="eyebrow">Child ideas</span>
+                        <p class="field-hint">Shown as “Also consider” details on this idea’s card.</p>
+                    </div>
+                    <div id="ideaChildrenList" class="idea-children-list" aria-live="polite"></div>
+                    <button id="ideaAddChildBtn" class="button secondary idea-add-child-btn" type="button">+ Add child idea</button>
+                </section>
                 <footer class="idea-editor-foot">
                     <button id="ideaEditorCancel" class="button secondary" type="button">Cancel</button>
                     <button id="ideaEditorSave" class="button primary" type="submit">Save idea</button>
+                </footer>
+            </form>
+        </section>
+    </div>
+
+    <div id="childIdeaEditor" class="idea-editor child-idea-editor" hidden>
+        <div id="childIdeaEditorBackdrop" class="idea-editor-backdrop"></div>
+        <section class="idea-editor-panel child-idea-editor-panel" role="dialog" aria-modal="true"
+            aria-labelledby="childIdeaEditorTitle">
+            <header class="idea-editor-head">
+                <div>
+                    <span class="eyebrow" id="childIdeaEditorEyebrow">Child idea</span>
+                    <h2 id="childIdeaEditorTitle">Add child idea</h2>
+                    <p id="childIdeaParentLabel" class="child-idea-parent-label"></p>
+                </div>
+                <button id="childIdeaEditorClose" class="idea-editor-close" type="button"
+                    aria-label="Close child editor">×</button>
+            </header>
+            <form id="childIdeaEditorForm" class="idea-editor-form child-idea-editor-form">
+                <label>
+                    <span>Title</span>
+                    <input id="childIdeaTitle" name="title" type="text" required placeholder="Short detail title">
+                </label>
+                <label>
+                    <span>Description</span>
+                    <textarea id="childIdeaDescription" name="description" rows="3"
+                        placeholder="Extra detail shown under the parent idea"></textarea>
+                </label>
+                <div id="childIdeaEditorActions" class="child-idea-editor-actions" hidden>
+                    <button id="childIdeaPromote" class="button secondary child-idea-promote" type="button">
+                        Make standalone idea
+                    </button>
+                    <button id="childIdeaDelete" class="button secondary child-idea-delete" type="button">
+                        Remove child
+                    </button>
+                </div>
+                <footer class="idea-editor-foot">
+                    <button id="childIdeaCancel" class="button secondary" type="button">Cancel</button>
+                    <button id="childIdeaSave" class="button primary" type="submit">Save child</button>
                 </footer>
             </form>
         </section>

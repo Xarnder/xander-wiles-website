@@ -12,7 +12,8 @@ import {
     query,
     orderBy,
     arrayUnion,
-    arrayRemove
+    arrayRemove,
+    deleteField
 } from 'https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js';
 import {
     ref,
@@ -27,6 +28,109 @@ const IDEAS_COLLECTION = 'ideas';
 
 function clean(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function getRowId(row) {
+    return row?.ideaId || row?.idea_id || '';
+}
+
+export function normaliseTitleKey(value) {
+    return clean(value).toLowerCase();
+}
+
+function isChildRow(row) {
+    return Number.parseInt(row?.level, 10) > 1 && Boolean(clean(row?.parentItem || row?.parent_item));
+}
+
+function buildIdeaUpdates(fields) {
+    const updates = {};
+
+    if (fields.section !== undefined) updates.section = clean(fields.section) || 'More ideas';
+    if (fields.subsection !== undefined) updates.subsection = clean(fields.subsection);
+    if (fields.level !== undefined) updates.level = Number.parseInt(fields.level, 10) || 1;
+    if (fields.parentItem !== undefined || fields.parent_item !== undefined) {
+        updates.parentItem = clean(fields.parentItem || fields.parent_item);
+    }
+    if (fields.title !== undefined) updates.title = clean(fields.title);
+    if (fields.description !== undefined) updates.description = clean(fields.description);
+    if (fields.fullText !== undefined || fields.full_text !== undefined) {
+        updates.fullText = clean(fields.fullText || fields.full_text);
+    }
+    if (fields.sortIndex !== undefined) updates.sortIndex = fields.sortIndex;
+    if (fields.images !== undefined) {
+        updates.images = clean(fields.images)
+            .split('|')
+            .map(clean)
+            .filter(Boolean);
+    }
+
+    return updates;
+}
+
+export function findDescendantRows(rows, anchorRow) {
+    const descendants = [];
+    const seenIds = new Set();
+    const queue = [{
+        title: clean(anchorRow.title),
+        section: clean(anchorRow.section) || 'More ideas'
+    }];
+
+    while (queue.length) {
+        const { title, section } = queue.shift();
+
+        rows.forEach((row) => {
+            const rowId = getRowId(row);
+            if (!rowId || seenIds.has(rowId) || rowId === getRowId(anchorRow)) return;
+
+            const matchesParent = normaliseTitleKey(row.parentItem || row.parent_item) === normaliseTitleKey(title)
+                && normaliseTitleKey(row.section) === normaliseTitleKey(section)
+                && isChildRow(row);
+
+            if (!matchesParent) return;
+
+            seenIds.add(rowId);
+            descendants.push(row);
+            queue.push({
+                title: clean(row.title),
+                section: clean(row.section) || 'More ideas'
+            });
+        });
+    }
+
+    rows.forEach((row) => {
+        const rowId = getRowId(row);
+        if (!rowId || seenIds.has(rowId) || rowId === getRowId(anchorRow) || !isChildRow(row)) return;
+
+        const matchesMovedParent = normaliseTitleKey(row.parentItem || row.parent_item) === normaliseTitleKey(anchorRow.title)
+            && normaliseTitleKey(row.section) !== normaliseTitleKey(anchorRow.section);
+
+        if (!matchesMovedParent) return;
+
+        seenIds.add(rowId);
+        descendants.push(row);
+    });
+
+    return descendants;
+}
+
+export function getDirectChildRows(rows, parentRow) {
+    const parentTitle = normaliseTitleKey(parentRow.title);
+
+    return rows.filter((row) => {
+        if (!isChildRow(row) || getRowId(row) === getRowId(parentRow)) return false;
+        return normaliseTitleKey(row.parentItem || row.parent_item) === parentTitle;
+    });
+}
+
+export function isRootIdea(row) {
+    return !isChildRow(row);
+}
+
+function getNextSortIndex(rows, sectionName, excludeIds = new Set()) {
+    return rows
+        .filter((row) => normaliseTitleKey(row.section) === normaliseTitleKey(sectionName)
+            && !excludeIds.has(getRowId(row)))
+        .reduce((max, row) => Math.max(max, row.sortIndex || 0), -1) + 1;
 }
 
 export function docToRow(data, id) {
@@ -147,36 +251,166 @@ export async function createIdea(fields) {
     return ideaId;
 }
 
-export async function updateIdea(ideaId, fields) {
+export async function createChildIdea(parentRow, fields) {
+    return createIdea({
+        section: clean(parentRow.section) || 'More ideas',
+        subsection: clean(parentRow.subsection),
+        level: 2,
+        parentItem: clean(parentRow.title),
+        title: fields.title,
+        description: fields.description,
+        fullText: fields.fullText || fields.full_text || fields.description
+    });
+}
+
+export async function promoteIdeaToStandalone(ideaId, originalRow, parentRow = null) {
+    const rows = await loadIdeasOnce();
+    const parent = parentRow || rows.find((row) => (
+        isRootIdea(row)
+        && normaliseTitleKey(row.title) === normaliseTitleKey(originalRow.parentItem || originalRow.parent_item)
+    ));
+
+    const section = clean(parent?.section || originalRow.section) || 'More ideas';
+    const subsection = clean(parent?.subsection ?? originalRow.subsection);
+    const sortIndex = getNextSortIndex(rows, section, new Set([ideaId]));
+
+    await updateDoc(doc(db, IDEAS_COLLECTION, ideaId), {
+        level: 1,
+        parentItem: deleteField(),
+        section,
+        subsection,
+        sortIndex,
+        updatedAt: serverTimestamp()
+    });
+
+    return { section, subsection };
+}
+
+export async function updateIdea(ideaId, fields, originalRow = null) {
+    if (originalRow) {
+        return updateIdeaWithDescendants(ideaId, fields, originalRow);
+    }
+
     const updates = {
+        ...buildIdeaUpdates(fields),
         updatedAt: serverTimestamp()
     };
-
-    if (fields.section !== undefined) updates.section = clean(fields.section) || 'More ideas';
-    if (fields.subsection !== undefined) updates.subsection = clean(fields.subsection);
-    if (fields.level !== undefined) updates.level = Number.parseInt(fields.level, 10) || 1;
-    if (fields.parentItem !== undefined || fields.parent_item !== undefined) {
-        updates.parentItem = clean(fields.parentItem || fields.parent_item);
-    }
-    if (fields.title !== undefined) updates.title = clean(fields.title);
-    if (fields.description !== undefined) updates.description = clean(fields.description);
-    if (fields.fullText !== undefined || fields.full_text !== undefined) {
-        updates.fullText = clean(fields.fullText || fields.full_text);
-    }
-    if (fields.sortIndex !== undefined) updates.sortIndex = fields.sortIndex;
-    if (fields.images !== undefined) {
-        updates.images = clean(fields.images)
-            .split('|')
-            .map(clean)
-            .filter(Boolean);
-    }
 
     await updateDoc(doc(db, IDEAS_COLLECTION, ideaId), updates);
 }
 
+async function updateIdeaWithDescendants(ideaId, fields, originalRow) {
+    const rows = await loadIdeasOnce();
+    const anchor = {
+        ideaId,
+        idea_id: ideaId,
+        title: clean(originalRow.title),
+        section: clean(originalRow.section) || 'More ideas',
+        subsection: clean(originalRow.subsection),
+        level: Number.parseInt(originalRow.level, 10) || 1,
+        parentItem: clean(originalRow.parentItem || originalRow.parent_item),
+        sortIndex: originalRow.sortIndex
+    };
+
+    const descendants = findDescendantRows(rows, anchor);
+    const parentUpdates = buildIdeaUpdates(fields);
+
+    const nextSection = parentUpdates.section !== undefined
+        ? parentUpdates.section
+        : anchor.section;
+    const nextSubsection = parentUpdates.subsection !== undefined
+        ? parentUpdates.subsection
+        : anchor.subsection;
+    const nextTitle = parentUpdates.title !== undefined
+        ? parentUpdates.title
+        : anchor.title;
+
+    const sectionChanged = parentUpdates.section !== undefined
+        && normaliseTitleKey(nextSection) !== normaliseTitleKey(anchor.section);
+    const subsectionChanged = parentUpdates.subsection !== undefined
+        && normaliseTitleKey(nextSubsection) !== normaliseTitleKey(anchor.subsection);
+    const titleChanged = parentUpdates.title !== undefined
+        && normaliseTitleKey(nextTitle) !== normaliseTitleKey(anchor.title);
+
+    const anchorWasChild = isChildRow(anchor);
+
+    if (anchorWasChild && sectionChanged) {
+        parentUpdates.level = 1;
+        parentUpdates.parentItem = '';
+    }
+
+    if (sectionChanged) {
+        const excludeIds = new Set([ideaId, ...descendants.map(getRowId)]);
+        parentUpdates.sortIndex = getNextSortIndex(rows, nextSection, excludeIds);
+    }
+
+    const batch = writeBatch(db);
+    const queueUpdate = (id, updates) => {
+        if (!id || !Object.keys(updates).length) return;
+        batch.update(doc(db, IDEAS_COLLECTION, id), {
+            ...updates,
+            updatedAt: serverTimestamp()
+        });
+    };
+
+    queueUpdate(ideaId, parentUpdates);
+
+    if (!anchorWasChild && descendants.length) {
+        descendants.forEach((child) => {
+            const childUpdates = {};
+            const childSection = clean(child.section) || 'More ideas';
+            const needsSectionRepair = normaliseTitleKey(childSection) !== normaliseTitleKey(nextSection);
+
+            if (sectionChanged || needsSectionRepair) {
+                childUpdates.section = nextSection;
+                childUpdates.sortIndex = parentUpdates.sortIndex;
+            }
+
+            if (subsectionChanged || needsSectionRepair) {
+                childUpdates.subsection = nextSubsection;
+            }
+
+            if (titleChanged && normaliseTitleKey(child.parentItem || child.parent_item) === normaliseTitleKey(anchor.title)) {
+                childUpdates.parentItem = nextTitle;
+            }
+
+            queueUpdate(getRowId(child), childUpdates);
+        });
+    }
+
+    await batch.commit();
+
+    return {
+        descendantCount: descendants.length,
+        movedWithParent: !anchorWasChild && sectionChanged && descendants.length > 0
+    };
+}
+
+export async function countDescendantRows(ideaId, rows = null) {
+    const allRows = rows || await loadIdeasOnce();
+    const anchor = allRows.find((row) => getRowId(row) === ideaId);
+    if (!anchor) return 0;
+    return findDescendantRows(allRows, anchor).length;
+}
+
 export async function deleteIdea(ideaId) {
-    await deleteIdeaImages(ideaId);
-    await deleteDoc(doc(db, IDEAS_COLLECTION, ideaId));
+    const rows = await loadIdeasOnce();
+    const anchor = rows.find((row) => getRowId(row) === ideaId);
+    const descendants = anchor ? findDescendantRows(rows, anchor) : [];
+
+    await Promise.all([
+        deleteIdeaImages(ideaId),
+        ...descendants.map((child) => deleteIdeaImages(getRowId(child)))
+    ]);
+
+    const batch = writeBatch(db);
+    descendants.forEach((child) => {
+        batch.delete(doc(db, IDEAS_COLLECTION, getRowId(child)));
+    });
+    batch.delete(doc(db, IDEAS_COLLECTION, ideaId));
+    await batch.commit();
+
+    return { descendantCount: descendants.length };
 }
 
 export async function deleteIdeaImages(ideaId) {
