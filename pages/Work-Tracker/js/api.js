@@ -1,11 +1,24 @@
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc, setDoc, runTransaction } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
 import { db } from './config.js';
-import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate } from './state.js';
+import { state, updatePercentageCuts, updateTimeCostItems, updateTcHourlyRate, updateTcDailyHours, updateTcWorkingDaysPerWeek, getBreaksViewDate, updateSavingPotPoolScope } from './state.js';
 import { renderCalendar, renderChart, DOM, showConfirm, showAlert, updateDatalists, renderPercentageCutStats, renderPercentageCutList, getAmountAfterPercentageCuts, renderCustomStatsPeriods, renderWorkPatternBreakdown } from './ui.js';
 import { getStartOfWeekDate, formatDuration, getMonthlyStatsConfig, STATS_PERIOD_MODES, getEffectiveSessionMetrics, calculateRollingPeriodTotals, calculateCalendarPeriodTotals, getBreakOverlapMs, getStartOfDay, isSameCalendarDay, getBreaksForDay, formatRelativeSessionAge } from './utils.js';
+import {
+    sanitizePoolScope,
+    computeSavingPotStateFromAppState,
+    validateAssign,
+    validateWithdraw,
+    clampSavedAmountForCost,
+    getItemSavedAmount,
+    roundMoney
+} from './savingPots.js';
 
 function getPercentageCutsRef() {
     return doc(db, "users", state.currentUser.uid, "settings", "percentageCuts");
+}
+
+function getSavingPotSettingsRef() {
+    return doc(db, "users", state.currentUser.uid, "settings", "savingPots");
 }
 
 function serializePercentageCuts(cuts) {
@@ -211,6 +224,7 @@ export async function saveTimeCostItem(itemData) {
     try {
         await addDoc(collection(db, "users", state.currentUser.uid, "timeCostItems"), {
             ...itemData,
+            savedAmount: 0,
             createdAt: serverTimestamp()
         });
         console.log("Debug: Time cost item saved to Firebase");
@@ -233,13 +247,167 @@ export async function deleteTimeCostItem(itemId) {
 
 export async function updateTimeCostItem(itemId, itemData) {
     if (!state.currentUser || !itemId) return;
+
+    const existingItem = state.timeCostItems.find(item => item.id === itemId);
+    const nextCost = itemData.cost !== undefined ? itemData.cost : existingItem?.cost;
+    const nextSavedAmount = itemData.savedAmount !== undefined
+        ? itemData.savedAmount
+        : getItemSavedAmount(existingItem || {});
+
+    if (nextCost !== undefined) {
+        itemData.savedAmount = clampSavedAmountForCost(nextSavedAmount, nextCost);
+    }
+
     try {
-        await updateDoc(doc(db, "users", state.currentUser.uid, "timeCostItems", itemId), itemData);
+        await updateDoc(doc(db, "users", state.currentUser.uid, "timeCostItems", itemId), {
+            ...itemData,
+            updatedAt: serverTimestamp()
+        });
         console.log("Debug: Time cost item updated", itemId);
     } catch (e) {
         console.error("Debug: Error updating time cost item: ", e);
         showAlert("Update Error", "Error updating saved item! Please check your internet connection.");
     }
+}
+
+export async function assignToSavingPot(itemId, amount) {
+    if (!state.currentUser) {
+        showAlert("Not Signed In", "Please sign in before assigning savings.");
+        return false;
+    }
+
+    const item = state.timeCostItems.find(entry => entry.id === itemId);
+    const potState = computeSavingPotStateFromAppState(state);
+    const validation = validateAssign(amount, item, potState);
+
+    if (!validation.ok) {
+        showAlert("Cannot Assign", validation.error);
+        return false;
+    }
+
+    const itemRef = doc(db, "users", state.currentUser.uid, "timeCostItems", itemId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const itemSnap = await transaction.get(itemRef);
+            if (!itemSnap.exists()) {
+                throw new Error('Saved item not found.');
+            }
+
+            const data = itemSnap.data();
+            const cost = roundMoney(Math.max(Number(data.cost) || 0, 0));
+            const currentSaved = getItemSavedAmount(data);
+            const nextSaved = roundMoney(currentSaved + validation.amount);
+
+            if (nextSaved > cost + 0.005) {
+                throw new Error('Assignment would exceed the item cost.');
+            }
+
+            transaction.update(itemRef, {
+                savedAmount: nextSaved,
+                updatedAt: serverTimestamp()
+            });
+        });
+
+        console.log("Debug: Saving pot assignment saved", itemId, validation.amount);
+        return true;
+    } catch (e) {
+        console.error("Debug: Error assigning to saving pot: ", e);
+        showAlert("Assign Error", e.message || "Error assigning savings! Please check your internet connection.");
+        return false;
+    }
+}
+
+export async function withdrawFromSavingPot(itemId, amount) {
+    if (!state.currentUser) {
+        showAlert("Not Signed In", "Please sign in before withdrawing savings.");
+        return false;
+    }
+
+    const item = state.timeCostItems.find(entry => entry.id === itemId);
+    const validation = validateWithdraw(amount, item);
+
+    if (!validation.ok) {
+        showAlert("Cannot Withdraw", validation.error);
+        return false;
+    }
+
+    const itemRef = doc(db, "users", state.currentUser.uid, "timeCostItems", itemId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const itemSnap = await transaction.get(itemRef);
+            if (!itemSnap.exists()) {
+                throw new Error('Saved item not found.');
+            }
+
+            const data = itemSnap.data();
+            const currentSaved = getItemSavedAmount(data);
+            const nextSaved = roundMoney(Math.max(0, currentSaved - validation.amount));
+
+            transaction.update(itemRef, {
+                savedAmount: nextSaved,
+                updatedAt: serverTimestamp()
+            });
+        });
+
+        console.log("Debug: Saving pot withdrawal saved", itemId, validation.amount);
+        return true;
+    } catch (e) {
+        console.error("Debug: Error withdrawing from saving pot: ", e);
+        showAlert("Withdraw Error", e.message || "Error withdrawing savings! Please check your internet connection.");
+        return false;
+    }
+}
+
+export async function saveSavingPotSettings(poolScope) {
+    if (!state.currentUser) {
+        showAlert("Not Signed In", "Please sign in before saving Saving Pot settings.");
+        return false;
+    }
+
+    const sanitizedScope = sanitizePoolScope(poolScope);
+    updateSavingPotPoolScope(sanitizedScope);
+
+    try {
+        await setDoc(getSavingPotSettingsRef(), {
+            poolScope: sanitizedScope,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+        console.log("Debug: Saving pot settings saved to Firebase");
+        return true;
+    } catch (e) {
+        console.error("Debug: Error saving saving pot settings: ", e);
+        showAlert("Save Error", "Error saving Saving Pot settings! Please check your internet connection.");
+        return false;
+    }
+}
+
+export function loadSavingPotSettings() {
+    if (!state.currentUser) return;
+
+    const settingsRef = getSavingPotSettingsRef();
+
+    onSnapshot(settingsRef, async (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            updateSavingPotPoolScope(sanitizePoolScope(data.poolScope));
+            console.log("Debug: Saving pot settings updated from Firebase");
+            return;
+        }
+
+        try {
+            await setDoc(settingsRef, {
+                poolScope: sanitizePoolScope(state.savingPotPoolScope),
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+            console.log("Debug: Local saving pot settings migrated to Firebase");
+        } catch (e) {
+            console.error("Debug: Error migrating saving pot settings: ", e);
+        }
+    }, (error) => {
+        console.error("Debug: Saving pot settings snapshot error", error);
+    });
 }
 
 export function loadTimeCostItems() {
@@ -531,6 +699,7 @@ export function renderDashboardData() {
                 DOM.sessionModal.classList.remove('modal-mode-add');
                 DOM.sessionModal.classList.add('modal-mode-edit');
                 DOM.sessionModal.classList.remove('hidden');
+                import('./ui.js').then(module => module.updateSessionModalDurationPreview());
             });
         });
 
@@ -604,7 +773,13 @@ export function renderDashboardData() {
 
     renderCalendar();
     renderChart();
-    import('./ui.js').then(module => module.renderGanttChart());
+    import('./ui.js').then(module => {
+        module.renderGanttChart();
+        module.renderSavingPotsWidget();
+        if (DOM.timeCostView && !DOM.timeCostView.classList.contains('hidden')) {
+            module.renderSavingPotsSummary();
+        }
+    });
     updateDatalists();
 }
 
@@ -793,6 +968,7 @@ export function renderBreakHistory() {
                     DOM.deleteBreakBtn.style.display = 'block';
                 }
                 DOM.breakModal.classList.remove('hidden');
+                import('./ui.js').then(module => module.updateBreakModalDurationPreviews());
             });
         });
 

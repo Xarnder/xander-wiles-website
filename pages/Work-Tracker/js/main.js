@@ -15,7 +15,17 @@ import {
     setupWidgetImageExports,
     renderTimeCostBreakdown,
     renderSavedTimeCostItems,
+    renderSavingPotsSummary,
+    renderSavingPotsWidget,
+    refreshSavingPotDisplays,
     renderTcCutsSummary,
+    closeSavingPotModal,
+    fullyFundSavingPot,
+    withdrawAllFromSavingPot,
+    openPartialFundModal,
+    syncPartialFundFromSlider,
+    syncPartialFundFromInput,
+    showAlert,
     renderPercentageCutStats,
     renderMoneyCounterModeControls,
     renderStatsPeriodModeControls,
@@ -23,7 +33,11 @@ import {
     renderSettingsDefaultFields,
     renderCsvExportCompanySelect,
     renderCalendarEditModeControls,
-    updateBatchModalForMode
+    updateBatchModalForMode,
+    updateTimerStartDurationPreview,
+    updateSessionModalDurationPreview,
+    updateBreakModalDurationPreviews,
+    clearBreakModalDurationPreviews
 } from './ui.js';
 import { setupAuth } from './auth.js';
 import { startTimer, stopTimer } from './timer.js';
@@ -63,7 +77,7 @@ import {
     setBreaksViewDate,
     shiftBreaksViewDate
 } from './state.js';
-import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory } from './api.js';
+import { renderDashboardData, savePercentageCuts, saveTimeCostItem, saveTimeCostSettings, renderBreakHistory, assignToSavingPot } from './api.js';
 import { getBreaksForDay, sessionOverlapsDay } from './utils.js';
 
 let percentageCutsSaveTimeout = null;
@@ -73,6 +87,7 @@ function schedulePercentageCutsAutosave() {
     renderDashboardData();
     renderTimeCostBreakdown();
     renderSavedTimeCostItems();
+    renderSavingPotsWidget();
     renderMoneyCounterModeControls();
 
     clearTimeout(percentageCutsSaveTimeout);
@@ -90,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyWidgetVisibility();
     applyWidgetTitles();
     applyDashboardDensity();
+    renderSavingPotsWidget();
     renderMoneyCounterModeControls();
     renderStatsPeriodModeControls();
     renderSettingsDefaultFields();
@@ -170,6 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Timer Events
     DOM.startBtn.addEventListener('click', startTimer);
     DOM.stopBtn.addEventListener('click', stopTimer);
+    updateTimerStartDurationPreview();
 
     // View Switcher Events
     if (DOM.viewDashboardBtn && DOM.viewTimeCostBtn && DOM.viewSettingsBtn) {
@@ -201,6 +218,14 @@ document.addEventListener('DOMContentLoaded', () => {
             DOM.dashboardView.classList.add('hidden');
             DOM.timeCostView.classList.add('hidden');
             initSettingsView(); // Initialize
+        });
+    }
+
+    if (DOM.spWidgetContent) {
+        DOM.spWidgetContent.addEventListener('click', (event) => {
+            const manageBtn = event.target.closest('.sp-widget-manage-btn');
+            if (!manageBtn || !DOM.viewTimeCostBtn) return;
+            DOM.viewTimeCostBtn.click();
         });
     }
 
@@ -323,6 +348,50 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             DOM.tcItemModal.classList.add('hidden');
+        });
+    }
+
+    if (DOM.closeSpActionModalBtn) {
+        DOM.closeSpActionModalBtn.addEventListener('click', () => {
+            closeSavingPotModal();
+        });
+    }
+
+    if (DOM.saveSpActionBtn) {
+        DOM.saveSpActionBtn.addEventListener('click', async () => {
+            const itemId = DOM.spActionItemId?.value;
+            const amount = syncPartialFundFromInput();
+
+            if (!itemId) return;
+
+            if (!Number.isFinite(amount) || amount <= 0) {
+                showAlert('Invalid Amount', 'Please enter an amount greater than zero.');
+                return;
+            }
+
+            const success = await assignToSavingPot(itemId, amount);
+
+            if (success) {
+                closeSavingPotModal();
+            }
+        });
+    }
+
+    if (DOM.spActionSlider) {
+        DOM.spActionSlider.addEventListener('input', () => {
+            syncPartialFundFromSlider();
+        });
+    }
+
+    if (DOM.spActionAmount) {
+        DOM.spActionAmount.addEventListener('input', () => {
+            syncPartialFundFromInput();
+        });
+
+        DOM.spActionAmount.addEventListener('keydown', async (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            DOM.saveSpActionBtn?.click();
         });
     }
 
@@ -778,6 +847,7 @@ document.addEventListener('DOMContentLoaded', () => {
         import('./utils.js').then(({ formatDateTimeLocal }) => {
             DOM.sessionStart.value = formatDateTimeLocal(newStart);
             DOM.sessionEnd.value = formatDateTimeLocal(newEnd);
+            updateSessionModalDurationPreview();
         });
 
         if (state.ratePreference === 'default_rate') {
@@ -817,6 +887,7 @@ document.addEventListener('DOMContentLoaded', () => {
             DOM.sessionModal.classList.remove('modal-mode-add');
             DOM.sessionModal.classList.add('modal-mode-edit');
             DOM.sessionModal.classList.remove('hidden');
+            updateSessionModalDurationPreview();
         });
     }
 
@@ -1457,6 +1528,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (DOM.timerStartTimeInput) {
+        DOM.timerStartTimeInput.addEventListener('input', updateTimerStartDurationPreview);
+        DOM.timerStartTimeInput.addEventListener('change', updateTimerStartDurationPreview);
+    }
+
+    if (DOM.hourlyRateInput) {
+        DOM.hourlyRateInput.addEventListener('input', updateTimerStartDurationPreview);
+        DOM.hourlyRateInput.addEventListener('change', updateTimerStartDurationPreview);
+    }
+
+    if (DOM.sessionStart) {
+        DOM.sessionStart.addEventListener('input', updateSessionModalDurationPreview);
+        DOM.sessionStart.addEventListener('change', updateSessionModalDurationPreview);
+    }
+
+    if (DOM.sessionEnd) {
+        DOM.sessionEnd.addEventListener('input', updateSessionModalDurationPreview);
+        DOM.sessionEnd.addEventListener('change', updateSessionModalDurationPreview);
+    }
+
+    if (DOM.breakStart) {
+        DOM.breakStart.addEventListener('input', updateBreakModalDurationPreviews);
+        DOM.breakStart.addEventListener('change', updateBreakModalDurationPreviews);
+    }
+
+    if (DOM.breakEnd) {
+        DOM.breakEnd.addEventListener('input', updateBreakModalDurationPreviews);
+        DOM.breakEnd.addEventListener('change', updateBreakModalDurationPreviews);
+    }
+
     if (DOM.deleteSessionBtn) {
         DOM.deleteSessionBtn.addEventListener('click', async () => {
             const sessionId = DOM.editSessionId.value;
@@ -1555,6 +1656,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.deleteBreakBtn.style.display = 'block';
             }
             DOM.breakModal.classList.remove('hidden');
+            updateBreakModalDurationPreviews();
         });
     }
 
@@ -1644,6 +1746,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 DOM.deleteBreakBtn.style.display = 'none';
             }
             DOM.breakModal.classList.remove('hidden');
+            updateBreakModalDurationPreviews();
         });
     }
 
@@ -1686,6 +1789,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (DOM.closeBreakModalBtn) {
         DOM.closeBreakModalBtn.addEventListener('click', () => {
             DOM.breakModal.classList.add('hidden');
+            clearBreakModalDurationPreviews();
         });
     }
 
@@ -1744,6 +1848,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     module.addCustomBreak(breakData);
                 }
                 DOM.breakModal.classList.add('hidden');
+                clearBreakModalDurationPreviews();
             });
         });
     }

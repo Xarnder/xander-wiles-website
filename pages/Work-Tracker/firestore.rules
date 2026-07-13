@@ -34,6 +34,19 @@ service cloud.firestore {
         && (!('label' in request.resource.data) || request.resource.data.label is string);
     }
 
+    function isValidTimeCostItem() {
+      return request.resource.data.name is string
+        && request.resource.data.cost is number
+        && request.resource.data.cost >= 0
+        && (!('dateBought' in request.resource.data)
+            || request.resource.data.dateBought == null
+            || request.resource.data.dateBought is string)
+        && (!('savedAmount' in request.resource.data)
+            || (request.resource.data.savedAmount is number
+                && request.resource.data.savedAmount >= 0
+                && request.resource.data.savedAmount <= request.resource.data.cost));
+    }
+
     match /users/{userId} {
 
       match /sessions/{sessionId} {
@@ -49,7 +62,9 @@ service cloud.firestore {
       }
 
       match /timeCostItems/{itemId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidTimeCostItem();
+        allow delete: if isOwner(userId);
       }
 
       match /settings/{settingId} {

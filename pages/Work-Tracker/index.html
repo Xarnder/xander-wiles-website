@@ -91,7 +91,7 @@
                 <div class="dashboard-grid">
                     <!-- Timer Card -->
                 <section class="card timer-widget" id="widget-timer">
-                    <h2 class="widget-title" style="display: flex; align-items: center; gap: 8px;">Timer <span class="live-indicator hidden"><span class="live-dot"></span>Live</span></h2>
+                    <h2 class="widget-title" style="display: flex; align-items: center; gap: 8px;">Timer <span class="preview-indicator hidden" id="timer-preview-indicator">Preview</span><span class="live-indicator hidden"><span class="live-dot"></span>Live</span></h2>
                     <div id="timer-input-container">
                         <div class="input-group">
                             <label for="hourly-rate">Hourly Rate (<span class="currency-symbol">£</span>)</label>
@@ -118,6 +118,7 @@
                         <div class="input-group timer-start-group">
                             <label for="timer-start-time">Start Time</label>
                             <input type="datetime-local" id="timer-start-time">
+                            <p id="timer-start-duration-preview" class="time-range-preview hidden" aria-live="polite"></p>
                         </div>
                     </div>
 
@@ -142,6 +143,7 @@
                     </div>
 
                     <div class="timer-display">
+                        <p id="timer-preview-banner" class="timer-preview-banner hidden">Preview only — not tracking yet. Press Start Work to begin.</p>
                         <span id="timer">00:00:00</span>
                         <div id="timer-shift-remaining" class="timer-shift-remaining hidden"></div>
                         <div id="live-earnings" class="highlight-text"><span class="currency-symbol">£</span>0.00</div>
@@ -226,6 +228,20 @@
                                 <strong id="money-count-10">0</strong>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <!-- Saving Pots -->
+                <section class="card saving-pots-widget" id="widget-saving-pots" aria-live="polite">
+                    <div class="sp-widget-header">
+                        <div class="sp-widget-header-copy">
+                            <h2 class="widget-title" style="margin: 0;">Saving Pots</h2>
+                            <p class="sp-widget-subtitle">Virtual savings from tracked earnings</p>
+                        </div>
+                        <span class="sp-widget-scope-badge" id="sp-widget-scope-label">All time</span>
+                    </div>
+                    <div id="sp-widget-content" class="sp-widget-content">
+                        <p class="loading-text">Loading saving pots...</p>
                     </div>
                 </section>
 
@@ -495,6 +511,10 @@
                 <!-- Saved Items Sheet -->
                 <section class="card time-cost-widget" style="margin-bottom: 25px;">
                     <h2 class="widget-title">Saved Items</h2>
+                    <div id="tc-saving-pots-summary" class="sp-summary" aria-live="polite">
+                        <p class="loading-text">Loading saving pots...</p>
+                    </div>
+                    <p class="sp-summary-hint">Virtual balance based on tracked sessions — not a bank account.</p>
                     <div class="tc-saved-items-filters" aria-label="Saved item filters">
                         <div class="input-group">
                             <label for="tc-saved-filter-search">Search Items</label>
@@ -885,6 +905,8 @@
                         style="width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(255, 255, 255, 0.05); color: var(--text-primary); font-family: 'Outfit', sans-serif;">
                 </div>
 
+                <p id="session-duration-preview" class="time-range-preview hidden" aria-live="polite"></p>
+
                 <div class="input-group">
                     <label for="session-rate">Hourly Rate (<span class="currency-symbol">£</span>)</label>
                     <input type="number" id="session-rate" value="20" min="0">
@@ -943,6 +965,9 @@
                         style="width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: rgba(255, 255, 255, 0.05); color: var(--text-primary); font-family: 'Outfit', sans-serif;">
                 </div>
 
+                <p id="break-elapsed-preview" class="time-range-preview hidden" aria-live="polite"></p>
+                <p id="break-duration-preview" class="time-range-preview hidden" aria-live="polite"></p>
+
                 <div class="input-group">
                     <label for="break-label">Label (Optional)</label>
                     <input type="text" id="break-label" placeholder="e.g. Lunch">
@@ -982,6 +1007,54 @@
 
                 <div class="settings-footer">
                     <button id="save-tc-item-btn" class="btn-primary">Save Item</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Partial Fund Modal -->
+        <div id="sp-action-modal" class="modal-overlay hidden">
+            <div class="modal-content card">
+                <div class="modal-header">
+                    <h2 id="sp-action-modal-title">Partial Fund</h2>
+                    <button id="close-sp-action-modal" class="btn-text" type="button">&times;</button>
+                </div>
+
+                <input type="hidden" id="sp-action-item-id" value="">
+                <input type="hidden" id="sp-action-max" value="">
+
+                <p id="sp-action-item-label" class="sp-action-item-label"></p>
+                <p id="sp-action-hint" class="sp-action-hint"></p>
+
+                <div id="sp-partial-controls" class="sp-partial-controls">
+                    <div class="sp-partial-amount-row">
+                        <label for="sp-action-slider">Amount to assign</label>
+                        <strong id="sp-partial-amount-display" class="sp-partial-amount-display"><span class="currency-symbol">£</span>0.00</strong>
+                    </div>
+                    <input
+                        type="range"
+                        id="sp-action-slider"
+                        class="sp-partial-fund-slider"
+                        min="0.01"
+                        max="1"
+                        step="0.01"
+                        value="0.01"
+                        aria-valuemin="0.01"
+                        aria-valuemax="1"
+                        aria-valuenow="0.01"
+                        aria-label="Partial fund amount"
+                    >
+                    <div class="sp-partial-range-labels">
+                        <span><span class="currency-symbol">£</span>0.01</span>
+                        <span id="sp-partial-max-label"><span class="currency-symbol">£</span>0.00</span>
+                    </div>
+                    <div class="input-group sp-partial-amount-input">
+                        <label for="sp-action-amount">Or enter amount (<span class="currency-symbol">£</span>)</label>
+                        <input type="number" id="sp-action-amount" min="0.01" step="0.01" placeholder="0.00">
+                    </div>
+                </div>
+
+                <div class="settings-footer">
+                    <button id="save-sp-action-btn" class="btn-primary" type="button">Assign</button>
                 </div>
             </div>
         </div>

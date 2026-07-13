@@ -1,5 +1,6 @@
 import { createPercentageCut, createTcCustomTimeScale, state, updateTcCustomTimeScales, updateTcMatrixSelectedItemIds, updateCsvExportCompany } from './state.js';
-import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getEffectiveSessionOverlapMs, getBreakOverlapMs, getCalendarDateKey, formatRelativeSessionAge, CSV_UNASSIGNED_COMPANY, accumulateDailySessionHours, accumulateDailyBreakHours, forEachSessionDaySegment } from './utils.js';
+import { formatDuration, getStartOfWeekDate, getSessionTimeRange, getMonthlyStatsConfig, getCustomStatsPeriodConfig, calculateRollingPeriodTotals, formatStatsPeriodUnit, computeWorkPatternAnalytics, formatAverageClockTime, formatClockTimeFromMs, formatWorkPatternDay, getEffectiveSessionMetrics, getEffectiveSessionOverlapMs, getBreakOverlapMs, getCalendarDateKey, formatRelativeSessionAge, CSV_UNASSIGNED_COMPANY, accumulateDailySessionHours, accumulateDailyBreakHours, forEachSessionDaySegment, formatClockDuration, isSameDateTimeLocalMinute } from './utils.js';
+import { computeSavingPotStateFromAppState, getItemSavedAmount, roundMoney, MONEY_EPSILON } from './savingPots.js';
 
 export const DOM = {
     authSection: document.getElementById('auth-section'),
@@ -13,6 +14,10 @@ export const DOM = {
     timerShiftRemaining: document.getElementById('timer-shift-remaining'),
     hourlyRateInput: document.getElementById('hourly-rate'),
     timerStartTimeInput: document.getElementById('timer-start-time'),
+    timerStartDurationPreview: document.getElementById('timer-start-duration-preview'),
+    timerPreviewBanner: document.getElementById('timer-preview-banner'),
+    timerPreviewIndicator: document.getElementById('timer-preview-indicator'),
+    timerWidget: document.getElementById('widget-timer'),
     timerInputContainer: document.getElementById('timer-input-container'),
     timerLiveMeta: document.getElementById('timer-live-meta'),
     moneyCounterWidget: document.getElementById('widget-money-counter'),
@@ -142,6 +147,7 @@ export const DOM = {
     editSessionId: document.getElementById('edit-session-id'),
     sessionStart: document.getElementById('session-start'),
     sessionEnd: document.getElementById('session-end'),
+    sessionDurationPreview: document.getElementById('session-duration-preview'),
     sessionRate: document.getElementById('session-rate'),
     sessionCompany: document.getElementById('session-company'),
     sessionCompanySelect: document.getElementById('session-company-select'),
@@ -165,6 +171,8 @@ export const DOM = {
     editBreakId: document.getElementById('edit-break-id'),
     breakStart: document.getElementById('break-start'),
     breakEnd: document.getElementById('break-end'),
+    breakElapsedPreview: document.getElementById('break-elapsed-preview'),
+    breakDurationPreview: document.getElementById('break-duration-preview'),
     breakLabel: document.getElementById('break-label'),
     saveBreakBtn: document.getElementById('save-break-btn'),
     deleteBreakBtn: document.getElementById('delete-break-btn'),
@@ -232,7 +240,24 @@ export const DOM = {
     editTcItemName: document.getElementById('edit-tc-item-name'),
     editTcItemCost: document.getElementById('edit-tc-item-cost'),
     editTcItemDateBought: document.getElementById('edit-tc-item-date-bought'),
-    saveTcItemBtn: document.getElementById('save-tc-item-btn')
+    saveTcItemBtn: document.getElementById('save-tc-item-btn'),
+    tcSavingPotsSummary: document.getElementById('tc-saving-pots-summary'),
+    spActionModal: document.getElementById('sp-action-modal'),
+    spActionModalTitle: document.getElementById('sp-action-modal-title'),
+    closeSpActionModalBtn: document.getElementById('close-sp-action-modal'),
+    spActionItemId: document.getElementById('sp-action-item-id'),
+    spActionMax: document.getElementById('sp-action-max'),
+    spActionItemLabel: document.getElementById('sp-action-item-label'),
+    spActionHint: document.getElementById('sp-action-hint'),
+    spPartialControls: document.getElementById('sp-partial-controls'),
+    spActionSlider: document.getElementById('sp-action-slider'),
+    spPartialAmountDisplay: document.getElementById('sp-partial-amount-display'),
+    spPartialMaxLabel: document.getElementById('sp-partial-max-label'),
+    spActionAmount: document.getElementById('sp-action-amount'),
+    saveSpActionBtn: document.getElementById('save-sp-action-btn'),
+    savingPotsWidget: document.getElementById('widget-saving-pots'),
+    spWidgetContent: document.getElementById('sp-widget-content'),
+    spWidgetScopeLabel: document.getElementById('sp-widget-scope-label')
 };
 
 export function showAlert(title, message) {
@@ -970,6 +995,187 @@ export function toggleLiveIndicators(isLive) {
     });
 }
 
+function hideTimeRangePreview(element) {
+    if (!element) return;
+    element.textContent = '';
+    element.classList.add('hidden');
+}
+
+function getDateTimeRangeDurationMs(startValue, endValue) {
+    if (!startValue || !endValue) return null;
+
+    const startMs = new Date(startValue).getTime();
+    const endMs = new Date(endValue).getTime();
+
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+        return null;
+    }
+
+    return endMs - startMs;
+}
+
+let timerStartPreviewInterval = null;
+let breakElapsedPreviewInterval = null;
+
+function clearTimerStartPreviewInterval() {
+    if (timerStartPreviewInterval) {
+        clearInterval(timerStartPreviewInterval);
+        timerStartPreviewInterval = null;
+    }
+}
+
+function clearBreakElapsedPreviewInterval() {
+    if (breakElapsedPreviewInterval) {
+        clearInterval(breakElapsedPreviewInterval);
+        breakElapsedPreviewInterval = null;
+    }
+}
+
+function setTimerPendingPreviewState(isActive) {
+    DOM.timerWidget?.classList.toggle('timer-widget-pending', isActive);
+    DOM.timerPreviewBanner?.classList.toggle('hidden', !isActive);
+    DOM.timerPreviewIndicator?.classList.toggle('hidden', !isActive);
+    DOM.liveEarningsDisplay?.classList.toggle('is-preview', isActive);
+}
+
+function resetTimerWidgetIdleState() {
+    if (!DOM.timerDisplay || state.startTime) return;
+
+    setTimerPendingPreviewState(false);
+    DOM.timerDisplay.textContent = '00:00:00';
+    DOM.liveEarningsDisplay.innerHTML = `
+        <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
+        <span class="cut-divider">|</span>
+        <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>0.00</span>
+    `;
+    updateShiftRemainingDisplay(0);
+    document.title = 'Work Tracker';
+}
+
+function renderTimerWidgetPendingPreview(elapsedMs) {
+    if (!DOM.timerDisplay || state.startTime) return;
+
+    setTimerPendingPreviewState(true);
+    DOM.timerDisplay.textContent = formatClockDuration(elapsedMs);
+
+    const rate = parseFloat(DOM.hourlyRateInput?.value);
+    const hourlyRate = Number.isFinite(rate) ? rate : 0;
+    const hoursFloat = elapsedMs / (1000 * 60 * 60);
+    const earned = hoursFloat * hourlyRate;
+    const afterCuts = getAmountAfterPercentageCuts(earned);
+
+    DOM.liveEarningsDisplay.innerHTML = `
+        <span class="timer-preview-earnings-note">Preview if started now</span>
+        <span class="before-cut">Before: <span class="currency-symbol">${state.currentCurrency}</span>${earned.toFixed(2)}</span>
+        <span class="cut-divider">|</span>
+        <span class="after-cut">After: <span class="currency-symbol">${state.currentCurrency}</span>${afterCuts.toFixed(2)}</span>
+    `;
+}
+
+export function updateTimerStartDurationPreview() {
+    clearTimerStartPreviewInterval();
+
+    const preview = DOM.timerStartDurationPreview;
+    if (!preview || !DOM.timerStartTimeInput || state.startTime) {
+        hideTimeRangePreview(preview);
+        if (!state.startTime) {
+            resetTimerWidgetIdleState();
+        }
+        return;
+    }
+
+    const startValue = DOM.timerStartTimeInput.value;
+    if (!startValue || isSameDateTimeLocalMinute(startValue)) {
+        hideTimeRangePreview(preview);
+        resetTimerWidgetIdleState();
+        return;
+    }
+
+    const renderPreview = () => {
+        const startMs = new Date(startValue).getTime();
+        const now = Date.now();
+
+        if (!Number.isFinite(startMs) || startMs > now || isSameDateTimeLocalMinute(startValue)) {
+            hideTimeRangePreview(preview);
+            resetTimerWidgetIdleState();
+            clearTimerStartPreviewInterval();
+            return;
+        }
+
+        const elapsedMs = now - startMs;
+        preview.textContent = `Preview session duration: ${formatDuration(elapsedMs)} (${formatClockDuration(elapsedMs)})`;
+        preview.classList.remove('hidden');
+        renderTimerWidgetPendingPreview(elapsedMs);
+    };
+
+    renderPreview();
+    timerStartPreviewInterval = setInterval(renderPreview, 1000);
+}
+
+export function updateSessionModalDurationPreview() {
+    const preview = DOM.sessionDurationPreview;
+    if (!preview) return;
+
+    const durationMs = getDateTimeRangeDurationMs(
+        DOM.sessionStart?.value,
+        DOM.sessionEnd?.value
+    );
+
+    if (durationMs == null) {
+        hideTimeRangePreview(preview);
+        return;
+    }
+
+    preview.textContent = `Session duration: ${formatDuration(durationMs)}`;
+    preview.classList.remove('hidden');
+}
+
+export function updateBreakModalDurationPreviews() {
+    clearBreakElapsedPreviewInterval();
+
+    const elapsedPreview = DOM.breakElapsedPreview;
+    const durationPreview = DOM.breakDurationPreview;
+    const startValue = DOM.breakStart?.value || '';
+    const endValue = DOM.breakEnd?.value || '';
+    const isAddMode = DOM.breakModal?.classList.contains('modal-mode-add');
+    const durationMs = getDateTimeRangeDurationMs(startValue, endValue);
+
+    if (durationMs == null) {
+        hideTimeRangePreview(durationPreview);
+    } else {
+        durationPreview.textContent = `Break duration: ${formatDuration(durationMs)}`;
+        durationPreview.classList.remove('hidden');
+    }
+
+    if (!isAddMode || !startValue || isSameDateTimeLocalMinute(startValue)) {
+        hideTimeRangePreview(elapsedPreview);
+        return;
+    }
+
+    const renderElapsedPreview = () => {
+        const startMs = new Date(startValue).getTime();
+        const now = Date.now();
+
+        if (!Number.isFinite(startMs) || startMs > now || isSameDateTimeLocalMinute(startValue)) {
+            hideTimeRangePreview(elapsedPreview);
+            clearBreakElapsedPreviewInterval();
+            return;
+        }
+
+        elapsedPreview.textContent = `Time since start: ${formatClockDuration(now - startMs)}`;
+        elapsedPreview.classList.remove('hidden');
+    };
+
+    renderElapsedPreview();
+    breakElapsedPreviewInterval = setInterval(renderElapsedPreview, 1000);
+}
+
+export function clearBreakModalDurationPreviews() {
+    clearBreakElapsedPreviewInterval();
+    hideTimeRangePreview(DOM.breakElapsedPreview);
+    hideTimeRangePreview(DOM.breakDurationPreview);
+}
+
 export function toggleTimerUI(isRunning) {
     if (isRunning) {
         DOM.startBtn.classList.add('hidden');
@@ -1010,6 +1216,11 @@ export function toggleTimerUI(isRunning) {
     if (!isRunning) {
         updateShiftRemainingDisplay(0);
         renderChart();
+        updateTimerStartDurationPreview();
+    } else {
+        clearTimerStartPreviewInterval();
+        setTimerPendingPreviewState(false);
+        hideTimeRangePreview(DOM.timerStartDurationPreview);
     }
 }
 
@@ -1651,7 +1862,7 @@ export function applyWidgetOrder() {
 
 export function applyWidgetVisibility() {
     const DEFAULT_WIDGET_IDS = [
-        'widget-timer', 'widget-breaks', 'widget-money-counter', 'widget-stats',
+        'widget-timer', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats',
         'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt',
         'widget-calendar', 'widget-chart', 'widget-history'
     ];
@@ -1936,6 +2147,7 @@ export function renderWidgetOrderList() {
         'widget-timer': 'Timer & Controls',
         'widget-breaks': 'Breaks',
         'widget-money-counter': 'Live Money Counter',
+        'widget-saving-pots': 'Saving Pots',
         'widget-stats': 'Statistics',
         'widget-work-pattern': 'Work Pattern',
         'widget-cut-stats': 'After Percentage Cuts',
@@ -2917,7 +3129,524 @@ export function renderTimeCostBreakdown() {
     DOM.tcBreakdownContainer.innerHTML = html;
 }
 
+function renderSavingPotProgressCell(progressItem, itemName, options = {}) {
+    const { showBadge = false } = options;
+    const cost = progressItem?.cost ?? 0;
+    const percent = progressItem?.percent ?? 0;
+    const isFullyFunded = progressItem?.isFullyFunded === true;
+    const accessibleName = `${itemName}: ${percent.toFixed(0)}% saved`;
+
+    if (cost <= 0) {
+        return '<span class="tc-muted-action">N/A</span>';
+    }
+
+    const fundedBadge = showBadge && isFullyFunded
+        ? '<span class="sp-funded-badge">Fully funded</span>'
+        : '';
+
+    return `
+        <div class="sp-progress-wrap">
+            ${fundedBadge}
+            <div
+                class="sp-progress"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="${Math.round(percent)}"
+                aria-label="${escapeHtml(accessibleName)}"
+            >
+                <span class="sp-progress-fill${isFullyFunded ? ' sp-progress-fill-complete' : ''}" style="width: ${Math.min(100, percent)}%;"></span>
+            </div>
+            <span class="sp-progress-label">${percent.toFixed(0)}% saved</span>
+        </div>
+    `;
+}
+
+function renderSavingPotItemPanel(progressItem, itemName, savedAmount, remaining, cost) {
+    const currency = state.currentCurrency;
+    const fundedBadge = progressItem?.isFullyFunded
+        ? '<span class="sp-funded-badge sp-funded-badge-inline">Fully funded</span>'
+        : '';
+
+    return `
+        <div class="sp-item-pot-panel">
+            <div class="sp-item-pot-panel-header">
+                <span class="sp-item-pot-panel-title">Saving Pot</span>
+                ${fundedBadge}
+            </div>
+            <div class="sp-item-pot-stats">
+                <div class="sp-item-pot-stat">
+                    <span class="sp-item-pot-stat-label">Saved</span>
+                    <span class="sp-item-pot-stat-value">${currency}${savedAmount.toFixed(2)}</span>
+                </div>
+                <div class="sp-item-pot-stat">
+                    <span class="sp-item-pot-stat-label">Remaining</span>
+                    <span class="sp-item-pot-stat-value">${cost > 0 ? `${currency}${remaining.toFixed(2)}` : 'N/A'}</span>
+                </div>
+            </div>
+            ${renderSavingPotProgressCell(progressItem, itemName)}
+        </div>
+    `;
+}
+
+function renderSavingPotActionButtons({ itemId, canFullyFund, canPartialFund, canWithdraw, fullFundAmount }) {
+    const escapedId = escapeHtml(itemId);
+    return `
+        <div class="sp-item-actions">
+            <button class="btn-primary btn-small sp-full-fund-btn" data-id="${escapedId}" title="Assign ${state.currentCurrency}${fullFundAmount.toFixed(2)} to fully fund" ${canFullyFund ? '' : 'disabled'}>Fully fund</button>
+            <button class="btn-outline btn-small sp-partial-fund-btn" data-id="${escapedId}" title="Choose a partial amount to assign" ${canPartialFund ? '' : 'disabled'}>Partial fund</button>
+            <button class="btn-outline btn-small sp-withdraw-btn" data-id="${escapedId}" title="Withdraw all assigned savings from this item" ${canWithdraw ? '' : 'disabled'}>Withdraw all</button>
+        </div>
+    `;
+}
+
+function renderSavedItemIconActions(itemId) {
+    const escapedId = escapeHtml(itemId);
+    return `
+        <div class="sp-row-icon-actions">
+            <button class="btn-edit tc-edit-btn" data-id="${escapedId}" title="Edit Item" type="button" aria-label="Edit item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+            </button>
+            <button class="btn-delete tc-delete-btn" data-id="${escapedId}" title="Delete Item" type="button" aria-label="Delete item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+            </button>
+        </div>
+    `;
+}
+
+function formatSavedItemDateBought(dateBought) {
+    if (!dateBought) return '<span class="tc-muted-action">Not set</span>';
+    return escapeHtml(new Date(`${dateBought}T00:00:00`).toLocaleDateString());
+}
+
+let lastSavedItemsLayoutMode = null;
+
+function ensureSavedItemsLayoutListener() {
+    if (ensureSavedItemsLayoutListener.bound) return;
+    ensureSavedItemsLayoutListener.bound = true;
+
+    const mediaQuery = window.matchMedia('(max-width: 900px)');
+    const onChange = () => {
+        if (!DOM.tcSavedItemsContainer) return;
+        const nextMode = mediaQuery.matches ? 'mobile' : 'desktop';
+        if (nextMode === lastSavedItemsLayoutMode) return;
+        renderSavedTimeCostItems();
+    };
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', onChange);
+    } else if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(onChange);
+    }
+}
+
+function renderSavedItemMobileCard(itemView) {
+    const {
+        itemId,
+        itemName,
+        cost,
+        dateBought,
+        progressItem,
+        savedAmount,
+        remaining,
+        canFullyFund,
+        canPartialFund,
+        canWithdraw,
+        fullFundAmount,
+        baseHoursStr,
+        baseDaysStr,
+        baseWeeksStr,
+        baseMonthsStr,
+        effectiveHoursStr,
+        effectiveDaysStr,
+        effectiveWeeksStr,
+        effectiveMonthsStr,
+        totalCutPercentage
+    } = itemView;
+
+    return `
+        <article class="tc-saved-item-card">
+            <div class="tc-saved-item-card-top">
+                <strong class="sp-item-name">${escapeHtml(itemName)}</strong>
+                ${renderSavedItemIconActions(itemId)}
+            </div>
+            <div class="tc-saved-item-card-meta">
+                <div class="tc-saved-item-meta-stat">
+                    <span class="tc-saved-item-meta-label">Cost</span>
+                    <span class="tc-saved-item-meta-value tc-amount">${state.currentCurrency}${cost.toFixed(2)}</span>
+                </div>
+                <div class="tc-saved-item-meta-stat">
+                    <span class="tc-saved-item-meta-label">Date bought</span>
+                    <span class="tc-saved-item-meta-value">${formatSavedItemDateBought(dateBought)}</span>
+                </div>
+            </div>
+            ${renderSavingPotItemPanel(progressItem, itemName, savedAmount, remaining, cost)}
+            ${renderSavingPotActionButtons({
+                itemId,
+                canFullyFund,
+                canPartialFund,
+                canWithdraw,
+                fullFundAmount
+            })}
+            <details class="tc-saved-item-time-details">
+                <summary>Time cost details</summary>
+                <div class="tc-saved-item-time-grid">
+                    <div class="tc-saved-item-time-group">
+                        <span class="tc-saved-item-time-group-title">Base time</span>
+                        <div class="tc-saved-item-time-values">
+                            <span>${baseHoursStr}</span>
+                            <span>${baseDaysStr}</span>
+                            <span>${baseWeeksStr}</span>
+                            <span>${baseMonthsStr}</span>
+                        </div>
+                    </div>
+                    <div class="tc-saved-item-time-group">
+                        <span class="tc-saved-item-time-group-title">After cuts (-${totalCutPercentage.toFixed(1)}%)</span>
+                        <div class="tc-saved-item-time-values">
+                            <span>${effectiveHoursStr}</span>
+                            <span>${effectiveDaysStr}</span>
+                            <span>${effectiveWeeksStr}</span>
+                            <span>${effectiveMonthsStr}</span>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </article>
+    `;
+}
+
+function buildSavingPotWarningHtml(potState, currency) {
+    if (!potState.isOverAssigned) return '';
+
+    return `<div class="sp-summary-warning" role="alert">
+        Over-assigned by <strong>${currency}${potState.overAssignedBy.toFixed(2)}</strong>.
+        Withdraw from items before assigning more.
+    </div>`;
+}
+
+function buildSavingPotBalanceGridHtml(potState, currency) {
+    return `
+        <div class="sp-summary-grid">
+            <div class="sp-summary-item">
+                <span class="sp-summary-label">Earnings pool</span>
+                <span class="sp-summary-value">${currency}${potState.earningsPool.toFixed(2)}</span>
+                <span class="sp-summary-meta">${escapeHtml(potState.poolScopeLabel)}</span>
+            </div>
+            <div class="sp-summary-item">
+                <span class="sp-summary-label">Assigned</span>
+                <span class="sp-summary-value">${currency}${potState.totalAssigned.toFixed(2)}</span>
+            </div>
+            <div class="sp-summary-item sp-summary-item-highlight">
+                <span class="sp-summary-label">Unassigned</span>
+                <span class="sp-summary-value">${currency}${potState.unassignedBalance.toFixed(2)}</span>
+            </div>
+        </div>
+    `;
+}
+
+function buildSavingPotGoalCardHtml(closestGoal, currency) {
+    if (!closestGoal) return '';
+
+    const itemName = closestGoal.item?.name || 'Unnamed Item';
+    const percent = closestGoal.percent ?? 0;
+
+    return `
+        <div class="sp-widget-goal-card">
+            <div class="sp-widget-goal-header">
+                <span class="sp-widget-goal-label">Closest goal</span>
+                <span class="sp-widget-goal-percent">${percent.toFixed(0)}%</span>
+            </div>
+            <strong class="sp-widget-goal-name">${escapeHtml(itemName)}</strong>
+            <div
+                class="sp-progress sp-progress-widget"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="${Math.round(percent)}"
+                aria-label="${escapeHtml(`${itemName}: ${percent.toFixed(0)}% saved`)}"
+            >
+                <span class="sp-progress-fill" style="width: ${Math.min(100, percent)}%;"></span>
+            </div>
+            <div class="sp-widget-goal-meta">
+                <span>Saved ${currency}${closestGoal.savedAmount.toFixed(2)}</span>
+                <span>${currency}${closestGoal.remaining.toFixed(2)} to go</span>
+            </div>
+        </div>
+    `;
+}
+
+export function renderSavingPotsSummary() {
+    if (!DOM.tcSavingPotsSummary) return;
+
+    const potState = computeSavingPotStateFromAppState(state);
+    DOM.tcSavingPotsSummary.innerHTML = `
+        ${buildSavingPotWarningHtml(potState, state.currentCurrency)}
+        ${buildSavingPotBalanceGridHtml(potState, state.currentCurrency)}
+    `;
+}
+
+export function renderSavingPotsWidget() {
+    if (!DOM.spWidgetContent) return;
+
+    const potState = computeSavingPotStateFromAppState(state);
+    const currency = state.currentCurrency;
+    const items = potState.itemsWithProgress || [];
+    const fundedCount = items.filter(item => item.isFullyFunded).length;
+    const activeGoals = items.filter(item => (item.cost || 0) > 0 && !item.isFullyFunded);
+
+    if (DOM.spWidgetScopeLabel) {
+        DOM.spWidgetScopeLabel.textContent = potState.poolScopeLabel;
+    }
+
+    if (DOM.savingPotsWidget) {
+        DOM.savingPotsWidget.classList.toggle('sp-widget-over-assigned', potState.isOverAssigned);
+    }
+
+    let bodyHtml = '';
+
+    if (!items.length) {
+        bodyHtml = `
+            <div class="sp-widget-empty">
+                <p class="sp-widget-empty-title">No saved items yet</p>
+                <p class="sp-widget-empty-copy">Add goals in Time Cost, then assign tracked earnings toward them.</p>
+            </div>
+        `;
+    } else if (potState.earningsPool <= 0 && potState.totalAssigned <= 0) {
+        bodyHtml = `
+            ${buildSavingPotBalanceGridHtml(potState, currency)}
+            <div class="sp-widget-empty sp-widget-empty-compact">
+                <p class="sp-widget-empty-copy">Track work sessions to build your earnings pool, then assign savings to your goals.</p>
+            </div>
+        `;
+    } else {
+        const goalSection = activeGoals.length
+            ? buildSavingPotGoalCardHtml(potState.closestGoal, currency)
+            : `<div class="sp-widget-all-funded">
+                    <span class="sp-funded-badge">Fully funded</span>
+                    <p>All ${fundedCount} saved item${fundedCount === 1 ? '' : 's'} reached their target.</p>
+               </div>`;
+
+        const assignedShare = potState.earningsPool > 0
+            ? Math.min(100, (potState.totalAssigned / potState.earningsPool) * 100)
+            : 0;
+
+        bodyHtml = `
+            ${buildSavingPotWarningHtml(potState, currency)}
+            <div class="sp-widget-hero">
+                <span class="sp-widget-hero-label">Available to assign</span>
+                <span class="sp-widget-hero-value">${currency}${potState.unassignedBalance.toFixed(2)}</span>
+                <span class="sp-widget-hero-meta">${escapeHtml(potState.poolScopeLabel)} · Pool ${currency}${potState.earningsPool.toFixed(2)}</span>
+            </div>
+            <div class="sp-widget-allocation">
+                <div class="sp-widget-allocation-labels">
+                    <span>Assigned ${currency}${potState.totalAssigned.toFixed(2)}</span>
+                    <span>${assignedShare.toFixed(0)}% of pool</span>
+                </div>
+                <div class="sp-progress sp-progress-widget sp-progress-allocation" aria-hidden="true">
+                    <span class="sp-progress-fill sp-progress-fill-assigned" style="width: ${assignedShare.toFixed(1)}%;"></span>
+                </div>
+            </div>
+            ${goalSection}
+        `;
+    }
+
+    DOM.spWidgetContent.innerHTML = `
+        ${bodyHtml}
+        <button type="button" class="btn-outline sp-widget-manage-btn">Manage in Time Cost</button>
+    `;
+}
+
+export function refreshSavingPotDisplays() {
+    renderSavingPotsSummary();
+    renderSavingPotsWidget();
+}
+
+export function getSavingPotFundLimits(itemId) {
+    const item = state.timeCostItems.find(entry => entry.id === itemId);
+    if (!item) {
+        return {
+            item: null,
+            maxAmount: 0,
+            remaining: 0,
+            savedAmount: 0,
+            canFund: false,
+            canFullyFund: false,
+            canPartialFund: false,
+            canWithdraw: false
+        };
+    }
+
+    const potState = computeSavingPotStateFromAppState(state);
+    const progressItem = potState.itemsWithProgress.find(entry => entry.id === itemId) || item;
+    const savedAmount = getItemSavedAmount(progressItem);
+    const cost = roundMoney(Math.max(Number(progressItem.cost) || 0, 0));
+    const remaining = roundMoney(Math.max(0, cost - savedAmount));
+    const maxAmount = roundMoney(Math.max(0, Math.min(potState.unassignedBalance, remaining)));
+    const canFund = cost > 0
+        && remaining > MONEY_EPSILON
+        && !potState.isOverAssigned
+        && maxAmount > MONEY_EPSILON;
+
+    return {
+        item,
+        progressItem,
+        potState,
+        maxAmount,
+        remaining,
+        savedAmount,
+        canFund,
+        canFullyFund: canFund,
+        canPartialFund: canFund && maxAmount >= 0.01,
+        canWithdraw: savedAmount > MONEY_EPSILON
+    };
+}
+
+function formatPartialFundAmount(amount) {
+    return `${state.currentCurrency}${roundMoney(amount).toFixed(2)}`;
+}
+
+function clampPartialFundAmount(amount, maxAmount) {
+    const max = roundMoney(Math.max(Number(maxAmount) || 0, 0));
+    if (max <= 0) return 0;
+    const min = Math.min(0.01, max);
+    const parsed = roundMoney(Number(amount));
+    if (!Number.isFinite(parsed)) return min;
+    return roundMoney(Math.min(Math.max(parsed, min), max));
+}
+
+export function updatePartialFundControls(maxAmount, amount = null) {
+    if (!DOM.spActionSlider || !DOM.spActionAmount) return 0;
+
+    const max = roundMoney(Math.max(Number(maxAmount) || 0, 0));
+    const min = max > 0 ? Math.min(0.01, max) : 0;
+    const nextAmount = amount === null
+        ? clampPartialFundAmount(max / 2, max)
+        : clampPartialFundAmount(amount, max);
+
+    DOM.spActionMax.value = String(max);
+    DOM.spActionSlider.min = String(min);
+    DOM.spActionSlider.max = String(max);
+    DOM.spActionSlider.step = max >= 10 ? '0.5' : '0.01';
+    DOM.spActionSlider.value = String(nextAmount);
+    DOM.spActionSlider.setAttribute('aria-valuemin', String(min));
+    DOM.spActionSlider.setAttribute('aria-valuemax', String(max));
+    DOM.spActionSlider.setAttribute('aria-valuenow', String(nextAmount));
+
+    DOM.spActionAmount.min = String(min);
+    DOM.spActionAmount.max = String(max);
+    DOM.spActionAmount.step = max >= 10 ? '0.5' : '0.01';
+    DOM.spActionAmount.value = nextAmount.toFixed(2);
+
+    if (DOM.spPartialAmountDisplay) {
+        DOM.spPartialAmountDisplay.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${nextAmount.toFixed(2)}`;
+    }
+
+    if (DOM.spPartialMaxLabel) {
+        DOM.spPartialMaxLabel.innerHTML = `<span class="currency-symbol">${state.currentCurrency}</span>${max.toFixed(2)}`;
+    }
+
+    if (DOM.saveSpActionBtn) {
+        DOM.saveSpActionBtn.disabled = max <= 0 || nextAmount <= 0;
+    }
+
+    return nextAmount;
+}
+
+export function syncPartialFundFromSlider() {
+    const max = roundMoney(Number(DOM.spActionMax?.value) || 0);
+    const amount = clampPartialFundAmount(DOM.spActionSlider?.value, max);
+    updatePartialFundControls(max, amount);
+    return amount;
+}
+
+export function syncPartialFundFromInput() {
+    const max = roundMoney(Number(DOM.spActionMax?.value) || 0);
+    const amount = clampPartialFundAmount(DOM.spActionAmount?.value, max);
+    updatePartialFundControls(max, amount);
+    return amount;
+}
+
+export async function fullyFundSavingPot(itemId) {
+    const limits = getSavingPotFundLimits(itemId);
+
+    if (limits.potState?.isOverAssigned) {
+        showAlert('Cannot Assign', 'You are over-assigned. Withdraw from items before assigning more.');
+        return false;
+    }
+
+    if (!limits.canFullyFund) {
+        showAlert('Cannot Fully Fund', 'There is no available balance to assign to this item.');
+        return false;
+    }
+
+    const { assignToSavingPot } = await import('./api.js');
+    return assignToSavingPot(itemId, limits.maxAmount);
+}
+
+export async function withdrawAllFromSavingPot(itemId) {
+    const limits = getSavingPotFundLimits(itemId);
+
+    if (!limits.canWithdraw) {
+        showAlert('Nothing to Withdraw', 'This item has no assigned savings yet.');
+        return false;
+    }
+
+    const { withdrawFromSavingPot } = await import('./api.js');
+    return withdrawFromSavingPot(itemId, limits.savedAmount);
+}
+
+export function openPartialFundModal(itemId) {
+    if (!DOM.spActionModal) return;
+
+    const limits = getSavingPotFundLimits(itemId);
+    const item = limits.item;
+    if (!item) return;
+
+    const itemName = item.name || 'Unnamed Item';
+
+    if (limits.potState?.isOverAssigned) {
+        showAlert('Cannot Assign', 'You are over-assigned. Withdraw from items before assigning more.');
+        return;
+    }
+
+    if (!limits.canPartialFund) {
+        showAlert('Cannot Partially Fund', 'There is no available balance to assign to this item.');
+        return;
+    }
+
+    DOM.spActionItemId.value = itemId;
+    if (DOM.spActionModalTitle) {
+        DOM.spActionModalTitle.textContent = 'Partial Fund';
+    }
+    DOM.spActionItemLabel.textContent = itemName;
+    DOM.spActionHint.textContent = `Choose how much to assign — up to ${formatPartialFundAmount(limits.maxAmount)} (${formatPartialFundAmount(limits.remaining)} remaining for this item).`;
+    updatePartialFundControls(limits.maxAmount);
+    if (DOM.saveSpActionBtn) {
+        DOM.saveSpActionBtn.textContent = 'Assign';
+    }
+
+    DOM.spActionModal.classList.remove('hidden');
+    DOM.spActionSlider?.focus();
+}
+
+export function closeSavingPotModal() {
+    if (!DOM.spActionModal) return;
+    DOM.spActionModal.classList.add('hidden');
+    DOM.spActionItemId.value = '';
+    DOM.spActionMax.value = '';
+    if (DOM.spActionAmount) DOM.spActionAmount.value = '';
+}
+
 export function renderSavedTimeCostItems() {
+    refreshSavingPotDisplays();
     renderTcCutsSummary();
     renderTimeCostRateBreakdown();
     if (!DOM.tcSavedItemsContainer) return;
@@ -2928,6 +3657,9 @@ export function renderSavedTimeCostItems() {
         renderSavedItemsComparisonMatrix([]);
         return;
     }
+
+    const potState = computeSavingPotStateFromAppState(state);
+    const progressById = new Map(potState.itemsWithProgress.map(item => [item.id, item]));
 
     const { baseRate, dailyHours, workingDaysPerWeek } = getTimeCostSettings();
     const daysInWeek = workingDaysPerWeek;
@@ -2961,100 +3693,127 @@ export function renderSavedTimeCostItems() {
     renderSavedItemsComparisonChart(filteredItems, baseRate, effectiveRate);
     renderSavedItemsComparisonMatrix(filteredItems);
 
-    let html = `
-        <div style="overflow-x: auto; width: 100%;">
-            <table class="tc-breakdown-table" style="min-width: 1060px;">
-                <thead>
-                    <tr>
-                        <th rowspan="2" class="tc-sticky-col" style="vertical-align: middle;">Item Name</th>
-                        <th rowspan="2" style="vertical-align: middle;">Cost</th>
-                        <th rowspan="2" style="vertical-align: middle;">Date Bought</th>
-                        <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">Base Time</th>
-                        <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">After Cuts Time (-${totalCutPercentage.toFixed(1)}%)</th>
-                        <th rowspan="2" style="vertical-align: middle; text-align: center;">Actions</th>
-                    </tr>
-                    <tr>
-                        <th style="font-size: 0.8rem; padding: 6px 10px;">Hours</th>
-                        <th style="font-size: 0.8rem; padding: 6px 10px;">Days</th>
-                        <th style="font-size: 0.8rem; padding: 6px 10px;">Weeks</th>
-                        <th style="font-size: 0.8rem; padding: 6px 10px;">Months</th>
-                        <th style="font-size: 0.8rem; padding: 6px 10px;">Hours</th>
-                        <th style="font-size: 0.8rem; padding: 6px 10px;">Days</th>
-                        <th style="font-size: 0.8rem; padding: 6px 10px;">Weeks</th>
-                        <th style="font-size: 0.8rem; padding: 6px 10px;">Months</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-
-    filteredItems.forEach(item => {
+    const itemViews = filteredItems.map(item => {
         const cost = Number(item.cost) || 0;
+        const progressItem = progressById.get(item.id);
+        const savedAmount = progressItem?.savedAmount ?? getItemSavedAmount(item);
+        const remaining = progressItem?.remaining ?? Math.max(0, cost - savedAmount);
         const itemName = item.name || 'Unnamed Item';
-        const escapedItemName = escapeHtml(itemName);
         const dateBought = item.dateBought || '';
+        const canFullyFund = cost > 0 && remaining > 0 && !potState.isOverAssigned && potState.unassignedBalance > 0;
+        const canPartialFund = canFullyFund;
+        const canWithdraw = savedAmount > 0;
+        const fullFundAmount = roundMoney(Math.max(0, Math.min(potState.unassignedBalance, remaining)));
         const baseHours = baseRate > 0 ? cost / baseRate : Infinity;
         const effectiveHours = effectiveRate > 0 ? cost / effectiveRate : Infinity;
 
-        // Base time components
         const baseDays = baseHours / dailyHours;
         const baseWeeks = baseDays / daysInWeek;
         const baseMonths = baseDays / daysInMonth;
 
-        // Effective time components
         const effectiveDays = effectiveHours / dailyHours;
         const effectiveWeeks = effectiveDays / daysInWeek;
         const effectiveMonths = effectiveDays / daysInMonth;
 
-        const baseHoursStr = baseHours === Infinity ? '∞' : `${baseHours.toFixed(1)}h`;
-        const baseDaysStr = baseHours === Infinity ? '∞' : `${baseDays.toFixed(1)}d`;
-        const baseWeeksStr = baseHours === Infinity ? '∞' : `${baseWeeks.toFixed(1)}w`;
-        const baseMonthsStr = baseHours === Infinity ? '∞' : `${baseMonths.toFixed(1)}m`;
+        return {
+            itemId: item.id,
+            itemName,
+            cost,
+            dateBought,
+            progressItem,
+            savedAmount,
+            remaining,
+            canFullyFund,
+            canPartialFund,
+            canWithdraw,
+            fullFundAmount,
+            totalCutPercentage,
+            baseHoursStr: baseHours === Infinity ? '∞' : `${baseHours.toFixed(1)}h`,
+            baseDaysStr: baseHours === Infinity ? '∞' : `${baseDays.toFixed(1)}d`,
+            baseWeeksStr: baseHours === Infinity ? '∞' : `${baseWeeks.toFixed(1)}w`,
+            baseMonthsStr: baseHours === Infinity ? '∞' : `${baseMonths.toFixed(1)}m`,
+            effectiveHoursStr: effectiveHours === Infinity ? '∞' : `${effectiveHours.toFixed(1)}h`,
+            effectiveDaysStr: effectiveHours === Infinity ? '∞' : `${effectiveDays.toFixed(1)}d`,
+            effectiveWeeksStr: effectiveHours === Infinity ? '∞' : `${effectiveWeeks.toFixed(1)}w`,
+            effectiveMonthsStr: effectiveHours === Infinity ? '∞' : `${effectiveMonths.toFixed(1)}m`
+        };
+    });
 
-        const effectiveHoursStr = effectiveHours === Infinity ? '∞' : `${effectiveHours.toFixed(1)}h`;
-        const effectiveDaysStr = effectiveHours === Infinity ? '∞' : `${effectiveDays.toFixed(1)}d`;
-        const effectiveWeeksStr = effectiveHours === Infinity ? '∞' : `${effectiveWeeks.toFixed(1)}w`;
-        const effectiveMonthsStr = effectiveHours === Infinity ? '∞' : `${effectiveMonths.toFixed(1)}m`;
-
-        html += `
+    let desktopRowsHtml = '';
+    itemViews.forEach(view => {
+        desktopRowsHtml += `
                 <tr>
-                    <td class="tc-sticky-col" style="font-weight: 600; white-space: nowrap;">${escapedItemName}</td>
-                    <td class="tc-amount">
-                        ${state.currentCurrency}${cost.toFixed(2)}
+                    <td class="tc-sticky-col sp-item-cell">
+                        <div class="sp-item-header">
+                            <strong class="sp-item-name">${escapeHtml(view.itemName)}</strong>
+                            ${renderSavingPotActionButtons(view)}
+                        </div>
+                        ${renderSavingPotItemPanel(view.progressItem, view.itemName, view.savedAmount, view.remaining, view.cost)}
                     </td>
-                    <td class="tc-date-bought-display">${dateBought ? escapeHtml(new Date(`${dateBought}T00:00:00`).toLocaleDateString()) : '<span class="tc-muted-action">Not set</span>'}</td>
-                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseHoursStr}</td>
-                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseDaysStr}</td>
-                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseWeeksStr}</td>
-                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${baseMonthsStr}</td>
-                    <td class="tc-time" style="font-size: 0.95rem;">${effectiveHoursStr}</td>
-                    <td class="tc-time" style="font-size: 0.95rem;">${effectiveDaysStr}</td>
-                    <td class="tc-time" style="font-size: 0.95rem;">${effectiveWeeksStr}</td>
-                    <td class="tc-time" style="font-size: 0.95rem;">${effectiveMonthsStr}</td>
+                    <td class="tc-amount">
+                        ${state.currentCurrency}${view.cost.toFixed(2)}
+                    </td>
+                    <td class="tc-date-bought-display">${formatSavedItemDateBought(view.dateBought)}</td>
+                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${view.baseHoursStr}</td>
+                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${view.baseDaysStr}</td>
+                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${view.baseWeeksStr}</td>
+                    <td class="tc-time" style="color: var(--text-primary); font-size: 0.95rem;">${view.baseMonthsStr}</td>
+                    <td class="tc-time" style="font-size: 0.95rem;">${view.effectiveHoursStr}</td>
+                    <td class="tc-time" style="font-size: 0.95rem;">${view.effectiveDaysStr}</td>
+                    <td class="tc-time" style="font-size: 0.95rem;">${view.effectiveWeeksStr}</td>
+                    <td class="tc-time" style="font-size: 0.95rem;">${view.effectiveMonthsStr}</td>
                     <td style="text-align: center;">
-                        <button class="btn-edit tc-edit-btn" data-id="${escapeHtml(item.id)}" title="Edit Item" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary);">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                            </svg>
-                        </button>
-                        <button class="btn-delete tc-delete-btn" data-id="${item.id}" title="Delete Item" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary);">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="3 6 5 6 21 6"></polyline>
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                <line x1="10" y1="11" x2="10" y2="17"></line>
-                                <line x1="14" y1="11" x2="14" y2="17"></line>
-                            </svg>
-                        </button>
+                        ${renderSavedItemIconActions(view.itemId)}
                     </td>
                 </tr>
         `;
     });
 
-    html += `
-                </tbody>
-            </table>
-        </div>
-    `;
+    const layoutMode = window.matchMedia('(max-width: 900px)').matches ? 'mobile' : 'desktop';
+    lastSavedItemsLayoutMode = layoutMode;
+    ensureSavedItemsLayoutListener();
+
+    const html = layoutMode === 'mobile'
+        ? `
+            <div class="tc-saved-items-layout tc-saved-items-layout-mobile">
+                <div class="tc-saved-items-mobile" aria-label="Saved items with Saving Pots">
+                    ${itemViews.map(renderSavedItemMobileCard).join('')}
+                </div>
+            </div>
+        `
+        : `
+            <div class="tc-saved-items-layout tc-saved-items-layout-desktop">
+                <div class="tc-saved-items-desktop">
+                    <div class="tc-table-scroll">
+                        <table class="tc-breakdown-table tc-saved-items-table">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2" class="tc-sticky-col sp-item-col-header" style="vertical-align: middle;">Item</th>
+                                    <th rowspan="2" style="vertical-align: middle;">Cost</th>
+                                    <th rowspan="2" style="vertical-align: middle;">Date Bought</th>
+                                    <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">Base Time</th>
+                                    <th colspan="4" style="text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 6px;">After Cuts Time (-${totalCutPercentage.toFixed(1)}%)</th>
+                                    <th rowspan="2" style="vertical-align: middle; text-align: center;">Actions</th>
+                                </tr>
+                                <tr>
+                                    <th style="font-size: 0.8rem; padding: 6px 10px;">Hours</th>
+                                    <th style="font-size: 0.8rem; padding: 6px 10px;">Days</th>
+                                    <th style="font-size: 0.8rem; padding: 6px 10px;">Weeks</th>
+                                    <th style="font-size: 0.8rem; padding: 6px 10px;">Months</th>
+                                    <th style="font-size: 0.8rem; padding: 6px 10px;">Hours</th>
+                                    <th style="font-size: 0.8rem; padding: 6px 10px;">Days</th>
+                                    <th style="font-size: 0.8rem; padding: 6px 10px;">Weeks</th>
+                                    <th style="font-size: 0.8rem; padding: 6px 10px;">Months</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${desktopRowsHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
 
     DOM.tcSavedItemsContainer.innerHTML = html;
 
@@ -3072,6 +3831,27 @@ export function renderSavedTimeCostItems() {
         });
     });
 
+    DOM.tcSavedItemsContainer.querySelectorAll('.sp-full-fund-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (btn.disabled) return;
+            await fullyFundSavingPot(btn.dataset.id);
+        });
+    });
+
+    DOM.tcSavedItemsContainer.querySelectorAll('.sp-partial-fund-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.disabled) return;
+            openPartialFundModal(btn.dataset.id);
+        });
+    });
+
+    DOM.tcSavedItemsContainer.querySelectorAll('.sp-withdraw-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (btn.disabled) return;
+            await withdrawAllFromSavingPot(btn.dataset.id);
+        });
+    });
+
     const deleteBtns = DOM.tcSavedItemsContainer.querySelectorAll('.tc-delete-btn');
     deleteBtns.forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -3079,10 +3859,14 @@ export function renderSavedTimeCostItems() {
             const itemObj = state.timeCostItems.find(x => x.id === itemId);
             const itemName = itemObj ? itemObj.name || 'Unnamed Item' : 'this item';
             const displayName = itemName ? `"${itemName}"` : 'this item';
+            const savedAmount = getItemSavedAmount(itemObj || {});
+            const savedNote = savedAmount > 0
+                ? ` ${state.currentCurrency}${savedAmount.toFixed(2)} assigned to this item will return to your unassigned balance.`
+                : '';
 
             const confirmed = await showConfirm(
                 "Delete Saved Item",
-                `Are you sure you want to delete ${displayName}?`
+                `Are you sure you want to delete ${displayName}?${savedNote}`
             );
             if (confirmed) {
                 import('./api.js').then(module => module.deleteTimeCostItem(itemId));

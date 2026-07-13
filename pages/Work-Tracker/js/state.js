@@ -1,4 +1,4 @@
-const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-breaks', 'widget-money-counter', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
+const DEFAULT_WIDGET_ORDER = ['widget-timer', 'widget-breaks', 'widget-money-counter', 'widget-saving-pots', 'widget-stats', 'widget-work-pattern', 'widget-cut-stats', 'widget-cuts', 'widget-gantt', 'widget-calendar', 'widget-chart', 'widget-history'];
 
 function createCutId() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -189,6 +189,18 @@ function loadTcMatrixSelectionInitialized() {
     return localStorage.getItem('work_tracker_tc_matrix_selection_initialized') === 'true';
 }
 
+const ALLOWED_SAVING_POT_POOL_SCOPES = new Set([
+    'all_time',
+    'rolling_30d',
+    'calendar_month',
+    'calendar_week'
+]);
+
+function loadSavingPotPoolScope() {
+    const saved = localStorage.getItem('work_tracker_saving_pot_pool_scope');
+    return ALLOWED_SAVING_POT_POOL_SCOPES.has(saved) ? saved : 'all_time';
+}
+
 export const state = {
     currentUser: null,
     timerInterval: null,
@@ -252,7 +264,8 @@ export const state = {
     historyPage: 0,
     csvExportPeriodFrom: localStorage.getItem('work_tracker_csv_export_from') || '',
     csvExportPeriodTo: localStorage.getItem('work_tracker_csv_export_to') || '',
-    csvExportCompany: localStorage.getItem('work_tracker_csv_export_company') || ''
+    csvExportCompany: localStorage.getItem('work_tracker_csv_export_company') || '',
+    savingPotPoolScope: loadSavingPotPoolScope()
 };
 
 export function updateCurrency(newCurrency) {
@@ -448,6 +461,12 @@ export function updateCsvExportPeriod(from, to) {
 export function updateCsvExportCompany(company) {
     state.csvExportCompany = company || '';
     localStorage.setItem('work_tracker_csv_export_company', state.csvExportCompany);
+}
+
+export function updateSavingPotPoolScope(scope) {
+    state.savingPotPoolScope = ALLOWED_SAVING_POT_POOL_SCOPES.has(scope) ? scope : 'all_time';
+    localStorage.setItem('work_tracker_saving_pot_pool_scope', state.savingPotPoolScope);
+    return state.savingPotPoolScope;
 }
 
 export function updateCalendarEditMode(mode) {
