@@ -7,6 +7,7 @@ import * as API from './api.js';
 import * as UI from './ui.js';
 import * as Utils from './utils.js';
 import { getTerm } from './utils.js';
+import { toggleKanbanFocus, exitKanbanFocus, isKanbanFocused, KANBAN_STAGES, DEFAULT_KANBAN_LABELS, getKanbanColumnLabel } from './kanban.js';
 
 console.log("[DEBUG] Main Module Initialized - v1.3 PWA Fixes");
 
@@ -108,7 +109,47 @@ window.toggleTaskComplete = function (taskId, isChecked) {
             // If auto-archive is off, expand the task so the user can quickly archive it manually
             state.expandedTaskId = taskId;
             UI.renderBoard();
+        } else {
+            // Uncheck (or kanban sync) — re-render so Finished ↔ Almost Done updates immediately
+            UI.renderBoard();
         }
+    });
+};
+window.updateKanbanStatus = function (taskId, status) {
+    // Multi-select: if this task is selected with others, move the whole selection
+    let ids = [taskId];
+    if (state.multiEditMode && state.selectedTaskIds.size > 0 && state.selectedTaskIds.has(taskId)) {
+        ids = Array.from(state.selectedTaskIds);
+    }
+
+    const apply = ids.length > 1
+        ? API.batchUpdateKanbanStatus(ids, status)
+        : API.updateKanbanStatus(taskId, status);
+
+    apply.then((count) => {
+        if (ids.length > 1) {
+            Utils.showToast(`Moved ${count || ids.length} items`);
+            state.selectedTaskIds.clear();
+            UI.updateMultiFloatingBar();
+        }
+        UI.renderBoard();
+    });
+};
+
+window.handleQuickKanbanMove = function (status) {
+    const ids = Array.from(state.selectedTaskIds);
+    if (ids.length === 0) {
+        Utils.showToast('No items selected');
+        return;
+    }
+    API.batchUpdateKanbanStatus(ids, status).then((count) => {
+        Utils.showToast(`Moved ${count || ids.length} items`);
+        UI.closeQuickMoveModal();
+        state.selectedTaskIds.clear();
+        UI.updateMultiFloatingBar();
+        state.multiEditMode = false;
+        UI.toggleMultiEditUI();
+        UI.renderBoard();
     });
 };
 window.updateListTitle = API.updateListTitle;
@@ -160,6 +201,8 @@ window.emptyOrphans = () => {
 window.addNewBoard = API.addNewBoard;
 window.rescueOrphanLists = API.rescueOrphanLists;
 window.renderBoard = UI.renderBoard;
+window.toggleKanbanFocus = toggleKanbanFocus;
+window.exitKanbanFocus = exitKanbanFocus;
 
 // --- DOM ELEMENTS ---
 const loginOverlay = document.getElementById('login-overlay');
@@ -378,6 +421,8 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('add-bottom-toggle')) document.getElementById('add-bottom-toggle').checked = (state.appData.settings.addTaskLocation === 'bottom');
             if (document.getElementById('show-site-header-toggle')) document.getElementById('show-site-header-toggle').checked = !!state.appData.settings.showSiteHeader;
             if (document.getElementById('disable-important-pinning-toggle')) document.getElementById('disable-important-pinning-toggle').checked = !!state.appData.settings.disableImportantPinning;
+            if (document.getElementById('work-tools-toggle')) document.getElementById('work-tools-toggle').checked = !!state.appData.settings.workToolsEnabled;
+            syncKanbanLabelsUI();
             if (document.getElementById('time-automation-confirm-toggle')) document.getElementById('time-automation-confirm-toggle').checked = state.appData.settings.timeAutomationConfirm !== false;
             if (document.getElementById('daily-reset-time-input')) document.getElementById('daily-reset-time-input').value = state.appData.settings.dailyResetTime || '04:00';
             if (document.getElementById('auto-add-time-input')) {
@@ -523,8 +568,17 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('online', UI.updateSyncUI);
     window.addEventListener('offline', UI.updateSyncUI);
 
+    // Measure fixed bottom tool panel → list/multi-bar clearance (normal + Kanban)
+    const scheduleSlimChrome = () => requestAnimationFrame(() => UI.layoutSlimChrome());
+    scheduleSlimChrome();
+    window.addEventListener('resize', scheduleSlimChrome);
+    window.addEventListener('orientationchange', scheduleSlimChrome);
+
     // Toggle Archive View
     document.getElementById('archive-mode-btn').onclick = function () {
+        if (isKanbanFocused()) {
+            exitKanbanFocus({ render: false, silent: true });
+        }
         state.showArchived = !state.showArchived;
         const btn = this;
 
@@ -568,6 +622,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const recentCompletedBtn = document.getElementById('recent-completed-btn');
     if (recentCompletedBtn) {
         recentCompletedBtn.onclick = function () {
+            if (isKanbanFocused()) {
+                exitKanbanFocus({ render: false, silent: true });
+            }
             state.showRecentCompleted = !state.showRecentCompleted;
             const btn = this;
 
@@ -649,6 +706,32 @@ document.addEventListener('DOMContentLoaded', () => {
         return checked;
     });
     setupSettingListener('disable-important-pinning-toggle', 'disableImportantPinning', true);
+    setupSettingListener('work-tools-toggle', 'workToolsEnabled', true, (checked) => {
+        state.appData.settings.workToolsEnabled = checked;
+        if (!checked) {
+            state.focusedKanbanListId = null;
+            document.body.classList.remove('kanban-focus-mode');
+        }
+        syncKanbanLabelsUI();
+        setTimeout(() => UI.renderBoard(), 0);
+        return checked;
+    });
+
+    const saveKanbanLabelsBtn = document.getElementById('save-kanban-labels-btn');
+    if (saveKanbanLabelsBtn) {
+        saveKanbanLabelsBtn.onclick = () => {
+            const labels = {};
+            KANBAN_STAGES.forEach((stage) => {
+                const input = document.getElementById(`kanban-label-${stage}`);
+                const raw = input ? input.value.trim() : '';
+                labels[stage] = raw || DEFAULT_KANBAN_LABELS[stage];
+            });
+            state.appData.settings.kanbanColumnLabels = labels;
+            API.updateSetting('kanbanColumnLabels', labels);
+            Utils.showToast('Kanban labels saved');
+            if (isKanbanFocused()) UI.renderBoard();
+        };
+    }
 
     // Drag Modes
     document.getElementById('mode-cut-btn').onclick = function () {
@@ -751,10 +834,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!card) return;
         // Allow normal button/input interactions - don't interfere with onclick handlers
         // This is critical for touch devices where preventDefault() blocks button clicks
-        if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.icon-btn')) {
+        if (
+            e.target.tagName === 'BUTTON' ||
+            e.target.tagName === 'INPUT' ||
+            e.target.closest('.icon-btn') ||
+            e.target.closest('.kanban-stage-moves') ||
+            e.target.closest('a') ||
+            e.target.closest('.task-img-preview')
+        ) {
             return; // Exit early to let the button's onclick handler work
         }
+        e.preventDefault();
+        e.stopPropagation();
         const taskId = card.dataset.taskId;
+        if (!taskId) return;
         if (state.selectedTaskIds.has(taskId)) {
             state.selectedTaskIds.delete(taskId);
             card.classList.remove('selected');
@@ -772,7 +865,43 @@ document.addEventListener('DOMContentLoaded', () => {
         // Open Modal
         const bar = document.getElementById('multi-edit-floating-bar');
         if (bar) bar.classList.add('hidden');
-        UI.renderGroupedListSelect(multiMoveSelect, true);
+
+        const listSection = document.getElementById('multi-list-move-section');
+        const kanbanSection = document.getElementById('multi-kanban-move-section');
+        const kanbanButtons = document.getElementById('multi-kanban-stage-buttons');
+
+        if (isKanbanFocused()) {
+            if (listSection) listSection.classList.add('hidden');
+            if (kanbanSection) kanbanSection.classList.remove('hidden');
+            if (kanbanButtons) {
+                kanbanButtons.innerHTML = '';
+                KANBAN_STAGES.forEach((stage) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn secondary multi-kanban-stage-btn';
+                    btn.textContent = getKanbanColumnLabel(stage);
+                    btn.onclick = () => {
+                        const ids = Array.from(state.selectedTaskIds);
+                        if (ids.length === 0) return;
+                        multiEditModal.classList.add('hidden');
+                        API.batchUpdateKanbanStatus(ids, stage).then((count) => {
+                            Utils.showToast(`Moved ${count || ids.length} items`);
+                            state.selectedTaskIds.clear();
+                            UI.updateMultiFloatingBar();
+                            state.multiEditMode = false;
+                            UI.toggleMultiEditUI();
+                            UI.renderBoard();
+                        });
+                    };
+                    kanbanButtons.appendChild(btn);
+                });
+            }
+        } else {
+            if (listSection) listSection.classList.remove('hidden');
+            if (kanbanSection) kanbanSection.classList.add('hidden');
+            UI.renderGroupedListSelect(multiMoveSelect, true);
+        }
+
         multiEditModal.classList.remove('hidden');
     };
     document.getElementById('multi-edit-close-modal-btn').onclick = () => {
@@ -1301,6 +1430,28 @@ function setupSettingListener(id, settingKey, isCheckbox, processVal) {
     };
 }
 
+function syncKanbanLabelsUI() {
+    const panel = document.getElementById('kanban-labels-settings');
+    const enabled = !!state.appData.settings.workToolsEnabled;
+    if (panel) {
+        panel.classList.toggle('hidden', !enabled);
+    }
+    if (!enabled) return;
+
+    const saved = state.appData.settings.kanbanColumnLabels || {};
+    KANBAN_STAGES.forEach((stage) => {
+        const input = document.getElementById(`kanban-label-${stage}`);
+        if (!input) return;
+        // Don't clobber while the user is typing in these fields
+        if (document.activeElement === input) return;
+        const value = (saved[stage] && String(saved[stage]).trim())
+            ? String(saved[stage]).trim()
+            : DEFAULT_KANBAN_LABELS[stage];
+        input.value = value;
+        input.placeholder = DEFAULT_KANBAN_LABELS[stage];
+    });
+}
+
 function triggerBackupDownload() {
     // Generate JSON backup data
     // Map tasks to ensure clean structure (glowColor, images, etc)
@@ -1319,9 +1470,13 @@ function triggerBackupDownload() {
             text: task.text,
             completed: task.completed,
             archived: task.archived,
+            kanbanStatus: task.kanbanStatus || (task.completed ? 'finished' : 'new'),
+            completedAt: task.completedAt ?? null,
             createdAt: task.createdAt,
+            updatedAt: task.updatedAt ?? null,
             glowColor: task.glowColor || 'none',
-            images: task.images || []
+            images: task.images || [],
+            nestedIdeas: task.nestedIdeas || []
         }))
     };
 
@@ -1635,7 +1790,12 @@ async function restoreBackup(data) {
             if (Array.isArray(data.tasks)) {
                 data.tasks.forEach(task => {
                     if (task && task.id) {
-                        batch.set(doc(db, "users", state.currentUser.uid, "tasks", task.id), task);
+                        const { id, ...taskFields } = task;
+                        // Ensure kanbanStatus round-trips (Q16); derive if missing
+                        if (!taskFields.kanbanStatus) {
+                            taskFields.kanbanStatus = taskFields.completed ? 'finished' : 'new';
+                        }
+                        batch.set(doc(db, "users", state.currentUser.uid, "tasks", id), taskFields);
                     } else {
                         console.warn("Skipping invalid task in restore (array format):", task);
                     }
@@ -1645,7 +1805,12 @@ async function restoreBackup(data) {
                 Object.keys(data.tasks).forEach(tid => {
                     const t = data.tasks[tid];
                     if (t) {
-                        batch.set(doc(db, "users", state.currentUser.uid, "tasks", tid), t);
+                        const taskFields = { ...t };
+                        delete taskFields.id;
+                        if (!taskFields.kanbanStatus) {
+                            taskFields.kanbanStatus = taskFields.completed ? 'finished' : 'new';
+                        }
+                        batch.set(doc(db, "users", state.currentUser.uid, "tasks", tid), taskFields);
                     }
                 });
             } else {
@@ -1913,11 +2078,16 @@ async function performBulkDeleteForever() {
 
 // --- GLOBAL KEYBOARD SHORTCUTS ---
 window.addEventListener('keydown', (e) => {
-    // 1. Esc to close all modals
+    // 1. Esc to close all modals, or exit Kanban focus
     if (e.key === 'Escape') {
-        document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(modal => {
-            modal.classList.add('hidden');
-        });
+        const openModals = document.querySelectorAll('.modal-overlay:not(.hidden)');
+        if (openModals.length > 0) {
+            openModals.forEach(modal => {
+                modal.classList.add('hidden');
+            });
+        } else if (isKanbanFocused()) {
+            exitKanbanFocus();
+        }
     }
     // 2. Cmd/Ctrl + K for search
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {

@@ -4,6 +4,7 @@ import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, 
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
+import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, partitionListTasksByStage, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages } from './kanban.js';
 
 // Global DOM Elements
 const boardContainer = document.getElementById('board-container');
@@ -61,6 +62,211 @@ export function getOrphanedTaskIds() {
     return allIds.filter(id => !activeIds.has(id));
 }
 
+/**
+ * Fill Kanban stage columns (pinned subsection + normal tasks per column).
+ */
+function populateKanbanFocus(list) {
+    const buckets = partitionListTasksByStage(list);
+    let number = 1;
+
+    KANBAN_STAGES.forEach((stage) => {
+        const pinnedZone = document.getElementById(`kanban-pinned-${list.id}-${stage}`);
+        const normalZone = document.getElementById(`kanban-stage-${list.id}-${stage}`);
+        const countEl = document.querySelector(`[data-stage-count="${stage}"]`);
+        const addSlot = document.querySelector(`.kanban-column[data-stage="${stage}"] .add-task-slot`);
+        const column = document.querySelector(`.kanban-column[data-stage="${stage}"]`);
+        if (!pinnedZone || !normalZone) return;
+
+        const { pinned = [], normal = [] } = buckets[stage] || { pinned: [], normal: [] };
+        const total = pinned.length + normal.length;
+
+        pinnedZone.innerHTML = '';
+        if (pinned.length > 0) {
+            const pHeader = document.createElement('div');
+            pHeader.className = 'kanban-pinned-header';
+            pHeader.innerHTML = `<i class="ph ph-push-pin-simple-fill"></i> Pinned`;
+            pinnedZone.appendChild(pHeader);
+            pinned.forEach((task) => {
+                pinnedZone.appendChild(createTaskElement(task, list.id, number++));
+            });
+            pinnedZone.classList.add('has-pinned');
+        } else {
+            pinnedZone.classList.remove('has-pinned');
+        }
+
+        normalZone.innerHTML = '';
+        normal.forEach((task) => {
+            normalZone.appendChild(createTaskElement(task, list.id, number++));
+        });
+
+        if (countEl) countEl.textContent = String(total);
+        normalZone.classList.toggle('is-empty', total === 0);
+        if (column) column.classList.toggle('is-column-empty', total === 0);
+
+        if (addSlot) {
+            addSlot.innerHTML = '';
+            if (stage === 'new') {
+                const isBottom = state.appData.settings.addTaskLocation === 'bottom';
+                addSlot.innerHTML = `
+                    <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
+                        <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
+                            <input type="text" class="add-task-input" placeholder="Type an idea to add" name="taskText" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
+                            <button type="submit" class="btn primary">+</button>
+                        </form>
+                    </div>`;
+            }
+        }
+    });
+
+    initKanbanSortables(list.id);
+}
+
+function getKanbanStageContainers(listId, stage) {
+    return [
+        document.getElementById(`kanban-pinned-${listId}-${stage}`),
+        document.getElementById(`kanban-stage-${listId}-${stage}`)
+    ].filter(Boolean);
+}
+
+function initKanbanSortables(listId) {
+    KANBAN_STAGES.forEach((stage) => {
+        getKanbanStageContainers(listId, stage).forEach((container) => {
+            const sortable = new Sortable(container, {
+                group: {
+                    name: 'kanban-stages',
+                    pull: true,
+                    put: true
+                },
+                animation: 150,
+                // Stay off while multi-selecting so card clicks can select
+                disabled: !!state.multiEditMode,
+                draggable: '.task-card',
+                filter: '.kanban-stage-moves, .kanban-pinned-header, .task-actions, .task-checkbox, input, button',
+                preventOnFilter: false,
+                forceFallback: true,
+                fallbackOnBody: true,
+                delay: 200,
+                delayOnTouchOnly: true,
+                emptyInsertThreshold: 40,
+                onStart: () => {
+                    document.body.classList.add('kanban-dragging');
+                },
+                onEnd: (evt) => {
+                    document.body.classList.remove('kanban-dragging');
+                    handleKanbanDragEnd(evt, listId);
+                },
+                onAdd: (evt) => {
+                    refreshKanbanColumnState(evt.to);
+                    if (evt.from) refreshKanbanColumnState(evt.from);
+                },
+                onRemove: (evt) => {
+                    refreshKanbanColumnState(evt.from);
+                }
+            });
+            state.sortableInstances.push(sortable);
+        });
+    });
+}
+
+function refreshKanbanColumnState(container) {
+    if (!container) return;
+    const column = container.closest('.kanban-column');
+    if (!column) return;
+
+    const stage = column.dataset.stage;
+    const listId = column.dataset.listId;
+    if (!stage || !listId) return;
+
+    const pinnedZone = document.getElementById(`kanban-pinned-${listId}-${stage}`);
+    const normalZone = document.getElementById(`kanban-stage-${listId}-${stage}`);
+    const pinnedCount = pinnedZone ? pinnedZone.querySelectorAll('.task-card').length : 0;
+    const normalCount = normalZone ? normalZone.querySelectorAll('.task-card').length : 0;
+    const total = pinnedCount + normalCount;
+
+    if (pinnedZone) {
+        pinnedZone.classList.toggle('has-pinned', pinnedCount > 0);
+        let header = pinnedZone.querySelector('.kanban-pinned-header');
+        if (pinnedCount > 0 && !header) {
+            header = document.createElement('div');
+            header.className = 'kanban-pinned-header';
+            header.innerHTML = `<i class="ph ph-push-pin-simple-fill"></i> Pinned`;
+            pinnedZone.insertBefore(header, pinnedZone.firstChild);
+        } else if (pinnedCount === 0 && header) {
+            header.remove();
+        }
+    }
+
+    if (normalZone) {
+        normalZone.classList.toggle('is-empty', total === 0);
+    }
+    column.classList.toggle('is-column-empty', total === 0);
+
+    const countEl = column.querySelector('[data-stage-count]');
+    if (countEl) countEl.textContent = String(total);
+}
+
+/**
+ * After a Kanban drag: update stage (if changed) and rewrite list taskIds order.
+ * Order per stage: pinned subsection then normal, across New → Finished, then archived.
+ */
+export function handleKanbanDragEnd(evt, listId) {
+    const taskId = evt.item?.dataset?.taskId;
+    if (!taskId || !listId || !state.currentUser) return;
+
+    const toColumn = evt.to?.closest?.('.kanban-column');
+    const fromColumn = evt.from?.closest?.('.kanban-column');
+    const toStage = toColumn?.dataset?.stage;
+    const fromStage = fromColumn?.dataset?.stage;
+
+    if (!toStage || !KANBAN_STAGES.includes(toStage)) return;
+
+    const batch = writeBatch(db);
+
+    if (fromStage && fromStage !== toStage) {
+        const updateData = buildKanbanStatusUpdate(toStage);
+        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), updateData);
+        if (state.appData.tasks[taskId]) {
+            Object.assign(state.appData.tasks[taskId], updateData);
+        }
+    }
+
+    const collectIdsFromZone = (zone) => {
+        if (!zone) return [];
+        return Array.from(zone.querySelectorAll('.task-card'))
+            .map(el => el.dataset.taskId)
+            .filter(Boolean);
+    };
+
+    const stageIds = KANBAN_STAGES.flatMap((stage) => {
+        const pinnedZone = document.getElementById(`kanban-pinned-${listId}-${stage}`);
+        const normalZone = document.getElementById(`kanban-stage-${listId}-${stage}`);
+        return [
+            ...collectIdsFromZone(pinnedZone),
+            ...collectIdsFromZone(normalZone)
+        ];
+    });
+
+    const listObj = state.appData.rawLists.find(l => l.id === listId);
+    const archivedIds = (listObj?.taskIds || []).filter((tid) => {
+        const task = state.appData.tasks[tid];
+        return task && task.archived;
+    });
+
+    const seen = new Set();
+    const finalIds = [...stageIds, ...archivedIds].filter((id) => {
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+    });
+
+    batch.update(doc(db, "users", state.currentUser.uid, "lists", listId), { taskIds: finalIds });
+
+    refreshKanbanColumnState(evt.from);
+    refreshKanbanColumnState(evt.to);
+
+    batch.commit().catch(e => handleSyncError(e));
+}
+
 // --- CORE RENDERING ---
 
 export function renderBoard() {
@@ -81,7 +287,10 @@ export function renderBoard() {
     // Cleanup Sortables
     state.sortableInstances.forEach(s => s.destroy());
     state.sortableInstances = [];
-    if (state.listSortable) state.listSortable.destroy();
+    if (state.listSortable) {
+        state.listSortable.destroy();
+        state.listSortable = null;
+    }
 
     // Capture Focus/Typing State
     const activeEl = document.activeElement;
@@ -106,6 +315,13 @@ export function renderBoard() {
     }
 
     boardContainer.innerHTML = '';
+    boardContainer.classList.remove('kanban-focus-board');
+
+    // Work Tools off clears any leftover focus session
+    if (!isWorkToolsEnabled()) {
+        state.focusedKanbanListId = null;
+    }
+    document.body.classList.toggle('kanban-focus-mode', isKanbanFocused());
 
     // ARCHIVE BADGE
     const header = document.querySelector('.app-header');
@@ -141,61 +357,83 @@ export function renderBoard() {
 
     const isCustomSort = state.appData.settings.sortMode === 'custom';
 
-    // Render Lists
-    state.appData.lists.forEach(list => renderListColumn(list, false, isCustomSort));
-
-    // Render Orphans
-    if (state.showArchived) {
-        const orphanTaskIds = getOrphanedTaskIds();
-        if (orphanTaskIds.length > 0) {
-            const orphanList = {
-                id: 'orphan-archive',
-                title: '🗄️ Archived / Orphans',
-                taskIds: orphanTaskIds
-            };
-            renderListColumn(orphanList, true, false);
+    // Kanban focus: only the focused list as stage columns (other lists unmounted)
+    let kanbanRendered = false;
+    if (isKanbanFocused()) {
+        const focusedList = state.appData.lists.find(l => l.id === state.focusedKanbanListId)
+            || (state.appData.rawLists || []).find(l => l.id === state.focusedKanbanListId);
+        if (focusedList) {
+            renderKanbanFocus(boardContainer, focusedList);
+            populateKanbanFocus(focusedList);
+            updateBoardUI();
+            updateTotalTaskCount();
+            applyStaticLayouts();
+            layoutSlimChrome();
+            kanbanRendered = true;
+        } else {
+            state.focusedKanbanListId = null;
+            document.body.classList.remove('kanban-focus-mode');
         }
     }
 
-    // Restore Scroll Positions
-    scrollMap.forEach((scrollTop, listId) => {
-        const container = document.getElementById(`task-list-${listId}`);
-        if (container) {
-            container.scrollTop = scrollTop;
-        }
-    });
+    if (!kanbanRendered) {
+        // Render Lists
+        state.appData.lists.forEach(list => renderListColumn(list, false, isCustomSort));
 
-    // List Sorting (Reorder List Columns)
-    state.listSortable = new Sortable(boardContainer, {
-        disabled: !state.appData.settings.dragEnabled,
-        animation: 150,
-        handle: '.list-drag-handle',
-        direction: 'horizontal',
-        filter: '.orphan-list',
-        forceFallback: true,
-        fallbackOnBody: true,
-        delay: 200,
-        delayOnTouchOnly: true,
-        onEnd: (evt) => {
-            if (evt.newIndex !== evt.oldIndex) {
-                // Reorder Logic
-                const movedList = state.appData.lists.splice(evt.oldIndex, 1)[0];
-                state.appData.lists.splice(evt.newIndex, 0, movedList);
-                // Update Order in DB
-                const newOrder = state.appData.lists.map(l => l.id).filter(id => id !== 'orphan-archive');
-                const boardId = state.appData.currentBoardId;
-                if (boardId) {
-                    updateDoc(doc(db, "users", state.currentUser.uid, "boards", boardId), { listOrder: newOrder });
-                } else {
-                    updateDoc(doc(db, "users", state.currentUser.uid), { listOrder: newOrder });
-                }
+        // Render Orphans
+        if (state.showArchived) {
+            const orphanTaskIds = getOrphanedTaskIds();
+            if (orphanTaskIds.length > 0) {
+                const orphanList = {
+                    id: 'orphan-archive',
+                    title: '🗄️ Archived / Orphans',
+                    taskIds: orphanTaskIds
+                };
+                renderListColumn(orphanList, true, false);
             }
         }
-    });
 
-    updateBoardUI();
-    updateTotalTaskCount();
-    applyStaticLayouts();
+        // Restore Scroll Positions
+        scrollMap.forEach((scrollTop, listId) => {
+            const container = document.getElementById(`task-list-${listId}`);
+            if (container) {
+                container.scrollTop = scrollTop;
+            }
+        });
+
+        // List Sorting (Reorder List Columns)
+        state.listSortable = new Sortable(boardContainer, {
+            disabled: !state.appData.settings.dragEnabled,
+            animation: 150,
+            handle: '.list-drag-handle',
+            direction: 'horizontal',
+            filter: '.orphan-list',
+            forceFallback: true,
+            fallbackOnBody: true,
+            delay: 200,
+            delayOnTouchOnly: true,
+            onEnd: (evt) => {
+                if (evt.newIndex !== evt.oldIndex) {
+                    // Reorder Logic
+                    const movedList = state.appData.lists.splice(evt.oldIndex, 1)[0];
+                    state.appData.lists.splice(evt.newIndex, 0, movedList);
+                    // Update Order in DB
+                    const newOrder = state.appData.lists.map(l => l.id).filter(id => id !== 'orphan-archive');
+                    const boardId = state.appData.currentBoardId;
+                    if (boardId) {
+                        updateDoc(doc(db, "users", state.currentUser.uid, "boards", boardId), { listOrder: newOrder });
+                    } else {
+                        updateDoc(doc(db, "users", state.currentUser.uid), { listOrder: newOrder });
+                    }
+                }
+            }
+        });
+
+        updateBoardUI();
+        updateTotalTaskCount();
+        applyStaticLayouts();
+        layoutSlimChrome();
+    }
 
     // Restore Focus/Typing State
     if (activeEl && activeEl.id) {
@@ -219,6 +457,11 @@ export function renderBoard() {
                 if (input.setSelectionRange) input.setSelectionRange(selectionStart, selectionEnd);
             }
         }
+    }
+
+    // Re-apply after every render — Sortables are recreated enabled by default
+    if (state.multiEditMode) {
+        enableSortables(false);
     }
 
     if (window.onBoardRendered) {
@@ -415,6 +658,26 @@ function applyStaticLayouts() {
     });
 }
 
+/**
+ * Slim mobile: measure the fixed bottom tool panel (including multi-select row when visible)
+ * and set --slim-bottom-clearance so lists clear it. Same for normal + Kanban.
+ */
+export function layoutSlimChrome() {
+    const root = document.documentElement;
+    if (!window.matchMedia('(max-width: 500px)').matches) {
+        root.style.removeProperty('--slim-bottom-clearance');
+        return;
+    }
+
+    const header = document.querySelector('.app-header');
+    if (!header) return;
+
+    // After layout: distance from header top to viewport bottom (+ gap)
+    const top = header.getBoundingClientRect().top;
+    const clearance = Math.max(120, Math.ceil(window.innerHeight - top) + 12);
+    root.style.setProperty('--slim-bottom-clearance', `${clearance}px`);
+}
+
 function renderListColumn(list, isOrphan, isCustomSort) {
     const listEl = document.createElement('div');
     listEl.className = `list-column ${isOrphan ? 'orphan-list' : ''}`;
@@ -440,9 +703,14 @@ function renderListColumn(list, isOrphan, isCustomSort) {
         : '';
 
     const hideCheckboxes = window.APP_CONFIG?.hideCheckboxes;
+    const workToolsOn = isWorkToolsEnabled();
+    const kanbanBtn = (!isOrphan && workToolsOn)
+        ? `<button type="button" class="icon-btn kanban-toggle-btn" onclick="window.toggleKanbanFocus('${list.id}')" title="Open Kanban" aria-pressed="false" aria-label="Open Kanban"><i class="ph ph-kanban"></i></button>`
+        : '';
     let headerButtons = isOrphan
         ? `<button class="icon-btn danger" onclick="window.emptyOrphans()" title="Delete All"><i class="ph ph-trash"></i></button>`
         : `<div class="list-header-right">
+             ${kanbanBtn}
              ${!hideCheckboxes ? `<button class="icon-btn clean-list-btn" onclick="window.clearCompletedInList('${list.id}')" title="Clear Completed ${getTerm(false, true)}"><i class="ph ph-broom"></i></button>` : ''}
               <button id="multi-select-all-btn" class="icon-btn multi-select-all-btn" onclick="window.selectAllInList('${list.id}')" title="Select All in List"><i class="ph ph-check-square-offset"></i></button>
               <button class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings"><i class="ph ph-sliders"></i></button>
@@ -919,6 +1187,22 @@ export function createTaskElement(task, sourceListId, number) {
         `;
     }
 
+    let kanbanMoveHtml = '';
+    // Hide stage arrows while multi-selecting so the whole card is tappable
+    if (isKanbanFocused() && !task.archived && !state.multiEditMode) {
+        const currentStage = resolveKanbanStatus(task);
+        const { prev, next } = getAdjacentKanbanStages(currentStage);
+        const leftBtn = prev
+            ? `<button type="button" class="icon-btn kanban-arrow-btn" title="Move to ${escapeHtml(getKanbanColumnLabel(prev))}" aria-label="Move left to ${escapeHtml(getKanbanColumnLabel(prev))}" onclick="event.stopPropagation(); window.updateKanbanStatus('${task.id}', '${prev}')"><i class="ph ph-caret-left"></i></button>`
+            : '';
+        const rightBtn = next
+            ? `<button type="button" class="icon-btn kanban-arrow-btn" title="Move to ${escapeHtml(getKanbanColumnLabel(next))}" aria-label="Move right to ${escapeHtml(getKanbanColumnLabel(next))}" onclick="event.stopPropagation(); window.updateKanbanStatus('${task.id}', '${next}')"><i class="ph ph-caret-right"></i></button>`
+            : '';
+        if (leftBtn || rightBtn) {
+            kanbanMoveHtml = `<div class="kanban-stage-moves" onclick="event.stopPropagation()">${leftBtn}${rightBtn}</div>`;
+        }
+    }
+
     let numberHtml = state.appData.settings.showNumbers ? `<span class="task-number">${number}.</span>` : '';
     let linkedIconHtml = isLinked ? `<i class="ph ph-link" style="font-size: 0.8em; margin-left: 5px; color: var(--accent-blue);" title="Linked to multiple lists"></i>` : '';
 
@@ -974,11 +1258,14 @@ export function createTaskElement(task, sourceListId, number) {
             </div>
         </div>
         <div class="task-actions">${actionsHtml}</div>
+        ${kanbanMoveHtml}
     `;
 
     // Expand/Reveal actions logic
     el.addEventListener('click', (event) => {
-        if (event.target.closest('.task-actions, .task-checkbox, .task-img-preview')) return;
+        // Multi-select handles card clicks via board delegation
+        if (state.multiEditMode) return;
+        if (event.target.closest('.task-actions, .task-checkbox, .task-img-preview, .kanban-stage-moves')) return;
 
         const wasShowing = (state.expandedTaskId === task.id);
 
@@ -1688,6 +1975,7 @@ export function toggleMultiEditUI() {
         document.querySelectorAll('.task-card.selected').forEach(el => el.classList.remove('selected'));
         enableSortables(true);
     }
+    requestAnimationFrame(() => layoutSlimChrome());
 }
 
 export function updateMultiFloatingBar() {
@@ -1717,15 +2005,25 @@ export function updateMultiFloatingBar() {
         floatingBar.classList.add('hidden');
         document.body.classList.remove('multi-bar-visible');
     }
+    // Remeasure after header grows/shrinks with the multi-select row
+    requestAnimationFrame(() => requestAnimationFrame(() => layoutSlimChrome()));
 }
 
 export function selectAllInList(listId) {
     if (!state.multiEditMode) return;
 
-    const listCol = document.querySelector(`.list-column[data-list-id="${listId}"]`);
-    if (!listCol) return;
+    let visibleCards;
+    if (isKanbanFocused() && state.focusedKanbanListId === listId) {
+        const shell = document.querySelector(`.kanban-focus-shell[data-list-id="${listId}"]`);
+        visibleCards = shell
+            ? Array.from(shell.querySelectorAll('.task-card'))
+            : [];
+    } else {
+        const listCol = document.querySelector(`.list-column[data-list-id="${listId}"]`);
+        if (!listCol) return;
+        visibleCards = Array.from(listCol.querySelectorAll('.task-card'));
+    }
 
-    const visibleCards = Array.from(listCol.querySelectorAll('.task-card'));
     if (visibleCards.length === 0) return;
 
     const allSelected = visibleCards.every(card => state.selectedTaskIds.has(card.dataset.taskId));
@@ -1748,10 +2046,38 @@ export function openQuickMoveModal() {
     const modal = document.getElementById('quick-move-modal-overlay');
     const container = document.getElementById('quick-move-list-container');
     const bar = document.getElementById('multi-edit-floating-bar');
+    const titleEl = modal?.querySelector('h2');
+    const helpEl = modal?.querySelector('.manual-move-section > p');
     if (!modal || !container) return;
 
     if (bar) bar.classList.add('hidden'); // Hide the pill
     container.innerHTML = '';
+
+    // Kanban focus: pick a stage instead of a list (same Move button flow)
+    if (isKanbanFocused()) {
+        if (titleEl) titleEl.textContent = 'Move to Kanban Section';
+        if (helpEl) helpEl.textContent = 'Select a Kanban section to move the selected items into.';
+
+        KANBAN_STAGES.forEach((stage) => {
+            const label = getKanbanColumnLabel(stage);
+            const btn = document.createElement('button');
+            btn.className = 'quick-move-item';
+            btn.type = 'button';
+            btn.innerHTML = `<span>${escapeHtml(label)}</span> <i class="ph ph-caret-right"></i>`;
+            btn.onclick = () => {
+                if (typeof window.handleQuickKanbanMove === 'function') {
+                    window.handleQuickKanbanMove(stage);
+                }
+            };
+            container.appendChild(btn);
+        });
+
+        modal.classList.remove('hidden');
+        return;
+    }
+
+    if (titleEl) titleEl.textContent = 'Move Selected Items';
+    if (helpEl) helpEl.textContent = 'Select a destination list to move items to.';
 
     const boards = state.appData.boards;
     const rawLists = state.appData.rawLists || [];
@@ -1823,10 +2149,22 @@ export function enableSortables(enable) {
 
     if (state.listSortable) state.listSortable.option("disabled", shouldDisableList);
     state.sortableInstances.forEach(s => {
-        const isOrphan = s.el.closest('.orphan-list') !== null;
-        const shouldDisableTasks = isOrphan 
-            ? (!enable || !isDragEnabled) 
-            : (!enable || !isDragEnabled || !isCustomSort);
+        const el = s.el;
+        const isOrphan = el?.closest?.('.orphan-list') !== null;
+        const isKanbanZone = !!(
+            el?.id?.startsWith('kanban-') ||
+            el?.classList?.contains('kanban-stage-tasks') ||
+            el?.classList?.contains('kanban-pinned-zone')
+        );
+        let shouldDisableTasks;
+        if (!enable || !isDragEnabled) {
+            shouldDisableTasks = true;
+        } else if (isKanbanZone || isOrphan) {
+            // Kanban drag is independent of custom-sort mode
+            shouldDisableTasks = false;
+        } else {
+            shouldDisableTasks = !isCustomSort;
+        }
         s.option("disabled", shouldDisableTasks);
     });
 }

@@ -140,6 +140,17 @@
     <!-- APP CONTAINER -->
     <div class="app-wrapper">
         <header class="app-header glass-panel">
+            <!-- Multi-select actions: shown inside the tool panel above other controls -->
+            <div id="multi-edit-floating-bar" class="header-row header-multi-select floating-action-bar hidden">
+                <span id="multi-selected-count">0 Selected</span>
+                <div class="floating-bar-buttons">
+                    <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
+                    <button id="multi-move-quick-btn" class="btn primary">Move</button>
+                    <button id="multi-delete-forever-btn" class="btn danger hidden" style="display: none;"><i
+                            class="ph ph-trash"></i> Delete Forever</button>
+                </div>
+            </div>
+
             <!-- Row 1: Board Management & Stats -->
             <div class="header-row header-row-1">
                 <div class="header-left">
@@ -277,6 +288,38 @@
                         <span class="slider-small round"></span>
                     </div>
                 </label>
+                <label class="dropdown-item-toggle" title="Enable Kanban workflow tools on lists">
+                    <span><i class="ph ph-kanban"></i> Work Tools</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="work-tools-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
+
+                <div id="kanban-labels-settings" class="menu-action-item kanban-labels-settings hidden"
+                    style="cursor: default; flex-direction: column; align-items: flex-start; gap: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <span><i class="ph ph-text-aa"></i> Kanban Column Names</span>
+                    </div>
+                    <p class="kanban-labels-hint">Custom labels for the four fixed stages. Leave blank to use defaults.</p>
+                    <label class="kanban-label-field">
+                        <span>New</span>
+                        <input type="text" id="kanban-label-new" class="glass-select full-width" placeholder="New" maxlength="40">
+                    </label>
+                    <label class="kanban-label-field">
+                        <span>Under Review</span>
+                        <input type="text" id="kanban-label-under_review" class="glass-select full-width" placeholder="Under Review" maxlength="40">
+                    </label>
+                    <label class="kanban-label-field">
+                        <span>Almost Done</span>
+                        <input type="text" id="kanban-label-almost_done" class="glass-select full-width" placeholder="Almost Done" maxlength="40">
+                    </label>
+                    <label class="kanban-label-field">
+                        <span>Finished</span>
+                        <input type="text" id="kanban-label-finished" class="glass-select full-width" placeholder="Finished" maxlength="40">
+                    </label>
+                    <button type="button" id="save-kanban-labels-btn" class="btn secondary" style="align-self: flex-end;">Save Labels</button>
+                </div>
                 <hr class="dropdown-divider">
 
                 <div class="menu-action-item"
@@ -546,7 +589,7 @@
 
             <div class="modal-divider"></div>
 
-            <div class="manual-move-section">
+            <div class="manual-move-section" id="multi-list-move-section">
                 <h3>Batch Move / Copy:</h3>
                 <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:10px;">
                     Select a destination list or create a new one.
@@ -559,6 +602,16 @@
                         <button id="multi-link-btn" class="btn secondary">Link (Copy)</button>
                         <button id="multi-move-btn" class="btn secondary">Move (Cut)</button>
                     </div>
+                </div>
+            </div>
+
+            <div class="manual-move-section hidden" id="multi-kanban-move-section">
+                <h3>Move to Kanban Section:</h3>
+                <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:10px;">
+                    Move all selected items into one Kanban section.
+                </p>
+                <div id="multi-kanban-stage-buttons" class="move-buttons" style="flex-wrap: wrap; gap: 8px;">
+                    <!-- Injected when opening modal in Kanban focus -->
                 </div>
             </div>
 
@@ -587,17 +640,6 @@
             <div class="modal-actions-bar" style="margin-top: 15px; justify-content: flex-end;">
                 <button id="quick-move-cancel-btn" class="btn secondary">Cancel</button>
             </div>
-        </div>
-    </div>
-
-    <!-- Floating Action Button for Multi Edit -->
-    <div id="multi-edit-floating-bar" class="floating-action-bar hidden">
-        <span id="multi-selected-count">0 Selected</span>
-        <div class="floating-bar-buttons">
-            <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
-            <button id="multi-move-quick-btn" class="btn primary">Move</button>
-            <button id="multi-delete-forever-btn" class="btn danger hidden" style="display: none;"><i
-                    class="ph ph-trash"></i> Delete Forever</button>
         </div>
     </div>
 

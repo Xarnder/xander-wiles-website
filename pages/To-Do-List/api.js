@@ -2,6 +2,7 @@ import { db } from './firebase-config.js';
 import { doc, updateDoc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { state } from './store.js';
 import { generateId, showToast } from './utils.js';
+import { buildKanbanStatusUpdate, isValidKanbanStatus } from './kanban.js';
 
 // --- API ACTIONS ---
 
@@ -33,6 +34,7 @@ export function handleAddTask(e, listId) {
         text: text,
         completed: false,
         archived: false,
+        kanbanStatus: 'new',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         images: [],
@@ -120,17 +122,63 @@ export function deleteTaskForever(taskId) {
 }
 
 export function toggleTaskComplete(taskId, isChecked) {
-    const updateData = { completed: isChecked };
-    if (isChecked) {
-        updateData.completedAt = Date.now();
-    } else {
-        updateData.completedAt = null;
+    // Q3: Finished ↔ completed synced both ways
+    const updateData = isChecked
+        ? buildKanbanStatusUpdate('finished')
+        : buildKanbanStatusUpdate('almost_done');
+
+    if (state.appData.tasks[taskId]) {
+        Object.assign(state.appData.tasks[taskId], updateData);
     }
+
     const p = updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), updateData)
         .catch(e => handleSyncError(e));
 
     // Auto archive logic check is usually done in UI/Main after update, or pure state reaction.
     return p;
+}
+
+export function updateKanbanStatus(taskId, status) {
+    if (!state.currentUser || !taskId) return Promise.resolve();
+    if (!isValidKanbanStatus(status)) {
+        showToast('Invalid kanban stage', 'error');
+        return Promise.resolve();
+    }
+
+    const updateData = buildKanbanStatusUpdate(status);
+    // Optimistic local update for snappier Kanban re-render
+    if (state.appData.tasks[taskId]) {
+        Object.assign(state.appData.tasks[taskId], updateData);
+    }
+
+    return updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), updateData)
+        .catch(e => handleSyncError(e));
+}
+
+export function batchUpdateKanbanStatus(taskIds, status) {
+    if (!state.currentUser || !taskIds || taskIds.length === 0) return Promise.resolve();
+    if (!isValidKanbanStatus(status)) {
+        showToast('Invalid kanban stage', 'error');
+        return Promise.resolve();
+    }
+
+    const updateData = buildKanbanStatusUpdate(status);
+    const batch = writeBatch(db);
+    const uniqueIds = [...new Set(taskIds)];
+
+    uniqueIds.forEach((taskId) => {
+        if (state.appData.tasks[taskId]) {
+            Object.assign(state.appData.tasks[taskId], updateData);
+        }
+        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), updateData);
+    });
+
+    return batch.commit()
+        .then(() => uniqueIds.length)
+        .catch(e => {
+            handleSyncError(e);
+            return 0;
+        });
 }
 
 export function updateListTitle(id, val) {
@@ -144,6 +192,10 @@ export function updateListDescription(id, val) {
 }
 
 export function deleteList(id) {
+    if (state.focusedKanbanListId === id) {
+        state.focusedKanbanListId = null;
+        document.body.classList.remove('kanban-focus-mode');
+    }
     const batch = writeBatch(db);
     batch.delete(doc(db, "users", state.currentUser.uid, "lists", id));
     const newOrder = state.appData.listOrder.filter(lid => lid !== id);
@@ -221,6 +273,8 @@ export function switchBoard(boardId) {
     console.log("[DEBUG] switchBoard triggered for boardId:", boardId);
     state.appData.currentBoardId = boardId;
     localStorage.setItem(`lastBoard_${state.currentUser.uid}`, boardId);
+    state.focusedKanbanListId = null;
+    document.body.classList.remove('kanban-focus-mode');
     
     // Sync listOrder for immediate UI update
     const board = state.appData.boards.find(b => b.id === boardId);

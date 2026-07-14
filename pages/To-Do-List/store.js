@@ -21,7 +21,14 @@ export const state = {
             addTaskLocation: 'top',
             dailyResetTime: '04:00',
             timeAutomationConfirm: true,
-            disableImportantPinning: false
+            disableImportantPinning: false,
+            workToolsEnabled: false,
+            kanbanColumnLabels: {
+                new: 'New',
+                under_review: 'Under Review',
+                almost_done: 'Almost Done',
+                finished: 'Finished'
+            }
         },
         listOrder: [],
         boards: [],
@@ -33,6 +40,7 @@ export const state = {
     showArchived: false,
     showRecentCompleted: false,
     compactView: true,
+    focusedKanbanListId: null,
     sortableInstances: [],
     listSortable: null,
 
@@ -71,13 +79,30 @@ export function resetState() {
         lists: [],
         rawLists: [],
         tasks: {},
-        settings: { autoArchive: false, showNumbers: false, theme: 'dark', sortMode: 'custom', dragEnabled: null, dailyResetTime: '04:00', timeAutomationConfirm: true, disableImportantPinning: false },
+        settings: {
+            autoArchive: false,
+            showNumbers: false,
+            theme: 'dark',
+            sortMode: 'custom',
+            dragEnabled: null,
+            dailyResetTime: '04:00',
+            timeAutomationConfirm: true,
+            disableImportantPinning: false,
+            workToolsEnabled: false,
+            kanbanColumnLabels: {
+                new: 'New',
+                under_review: 'Under Review',
+                almost_done: 'Almost Done',
+                finished: 'Finished'
+            }
+        },
         listOrder: [],
         boards: [],
         currentBoardId: null
     };
     state.selectedTaskIds.clear();
     state.expandedTaskId = null;
+    state.focusedKanbanListId = null;
 }
 
 export function cleanupListeners() {

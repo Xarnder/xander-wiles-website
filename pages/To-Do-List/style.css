@@ -776,12 +776,9 @@
     border-color: rgba(255, 255, 255, 0.06);
 }
 
-/* Fancy Floating Action Bar */
-[data-theme="fancy"] .floating-action-bar {
-    background: rgba(15, 10, 30, 0.85);
-    backdrop-filter: blur(20px);
-    border-color: rgba(129, 140, 248, 0.2);
-    box-shadow: 0 15px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(99, 102, 241, 0.1);
+/* Fancy multi-select row inside header */
+[data-theme="fancy"] .floating-action-bar.header-multi-select {
+    border-bottom-color: rgba(129, 140, 248, 0.2);
 }
 
 /* Fancy Board Dropdown */
@@ -2797,29 +2794,38 @@ input:checked+.slider-small:before {
 
 
 
-.floating-action-bar {
+/* Multi-select actions live inside .app-header (top row), not a separate floating panel */
+.floating-action-bar.header-multi-select {
     position: relative;
     width: 100%;
-    background: var(--dropdown-bg-glass);
-    padding: 12px 20px;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    border: 1px solid var(--glass-border);
+    flex: 1 0 100%;
+    order: -1;
+    margin: 0;
+    padding: 8px 4px 10px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--glass-border);
+    border-radius: 0;
+    box-shadow: none;
+    backdrop-filter: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 20px;
-    z-index: 100;
-    backdrop-filter: blur(12px);
-    margin-top: 15px;
-    margin-bottom: 20px;
+    gap: 12px;
+    z-index: 1;
     flex-shrink: 0;
+}
+
+.floating-action-bar.header-multi-select.hidden {
+    display: none !important;
 }
 
 .floating-bar-buttons {
     display: flex;
     gap: 12px;
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 /* Quick Move List Styles */
@@ -3054,6 +3060,16 @@ input:checked+.slider-small:before {
         max-width: 85vw;
     }
 
+    .kanban-columns {
+        scroll-snap-type: x mandatory;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .kanban-column {
+        scroll-snap-align: center;
+    }
+
     .board-container {
         scroll-snap-type: x mandatory;
         padding-left: 10px;
@@ -3099,7 +3115,8 @@ input:checked+.slider-small:before {
 
         /* Adjust main container to fill more height */
         .board-container {
-            padding-bottom: 200px !important;
+            /* Fallback matches prior magic number; JS sets --slim-bottom-clearance from measured header */
+            padding-bottom: var(--slim-bottom-clearance, 200px) !important;
             height: 100% !important;
             align-items: stretch !important;
         }
@@ -3107,6 +3124,29 @@ input:checked+.slider-small:before {
         .list-column {
             height: 100% !important;
             max-height: none !important;
+        }
+
+        /* Kanban uses the same clearance as normal lists — do not override padding/margins */
+
+        body.kanban-focus-mode .kanban-focus-shell {
+            height: 100% !important;
+            min-height: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+
+        body.kanban-focus-mode .kanban-columns {
+            flex: 1 1 auto !important;
+            min-height: 0 !important;
+            height: auto !important;
+            align-items: stretch !important;
+            padding-bottom: 0 !important;
+        }
+
+        body.kanban-focus-mode .kanban-column.list-column {
+            height: 100% !important;
+            max-height: none !important;
+            align-self: stretch !important;
         }
 
         /* Move Sync Indicator to the top */
@@ -3124,20 +3164,20 @@ input:checked+.slider-small:before {
             font-size: 0.75rem !important;
         }
 
-        /* Float Multi-Edit Bar closer to the floating header */
-        .floating-action-bar {
-            position: relative !important;
-            z-index: 9100 !important;
+        /* Multi-select is inside the header panel — no separate floating bar clearance */
+        .floating-action-bar.header-multi-select {
+            margin: 0 !important;
+            padding: 4px 0 10px !important;
             width: 100% !important;
-            max-width: none !important;
-            margin-top: 10px !important;
-            /* Sit above the floating bottom header */
-            margin-bottom: calc(190px + env(safe-area-inset-bottom, 0px)) !important;
+            border-bottom: 1px solid var(--glass-border) !important;
+            z-index: 1 !important;
         }
 
-        /* Dynamically shrink lists when multi-edit is actually visible (tasks selected) */
+        /* When multi-select row is visible the header is taller; JS remeasures --slim-bottom-clearance.
+           Keep board filling remaining space (same height:100% as normal). */
         body.multi-bar-visible .board-container {
-            padding-bottom: 20px !important;
+            padding-bottom: var(--slim-bottom-clearance, 200px) !important;
+            height: 100% !important;
         }
 
         /* Hide the redundant board title input on mobile only */
@@ -3530,6 +3570,21 @@ input:checked+.slider-small:before {
     flex: 1;
 }
 
+.multi-kanban-stage-buttons {
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.multi-kanban-stage-btn {
+    flex: 1 1 calc(50% - 12px);
+    min-width: 140px;
+    padding: 14px 18px !important;
+    font-size: 0.95rem !important;
+    line-height: 1.3;
+    white-space: normal !important;
+    text-align: center;
+}
+
 /* --- MULTI EDIT MODE --- */
 .multi-edit-active .task-checkbox {
     pointer-events: none;
@@ -3538,6 +3593,10 @@ input:checked+.slider-small:before {
 }
 
 .multi-edit-active .task-actions {
+    display: none !important;
+}
+
+.multi-edit-active .kanban-stage-moves {
     display: none !important;
 }
 
@@ -3557,32 +3616,7 @@ input:checked+.slider-small:before {
     box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
 }
 
-.floating-action-bar {
-    position: relative;
-    width: 100%;
-    background: var(--dropdown-bg-glass);
-    padding: 12px 20px;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    border: 1px solid var(--glass-border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    z-index: 100;
-    backdrop-filter: blur(12px);
-    margin-bottom: 15px;
-    flex-shrink: 0;
-}
-
-@media (max-width: 480px) {
-    .floating-action-bar {
-        padding: 10px 15px;
-        gap: 10px;
-        width: 100%;
-        justify-content: space-between;
-    }
-}
+/* Legacy standalone floating-action-bar styles removed — multi-select is .header-multi-select in .app-header */
 
 @keyframes floatUp {
     from {
@@ -3593,6 +3627,18 @@ input:checked+.slider-small:before {
     to {
         transform: translate(-50%, 0);
         opacity: 1;
+    }
+}
+
+@media (max-width: 500px) {
+    .floating-action-bar.header-multi-select .btn {
+        padding: 6px 10px !important;
+        font-size: 0.7rem !important;
+    }
+
+    #multi-selected-count {
+        font-size: 0.85rem;
+        white-space: nowrap;
     }
 }
 
@@ -3846,8 +3892,7 @@ html[data-theme="fancy"] body.theme-story-manager .modal-overlay {
 
 html[data-theme="fancy"] body.theme-story-manager .confirm-box,
 html[data-theme="fancy"] body.theme-story-manager .modal,
-html[data-theme="fancy"] body.theme-story-manager .toast,
-html[data-theme="fancy"] body.theme-story-manager .floating-action-bar {
+html[data-theme="fancy"] body.theme-story-manager .toast {
     background: rgba(20, 20, 20, 0.9) !important;
     border-color: rgba(255, 140, 0, 0.35) !important;
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7), 0 0 30px rgba(234, 88, 12, 0.2) !important;
@@ -4415,4 +4460,401 @@ body.theme-story-manager .nested-idea-editor-row.selected {
 
 [data-theme="light"] .frozen-tasks-header {
     color: #b45309;
+}
+
+/* --- WORK TOOLS / KANBAN FOCUS (Phase 2 shell) --- */
+.kanban-toggle-btn.is-active,
+.kanban-toggle-btn[aria-pressed="true"] {
+    color: var(--accent-blue);
+    background: rgba(59, 130, 246, 0.15);
+}
+
+body.kanban-focus-mode .board-container.kanban-focus-board {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    gap: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    /* padding-bottom comes from slim-mobile / multi-bar rules (same as normal lists) */
+}
+
+.kanban-focus-shell {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+    gap: 10px;
+}
+
+.kanban-columns {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    align-items: stretch;
+}
+
+.kanban-focus-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    backdrop-filter: blur(20px);
+    flex-shrink: 0;
+}
+
+.kanban-focus-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+
+.kanban-focus-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.kanban-focus-title {
+    font-size: 1.15rem;
+}
+
+.kanban-focus-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.kanban-column {
+    /* Width/snap match .list-column (element also has list-column class) */
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.kanban-column-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.kanban-pinned-zone {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0 10px 6px;
+    padding: 6px 8px;
+    background: rgba(251, 191, 36, 0.05);
+    border: 1px dashed rgba(251, 191, 36, 0.25);
+    border-radius: 8px;
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
+}
+
+.kanban-pinned-zone.has-pinned {
+    display: flex;
+}
+
+.kanban-pinned-zone .task-card {
+    flex-shrink: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.kanban-pinned-zone:empty,
+.kanban-pinned-zone:not(.has-pinned) {
+    display: none;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+/* Allow dropping into empty pinned zone when dragging */
+body.kanban-dragging .kanban-pinned-zone {
+    display: flex;
+    min-height: 44px;
+    margin: 0 10px 6px;
+    padding: 6px 8px;
+    border: 1px dashed rgba(251, 191, 36, 0.35);
+}
+
+body.kanban-dragging .kanban-pinned-zone:not(.has-pinned):empty::before {
+    content: "Pinned";
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #f59e0b;
+    opacity: 0.7;
+    padding: 4px 2px;
+}
+
+.kanban-pinned-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #f59e0b;
+    padding: 0 2px 2px;
+    pointer-events: none;
+}
+
+[data-theme="light"] .kanban-pinned-zone {
+    background: rgba(217, 119, 6, 0.05);
+    border-color: rgba(217, 119, 6, 0.25);
+}
+
+[data-theme="light"] .kanban-pinned-header {
+    color: #b45309;
+}
+
+.kanban-column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 15px 4px;
+}
+
+.kanban-column-title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.kanban-column-count {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    opacity: 0.8;
+}
+
+.kanban-stage-tasks {
+    flex: 1 1 auto;
+    min-height: 80px;
+    padding: 8px 12px 12px;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kanban-stage-tasks.is-empty::before {
+    content: "Drop here";
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 88px;
+    opacity: 0.45;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    border: 1px dashed var(--glass-border);
+    border-radius: 8px;
+    pointer-events: none;
+}
+
+.kanban-column.is-column-empty .kanban-stage-tasks.is-empty::before {
+    content: "Drop here";
+}
+
+body.kanban-dragging .kanban-stage-tasks {
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
+
+body.kanban-dragging .kanban-stage-tasks.is-empty::before {
+    opacity: 0.8;
+    color: var(--accent-blue);
+    border-color: rgba(59, 130, 246, 0.45);
+}
+
+.kanban-empty-msg {
+    opacity: 0.55;
+    font-size: 0.85rem;
+}
+
+.kanban-labels-settings {
+    width: 100%;
+}
+
+.kanban-labels-settings.hidden {
+    display: none !important;
+}
+
+.kanban-labels-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    opacity: 0.7;
+    line-height: 1.35;
+}
+
+.kanban-label-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.kanban-label-field input {
+    color: var(--text-primary);
+}
+
+/* Legacy global pin tray removed — pinned tasks live per-column */
+
+.kanban-column .add-task-slot .add-task-container {
+    padding: 0 12px 8px;
+}
+
+.kanban-stage-moves {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 6px 8px 8px;
+}
+
+.kanban-arrow-btn.icon-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    padding: 4px;
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+}
+
+.kanban-arrow-btn.icon-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+[data-theme="light"] .kanban-arrow-btn.icon-btn {
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .kanban-arrow-btn.icon-btn:hover {
+    background: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.2);
+    color: var(--text-primary);
+}
+
+body.kanban-focus-mode .task-card {
+    margin-bottom: 0;
+    cursor: grab;
+}
+
+body.kanban-focus-mode .task-card:active {
+    cursor: grabbing;
+}
+
+body.kanban-dragging .task-card {
+    opacity: 0.95;
+}
+
+.kanban-column {
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+body.kanban-dragging .kanban-column {
+    border-color: rgba(59, 130, 246, 0.35);
+}
+
+@media (max-width: 768px) {
+    .kanban-focus-eyebrow {
+        display: none;
+    }
+
+    .kanban-pinned-zone.has-pinned {
+        flex: 0 0 auto;
+        overflow: visible;
+        max-height: none;
+    }
+
+    .kanban-stage-tasks {
+        min-height: 60px;
+    }
+}
+
+@media (max-width: 500px) {
+    body.kanban-focus-mode .kanban-column {
+        overflow: hidden;
+    }
+
+    body.kanban-focus-mode .kanban-column-body {
+        overflow-x: hidden;
+        overflow-y: auto;
+        min-height: 0;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    body.kanban-focus-mode .kanban-pinned-zone.has-pinned {
+        flex: 0 0 auto;
+        flex-shrink: 0;
+        overflow: visible;
+        max-height: none;
+    }
+
+    body.kanban-focus-mode .kanban-pinned-zone .task-card {
+        overflow: visible;
+    }
+
+    body.kanban-focus-mode .kanban-stage-tasks {
+        flex: 0 0 auto;
+        min-height: 60px;
+        overflow: visible;
+    }
+
+    .kanban-stage-moves {
+        padding: 6px 8px 8px;
+        gap: 8px;
+    }
+
+    .kanban-arrow-btn.icon-btn {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+    }
 }
