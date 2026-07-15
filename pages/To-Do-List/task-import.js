@@ -169,7 +169,8 @@ export function getTaskImportInstructions() {
         'Sign in to the app first.',
         'Open Settings (gear) → Import Project Tasks (AI).',
         'Click Copy LLM Prompt and paste it into Cursor with your design docs attached.',
-        'Save the AI output as a .json file, or copy/paste it into the import box.',
+        'Important: ask the AI to create a real .json file on disk (e.g. project-tasks-import.json) — not just JSON in chat.',
+        'In the app, click Choose JSON File and select that saved file (or paste into the box as a fallback).',
         'Click Analyze Import and review how many tasks will be added vs skipped.',
         'Choose "Create a new board" for a fresh project, or add to your current board.',
         'Click Import Tasks and wait for the progress bar to finish.',
@@ -181,12 +182,20 @@ export function getTaskImportPrompt() {
     return `You are generating a task import file for a to-do list app. Read ALL attached design documents carefully.
 
 GOAL
-Turn the design docs into an actionable project task list, grouped by module or delivery phase, ready to import in one step.
+Turn the design docs into an actionable project task list, grouped by module or delivery phase, saved as a real JSON file the user can import.
 
-OUTPUT DISCIPLINE (critical)
-- Return ONE raw JSON object only
-- Do NOT wrap output in markdown code fences
-- Do NOT add explanation, preamble, postamble, or apologies
+DELIVERABLE — READ THIS FIRST (most important)
+- You MUST create an actual .json file on disk in the project/workspace
+- Suggested filename: project-tasks-import.json (or <project-name>-tasks-import.json)
+- In Cursor: use the file create/write tool to save the file — do NOT only print JSON in chat
+- The chat reply should be SHORT: confirm the filename and path, plus a brief task/list count summary
+- Do NOT dump the full JSON into the chat unless the user explicitly asks to see it
+- The user will import this file via: To-Do List app → Settings → Import Project Tasks (AI) → Choose JSON File
+
+OUTPUT DISCIPLINE (for the file contents)
+- The .json file must contain ONE raw JSON object only
+- Do NOT wrap the file contents in markdown code fences
+- Do NOT add explanation, preamble, postamble, or apologies inside the file
 - Do NOT include comments inside the JSON
 - Use double quotes for all keys and string values
 - No trailing commas
@@ -255,6 +264,7 @@ KANBAN STATUS (optional — usually omit)
 - Only set when docs clearly indicate progress: "new", "under_review", "almost_done", "finished"
 
 COMMON MISTAKES TO AVOID
+- Do NOT only paste JSON in the chat — the user needs a real .json file they can upload
 - Do not output markdown bullets, tables, or prose instead of JSON
 - Do not create a flat list of 100 top-level tasks — group and subtask instead
 - Do not repeat the same task in multiple lists
@@ -262,14 +272,15 @@ COMMON MISTAKES TO AVOID
 - Do not use numbered markdown lists as task text (no "1. Do X")
 
 FINAL SELF-CHECK (must pass before you respond)
-1. Output is valid JSON with no extra text
-2. "lists" is a non-empty array
-3. Every list has a non-empty "title" and non-empty "tasks" array
-4. Every task has non-empty "text"
-5. Detail steps live in "subtasks", not as duplicate top-level tasks
-6. The structure accurately reflects the attached design docs
+1. A real .json file exists on disk with valid JSON inside
+2. Chat reply names the file path (not the full JSON body)
+3. "lists" is a non-empty array
+4. Every list has a non-empty "title" and non-empty "tasks" array
+5. Every task has non-empty "text"
+6. Detail steps live in "subtasks", not as duplicate top-level tasks
+7. The structure accurately reflects the attached design docs
 
-Output the JSON object now.`;
+Create the .json file now, then reply with the file path and import summary only.`;
 }
 
 function repairJsonText(text) {
