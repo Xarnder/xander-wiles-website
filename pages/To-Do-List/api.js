@@ -3,6 +3,13 @@ import { doc, updateDoc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc 
 import { state } from './store.js';
 import { generateId, showToast } from './utils.js';
 import { buildKanbanStatusUpdate, isValidKanbanStatus } from './kanban.js';
+import {
+    migrateNestedTree,
+    setNodeCompleted,
+    setNodeKanbanStatus,
+    reorderNestedSiblings as reorderNestedSiblingsInTree,
+    getParentKanbanStatus
+} from './nested.js';
 
 // --- API ACTIONS ---
 
@@ -136,6 +143,65 @@ export function toggleTaskComplete(taskId, isChecked) {
 
     // Auto archive logic check is usually done in UI/Main after update, or pure state reaction.
     return p;
+}
+
+export function updateTaskNestedIdeas(taskId, nestedIdeas) {
+    if (!state.currentUser || !taskId) return Promise.resolve();
+
+    const updateData = {
+        nestedIdeas,
+        updatedAt: Date.now()
+    };
+
+    if (state.appData.tasks[taskId]) {
+        Object.assign(state.appData.tasks[taskId], updateData);
+    }
+
+    return updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), updateData)
+        .catch(e => handleSyncError(e));
+}
+
+export function toggleNestedIdeaComplete(taskId, nodeId, isChecked) {
+    if (!state.currentUser || !taskId || !nodeId) return Promise.resolve();
+
+    const task = state.appData.tasks[taskId];
+    if (!task) return Promise.resolve();
+
+    const parentKanban = getParentKanbanStatus(task);
+    const currentTree = migrateNestedTree(task.nestedIdeas || [], parentKanban);
+    const updatedTree = setNodeCompleted(currentTree, nodeId, isChecked);
+
+    return updateTaskNestedIdeas(taskId, updatedTree);
+}
+
+export function reorderNestedSiblings(taskId, parentNodeId, orderedChildIds) {
+    if (!state.currentUser || !taskId || !Array.isArray(orderedChildIds)) return Promise.resolve();
+
+    const task = state.appData.tasks[taskId];
+    if (!task) return Promise.resolve();
+
+    const parentKanban = getParentKanbanStatus(task);
+    const currentTree = migrateNestedTree(task.nestedIdeas || [], parentKanban);
+    const updatedTree = reorderNestedSiblingsInTree(currentTree, parentNodeId, orderedChildIds);
+
+    return updateTaskNestedIdeas(taskId, updatedTree);
+}
+
+export function updateNestedIdeaKanbanStatus(taskId, nodeId, kanbanStatus) {
+    if (!state.currentUser || !taskId || !nodeId) return Promise.resolve();
+    if (!isValidKanbanStatus(kanbanStatus)) {
+        showToast('Invalid kanban stage', 'warning');
+        return Promise.resolve();
+    }
+
+    const task = state.appData.tasks[taskId];
+    if (!task) return Promise.resolve();
+
+    const parentKanban = getParentKanbanStatus(task);
+    const currentTree = migrateNestedTree(task.nestedIdeas || [], parentKanban);
+    const updatedTree = setNodeKanbanStatus(currentTree, nodeId, kanbanStatus);
+
+    return updateTaskNestedIdeas(taskId, updatedTree);
 }
 
 export function updateKanbanStatus(taskId, status) {

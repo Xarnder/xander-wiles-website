@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-todo-v32';
+const CACHE_NAME = 'taskmaster-todo-v38';
 const OWNED_CACHE_PREFIXES = ['taskmaster-todo-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',
@@ -10,6 +10,7 @@ const ASSETS_TO_CACHE = [
     './api.js',
     './store.js',
     './ui.js',
+    './nested.js',
     './utils.js',
     './local-ai.js',
     '/assets/js/local-llm.js',

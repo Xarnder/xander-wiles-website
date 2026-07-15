@@ -157,7 +157,8 @@ export function toggleKanbanFocus(listId) {
 }
 
 /**
- * Focus chrome + four stage column shells (tasks filled by ui.populateKanbanFocus).
+ * Focus chrome + connected Kanban board (headers / stretch / bodies).
+ * Tasks filled by ui.populateKanbanFocus.
  */
 export function renderKanbanFocus(boardContainer, list) {
     document.body.classList.add('kanban-focus-mode');
@@ -167,14 +168,19 @@ export function renderKanbanFocus(boardContainer, list) {
     shell.className = 'kanban-focus-shell';
     shell.dataset.listId = list.id;
 
-    const columnsHtml = KANBAN_STAGES.map((stage) => {
+    const headersHtml = KANBAN_STAGES.map((stage, index) => {
         const label = escapeHtml(getKanbanColumnLabel(stage));
         return `
-            <div class="kanban-column list-column" data-stage="${stage}" data-list-id="${list.id}">
-                <div class="kanban-column-header">
-                    <h3 class="kanban-column-title">${label}</h3>
-                    <span class="kanban-column-count" data-stage-count="${stage}">0</span>
-                </div>
+            <div class="kanban-column-header" data-stage="${stage}" data-list-id="${list.id}" style="grid-column:${index + 1}">
+                <h3 class="kanban-column-title">${label}</h3>
+                <span class="kanban-column-count" data-stage-count="${stage}">0</span>
+            </div>
+        `;
+    }).join('');
+
+    const panesHtml = KANBAN_STAGES.map((stage, index) => {
+        return `
+            <div class="kanban-column-pane" data-stage="${stage}" data-list-id="${list.id}" style="grid-column:${index + 1}">
                 <div class="add-task-slot" data-add-slot="${stage}"></div>
                 <div class="kanban-column-body">
                     <div class="kanban-pinned-zone" id="kanban-pinned-${list.id}-${stage}" data-kanban-stage="${stage}"></div>
@@ -210,7 +216,9 @@ export function renderKanbanFocus(boardContainer, list) {
             </div>
         </div>
         <div class="kanban-columns" role="region" aria-label="Kanban columns for ${escapeHtml(list.title)}">
-            ${columnsHtml}
+            ${headersHtml}
+            <div class="kanban-stretch-band hidden" id="kanban-stretch-${list.id}" aria-label="Tasks spanning multiple stages"></div>
+            ${panesHtml}
         </div>
     `;
 

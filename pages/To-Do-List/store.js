@@ -42,6 +42,7 @@ export const state = {
     compactView: true,
     focusedKanbanListId: null,
     sortableInstances: [],
+    nestedSortableInstances: [],
     listSortable: null,
 
     // Multi-Edit State

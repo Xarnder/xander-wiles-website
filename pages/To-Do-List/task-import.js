@@ -2,6 +2,7 @@ import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 import { generateId, parseNestedMarkdown } from './utils.js';
 import { KANBAN_STAGES } from './kanban.js';
+import { migrateNestedTree } from './nested.js';
 
 export const TASK_IMPORT_FORMAT_VERSION = 1;
 const BATCH_LIMIT = 450;
@@ -438,7 +439,7 @@ function normalizeGlowColor(value) {
     return VALID_GLOW_COLORS.has(withHash) ? withHash : 'none';
 }
 
-function normalizeNestedIdeas(items, diagnostics, context) {
+function normalizeNestedIdeas(items, diagnostics, context, parentKanbanStatus = 'new') {
     const output = [];
 
     asArray(items).forEach((item, index) => {
@@ -466,13 +467,27 @@ function normalizeNestedIdeas(items, diagnostics, context) {
             return;
         }
 
+        const completed = asTruthy(item.completed);
+        const nodeKanban = item.kanbanStatus
+            ? normalizeKanbanStatus(item.kanbanStatus, completed)
+            : parentKanbanStatus;
+
         output.push({
+            id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : undefined,
             text,
-            nestedIdeas: normalizeNestedIdeas(getSubtaskSource(item), diagnostics, `${context} > "${text}"`)
+            completed: typeof item.completed === 'boolean' ? item.completed : completed,
+            completedAt: Number.isFinite(Number(item.completedAt)) ? Number(item.completedAt) : null,
+            kanbanStatus: nodeKanban,
+            nestedIdeas: normalizeNestedIdeas(
+                getSubtaskSource(item),
+                diagnostics,
+                `${context} > "${text}"`,
+                nodeKanban
+            )
         });
     });
 
-    return output;
+    return migrateNestedTree(output, parentKanbanStatus);
 }
 
 function applyImportantPrefix(text, important) {
@@ -523,7 +538,12 @@ function normalizeTask(task, diagnostics, context, index) {
         updatedAt: Number.isFinite(Number(task?.updatedAt)) ? Number(task.updatedAt) : null,
         glowColor,
         images: Array.isArray(task?.images) ? task.images.filter(Boolean) : [],
-        nestedIdeas: normalizeNestedIdeas(getSubtaskSource(task), diagnostics, `${context} > "${text}"`)
+        nestedIdeas: normalizeNestedIdeas(
+            getSubtaskSource(task),
+            diagnostics,
+            `${context} > "${text}"`,
+            kanbanStatus
+        )
     };
 }
 

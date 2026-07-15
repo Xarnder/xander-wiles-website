@@ -1,10 +1,20 @@
 import { state } from './store.js';
 import { escapeHtml, showToast, generateId, formatDateTime, getTerm, parseNestedMarkdown, isUserTyping } from './utils.js';
-import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, handleSyncError, updateDoc } from './api.js';
+import {
+    sanitizeNestedForSave,
+    countNestedNodes,
+    BOARD_NESTED_MAX_DEPTH,
+    getParentKanbanStatus,
+    getParentKanbanSpan,
+    isMultiColumnKanbanStretch,
+    getKanbanPlacementStage,
+    taskMatchesSearch
+} from './nested.js';
+import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, handleSyncError, updateDoc } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
-import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, partitionListTasksByStage, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages } from './kanban.js';
+import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages, isValidKanbanStatus, isImportantTask } from './kanban.js';
 
 // Global DOM Elements
 const boardContainer = document.getElementById('board-container');
@@ -64,17 +74,58 @@ export function getOrphanedTaskIds() {
 
 /**
  * Fill Kanban stage columns (pinned subsection + normal tasks per column).
+ * Multi-column stretch parents sit inside the connected board grid (not a separate lane).
  */
 function populateKanbanFocus(list) {
-    const buckets = partitionListTasksByStage(list);
+    const buckets = {};
+    KANBAN_STAGES.forEach((stage) => {
+        buckets[stage] = { pinned: [], normal: [] };
+    });
+
+    const stretchTasks = { pinned: [], normal: [] };
+    const pinningDisabled = !!state.appData.settings.disableImportantPinning;
+    const taskIds = list.taskIds || [];
+
+    taskIds.forEach((taskId) => {
+        const task = state.appData.tasks[taskId];
+        if (!task || task.archived) return;
+
+        const shouldPin = isImportantTask(task) && !pinningDisabled;
+        const bucketKey = shouldPin ? 'pinned' : 'normal';
+
+        if (isMultiColumnKanbanStretch(task)) {
+            stretchTasks[bucketKey].push(task);
+            return;
+        }
+
+        const stage = getKanbanPlacementStage(task);
+        if (!buckets[stage]) return;
+        buckets[stage][bucketKey].push(task);
+    });
+
     let number = 1;
+
+    const stretchBand = document.getElementById(`kanban-stretch-${list.id}`);
+    if (stretchBand) {
+        stretchBand.innerHTML = '';
+        [...stretchTasks.pinned, ...stretchTasks.normal].forEach((task) => {
+            const placement = getParentKanbanSpan(task);
+            const card = createTaskElement(task, list.id, number++, { kanbanStretch: placement });
+            card.classList.add('kanban-stretched-card');
+            card.style.gridColumn = `${placement.startIndex + 1} / span ${placement.span}`;
+            card.style.setProperty('--kanban-span', String(placement.span));
+            stretchBand.appendChild(card);
+        });
+        stretchBand.classList.toggle('hidden', stretchBand.childElementCount === 0);
+        stretchBand.classList.toggle('has-stretch', stretchBand.childElementCount > 0);
+    }
 
     KANBAN_STAGES.forEach((stage) => {
         const pinnedZone = document.getElementById(`kanban-pinned-${list.id}-${stage}`);
         const normalZone = document.getElementById(`kanban-stage-${list.id}-${stage}`);
         const countEl = document.querySelector(`[data-stage-count="${stage}"]`);
-        const addSlot = document.querySelector(`.kanban-column[data-stage="${stage}"] .add-task-slot`);
-        const column = document.querySelector(`.kanban-column[data-stage="${stage}"]`);
+        const addSlot = document.querySelector(`.kanban-column-pane[data-stage="${stage}"] .add-task-slot`);
+        const column = document.querySelector(`.kanban-column-pane[data-stage="${stage}"]`);
         if (!pinnedZone || !normalZone) return;
 
         const { pinned = [], normal = [] } = buckets[stage] || { pinned: [], normal: [] };
@@ -141,7 +192,7 @@ function initKanbanSortables(listId) {
                 // Stay off while multi-selecting so card clicks can select
                 disabled: !!state.multiEditMode,
                 draggable: '.task-card',
-                filter: '.kanban-stage-moves, .kanban-pinned-header, .task-actions, .task-checkbox, input, button',
+                filter: '.kanban-stage-moves, .kanban-pinned-header, .task-actions, .task-checkbox, .nested-idea-checkbox, .nested-kanban-stage-select, .nested-idea-drag-handle, input, button, select',
                 preventOnFilter: false,
                 forceFallback: true,
                 fallbackOnBody: true,
@@ -170,7 +221,7 @@ function initKanbanSortables(listId) {
 
 function refreshKanbanColumnState(container) {
     if (!container) return;
-    const column = container.closest('.kanban-column');
+    const column = container.closest('.kanban-column-pane') || container.closest('.kanban-column');
     if (!column) return;
 
     const stage = column.dataset.stage;
@@ -201,7 +252,7 @@ function refreshKanbanColumnState(container) {
     }
     column.classList.toggle('is-column-empty', total === 0);
 
-    const countEl = column.querySelector('[data-stage-count]');
+    const countEl = document.querySelector(`[data-stage-count="${stage}"]`);
     if (countEl) countEl.textContent = String(total);
 }
 
@@ -213,8 +264,8 @@ export function handleKanbanDragEnd(evt, listId) {
     const taskId = evt.item?.dataset?.taskId;
     if (!taskId || !listId || !state.currentUser) return;
 
-    const toColumn = evt.to?.closest?.('.kanban-column');
-    const fromColumn = evt.from?.closest?.('.kanban-column');
+    const toColumn = evt.to?.closest?.('.kanban-column-pane') || evt.to?.closest?.('.kanban-column');
+    const fromColumn = evt.from?.closest?.('.kanban-column-pane') || evt.from?.closest?.('.kanban-column');
     const toStage = toColumn?.dataset?.stage;
     const fromStage = fromColumn?.dataset?.stage;
 
@@ -287,6 +338,8 @@ export function renderBoard() {
     // Cleanup Sortables
     state.sortableInstances.forEach(s => s.destroy());
     state.sortableInstances = [];
+    state.nestedSortableInstances.forEach(s => s.destroy());
+    state.nestedSortableInstances = [];
     if (state.listSortable) {
         state.listSortable.destroy();
         state.listSortable = null;
@@ -467,6 +520,62 @@ export function renderBoard() {
     if (window.onBoardRendered) {
         window.onBoardRendered();
     }
+
+    initNestedSortables();
+}
+
+function isNestedDragEnabled() {
+    return !isKanbanFocused()
+        && state.appData.settings.sortMode === 'custom'
+        && !!state.appData.settings.dragEnabled
+        && !state.multiEditMode
+        && !state.showArchived;
+}
+
+function handleNestedDragEnd(evt) {
+    const list = evt.from;
+    const taskId = list?.dataset?.taskId;
+    const parentNodeId = list?.dataset?.parentNodeId;
+
+    if (!taskId || evt.oldIndex === evt.newIndex) return;
+
+    const orderedIds = Array.from(list.children)
+        .filter((el) => el.classList.contains('nested-idea-display-item'))
+        .map((el) => el.dataset.nodeId)
+        .filter(Boolean);
+
+    if (orderedIds.length === 0) return;
+
+    const apiParentId = parentNodeId === 'root' ? null : parentNodeId;
+    reorderNestedSiblings(taskId, apiParentId, orderedIds).catch(() => {});
+}
+
+function initNestedSortables() {
+    if (!isNestedDragEnabled() || typeof Sortable === 'undefined') return;
+
+    document.querySelectorAll('.nested-ideas-list[data-task-id]').forEach((listEl) => {
+        const taskId = listEl.dataset.taskId;
+        const parentNodeId = listEl.dataset.parentNodeId || 'root';
+        if (!taskId) return;
+
+        const sortable = new Sortable(listEl, {
+            group: {
+                name: `nested-${taskId}-${parentNodeId}`,
+                pull: false,
+                put: false
+            },
+            draggable: '.nested-idea-display-item',
+            handle: '.nested-idea-drag-handle',
+            animation: 150,
+            delay: 150,
+            delayOnTouchOnly: true,
+            forceFallback: true,
+            fallbackOnBody: true,
+            onEnd: handleNestedDragEnd
+        });
+
+        state.nestedSortableInstances.push(sortable);
+    });
 }
 
 export function updateBoardUI() {
@@ -845,17 +954,183 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     }
 }
 
-export function generateNestedIdeasHtml(nestedIdeas) {
-    if (!nestedIdeas || nestedIdeas.length === 0) return '';
-    let html = '<div class="nested-ideas-list">';
-    nestedIdeas.forEach(idea => {
-        html += `<div class="nested-idea-display-item">
-            ${escapeHtml(idea.text)}
-        </div>`;
-        if (idea.nestedIdeas && idea.nestedIdeas.length > 0) {
-            html += generateNestedIdeasHtml(idea.nestedIdeas);
+export function generateNestedIdeasHtml(nestedIdeas, taskId, depth = 1, dragEnabled = false) {
+    if (!nestedIdeas || nestedIdeas.length === 0 || !taskId) return '';
+    return renderNestedIdeasList(nestedIdeas, taskId, depth, 'root', dragEnabled);
+}
+
+function renderNestedIdeasList(nestedIdeas, taskId, depth, parentNodeId, dragEnabled) {
+    const listClass = depth === 1
+        ? 'nested-ideas-list'
+        : 'nested-ideas-list nested-ideas-list-nested';
+
+    let html = `<div class="${listClass}" role="group" aria-label="Subtasks" data-task-id="${taskId}" data-parent-node-id="${parentNodeId}">`;
+
+    nestedIdeas.forEach((idea) => {
+        if (!idea || typeof idea.text !== 'string' || !idea.text.trim()) return;
+
+        const nodeId = typeof idea.id === 'string' ? idea.id : '';
+        const checkboxId = `nested-cb-${taskId}-${nodeId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const completedClass = idea.completed ? ' nested-idea-completed' : '';
+        const hideCheckboxes = window.APP_CONFIG && window.APP_CONFIG.hideCheckboxes;
+        const showDragHandle = dragEnabled && nodeId;
+
+        html += `<div class="nested-idea-display-item${completedClass}" data-node-id="${nodeId}" data-nested-depth="${depth}">`;
+        html += '<div class="nested-idea-row">';
+
+        if (showDragHandle) {
+            html += `<button type="button" class="nested-idea-drag-handle" title="Reorder subtask" aria-label="Reorder subtask" onclick="event.stopPropagation()" ontouchstart="event.stopPropagation()"><i class="ph ph-dots-six-vertical"></i></button>`;
+        }
+
+        if (!hideCheckboxes && nodeId) {
+            html += `<input type="checkbox" class="nested-idea-checkbox" id="${escapeHtml(checkboxId)}"
+                ${idea.completed ? 'checked' : ''}
+                aria-checked="${idea.completed ? 'true' : 'false'}"
+                onchange="window.toggleNestedIdeaComplete('${taskId}', '${nodeId}', this.checked)"
+                onclick="event.stopPropagation()"
+                ontouchstart="event.stopPropagation()">`;
+            html += `<label for="${escapeHtml(checkboxId)}" class="nested-idea-label">${escapeHtml(idea.text)}</label>`;
+        } else {
+            html += `<span class="nested-idea-label">${escapeHtml(idea.text)}</span>`;
+        }
+
+        html += '</div>';
+
+        const children = Array.isArray(idea.nestedIdeas) ? idea.nestedIdeas : [];
+        if (children.length > 0) {
+            if (depth < BOARD_NESTED_MAX_DEPTH) {
+                html += renderNestedIdeasList(children, taskId, depth + 1, nodeId, dragEnabled);
+            } else {
+                const deeperCount = countNestedNodes(children);
+                if (deeperCount > 0) {
+                    html += `<div class="nested-idea-deeper-hint">+${deeperCount} more in editor</div>`;
+                }
+            }
+        }
+
+        html += '</div>';
+    });
+
+    html += '</div>';
+    return html;
+}
+
+function collectNestedNodesForKanban(nestedIdeas, depth = 1, out = []) {
+    if (!Array.isArray(nestedIdeas)) return out;
+
+    nestedIdeas.forEach((node) => {
+        if (!node || typeof node.text !== 'string' || !node.text.trim()) return;
+        out.push(node);
+        if (depth < BOARD_NESTED_MAX_DEPTH && Array.isArray(node.nestedIdeas) && node.nestedIdeas.length > 0) {
+            collectNestedNodesForKanban(node.nestedIdeas, depth + 1, out);
         }
     });
+
+    return out;
+}
+
+function renderNestedKanbanItem(node, taskId) {
+    const nodeId = typeof node.id === 'string' ? node.id : '';
+    const checkboxId = `nested-cb-${taskId}-${nodeId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const completedClass = node.completed ? ' nested-idea-completed' : '';
+    const hideCheckboxes = window.APP_CONFIG && window.APP_CONFIG.hideCheckboxes;
+    const stage = isValidKanbanStatus(node.kanbanStatus) ? node.kanbanStatus : 'new';
+
+    const stageOptions = KANBAN_STAGES.map((s) => {
+        const selected = s === stage ? ' selected' : '';
+        return `<option value="${s}"${selected}>${escapeHtml(getKanbanColumnLabel(s))}</option>`;
+    }).join('');
+
+    let html = `<div class="nested-idea-display-item${completedClass}" data-node-id="${nodeId}">`;
+    html += '<div class="nested-idea-row">';
+
+    if (!hideCheckboxes && nodeId) {
+        html += `<input type="checkbox" class="nested-idea-checkbox" id="${escapeHtml(checkboxId)}"
+            ${node.completed ? 'checked' : ''}
+            aria-checked="${node.completed ? 'true' : 'false'}"
+            onchange="window.toggleNestedIdeaComplete('${taskId}', '${nodeId}', this.checked)"
+            onclick="event.stopPropagation()"
+            ontouchstart="event.stopPropagation()">`;
+        html += `<label for="${escapeHtml(checkboxId)}" class="nested-idea-label">${escapeHtml(node.text)}</label>`;
+    } else {
+        html += `<span class="nested-idea-label">${escapeHtml(node.text)}</span>`;
+    }
+
+    if (!node.completed && nodeId) {
+        html += `<select class="nested-kanban-stage-select glass-select" aria-label="Subtask stage"
+            onchange="window.updateNestedIdeaKanbanStatus('${taskId}', '${nodeId}', this.value)"
+            onclick="event.stopPropagation()"
+            ontouchstart="event.stopPropagation()">${stageOptions}</select>`;
+    }
+
+    html += '</div></div>';
+    return html;
+}
+
+function generateNestedKanbanHtml(nestedIdeas, task, options = {}) {
+    if (!nestedIdeas?.length || !task?.id) return '';
+
+    const parentStatus = getParentKanbanStatus(task);
+    const nodes = collectNestedNodesForKanban(nestedIdeas);
+    const incompleteByStage = {};
+    KANBAN_STAGES.forEach((stage) => { incompleteByStage[stage] = []; });
+    const completedNodes = [];
+
+    nodes.forEach((node) => {
+        if (node.completed) {
+            completedNodes.push(node);
+            return;
+        }
+        const stage = isValidKanbanStatus(node.kanbanStatus) ? node.kanbanStatus : parentStatus;
+        incompleteByStage[stage].push(node);
+    });
+
+    const spanColumns = Array.isArray(options.spanColumns) && options.spanColumns.length > 1
+        ? options.spanColumns
+        : null;
+    const isStretch = !!spanColumns;
+
+    let html = isStretch
+        ? `<div class="nested-ideas-list nested-kanban-view nested-kanban-span-grid" style="--kanban-span:${spanColumns.length}" role="group" aria-label="Subtasks by stage">`
+        : '<div class="nested-ideas-list nested-kanban-view" role="group" aria-label="Subtasks by stage">';
+
+    const stagesToRender = spanColumns || KANBAN_STAGES.filter((stage) => incompleteByStage[stage].length > 0);
+
+    if (isStretch) {
+        spanColumns.forEach((stage) => {
+            const items = incompleteByStage[stage] || [];
+            html += `<div class="nested-kanban-stage-col" data-stage="${stage}">`;
+            html += `<div class="nested-kanban-stage-label">${escapeHtml(getKanbanColumnLabel(stage))}</div>`;
+            if (items.length === 0) {
+                html += '<div class="nested-kanban-stage-empty">—</div>';
+            } else {
+                items.forEach((node) => { html += renderNestedKanbanItem(node, task.id); });
+            }
+            html += '</div>';
+        });
+    } else {
+        stagesToRender.forEach((stage) => {
+            const items = incompleteByStage[stage];
+            if (!items.length) return;
+            html += `<div class="nested-kanban-stage-group" data-stage="${stage}">`;
+            html += `<div class="nested-kanban-stage-label">${escapeHtml(getKanbanColumnLabel(stage))}</div>`;
+            items.forEach((node) => { html += renderNestedKanbanItem(node, task.id); });
+            html += '</div>';
+        });
+    }
+
+    if (completedNodes.length > 0) {
+        html += `<div class="nested-kanban-stage-group nested-kanban-completed-group${isStretch ? ' nested-kanban-completed-span' : ''}">`;
+        html += '<div class="nested-kanban-stage-label">Completed</div>';
+        completedNodes.forEach((node) => { html += renderNestedKanbanItem(node, task.id); });
+        html += '</div>';
+    }
+
+    const deeperCount = countNestedNodes(nestedIdeas) - nodes.length;
+    if (deeperCount > 0) {
+        html += `<div class="nested-idea-deeper-hint">+${deeperCount} more in editor</div>`;
+    }
+
     html += '</div>';
     return html;
 }
@@ -865,7 +1140,7 @@ export function renderNestedEditorList(container, dataArray, level = 1) {
     dataArray.forEach((data) => {
         // Ensure each item has a persistent tempId for this edit session
         if (!data.tempId) {
-            data.tempId = 'id-' + Math.random().toString(36).substr(2, 9);
+            data.tempId = data.id || ('id-' + Math.random().toString(36).substr(2, 9));
         }
         container.appendChild(createNestedIdeaEditorItem(data, level));
     });
@@ -875,6 +1150,11 @@ export function createNestedIdeaEditorItem(data, level = 1) {
     const div = document.createElement('div');
     div.className = 'nested-idea-editor-item';
     div.dataset.tempId = data.tempId;
+
+    if (data.id) div.dataset.nodeId = data.id;
+    if (typeof data.completed === 'boolean') div.dataset.completed = String(data.completed);
+    if (typeof data.completedAt === 'number') div.dataset.completedAt = String(data.completedAt);
+    if (data.kanbanStatus) div.dataset.kanbanStatus = data.kanbanStatus;
     
     const row = document.createElement('div');
     row.className = 'nested-idea-editor-row';
@@ -1121,20 +1401,35 @@ export function serializeNestedEditorList(container) {
         const input = item.querySelector('.nested-idea-input');
         const childContainer = item.querySelector('.nested-ideas-child-container');
         if (input && input.value.trim() !== '') {
-            arr.push({
+            const entry = {
                 text: input.value.trim(),
-                tempId: item.dataset.tempId, // Preserve tempId
+                tempId: item.dataset.tempId,
                 nestedIdeas: childContainer ? serializeNestedEditorList(childContainer) : []
-            });
+            };
+            if (item.dataset.nodeId) entry.id = item.dataset.nodeId;
+            if (item.dataset.completed === 'true') entry.completed = true;
+            else if (item.dataset.completed === 'false') entry.completed = false;
+            if (item.dataset.completedAt) {
+                const parsed = Number(item.dataset.completedAt);
+                if (!Number.isNaN(parsed)) entry.completedAt = parsed;
+            }
+            if (item.dataset.kanbanStatus) entry.kanbanStatus = item.dataset.kanbanStatus;
+            arr.push(entry);
         }
     });
     return arr;
 }
 
-export function createTaskElement(task, sourceListId, number) {
+/** Firestore save path — strips tempId and ensures migrated node fields. */
+export function serializeNestedEditorListForSave(container, parentKanbanStatus = 'new') {
+    return sanitizeNestedForSave(serializeNestedEditorList(container), parentKanbanStatus);
+}
+
+export function createTaskElement(task, sourceListId, number, options = {}) {
     const el = document.createElement('div');
     const isLocked = state.appData.settings.sortMode !== 'custom';
     const isImportant = task.text.includes('!') || task.text.includes('!!');
+    const kanbanStretch = options.kanbanStretch || null;
 
     let listCount = 0;
     state.appData.rawLists.forEach(l => {
@@ -1237,7 +1532,16 @@ export function createTaskElement(task, sourceListId, number) {
         `;
     }
 
-    let nestedHtml = task.nestedIdeas ? generateNestedIdeasHtml(task.nestedIdeas) : '';
+    let nestedHtml = '';
+    if (task.nestedIdeas?.length) {
+        if (isKanbanFocused()) {
+            nestedHtml = generateNestedKanbanHtml(task.nestedIdeas, task, {
+                spanColumns: kanbanStretch?.span > 1 ? kanbanStretch.columns : null
+            });
+        } else {
+            nestedHtml = generateNestedIdeasHtml(task.nestedIdeas, task.id, 1, isNestedDragEnabled());
+        }
+    }
     const hasNested = task.nestedIdeas && task.nestedIdeas.length > 0;
     const nestedIndicatorHtml = hasNested ? `<i class="ph ph-list-plus nested-indicator" title="Has sub-ideas"></i>` : '';
     const aiModifiedIconHtml = task.aiModified ? `<i class="ph ph-sparkle ai-modified-indicator" title="Changed by local AI"></i>` : '';
@@ -1265,7 +1569,7 @@ export function createTaskElement(task, sourceListId, number) {
     el.addEventListener('click', (event) => {
         // Multi-select handles card clicks via board delegation
         if (state.multiEditMode) return;
-        if (event.target.closest('.task-actions, .task-checkbox, .task-img-preview, .kanban-stage-moves')) return;
+        if (event.target.closest('.task-actions, .task-checkbox, .task-img-preview, .kanban-stage-moves, .nested-ideas-list, .nested-idea-checkbox, .nested-idea-drag-handle, .nested-idea-label, .nested-kanban-stage-select')) return;
 
         const wasShowing = (state.expandedTaskId === task.id);
 
@@ -2167,6 +2471,11 @@ export function enableSortables(enable) {
         }
         s.option("disabled", shouldDisableTasks);
     });
+
+    const nestedDragEnabled = enable && isNestedDragEnabled();
+    state.nestedSortableInstances.forEach((s) => {
+        s.option('disabled', !nestedDragEnabled);
+    });
 }
 
 // --- IMAGE UPLOAD TRADITIONAL ---
@@ -2181,7 +2490,6 @@ export function triggerImageUpload(taskId) {
 export function performSearch(query) {
     const searchResultsContainer = document.getElementById('search-results-container');
     const searchEmptyState = document.getElementById('search-empty-state');
-    const searchTerm = getTerm(false);
 
     const term = query.trim().toLowerCase();
     searchResultsContainer.innerHTML = '';
@@ -2196,15 +2504,26 @@ export function performSearch(query) {
 
     Object.values(state.appData.tasks).forEach(task => {
         if (!task) return;
-        if ((state.searchShowArchived || !task.archived) && task.text.toLowerCase().includes(term)) {
-            const context = getTaskContext(task.id);
-            if (context.length > 0) {
-                matches.push({ task, context });
-            } else if (state.showArchived && task.archived) {
-                matches.push({ task, context: [{ boardName: 'System', listName: 'Archived / Orphan', index: '-' }] });
-            } else if (getOrphanedTaskIds().includes(task.id)) {
-                matches.push({ task, context: [{ boardName: 'System', listName: 'Orphan', index: '-' }] });
-            }
+        if (!(state.searchShowArchived || !task.archived)) return;
+
+        const searchHit = taskMatchesSearch(task, term);
+        if (!searchHit.matched) return;
+
+        const context = getTaskContext(task.id);
+        if (context.length > 0) {
+            matches.push({ task, context, searchHit });
+        } else if (state.showArchived && task.archived) {
+            matches.push({
+                task,
+                context: [{ boardName: 'System', listName: 'Archived / Orphan', index: '-' }],
+                searchHit
+            });
+        } else if (getOrphanedTaskIds().includes(task.id)) {
+            matches.push({
+                task,
+                context: [{ boardName: 'System', listName: 'Orphan', index: '-' }],
+                searchHit
+            });
         }
     });
 
@@ -2214,7 +2533,7 @@ export function performSearch(query) {
     } else {
         searchEmptyState.classList.add('hidden');
         matches.forEach(match => {
-            renderSearchResultItem(match.task, match.context);
+            renderSearchResultItem(match.task, match.context, match.searchHit);
         });
     }
 }
@@ -2239,7 +2558,7 @@ function getTaskContext(taskId) {
     return contexts;
 }
 
-function renderSearchResultItem(task, contexts) {
+function renderSearchResultItem(task, contexts, searchHit = null) {
     const searchResultsContainer = document.getElementById('search-results-container');
     const sourceListId = contexts[0]?.listId || 'orphan-archive';
 
@@ -2249,6 +2568,14 @@ function renderSearchResultItem(task, contexts) {
     contextContainer.style.marginBottom = '6px';
     contextContainer.style.display = 'flex';
     contextContainer.style.flexWrap = 'wrap';
+    contextContainer.style.gap = '6px';
+
+    if (searchHit?.source === 'nested' && searchHit.nestedText) {
+        const subBadge = document.createElement('span');
+        subBadge.className = 'search-context-badge search-subtask-match';
+        subBadge.innerHTML = `<i class="ph ph-list-checks"></i> Matched subtask: ${escapeHtml(searchHit.nestedText)}`;
+        contextContainer.appendChild(subBadge);
+    }
 
     contexts.forEach(ctx => {
         const badge = document.createElement('span');

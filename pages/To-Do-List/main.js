@@ -16,6 +16,39 @@ import {
     buildImportReportSummary,
     executeTaskImport
 } from './task-import.js';
+import {
+    migrateNestedTree,
+    nestedTreeNeedsMigration,
+    getParentKanbanStatus,
+    allSubtasksComplete
+} from './nested.js';
+
+const nestedRollupPromptedTaskIds = new Set();
+
+let nestedMigrationPersistInFlight = false;
+
+async function persistNestedMigrations(updates) {
+    if (!state.currentUser || !updates.length || nestedMigrationPersistInFlight) return;
+
+    nestedMigrationPersistInFlight = true;
+    try {
+        const BATCH_SIZE = 450;
+        for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+            const batch = writeBatch(db);
+            updates.slice(i, i + BATCH_SIZE).forEach(({ id, nestedIdeas }) => {
+                batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), {
+                    nestedIdeas,
+                    updatedAt: Date.now()
+                });
+            });
+            await batch.commit();
+        }
+    } catch (e) {
+        console.warn('[nested] Failed to persist nestedIdeas migration:', e);
+    } finally {
+        nestedMigrationPersistInFlight = false;
+    }
+}
 
 console.log("[DEBUG] Main Module Initialized - v1.3 PWA Fixes");
 
@@ -106,6 +139,7 @@ window.deleteTaskForever = (taskId) => {
 };
 window.toggleTaskComplete = function (taskId, isChecked) {
     API.toggleTaskComplete(taskId, isChecked).then(() => {
+        nestedRollupPromptedTaskIds.delete(taskId);
         // Auto archive logic
         if (isChecked && state.appData.settings.autoArchive) {
             setTimeout(() => {
@@ -121,6 +155,41 @@ window.toggleTaskComplete = function (taskId, isChecked) {
             // Uncheck (or kanban sync) — re-render so Finished ↔ Almost Done updates immediately
             UI.renderBoard();
         }
+    });
+};
+window.toggleNestedIdeaComplete = function (taskId, nodeId, isChecked) {
+    API.toggleNestedIdeaComplete(taskId, nodeId, isChecked).then(() => {
+        if (!isChecked) {
+            nestedRollupPromptedTaskIds.delete(taskId);
+            UI.renderBoard();
+            return;
+        }
+
+        const task = state.appData.tasks[taskId];
+        if (
+            task
+            && !task.completed
+            && allSubtasksComplete(task.nestedIdeas)
+            && !nestedRollupPromptedTaskIds.has(taskId)
+        ) {
+            nestedRollupPromptedTaskIds.add(taskId);
+            showConfirmModal(
+                'Mark parent complete?',
+                `All subtasks on this ${getTerm(true)} are checked off.`,
+                () => {
+                    API.toggleTaskComplete(taskId, true).then(() => UI.renderBoard());
+                },
+                'ph-check-circle',
+                { confirmLabel: 'Mark complete', cancelLabel: 'Dismiss', confirmButtonClass: 'btn primary' }
+            );
+        }
+
+        UI.renderBoard();
+    });
+};
+window.updateNestedIdeaKanbanStatus = function (taskId, nodeId, status) {
+    API.updateNestedIdeaKanbanStatus(taskId, nodeId, status).then(() => {
+        UI.renderBoard();
     });
 };
 window.updateKanbanStatus = function (taskId, status) {
@@ -542,9 +611,24 @@ function setupFirestoreListeners(uid) {
         state.hasPendingWrites = snapshot.metadata.hasPendingWrites;
         if (!snapshot.metadata.fromCache) updateLastSync();
         state.appData.tasks = {};
-        snapshot.forEach(doc => {
-            state.appData.tasks[doc.id] = { id: doc.id, ...doc.data() };
+        const migrationUpdates = [];
+
+        snapshot.forEach(docSnap => {
+            const task = { id: docSnap.id, ...docSnap.data() };
+            const parentKanban = getParentKanbanStatus(task);
+
+            if (nestedTreeNeedsMigration(task.nestedIdeas, parentKanban)) {
+                task.nestedIdeas = migrateNestedTree(task.nestedIdeas || [], parentKanban);
+                migrationUpdates.push({ id: task.id, nestedIdeas: task.nestedIdeas });
+            }
+
+            state.appData.tasks[docSnap.id] = task;
         });
+
+        if (migrationUpdates.length > 0 && state.currentUser && !nestedMigrationPersistInFlight) {
+            persistNestedMigrations(migrationUpdates);
+        }
+
         UI.renderBoard();
 
         // Auto-refresh search if open
@@ -1033,7 +1117,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const taskId = modalOverlay.dataset.taskId;
         const text = document.getElementById('modal-task-input').value;
         const nestedContainer = document.getElementById('nested-ideas-editor-container');
-        const nestedIdeas = nestedContainer ? UI.serializeNestedEditorList(nestedContainer) : [];
+        const parentTask = state.appData.tasks[taskId];
+        const parentKanban = getParentKanbanStatus(parentTask);
+        const nestedIdeas = nestedContainer
+            ? UI.serializeNestedEditorListForSave(nestedContainer, parentKanban)
+            : [];
         updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
             text: text,
             nestedIdeas: nestedIdeas,
@@ -1706,7 +1794,7 @@ function setupTaskImportModal(optionsModal) {
     });
 }
 
-function showConfirmModal(title, desc, onConfirm, iconClass = 'ph-warning-circle') {
+function showConfirmModal(title, desc, onConfirm, iconClass = 'ph-warning-circle', options = {}) {
     const modal = document.getElementById('confirm-modal-overlay');
     const titleEl = document.getElementById('confirm-title');
     const descEl = document.getElementById('confirm-desc');
@@ -1728,6 +1816,10 @@ function showConfirmModal(title, desc, onConfirm, iconClass = 'ph-warning-circle
 
     const newCancel = cancelBtn.cloneNode(true);
     cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+    newYes.textContent = options.confirmLabel || 'Confirm';
+    newCancel.textContent = options.cancelLabel || 'Cancel';
+    newYes.className = options.confirmButtonClass || 'btn danger';
 
     newYes.onclick = () => {
         onConfirm();
@@ -1783,19 +1875,22 @@ function triggerBackupDownload() {
             title: list.title,
             taskIds: list.taskIds || []
         })),
-        tasks: Object.entries(state.appData.tasks).map(([id, task]) => ({
-            id: id,
-            text: task.text,
-            completed: task.completed,
-            archived: task.archived,
-            kanbanStatus: task.kanbanStatus || (task.completed ? 'finished' : 'new'),
-            completedAt: task.completedAt ?? null,
-            createdAt: task.createdAt,
-            updatedAt: task.updatedAt ?? null,
-            glowColor: task.glowColor || 'none',
-            images: task.images || [],
-            nestedIdeas: task.nestedIdeas || []
-        }))
+        tasks: Object.entries(state.appData.tasks).map(([id, task]) => {
+            const parentKanban = getParentKanbanStatus(task);
+            return {
+                id: id,
+                text: task.text,
+                completed: task.completed,
+                archived: task.archived,
+                kanbanStatus: task.kanbanStatus || (task.completed ? 'finished' : 'new'),
+                completedAt: task.completedAt ?? null,
+                createdAt: task.createdAt,
+                updatedAt: task.updatedAt ?? null,
+                glowColor: task.glowColor || 'none',
+                images: task.images || [],
+                nestedIdeas: migrateNestedTree(task.nestedIdeas || [], parentKanban)
+            };
+        })
     };
 
     const jsonStr = JSON.stringify(backupData, null, 2);
@@ -1899,7 +1994,7 @@ async function triggerSingleListCSVExport(listId) {
             myRow[3] = (rootTask.glowColor && rootTask.glowColor !== 'none') ? "YES" : "NO";
             myRow[4] = rootTask.glowColor || "none";
             myRow[5] = node.archived ? "ARCHIVED" : "ACTIVE";
-            myRow[6] = node.completed ? "DONE" : "ACTIVE";
+            myRow[6] = (node.completed === true) ? "DONE" : "ACTIVE";
             rowsForList.push(myRow);
         }
     };
@@ -1992,7 +2087,7 @@ function generateBoardGridData(board) {
                 myRow[3] = (rootTask.glowColor && rootTask.glowColor !== 'none') ? "YES" : "NO";
                 myRow[4] = rootTask.glowColor || "none";
                 myRow[5] = node.archived ? "ARCHIVED" : "ACTIVE";
-                myRow[6] = node.completed ? "DONE" : "ACTIVE";
+                myRow[6] = (node.completed === true) ? "DONE" : "ACTIVE";
                 rowsForList.push(myRow);
             }
         };
@@ -2113,6 +2208,8 @@ async function restoreBackup(data) {
                         if (!taskFields.kanbanStatus) {
                             taskFields.kanbanStatus = taskFields.completed ? 'finished' : 'new';
                         }
+                        const parentKanban = taskFields.kanbanStatus || (taskFields.completed ? 'finished' : 'new');
+                        taskFields.nestedIdeas = migrateNestedTree(taskFields.nestedIdeas || [], parentKanban);
                         batch.set(doc(db, "users", state.currentUser.uid, "tasks", id), taskFields);
                     } else {
                         console.warn("Skipping invalid task in restore (array format):", task);
@@ -2128,6 +2225,8 @@ async function restoreBackup(data) {
                         if (!taskFields.kanbanStatus) {
                             taskFields.kanbanStatus = taskFields.completed ? 'finished' : 'new';
                         }
+                        const parentKanban = taskFields.kanbanStatus || (taskFields.completed ? 'finished' : 'new');
+                        taskFields.nestedIdeas = migrateNestedTree(taskFields.nestedIdeas || [], parentKanban);
                         batch.set(doc(db, "users", state.currentUser.uid, "tasks", tid), taskFields);
                     }
                 });
