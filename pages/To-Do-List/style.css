@@ -4858,3 +4858,337 @@ body.kanban-dragging .kanban-column {
         min-width: 34px;
     }
 }
+
+.task-import-modal {
+    max-width: 760px;
+    width: min(760px, 96vw);
+}
+
+.task-import-guide {
+    margin-bottom: 14px;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.task-import-guide summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.task-import-instructions {
+    margin: 10px 0 0;
+    padding-left: 20px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.task-import-instructions li + li {
+    margin-top: 6px;
+}
+
+.task-import-prompt-details {
+    margin-bottom: 14px;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.task-import-prompt-details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.task-import-prompt-preview {
+    width: 100%;
+    min-height: 180px;
+    max-height: 34vh;
+    margin-top: 10px;
+    background: var(--input-bg);
+    color: var(--text-secondary);
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--glass-border);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.task-import-lead {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin: 0 0 16px;
+}
+
+.task-import-actions-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.task-import-file-btn {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.task-import-label {
+    display: block;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.task-import-textarea {
+    width: 100%;
+    min-height: 220px;
+    background: var(--input-bg);
+    color: var(--input-text);
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    font-size: 0.92rem;
+    line-height: 1.5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    resize: vertical;
+    box-sizing: border-box;
+    margin-bottom: 16px;
+}
+
+.task-import-textarea:focus {
+    outline: none;
+    border-color: rgba(56, 189, 248, 0.65);
+}
+
+.task-import-summary {
+    margin-bottom: 14px;
+}
+
+.task-import-report {
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.task-import-report-headline {
+    margin: 0 0 6px;
+    font-size: 1.05rem;
+}
+
+.task-import-report-headline.is-success {
+    color: #86efac;
+}
+
+.task-import-report-headline.is-error {
+    color: #fca5a5;
+}
+
+.task-import-report-subheadline {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.task-import-stat-success strong {
+    color: #86efac;
+}
+
+.task-import-stat-fail strong {
+    color: #fca5a5;
+}
+
+.task-import-stat-muted strong {
+    color: var(--text-primary);
+    font-size: 0.92rem;
+}
+
+.task-import-skipped {
+    background: rgba(251, 146, 60, 0.12);
+    border: 1px solid rgba(251, 146, 60, 0.35);
+    color: #fdba74;
+}
+
+.task-import-debug {
+    margin-bottom: 14px;
+    border: 1px dashed var(--glass-border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.task-import-debug summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.task-import-debug-body {
+    margin-top: 10px;
+    max-height: 24vh;
+    overflow-y: auto;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.task-import-debug-body ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.task-import-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+}
+
+.task-import-stat-grid div {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 10px 12px;
+}
+
+.task-import-stat-grid span {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.task-import-stat-grid strong {
+    font-size: 1rem;
+}
+
+.task-import-summary-error {
+    color: #f87171;
+    margin: 0;
+}
+
+.task-import-message {
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-size: 0.9rem;
+}
+
+.task-import-message ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+}
+
+.task-import-message li + li {
+    margin-top: 4px;
+}
+
+.task-import-errors {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fecaca;
+}
+
+.task-import-warnings {
+    background: rgba(234, 179, 8, 0.12);
+    border: 1px solid rgba(234, 179, 8, 0.35);
+    color: #fde68a;
+}
+
+.task-import-target-panel {
+    margin-bottom: 16px;
+}
+
+.task-import-preview-wrap {
+    margin-bottom: 16px;
+}
+
+.task-import-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.task-import-preview-header h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.task-import-preview-count {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.task-import-preview-list {
+    max-height: 34vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.task-import-preview-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.task-import-preview-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.task-import-preview-card p {
+    margin: 0 0 8px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.task-import-preview-card ul {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+}
+
+.task-import-more {
+    font-style: italic;
+}
+
+.task-import-progress {
+    margin-bottom: 14px;
+}
+
+.task-import-progress-bar {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.task-import-progress-fill {
+    width: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #38bdf8, #3b82f6);
+    transition: width 0.2s ease;
+}
+
+#task-import-progress-text {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}

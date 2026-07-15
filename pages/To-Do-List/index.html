@@ -367,11 +367,16 @@
                     Backup</label>
                 <input type="file" id="upload-json" accept=".json" style="display: none;">
 
+                <button id="open-task-import-btn" class="menu-action-item" style="color: #38bdf8;">
+                    <i class="ph ph-sparkle"></i> Import Project Tasks (AI)
+                </button>
+
                 <!-- TODOIST IMPORT (NEW) -->
                 <label for="import-todoist-csv" class="menu-action-item" style="color: #e44332;">
                     <i class="ph ph-file-csv"></i> Import Todoist CSV
                 </label>
                 <input type="file" id="import-todoist-csv" accept=".csv" style="display: none;">
+                <input type="file" id="task-import-file-input" accept=".json,.txt,application/json,text/plain" style="display: none;">
 
                 <hr class="dropdown-divider">
                 <div class="menu-action-item" style="cursor: default; flex-direction: column; align-items: flex-start;">
@@ -1076,6 +1081,99 @@
                 <button id="modal-rescue-boards-btn" class="btn secondary full-width" style="width: 100%;">
                     <i class="ph ph-lifebuoy"></i> Rescue Orphan Lists
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TASK IMPORT MODAL -->
+    <div id="task-import-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel task-import-modal">
+            <div class="modal-header-row">
+                <h2>Import Project Tasks</h2>
+                <button id="close-task-import-btn" class="icon-btn-large">&times;</button>
+            </div>
+
+            <div id="task-import-input-step">
+                <p class="task-import-lead">
+                    Paste AI-generated JSON or an indented outline. The importer auto-fixes most formatting issues before preview.
+                </p>
+
+                <details class="task-import-guide" open>
+                    <summary>Step-by-step instructions</summary>
+                    <ol id="task-import-instructions-list" class="task-import-instructions"></ol>
+                </details>
+
+                <div class="task-import-actions-row">
+                    <label for="task-import-file-input" class="btn secondary task-import-file-btn">
+                        <i class="ph ph-upload-simple"></i> Choose JSON File
+                    </label>
+                    <button id="copy-task-import-prompt-btn" class="btn secondary" type="button">
+                        <i class="ph ph-copy"></i> Copy LLM Prompt
+                    </button>
+                </div>
+
+                <details id="task-import-prompt-details" class="task-import-prompt-details">
+                    <summary>Preview LLM Prompt</summary>
+                    <textarea id="task-import-prompt-preview" class="task-import-prompt-preview" rows="14"
+                        readonly spellcheck="false"></textarea>
+                </details>
+
+                <label for="task-import-text-input" class="task-import-label">Paste JSON or outline text</label>
+                <textarea id="task-import-text-input" class="task-import-textarea" rows="10"
+                    placeholder='JSON example: {"projectTitle":"My Project","lists":[{"title":"Auth","tasks":[{"text":"Implement login","subtasks":["Build form"]}]}]}&#10;&#10;Outline example:&#10;## LIST: Auth&#10;!! Set up login&#10;  Build form&#10;  Add validation'
+                    spellcheck="false"></textarea>
+
+                <div class="modal-actions-bar">
+                    <button id="analyze-task-import-btn" class="btn primary" type="button">Analyze Import</button>
+                    <button id="cancel-task-import-btn" class="btn secondary" type="button">Cancel</button>
+                </div>
+            </div>
+
+            <div id="task-import-preview-step" class="hidden">
+                <div id="task-import-report" class="task-import-report">
+                    <h3 id="task-import-report-headline" class="task-import-report-headline"></h3>
+                    <p id="task-import-report-subheadline" class="task-import-report-subheadline"></p>
+                </div>
+
+                <div id="task-import-summary" class="task-import-summary"></div>
+
+                <div id="task-import-errors" class="task-import-message task-import-errors hidden"></div>
+                <div id="task-import-skipped" class="task-import-message task-import-skipped hidden"></div>
+                <div id="task-import-warnings" class="task-import-message task-import-warnings hidden"></div>
+                <details id="task-import-debug-details" class="task-import-debug hidden">
+                    <summary>Debug details</summary>
+                    <div id="task-import-debug" class="task-import-debug-body"></div>
+                </details>
+
+                <div class="task-import-target-panel">
+                    <label for="task-import-target-select" class="task-import-label">Import destination</label>
+                    <select id="task-import-target-select" class="glass-select full-width">
+                        <option value="current_board">Add lists to current board</option>
+                        <option value="new_board">Create a new board</option>
+                    </select>
+                    <input type="text" id="task-import-board-title-input" class="add-task-input full-width hidden"
+                        placeholder="New board title">
+                </div>
+
+                <div class="task-import-preview-wrap">
+                    <div class="task-import-preview-header">
+                        <h3>Preview</h3>
+                        <span id="task-import-preview-count" class="task-import-preview-count"></span>
+                    </div>
+                    <div id="task-import-preview-list" class="task-import-preview-list"></div>
+                </div>
+
+                <div id="task-import-progress" class="task-import-progress hidden">
+                    <div class="task-import-progress-bar">
+                        <div id="task-import-progress-fill" class="task-import-progress-fill"></div>
+                    </div>
+                    <p id="task-import-progress-text">Preparing import...</p>
+                </div>
+
+                <div class="modal-actions-bar">
+                    <button id="confirm-task-import-btn" class="btn primary" type="button" disabled>Import Tasks</button>
+                    <button id="back-task-import-btn" class="btn secondary" type="button">Back</button>
+                </div>
             </div>
         </div>
     </div>

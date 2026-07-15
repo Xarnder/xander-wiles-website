@@ -8,6 +8,14 @@ import * as UI from './ui.js';
 import * as Utils from './utils.js';
 import { getTerm } from './utils.js';
 import { toggleKanbanFocus, exitKanbanFocus, isKanbanFocused, KANBAN_STAGES, DEFAULT_KANBAN_LABELS, getKanbanColumnLabel } from './kanban.js';
+import {
+    getTaskImportPrompt,
+    getTaskImportInstructions,
+    parseTaskImportText,
+    buildImportPreviewLines,
+    buildImportReportSummary,
+    executeTaskImport
+} from './task-import.js';
 
 console.log("[DEBUG] Main Module Initialized - v1.3 PWA Fixes");
 
@@ -1316,6 +1324,9 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
 
+    setupTaskImportModal(optionsModal);
+
+
     // Backup Modal
     const backupLaterBtn = document.getElementById('backup-later-btn');
     if (backupLaterBtn) backupLaterBtn.onclick = () => {
@@ -1387,6 +1398,313 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 });
+
+function setupTaskImportModal(optionsModal) {
+    const modal = document.getElementById('task-import-modal-overlay');
+    const inputStep = document.getElementById('task-import-input-step');
+    const previewStep = document.getElementById('task-import-preview-step');
+    const textInput = document.getElementById('task-import-text-input');
+    const fileInput = document.getElementById('task-import-file-input');
+    const summaryEl = document.getElementById('task-import-summary');
+    const reportHeadlineEl = document.getElementById('task-import-report-headline');
+    const reportSubheadlineEl = document.getElementById('task-import-report-subheadline');
+    const errorsEl = document.getElementById('task-import-errors');
+    const skippedEl = document.getElementById('task-import-skipped');
+    const warningsEl = document.getElementById('task-import-warnings');
+    const debugDetailsEl = document.getElementById('task-import-debug-details');
+    const debugEl = document.getElementById('task-import-debug');
+    const previewListEl = document.getElementById('task-import-preview-list');
+    const previewCountEl = document.getElementById('task-import-preview-count');
+    const targetSelect = document.getElementById('task-import-target-select');
+    const boardTitleInput = document.getElementById('task-import-board-title-input');
+    const confirmBtn = document.getElementById('confirm-task-import-btn');
+    const progressWrap = document.getElementById('task-import-progress');
+    const progressFill = document.getElementById('task-import-progress-fill');
+    const progressText = document.getElementById('task-import-progress-text');
+    const instructionsList = document.getElementById('task-import-instructions-list');
+    const promptPreview = document.getElementById('task-import-prompt-preview');
+    const promptDetails = document.getElementById('task-import-prompt-details');
+
+    if (!modal || !inputStep || !previewStep || !textInput) return;
+
+    if (promptPreview) {
+        promptPreview.value = getTaskImportPrompt();
+    }
+
+    if (instructionsList) {
+        instructionsList.innerHTML = getTaskImportInstructions()
+            .map((step) => `<li>${Utils.escapeHtml(step)}</li>`)
+            .join('');
+    }
+
+    let pendingImport = null;
+
+    const resetModal = () => {
+        pendingImport = null;
+        inputStep.classList.remove('hidden');
+        previewStep.classList.add('hidden');
+        progressWrap.classList.add('hidden');
+        progressFill.style.width = '0%';
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Import Tasks';
+        if (reportHeadlineEl) reportHeadlineEl.textContent = '';
+        if (reportSubheadlineEl) reportSubheadlineEl.textContent = '';
+        errorsEl.classList.add('hidden');
+        skippedEl.classList.add('hidden');
+        warningsEl.classList.add('hidden');
+        if (debugDetailsEl) debugDetailsEl.classList.add('hidden');
+        errorsEl.innerHTML = '';
+        skippedEl.innerHTML = '';
+        warningsEl.innerHTML = '';
+        if (debugEl) debugEl.innerHTML = '';
+        previewListEl.innerHTML = '';
+        previewCountEl.textContent = '';
+        summaryEl.innerHTML = '';
+        targetSelect.value = 'current_board';
+        boardTitleInput.classList.add('hidden');
+        boardTitleInput.value = '';
+        if (fileInput) fileInput.value = '';
+        if (promptDetails) promptDetails.open = false;
+    };
+
+    const closeModal = () => {
+        modal.classList.add('hidden');
+        resetModal();
+    };
+
+    const renderIssueList = (el, title, items, className) => {
+        if (!items.length) {
+            el.classList.add('hidden');
+            el.innerHTML = '';
+            return;
+        }
+        el.classList.remove('hidden');
+        el.className = `task-import-message ${className}`;
+        el.innerHTML = `<strong>${title}</strong><ul>${items.map((item) => `<li>${Utils.escapeHtml(item)}</li>`).join('')}</ul>`;
+    };
+
+    const renderImportReport = (result) => {
+        const report = buildImportReportSummary(result);
+        const diagnostics = result?.diagnostics;
+        const stats = result?.data?.stats;
+
+        if (reportHeadlineEl) {
+            reportHeadlineEl.textContent = report.headline;
+            reportHeadlineEl.classList.toggle('is-error', !report.canImport);
+            reportHeadlineEl.classList.toggle('is-success', report.canImport);
+        }
+        if (reportSubheadlineEl) reportSubheadlineEl.textContent = report.subheadline || '';
+        confirmBtn.textContent = report.confirmLabel || 'Import Tasks';
+
+        if (!stats) {
+            summaryEl.innerHTML = '';
+            renderIssueList(errorsEl, 'Blocking issues', result?.errors || diagnostics?.errors || ['Unknown import error.'], 'task-import-errors');
+            renderIssueList(skippedEl, 'Skipped items', diagnostics?.skips || [], 'task-import-skipped');
+            renderIssueList(warningsEl, 'Auto-fixed during import', diagnostics?.fixes || [], 'task-import-warnings');
+            if (debugDetailsEl && debugEl) {
+                const debugLines = [
+                    ...(diagnostics?.info || []).map((line) => `INFO: ${line}`),
+                    ...(diagnostics?.skips || []).map((line) => `SKIP: ${line}`),
+                    ...(diagnostics?.fixes || []).map((line) => `FIX: ${line}`)
+                ];
+                if (debugLines.length) {
+                    debugDetailsEl.classList.remove('hidden');
+                    debugEl.innerHTML = `<ul>${debugLines.map((line) => `<li>${Utils.escapeHtml(line)}</li>`).join('')}</ul>`;
+                } else {
+                    debugDetailsEl.classList.add('hidden');
+                    debugEl.innerHTML = '';
+                }
+            }
+            return;
+        }
+
+        summaryEl.innerHTML = `
+            <div class="task-import-stat-grid">
+                <div class="task-import-stat-success"><span>Will add</span><strong>${stats.taskCount} ${stats.taskCount === 1 ? getTerm(true) : getTerm(false)}</strong></div>
+                <div class="task-import-stat-success"><span>Subtasks</span><strong>${stats.nestedCount}</strong></div>
+                <div class="task-import-stat-success"><span>Lists</span><strong>${stats.listCount}</strong></div>
+                <div><span>Important</span><strong>${stats.importantCount}</strong></div>
+                <div class="task-import-stat-muted"><span>Project</span><strong>${Utils.escapeHtml(result.data.projectTitle)}</strong></div>
+                <div class="task-import-stat-fail ${stats.skippedTaskCount + stats.skippedSubtaskCount + stats.skippedListCount > 0 ? '' : 'hidden'}">
+                    <span>Skipped</span>
+                    <strong>${stats.skippedTaskCount + stats.skippedSubtaskCount + stats.skippedListCount}</strong>
+                </div>
+            </div>
+        `;
+
+        renderIssueList(errorsEl, 'Blocking issues', result.errors || [], 'task-import-errors');
+        renderIssueList(
+            skippedEl,
+            `Skipped ${stats.skippedTaskCount + stats.skippedSubtaskCount + stats.skippedListCount} item(s)`,
+            diagnostics?.skips || [],
+            'task-import-skipped'
+        );
+        renderIssueList(warningsEl, 'Auto-fixed during import', diagnostics?.fixes || [], 'task-import-warnings');
+
+        if (debugDetailsEl && debugEl) {
+            const debugLines = [
+                `Source lists: ${stats.sourceListCount}`,
+                `Source tasks: ${stats.sourceTaskCount}`,
+                `Source subtasks: ${stats.sourceSubtaskCount}`,
+                `Import tasks: ${stats.taskCount}`,
+                `Import subtasks: ${stats.nestedCount}`,
+                `Skipped tasks: ${stats.skippedTaskCount}`,
+                `Skipped subtasks: ${stats.skippedSubtaskCount}`,
+                `Skipped lists: ${stats.skippedListCount}`,
+                ...(diagnostics?.info || []).map((line) => `INFO: ${line}`),
+                ...(diagnostics?.fixes || []).map((line) => `FIX: ${line}`),
+                ...(diagnostics?.skips || []).map((line) => `SKIP: ${line}`)
+            ];
+            debugDetailsEl.classList.remove('hidden');
+            debugEl.innerHTML = `<ul>${debugLines.map((line) => `<li>${Utils.escapeHtml(line)}</li>`).join('')}</ul>`;
+        }
+    };
+
+    const showPreview = (result) => {
+        inputStep.classList.add('hidden');
+        previewStep.classList.remove('hidden');
+        renderImportReport(result);
+
+        if (!result.ok || !result.data) {
+            confirmBtn.disabled = true;
+            return;
+        }
+
+        pendingImport = result.data;
+        const { stats } = result.data;
+
+        boardTitleInput.value = result.data.boardTitle || result.data.projectTitle || 'Imported Board';
+        previewCountEl.textContent = `${stats.listCount} list${stats.listCount === 1 ? '' : 's'}`;
+
+        previewListEl.innerHTML = buildImportPreviewLines(result.data).map((line) => `
+            <div class="task-import-preview-card">
+                <div class="task-import-preview-card-header">
+                    <strong>${Utils.escapeHtml(line.title)}</strong>
+                    <span>${line.taskCount} ${line.taskCount === 1 ? getTerm(true) : getTerm(false)}</span>
+                </div>
+                ${line.description ? `<p>${Utils.escapeHtml(line.description)}</p>` : ''}
+                <ul>
+                    ${line.previewTasks.map((task) => `<li>${Utils.escapeHtml(task)}</li>`).join('')}
+                    ${line.remaining > 0 ? `<li class="task-import-more">+${line.remaining} more...</li>` : ''}
+                </ul>
+            </div>
+        `).join('');
+
+        confirmBtn.disabled = false;
+    };
+
+    const analyzeCurrentInput = () => {
+        if (!textInput.value.trim()) {
+            Utils.showToast('Paste JSON or an outline before analyzing.', 'warning');
+            return;
+        }
+        const result = parseTaskImportText(textInput.value);
+        showPreview(result);
+    };
+
+    document.getElementById('open-task-import-btn')?.addEventListener('click', () => {
+        if (!state.currentUser) {
+            Utils.showToast('Sign in to import project tasks.', 'warning');
+            return;
+        }
+        if (optionsModal) optionsModal.classList.add('hidden');
+        resetModal();
+        modal.classList.remove('hidden');
+        textInput.focus();
+    });
+
+    document.getElementById('close-task-import-btn')?.addEventListener('click', closeModal);
+    document.getElementById('cancel-task-import-btn')?.addEventListener('click', closeModal);
+    document.getElementById('back-task-import-btn')?.addEventListener('click', () => {
+        previewStep.classList.add('hidden');
+        inputStep.classList.remove('hidden');
+        progressWrap.classList.add('hidden');
+        confirmBtn.disabled = !pendingImport;
+    });
+
+    document.getElementById('analyze-task-import-btn')?.addEventListener('click', analyzeCurrentInput);
+
+    document.getElementById('copy-task-import-prompt-btn')?.addEventListener('click', async () => {
+        const copied = await Utils.copyToClipboard(getTaskImportPrompt());
+        Utils.showToast(copied ? 'LLM prompt copied to clipboard' : 'Could not copy prompt', copied ? 'success' : 'warning');
+    });
+
+    fileInput?.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            textInput.value = String(evt.target.result || '');
+            analyzeCurrentInput();
+        };
+        reader.onerror = () => Utils.showToast('Could not read import file.', 'warning');
+        reader.readAsText(file);
+    });
+
+    targetSelect?.addEventListener('change', () => {
+        const useNewBoard = targetSelect.value === 'new_board';
+        boardTitleInput.classList.toggle('hidden', !useNewBoard);
+    });
+
+    confirmBtn?.addEventListener('click', async () => {
+        if (!pendingImport || !state.currentUser) {
+            Utils.showToast('Sign in before importing tasks.', 'warning');
+            return;
+        }
+
+        const useNewBoard = targetSelect.value === 'new_board';
+        const currentBoardId = state.appData.currentBoardId;
+        if (!useNewBoard && !currentBoardId) {
+            Utils.showToast('Select a board or choose "Create a new board".', 'warning');
+            return;
+        }
+
+        confirmBtn.disabled = true;
+        progressWrap.classList.remove('hidden');
+        progressFill.style.width = '0%';
+        progressText.textContent = 'Importing tasks...';
+
+        try {
+            const result = await executeTaskImport(
+                state.currentUser.uid,
+                pendingImport,
+                {
+                    target: useNewBoard ? 'new_board' : 'current_board',
+                    boardId: useNewBoard ? null : currentBoardId,
+                    boardTitle: boardTitleInput.value.trim() || pendingImport.boardTitle || pendingImport.projectTitle
+                },
+                (percent) => {
+                    progressFill.style.width = `${percent}%`;
+                    progressText.textContent = `Importing tasks... ${percent}%`;
+                }
+            );
+
+            const skippedTotal = (result.skippedTaskCount || 0) + (result.skippedSubtaskCount || 0);
+            const skippedSuffix = skippedTotal > 0 ? ` (${skippedTotal} skipped during analysis)` : '';
+            Utils.showToast(
+                `Imported ${result.taskCount} ${result.taskCount === 1 ? getTerm(true) : getTerm(false)} across ${result.listCount} lists${skippedSuffix}.`,
+                'success'
+            );
+
+            if (result.createdNewBoard) {
+                API.switchBoard(result.boardId);
+            } else {
+                UI.renderBoard();
+            }
+
+            closeModal();
+        } catch (error) {
+            console.error('Task import failed:', error);
+            Utils.showToast(`Import failed: ${error.message || 'Unknown error'}`, 'warning');
+            confirmBtn.disabled = false;
+            progressWrap.classList.add('hidden');
+        }
+    });
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+}
 
 function showConfirmModal(title, desc, onConfirm, iconClass = 'ph-warning-circle') {
     const modal = document.getElementById('confirm-modal-overlay');
