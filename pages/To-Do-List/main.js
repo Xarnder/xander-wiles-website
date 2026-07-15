@@ -192,6 +192,11 @@ window.updateNestedIdeaKanbanStatus = function (taskId, nodeId, status) {
         UI.renderBoard();
     });
 };
+window.shiftAllNestedKanban = function (taskId, delta) {
+    API.shiftAllNestedKanban(taskId, delta).then(() => {
+        UI.renderBoard();
+    });
+};
 window.updateKanbanStatus = function (taskId, status) {
     // Multi-select: if this task is selected with others, move the whole selection
     let ids = [taskId];

@@ -2,13 +2,15 @@ import { db } from './firebase-config.js';
 import { doc, updateDoc, writeBatch, arrayUnion, arrayRemove, deleteDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { state } from './store.js';
 import { generateId, showToast } from './utils.js';
-import { buildKanbanStatusUpdate, isValidKanbanStatus } from './kanban.js';
+import { buildKanbanStatusUpdate, isValidKanbanStatus, KANBAN_STAGES } from './kanban.js';
 import {
     migrateNestedTree,
     setNodeCompleted,
     setNodeKanbanStatus,
     reorderNestedSiblings as reorderNestedSiblingsInTree,
-    getParentKanbanStatus
+    getParentKanbanStatus,
+    canShiftAllNestedKanban,
+    shiftAllNestedKanbanStatuses
 } from './nested.js';
 
 // --- API ACTIONS ---
@@ -202,6 +204,42 @@ export function updateNestedIdeaKanbanStatus(taskId, nodeId, kanbanStatus) {
     const updatedTree = setNodeKanbanStatus(currentTree, nodeId, kanbanStatus);
 
     return updateTaskNestedIdeas(taskId, updatedTree);
+}
+
+/** Shift every incomplete subtask one stage left (−1) or right (+1). */
+export function shiftAllNestedKanban(taskId, delta) {
+    if (!state.currentUser || !taskId) return Promise.resolve();
+    if (delta !== -1 && delta !== 1) return Promise.resolve();
+
+    const task = state.appData.tasks[taskId];
+    if (!task) return Promise.resolve();
+
+    if (!canShiftAllNestedKanban(task, delta)) {
+        showToast(delta < 0 ? 'Already at the first stage' : 'Already at the last stage', 'warning');
+        return Promise.resolve();
+    }
+
+    const parentKanban = getParentKanbanStatus(task);
+    const currentTree = migrateNestedTree(task.nestedIdeas || [], parentKanban);
+    const updatedTree = shiftAllNestedKanbanStatuses(currentTree, delta, parentKanban);
+
+    const updateData = {
+        nestedIdeas: updatedTree,
+        updatedAt: Date.now()
+    };
+
+    const parentIdx = KANBAN_STAGES.indexOf(parentKanban);
+    const nextParentIdx = parentIdx + delta;
+    if (parentIdx >= 0 && nextParentIdx >= 0 && nextParentIdx < KANBAN_STAGES.length) {
+        Object.assign(updateData, buildKanbanStatusUpdate(KANBAN_STAGES[nextParentIdx]));
+    }
+
+    if (state.appData.tasks[taskId]) {
+        Object.assign(state.appData.tasks[taskId], updateData);
+    }
+
+    return updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), updateData)
+        .catch(e => handleSyncError(e));
 }
 
 export function updateKanbanStatus(taskId, status) {

@@ -238,18 +238,22 @@ export function getParentKanbanSpan(task) {
 
     walk(task?.nestedIdeas);
 
-    const columns = stagesWithOpen.size > 0
+    const occupied = stagesWithOpen.size > 0
         ? KANBAN_STAGES.filter((stage) => stagesWithOpen.has(stage))
         : [parentStatus];
 
-    const startIndex = KANBAN_STAGES.indexOf(columns[0]);
-    const endIndex = KANBAN_STAGES.indexOf(columns[columns.length - 1]);
+    const startIndex = Math.max(0, KANBAN_STAGES.indexOf(occupied[0]));
+    const lastOccupied = occupied[occupied.length - 1];
+    const lastIndex = Math.max(startIndex, KANBAN_STAGES.indexOf(lastOccupied));
+
+    // Continuous range including empty gap columns so subtask cells align to board columns
+    const columns = KANBAN_STAGES.slice(startIndex, lastIndex + 1);
 
     return {
         columns,
-        startIndex: startIndex >= 0 ? startIndex : 0,
-        endIndex: endIndex >= 0 ? endIndex + 1 : 1,
-        span: Math.max(1, (endIndex >= 0 ? endIndex : 0) - (startIndex >= 0 ? startIndex : 0) + 1)
+        startIndex,
+        endIndex: lastIndex + 1,
+        span: columns.length
     };
 }
 
@@ -259,6 +263,86 @@ export function isMultiColumnKanbanStretch(task) {
 
 export function getKanbanPlacementStage(task) {
     return getParentKanbanSpan(task).columns[0] || getParentKanbanStatus(task);
+}
+
+/**
+ * Whether every incomplete nested node can move `delta` stages (−1 or +1).
+ * Returns false when there are no incomplete nested nodes.
+ */
+export function canShiftAllNestedKanban(task, delta) {
+    if (delta !== -1 && delta !== 1) return false;
+    if (!hasIncompleteNested(task)) return false;
+
+    const parentStatus = getParentKanbanStatus(task);
+    let blocked = false;
+
+    const walk = (nodes) => {
+        if (!Array.isArray(nodes) || blocked) return;
+        nodes.forEach((node) => {
+            if (!node || typeof node !== 'object' || blocked) return;
+            if (!node.completed) {
+                const stage = isValidKanbanStatus(node.kanbanStatus)
+                    ? node.kanbanStatus
+                    : parentStatus;
+                const idx = KANBAN_STAGES.indexOf(stage);
+                const next = idx + delta;
+                if (idx < 0 || next < 0 || next >= KANBAN_STAGES.length) {
+                    blocked = true;
+                }
+            }
+            walk(node.nestedIdeas);
+        });
+    };
+
+    walk(task?.nestedIdeas);
+    return !blocked;
+}
+
+export function hasIncompleteNested(task) {
+    const walk = (nodes) => {
+        if (!Array.isArray(nodes)) return false;
+        for (const node of nodes) {
+            if (!node || typeof node !== 'object') continue;
+            if (!node.completed) return true;
+            if (walk(node.nestedIdeas)) return true;
+        }
+        return false;
+    };
+    return walk(task?.nestedIdeas);
+}
+
+/** Shift every incomplete nested node's kanbanStatus by `delta` (−1 or +1). */
+export function shiftAllNestedKanbanStatuses(nestedIdeas, delta, parentFallback = 'new') {
+    if (!Array.isArray(nestedIdeas) || (delta !== -1 && delta !== 1)) {
+        return nestedIdeas || [];
+    }
+
+    const fallback = isValidKanbanStatus(parentFallback) ? parentFallback : 'new';
+
+    return nestedIdeas.map((node) => {
+        if (!node || typeof node !== 'object') return node;
+
+        let kanbanStatus = isValidKanbanStatus(node.kanbanStatus)
+            ? node.kanbanStatus
+            : fallback;
+
+        if (!node.completed) {
+            const idx = KANBAN_STAGES.indexOf(kanbanStatus);
+            const next = idx + delta;
+            if (idx >= 0 && next >= 0 && next < KANBAN_STAGES.length) {
+                kanbanStatus = KANBAN_STAGES[next];
+            }
+        }
+
+        const children = Array.isArray(node.nestedIdeas) ? node.nestedIdeas : [];
+        return {
+            ...node,
+            kanbanStatus,
+            nestedIdeas: children.length
+                ? shiftAllNestedKanbanStatuses(children, delta, fallback)
+                : []
+        };
+    });
 }
 
 export function setNodeKanbanStatus(nestedIdeas, nodeId, kanbanStatus) {

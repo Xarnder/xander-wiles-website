@@ -8,9 +8,11 @@ import {
     getParentKanbanSpan,
     isMultiColumnKanbanStretch,
     getKanbanPlacementStage,
+    canShiftAllNestedKanban,
+    hasIncompleteNested,
     taskMatchesSearch
 } from './nested.js';
-import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, handleSyncError, updateDoc } from './api.js';
+import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
@@ -73,8 +75,10 @@ export function getOrphanedTaskIds() {
 }
 
 /**
- * Fill Kanban stage columns (pinned subsection + normal tasks per column).
- * Multi-column stretch parents sit inside the connected board grid (not a separate lane).
+ * Fill Kanban stage columns.
+ * Pinned tasks live in a board-wide pinned band (stretch cards span columns via grid).
+ * Multi-column normal parents sit in the stretch grid above the column panes.
+ * Add-task form is board-level (top or bottom per settings).
  */
 function populateKanbanFocus(list) {
     const buckets = {};
@@ -82,7 +86,8 @@ function populateKanbanFocus(list) {
         buckets[stage] = { pinned: [], normal: [] };
     });
 
-    const stretchTasks = { pinned: [], normal: [] };
+    const stretchPinned = [];
+    const stretchNormal = [];
     const pinningDisabled = !!state.appData.settings.disableImportantPinning;
     const taskIds = list.taskIds || [];
 
@@ -91,85 +96,122 @@ function populateKanbanFocus(list) {
         if (!task || task.archived) return;
 
         const shouldPin = isImportantTask(task) && !pinningDisabled;
-        const bucketKey = shouldPin ? 'pinned' : 'normal';
 
         if (isMultiColumnKanbanStretch(task)) {
-            stretchTasks[bucketKey].push(task);
+            const placement = getParentKanbanSpan(task);
+            if (shouldPin) stretchPinned.push({ task, placement });
+            else stretchNormal.push({ task, placement });
             return;
         }
 
         const stage = getKanbanPlacementStage(task);
         if (!buckets[stage]) return;
-        buckets[stage][bucketKey].push(task);
+        buckets[stage][shouldPin ? 'pinned' : 'normal'].push(task);
     });
 
     let number = 1;
 
-    const stretchBand = document.getElementById(`kanban-stretch-${list.id}`);
-    if (stretchBand) {
-        stretchBand.innerHTML = '';
-        [...stretchTasks.pinned, ...stretchTasks.normal].forEach((task) => {
-            const placement = getParentKanbanSpan(task);
-            const card = createTaskElement(task, list.id, number++, { kanbanStretch: placement });
-            card.classList.add('kanban-stretched-card');
-            card.style.gridColumn = `${placement.startIndex + 1} / span ${placement.span}`;
-            card.style.setProperty('--kanban-span', String(placement.span));
-            stretchBand.appendChild(card);
-        });
-        stretchBand.classList.toggle('hidden', stretchBand.childElementCount === 0);
-        stretchBand.classList.toggle('has-stretch', stretchBand.childElementCount > 0);
+    const isBottom = state.appData.settings.addTaskLocation === 'bottom';
+    const addTop = document.getElementById(`kanban-add-top-${list.id}`);
+    const addBottom = document.getElementById(`kanban-add-bottom-${list.id}`);
+    const addFormHtml = `
+        <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
+            <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
+                <input type="text" class="add-task-input" placeholder="Type an idea to add" name="taskText" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
+                <button type="submit" class="btn primary">+</button>
+            </form>
+        </div>`;
+
+    if (addTop) {
+        addTop.innerHTML = isBottom ? '' : addFormHtml;
+        addTop.classList.toggle('hidden', isBottom);
     }
+    if (addBottom) {
+        addBottom.innerHTML = isBottom ? addFormHtml : '';
+        addBottom.classList.toggle('hidden', !isBottom);
+    }
+
+    const pinnedBand = document.getElementById(`kanban-pinned-band-${list.id}`);
+    const pinnedStretchGrid = document.getElementById(`kanban-pinned-stretch-${list.id}`);
+    const stretchGrid = document.getElementById(`kanban-stretch-grid-${list.id}`);
+
+    if (pinnedStretchGrid) pinnedStretchGrid.innerHTML = '';
+    if (stretchGrid) stretchGrid.innerHTML = '';
+
+    let pinnedTotalAll = stretchPinned.length;
+
+    stretchPinned.forEach(({ task, placement }) => {
+        if (!pinnedStretchGrid) return;
+        const card = createStretchCard(task, list.id, number++, placement);
+        card.style.gridColumn = `${placement.startIndex + 1} / span ${placement.span}`;
+        pinnedStretchGrid.appendChild(card);
+    });
 
     KANBAN_STAGES.forEach((stage) => {
         const pinnedZone = document.getElementById(`kanban-pinned-${list.id}-${stage}`);
         const normalZone = document.getElementById(`kanban-stage-${list.id}-${stage}`);
         const countEl = document.querySelector(`[data-stage-count="${stage}"]`);
-        const addSlot = document.querySelector(`.kanban-column-pane[data-stage="${stage}"] .add-task-slot`);
         const column = document.querySelector(`.kanban-column-pane[data-stage="${stage}"]`);
         if (!pinnedZone || !normalZone) return;
 
         const { pinned = [], normal = [] } = buckets[stage] || { pinned: [], normal: [] };
-        const total = pinned.length + normal.length;
+        const stretchStartsHere = [
+            ...stretchPinned.filter((s) => s.placement.columns[0] === stage),
+            ...stretchNormal.filter((s) => s.placement.columns[0] === stage)
+        ].length;
 
         pinnedZone.innerHTML = '';
-        if (pinned.length > 0) {
-            const pHeader = document.createElement('div');
-            pHeader.className = 'kanban-pinned-header';
-            pHeader.innerHTML = `<i class="ph ph-push-pin-simple-fill"></i> Pinned`;
-            pinnedZone.appendChild(pHeader);
-            pinned.forEach((task) => {
-                pinnedZone.appendChild(createTaskElement(task, list.id, number++));
-            });
-            pinnedZone.classList.add('has-pinned');
-        } else {
-            pinnedZone.classList.remove('has-pinned');
-        }
+        pinned.forEach((task) => {
+            pinnedZone.appendChild(createTaskElement(task, list.id, number++));
+        });
+        pinnedZone.classList.toggle('has-pinned', pinned.length > 0);
+        pinnedTotalAll += pinned.length;
 
         normalZone.innerHTML = '';
         normal.forEach((task) => {
             normalZone.appendChild(createTaskElement(task, list.id, number++));
         });
 
+        const total = pinned.length + normal.length + stretchStartsHere;
         if (countEl) countEl.textContent = String(total);
-        normalZone.classList.toggle('is-empty', total === 0);
+        normalZone.classList.toggle('is-empty', normal.length === 0 && stretchStartsHere === 0);
         if (column) column.classList.toggle('is-column-empty', total === 0);
-
-        if (addSlot) {
-            addSlot.innerHTML = '';
-            if (stage === 'new') {
-                const isBottom = state.appData.settings.addTaskLocation === 'bottom';
-                addSlot.innerHTML = `
-                    <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
-                        <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                            <input type="text" class="add-task-input" placeholder="Type an idea to add" name="taskText" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
-                            <button type="submit" class="btn primary">+</button>
-                        </form>
-                    </div>`;
-            }
-        }
     });
 
+    stretchNormal.forEach(({ task, placement }) => {
+        if (!stretchGrid) return;
+        const card = createStretchCard(task, list.id, number++, placement);
+        card.style.gridColumn = `${placement.startIndex + 1} / span ${placement.span}`;
+        stretchGrid.appendChild(card);
+    });
+
+    if (pinnedBand) {
+        pinnedBand.classList.toggle('hidden', pinnedTotalAll === 0);
+        pinnedBand.classList.toggle('has-pinned', pinnedTotalAll > 0);
+    }
+    if (pinnedStretchGrid) {
+        pinnedStretchGrid.classList.toggle('hidden', stretchPinned.length === 0);
+    }
+    const pinnedZonesRow = document.getElementById(`kanban-pinned-grid-${list.id}`);
+    if (pinnedZonesRow) {
+        const anySinglePinned = KANBAN_STAGES.some((s) => (buckets[s]?.pinned || []).length > 0);
+        pinnedZonesRow.classList.toggle('hidden', !anySinglePinned);
+    }
+    if (stretchGrid) {
+        stretchGrid.classList.toggle('hidden', stretchNormal.length === 0);
+        stretchGrid.classList.toggle('has-stretch', stretchNormal.length > 0);
+    }
+
     initKanbanSortables(list.id);
+}
+
+function createStretchCard(task, listId, number, placement) {
+    const card = createTaskElement(task, listId, number, { kanbanStretch: placement });
+    card.classList.add('kanban-stretched-card');
+    card.dataset.stretchTaskId = task.id;
+    card.style.setProperty('--kanban-span', String(placement.span));
+    card.style.setProperty('--kanban-span-start', String(placement.startIndex));
+    return card;
 }
 
 function getKanbanStageContainers(listId, stage) {
@@ -189,10 +231,9 @@ function initKanbanSortables(listId) {
                     put: true
                 },
                 animation: 150,
-                // Stay off while multi-selecting so card clicks can select
                 disabled: !!state.multiEditMode,
-                draggable: '.task-card',
-                filter: '.kanban-stage-moves, .kanban-pinned-header, .task-actions, .task-checkbox, .nested-idea-checkbox, .nested-kanban-stage-select, .nested-idea-drag-handle, input, button, select',
+                draggable: '.task-card:not(.kanban-stretched-card)',
+                filter: '.kanban-stage-moves, .kanban-pinned-header, .task-actions, .task-checkbox, .nested-idea-checkbox, .nested-kanban-stage-moves, .nested-idea-drag-handle, input, button, select',
                 preventOnFilter: false,
                 forceFallback: true,
                 fallbackOnBody: true,
@@ -219,55 +260,96 @@ function initKanbanSortables(listId) {
     });
 }
 
+function countStretchStartsInStage(listId, stage) {
+    let count = 0;
+    document.querySelectorAll(
+        `.kanban-focus-shell[data-list-id="${listId}"] .kanban-stretched-card[data-stretch-task-id]`
+    ).forEach((card) => {
+        const task = state.appData.tasks[card.dataset.stretchTaskId];
+        if (task && getKanbanPlacementStage(task) === stage) count++;
+    });
+    return count;
+}
+
+function refreshPinnedBandVisibility(listId) {
+    const pinnedBand = document.getElementById(`kanban-pinned-band-${listId}`);
+    if (!pinnedBand) return;
+
+    let bandPinned = pinnedBand.querySelectorAll('.kanban-stretched-card').length;
+    let singlePinned = 0;
+    KANBAN_STAGES.forEach((s) => {
+        const z = document.getElementById(`kanban-pinned-${listId}-${s}`);
+        if (z) singlePinned += z.querySelectorAll('.task-card').length;
+    });
+    bandPinned += singlePinned;
+    pinnedBand.classList.toggle('hidden', bandPinned === 0);
+    pinnedBand.classList.toggle('has-pinned', bandPinned > 0);
+
+    const zonesRow = document.getElementById(`kanban-pinned-grid-${listId}`);
+    if (zonesRow) zonesRow.classList.toggle('hidden', singlePinned === 0);
+
+    const pinnedStretchGrid = document.getElementById(`kanban-pinned-stretch-${listId}`);
+    if (pinnedStretchGrid) {
+        pinnedStretchGrid.classList.toggle(
+            'hidden',
+            pinnedStretchGrid.querySelectorAll('.kanban-stretched-card').length === 0
+        );
+    }
+}
+
 function refreshKanbanColumnState(container) {
     if (!container) return;
-    const column = container.closest('.kanban-column-pane') || container.closest('.kanban-column');
-    if (!column) return;
 
-    const stage = column.dataset.stage;
-    const listId = column.dataset.listId;
+    const pinnedZone = container.classList?.contains('kanban-pinned-zone')
+        ? container
+        : null;
+    const column = container.closest('.kanban-column-pane') || container.closest('.kanban-column');
+    const listId = column?.dataset?.listId
+        || pinnedZone?.dataset?.listId
+        || container.closest('.kanban-focus-shell')?.dataset?.listId;
+    const stage = column?.dataset?.stage || pinnedZone?.dataset?.kanbanStage;
     if (!stage || !listId) return;
 
-    const pinnedZone = document.getElementById(`kanban-pinned-${listId}-${stage}`);
+    const pinnedEl = document.getElementById(`kanban-pinned-${listId}-${stage}`);
     const normalZone = document.getElementById(`kanban-stage-${listId}-${stage}`);
-    const pinnedCount = pinnedZone ? pinnedZone.querySelectorAll('.task-card').length : 0;
+    const pinnedCount = pinnedEl ? pinnedEl.querySelectorAll('.task-card').length : 0;
     const normalCount = normalZone ? normalZone.querySelectorAll('.task-card').length : 0;
-    const total = pinnedCount + normalCount;
+    const stretchStartCount = countStretchStartsInStage(listId, stage);
+    const total = pinnedCount + normalCount + stretchStartCount;
 
-    if (pinnedZone) {
-        pinnedZone.classList.toggle('has-pinned', pinnedCount > 0);
-        let header = pinnedZone.querySelector('.kanban-pinned-header');
-        if (pinnedCount > 0 && !header) {
-            header = document.createElement('div');
-            header.className = 'kanban-pinned-header';
-            header.innerHTML = `<i class="ph ph-push-pin-simple-fill"></i> Pinned`;
-            pinnedZone.insertBefore(header, pinnedZone.firstChild);
-        } else if (pinnedCount === 0 && header) {
-            header.remove();
-        }
+    if (pinnedEl) {
+        pinnedEl.classList.toggle('has-pinned', pinnedCount > 0);
     }
+    refreshPinnedBandVisibility(listId);
 
     if (normalZone) {
-        normalZone.classList.toggle('is-empty', total === 0);
+        normalZone.classList.toggle('is-empty', normalCount === 0 && stretchStartCount === 0);
     }
-    column.classList.toggle('is-column-empty', total === 0);
+    if (column) column.classList.toggle('is-column-empty', total === 0);
 
-    const countEl = document.querySelector(`[data-stage-count="${stage}"]`);
+    const countEl = document.querySelector(
+        `.kanban-column-header[data-stage="${stage}"][data-list-id="${listId}"] [data-stage-count="${stage}"]`
+    ) || document.querySelector(`[data-stage-count="${stage}"]`);
     if (countEl) countEl.textContent = String(total);
 }
 
 /**
  * After a Kanban drag: update stage (if changed) and rewrite list taskIds order.
- * Order per stage: pinned subsection then normal, across New → Finished, then archived.
+ * Order per stage: pinned stretch → pinned zone → normal stretch → normal zone, across stages, then archived.
  */
 export function handleKanbanDragEnd(evt, listId) {
     const taskId = evt.item?.dataset?.taskId;
     if (!taskId || !listId || !state.currentUser) return;
 
-    const toColumn = evt.to?.closest?.('.kanban-column-pane') || evt.to?.closest?.('.kanban-column');
-    const fromColumn = evt.from?.closest?.('.kanban-column-pane') || evt.from?.closest?.('.kanban-column');
-    const toStage = toColumn?.dataset?.stage;
-    const fromStage = fromColumn?.dataset?.stage;
+    const resolveStage = (container) => {
+        if (!container) return null;
+        if (container.dataset?.kanbanStage) return container.dataset.kanbanStage;
+        const column = container.closest?.('.kanban-column-pane') || container.closest?.('.kanban-column');
+        return column?.dataset?.stage || null;
+    };
+
+    const toStage = resolveStage(evt.to);
+    const fromStage = resolveStage(evt.from);
 
     if (!toStage || !KANBAN_STAGES.includes(toStage)) return;
 
@@ -288,11 +370,26 @@ export function handleKanbanDragEnd(evt, listId) {
             .filter(Boolean);
     };
 
+    const collectStretchIdsForStage = (gridEl, stage) => {
+        if (!gridEl) return [];
+        return Array.from(gridEl.querySelectorAll('.kanban-stretched-card[data-stretch-task-id]'))
+            .map((el) => el.dataset.stretchTaskId)
+            .filter((id) => {
+                const task = state.appData.tasks[id];
+                return task && getKanbanPlacementStage(task) === stage;
+            });
+    };
+
+    const pinnedStretchGrid = document.getElementById(`kanban-pinned-stretch-${listId}`);
+    const normalStretchGrid = document.getElementById(`kanban-stretch-grid-${listId}`);
+
     const stageIds = KANBAN_STAGES.flatMap((stage) => {
         const pinnedZone = document.getElementById(`kanban-pinned-${listId}-${stage}`);
         const normalZone = document.getElementById(`kanban-stage-${listId}-${stage}`);
         return [
+            ...collectStretchIdsForStage(pinnedStretchGrid, stage),
             ...collectIdsFromZone(pinnedZone),
+            ...collectStretchIdsForStage(normalStretchGrid, stage),
             ...collectIdsFromZone(normalZone)
         ];
     });
@@ -334,6 +431,12 @@ export function renderBoard() {
             scrollMap.set(listId, taskList.scrollTop);
         }
     });
+
+    // Kanban focus scrolls on .kanban-columns (not per-column task lists)
+    const kanbanScrollEl = document.querySelector('.kanban-focus-board .kanban-columns');
+    const savedKanbanScroll = kanbanScrollEl
+        ? { top: kanbanScrollEl.scrollTop, left: kanbanScrollEl.scrollLeft }
+        : null;
 
     // Cleanup Sortables
     state.sortableInstances.forEach(s => s.destroy());
@@ -423,6 +526,14 @@ export function renderBoard() {
             applyStaticLayouts();
             layoutSlimChrome();
             kanbanRendered = true;
+
+            if (savedKanbanScroll) {
+                const nextKanbanScroll = document.querySelector('.kanban-focus-board .kanban-columns');
+                if (nextKanbanScroll) {
+                    nextKanbanScroll.scrollTop = savedKanbanScroll.top;
+                    nextKanbanScroll.scrollLeft = savedKanbanScroll.left;
+                }
+            }
         } else {
             state.focusedKanbanListId = null;
             document.body.classList.remove('kanban-focus-mode');
@@ -960,6 +1071,7 @@ export function generateNestedIdeasHtml(nestedIdeas, taskId, depth = 1, dragEnab
 }
 
 function renderNestedIdeasList(nestedIdeas, taskId, depth, parentNodeId, dragEnabled) {
+    // Flat visual hierarchy: nesting is for Sortable/sibling order only — no indent.
     const listClass = depth === 1
         ? 'nested-ideas-list'
         : 'nested-ideas-list nested-ideas-list-nested';
@@ -974,8 +1086,9 @@ function renderNestedIdeasList(nestedIdeas, taskId, depth, parentNodeId, dragEna
         const completedClass = idea.completed ? ' nested-idea-completed' : '';
         const hideCheckboxes = window.APP_CONFIG && window.APP_CONFIG.hideCheckboxes;
         const showDragHandle = dragEnabled && nodeId;
+        const depthClass = depth > 1 ? ` nested-depth-${Math.min(depth, 3)}` : '';
 
-        html += `<div class="nested-idea-display-item${completedClass}" data-node-id="${nodeId}" data-nested-depth="${depth}">`;
+        html += `<div class="nested-idea-display-item${completedClass}${depthClass}" data-node-id="${nodeId}" data-nested-depth="${depth}">`;
         html += '<div class="nested-idea-row">';
 
         if (showDragHandle) {
@@ -1020,7 +1133,7 @@ function collectNestedNodesForKanban(nestedIdeas, depth = 1, out = []) {
 
     nestedIdeas.forEach((node) => {
         if (!node || typeof node.text !== 'string' || !node.text.trim()) return;
-        out.push(node);
+        out.push({ node, depth });
         if (depth < BOARD_NESTED_MAX_DEPTH && Array.isArray(node.nestedIdeas) && node.nestedIdeas.length > 0) {
             collectNestedNodesForKanban(node.nestedIdeas, depth + 1, out);
         }
@@ -1029,19 +1142,16 @@ function collectNestedNodesForKanban(nestedIdeas, depth = 1, out = []) {
     return out;
 }
 
-function renderNestedKanbanItem(node, taskId) {
+function renderNestedKanbanItem(node, taskId, depth = 1) {
     const nodeId = typeof node.id === 'string' ? node.id : '';
     const checkboxId = `nested-cb-${taskId}-${nodeId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
     const completedClass = node.completed ? ' nested-idea-completed' : '';
+    const depthClass = depth > 1 ? ` nested-depth-${Math.min(depth, 3)}` : '';
     const hideCheckboxes = window.APP_CONFIG && window.APP_CONFIG.hideCheckboxes;
     const stage = isValidKanbanStatus(node.kanbanStatus) ? node.kanbanStatus : 'new';
+    const { prev, next } = getAdjacentKanbanStages(stage);
 
-    const stageOptions = KANBAN_STAGES.map((s) => {
-        const selected = s === stage ? ' selected' : '';
-        return `<option value="${s}"${selected}>${escapeHtml(getKanbanColumnLabel(s))}</option>`;
-    }).join('');
-
-    let html = `<div class="nested-idea-display-item${completedClass}" data-node-id="${nodeId}">`;
+    let html = `<div class="nested-idea-display-item${completedClass}${depthClass}" data-node-id="${nodeId}" data-nested-depth="${depth}">`;
     html += '<div class="nested-idea-row">';
 
     if (!hideCheckboxes && nodeId) {
@@ -1057,10 +1167,13 @@ function renderNestedKanbanItem(node, taskId) {
     }
 
     if (!node.completed && nodeId) {
-        html += `<select class="nested-kanban-stage-select glass-select" aria-label="Subtask stage"
-            onchange="window.updateNestedIdeaKanbanStatus('${taskId}', '${nodeId}', this.value)"
-            onclick="event.stopPropagation()"
-            ontouchstart="event.stopPropagation()">${stageOptions}</select>`;
+        const leftBtn = prev
+            ? `<button type="button" class="icon-btn nested-kanban-arrow-btn" title="Move to ${escapeHtml(getKanbanColumnLabel(prev))}" aria-label="Move left to ${escapeHtml(getKanbanColumnLabel(prev))}" onclick="event.stopPropagation(); window.updateNestedIdeaKanbanStatus('${taskId}', '${nodeId}', '${prev}')"><i class="ph ph-caret-left"></i></button>`
+            : `<button type="button" class="icon-btn nested-kanban-arrow-btn is-disabled" title="No space to move left" aria-label="Cannot move left" disabled><i class="ph ph-caret-left"></i></button>`;
+        const rightBtn = next
+            ? `<button type="button" class="icon-btn nested-kanban-arrow-btn" title="Move to ${escapeHtml(getKanbanColumnLabel(next))}" aria-label="Move right to ${escapeHtml(getKanbanColumnLabel(next))}" onclick="event.stopPropagation(); window.updateNestedIdeaKanbanStatus('${taskId}', '${nodeId}', '${next}')"><i class="ph ph-caret-right"></i></button>`
+            : `<button type="button" class="icon-btn nested-kanban-arrow-btn is-disabled" title="No space to move right" aria-label="Cannot move right" disabled><i class="ph ph-caret-right"></i></button>`;
+        html += `<div class="nested-kanban-stage-moves" onclick="event.stopPropagation()">${leftBtn}${rightBtn}</div>`;
     }
 
     html += '</div></div>';
@@ -1071,18 +1184,18 @@ function generateNestedKanbanHtml(nestedIdeas, task, options = {}) {
     if (!nestedIdeas?.length || !task?.id) return '';
 
     const parentStatus = getParentKanbanStatus(task);
-    const nodes = collectNestedNodesForKanban(nestedIdeas);
+    const entries = collectNestedNodesForKanban(nestedIdeas);
     const incompleteByStage = {};
     KANBAN_STAGES.forEach((stage) => { incompleteByStage[stage] = []; });
-    const completedNodes = [];
+    const completedEntries = [];
 
-    nodes.forEach((node) => {
+    entries.forEach(({ node, depth }) => {
         if (node.completed) {
-            completedNodes.push(node);
+            completedEntries.push({ node, depth });
             return;
         }
         const stage = isValidKanbanStatus(node.kanbanStatus) ? node.kanbanStatus : parentStatus;
-        incompleteByStage[stage].push(node);
+        incompleteByStage[stage].push({ node, depth });
     });
 
     const spanColumns = Array.isArray(options.spanColumns) && options.spanColumns.length > 1
@@ -1099,12 +1212,10 @@ function generateNestedKanbanHtml(nestedIdeas, task, options = {}) {
     if (isStretch) {
         spanColumns.forEach((stage) => {
             const items = incompleteByStage[stage] || [];
-            html += `<div class="nested-kanban-stage-col" data-stage="${stage}">`;
-            html += `<div class="nested-kanban-stage-label">${escapeHtml(getKanbanColumnLabel(stage))}</div>`;
-            if (items.length === 0) {
-                html += '<div class="nested-kanban-stage-empty">—</div>';
-            } else {
-                items.forEach((node) => { html += renderNestedKanbanItem(node, task.id); });
+            html += `<div class="nested-kanban-stage-col${items.length === 0 ? ' is-empty' : ''}" data-stage="${stage}">`;
+            if (items.length > 0) {
+                html += `<div class="nested-kanban-stage-label">${escapeHtml(getKanbanColumnLabel(stage))}</div>`;
+                items.forEach(({ node, depth }) => { html += renderNestedKanbanItem(node, task.id, depth); });
             }
             html += '</div>';
         });
@@ -1114,19 +1225,19 @@ function generateNestedKanbanHtml(nestedIdeas, task, options = {}) {
             if (!items.length) return;
             html += `<div class="nested-kanban-stage-group" data-stage="${stage}">`;
             html += `<div class="nested-kanban-stage-label">${escapeHtml(getKanbanColumnLabel(stage))}</div>`;
-            items.forEach((node) => { html += renderNestedKanbanItem(node, task.id); });
+            items.forEach(({ node, depth }) => { html += renderNestedKanbanItem(node, task.id, depth); });
             html += '</div>';
         });
     }
 
-    if (completedNodes.length > 0) {
+    if (completedEntries.length > 0) {
         html += `<div class="nested-kanban-stage-group nested-kanban-completed-group${isStretch ? ' nested-kanban-completed-span' : ''}">`;
         html += '<div class="nested-kanban-stage-label">Completed</div>';
-        completedNodes.forEach((node) => { html += renderNestedKanbanItem(node, task.id); });
+        completedEntries.forEach(({ node, depth }) => { html += renderNestedKanbanItem(node, task.id, depth); });
         html += '</div>';
     }
 
-    const deeperCount = countNestedNodes(nestedIdeas) - nodes.length;
+    const deeperCount = countNestedNodes(nestedIdeas) - entries.length;
     if (deeperCount > 0) {
         html += `<div class="nested-idea-deeper-hint">+${deeperCount} more in editor</div>`;
     }
@@ -1485,15 +1596,21 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
     let kanbanMoveHtml = '';
     // Hide stage arrows while multi-selecting so the whole card is tappable
     if (isKanbanFocused() && !task.archived && !state.multiEditMode) {
-        const currentStage = resolveKanbanStatus(task);
-        const { prev, next } = getAdjacentKanbanStages(currentStage);
-        const leftBtn = prev
-            ? `<button type="button" class="icon-btn kanban-arrow-btn" title="Move to ${escapeHtml(getKanbanColumnLabel(prev))}" aria-label="Move left to ${escapeHtml(getKanbanColumnLabel(prev))}" onclick="event.stopPropagation(); window.updateKanbanStatus('${task.id}', '${prev}')"><i class="ph ph-caret-left"></i></button>`
-            : '';
-        const rightBtn = next
-            ? `<button type="button" class="icon-btn kanban-arrow-btn" title="Move to ${escapeHtml(getKanbanColumnLabel(next))}" aria-label="Move right to ${escapeHtml(getKanbanColumnLabel(next))}" onclick="event.stopPropagation(); window.updateKanbanStatus('${task.id}', '${next}')"><i class="ph ph-caret-right"></i></button>`
-            : '';
-        if (leftBtn || rightBtn) {
+        if (hasIncompleteNested(task)) {
+            const canLeft = canShiftAllNestedKanban(task, -1);
+            const canRight = canShiftAllNestedKanban(task, 1);
+            const leftBtn = `<button type="button" class="icon-btn kanban-arrow-btn${canLeft ? '' : ' is-disabled'}" title="${canLeft ? 'Shift all subtasks left' : 'No space to move left'}" aria-label="${canLeft ? 'Shift all subtasks left' : 'Cannot move left'}" ${canLeft ? '' : 'disabled '}onclick="event.stopPropagation(); window.shiftAllNestedKanban('${task.id}', -1)"><i class="ph ph-caret-left"></i></button>`;
+            const rightBtn = `<button type="button" class="icon-btn kanban-arrow-btn${canRight ? '' : ' is-disabled'}" title="${canRight ? 'Shift all subtasks right' : 'No space to move right'}" aria-label="${canRight ? 'Shift all subtasks right' : 'Cannot move right'}" ${canRight ? '' : 'disabled '}onclick="event.stopPropagation(); window.shiftAllNestedKanban('${task.id}', 1)"><i class="ph ph-caret-right"></i></button>`;
+            kanbanMoveHtml = `<div class="kanban-stage-moves" onclick="event.stopPropagation()">${leftBtn}${rightBtn}</div>`;
+        } else {
+            const currentStage = resolveKanbanStatus(task);
+            const { prev, next } = getAdjacentKanbanStages(currentStage);
+            const leftBtn = prev
+                ? `<button type="button" class="icon-btn kanban-arrow-btn" title="Move to ${escapeHtml(getKanbanColumnLabel(prev))}" aria-label="Move left to ${escapeHtml(getKanbanColumnLabel(prev))}" onclick="event.stopPropagation(); window.updateKanbanStatus('${task.id}', '${prev}')"><i class="ph ph-caret-left"></i></button>`
+                : `<button type="button" class="icon-btn kanban-arrow-btn is-disabled" title="No space to move left" aria-label="Cannot move left" disabled><i class="ph ph-caret-left"></i></button>`;
+            const rightBtn = next
+                ? `<button type="button" class="icon-btn kanban-arrow-btn" title="Move to ${escapeHtml(getKanbanColumnLabel(next))}" aria-label="Move right to ${escapeHtml(getKanbanColumnLabel(next))}" onclick="event.stopPropagation(); window.updateKanbanStatus('${task.id}', '${next}')"><i class="ph ph-caret-right"></i></button>`
+                : `<button type="button" class="icon-btn kanban-arrow-btn is-disabled" title="No space to move right" aria-label="Cannot move right" disabled><i class="ph ph-caret-right"></i></button>`;
             kanbanMoveHtml = `<div class="kanban-stage-moves" onclick="event.stopPropagation()">${leftBtn}${rightBtn}</div>`;
         }
     }
@@ -1569,7 +1686,7 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
     el.addEventListener('click', (event) => {
         // Multi-select handles card clicks via board delegation
         if (state.multiEditMode) return;
-        if (event.target.closest('.task-actions, .task-checkbox, .task-img-preview, .kanban-stage-moves, .nested-ideas-list, .nested-idea-checkbox, .nested-idea-drag-handle, .nested-idea-label, .nested-kanban-stage-select')) return;
+        if (event.target.closest('.task-actions, .task-checkbox, .task-img-preview, .kanban-stage-moves, .nested-ideas-list, .nested-idea-checkbox, .nested-idea-drag-handle, .nested-idea-label, .nested-kanban-stage-moves')) return;
 
         const wasShowing = (state.expandedTaskId === task.id);
 

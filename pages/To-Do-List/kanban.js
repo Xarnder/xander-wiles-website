@@ -178,12 +178,18 @@ export function renderKanbanFocus(boardContainer, list) {
         `;
     }).join('');
 
+    const pinnedZonesHtml = KANBAN_STAGES.map((stage, index) => {
+        return `
+            <div class="kanban-pinned-zone" id="kanban-pinned-${list.id}-${stage}"
+                data-kanban-stage="${stage}" data-list-id="${list.id}"
+                style="grid-column:${index + 1}"></div>
+        `;
+    }).join('');
+
     const panesHtml = KANBAN_STAGES.map((stage, index) => {
         return `
             <div class="kanban-column-pane" data-stage="${stage}" data-list-id="${list.id}" style="grid-column:${index + 1}">
-                <div class="add-task-slot" data-add-slot="${stage}"></div>
                 <div class="kanban-column-body">
-                    <div class="kanban-pinned-zone" id="kanban-pinned-${list.id}-${stage}" data-kanban-stage="${stage}"></div>
                     <div class="task-list kanban-stage-tasks" id="kanban-stage-${list.id}-${stage}" data-kanban-stage="${stage}"></div>
                 </div>
             </div>
@@ -193,6 +199,13 @@ export function renderKanbanFocus(boardContainer, list) {
     shell.innerHTML = `
         <div class="kanban-focus-bar">
             <div class="kanban-focus-bar-left">
+                <button type="button" class="icon-btn kanban-toggle-btn kanban-close-btn is-active"
+                    onclick="window.toggleKanbanFocus('${list.id}')"
+                    title="Close Kanban"
+                    aria-pressed="true"
+                    aria-label="Close Kanban">
+                    <i class="ph ph-x"></i>
+                </button>
                 <span class="kanban-focus-eyebrow"><i class="ph ph-kanban"></i> Kanban</span>
                 <input type="text" class="list-title kanban-focus-title" value="${list.title.replace(/"/g, '&quot;')}"
                     onchange="window.updateListTitle('${list.id}', this.value)"
@@ -206,20 +219,26 @@ export function renderKanbanFocus(boardContainer, list) {
                 <button type="button" class="icon-btn list-action-btn" onclick="window.openEditListModal('${list.id}')" title="Edit List Settings">
                     <i class="ph ph-sliders"></i>
                 </button>
-                <button type="button" class="icon-btn kanban-toggle-btn is-active"
-                    onclick="window.toggleKanbanFocus('${list.id}')"
-                    title="Close Kanban"
-                    aria-pressed="true"
-                    aria-label="Close Kanban">
-                    <i class="ph ph-kanban"></i>
-                </button>
             </div>
         </div>
+        <div class="kanban-board-add hidden" id="kanban-add-top-${list.id}" data-add-position="top"></div>
         <div class="kanban-columns" role="region" aria-label="Kanban columns for ${escapeHtml(list.title)}">
             ${headersHtml}
-            <div class="kanban-stretch-band hidden" id="kanban-stretch-${list.id}" aria-label="Tasks spanning multiple stages"></div>
-            ${panesHtml}
+            <div class="kanban-pinned-band hidden" id="kanban-pinned-band-${list.id}" aria-label="Pinned tasks">
+                <div class="kanban-pinned-header"><i class="ph ph-push-pin-simple-fill"></i> Pinned</div>
+                <div class="kanban-pinned-stretch-grid" id="kanban-pinned-stretch-${list.id}"></div>
+                <div class="kanban-pinned-zones-row" id="kanban-pinned-grid-${list.id}">
+                    ${pinnedZonesHtml}
+                </div>
+            </div>
+            <div class="kanban-body-stack">
+                <div class="kanban-stretch-grid" id="kanban-stretch-grid-${list.id}"></div>
+                <div class="kanban-panes-row" id="kanban-panes-row-${list.id}">
+                    ${panesHtml}
+                </div>
+            </div>
         </div>
+        <div class="kanban-board-add hidden" id="kanban-add-bottom-${list.id}" data-add-position="bottom"></div>
     `;
 
     boardContainer.appendChild(shell);
