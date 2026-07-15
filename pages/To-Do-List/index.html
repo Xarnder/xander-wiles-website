@@ -202,7 +202,7 @@
 
     <!-- OPTIONS MODAL -->
     <div id="options-modal-overlay" class="modal-overlay hidden">
-        <div class="modal glass-panel">
+        <div class="modal glass-panel options-modal">
             <div class="modal-header-row">
                 <h2>App Options</h2>
                 <button id="close-options-btn" class="icon-btn-large">&times;</button>
@@ -240,7 +240,7 @@
                     <i class="ph ph-spell-check"></i> Toggle Spellcheck (Test)
                 </button>
 
-                <hr class="dropdown-divider">
+                <hr class="dropdown-divider options-span-all">
                 <div class="dropdown-item-toggle" style="cursor: default;">
                     <span>Drag Mode</span>
                     <div class="toggle-group" style="background: rgba(0,0,0,0.2); padding: 2px; border-radius: 8px; display: flex;">
@@ -330,7 +330,7 @@
                     <input type="number" id="auto-add-time-input" class="glass-select full-width" style="padding: 8px;" min="5" max="3600" value="30">
                 </div>
 
-                <hr class="dropdown-divider">
+                <hr class="dropdown-divider options-span-all">
 
                 <div class="menu-action-item"
                     style="cursor: default; flex-direction: column; align-items: flex-start; gap: 8px;">
@@ -357,7 +357,7 @@
                     </select>
                 </div>
 
-                <hr class="dropdown-divider">
+                <hr class="dropdown-divider options-span-all">
 
                 <!-- IMPORT / EXPORT -->
                 <button id="download-json-btn" class="menu-action-item"><i class="ph ph-download-simple"></i>
@@ -378,8 +378,8 @@
                 <input type="file" id="import-todoist-csv" accept=".csv" style="display: none;">
                 <input type="file" id="task-import-file-input" accept=".json,.txt,application/json,text/plain" style="display: none;">
 
-                <hr class="dropdown-divider">
-                <div class="menu-action-item" style="cursor: default; flex-direction: column; align-items: flex-start;">
+                <hr class="dropdown-divider options-span-all">
+                <div class="menu-action-item options-span-all" style="cursor: default; flex-direction: column; align-items: flex-start;">
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 12px;">
                         <span><i class="ph ph-bell-ringing"></i> Backup Freq</span>
@@ -406,11 +406,11 @@
                     Reset App Data
                 </button>
 
-                <hr class="dropdown-divider">
+                <hr class="dropdown-divider options-span-all">
                 <button id="logout-btn" class="menu-action-item danger-text" style="display:none;">
                     <i class="ph ph-sign-out"></i> Logout
                 </button>
-                <hr class="dropdown-divider">
+                <hr class="dropdown-divider options-span-all">
                 <div class="menu-action-item sync-info-menu-item" style="cursor: default;">
                     <div id="options-sync-dot" class="sync-dot"></div>
                     <span id="options-sync-status-text">Synced</span>
