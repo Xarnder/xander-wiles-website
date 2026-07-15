@@ -74,7 +74,8 @@
                     <li><span class="rule-num">6</span> Defined what “done” means.</li>
                 </ol>
 
-                <p class="callout">The AI should work in small, reviewable steps and should never make large hidden changes.</p>
+                <p class="callout" data-workflow-mode="step-by-step">The AI should work in small, reviewable steps and should never make large hidden changes.</p>
+                <p class="callout hidden" data-workflow-mode="all-in-one">The AI should implement the approved plan completely and should never make large hidden changes.</p>
 
                 <figure class="guide-figure">
                     <img src="images/hero-workflow.webp"
@@ -91,7 +92,7 @@
                         <li><a href="#core-rule"><span class="phase-num">★</span> Core Rule</a></li>
                         <li><a href="#phase-1"><span class="phase-num">1</span> Project / Feature Brief</a></li>
                         <li><a href="#phase-2"><span class="phase-num">2</span> Answer Questions</a></li>
-                        <li><a href="#phase-3"><span class="phase-num">3</span> Implementation (4a / 4b)</a></li>
+                        <li><a href="#phase-3"><span class="phase-num">3</span> <span id="sidebar-phase-3-label">Implementation (Small Steps)</span></a></li>
                         <li><a href="#phase-4"><span class="phase-num">4</span> Self-Review Before Testing</a></li>
                         <li><a href="#phase-5"><span class="phase-num">5</span> Testing</a></li>
                         <li><a href="#phase-6"><span class="phase-num">6</span> Production Release Checklist</a></li>
@@ -101,6 +102,15 @@
                 <div class="sidebar-card">
                     <h2>Settings</h2>
                     <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Workflow Mode</span>
+                            <div class="mode-toggle" role="group" aria-label="Workflow mode">
+                                <button type="button" class="mode-toggle-btn active" data-mode="step-by-step" aria-pressed="true">Step by Step</button>
+                                <button type="button" class="mode-toggle-btn" data-mode="all-in-one" aria-pressed="false">All in One</button>
+                            </div>
+                            <p id="mode-toggle-hint" class="mode-toggle-hint" data-workflow-mode="step-by-step">For larger features — plan, then implement in small, reviewable steps.</p>
+                            <p id="mode-toggle-hint-alt" class="mode-toggle-hint hidden" data-workflow-mode="all-in-one">For smaller tasks — same workflow, but implement everything in one go.</p>
+                        </div>
                         <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                             <label for="parent-path-input" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Parent Path Prefix</label>
                             <input type="text" id="parent-path-input" class="prompt-field" placeholder="e.g. pages/timelineapp/" style="font-size: 0.8rem; padding: 0.45rem 0.6rem; width: 100%; box-sizing: border-box;">
@@ -293,10 +303,12 @@ Before coding, summarize:
 1. The final agreed scope.
 2. Any decisions I made.
 3. Any assumptions still remaining.
-4. The first small implementation step you recommend.
+<span data-workflow-mode="step-by-step">4. The first small implementation step you recommend.
 5. The exact files you expect to edit first.
 
-Do not start coding until I approve the implementation step.</pre>
+Do not start coding until I approve the implementation step.</span><span data-workflow-mode="all-in-one">4. The exact files you expect to edit first.
+
+Do not start coding until I approve.</span></pre>
                     </div>
                 </section>
 
@@ -306,10 +318,11 @@ Do not start coding until I approve the implementation step.</pre>
                         <h2>Phase 3 — Implementation</h2>
                     </div>
 
-                    <p class="section-intro">Choose the implementation style that best fits your change. Use 4a for safer, iterative progress on complex codebases, or 4b for simpler, self-contained features.</p>
+                    <p class="section-intro" data-workflow-mode="step-by-step">Use this prompt when you are ready to let the AI code iteratively in small, safe steps.</p>
+                    <p class="section-intro hidden" data-workflow-mode="all-in-one">Use this prompt when you are ready to let the AI implement the full feature in one go.</p>
 
-                    <h3 class="subsection-title">Phase 4a — Implementation in Small Steps</h3>
-                    <p class="section-intro">Use this when you are ready to let the AI code iteratively.</p>
+                    <div data-workflow-mode="step-by-step">
+                    <h3 class="subsection-title">Implementation in Small Steps</h3>
 
                     <div class="prompt-label"><span>Prompt</span></div>
                     <div class="prompt-block">
@@ -321,7 +334,16 @@ Do not start coding until I approve the implementation step.</pre>
                             </svg>
                             <span class="copy-label">Copy</span>
                         </button>
-                        <div class="prompt-body">Start implementing the feature, but work in small, safe steps.
+                        <div class="prompt-body">Before implementing, re-read these planning documents:
+
+<span data-file-toggle="00-brief">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/00-brief.md`
+</span><span data-file-toggle="01-questions-and-decisions">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/01-questions-and-decisions.md`
+</span><span data-file-toggle="02-technical-plan">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/02-technical-plan.md`
+</span><span data-file-toggle="03-risk-and-safety-review">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/03-risk-and-safety-review.md`
+</span><span data-file-toggle="04-test-plan">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/04-test-plan.md`
+</span><span data-file-toggle="05-release-checklist">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/05-release-checklist.md`
+</span>
+Now that you have read these documents, start implementing the feature, but work in small, safe steps.
 
                             Rules:
 
@@ -331,7 +353,8 @@ Do not start coding until I approve the implementation step.</pre>
                             - Do not refactor unrelated code.
                             - Do not change public APIs unless the plan says to.
                             - Do not change database schema without explaining the migration and rollback.
-                            - Do not introduce new packages unless you explain why they are needed.
+                            - Do not install new libraries or dependencies without telling me first. If any are needed, explain why and give me the exact install commands to run.
+                            - If backend security rules need to change (e.g. Firebase Firestore/Storage rules, Supabase RLS policies, API permissions, or database access rules), tell me before making changes and explain exactly what to update and where (backend console, config file, or deployment step).
                             - Do not store secrets in code.
                             - Do not weaken authentication, authorization, validation, or error handling.
                             - Prefer clear, maintainable code over clever code.
@@ -350,9 +373,10 @@ Do not start coding until I approve the implementation step.</pre>
                                 aria-label="Describe the approved implementation step"></textarea>
                         </div>
                     </div>
+                    </div>
 
-                    <h3 class="subsection-title" style="margin-top: 2rem;">Phase 4b — Implementation All-in-One Go</h3>
-                    <p class="section-intro">Use this for simpler, self-contained features where a single large change is appropriate.</p>
+                    <div class="hidden" data-workflow-mode="all-in-one">
+                    <h3 class="subsection-title">Implementation All-in-One</h3>
 
                     <div class="prompt-label"><span>Prompt</span></div>
                     <div class="prompt-block">
@@ -364,7 +388,16 @@ Do not start coding until I approve the implementation step.</pre>
                             </svg>
                             <span class="copy-label">Copy</span>
                         </button>
-                        <div class="prompt-body">Start implementing the entire feature plan in one go.
+                        <div class="prompt-body">Before implementing, re-read these planning documents:
+
+<span data-file-toggle="00-brief">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/00-brief.md`
+</span><span data-file-toggle="01-questions-and-decisions">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/01-questions-and-decisions.md`
+</span><span data-file-toggle="02-technical-plan">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/02-technical-plan.md`
+</span><span data-file-toggle="03-risk-and-safety-review">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/03-risk-and-safety-review.md`
+</span><span data-file-toggle="04-test-plan">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/04-test-plan.md`
+</span><span data-file-toggle="05-release-checklist">- `<span data-parent-path></span>docs/<span data-feature-date></span>/<span data-feature-name></span>feature-plan/05-release-checklist.md`
+</span>
+Now that you have read these documents, start implementing the entire feature plan in one go.
 
                             Rules:
 
@@ -372,7 +405,8 @@ Do not start coding until I approve the implementation step.</pre>
                             - Do not refactor unrelated code.
                             - Do not change public APIs unless the plan says to.
                             - Do not change database schema without explaining the migration and rollback.
-                            - Do not introduce new packages unless you explain why they are needed.
+                            - Do not install new libraries or dependencies without telling me first. If any are needed, explain why and give me the exact install commands to run.
+                            - If backend security rules need to change (e.g. Firebase Firestore/Storage rules, Supabase RLS policies, API permissions, or database access rules), tell me before making changes and explain exactly what to update and where (backend console, config file, or deployment step).
                             - Do not store secrets in code.
                             - Do not weaken authentication, authorization, validation, or error handling.
                             - Prefer clear, maintainable code over clever code.
@@ -382,6 +416,7 @@ Do not start coding until I approve the implementation step.</pre>
                             3. Which files changed.
                             4. What tests should now be run.
                         </div>
+                    </div>
                     </div>
 
                     <figure class="guide-figure">
@@ -396,7 +431,8 @@ Do not start coding until I approve the implementation step.</pre>
                         <h2>Phase 4 — Self-Review Before Testing</h2>
                     </div>
 
-                    <p class="section-intro">Run this after each implementation step.</p>
+                    <p class="section-intro" data-workflow-mode="step-by-step">Run this after each implementation step.</p>
+                    <p class="section-intro hidden" data-workflow-mode="all-in-one">Run this after implementation.</p>
 
                     <div class="prompt-label"><span>Prompt</span></div>
                     <div class="prompt-block">

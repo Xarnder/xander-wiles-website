@@ -39,6 +39,97 @@ function fieldValue(field) {
     return field.dataset.default || '';
 }
 
+function detectPromptLineClass(line) {
+    const trimmed = line.trim();
+    if (!trimmed) return 'blank';
+    if (/^\d+\.\s/.test(trimmed)) return 'numbered';
+    if (/^-\s/.test(trimmed)) {
+        return /^\s{2,}-/.test(line) ? 'bullet-nested' : 'bullet';
+    }
+    return 'text';
+}
+
+function createPromptLine(line, lineClass) {
+    const element = document.createElement('span');
+    element.className = lineClass === 'blank'
+        ? 'prompt-line prompt-line--blank'
+        : `prompt-line prompt-line--${lineClass}`;
+    if (lineClass !== 'blank') {
+        element.textContent = line.trim();
+    }
+    return element;
+}
+
+function shouldPreservePromptNode(node) {
+    if (node.nodeType !== Node.ELEMENT_NODE) return false;
+    return node.matches('.prompt-field, textarea, input, select, button')
+        || node.id === 'dynamic-update-list';
+}
+
+function formatPromptTextContent(text) {
+    const fragment = document.createDocumentFragment();
+    const lines = text.split('\n');
+
+    lines.forEach((line) => {
+        const lineClass = detectPromptLineClass(line);
+        fragment.appendChild(createPromptLine(line, lineClass));
+    });
+
+    return fragment;
+}
+
+function formatPromptInlineContainer(container) {
+    if (container.dataset.promptInlineFormatted) return;
+
+    const fragment = document.createDocumentFragment();
+    Array.from(container.childNodes).forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+            fragment.appendChild(formatPromptTextContent(child.textContent));
+        } else {
+            fragment.appendChild(child);
+        }
+    });
+
+    container.replaceChildren(fragment);
+    container.dataset.promptInlineFormatted = 'true';
+}
+
+function formatPromptContainer(container) {
+    if (container.dataset.promptFormatted) return;
+
+    const fragment = document.createDocumentFragment();
+    Array.from(container.childNodes).forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+            fragment.appendChild(formatPromptTextContent(child.textContent));
+        } else if (shouldPreservePromptNode(child)) {
+            fragment.appendChild(child);
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+            if (child.matches('[data-file-toggle]') && child.textContent.trim().startsWith('-')) {
+                const line = document.createElement('span');
+                line.className = 'prompt-line prompt-line--bullet';
+                line.appendChild(child);
+                fragment.appendChild(line);
+            } else if (child.matches('[data-file-toggle]') && child.textContent.includes('\n')) {
+                formatPromptInlineContainer(child);
+                fragment.appendChild(child);
+            } else if (child.matches('.prompt-line')) {
+                fragment.appendChild(child);
+            } else {
+                fragment.appendChild(child);
+            }
+        }
+    });
+
+    container.replaceChildren(fragment);
+    container.dataset.promptFormatted = 'true';
+}
+
+function initPromptFormatting() {
+    document.querySelectorAll('.prompt-body, .prompt-block > pre').forEach((container) => {
+        formatPromptContainer(container);
+    });
+}
+
 function getPromptText(root) {
     let text = '';
 
@@ -51,6 +142,16 @@ function getPromptText(root) {
             }
             if (child.matches('.prompt-field')) {
                 text += fieldValue(child);
+            } else if (child.classList.contains('prompt-line')) {
+                if (child.classList.contains('prompt-line--blank')) {
+                    text += '\n';
+                } else {
+                    const lineText = getPromptText(child);
+                    if (lineText.trim()) {
+                        text += lineText;
+                        text += '\n';
+                    }
+                }
             } else if (child.tagName === 'BR') {
                 text += '\n';
             } else {
@@ -64,6 +165,7 @@ function getPromptText(root) {
 
 document.addEventListener('DOMContentLoaded', () => {
     applyFeatureDatePaths();
+    initPromptFormatting();
 
     const parentPathInput = document.getElementById('parent-path-input');
     if (parentPathInput) {
@@ -93,6 +195,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // File visibility toggles
     const fileToggles = document.querySelectorAll('.file-toggle-item input[type="checkbox"]');
+
+    // Workflow mode toggle
+    const modeToggleButtons = document.querySelectorAll('.mode-toggle-btn');
+    const sidebarPhase3Label = document.getElementById('sidebar-phase-3-label');
+    const WORKFLOW_MODES = {
+        'step-by-step': 'Implementation (Small Steps)',
+        'all-in-one': 'Implementation (All in One)',
+    };
+
+    function applyWorkflowMode(mode) {
+        document.querySelectorAll('[data-workflow-mode]').forEach((element) => {
+            const isActive = element.dataset.workflowMode === mode;
+            element.classList.toggle('hidden', !isActive);
+        });
+
+        modeToggleButtons.forEach((button) => {
+            const isActive = button.dataset.mode === mode;
+            button.classList.toggle('active', isActive);
+            button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+
+        if (sidebarPhase3Label) {
+            sidebarPhase3Label.textContent = WORKFLOW_MODES[mode] || WORKFLOW_MODES['step-by-step'];
+        }
+    }
+
+    if (modeToggleButtons.length > 0) {
+        const savedMode = localStorage.getItem('setting-workflow-mode') || 'step-by-step';
+        applyWorkflowMode(savedMode);
+
+        modeToggleButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const mode = button.dataset.mode;
+                applyWorkflowMode(mode);
+                localStorage.setItem('setting-workflow-mode', mode);
+            });
+        });
+    }
 
     function formatList(items) {
         if (items.length === 0) return '';
@@ -131,10 +271,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateFileVisibility(fileKey, isChecked) {
         const targetElements = document.querySelectorAll(`[data-file-toggle="${fileKey}"]`);
         targetElements.forEach((el) => {
+            const toggleTarget = el.closest('.prompt-line') || el;
             if (isChecked) {
-                el.classList.remove('hidden');
+                toggleTarget.classList.remove('hidden');
             } else {
-                el.classList.add('hidden');
+                toggleTarget.classList.add('hidden');
             }
         });
         updateDynamicUpdateList();
