@@ -19,6 +19,7 @@ import ConfirmModal from './ConfirmModal';
 import ImageWithSkeleton from './ImageWithSkeleton';
 import SpecialDayAnimation from './SpecialDayAnimation';
 import LocalSummaryPanel from './LocalSummaryPanel';
+import Modal from './Modal';
 import { LOCAL_SUMMARISER_MODEL_ID } from '../lib/localSummariser';
 import {
     cleanSubEntriesForSave,
@@ -45,13 +46,14 @@ function cleanConfiguredNumericEntries(numericEntries, numericFields, shouldFilt
     }, {});
 }
 
-function createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries, numericEntries, numericFields, entrySettingsLoaded }) {
+function createEntrySignature({ content, title, selectedTags, mood, isSpecial, images = [], subEntries, numericEntries, numericFields, entrySettingsLoaded }) {
     return JSON.stringify({
         content,
         title,
         selectedTags,
         mood,
         isSpecial,
+        images,
         subEntries: cleanSubEntriesForSave(subEntries),
         numericEntries: cleanConfiguredNumericEntries(numericEntries, numericFields || [], entrySettingsLoaded)
     });
@@ -72,6 +74,8 @@ export default function EntryEditor() {
     const [content, setContent] = useState('');
     const [title, setTitle] = useState('');
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+    const [reloadKey, setReloadKey] = useState(0);
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [isSpecial, setIsSpecial] = useState(false);
@@ -105,10 +109,13 @@ export default function EntryEditor() {
     // Caption State
     const [editingCaptionIndex, setEditingCaptionIndex] = useState(null);
     const [tempCaption, setTempCaption] = useState('');
+    const [lightboxImage, setLightboxImage] = useState(null);
+    const [zoomLevel, setZoomLevel] = useState(1);
 
     // Drag and Drop State
     const [draggedImageIndex, setDraggedImageIndex] = useState(null);
     const [dragOverImageIndex, setDragOverImageIndex] = useState(null);
+    const [isFileDragging, setIsFileDragging] = useState(false);
 
     // New features state
     const [mood, setMood] = useState(null);
@@ -117,6 +124,8 @@ export default function EntryEditor() {
     const autoSaveTimerRef = useRef(null);
     const lastSavedSignature = useRef('');
     const isFirstLoad = useRef(true);
+    const lastWordMilestoneRef = useRef(0);
+    const [wordMilestoneFlash, setWordMilestoneFlash] = useState(null);
 
     const WRITING_PROMPTS = [
         "What made you smile today?",
@@ -211,9 +220,29 @@ export default function EntryEditor() {
             }
             // Cancel: Esc
             if (e.key === 'Escape') {
-                if (isEditing) setIsEditing(false);
+                if (lightboxImage) {
+                    setLightboxImage(null);
+                    setZoomLevel(1);
+                } else if (editingCaptionIndex !== null) {
+                    setEditingCaptionIndex(null);
+                } else if (showDeleteConfirm) {
+                    setShowDeleteConfirm(false);
+                } else if (showDuplicateConfirm) {
+                    setShowDuplicateConfirm(false);
+                } else if (isEditing) {
+                    setIsEditing(false);
+                }
+                return;
             }
             // Navigate: Alt+Left / Alt+Right
+            const target = e.target;
+            const isTyping = target instanceof HTMLElement && (
+                target.matches('input, textarea, select') ||
+                target.isContentEditable ||
+                target.closest('.CodeMirror')
+            );
+            if (isTyping || lightboxImage || editingCaptionIndex !== null || showDeleteConfirm || showDuplicateConfirm) return;
+
             if (e.altKey && e.key === 'ArrowLeft') {
                 e.preventDefault();
                 handlePrevDay();
@@ -226,7 +255,7 @@ export default function EntryEditor() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, date]);
+    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, images, date, lightboxImage, editingCaptionIndex, showDeleteConfirm, showDuplicateConfirm]);
 
     // Auto-save logic
     useEffect(() => {
@@ -235,7 +264,7 @@ export default function EntryEditor() {
             return;
         }
 
-        const currentSignature = createEntrySignature({ content, title, selectedTags, mood, isSpecial, subEntries, numericEntries, numericFields, entrySettingsLoaded });
+        const currentSignature = createEntrySignature({ content, title, selectedTags, mood, isSpecial, images, subEntries, numericEntries, numericFields, entrySettingsLoaded });
         if (currentSignature === lastSavedSignature.current) return;
 
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -247,7 +276,7 @@ export default function EntryEditor() {
         return () => {
             if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         };
-    }, [content, title, selectedTags, mood, isSpecial, subEntries, numericEntries, numericFields, entrySettingsLoaded, isEditing]);
+    }, [content, title, selectedTags, mood, isSpecial, images, subEntries, numericEntries, numericFields, entrySettingsLoaded, isEditing]);
 
     async function handleAutoSave() {
         if (!currentUser || !isEditing) return;
@@ -259,16 +288,22 @@ export default function EntryEditor() {
             const inferredTitle = content.split('\n')[0].replace('#', '').trim();
             const cleanedSubEntries = cleanSubEntriesForSave(subEntries);
             const cleanedNumericEntries = cleanConfiguredNumericEntries(numericEntries, numericFields, entrySettingsLoaded);
+            const mainImage = images.length > 0 ? images[0] : null;
             
             await setDoc(docRef, {
+                date: parseISO(date),
                 title: trimmedTitle || inferredTitle,
                 content: content,
                 updatedAt: serverTimestamp(),
+                images,
                 tags: selectedTags,
                 mood: mood,
                 isSpecial: isSpecial,
                 subEntries: cleanedSubEntries,
                 numericEntries: cleanedNumericEntries,
+                imageUrl: mainImage ? mainImage.url : null,
+                imageSize: mainImage ? mainImage.size : 0,
+                imagePath: mainImage ? mainImage.path : null,
                 textSize: new Blob([
                     content,
                     subEntriesToPlainText(cleanedSubEntries),
@@ -282,6 +317,7 @@ export default function EntryEditor() {
                 selectedTags,
                 mood,
                 isSpecial,
+                images,
                 subEntries: cleanedSubEntries,
                 numericEntries: cleanedNumericEntries,
                 numericFields,
@@ -290,6 +326,7 @@ export default function EntryEditor() {
             setTimeout(() => setIsAutoSaving(false), 2000);
         } catch (err) {
             console.error("Auto-save error:", err);
+            toastError('Auto-save failed. Your changes are still in the editor.');
             setIsAutoSaving(false);
         }
     }
@@ -350,6 +387,26 @@ export default function EntryEditor() {
 
     const totalWordCount = wordCount + subEntryWordCount;
 
+    // Celebrate every 100 main-entry words while typing (skip initial load / existing counts)
+    useEffect(() => {
+        if (!isEditing) {
+            lastWordMilestoneRef.current = Math.floor(wordCount / 100) * 100;
+            return;
+        }
+
+        const milestone = Math.floor(wordCount / 100) * 100;
+        if (milestone >= 100 && milestone > lastWordMilestoneRef.current) {
+            lastWordMilestoneRef.current = milestone;
+            setWordMilestoneFlash(milestone);
+            const timer = window.setTimeout(() => setWordMilestoneFlash(null), 1400);
+            return () => window.clearTimeout(timer);
+        }
+
+        if (milestone < lastWordMilestoneRef.current) {
+            lastWordMilestoneRef.current = milestone;
+        }
+    }, [wordCount, isEditing]);
+
     const readingTime = useMemo(() => {
         const wordsPerMinute = 200;
         const minutes = totalWordCount / wordsPerMinute;
@@ -357,8 +414,14 @@ export default function EntryEditor() {
         return `${Math.ceil(minutes)} min read`;
     }, [totalWordCount]);
 
-    const wordGoal = 200;
-    const wordProgress = Math.min(100, (totalWordCount / wordGoal) * 100);
+    const wordCycleGoal = 100;
+    const wordsInCycle = wordCount % wordCycleGoal;
+    const wordProgress = wordCount > 0 && wordsInCycle === 0
+        ? (wordMilestoneFlash ? 100 : 0)
+        : (wordsInCycle / wordCycleGoal) * 100;
+    const wordsUntilNextMilestone = wordsInCycle === 0 && wordCount > 0
+        ? (wordMilestoneFlash ? 0 : wordCycleGoal)
+        : wordCycleGoal - wordsInCycle;
 
     const timeSinceEntry = useMemo(() => {
         if (!date) return "";
@@ -400,7 +463,11 @@ export default function EntryEditor() {
     useEffect(() => {
         async function fetchEntry() {
             setLoading(true);
-            if (!currentUser) return;
+            setLoadError('');
+            if (!currentUser) {
+                setLoading(false);
+                return;
+            }
 
             try {
                 const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
@@ -422,6 +489,11 @@ export default function EntryEditor() {
                         selectedTags: data.tags || [],
                         mood: data.mood || null,
                         isSpecial: data.isSpecial || false,
+                        images: data.images || (data.imageUrl ? [{
+                            url: data.imageUrl,
+                            path: data.imagePath || null,
+                            size: data.imageSize || 0
+                        }] : []),
                         subEntries: data.subEntries || {},
                         numericEntries: data.numericEntries || {},
                         numericFields: [],
@@ -476,13 +548,14 @@ export default function EntryEditor() {
                 }
             } catch (error) {
                 console.error("Error fetching entry:", error);
+                setLoadError('This entry could not be loaded. Check your connection and try again.');
             } finally {
                 setLoading(false);
             }
         }
 
         fetchEntry();
-    }, [date, currentUser]);
+    }, [date, currentUser, reloadKey]);
 
     // Fetch configurable entry fields
     useEffect(() => {
@@ -536,7 +609,7 @@ export default function EntryEditor() {
     }, [content]);
 
     const uploadImageFiles = async (files) => {
-        if (files.length === 0) return;
+        if (files.length === 0 || !currentUser) return;
 
         if (images.length + files.length > 8) {
             toastError("You can only have up to 8 images per entry.");
@@ -548,8 +621,8 @@ export default function EntryEditor() {
         setCurrentUploadIndex(0);
         setStatusMessage('Starting upload...');
 
+        const newImages = [];
         try {
-            const newImages = [];
             const storage = getStorage();
 
             for (let i = 0; i < files.length; i++) {
@@ -582,10 +655,37 @@ export default function EntryEditor() {
                 });
             }
 
-            setImages(prev => [...prev, ...newImages]);
+            const combinedImages = [...images, ...newImages];
+            const mainImage = combinedImages[0] || null;
+            await setDoc(doc(db, 'users', currentUser.uid, 'entries', date), {
+                date: parseISO(date),
+                images: combinedImages,
+                imageUrl: mainImage?.url || null,
+                imageSize: mainImage?.size || 0,
+                imagePath: mainImage?.path || null,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+            setImages(combinedImages);
             success('Images uploaded successfully');
         } catch (error) {
             console.error("Error uploading image:", error);
+            if (newImages.length > 0) {
+                const recoveredImages = [...images, ...newImages];
+                setImages(recoveredImages);
+                try {
+                    const mainImage = recoveredImages[0] || null;
+                    await setDoc(doc(db, 'users', currentUser.uid, 'entries', date), {
+                        date: parseISO(date),
+                        images: recoveredImages,
+                        imageUrl: mainImage?.url || null,
+                        imageSize: mainImage?.size || 0,
+                        imagePath: mainImage?.path || null,
+                        updatedAt: serverTimestamp()
+                    }, { merge: true });
+                } catch (metadataError) {
+                    console.error('Failed to preserve partially uploaded images:', metadataError);
+                }
+            }
             if (error.message === "Could not read this iPhone photo format.") {
                 toastError("Could not convert HEIC image. Please try a different photo.");
             } else {
@@ -628,36 +728,53 @@ export default function EntryEditor() {
         }
     };
 
+    const handleFileDrop = async (event) => {
+        const files = Array.from(event.dataTransfer?.files || []).filter((file) => file.type.startsWith('image/'));
+        if (files.length === 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setIsFileDragging(false);
+        await uploadImageFiles(files);
+    };
+
     const handleRemoveImage = (index) => {
         setImageToDelete(index);
         setShowDeleteConfirm(true);
     };
 
     const confirmRemoveImage = async () => {
-        if (imageToDelete === null) return;
+        if (imageToDelete === null || !currentUser) return;
 
         setUploading(true);
         try {
             const image = images[imageToDelete];
-            if (image && image.path) {
-                const storage = getStorage();
-                const storageRef = ref(storage, image.path);
-                await deleteObject(storageRef);
-            } else if (image && image.url) {
-                // Try to construct path from URL if metadata missing (fallback)
-                try {
+            const newImages = images.filter((_, index) => index !== imageToDelete);
+            const mainImage = newImages[0] || null;
+            const entryRef = doc(db, 'users', currentUser.uid, 'entries', date);
+
+            await setDoc(entryRef, {
+                date: parseISO(date),
+                images: newImages,
+                imageUrl: mainImage?.url || null,
+                imageSize: mainImage?.size || 0,
+                imagePath: mainImage?.path || null,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+            setImages(newImages);
+
+            try {
+                if (image?.path) {
+                    const storage = getStorage();
+                    const storageRef = ref(storage, image.path);
+                    await deleteObject(storageRef);
+                } else if (image?.url) {
                     const storage = getStorage();
                     const path = decodeURIComponent(image.url.split('/o/')[1].split('?')[0]);
-                    const storageRef = ref(storage, path);
-                    await deleteObject(storageRef);
-                } catch (e) {
-                    console.warn("Could not derive storage path from URL", e);
+                    await deleteObject(ref(storage, path));
                 }
+            } catch (cleanupError) {
+                console.warn('Image metadata was removed, but storage cleanup failed:', cleanupError);
             }
-
-            const newImages = [...images];
-            newImages.splice(imageToDelete, 1);
-            setImages(newImages);
 
             setImageToDelete(null);
             success("Image removed");
@@ -740,6 +857,7 @@ export default function EntryEditor() {
                 selectedTags,
                 mood,
                 isSpecial,
+                images,
                 subEntries: cleanedSubEntries,
                 numericEntries: cleanedNumericEntries,
                 numericFields,
@@ -874,10 +992,6 @@ export default function EntryEditor() {
         setShowPrompts(true);
     };
 
-    // Lightbox State
-    const [lightboxImage, setLightboxImage] = useState(null);
-    const [zoomLevel, setZoomLevel] = useState(1);
-
     // Lightbox Handlers
     const handleImageClick = (img) => {
         if (!isEditing) {
@@ -920,12 +1034,23 @@ export default function EntryEditor() {
         </div>
     );
 
+    if (loadError) return (
+        <div role="alert" className="glass-card p-8 flex flex-col items-center justify-center min-h-[320px] text-center">
+            <PenTool className="w-10 h-10 mb-4 text-primary" />
+            <h2 className="text-xl font-serif font-bold text-text mb-2">Entry unavailable</h2>
+            <p className="text-text-secondary mb-5">{loadError}</p>
+            <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="glass-button px-4 py-2 text-text">
+                Try again
+            </button>
+        </div>
+    );
+
     return (
-        <div className="h-full flex flex-col relative text-white">
+        <div className="h-full flex flex-col relative text-text">
             <div className="mb-6 sticky top-24 z-40 relative transition-all duration-300 isolate">
                 {/* Background Layer */}
                 <div
-                    className="absolute inset-0 bg-[#0a0a0b] -z-10 rounded-xl shadow-lg border border-white/10"
+                    className="absolute inset-0 bg-surface -z-10 rounded-xl shadow-lg border border-border"
                 />
 
                 {/* Background Image Overlay */}
@@ -935,7 +1060,7 @@ export default function EntryEditor() {
                             className="absolute inset-0 z-[-5] rounded-xl opacity-20 bg-cover bg-center pointer-events-none transition-opacity duration-500"
                             style={{ backgroundImage: `url(${images[0].url})` }}
                         />
-                        <div className="absolute inset-0 z-[-4] bg-gradient-to-b from-[#0a0a0b]/80 via-[#0a0a0b]/90 to-[#0a0a0b] rounded-xl" />
+                        <div className="absolute inset-0 z-[-4] bg-gradient-to-b from-bg/80 via-bg/90 to-bg rounded-xl" />
                     </>
                 )}
 
@@ -1105,22 +1230,6 @@ export default function EntryEditor() {
 
             {/* Content Container */}
             <div className={`glass-card flex-1 p-4 sm:p-6 md:p-8 overflow-hidden flex flex-col relative ${isEditing ? 'ring-2 ring-primary/30' : ''}`}>
-                
-                {/* Word Progress Bar (Editor Mode Only) */}
-                {isEditing && (
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-white/5 overflow-hidden z-20">
-                        <div 
-                            className="h-full bg-gradient-to-r from-primary to-secondary transition-all duration-500 ease-out"
-                            style={{ width: `${wordProgress}%` }}
-                        />
-                        {totalWordCount >= wordGoal && (
-                            <div className="absolute right-2 top-2 flex items-center text-[10px] text-green-400 font-bold uppercase tracking-widest animate-pulse">
-                                <Target className="w-3 h-3 mr-1" />
-                                Goal Reached
-                            </div>
-                        )}
-                    </div>
-                )}
 
                 {images.length > 0 && !isEditing && (
                     <div className={`mb-6 ${images.length === 1 ? 'flex justify-center' : 'columns-1 sm:columns-2 gap-4'}`}>
@@ -1149,7 +1258,28 @@ export default function EntryEditor() {
                 )}
 
                 {isEditing ? (
-                    <div className="h-full flex flex-col" onPaste={handlePaste}>
+                    <div
+                        className="h-full flex flex-col relative"
+                        onPaste={handlePaste}
+                        onDragEnter={(event) => {
+                            if (event.dataTransfer?.types?.includes('Files')) setIsFileDragging(true);
+                        }}
+                        onDragOver={(event) => {
+                            if (event.dataTransfer?.types?.includes('Files')) event.preventDefault();
+                        }}
+                        onDragLeave={(event) => {
+                            if (!event.currentTarget.contains(event.relatedTarget)) setIsFileDragging(false);
+                        }}
+                        onDrop={handleFileDrop}
+                    >
+                        {isFileDragging && (
+                            <div className="absolute inset-0 z-50 rounded-xl border-2 border-dashed border-primary bg-bg/90 flex items-center justify-center pointer-events-none">
+                                <div className="text-center text-primary">
+                                    <ImageIcon className="w-10 h-10 mx-auto mb-2" />
+                                    <p className="font-bold">Drop images to add them</p>
+                                </div>
+                            </div>
+                        )}
                         <div onClick={() => {
                             if (isInferredTitle) {
                                 toastError("Title is inferred from content. Please edit it in the journal entry.");
@@ -1175,7 +1305,7 @@ export default function EntryEditor() {
 
                         {/* Writing Prompt Callout */}
                         {showPrompts && (
-                            <div className="mb-3 sm:mb-6 p-3 sm:p-4 rounded-xl bg-secondary/10 border border-secondary/20 animate-in slide-in-from-top duration-300 relative group">
+                            <div className="mb-3 sm:mb-6 p-3 sm:p-4 rounded-xl bg-secondary/10 border border-secondary/20 animation-fade-in relative group">
                                 <button 
                                     onClick={() => setShowPrompts(false)}
                                     className="absolute top-2 right-2 text-text-muted hover:text-white"
@@ -1301,6 +1431,57 @@ export default function EntryEditor() {
                         </div>
 
                         <div className="flex-1 overflow-auto custom-scrollbar -mr-4 pr-4">
+                            {/* Writing progress — cycles every 100 main-entry words */}
+                            <div
+                                className={`mb-4 sm:mb-5 rounded-xl border p-3 sm:p-4 transition-colors ${
+                                    wordMilestoneFlash
+                                        ? 'border-secondary/40 bg-secondary/10 animate-progress-milestone'
+                                        : 'border-white/10 bg-white/5'
+                                }`}
+                                aria-live="polite"
+                            >
+                                <div className="mb-2.5 flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 text-[10px] sm:text-xs font-bold uppercase tracking-widest text-text-muted">
+                                        <Target className={`h-3.5 w-3.5 ${wordMilestoneFlash ? 'text-secondary' : 'text-primary'}`} />
+                                        Writing progress
+                                    </div>
+                                    <div
+                                        className={`flex items-center gap-2 text-[11px] tabular-nums ${
+                                            wordMilestoneFlash ? 'text-secondary animate-word-milestone' : 'text-text-muted'
+                                        }`}
+                                    >
+                                        <span className="font-medium">
+                                            {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                                        </span>
+                                        {wordMilestoneFlash ? (
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-secondary">
+                                                Well done · {wordMilestoneFlash}
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] text-text-muted/70">
+                                                {wordsUntilNextMilestone} to next
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="h-3 sm:h-3.5 rounded-full bg-black/30 border border-white/5 overflow-hidden shadow-inner">
+                                    <div
+                                        className={`h-full rounded-full bg-gradient-to-r from-primary via-primary-variant to-secondary shadow-[0_0_12px_rgba(139,92,246,0.35)] ${
+                                            wordMilestoneFlash
+                                                ? 'animate-progress-fill-flash'
+                                                : wordProgress === 0
+                                                    ? ''
+                                                    : 'transition-[width] duration-300 ease-out'
+                                        }`}
+                                        style={{ width: `${wordProgress}%` }}
+                                    />
+                                </div>
+                                <div className="mt-2 flex justify-between text-[10px] uppercase tracking-wider text-text-muted/60">
+                                    <span>{wordsInCycle || (wordMilestoneFlash ? wordCycleGoal : 0)} / {wordCycleGoal}</span>
+                                    <span>Resets every {wordCycleGoal}</span>
+                                </div>
+                            </div>
+
                             <div className="mb-4 sm:mb-6">
                                 <div className="mb-1.5 sm:mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
                                     <BookOpen className="h-4 w-4 text-primary" />
@@ -1373,7 +1554,7 @@ export default function EntryEditor() {
 
                                 {/* Collapsible Formatting Panel */}
                                 {showFormatting && (
-                                    <div className="flex flex-wrap items-center gap-1 p-1.5 bg-white/5 border border-white/10 rounded-lg animate-in fade-in slide-in-from-top duration-200 w-fit">
+                                    <div className="flex flex-wrap items-center gap-1 p-1.5 bg-white/5 border border-white/10 rounded-lg animation-fade-in w-fit">
                                         <button
                                             type="button"
                                             onClick={() => mdeInstance && EasyMDE.toggleBold(mdeInstance)}
@@ -1762,10 +1943,14 @@ export default function EntryEditor() {
             />
 
             {/* Caption Edit Modal */}
-            {editingCaptionIndex !== null && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                    <div className="glass-card w-full max-w-md p-6 relative animate-in fade-in zoom-in duration-200">
-                        <h3 className="text-xl font-bold text-white mb-4">Image Caption</h3>
+            <Modal
+                isOpen={editingCaptionIndex !== null}
+                onClose={() => setEditingCaptionIndex(null)}
+                labelledBy="image-caption-title"
+                className="glass-card w-full max-w-md p-6 bg-surface"
+                backdropClassName="bg-black/80"
+            >
+                        <h3 id="image-caption-title" className="text-xl font-bold text-text mb-4">Image Caption</h3>
                         <textarea
                             value={tempCaption}
                             onChange={(e) => setTempCaption(e.target.value)}
@@ -1775,12 +1960,14 @@ export default function EntryEditor() {
                         />
                         <div className="flex justify-end gap-3">
                             <button
+                                type="button"
                                 onClick={() => setEditingCaptionIndex(null)}
                                 className="glass-button px-4 py-2 text-text hover:bg-white/10"
                             >
                                 Cancel
                             </button>
                             <button
+                                type="button"
                                 onClick={() => {
                                     const newImages = [...images];
                                     newImages[editingCaptionIndex].caption = tempCaption.trim();
@@ -1792,19 +1979,22 @@ export default function EntryEditor() {
                                 Save Caption
                             </button>
                         </div>
-                    </div>
-                </div>
-            )}
+            </Modal>
 
             {/* Lightbox Modal - Portaled to body to avoid z-index stacking context issues */}
-            {lightboxImage && createPortal(
-                <div
-                    className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center animate-in fade-in duration-300 overflow-auto p-4 sm:p-8"
-                    onClick={closeLightbox}
+            {lightboxImage && (
+                <Modal
+                    isOpen={true}
+                    onClose={closeLightbox}
+                    labelledBy="image-lightbox-title"
+                    zIndexClassName="z-[9999]"
+                    containerClassName="items-stretch justify-stretch"
+                    backdropClassName="bg-black/95"
+                    className="w-full h-full flex flex-col items-center justify-center overflow-auto p-4 sm:p-8"
                 >
+                    <h2 id="image-lightbox-title" className="sr-only">Full screen journal image</h2>
                     <div
                         className="relative flex flex-col items-center shrink-0"
-                        onClick={(e) => e.stopPropagation()}
                     >
                         {/* Caption */}
                         {lightboxImage.caption && (
@@ -1842,10 +2032,12 @@ export default function EntryEditor() {
                         onClick={(e) => e.stopPropagation()}
                     >
                         <button
+                            type="button"
                             onClick={handleZoomOut}
                             disabled={zoomLevel <= 1}
                             className="p-2 hover:bg-white/10 rounded-full text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Zoom Out"
+                            aria-label="Zoom out"
                         >
                             <ChevronLeft className="w-5 h-5 rotate-[-90deg]" />
                         </button>
@@ -1855,10 +2047,12 @@ export default function EntryEditor() {
                         </span>
 
                         <button
+                            type="button"
                             onClick={handleZoomIn}
                             disabled={zoomLevel >= 3}
                             className="p-2 hover:bg-white/10 rounded-full text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                             title="Zoom In"
+                            aria-label="Zoom in"
                         >
                             <ChevronRight className="w-5 h-5 rotate-[-90deg]" />
                         </button>
@@ -1866,15 +2060,16 @@ export default function EntryEditor() {
                         <div className="w-px h-6 bg-white/20 mx-1"></div>
 
                         <button
+                            type="button"
                             onClick={closeLightbox}
                             className="p-2 hover:bg-white/10 rounded-full text-white transition-colors"
                             title="Close"
+                            aria-label="Close image viewer"
                         >
                             <X className="w-5 h-5" />
                         </button>
                     </div>
-                </div>,
-                document.body
+                </Modal>
             )}
 
             {animationActive && buttonRect && createPortal(

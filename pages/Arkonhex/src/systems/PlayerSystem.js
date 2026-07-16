@@ -48,6 +48,7 @@ export class PlayerSystem {
         this.isSwimming = false;
         this.wasSubmerged = false;
         this.wasFeetInWater = false;
+        this.waterOverlay = document.getElementById('water-overlay');
         this.ambientStarted = false;
         this.ambientTime = 0; // Tracks elapsed time for ambient volume modulation
         this.lastSineWasLow = false; // Used to detect sine trough crossing for random seek
@@ -67,6 +68,21 @@ export class PlayerSystem {
         // Raycasting for block interaction
         this.raycaster = new THREE.Raycaster();
         this.selectedBlock = null;
+        this.interactionScreenCenter = new THREE.Vector2(0, 0);
+        this.interactionMeshes = [];
+        this.interactionIntersections = [];
+        this.interactionPoint = new THREE.Vector3();
+
+        // Reused hot-path objects avoid creating short-lived vectors and arrays
+        // on every frame.
+        this.forwardVector = new THREE.Vector3();
+        this.rightVector = new THREE.Vector3();
+        this.moveDirection = new THREE.Vector3();
+        this.cameraWorldPosition = new THREE.Vector3();
+        this.digitCodes = [
+            'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
+            'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
+        ];
 
         // Highlight Mesh
         const highlightGeom = new THREE.CylinderGeometry(HEX_SIZE * 1.05, HEX_SIZE * 1.05, 1.05, 6);
@@ -146,20 +162,18 @@ export class PlayerSystem {
 
     updateMovement(delta) {
         // Calculate forward and right vectors based on yaw
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.yawObject.quaternion);
-        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.yawObject.quaternion);
+        const forward = this.forwardVector.set(0, 0, -1).applyQuaternion(this.yawObject.quaternion);
+        const right = this.rightVector.set(1, 0, 0).applyQuaternion(this.yawObject.quaternion);
 
         forward.y = 0; right.y = 0;
         forward.normalize(); right.normalize();
 
         // Input direction
-        let moveDir = new THREE.Vector3(0, 0, 0);
+        const moveDir = this.moveDirection.set(0, 0, 0);
         if (this.engine.touchManager && this.engine.touchManager.joystickActive) {
             const tMove = this.engine.touchManager.getMovementVector();
-            if (tMove.y < 0) moveDir.add(forward.clone().multiplyScalar(-tMove.y));
-            if (tMove.y > 0) moveDir.sub(forward.clone().multiplyScalar(tMove.y));
-            if (tMove.x < 0) moveDir.sub(right.clone().multiplyScalar(-tMove.x));
-            if (tMove.x > 0) moveDir.add(right.clone().multiplyScalar(tMove.x));
+            if (tMove.y !== 0) moveDir.addScaledVector(forward, -tMove.y);
+            if (tMove.x !== 0) moveDir.addScaledVector(right, tMove.x);
         } else {
             if (this.input.isKeyDown('KeyW')) moveDir.add(forward);
             if (this.input.isKeyDown('KeyS')) moveDir.sub(forward);
@@ -223,7 +237,7 @@ export class PlayerSystem {
 
         // ---- CAMERA-LEVEL water detection (tint, swim sound, underwater ambience) ----
         let isSubmerged = false;
-        const cameraWorldPos = new THREE.Vector3();
+        const cameraWorldPos = this.cameraWorldPosition;
         this.camera.getWorldPosition(cameraWorldPos);
         const camBlockId = this.physics.getBlockAt(cameraWorldPos.x, cameraWorldPos.y, cameraWorldPos.z);
         if (camBlockId !== 0) {
@@ -257,9 +271,9 @@ export class PlayerSystem {
             currentSprint *= 0.33;
             currentFly *= 0.33;
 
-            // Toggle UI overlay
-            const overlay = document.getElementById('water-overlay');
-            if (overlay) overlay.style.display = 'block';
+            if (!this.wasSubmerged && this.waterOverlay) {
+                this.waterOverlay.style.display = 'block';
+            }
 
             // Handle swimming sound
             if (moveDir.lengthSq() > 0 && !this.isSwimming) {
@@ -270,14 +284,16 @@ export class PlayerSystem {
                 this.isSwimming = false;
             }
         } else {
-            const overlay = document.getElementById('water-overlay');
-            if (overlay) overlay.style.display = 'none';
+            if (this.wasSubmerged && this.waterOverlay) {
+                this.waterOverlay.style.display = 'none';
+            }
 
             if (this.isSwimming) {
                 this.audioManager.stopSFX('swim');
                 this.isSwimming = false;
             }
         }
+        this.wasSubmerged = isSubmerged;
 
         const baseSpeed = isSprinting ? currentSprint : currentWalk;
         const speed = this.isFlying ? currentFly : baseSpeed;
@@ -360,12 +376,6 @@ export class PlayerSystem {
      * Handle number keys 1-9 for hotbar slot selection, and scroll wheel.
      */
     updateHotbarKeys() {
-        // Number keys
-        const digitCodes = [
-            'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
-            'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
-        ];
-
         // Toggle tool mode
         if (this.input.consumeKey('KeyY')) {
             this.activeTool = this.activeTool === 'block' ? 'smooth' : 'block';
@@ -374,8 +384,8 @@ export class PlayerSystem {
             }
         }
 
-        for (let i = 0; i < digitCodes.length; i++) {
-            if (this.input.consumeKey(digitCodes[i])) {
+        for (let i = 0; i < this.digitCodes.length; i++) {
+            if (this.input.consumeKey(this.digitCodes[i])) {
                 if (this.activeTool === 'smooth') {
                     // Update smooth height (1-9 map to index+1, 0 maps to index 9 + 1 = 10)
                     this.smoothHeight = i + 1;
@@ -437,31 +447,51 @@ export class PlayerSystem {
 
     updateInteraction(delta) {
         // Set raycaster to center of screen
-        this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+        this.raycaster.setFromCamera(this.interactionScreenCenter, this.camera);
 
-        // Gather meshes to test
-        const meshes = Array.from(this.chunkSystem.chunks.values())
-            .map(c => c.mesh)
-            .filter(m => m !== null);
+        // Interaction range is eight world units, so only the player's chunk
+        // and its immediate neighbors can possibly be hit. Testing every one
+        // of the 217 loaded chunk groups made raycasting scale with view range.
+        const playerAxial = worldToAxial(this.position.x, this.position.z);
+        const playerChunkQ = Math.floor(playerAxial.q / 16);
+        const playerChunkR = Math.floor(playerAxial.r / 16);
+        const meshes = this.interactionMeshes;
+        meshes.length = 0;
 
-        let closestIntersection = null;
-
-        // Note: The chunks are Groups containing multiple meshes (solid, transparent)
-        const intersects = this.raycaster.intersectObjects(meshes, true);
-
-        if (intersects.length > 0 && intersects[0].distance < 8) {
-            closestIntersection = intersects[0];
+        for (let dcq = -1; dcq <= 1; dcq++) {
+            for (let dcr = -1; dcr <= 1; dcr++) {
+                const chunk = this.chunkSystem.chunks.get(
+                    `${playerChunkQ + dcq},${playerChunkR + dcr}`
+                );
+                if (chunk?.mesh) meshes.push(chunk.mesh);
+            }
         }
+
+        const intersects = this.interactionIntersections;
+        intersects.length = 0;
+        this.raycaster.intersectObjects(meshes, true, intersects);
+        const closestIntersection = intersects.length > 0 && intersects[0].distance < 8
+            ? intersects[0]
+            : null;
 
         if (closestIntersection && closestIntersection.face) {
             // Find block coordinate
             const hitPoint = closestIntersection.point;
             // Nudge point slightly inside the block using the face normal
-            const inwardPoint = hitPoint.clone().sub(closestIntersection.face.normal.clone().multiplyScalar(0.1));
+            const inwardPoint = this.interactionPoint
+                .copy(hitPoint)
+                .addScaledVector(closestIntersection.face.normal, -0.1);
             const { q, r } = worldToAxial(inwardPoint.x, inwardPoint.z);
             const y = Math.floor(inwardPoint.y);
 
-            this.selectedBlock = { q, r, y, normal: closestIntersection.face.normal };
+            if (this.selectedBlock) {
+                this.selectedBlock.q = q;
+                this.selectedBlock.r = r;
+                this.selectedBlock.y = y;
+                this.selectedBlock.normal = closestIntersection.face.normal;
+            } else {
+                this.selectedBlock = { q, r, y, normal: closestIntersection.face.normal };
+            }
 
             // Update highlight mesh
             const hexPos = axialToWorld(q, r);
@@ -515,7 +545,7 @@ export class PlayerSystem {
                 if (Math.abs(norm.y) > 0.5) {
                     placeY += Math.sign(norm.y);
                 } else {
-                    const outward = hitPoint.clone().add(norm.clone().multiplyScalar(0.5));
+                    const outward = this.interactionPoint.copy(hitPoint).addScaledVector(norm, 0.5);
                     const nextAxial = worldToAxial(outward.x, outward.z);
                     placeQ = nextAxial.q;
                     placeR = nextAxial.r;

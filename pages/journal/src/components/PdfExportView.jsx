@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { format, parseISO, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval } from 'date-fns';
+import { collection, query, where, getDocs, orderBy, documentId } from 'firebase/firestore';
+import { format, parseISO, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { FileDown, Calendar, Type, ChevronLeft, ChevronRight, Printer, Image as ImageIcon, Star } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 import html2pdf from 'html2pdf.js';
+import { useToast } from '../context/ToastContext';
 
 export default function PdfExportView() {
     const { currentUser } = useAuth();
+    const { error: toastError } = useToast();
     const [filterMode, setFilterMode] = useState('month'); // range, month, year
     const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -44,12 +46,6 @@ export default function PdfExportView() {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [previewScale, setPreviewScale] = useState(1);
-
-    // Initial load check
-    useEffect(() => {
-        if (filterMode === 'range' && !startDate && !endDate) return;
-        // Trigger fetch (logic below)
-    }, []);
 
     // Fetch tag definitions
     useEffect(() => {
@@ -118,14 +114,11 @@ export default function PdfExportView() {
                 }
 
                 if (start && end) {
-                    // Create Date Range Header String
-                    const dateRangeStr = `${format(start, 'MMMM d, yyyy')} - ${format(end, 'MMMM d, yyyy')}`;
-
                     q = query(
                         entriesRef,
-                        where('date', '>=', start),
-                        where('date', '<=', end),
-                        orderBy('date', 'asc')
+                        where(documentId(), '>=', format(start, 'yyyy-MM-dd')),
+                        where(documentId(), '<=', format(end, 'yyyy-MM-dd')),
+                        orderBy(documentId(), 'asc')
                     );
 
                     const querySnapshot = await getDocs(q);
@@ -160,7 +153,7 @@ export default function PdfExportView() {
                             ...data,
                             title: title || 'Untitled Entry',
                             // Ensure date is a string YYYY-MM-DD for consistency
-                            date: format(data.date.toDate(), 'yyyy-MM-dd'),
+                            date: doc.id,
                             content: content,
                             images: data.images || (data.imageUrl ? [{ url: data.imageUrl }] : (data.imageMetadata ? [{ url: data.imageMetadata.url }] : []))
                         };
@@ -201,28 +194,6 @@ export default function PdfExportView() {
                     const pageHeight = clientHeight > 0 ? clientHeight : 1123;
                     setTotalPages(Math.max(1, Math.ceil(scrollHeight / pageHeight)));
                     setCurrentPage(1); // Reset to first page on new content
-
-                    // Calculate TOC
-                    // Find all month headers or first entry of each month
-                    const newTocItems = [];
-                    let currentMonth = '';
-
-                    entries.forEach((entry, index) => {
-                        const entryDate = parseISO(entry.date);
-                        const monthStr = format(entryDate, 'MMMM yyyy');
-
-                        if (monthStr !== currentMonth) {
-                            currentMonth = monthStr;
-                            // Find the DOM element for this entry
-                            // We need to query selector strictly within our preview container to avoid other elements
-                            // But identifiers might be tricky. Let's use ID on the entry div.
-                            // Wait, we are in a timeout, render should be done.
-                            // BUT, React renders might take a tick.
-
-                            // Let's defer this calculation slightly more or rely on a separate effect if needed.
-                            // For now assuming the DOM is ready in this timeout.
-                        }
-                    });
 
                     // More robust TOC calculation reading actual DOM offsets
                     const items = [];
@@ -403,7 +374,7 @@ export default function PdfExportView() {
             }).save();
         } catch (err) {
             console.error('PDF Generation Failed:', err);
-            alert(`PDF Generation Failed: ${err.message}`);
+            toastError(`PDF generation failed: ${err.message}`);
         } finally {
             document.body.removeChild(clone);
             setIsExporting(false);
@@ -760,7 +731,7 @@ export default function PdfExportView() {
                 {/* A4 Page Container / Scrollable Area */}
                 <div
                     ref={previewContainerRef}
-                    className="flex-1 overflow-auto p-4 md:p-8 bg-[#1a1a1c] scroll-smooth print:p-0 print:block print:bg-white print:overflow-visible"
+                    className="flex-1 overflow-auto p-4 md:p-8 bg-surface scroll-smooth print:p-0 print:block print:bg-white print:overflow-visible"
                     onScroll={(e) => {
                         const pageHeight = e.target.clientHeight;
                         if (pageHeight > 0) {

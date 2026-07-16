@@ -22,7 +22,6 @@ function PrivateRoute({ children }) {
 }
 
 function App() {
-  console.log("App component rendering");
   return (
     <ToastProvider>
       <div className="text-text font-body">

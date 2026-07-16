@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { HardDrive, Image as ImageIcon, FileText, Loader } from 'lucide-react';
 
@@ -36,7 +36,9 @@ export default function StorageStats({ variant = 'entry', entryTextSize = 0, ent
         }
 
         // Image size
-        if (data.imageSize) {
+        if (Array.isArray(data.images) && data.images.length > 0) {
+            size += data.images.reduce((total, image) => total + (Number(image?.size) || 0), 0);
+        } else if (data.imageSize) {
             size += data.imageSize;
         } else if (data.imageMetadata && data.imageMetadata.sizeInBytes) {
             size += data.imageMetadata.sizeInBytes;
@@ -104,7 +106,7 @@ export default function StorageStats({ variant = 'entry', entryTextSize = 0, ent
                     </div>
 
                     {/* Hover Tooltip / Popover */}
-                    <div className="absolute bottom-full right-0 mb-2 w-48 p-3 rounded-lg bg-[#1a1b1e] border border-white/10 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 transform translate-y-2 group-hover:translate-y-0">
+                    <div className="absolute bottom-full right-0 mb-2 w-48 p-3 rounded-lg bg-surface border border-border shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 transform translate-y-2 group-hover:translate-y-0">
                         <div className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider border-b border-white/5 pb-1">Breakdown</div>
                         <div className="space-y-2">
                             <div className="flex justify-between items-center">

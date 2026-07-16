@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, documentId, onSnapshot } from 'firebase/firestore';
-import { format, subDays, subMonths, subYears, parseISO, startOfWeek, endOfWeek, isSameMonth, getMonth, getYear, isSameWeek } from 'date-fns';
+import { format, subDays, subMonths, subYears, parseISO, startOfWeek, endOfWeek, getMonth, getYear } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { History, Star, Calendar, MessageSquare, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import ImageWithSkeleton from './ImageWithSkeleton';
@@ -47,12 +47,13 @@ export default function MemoriesView() {
     const navigate = useNavigate();
     const [entries, setEntries] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+    const [reloadKey, setReloadKey] = useState(0);
 
     // Fetch past year of entries
     useEffect(() => {
         if (!currentUser) return;
 
-        setLoading(true);
         const endDate = new Date();
         const startDate = subYears(endDate, 1);
 
@@ -90,11 +91,12 @@ export default function MemoriesView() {
             setLoading(false);
         }, (error) => {
             console.error("Error fetching memory data:", error);
+            setLoadError('Your memories could not be loaded. Check your connection and try again.');
             setLoading(false);
         });
 
         return () => unsubscribe();
-    }, [currentUser]);
+    }, [currentUser, reloadKey]);
 
     const memories = useMemo(() => {
         const today = new Date();
@@ -168,14 +170,16 @@ export default function MemoriesView() {
     }, [entries]);
 
     const MemoryCard = ({ entry, label, icon: Icon, iconColor }) => (
-        <div
+        <button
+            type="button"
             onClick={() => navigate(`/entry/${entry.id}`, { state: { from: '/memories' } })}
-            className={`glass-card overflow-hidden hover:bg-white/5 cursor-pointer transition-all duration-300 group flex flex-col h-full ring-1 hover:ring-primary/30 ${entry.isSpecial ? 'ring-yellow-400/60 border-2 border-yellow-400/20 bg-yellow-400/5' : 'ring-white/5'}`}
+            aria-label={`Open ${entry.title} from ${format(entry.date, 'MMMM d, yyyy')}`}
+            className={`glass-card overflow-hidden text-left hover:bg-white/5 cursor-pointer transition-all duration-300 group flex flex-col h-full ring-1 hover:ring-primary/30 focus:outline-none focus:ring-2 focus:ring-primary ${entry.isSpecial ? 'ring-yellow-400/60 border-2 border-yellow-400/20 bg-yellow-400/5' : 'ring-white/5'}`}
         >
             {/* Header */}
             <div className="bg-black/20 p-3 border-b border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <Icon className={`w-4 h-4 ${entry.isSpecial ? 'text-yellow-400' : iconColor}`} />
+                    {React.createElement(Icon, { className: `w-4 h-4 ${entry.isSpecial ? 'text-yellow-400' : iconColor}` })}
                     <span className="text-sm font-medium text-white/90">{label}</span>
                     {entry.isSpecial && <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />}
                 </div>
@@ -217,7 +221,7 @@ export default function MemoriesView() {
                     </div>
                 </div>
             </div>
-        </div>
+        </button>
     );
 
     if (loading) {
@@ -225,6 +229,22 @@ export default function MemoriesView() {
             <div className="flex flex-col items-center justify-center p-12 text-text-muted animate-pulse">
                 <History className="w-12 h-12 mb-4 opacity-50" />
                 <p>Retrieving memories...</p>
+            </div>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <div role="alert" className="glass-card p-10 text-center">
+                <History className="w-10 h-10 mx-auto mb-4 text-primary" />
+                <p className="text-text-secondary mb-4">{loadError}</p>
+                <button type="button" onClick={() => {
+                    setLoading(true);
+                    setLoadError('');
+                    setReloadKey((key) => key + 1);
+                }} className="glass-button px-4 py-2 text-text">
+                    Try again
+                </button>
             </div>
         );
     }

@@ -6,8 +6,12 @@ const ToastContext = createContext(null);
 export function ToastProvider({ children }) {
     const [toasts, setToasts] = useState([]);
 
+    const removeToast = useCallback((id) => {
+        setToasts(prev => prev.filter(toast => toast.id !== id));
+    }, []);
+
     const addToast = useCallback((message, type = 'info', duration = 5000) => {
-        const id = Date.now();
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         setToasts(prev => [...prev, { id, message, type }]);
 
         if (duration) {
@@ -15,11 +19,7 @@ export function ToastProvider({ children }) {
                 removeToast(id);
             }, duration);
         }
-    }, []);
-
-    const removeToast = useCallback((id) => {
-        setToasts(prev => prev.filter(toast => toast.id !== id));
-    }, []);
+    }, [removeToast]);
 
     const success = useCallback((message) => addToast(message, 'success'), [addToast]);
     const error = useCallback((message) => addToast(message, 'error'), [addToast]);
@@ -28,10 +28,11 @@ export function ToastProvider({ children }) {
     return (
         <ToastContext.Provider value={{ addToast, removeToast, success, error, info }}>
             {children}
-            <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none">
+            <div className="fixed bottom-24 right-4 left-4 sm:left-auto md:bottom-4 z-[110] flex flex-col gap-2 max-w-sm pointer-events-none" aria-live="polite" aria-atomic="false">
                 {toasts.map(toast => (
                     <div
                         key={toast.id}
+                        role={toast.type === 'error' ? 'alert' : 'status'}
                         className={`
                             pointer-events-auto flex items-start gap-3 p-4 rounded-lg shadow-lg border backdrop-blur-md transition-all duration-300 animate-slide-in
                             ${toast.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-200' : ''}
@@ -46,7 +47,9 @@ export function ToastProvider({ children }) {
                         <p className="text-sm font-medium">{toast.message}</p>
 
                         <button
+                            type="button"
                             onClick={() => removeToast(toast.id)}
+                            aria-label="Dismiss notification"
                             className="shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                         >
                             <X className="w-4 h-4" />

@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React from 'react';
 import { X, LogOut } from 'lucide-react';
+import Modal from './Modal';
 
 export default function MobileMenuModal({ 
     isOpen, 
@@ -9,45 +9,24 @@ export default function MobileMenuModal({
     handleLogout, 
     navItems: NavItems
 }) {
-    // Lock body scroll when open
-    useEffect(() => {
-        if (isOpen) {
-            document.body.style.overflow = 'hidden';
-        } else {
-            document.body.style.overflow = 'unset';
-        }
-        return () => {
-            document.body.style.overflow = 'unset';
-        };
-    }, [isOpen]);
-
-    // Close on escape
-    useEffect(() => {
-        const handleEsc = (e) => {
-            if (isOpen && e.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    }, [isOpen, onClose]);
-
-    if (!isOpen) return null;
-
-    return createPortal(
-        <div className="fixed inset-0 z-[100] md:hidden">
-            {/* Backdrop */}
-            <div 
-                className="absolute inset-0 bg-black/80 backdrop-blur-md animate-fade-in"
-                onClick={onClose}
-            />
-
-            {/* Modal Content */}
-            <div className="absolute inset-x-4 top-20 bottom-8 glass-card flex flex-col animate-scale-in overflow-hidden shadow-2xl bg-[#0a0a0b]/95 border border-white/10">
+    return (
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            labelledBy="mobile-navigation-title"
+            zIndexClassName="z-[100]"
+            containerClassName="md:hidden items-stretch justify-center px-4 pt-20 pb-8"
+            backdropClassName="bg-black/80"
+            className="w-full glass-card flex flex-col overflow-hidden shadow-2xl bg-surface/95 border border-border"
+        >
                 {/* Header */}
-                <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                    <h2 className="text-xl font-serif font-bold text-white">Navigation</h2>
+                <div className="p-4 border-b border-border flex items-center justify-between">
+                    <h2 id="mobile-navigation-title" className="text-xl font-serif font-bold text-text">Navigation</h2>
                     <button 
+                        type="button"
                         onClick={onClose}
-                        className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-white transition-all duration-200"
+                        aria-label="Close navigation"
+                        className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-text transition-all duration-200"
                     >
                         <X className="h-6 w-6" />
                     </button>
@@ -61,8 +40,9 @@ export default function MobileMenuModal({
                 </div>
 
                 {/* Footer */}
-                <div className="p-4 border-t border-white/10 bg-black/20">
+                <div className="p-4 border-t border-border bg-black/20">
                     <button
+                        type="button"
                         onClick={handleLogout}
                         className="flex items-center w-full px-4 py-3 rounded-lg text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors font-medium"
                     >
@@ -75,8 +55,6 @@ export default function MobileMenuModal({
                         </div>
                     )}
                 </div>
-            </div>
-        </div>,
-        document.body
+        </Modal>
     );
 }

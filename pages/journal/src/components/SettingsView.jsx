@@ -973,7 +973,7 @@ export default function SettingsView() {
                     onClick={() => closeDeleteSectionModal()}
                 />
 
-                <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-white/10 bg-[#18181b] shadow-2xl animation-scale-in">
+                <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface shadow-2xl animation-scale-in">
                     <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-4">
                         <div className="min-w-0">
                             <h3 className="flex items-center gap-2 text-lg font-bold text-white">
@@ -1096,7 +1096,7 @@ export default function SettingsView() {
                     }}
                 />
 
-                <div className="relative w-full max-w-md overflow-hidden rounded-xl border border-white/10 bg-[#18181b] shadow-2xl animation-scale-in">
+                <div className="relative w-full max-w-md overflow-hidden rounded-xl border border-border bg-surface shadow-2xl animation-scale-in">
                     <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-4">
                         <div className="min-w-0">
                             <h3 className="flex items-center gap-2 text-lg font-bold text-white">
@@ -1154,7 +1154,7 @@ export default function SettingsView() {
                     onClick={closeCustomTitleModal}
                 />
 
-                <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-white/10 bg-[#18181b] shadow-2xl animation-scale-in">
+                <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface shadow-2xl animation-scale-in">
                     <div className="flex items-center justify-between border-b border-white/10 bg-white/5 p-4">
                         <div className="min-w-0">
                             <h3 className="text-lg font-bold text-white">Disable custom titles?</h3>

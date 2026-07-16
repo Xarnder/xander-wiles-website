@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Upload, FolderInput, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, doc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { doc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { correctCommonTypos, parseJournalEntries } from '../utils/journalParser';
 
 export default function DirectoryImporter() {
@@ -18,7 +18,7 @@ export default function DirectoryImporter() {
             return;
         }
 
-        if (!window.confirm("WARNING: This will overwrite any existing entries with the same date. Do you want to continue?")) {
+        if (!window.confirm("This will update the title and content for matching dates while preserving images, tags, custom fields, and summaries. Do you want to continue?")) {
             return;
         }
 
@@ -98,8 +98,6 @@ export default function DirectoryImporter() {
             return;
         }
 
-        console.log(`DirectoryImporter: Starting upload for user ${currentUser.uid} (${currentUser.email}). entries: ${entries.length}`);
-
         // Batch writes (limit 500)
         const batchSize = 400; // Safe margin
         const chunks = [];
@@ -123,15 +121,13 @@ export default function DirectoryImporter() {
                         userId: currentUser.uid,
                         sourceFile: entry.sourceFile,
                         updatedAt: serverTimestamp()
-                    });
+                    }, { merge: true });
                 });
 
                 await batch.commit();
                 uploadedCount += chunk.length;
-                console.log(`DirectoryImporter: Successfully uploaded batch of ${chunk.length} entries.`);
                 setStats(prev => ({ ...prev, entriesUploaded: uploadedCount }));
             }
-            console.log("DirectoryImporter: Upload complete.");
         } catch (error) {
             console.error("DirectoryImporter: Error uploading entries:", error);
             if (error.code === 'permission-denied') {
@@ -178,9 +174,9 @@ export default function DirectoryImporter() {
             )}
 
             {errorMessage && !isImporting && (
-                <div className="fixed bottom-4 right-4 bg-red-900 border border-red-700 text-white p-4 rounded-md shadow-lg z-50">
+                <div role="alert" className="fixed bottom-24 md:bottom-4 right-4 left-4 sm:left-auto bg-red-900 border border-red-700 text-white p-4 pr-10 rounded-md shadow-lg z-[110]">
                     <p>{errorMessage}</p>
-                    <button onClick={() => setErrorMessage('')} className="absolute top-1 right-2 text-xs opacity-70 hover:opacity-100">X</button>
+                    <button type="button" aria-label="Dismiss import error" onClick={() => setErrorMessage('')} className="absolute top-2 right-3 text-xs opacity-70 hover:opacity-100">X</button>
                 </div>
             )}
         </div>

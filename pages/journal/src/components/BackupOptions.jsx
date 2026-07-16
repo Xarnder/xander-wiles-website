@@ -252,7 +252,7 @@ export default function BackupOptions({ showTrigger = true }) {
 
             {isOpen && ReactDOM.createPortal(
                 <div className="fixed inset-0 z-[100] flex flex-col items-center overflow-y-auto p-4 bg-black/80 backdrop-blur-md animation-fade-in">
-                    <div className="glass-card w-full max-w-lg p-6 relative overflow-hidden flex flex-col max-h-[85vh] my-auto bg-[#1a1b1e]/95 shadow-2xl">
+                    <div className="glass-card w-full max-w-lg p-6 relative overflow-hidden flex flex-col max-h-[85vh] my-auto bg-surface/95 shadow-2xl">
                         {/* Header */}
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-serif font-bold text-white flex items-center gap-2">

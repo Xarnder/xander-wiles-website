@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, documentId } from 'firebase/firestore';
-import { format, startOfMonth, endOfMonth, addMonths, subMonths, parseISO, getDate } from 'date-fns';
+import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight, Calendar, Star } from 'lucide-react';
 
 export default function MonthView() {
@@ -12,12 +12,15 @@ export default function MonthView() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [entries, setEntries] = useState({});
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         let unsubscribe = () => { };
 
         async function fetchMonthEntries() {
             setLoading(true);
+            setLoadError('');
             if (!currentUser) return;
 
             try {
@@ -74,11 +77,13 @@ export default function MonthView() {
                     setLoading(false);
                 }, (error) => {
                     console.error("Error fetching entries:", error);
+                    setLoadError('This month could not be loaded. Check your connection and try again.');
                     setLoading(false);
                 });
 
             } catch (error) {
                 console.error("Error setting up listener:", error);
+                setLoadError('This month could not be loaded. Check your connection and try again.');
                 setLoading(false);
             }
         }
@@ -86,15 +91,17 @@ export default function MonthView() {
         fetchMonthEntries();
 
         return () => unsubscribe();
-    }, [currentDate, currentUser]);
+    }, [currentDate, currentUser, reloadKey]);
 
     // Handle arrow keys
     useEffect(() => {
         const handleKeyDown = (e) => {
+            const target = e.target;
+            if (target instanceof HTMLElement && (target.matches('input, textarea, select') || target.isContentEditable)) return;
             if (e.key === 'ArrowLeft') {
-                prevMonth();
+                setCurrentDate((date) => subMonths(date, 1));
             } else if (e.key === 'ArrowRight') {
-                nextMonth();
+                setCurrentDate((date) => addMonths(date, 1));
             }
         };
 
@@ -125,11 +132,13 @@ export default function MonthView() {
     return (
         <div className="space-y-6 max-w-2xl mx-auto animation-fade-in">
             {/* Header / Navigation */}
-            <div className="flex items-center justify-between glass-card p-4">
+            <div className="sticky top-24 z-20 flex items-center justify-between glass-card p-4">
                 <button
+                    type="button"
                     onClick={prevMonth}
                     className="glass-button p-2 text-text-muted hover:text-white rounded-full hover:bg-white/10"
                     title="Previous Month (Left Arrow)"
+                    aria-label="Previous month"
                 >
                     <ChevronLeft className="w-6 h-6" />
                 </button>
@@ -141,9 +150,11 @@ export default function MonthView() {
                 </div>
 
                 <button
+                    type="button"
                     onClick={nextMonth}
                     className="glass-button p-2 text-text-muted hover:text-white rounded-full hover:bg-white/10"
                     title="Next Month (Right Arrow)"
+                    aria-label="Next month"
                 >
                     <ChevronRight className="w-6 h-6" />
                 </button>
@@ -153,6 +164,13 @@ export default function MonthView() {
             <div className="glass-card overflow-hidden">
                 {loading ? (
                     <div className="p-8 text-center text-text-muted animate-pulse">Loading...</div>
+                ) : loadError ? (
+                    <div role="alert" className="p-8 text-center">
+                        <p className="text-text-secondary mb-4">{loadError}</p>
+                        <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="glass-button px-4 py-2 text-text">
+                            Try again
+                        </button>
+                    </div>
                 ) : (
                     <div className="divide-y divide-white/10">
                         {monthDates.map((dateObj) => {
@@ -204,7 +222,7 @@ export default function MonthView() {
                                         <div className="w-12 h-12 shrink-0 rounded-md overflow-hidden bg-white/5 border border-white/10 relative group">
                                             <img
                                                 src={entryData.imageUrl}
-                                                alt="Thumb"
+                                                alt={`${entryData.title} thumbnail`}
                                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                                 loading="lazy"
                                             />

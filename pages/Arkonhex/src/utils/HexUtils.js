@@ -91,13 +91,7 @@ export function hexDistance(q1, r1, q2, r2) {
  * @param {Function} isSolidFn Function to check if blockAboveId is solid
  * @returns {number} The physical render height [0.6, 1.0]
  */
-export function getSeededBlockHeight(q, r, y, seedStr, blockAboveId, isSolidFn) {
-    // If there is a solid block immediately above, force full height
-    if (blockAboveId !== 0 && isSolidFn(blockAboveId)) {
-        return 1.0;
-    }
-
-    // Convert seed string to a quick integer hash
+export function hashSeed(seedStr) {
     let hash = 0;
     if (seedStr && seedStr.length > 0) {
         for (let i = 0; i < seedStr.length; i++) {
@@ -105,6 +99,18 @@ export function getSeededBlockHeight(q, r, y, seedStr, blockAboveId, isSolidFn) 
             hash |= 0;
         }
     }
+    return hash;
+}
+
+export function getSeededBlockHeight(q, r, y, seedOrHash, blockAboveId, isSolidFn) {
+    // If there is a solid block immediately above, force full height
+    if (blockAboveId !== 0 && isSolidFn(blockAboveId)) {
+        return 1.0;
+    }
+
+    // Hot mesh/physics paths pass a precomputed numeric hash. String callers
+    // remain supported for compatibility.
+    const hash = typeof seedOrHash === 'number' ? seedOrHash : hashSeed(seedOrHash);
 
     // Create a 3D procedural pseudo-random float [0, 1] mapped to [0.6, 1.0]
     // The exact same parameters must yield the exact same height

@@ -24,6 +24,11 @@ export class Renderer {
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.0;
 
+        // GTAO is a spatially smooth effect that is denoised before compositing.
+        // Rendering it at half resolution cuts its pixel cost by 75% while the
+        // full-resolution color pass keeps terrain and texture detail sharp.
+        this.gtaoResolutionScale = 0.5;
+
         // Add canvas to DOM
         this.engine.container.appendChild(this.renderer.domElement);
 
@@ -70,10 +75,21 @@ export class Renderer {
             samples: 16
         });
         this.composer.addPass(this.gtaoPass);
+        this.resizeGtao(width, height);
 
         // 3. Output (Tonemapping/Coloring)
         this.outputPass = new OutputPass();
         this.composer.addPass(this.outputPass);
+    }
+
+    resizeGtao(width, height) {
+        if (!this.gtaoPass) return;
+
+        const scale = THREE.MathUtils.clamp(this.gtaoResolutionScale, 0.25, 1);
+        this.gtaoPass.setSize(
+            Math.max(1, Math.floor(width * scale)),
+            Math.max(1, Math.floor(height * scale))
+        );
     }
 
     setGtaoIntensity(intensity) {
@@ -116,9 +132,9 @@ export class Renderer {
         if (this.composer) {
             this.composer.setSize(width, height);
         }
-        if (this.gtaoPass) {
-            this.gtaoPass.updateGtaoMaterial({ resolution: new THREE.Vector2(width, height) });
-        }
+        // EffectComposer resizes every pass to full resolution, so restore the
+        // deliberately smaller AO buffers afterwards.
+        this.resizeGtao(width, height);
 
         // Update Thick Line resolution for the shared outline material
         const chunkSystem = this.engine.chunkSystem;

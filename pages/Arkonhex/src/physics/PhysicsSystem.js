@@ -1,10 +1,19 @@
-import { worldToAxial, HEX_SIZE, HEX_WIDTH, getSeededBlockHeight } from '../utils/HexUtils.js';
+import { worldToAxial, HEX_SIZE, HEX_WIDTH, getSeededBlockHeight, hashSeed } from '../utils/HexUtils.js?v=42';
 
 export class PhysicsSystem {
     constructor(engine, chunkSystem) {
         this.engine = engine;
         this.chunkSystem = chunkSystem;
         this.gravity = -30;
+        this.checkPoints = Array.from({ length: 5 }, () => ({ x: 0, z: 0 }));
+        this.collisionResult = { onGround: false };
+        this.seedHash = hashSeed("arkonhex");
+        this.solidMask = new Uint8Array(256);
+        for (let id = 1; id < this.solidMask.length; id++) {
+            const definition = this.chunkSystem.blockSystem.getBlockDef(id);
+            this.solidMask[id] = definition?.hardness > 0 ? 1 : 0;
+        }
+        this.isSolidBlock = (id) => this.isSolid(id);
     }
 
     /**
@@ -16,15 +25,16 @@ export class PhysicsSystem {
 
         const { q, r } = worldToAxial(x, z);
 
-        // We need the world seed from the engine/worldgen
-        // The seed exists on engine.worldSystem.worldGen.seed or similar, but let's grab it safely
-        const seed = this.engine.worldSystem?.currentWorld?.seed || "arkonhex";
-
         const blockAboveId = this.getBlockAt(x, y + 1, z);
 
-        const isSolidFn = (id) => this.isSolid(id);
-
-        return getSeededBlockHeight(q, r, Math.floor(y), seed, blockAboveId, isSolidFn);
+        return getSeededBlockHeight(
+            q,
+            r,
+            Math.floor(y),
+            this.seedHash,
+            blockAboveId,
+            this.isSolidBlock
+        );
     }
     getBlockAt(x, y, z) {
         if (y < 0 || y >= 64) return 0;
@@ -74,13 +84,17 @@ export class PhysicsSystem {
 
         // Wait, for vertical collision, we should test the player's bounding cylinder volume against blocks.
         // For simplicity, just checking center point + radius points
-        const checkPoints = [
-            { x: position.x, z: position.z }, // Center
-            { x: position.x + radius, z: position.z },
-            { x: position.x - radius, z: position.z },
-            { x: position.x, z: position.z + radius },
-            { x: position.x, z: position.z - radius }
-        ];
+        const checkPoints = this.checkPoints;
+        checkPoints[0].x = position.x;
+        checkPoints[0].z = position.z;
+        checkPoints[1].x = position.x + radius;
+        checkPoints[1].z = position.z;
+        checkPoints[2].x = position.x - radius;
+        checkPoints[2].z = position.z;
+        checkPoints[3].x = position.x;
+        checkPoints[3].z = position.z + radius;
+        checkPoints[4].x = position.x;
+        checkPoints[4].z = position.z - radius;
 
         // Refined Vertical Check
         for (let pt of checkPoints) {
@@ -182,13 +196,11 @@ export class PhysicsSystem {
 
         position.set(nextX, nextY, nextZ);
 
-        return { onGround };
+        this.collisionResult.onGround = onGround;
+        return this.collisionResult;
     }
 
     isSolid(blockId) {
-        if (blockId === 0) return false;
-        const def = this.chunkSystem.blockSystem.getBlockDef(blockId);
-        // Assuming water/air are non-solid unless hardness is defined to block
-        return def && def.hardness > 0;
+        return this.solidMask[blockId] === 1;
     }
 }

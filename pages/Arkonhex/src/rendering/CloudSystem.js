@@ -15,7 +15,11 @@ export class CloudSystem {
         this.cloudRadius = 1200; // How far to render clouds
         this.castShadows = false; // Toggled by Settings Menu
 
-        this.cloudMeshes = new Map(); // key -> mesh
+        // Retained as a coordinate cache and as the public marker used by the
+        // settings UI to locate this system. Cloud geometry is instanced below.
+        this.cloudMeshes = new Map();
+        this.cloudBuildJob = null;
+        this.requestedCloudCenter = null;
 
         // Simplex noise specifically for clouds
         const prng = createPRNG("arkonhex_clouds");
@@ -40,7 +44,30 @@ export class CloudSystem {
         this.geometry = new THREE.CylinderGeometry(1, 1, 1, 6); // Size 1x1, we scale later
 
         this.cloudGroup = new THREE.Group();
+        this.cloudGroup.name = 'Clouds';
         this.engine.scene.add(this.cloudGroup);
+
+        // Double-buffer the instance data so a new cloud field can be prepared
+        // over several frames while the previous field remains visible.
+        const qRadius = Math.floor(this.cloudRadius / 32);
+        this.maxCloudInstances = 1 + 3 * qRadius * (qRadius + 1);
+        this.cloudInstances = [0, 1].map(() => {
+            const mesh = new THREE.InstancedMesh(
+                this.geometry,
+                this.material,
+                this.maxCloudInstances
+            );
+            mesh.count = 0;
+            mesh.visible = false;
+            mesh.castShadow = this.castShadows;
+            mesh.receiveShadow = false;
+            mesh.frustumCulled = false;
+            mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            this.cloudGroup.add(mesh);
+            return mesh;
+        });
+        this.activeCloudMeshIndex = 0;
+        this.instanceTransform = new THREE.Object3D();
 
         this.engine.registerSystem(this);
     }
@@ -92,104 +119,92 @@ export class CloudSystem {
 
             this.updateClouds(relX, relZ);
         }
+
+        // Advance one bounded portion of the cloud rebuild per frame. A full
+        // 4,000-cell scan never blocks a single frame.
+        if (this.cloudBuildJob) {
+            const result = this.cloudBuildJob.next();
+            if (result.done) this.cloudBuildJob = null;
+        }
     }
 
     updateClouds(relX, relZ) {
-        // We evaluate clouds on a much larger macro grid so we don't spam thousands of meshes.
-        // Let's use a huge virtual hex grid, e.g., cloud block 32 units wide.
         const CLOUD_SIZE = 32;
-
         const qRad = Math.floor(this.cloudRadius / CLOUD_SIZE);
-
         const pQ = Math.round(relX / (CLOUD_SIZE * Math.sqrt(3)));
         const pR = Math.round(relZ / (CLOUD_SIZE * 1.5));
+        const centerKey = `${pQ},${pR}`;
 
-        const neededClouds = new Set();
+        // The field only changes after crossing a 32-unit macro-cell. The old
+        // implementation rebuilt Sets and checked every cloud on every frame.
+        if (centerKey === this.requestedCloudCenter) return;
 
-        for (let dq = -qRad; dq <= qRad; dq++) {
-            for (let dr = -qRad; dr <= qRad; dr++) {
-                if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 <= qRad) {
-                    const q = pQ + dq;
-                    const r = pR + dr;
+        this.requestedCloudCenter = centerKey;
+        this.cloudBuildJob = this.buildCloudFieldGenerator(pQ, pR, qRad, CLOUD_SIZE);
+    }
 
-                    const key = `${q},${r}`;
-                    neededClouds.add(key);
+    *buildCloudFieldGenerator(centerQ, centerR, qRadius, size) {
+        const inactiveIndex = 1 - this.activeCloudMeshIndex;
+        const targetMesh = this.cloudInstances[inactiveIndex];
+        const nextCloudCoordinates = new Map();
+        const transform = this.instanceTransform;
+        let instanceCount = 0;
+        let visitedCount = 0;
 
-                    if (!this.cloudMeshes.has(key)) {
-                        this.spawnCloudAt(q, r, CLOUD_SIZE);
-                    } else {
-                        // Update existing cloud drift offset via noise density check
-                        this.updateCloudMesh(q, r, this.cloudMeshes.get(key), CLOUD_SIZE);
-                    }
+        targetMesh.visible = false;
+
+        for (let dq = -qRadius; dq <= qRadius; dq++) {
+            for (let dr = -qRadius; dr <= qRadius; dr++) {
+                if ((Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 > qRadius) {
+                    continue;
                 }
+
+                const q = centerQ + dq;
+                const r = centerR + dr;
+                const localX = (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r) * size;
+                const localZ = (3 / 2 * r) * size;
+                const nx = localX * this.cloudScale;
+                const nz = localZ * this.cloudScale;
+
+                let density = (this.noise.noise2D(nx, nz) + 1) / 2;
+                const macroNoise = (this.noise.noise2D(nx * 0.01, nz * 0.01) + 1) / 2;
+                if (macroNoise < 0.4) density = 0;
+
+                const key = `${q},${r}`;
+                if (density > this.cloudThreshold) {
+                    const pseudoRandom = Math.abs(Math.sin(q * 12.9898 + r * 78.233)) * 60;
+                    const scaleFac = size * ((density - this.cloudThreshold) * 3 + 1);
+
+                    transform.position.set(localX, this.cloudHeight + pseudoRandom, localZ);
+                    transform.scale.set(scaleFac, 10 + density * 15, scaleFac);
+                    transform.updateMatrix();
+                    targetMesh.setMatrixAt(instanceCount, transform.matrix);
+
+                    nextCloudCoordinates.set(key, true);
+                    instanceCount++;
+                } else {
+                    nextCloudCoordinates.set(key, null);
+                }
+
+                visitedCount++;
+                if (visitedCount % 128 === 0) yield;
             }
         }
 
-        // Cull far clouds
-        for (const [key, mesh] of this.cloudMeshes.entries()) {
-            if (!neededClouds.has(key)) {
-                if (mesh) this.cloudGroup.remove(mesh);
-                this.cloudMeshes.delete(key);
-            }
-        }
+        targetMesh.count = instanceCount;
+        targetMesh.castShadow = this.castShadows;
+        targetMesh.receiveShadow = false;
+        targetMesh.instanceMatrix.needsUpdate = true;
+
+        this.cloudInstances[this.activeCloudMeshIndex].visible = false;
+        targetMesh.visible = true;
+        this.activeCloudMeshIndex = inactiveIndex;
+        this.cloudMeshes = nextCloudCoordinates;
     }
 
-    spawnCloudAt(q, r, size) {
-        // Local Position within the moving Cloud Group
-        const localX = (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r) * size;
-        const localZ = (3 / 2 * r) * size;
-
-        // Static noise query based purely on coordinate
-        const nx = localX * this.cloudScale;
-        const nz = localZ * this.cloudScale;
-
-        // We use rigid cutoff noise threshold to make clear distinct fluffy shapes
-        let density = this.noise.noise2D(nx, nz);
-        density = (density + 1) / 2; // [0, 1]
-
-        // MACRO NOISE MASK: Evaluate the noise at a massive zoomed-out scale to carve huge blue-sky gaps
-        // Lower scale (0.01) makes the clear sky gaps much wider/longer periods
-        let macroNoise = this.noise.noise2D(nx * 0.01, nz * 0.01);
-        macroNoise = (macroNoise + 1) / 2; // [0, 1]
-
-        // If the region rolls low on the macro scale, explicitly kill the clouds in this chunk
-        // Decreased threshold to 0.4 means 40% of the sky is empty (Good cloud cover)
-        if (macroNoise < 0.4) {
-            density = 0;
-        }
-
-        // Create an instanced mesh or just a scaled group
-        // If density exceeds threshold, we spawn
-        if (density > this.cloudThreshold) {
-            const mesh = new THREE.Mesh(this.geometry, this.material);
-            // Stagger spawn height using a deterministic pseudo-random number based on the grid coordinate (q, r).
-            // This guarantees that adjacent/overlapping hexes are forcefully pushed onto completely different height planes!
-            const pseudoRandom = Math.abs(Math.sin(q * 12.9898 + r * 78.233)) * 60.0;
-            mesh.position.set(localX, this.cloudHeight + pseudoRandom, localZ);
-
-            // Scale hex radius based on density to make fluffy overlapping varied hexagons
-            const scaleFac = size * ((density - this.cloudThreshold) * 3 + 1);
-            // Thick clouds
-            mesh.scale.set(scaleFac, 10 + (density * 15), scaleFac);
-            mesh.castShadow = this.castShadows;
-            mesh.receiveShadow = false; // Never let clouds cast shadows onto themselves or each other
-
-            this.cloudGroup.add(mesh);
-            this.cloudMeshes.set(`${q},${r}`, mesh);
-
-            // Slightly optimize cull bounds
-            mesh.matrixAutoUpdate = false;
-            mesh.updateMatrix();
-        } else {
-            // Put a null marker so we don't keep testing
-            this.cloudMeshes.set(`${q},${r}`, null);
-        }
-    }
-
-    updateCloudMesh(q, r, mesh, size) {
-        // Because the noise and scale are completely static to the grid tile, we do not need to do anything! 
-        // The drift is handled entirely by the parent CloudGroup moving globally.
-        // We just leave the mesh exactly where it is.
-        return;
+    dispose() {
+        this.engine.scene.remove(this.cloudGroup);
+        this.geometry.dispose();
+        this.material.dispose();
     }
 }

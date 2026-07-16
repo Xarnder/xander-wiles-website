@@ -4,9 +4,11 @@ import { db } from '../firebase';
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { format, parse } from 'date-fns';
 import { Wrench } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 export default function DataRepair() {
     const { currentUser } = useAuth();
+    const { success, error: toastError, info } = useToast();
     const [scanning, setScanning] = useState(false);
     const [status, setStatus] = useState('');
 
@@ -52,10 +54,12 @@ export default function DataRepair() {
             const entriesRef = collection(db, 'users', currentUser.uid, 'entries');
             const snapshot = await getDocs(entriesRef);
 
-            const batch = writeBatch(db);
-            let fixCount = 0;
             let processed = 0;
             const total = snapshot.size;
+            const existingIds = new Set(snapshot.docs.map((entryDoc) => entryDoc.id));
+            const claimedTargets = new Set();
+            const fixes = [];
+            let collisionCount = 0;
 
             for (const docSnap of snapshot.docs) {
                 processed++;
@@ -78,40 +82,54 @@ export default function DataRepair() {
                             const actualDateId = format(actualDateObj, 'yyyy-MM-dd');
 
                             if (actualDateId !== currentId) {
-                                console.log(`Mismatch found! Content: ${rawDateStr} (${actualDateId}) vs Storage: ${currentId}`);
+                                if (existingIds.has(actualDateId) || claimedTargets.has(actualDateId)) {
+                                    collisionCount++;
+                                    continue;
+                                }
 
-                                // New Doc Ref
-                                const newDocRef = doc(db, 'users', currentUser.uid, 'entries', actualDateId);
-
-                                // Copy data to new doc
-                                batch.set(newDocRef, {
-                                    ...data,
-                                    date: actualDateObj, // Update stored date object too
-                                });
-
-                                // Delete old doc
-                                const oldDocRef = doc(db, 'users', currentUser.uid, 'entries', currentId);
-                                batch.delete(oldDocRef);
-
-                                fixCount++;
+                                claimedTargets.add(actualDateId);
+                                fixes.push({ currentId, actualDateId, actualDateObj, data });
                             }
                         }
                     }
                 }
             }
 
-            if (fixCount > 0) {
-                setStatus(`Committing ${fixCount} fixes...`);
-                await batch.commit();
-                alert(`Success! Fixed ${fixCount} entries. The page will now reload to update the calendar.`);
-                window.location.reload();
+            if (fixes.length > 0) {
+                const movesPerBatch = 200;
+                let committed = 0;
+
+                for (let i = 0; i < fixes.length; i += movesPerBatch) {
+                    const batch = writeBatch(db);
+                    const chunk = fixes.slice(i, i + movesPerBatch);
+
+                    chunk.forEach(({ currentId, actualDateId, actualDateObj, data }) => {
+                        const newDocRef = doc(db, 'users', currentUser.uid, 'entries', actualDateId);
+                        const oldDocRef = doc(db, 'users', currentUser.uid, 'entries', currentId);
+                        batch.set(newDocRef, { ...data, date: actualDateObj });
+                        batch.delete(oldDocRef);
+                    });
+
+                    setStatus(`Committing ${Math.min(i + chunk.length, fixes.length)}/${fixes.length} fixes...`);
+                    await batch.commit();
+                    committed += chunk.length;
+                }
+
+                success(`Repaired ${committed} ${committed === 1 ? 'entry' : 'entries'}.`);
+                if (collisionCount > 0) {
+                    info(`Skipped ${collisionCount} date ${collisionCount === 1 ? 'collision' : 'collisions'} to protect existing entries.`);
+                }
             } else {
-                alert("No date mismatches found.");
+                if (collisionCount > 0) {
+                    info(`No entries moved; ${collisionCount} date ${collisionCount === 1 ? 'collision needs' : 'collisions need'} manual review.`);
+                } else {
+                    info('No date mismatches found.');
+                }
             }
 
         } catch (error) {
             console.error("Repair failed:", error);
-            alert("An error occurred during repair. Check console.");
+            toastError('Date repair failed. No uncommitted changes were applied.');
         } finally {
             setScanning(false);
             setStatus('');
@@ -124,6 +142,7 @@ export default function DataRepair() {
             disabled={scanning}
             className="p-2 rounded-full hover:bg-white/5 text-text-muted hover:text-primary transition"
             title="Repair Dates"
+            aria-label={scanning ? status || 'Repairing entry dates' : 'Repair entry dates'}
         >
             <Wrench className={`h-5 w-5 ${scanning ? 'animate-spin' : ''}`} />
         </button>

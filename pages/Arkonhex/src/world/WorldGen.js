@@ -3,7 +3,7 @@ import { createPRNG } from '../utils/MathUtils.js';
 import { axialToWorld } from '../utils/HexUtils.js';
 import { Chunk } from './Chunk.js';
 import { CaveGenerator } from './CaveGenerator.js';
-import { CastleGenerator } from './CastleGenerator.js';
+import { CastleGenerator } from './CastleGenerator.js?v=42';
 
 const CHUNK_SIZE = 16;
 const CHUNK_HEIGHT = 64;
@@ -123,9 +123,21 @@ export class WorldGen {
                 let stoneValue = this.stoneNoise.noise2D(worldPos.x * stoneNoiseScale, worldPos.z * stoneNoiseScale);
                 stoneValue = (stoneValue + 1.0) / 2.0;
 
+                // Castle placement only depends on the column coordinate, not Y.
+                // Resolve it once instead of scanning nine castle regions for
+                // every one of the 64 vertical voxels.
+                const castleInfo = this.castleGen.getNearbyCastleCenter(globalQ, globalR);
+
                 for (let y = 0; y < CHUNK_HEIGHT; y++) {
                     // Check castle generator first
-                    const castleBlock = this.castleGen.getCastleBlock(globalQ, globalR, y, surfaceY, blockSystem);
+                    const castleBlock = this.castleGen.getCastleBlock(
+                        globalQ,
+                        globalR,
+                        y,
+                        surfaceY,
+                        blockSystem,
+                        castleInfo
+                    );
                     if (castleBlock !== null) {
                         if (castleBlock !== -1) {
                             chunk.setBlock(lq, lr, y, castleBlock);
@@ -208,11 +220,10 @@ export class WorldGen {
                         chunk.setBlock(lq, lr, y, waterId);
                     }
                 }
-            }
 
-            // Yield every 2 rows of the chunk to let the main thread render a frame
-            if (lr % 2 === 0) {
-                yield;
+                // Keep each generator step small enough for ChunkSystem's frame
+                // budget to interrupt generation before a visible hitch.
+                if (lq % 2 === 1) yield;
             }
         }
 

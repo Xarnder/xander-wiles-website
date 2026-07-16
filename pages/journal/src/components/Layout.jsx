@@ -9,6 +9,23 @@ import SearchModal from './SearchModal';
 import MobileMenuModal from './MobileMenuModal';
 import BackupOptions from './BackupOptions';
 
+function NavItem({ path, icon: Icon, label, currentPath, onSelect }) {
+    const isActive = currentPath === path || (path === '/' && currentPath.startsWith('/entry/'));
+    return (
+        <button
+            type="button"
+            onClick={() => onSelect(path)}
+            className={`flex items-center w-full px-4 py-3 rounded-lg transition-all duration-200 ${isActive
+                ? 'bg-primary/20 text-white'
+                : 'text-text-muted hover:bg-white/5 hover:text-white'
+            }`}
+        >
+            {React.createElement(Icon, { className: `h-5 w-5 mr-3 ${isActive ? 'text-primary' : ''}` })}
+            <span className="font-medium">{label}</span>
+        </button>
+    );
+}
+
 export default function Layout() {
     const { currentUser, logout } = useAuth();
     const navigate = useNavigate();
@@ -21,7 +38,6 @@ export default function Layout() {
     // Keep a real-time listener for the last 7 days to make "Quick Write" instantaneous
     useEffect(() => {
         if (!currentUser) {
-            setRecentEntries({});
             return;
         }
 
@@ -51,6 +67,7 @@ export default function Layout() {
 
     function handleQuickWrite() {
         if (!currentUser) return;
+        setIsQuickWriting(true);
         
         // Find the dates for the last 7 days
         const today = new Date();
@@ -79,6 +96,7 @@ export default function Layout() {
         }
 
         navigate(`/entry/${targetDate}`);
+        window.setTimeout(() => setIsQuickWriting(false), 500);
     }
 
     async function handleLogout() {
@@ -89,11 +107,6 @@ export default function Layout() {
             console.error('Failed to log out');
         }
     }
-
-    // Close mobile menu on navigation
-    useEffect(() => {
-        setIsMobileMenuOpen(false);
-    }, [location.pathname]);
 
     // Global Search Shortcut (Cmd+K / Ctrl+K)
     useEffect(() => {
@@ -128,23 +141,9 @@ export default function Layout() {
         document.title = title;
     }, [location.pathname]);
 
-    const NavItem = ({ path, icon: Icon, label, onClick }) => {
-        const isActive = location.pathname === path;
-        return (
-            <button
-                onClick={() => {
-                    navigate(path);
-                    if (onClick) onClick();
-                }}
-                className={`flex items-center w-full px-4 py-3 rounded-lg transition-all duration-200 ${isActive
-                    ? 'bg-primary/20 text-white'
-                    : 'text-text-muted hover:bg-white/5 hover:text-white'
-                    }`}
-            >
-                <Icon className={`h-5 w-5 mr-3 ${isActive ? 'text-primary' : ''}`} />
-                <span className="font-medium">{label}</span>
-            </button>
-        );
+    const handleMobileNavigate = (path) => {
+        setIsMobileMenuOpen(false);
+        navigate(path);
     };
 
     return (
@@ -156,14 +155,14 @@ export default function Layout() {
             <header className="sticky top-0 z-50 px-4 pt-4 pb-2">
                 <div className="glass-card max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center transition-all duration-300 relative">
                     {/* Logo / Title */}
-                    <div className="flex items-center cursor-pointer group" onClick={() => navigate('/')}>
+                    <button type="button" className="flex items-center cursor-pointer group" onClick={() => navigate('/')} aria-label="Go to journal calendar">
                         <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors mr-3">
                             <Book className="h-6 w-6 text-primary" />
                         </div>
                         <h1 className="hidden sm:block text-xl font-serif font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
                             Digital Journal
                         </h1>
-                    </div>
+                    </button>
 
                     {/* Desktop Actions */}
                     <div className="hidden md:flex items-center space-x-3">
@@ -173,87 +172,109 @@ export default function Layout() {
 
                         <div className="flex items-center gap-2 border-r border-white/10 pr-4 mr-1">
                             <button
+                                type="button"
                                 onClick={handleQuickWrite}
                                 className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
                                 title="Quick Write (Last unwritten day)"
+                                aria-label="Quick Write: open the oldest unwritten day from the past week"
                                 disabled={isQuickWriting}
                             >
                                 <PenTool className="h-5 w-5" />
                             </button>
                             <button
+                                type="button"
                                 onClick={() => setIsSearchOpen(true)}
                                 className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
                                 title="Search (Cmd+K)"
+                                aria-label="Search journal"
+                                aria-expanded={isSearchOpen}
                             >
                                 <Search className="h-5 w-5" />
                             </button>
                         </div>
 
                         <button
+                            type="button"
                             onClick={() => navigate('/')}
-                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
+                            className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/' || location.pathname.startsWith('/entry/') ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Calendar"
+                            aria-label="Calendar"
                         >
                             <CalendarIcon className="h-5 w-5" />
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => navigate('/month')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/month' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Month List View"
+                            aria-label="Month list view"
                         >
                             <List className="h-5 w-5" />
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => navigate('/images')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/images' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Photo Gallery"
+                            aria-label="Photo gallery"
                         >
                             <ImageIcon className="h-5 w-5" />
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => navigate('/stats')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/stats' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Stats View"
+                            aria-label="Statistics"
                         >
                             <BarChart className="h-5 w-5" />
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => navigate('/tags')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/tags' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Tags"
+                            aria-label="Tags"
                         >
                             <Tag className="h-5 w-5" />
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => navigate('/memories')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/memories' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Memories"
+                            aria-label="Memories"
                         >
                             <History className="h-5 w-5" />
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => navigate('/pdf-export')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/pdf-export' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Export PDF"
+                            aria-label="Export PDF"
                         >
                             <FileDown className="h-5 w-5" />
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => navigate('/settings')}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${location.pathname === '/settings' ? 'text-primary bg-white/5' : 'text-text-muted hover:text-primary'}`}
                             title="Settings"
+                            aria-label="Settings"
                         >
                             <Settings className="h-5 w-5" />
                         </button>
 
                         <button
+                            type="button"
                             onClick={handleLogout}
                             className="flex items-center px-4 py-2 rounded-lg text-sm font-medium bg-white/5 hover:bg-red-500/10 hover:text-red-400 border border-transparent hover:border-red-500/20 transition-all duration-200"
                         >
@@ -265,22 +286,30 @@ export default function Layout() {
                     {/* Mobile Header Controls */}
                     <div className="flex md:hidden items-center gap-2">
                         <button
+                            type="button"
                             onClick={handleQuickWrite}
                             className={`p-2 rounded-lg hover:bg-white/5 transition-all duration-200 ${isQuickWriting ? 'animate-pulse text-primary' : 'text-text-muted hover:text-primary'}`}
                             disabled={isQuickWriting}
+                            aria-label="Quick Write: open the oldest unwritten day from the past week"
                         >
                             <PenTool className="h-5 w-5" />
                         </button>
                         <button
+                            type="button"
                             onClick={() => setIsSearchOpen(true)}
                             className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-primary transition-all duration-200"
+                            aria-label="Search journal"
+                            aria-expanded={isSearchOpen}
                         >
                             <Search className="h-5 w-5" />
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                             className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-white transition-all duration-200"
+                            aria-label={isMobileMenuOpen ? 'Close navigation' : 'Open navigation'}
+                            aria-expanded={isMobileMenuOpen}
                         >
                             {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
                         </button>
@@ -295,14 +324,14 @@ export default function Layout() {
                         handleLogout={handleLogout}
                         navItems={
                             <>
-                                <NavItem path="/" icon={CalendarIcon} label="Calendar" />
-                                <NavItem path="/month" icon={List} label="Month View" />
-                                <NavItem path="/images" icon={ImageIcon} label="Photos" />
-                                <NavItem path="/stats" icon={BarChart} label="Stats" />
-                                <NavItem path="/tags" icon={Tag} label="Tags" />
-                                <NavItem path="/memories" icon={History} label="Memories" />
-                                <NavItem path="/pdf-export" icon={FileDown} label="PDF Export" />
-                                <NavItem path="/settings" icon={Settings} label="Settings" />
+                                <NavItem path="/" icon={CalendarIcon} label="Calendar" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <NavItem path="/month" icon={List} label="Month View" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <NavItem path="/images" icon={ImageIcon} label="Photos" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <NavItem path="/stats" icon={BarChart} label="Stats" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <NavItem path="/tags" icon={Tag} label="Tags" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <NavItem path="/memories" icon={History} label="Memories" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <NavItem path="/pdf-export" icon={FileDown} label="PDF Export" currentPath={location.pathname} onSelect={handleMobileNavigate} />
+                                <NavItem path="/settings" icon={Settings} label="Settings" currentPath={location.pathname} onSelect={handleMobileNavigate} />
                             </>
                         }
                     />
@@ -317,6 +346,7 @@ export default function Layout() {
             {/* Floating Action Button (Quick Write) */}
             {!location.pathname.startsWith('/entry/') && currentUser && (
                 <button
+                    type="button"
                     onClick={handleQuickWrite}
                     className={`fixed bottom-6 right-6 p-4 rounded-full shadow-2xl z-40 transition-all duration-300 hover:scale-110 active:scale-95 md:bottom-8 md:right-8 group ${
                         isQuickWriting 
@@ -324,6 +354,7 @@ export default function Layout() {
                             : 'bg-gradient-to-br from-primary to-primary-variant hover:shadow-[0_0_20px_rgba(139,92,246,0.4)]'
                     }`}
                     title="Quick Write (Last unwritten day)"
+                    aria-label="Quick Write: open the oldest unwritten day from the past week"
                     disabled={isQuickWriting}
                 >
                     <PenTool className="h-6 w-6 text-white group-hover:rotate-12 transition-transform duration-200" />

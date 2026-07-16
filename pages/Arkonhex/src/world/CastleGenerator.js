@@ -25,6 +25,40 @@ export class CastleGenerator {
 
         this.TOWER_HEIGHT = 60; // Max Y is 63, so tower goes very high
         this.WALL_HEIGHT = 8;
+
+        // Region rolls are deterministic and queried repeatedly during chunk
+        // generation. Cache them once instead of rebuilding a seeded PRNG for
+        // every block and every Y layer.
+        this.regionCastleCache = new Map();
+    }
+
+    getCastleForRegion(regionQ, regionR) {
+        const key = `${regionQ},${regionR}`;
+        if (this.regionCastleCache.has(key)) {
+            return this.regionCastleCache.get(key);
+        }
+
+        let castle = null;
+        if (regionQ === 0 && regionR === 0) {
+            castle = { q: 75, r: 0 };
+        } else {
+            const regionSeed = `${this.seed}_castle_${regionQ}_${regionR}`;
+            const prng = createPRNG(regionSeed);
+
+            if (prng() <= this.CASTLE_CHANCE) {
+                const offsetCQ = Math.floor(prng() * this.REGION_SIZE);
+                const offsetCR = Math.floor(prng() * this.REGION_SIZE);
+                const chunkSize = 16;
+
+                castle = {
+                    q: ((regionQ * this.REGION_SIZE) + offsetCQ) * chunkSize + Math.floor(chunkSize / 2),
+                    r: ((regionR * this.REGION_SIZE) + offsetCR) * chunkSize + Math.floor(chunkSize / 2)
+                };
+            }
+        }
+
+        this.regionCastleCache.set(key, castle);
+        return castle;
     }
 
     /**
@@ -44,36 +78,12 @@ export class CastleGenerator {
         // A castle has radius 12 chunks, which easily bleeds into neighboring regions.
         for (let rq = centerRq - 1; rq <= centerRq + 1; rq++) {
             for (let rr = centerRr - 1; rr <= centerRr + 1; rr++) {
-
-                let castleQ, castleR, hasCastle = false;
-
-                // Check if this is the spawn region (0, 0)
-                if (rq === 0 && rr === 0) {
-                    hasCastle = true;
-                    castleQ = 75;
-                    castleR = 0;
-                } else {
-                    // Use region coords to seed the PRNG
-                    const regionSeed = `${this.seed}_castle_${rq}_${rr}`;
-                    const prng = createPRNG(regionSeed);
-
-                    // Roll for presence
-                    if (prng() <= this.CASTLE_CHANCE) {
-                        hasCastle = true;
-                        const offsetCQ = Math.floor(prng() * this.REGION_SIZE);
-                        const offsetCR = Math.floor(prng() * this.REGION_SIZE);
-
-                        // Select center block of that chunk
-                        castleQ = ((rq * this.REGION_SIZE) + offsetCQ) * CHUNK_SIZE + Math.floor(CHUNK_SIZE / 2);
-                        castleR = ((rr * this.REGION_SIZE) + offsetCR) * CHUNK_SIZE + Math.floor(CHUNK_SIZE / 2);
-                    }
-                }
-
-                if (hasCastle) {
+                const castle = this.getCastleForRegion(rq, rr);
+                if (castle) {
                     // Check if the given query block is within influence radius of this castle
-                    const dist = hexDistance(globalQ, globalR, castleQ, castleR);
+                    const dist = hexDistance(globalQ, globalR, castle.q, castle.r);
                     if (dist <= this.OUTER_RADIUS) {
-                        return { q: castleQ, r: castleR, dist: dist };
+                        return { q: castle.q, r: castle.r, dist };
                     }
                 }
             }
@@ -105,32 +115,12 @@ export class CastleGenerator {
         // Scan surrounding regions
         for (let rq = centerRq - searchRadiusRegions; rq <= centerRq + searchRadiusRegions; rq++) {
             for (let rr = centerRr - searchRadiusRegions; rr <= centerRr + searchRadiusRegions; rr++) {
-
-                let castleQ, castleR, hasCastle = false;
-
-                if (rq === 0 && rr === 0) {
-                    hasCastle = true;
-                    castleQ = 75;
-                    castleR = 0;
-                } else {
-                    const regionSeed = `${this.seed}_castle_${rq}_${rr}`;
-                    const prng = createPRNG(regionSeed);
-
-                    if (prng() <= this.CASTLE_CHANCE) {
-                        hasCastle = true;
-                        const offsetCQ = Math.floor(prng() * this.REGION_SIZE);
-                        const offsetCR = Math.floor(prng() * this.REGION_SIZE);
-
-                        castleQ = ((rq * this.REGION_SIZE) + offsetCQ) * CHUNK_SIZE + Math.floor(CHUNK_SIZE / 2);
-                        castleR = ((rr * this.REGION_SIZE) + offsetCR) * CHUNK_SIZE + Math.floor(CHUNK_SIZE / 2);
-                    }
-                }
-
-                if (hasCastle) {
-                    const dist = hexDistance(globalQ, globalR, castleQ, castleR);
+                const castle = this.getCastleForRegion(rq, rr);
+                if (castle) {
+                    const dist = hexDistance(globalQ, globalR, castle.q, castle.r);
                     if (dist < minDistance) {
                         minDistance = dist;
-                        closestCastle = { q: castleQ, r: castleR, dist: dist };
+                        closestCastle = { q: castle.q, r: castle.r, dist };
                     }
                 }
             }
@@ -143,8 +133,10 @@ export class CastleGenerator {
      * Determines what block should be at a specific coordinate for the castle.
      * @returns {number|null} -1 for AIR (clear space), specific ID for block, null to leave natural terrain
      */
-    getCastleBlock(globalQ, globalR, y, terrainY, blockSystem) {
-        const castleInfo = this.getNearbyCastleCenter(globalQ, globalR);
+    getCastleBlock(globalQ, globalR, y, terrainY, blockSystem, cachedCastleInfo = undefined) {
+        const castleInfo = cachedCastleInfo === undefined
+            ? this.getNearbyCastleCenter(globalQ, globalR)
+            : cachedCastleInfo;
         if (!castleInfo) return null;
 
         const dist = castleInfo.dist;

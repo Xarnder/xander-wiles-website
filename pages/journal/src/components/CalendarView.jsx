@@ -14,6 +14,8 @@ export default function CalendarView() {
     const [tags, setTags] = useState({}); // Map of tagId -> tag data
     const [totalEntries, setTotalEntries] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+    const [reloadKey, setReloadKey] = useState(0);
     const navigate = useNavigate();
     const location = useLocation();
     const isEntrySelected = location.pathname.includes('/entry/');
@@ -44,6 +46,7 @@ export default function CalendarView() {
 
         async function setupListener() {
             setLoading(true);
+            setLoadError('');
             if (!currentUser) return;
 
             try {
@@ -72,11 +75,13 @@ export default function CalendarView() {
                     setLoading(false);
                 }, (error) => {
                     console.error("Error fetching entries:", error);
+                    setLoadError('The calendar could not be loaded. Check your connection and try again.');
                     setLoading(false);
                 });
 
             } catch (error) {
                 console.error("Error setting up listener:", error);
+                setLoadError('The calendar could not be loaded. Check your connection and try again.');
                 setLoading(false);
             }
         }
@@ -84,7 +89,7 @@ export default function CalendarView() {
         setupListener();
 
         return () => unsubscribe();
-    }, [currentYear, currentUser]);
+    }, [currentYear, currentUser, reloadKey]);
 
     // Fetch total count (all time)
     useEffect(() => {
@@ -145,17 +150,31 @@ export default function CalendarView() {
             </div>
 
             {/* Controls - Hidden if entry selected on mobile */}
+            {isEntrySelected && (
+                <button
+                    type="button"
+                    onClick={() => navigate('/')}
+                    className="md:hidden glass-button px-4 py-2 text-sm text-text inline-flex items-center gap-2"
+                >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back to calendar
+                </button>
+            )}
             <div className={`items-center justify-center space-x-6 mb-8 ${isEntrySelected ? 'hidden md:flex' : 'flex'}`}>
                 <button
+                    type="button"
                     onClick={prevYear}
                     className="glass-button p-3 rounded-full hover:scale-110 active:scale-95 text-text-muted hover:text-white"
+                    aria-label={`Show ${currentYear - 1}`}
                 >
                     <ChevronLeft className="w-6 h-6" />
                 </button>
                 <h2 className="text-4xl font-serif font-bold text-white tracking-tight">{currentYear}</h2>
                 <button
+                    type="button"
                     onClick={nextYear}
                     className="glass-button p-3 rounded-full hover:scale-110 active:scale-95 text-text-muted hover:text-white"
+                    aria-label={`Show ${currentYear + 1}`}
                 >
                     <ChevronRight className="w-6 h-6" />
                 </button>
@@ -173,6 +192,13 @@ export default function CalendarView() {
 
                     {loading ? (
                         <div className="text-center text-text-muted py-20 animate-pulse">Loading secular time...</div>
+                    ) : loadError ? (
+                        <div role="alert" className="glass-card p-8 text-center">
+                            <p className="text-text-secondary mb-4">{loadError}</p>
+                            <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="glass-button px-4 py-2 text-text">
+                                Try again
+                            </button>
+                        </div>
                     ) : (
                         <div className={`grid gap-6 transition-all duration-300 ${isEntrySelected
                             ? 'grid-cols-1'
@@ -213,7 +239,7 @@ export default function CalendarView() {
                                         <h3 className="text-center font-serif text-white font-bold mb-4 text-lg border-b border-white/5 pb-2 group-hover:text-primary transition-colors">{format(monthDate, 'MMMM')}</h3>
 
                                         <div className="grid grid-cols-7 gap-1 text-center text-xs mb-2 text-text-muted font-bold opacity-60">
-                                            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                                            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d, i) => (
                                                 <div key={i}>{d}</div>
                                             ))}
                                         </div>
@@ -240,10 +266,10 @@ export default function CalendarView() {
 
                                                 if (isSelected) {
                                                     // Blue selection instead of secondary/primary
-                                                    className += 'ring-2 ring-blue-400 ring-offset-2 ring-offset-[#0a0a0b] z-10 scale-110 bg-blue-600 text-white ';
+                                                    className += 'ring-2 ring-blue-400 ring-offset-2 ring-offset-bg z-10 scale-110 bg-blue-600 text-white ';
                                                 } else if (entry && entry.isSpecial) {
                                                     // Special Day: Yellow ring and slight glow
-                                                    className += 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-[#0a0a0b] z-10 font-bold bg-yellow-500 text-[#1a1b1e] ';
+                                                    className += 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-bg z-10 font-bold bg-yellow-500 text-[#1a1b1e] ';
                                                     style = {
                                                         boxShadow: '0 0 15px rgba(234, 179, 8, 0.4)'
                                                     };
@@ -291,11 +317,13 @@ export default function CalendarView() {
 
                                                 return (
                                                     <button
+                                                        type="button"
                                                         key={day}
                                                         onClick={() => navigate(`entry/${dateKey}`, { state: { from: location.pathname } })}
                                                         style={style}
                                                         className={className}
                                                         title={entry ? `${entry.wordCount} words${entry.hasTitle ? ' + Title' : ''}` : ''}
+                                                        aria-label={`${format(dateObj, 'MMMM d, yyyy')}${entry ? `, ${entry.wordCount} words, ${entry.imageCount} images${entry.isSpecial ? ', special day' : ''}` : ', no entry'}`}
                                                     >
                                                         {day}
                                                         {/* Special Day Star Icon */}
@@ -307,7 +335,7 @@ export default function CalendarView() {
 
                                                         {/* Image Indicator - Blue Badge with Count */}
                                                         {entry && entry.imageCount > 0 && (
-                                                            <div className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-0.5 bg-blue-500 rounded-full border-2 border-[#0a0a0b] text-[10px] font-bold text-white z-20 shadow-sm">
+                                                            <div className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-0.5 bg-blue-500 rounded-full border-2 border-bg text-[10px] font-bold text-white z-20 shadow-sm" aria-hidden="true">
                                                                 {entry.imageCount}
                                                             </div>
                                                         )}
@@ -352,12 +380,7 @@ export default function CalendarView() {
                 )}
             </div>
 
-            {/* Footer which acts as spacer and info */}
-            <div className="mt-8 pt-6 border-t border-white/5 text-center pb-8">
-                <p className="text-xs text-text-muted">
-                    User ID: <code className="bg-black/40 px-2 py-1 rounded text-primary/70 select-all hover:text-primary cursor-pointer transition-colors" title="ID needed for migration">{currentUser?.uid}</code>
-                </p>
-            </div>
+            <div className="pb-8" aria-hidden="true" />
         </div>
     );
 }

@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, getDocs, orderBy, getCountFromServer, limit, startAfter } from 'firebase/firestore';
-import { Search, X, Loader, Calendar, AlertTriangle } from 'lucide-react';
+import { collection, query, getDocs, orderBy, getCountFromServer, limit, startAfter, documentId } from 'firebase/firestore';
+import { Search, X, Calendar, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import Modal from './Modal';
 
 const BATCH_SIZE = 500; // Adjust based on document size/network
 
@@ -14,11 +15,10 @@ export default function SearchModal({ isOpen, onClose }) {
     const [queryText, setQueryText] = useState('');
     const [searchMode, setSearchMode] = useState('any'); // 'any' | 'phrase'
     const [entries, setEntries] = useState([]);
-    const [results, setResults] = useState([]);
     const [selectedYear, setSelectedYear] = useState('All');
 
     const availableYears = useMemo(() => {
-        const years = new Set(entries.map(e => e.date ? new Date(e.date).getFullYear() : null).filter(Boolean));
+        const years = new Set(entries.map((entry) => Number(entry.id?.slice(0, 4))).filter(Boolean));
         return ['All', ...Array.from(years).sort((a, b) => b - a)];
     }, [entries]);
 
@@ -28,24 +28,25 @@ export default function SearchModal({ isOpen, onClose }) {
     const [totalEntries, setTotalEntries] = useState(0);
     const [timeEstimate, setTimeEstimate] = useState(null);
     const [isLargeDataset, setIsLargeDataset] = useState(false);
+    const [indexError, setIndexError] = useState('');
+    const [activeIndex, setActiveIndex] = useState(-1);
 
     const inputRef = useRef(null);
-    const modalRef = useRef(null);
+    const indexEntriesRef = useRef(null);
 
     // Index all entries
-    async function indexEntries() {
+    const indexEntries = useCallback(async () => {
         if (!currentUser) return;
         setIndexing(true);
         setProgress(0);
         setTimeEstimate('Calculating...');
+        setIndexError('');
 
         try {
             // 1. Get Total Count
             const coll = collection(db, 'users', currentUser.uid, 'entries');
-            console.log("Fetching count for:", currentUser.uid);
             const countSnapshot = await getCountFromServer(coll);
             const count = countSnapshot.data().count;
-            console.log("Total entries to index:", count);
             setTotalEntries(count);
 
             if (count > 1000) setIsLargeDataset(true);
@@ -58,7 +59,7 @@ export default function SearchModal({ isOpen, onClose }) {
 
             while (fetchedCount < count) {
                 // Determine query constraints
-                let constraints = [orderBy('date', 'desc'), limit(BATCH_SIZE)];
+                let constraints = [orderBy(documentId(), 'desc'), limit(BATCH_SIZE)];
                 if (lastDoc) {
                     constraints.push(startAfter(lastDoc));
                 }
@@ -68,13 +69,19 @@ export default function SearchModal({ isOpen, onClose }) {
 
                 if (snapshot.empty) break;
 
-                const batchDocs = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    // Pre-process lowercase content for faster search
-                    searchableContent: (doc.data().content || '').toLowerCase(),
-                    searchableTitle: (doc.data().title || '').toLowerCase()
-                }));
+                const batchDocs = snapshot.docs.map((entryDoc) => {
+                    const data = entryDoc.data();
+                    const subEntryText = Object.values(data.subEntries || {})
+                        .flatMap((subEntry) => [subEntry?.title, subEntry?.content])
+                        .filter(Boolean)
+                        .join(' ');
+                    return {
+                        id: entryDoc.id,
+                        ...data,
+                        searchableContent: `${data.content || ''} ${subEntryText}`.toLowerCase(),
+                        searchableTitle: (data.title || '').toLowerCase()
+                    };
+                });
 
                 allDocs = [...allDocs, ...batchDocs];
                 fetchedCount += batchDocs.length;
@@ -107,44 +114,40 @@ export default function SearchModal({ isOpen, onClose }) {
         } catch (error) {
             console.error("Error indexing entries:", error);
             setIndexing(false);
-            setTimeEstimate('Error');
+            setTimeEstimate(null);
+            setIndexError('Your journal could not be indexed. Check your connection and try again.');
         }
-    }
+    }, [currentUser]);
+    useEffect(() => {
+        indexEntriesRef.current = indexEntries;
+    }, [indexEntries]);
 
     // Focus input when opened and trigger indexing
     useEffect(() => {
         if (isOpen) {
-            setTimeout(() => inputRef.current?.focus(), 100);
+            const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 100);
+            let indexTimer;
             if (entries.length === 0 && !indexing) {
-                indexEntries();
+                indexTimer = window.setTimeout(() => indexEntriesRef.current?.(), 0);
             }
+            return () => {
+                window.clearTimeout(focusTimer);
+                window.clearTimeout(indexTimer);
+            };
         }
-    }, [isOpen]);
-
-    // Close on escape
-    useEffect(() => {
-        const handleEsc = (e) => {
-            if (e.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    }, [onClose]);
+        return undefined;
+    }, [isOpen, entries.length, indexing]);
 
     // Perform Search
-    useEffect(() => {
-        console.log("Search effect running. Query:", queryText, "Mode:", searchMode, "Year:", selectedYear, "Entries:", entries.length);
-
-        if (!queryText.trim()) {
-            setResults([]);
-            return;
-        }
+    const results = useMemo(() => {
+        if (!queryText.trim()) return [];
 
         const lowerQuery = queryText.toLowerCase();
 
-        const filtered = entries.filter(entry => {
+        return entries.filter(entry => {
             // Filter by Year first
             if (selectedYear !== 'All') {
-                const entryYear = entry.date ? new Date(entry.date).getFullYear() : null;
+                const entryYear = Number(entry.id?.slice(0, 4));
                 if (entryYear !== parseInt(selectedYear)) return false;
             }
 
@@ -161,43 +164,54 @@ export default function SearchModal({ isOpen, onClose }) {
                 );
             }
 
-            // Debug specific failure cases (optional, remove later)
-            // if (queryText === 'pizza' && !matches) {
-            //     console.log("Pizza mismatch on:", entry.id, entry.searchableContent.slice(0, 50));
-            // }
-
             return matches;
         });
-
-        console.log("Filtered results count:", filtered.length);
-        setResults(filtered);
     }, [queryText, searchMode, selectedYear, entries]);
+
+    useEffect(() => {
+        if (activeIndex < 0) return;
+        document.getElementById(`search-result-${activeIndex}`)?.scrollIntoView({ block: 'nearest' });
+    }, [activeIndex]);
+
+    const openResult = (entry) => {
+        navigate(`/entry/${entry.id}`, { state: { from: window.location.pathname } });
+        onClose();
+    };
+
+    const handleInputKeyDown = (event) => {
+        if (event.key === 'ArrowDown' && results.length > 0) {
+            event.preventDefault();
+            setActiveIndex((current) => (current + 1) % results.length);
+        } else if (event.key === 'ArrowUp' && results.length > 0) {
+            event.preventDefault();
+            setActiveIndex((current) => (current <= 0 ? results.length - 1 : current - 1));
+        } else if (event.key === 'Enter' && activeIndex >= 0) {
+            event.preventDefault();
+            openResult(results[activeIndex]);
+        }
+    };
 
     // ... (getSnippet removed/unused)
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center pt-20 px-4">
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm animation-fade-in"
-                onClick={onClose}
-            ></div>
-
-            {/* Modal */}
-            <div
-                ref={modalRef}
-                className="relative bg-[#18181b] w-full max-w-2xl rounded-xl shadow-2xl border border-white/10 flex flex-col max-h-[80vh] animation-scale-in overflow-hidden"
-            >
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            labelledBy="journal-search-title"
+            initialFocusRef={inputRef}
+            containerClassName="items-start justify-center pt-20 px-4"
+            className="bg-surface w-full max-w-2xl rounded-xl shadow-2xl border border-border flex flex-col max-h-[80vh] overflow-hidden"
+        >
                 {/* Header / Input */}
-                <div className="p-4 border-b border-white/10 bg-white/5 space-y-4">
+                <div className="p-4 border-b border-border bg-white/5 space-y-4">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-bold text-white flex items-center">
+                        <h2 id="journal-search-title" className="text-lg font-bold text-text flex items-center">
                             <Search className="w-5 h-5 mr-2 text-primary" />
                             Search Journal
                         </h2>
-                        <button onClick={onClose} className="text-text-muted hover:text-white transition-colors">
+                        <button type="button" onClick={onClose} aria-label="Close search" className="text-text-muted hover:text-text transition-colors">
                             <X className="w-6 h-6" />
                         </button>
                     </div>
@@ -208,9 +222,15 @@ export default function SearchModal({ isOpen, onClose }) {
                             ref={inputRef}
                             type="text"
                             value={queryText}
-                            onChange={(e) => setQueryText(e.target.value)}
+                            onChange={(e) => {
+                                setQueryText(e.target.value);
+                                setActiveIndex(e.target.value.trim() ? 0 : -1);
+                            }}
+                            onKeyDown={handleInputKeyDown}
                             placeholder="Search your memories..."
-                            className="w-full bg-black/40 border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
+                            aria-controls="journal-search-results"
+                            aria-activedescendant={activeIndex >= 0 ? `search-result-${activeIndex}` : undefined}
+                            className="w-full glass-input py-3 pl-10 pr-4"
                         />
                     </div>
 
@@ -221,7 +241,10 @@ export default function SearchModal({ isOpen, onClose }) {
                                     <input
                                         type="checkbox"
                                         checked={searchMode === 'phrase'}
-                                        onChange={(e) => setSearchMode(e.target.checked ? 'phrase' : 'any')}
+                                        onChange={(e) => {
+                                            setSearchMode(e.target.checked ? 'phrase' : 'any');
+                                            setActiveIndex(0);
+                                        }}
                                         className="sr-only peer"
                                     />
                                     <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-secondary/30 peer-checked:border-secondary/50 transition-all duration-300"></div>
@@ -233,8 +256,11 @@ export default function SearchModal({ isOpen, onClose }) {
                             {/* Year Filter */}
                             <select
                                 value={selectedYear}
-                                onChange={(e) => setSelectedYear(e.target.value)}
-                                className="bg-black/40 border border-white/10 rounded-lg text-sm text-text-muted py-1 px-2 focus:outline-none focus:border-primary/50"
+                                onChange={(e) => {
+                                    setSelectedYear(e.target.value);
+                                    setActiveIndex(0);
+                                }}
+                            className="glass-input py-1 px-2"
                             >
                                 {availableYears.map(year => (
                                     <option key={year} value={year}>{year}</option>
@@ -269,25 +295,35 @@ export default function SearchModal({ isOpen, onClose }) {
                     </div>
                 )}
 
+                {indexError && !indexing && (
+                    <div role="alert" className="px-4 py-3 bg-red-500/10 border-b border-red-500/20 flex items-center justify-between gap-3">
+                        <p className="text-sm text-red-300">{indexError}</p>
+                        <button type="button" onClick={indexEntries} className="shrink-0 glass-button px-3 py-1.5 text-sm text-text">
+                            Retry
+                        </button>
+                    </div>
+                )}
+
                 {/* Results List */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                <div id="journal-search-results" role="listbox" aria-label="Search results" className="flex-1 overflow-y-auto custom-scrollbar p-2">
                     {results.length === 0 && queryText && !indexing ? (
                         <div className="text-center py-10 text-text-muted">
                             <p>No matches found for "{queryText}"</p>
                         </div>
                     ) : (
                         <div className="space-y-1">
-                            {results.map(entry => (
+                            {results.map((entry, index) => (
                                 <button
                                     key={entry.id}
-                                    onClick={() => {
-                                        navigate(`/entry/${entry.id}`, { state: { from: window.location.pathname } });
-                                        onClose();
-                                    }}
-                                    className="w-full text-left p-2 rounded-lg hover:bg-white/5 transition-colors group border border-transparent hover:border-white/5"
+                                    id={`search-result-${index}`}
+                                    role="option"
+                                    aria-selected={activeIndex === index}
+                                    onMouseEnter={() => setActiveIndex(index)}
+                                    onClick={() => openResult(entry)}
+                                    className={`w-full text-left p-2 rounded-lg transition-colors group border ${activeIndex === index ? 'bg-primary/10 border-primary/30' : 'border-transparent hover:bg-white/5 hover:border-white/5'}`}
                                 >
                                     <div className="flex justify-between items-center gap-2">
-                                        <h3 className="font-medium text-white group-hover:text-primary transition-colors truncate">
+                                        <h3 className="font-medium text-text group-hover:text-primary transition-colors truncate">
                                             {cleanTitle(entry.title)}
                                         </h3>
                                         <span className="text-xs text-text-muted flex items-center shrink-0">
@@ -314,8 +350,7 @@ export default function SearchModal({ isOpen, onClose }) {
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+        </Modal>
     );
 }
 
@@ -377,7 +412,7 @@ function HighlightedSnippet({ content, query, mode }) {
                 regex = new RegExp(`(${words.map(escapeRegExp).join('|')})`, 'gi');
             }
         }
-    } catch (e) {
+    } catch {
         return <span>{snippet}</span>;
     }
 
@@ -423,19 +458,19 @@ function cleanTitle(rawTitle) {
     // Try to extract just the title part after the colon
     const colonMatch = rawTitle.match(/:\s*(.+?)(?:\+\+|\*\*|$)/);
     if (colonMatch && colonMatch[1]) {
-        const title = colonMatch[1].replace(/[\*\+]+/g, '').trim();
+        const title = colonMatch[1].replace(/[*+]+/g, '').trim();
         if (title) return title.length > 60 ? title.slice(0, 60) + '...' : title;
     }
 
     // If no colon pattern, try to extract from ++ markers with dash separator
     const dashMatch = rawTitle.match(/\+\+[^-]+-\s*(.+?)\+\+/);
     if (dashMatch && dashMatch[1]) {
-        const title = dashMatch[1].replace(/[\*\+]+/g, '').trim();
+        const title = dashMatch[1].replace(/[*+]+/g, '').trim();
         if (title) return title.length > 60 ? title.slice(0, 60) + '...' : title;
     }
 
     // Fallback: just strip formatting chars
-    const stripped = rawTitle.replace(/[\*\+#]+/g, '').trim();
+    const stripped = rawTitle.replace(/[*+#]+/g, '').trim();
     if (stripped) return stripped.length > 60 ? stripped.slice(0, 60) + '...' : stripped;
 
     return 'Untitled';

@@ -2,10 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { BarChart as BarChartIcon, TrendingUp, Type, MessageSquare, Tag, Image as ImageIcon, Download, X, Calendar, FileText, CheckCircle, AlertCircle, Loader, Star, Smile, Meh, Frown, Heart, Zap } from 'lucide-react';
-import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
-import { collection, query, where, documentId, onSnapshot, getDocs, orderBy } from 'firebase/firestore';
+import { format, subDays, subMonths, subYears, startOfDay } from 'date-fns';
+import { collection, query, where, documentId, onSnapshot, getDocs } from 'firebase/firestore';
 import { saveAs } from 'file-saver';
-import ReactDOM from 'react-dom';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     Line, ComposedChart, Area, Cell, Legend, LabelList
@@ -13,6 +12,8 @@ import {
 import StorageStats from './StorageStats';
 import FirestoreUsage from './FirestoreUsage';
 import { subEntriesToPlainText } from '../utils/entrySections';
+import { useToast } from '../context/ToastContext';
+import Modal from './Modal';
 
 // List of common stop words to exclude from analysis
 const STOP_WORDS = new Set([
@@ -52,6 +53,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function StatsView() {
     const { currentUser } = useAuth();
+    const { error: toastError } = useToast();
     const navigate = useNavigate();
     const [timeRange, setTimeRange] = useState('month'); // week, month, 6months, year
     const [entries, setEntries] = useState([]);
@@ -168,7 +170,9 @@ export default function StatsView() {
         } else if (data.content || data.subEntries) {
             size += new Blob([getEntryText(data)]).size;
         }
-        if (data.imageSize) {
+        if (Array.isArray(data.images) && data.images.length > 0) {
+            size += data.images.reduce((total, image) => total + (Number(image?.size) || 0), 0);
+        } else if (data.imageSize) {
             size += data.imageSize;
         } else if (data.imageMetadata && data.imageMetadata.sizeInBytes) {
             size += data.imageMetadata.sizeInBytes;
@@ -256,7 +260,7 @@ export default function StatsView() {
 
         } catch (error) {
             console.error("CSV Export failed:", error);
-            alert("Export failed. Please try again.");
+            toastError('Export failed. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -268,8 +272,6 @@ export default function StatsView() {
         let totalImages = 0;
         const wordCounts = {};
         const tagCounts = {}; // { tagId: { count: 0, totalWords: 0 } }
-        const chartData = [];
-
         // Map entries to chart data
         const entryMap = new Map();
 
@@ -436,13 +438,13 @@ export default function StatsView() {
         };
     }, [entries, timeRange, tags]);
 
-    const CustomTooltip = ({ active, payload, label }) => {
+    const CustomTooltip = ({ active, payload }) => {
         if (active && payload && payload.length) {
             // payload[0] is usually the bar (words), payload[1] might be line (avg)
             // But checking payload[0].payload gives the full data object we passed
             const data = payload[0].payload;
             return (
-                <div className="bg-[#1a1b1e] border border-white/10 p-3 rounded shadow-xl text-white">
+                <div className="bg-surface border border-border p-3 rounded shadow-xl text-text">
                     {/* Date removed as requested */}
                     {data.title && (
                         <p className="font-bold text-sm mb-2 text-primary break-words whitespace-pre-wrap max-w-xs">
@@ -487,7 +489,7 @@ export default function StatsView() {
             const config = MOOD_CONFIG[mood];
 
             return (
-                <div className="bg-[#1a1b1e] border border-white/10 p-3 rounded shadow-xl text-white">
+                <div className="bg-surface border border-border p-3 rounded shadow-xl text-text">
                     {data.title && (
                         <p className="font-bold text-sm mb-2 text-primary break-words whitespace-pre-wrap max-w-xs">
                             {data.title}
@@ -517,6 +519,18 @@ export default function StatsView() {
         }
         return null;
     };
+
+    if (loading && entries.length === 0) {
+        return (
+            <div className="space-y-6" role="status" aria-label="Loading journal statistics">
+                <div className="glass-card h-20 animate-pulse" />
+                <div className="glass-card h-[400px] p-6">
+                    <div className="h-5 w-48 rounded bg-white/10 animate-pulse mb-8" />
+                    <div className="h-[300px] rounded-lg bg-white/5 animate-pulse" />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 animation-fade-in pb-10">
@@ -836,17 +850,24 @@ export default function StatsView() {
             </div>
 
             {/* Export Modal */}
-            {isExportModalOpen && ReactDOM.createPortal(
-                <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-md animation-fade-in">
-                    <div className="glass-card w-full max-w-md p-6 relative overflow-hidden bg-[#1a1b1e]/95 shadow-2xl border border-white/10">
+            <Modal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                labelledBy="stats-export-title"
+                zIndexClassName="z-[100]"
+                backdropClassName="bg-black/80"
+                className="glass-card w-full max-w-md p-6 overflow-hidden bg-surface/95 shadow-2xl border border-border"
+            >
                         {/* Header */}
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-serif font-bold text-white flex items-center gap-2">
+                            <h2 id="stats-export-title" className="text-xl font-serif font-bold text-text flex items-center gap-2">
                                 <FileText className="w-5 h-5 text-primary" />
                                 Export CSV
                             </h2>
                             <button
+                                type="button"
                                 onClick={() => setIsExportModalOpen(false)}
+                                aria-label="Close export dialog"
                                 className="p-2 rounded-full hover:bg-white/10 text-text-muted hover:text-white transition-colors"
                             >
                                 <X className="w-5 h-5" />
@@ -870,6 +891,7 @@ export default function StatsView() {
                                     { id: 'all', label: 'All Time' }
                                 ].map(opt => (
                                     <button
+                                        type="button"
                                         key={opt.id}
                                         onClick={() => handleExportCSV(opt.id)}
                                         disabled={loading}
@@ -887,10 +909,7 @@ export default function StatsView() {
                                 <span className="font-medium">Generating Export...</span>
                             </div>
                         )}
-                    </div>
-                </div>,
-                document.body
-            )}
+            </Modal>
         </div>
     );
 }

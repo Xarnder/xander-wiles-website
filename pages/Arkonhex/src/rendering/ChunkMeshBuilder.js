@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { HEX_SIZE, axialToWorld, getSeededBlockHeight } from '../utils/HexUtils.js';
+import { HEX_SIZE, axialToWorld, getSeededBlockHeight, hashSeed } from '../utils/HexUtils.js?v=42';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
@@ -272,6 +272,8 @@ export class ChunkMeshBuilder {
      * @returns {Generator<undefined, THREE.Group|null, unknown>}
      */
     *buildChunkMeshGenerator(chunk, blockSystem, chunkSystem, seed = "arkonhex") {
+        const seedHash = hashSeed(seed);
+
         // We now have multiple materials, so we need a discrete set of buffers for each material index
         const numMaterials = this.materialArray.length;
 
@@ -566,7 +568,7 @@ export class ChunkMeshBuilder {
                 const blockAboveId = chunkSystem ? chunkSystem.getBlockGlobal(globalQ, globalR, block.y + 1) : 0;
 
                 // Determine actual height factoring in the Smooth Tool custom heights
-                let blockHeight = isTorch ? 0.8 : (chunk.isLOD ? 1.0 : (def.name === 'water' ? 0.5 : getSeededBlockHeight(globalQ, globalR, block.y, seed, blockAboveId, isSolidFn)));
+                let blockHeight = isTorch ? 0.8 : (chunk.isLOD ? 1.0 : (def.name === 'water' ? 0.5 : getSeededBlockHeight(globalQ, globalR, block.y, seedHash, blockAboveId, isSolidFn)));
                 const customHeightVal = chunkSystem ? chunkSystem.getHeightGlobal(globalQ, globalR, block.y) : 0;
                 if (customHeightVal > 0) {
                     blockHeight = customHeightVal / 10.0;
@@ -596,7 +598,7 @@ export class ChunkMeshBuilder {
                             return true; // Gap above me, so render my top face
                         } else if (gy < block.y) {
                             const nBlockAboveId = chunkSystem.getBlockGlobal(gq, gr, gy + 1);
-                            let nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seed, nBlockAboveId, isSolidFn));
+                            let nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seedHash, nBlockAboveId, isSolidFn));
                             const nCustomHeightVal = chunkSystem.getHeightGlobal(gq, gr, gy);
                             if (nCustomHeightVal > 0) {
                                 nHeight = nCustomHeightVal / 10.0;
@@ -607,7 +609,7 @@ export class ChunkMeshBuilder {
                     } else if (isSide) { // Allow all heights to render side faces appropriately
                         // Get the exact height of the neighbor block to see if it covers me
                         const nBlockAboveId = chunkSystem.getBlockGlobal(gq, gr, gy + 1);
-                        let nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seed, nBlockAboveId, isSolidFn));
+                        let nHeight = chunk.isLOD ? 1.0 : (nDef.name === 'water' ? 0.5 : getSeededBlockHeight(gq, gr, gy, seedHash, nBlockAboveId, isSolidFn));
                         const nCustomHeightVal = chunkSystem.getHeightGlobal(gq, gr, gy);
                         if (nCustomHeightVal > 0) {
                             nHeight = nCustomHeightVal / 10.0;
@@ -749,9 +751,10 @@ export class ChunkMeshBuilder {
                     );
                 } // end for 6 sides
 
-                // Yield to main thread every ~400 solid blocks to prevent frame drops
+                // Neighbor-aware face culling is expensive; use small slices so
+                // ChunkSystem's frame budget can interrupt before a visible hitch.
                 blocksProcessed++;
-                if (blocksProcessed % 400 === 0) {
+                if (blocksProcessed % 64 === 0) {
                     yield;
                 }
             }
@@ -812,9 +815,6 @@ export class ChunkMeshBuilder {
 
             geometry.computeBoundingSphere();
             geometry.computeBoundingBox();
-
-            yield; // Compute vertex normals can be heavy
-            geometry.computeVertexNormals();
 
             const mesh = new THREE.Mesh(geometry, materialsArray);
             mesh.castShadow = true;

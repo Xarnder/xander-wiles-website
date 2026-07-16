@@ -1,4 +1,4 @@
-import { ChunkMeshBuilder } from '../rendering/ChunkMeshBuilder.js';
+import { ChunkMeshBuilder } from '../rendering/ChunkMeshBuilder.js?v=42';
 import { worldToAxial } from '../utils/HexUtils.js';
 import { Chunk } from './Chunk.js';
 import { saveChunk, loadChunk } from '../storage/ChunkStorage.js';
@@ -15,6 +15,7 @@ export class ChunkSystem {
         this.pendingChunks = new Set();
         this.dirtyChunks = new Set();
         this.priorityDirtyChunks = new Set(); // Queue for player-modified chunks
+        this.animatingChunks = new Set();
         this.isLoadingDB = false;
 
         // Generator state for time-slicing
@@ -24,7 +25,8 @@ export class ChunkSystem {
         this.enableFlyInAnimation = true; // Default to true, updated by UI Settings
 
         this.renderDistance = 8; // Expanded for further view distance
-        this.lodDistance = 100;    // Increased above renderDistance to disable LOD flat rendering completely
+        this.enableLOD = true;
+        this.lodDistance = 4;
 
         // Debounced save queue — collects modified chunks, flushes every 5 seconds
         this.saveQueue = new Set(); // Set of chunk keys that need saving
@@ -85,7 +87,7 @@ export class ChunkSystem {
                     const key = this.getChunkKey(cq, cr);
                     neededChunks.add(key);
 
-                    const isLOD = dist > this.lodDistance;
+                    const isLOD = this.enableLOD && dist > this.lodDistance;
 
                     if (!this.chunks.has(key) && !this.pendingChunks.has(key)) {
                         this.pendingChunks.add(key);
@@ -198,6 +200,7 @@ export class ChunkSystem {
         this.pendingChunks.delete(key);
         this.dirtyChunks.delete(chunk);
         this.priorityDirtyChunks.delete(chunk);
+        this.animatingChunks.delete(chunk);
         // Remove from queue if it was pending
         this.chunkGenQueue = this.chunkGenQueue.filter(item => item.key !== key);
     }
@@ -304,19 +307,23 @@ export class ChunkSystem {
 
         // 3. Animate currently generating chunks
         // Delta time for frame-rate independent physics
-        for (const chunk of this.chunks.values()) {
-            if (chunk.isAnimating && chunk.mesh) {
-                // Lerp towards 0
-                chunk.currentY += (chunk.targetY - chunk.currentY) * 5 * delta;
-
-                // Snap if close enough
-                if (Math.abs(chunk.targetY - chunk.currentY) < 0.1) {
-                    chunk.currentY = chunk.targetY;
-                    chunk.isAnimating = false; // Done animating
-                }
-
-                chunk.mesh.position.y = chunk.currentY;
+        for (const chunk of this.animatingChunks) {
+            if (!chunk.mesh) {
+                this.animatingChunks.delete(chunk);
+                continue;
             }
+
+            // Lerp towards 0
+            chunk.currentY += (chunk.targetY - chunk.currentY) * 5 * delta;
+
+            // Snap if close enough
+            if (Math.abs(chunk.targetY - chunk.currentY) < 0.1) {
+                chunk.currentY = chunk.targetY;
+                chunk.isAnimating = false;
+                this.animatingChunks.delete(chunk);
+            }
+
+            chunk.mesh.position.y = chunk.currentY;
         }
     }
 
@@ -359,6 +366,12 @@ export class ChunkSystem {
             } else {
                 // Just an existing mesh update (like placing a block), maintain height
                 chunk.mesh.position.y = chunk.currentY;
+            }
+
+            if (chunk.isAnimating) {
+                this.animatingChunks.add(chunk);
+            } else {
+                this.animatingChunks.delete(chunk);
             }
 
             this.engine.scene.add(mesh);

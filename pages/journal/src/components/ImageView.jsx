@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, documentId } from 'firebase/firestore';
 import { format, parseISO } from 'date-fns';
 import { Image as ImageIcon, Calendar, Star, LayoutGrid, Square } from 'lucide-react';
 
@@ -14,17 +14,20 @@ export default function ImageView() {
     const [loading, setLoading] = useState(true);
     const [showInfo, setShowInfo] = useState(true);
     const [mobileColumns, setMobileColumns] = useState(2);
+    const [loadError, setLoadError] = useState('');
+    const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
         async function fetchImages() {
             if (!currentUser) return;
             setLoading(true);
+            setLoadError('');
             try {
                 // Fetch all entries ordered by date desc
                 // We filter partially on client side to handle legacy schema differences effortlessly
                 const q = query(
                     collection(db, 'users', currentUser.uid, 'entries'),
-                    orderBy('date', 'desc')
+                    orderBy(documentId(), 'desc')
                 );
 
                 const querySnapshot = await getDocs(q);
@@ -44,7 +47,7 @@ export default function ImageView() {
                     if (entryImages.length > 0) {
                         imageEntries.push({
                             id: doc.id,
-                            date: data.date.toDate ? data.date.toDate() : parseISO(data.date), // Handle generic timestamp or string
+                            date: parseISO(doc.id),
                             title: data.title || 'Untitled',
                             images: entryImages, // Array of { url }
                             isSpecial: data.isSpecial || false
@@ -55,13 +58,14 @@ export default function ImageView() {
                 setEntries(imageEntries);
             } catch (error) {
                 console.error("Error fetching images:", error);
+                setLoadError('The gallery could not be loaded. Check your connection and try again.');
             } finally {
                 setLoading(false);
             }
         }
 
         fetchImages();
-    }, [currentUser]);
+    }, [currentUser, reloadKey]);
 
     const ITEMS_PER_PAGE = 50;
 
@@ -133,6 +137,7 @@ export default function ImageView() {
                             onClick={() => setMobileColumns(prev => prev === 1 ? 2 : 1)}
                             className="p-2 rounded-lg transition-colors md:hidden bg-white/5 text-text-muted hover:bg-white/10 hover:text-white mr-2"
                             title={mobileColumns === 1 ? "Show 2 columns" : "Show 1 column"}
+                            aria-label={mobileColumns === 1 ? "Show 2 columns" : "Show 1 column"}
                         >
                             {mobileColumns === 1 ? <LayoutGrid className="w-5 h-5" /> : <Square className="w-5 h-5" />}
                         </button>
@@ -140,6 +145,8 @@ export default function ImageView() {
                             onClick={() => setShowInfo(!showInfo)}
                             className={`p-2 rounded-lg transition-colors ${showInfo ? 'bg-primary text-white' : 'bg-white/5 text-text-muted hover:bg-white/10 hover:text-white'}`}
                             title={showInfo ? "Hide Details" : "Show Details"}
+                            aria-label={showInfo ? "Hide photo details" : "Show photo details"}
+                            aria-pressed={showInfo}
                         >
                             <ImageIcon className="w-5 h-5" />
                         </button>
@@ -158,6 +165,13 @@ export default function ImageView() {
                     <div className="w-12 h-12 bg-white/10 rounded-full mb-4"></div>
                     <p>Loading gallery...</p>
                 </div>
+            ) : loadError ? (
+                <div role="alert" className="glass-card p-8 text-center">
+                    <p className="text-text-secondary mb-4">{loadError}</p>
+                    <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="glass-button px-4 py-2 text-text">
+                        Try again
+                    </button>
+                </div>
             ) : entries.length > 0 ? (
                 <>
                     {Object.entries(groupedEntries).map(([monthYear, monthEntries]) => (
@@ -168,11 +182,13 @@ export default function ImageView() {
                             </h3>
                             <div className={`grid ${mobileColumns === 1 ? 'grid-cols-1' : 'grid-cols-2'} md:grid-cols-3 lg:grid-cols-4 gap-4`}>
                                 {monthEntries.map((entry) => (
-                                    <div
+                                    <button
+                                        type="button"
                                         key={entry.id}
                                         id={`gallery-item-${entry.id}`}
                                         onClick={() => navigate(`/entry/${format(entry.date, 'yyyy-MM-dd')}`, { state: { fromGallery: true, scrollToId: entry.id, from: '/images' } })}
-                                        className={`group relative aspect-square rounded-xl overflow-hidden cursor-pointer bg-white/5 border transition-all duration-300 ${entry.isSpecial ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-white/10 hover:border-primary/50'}`}
+                                        aria-label={`Open ${entry.title} from ${format(entry.date, 'MMMM d, yyyy')}`}
+                                        className={`group relative aspect-square rounded-xl overflow-hidden cursor-pointer bg-white/5 border text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-primary ${entry.isSpecial ? 'border-yellow-400 ring-2 ring-yellow-400/30' : 'border-white/10 hover:border-primary/50'}`}
                                     >
                                         <div className={`w-full h-full relative ${entry.images.length > 1 ? 'grid grid-cols-2 grid-rows-2 gap-[1px]' : ''}`}>
                                             {entry.images.length === 1 ? (
@@ -220,7 +236,7 @@ export default function ImageView() {
                                                 </p>
                                             </div>
                                         </div>
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         </div>

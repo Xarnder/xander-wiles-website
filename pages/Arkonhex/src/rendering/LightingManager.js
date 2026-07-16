@@ -227,7 +227,7 @@ export class LightingManager {
         };
     }
 
-    interpolateColor(array, time) {
+    interpolateColor(array, time, target) {
         // 9 indices means mapping time (0.0 to 1.0) into 8 steps
         const scaledTime = time * 8.0;
         const index1 = Math.floor(scaledTime);
@@ -235,8 +235,7 @@ export class LightingManager {
 
         const mixRatio = scaledTime - index1;
 
-        const result = array[index1].clone();
-        return result.lerp(array[index2], mixRatio);
+        return target.copy(array[index1]).lerp(array[index2], mixRatio);
     }
 
     update(playerPosition, delta, inputManager) {
@@ -325,11 +324,10 @@ export class LightingManager {
 
         // 4. Color Interpolation Logic (Simplified for glossy material)
         // Since it's a physical material, we only have one base color. 
-        this.skyUniforms.topColor.value.copy(this.interpolateColor(this.colors.skyTop, this.timeOfDay));
-        this.skyUniforms.bottomColor.value.copy(this.interpolateColor(this.colors.skyBottom, this.timeOfDay));
-
-        this.sunLight.color.copy(this.interpolateColor(this.colors.sunLight, this.timeOfDay));
-        this.ambientLight.color.copy(this.interpolateColor(this.colors.ambientLight, this.timeOfDay));
+        this.interpolateColor(this.colors.skyTop, this.timeOfDay, this.skyUniforms.topColor.value);
+        this.interpolateColor(this.colors.skyBottom, this.timeOfDay, this.skyUniforms.bottomColor.value);
+        this.interpolateColor(this.colors.sunLight, this.timeOfDay, this.sunLight.color);
+        this.interpolateColor(this.colors.ambientLight, this.timeOfDay, this.ambientLight.color);
 
         // Scale ambient intensity with day/night: full strength at noon, dim at night
         const dayFactor = Math.max(0.15, Math.sin(Math.max(0, (this.timeOfDay - 0.2) / 0.6) * Math.PI));

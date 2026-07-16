@@ -26,6 +26,7 @@ export class UIManager {
 
         this.frameCount = 0;
         this.lastFpsTime = 0;
+        this.lastHudUpdateTime = -Infinity;
 
         this.highGraphics = false; // default off as per user request
 
@@ -921,62 +922,61 @@ export class UIManager {
             this.lastFpsTime = time;
         }
 
-        // Debug info - In-Game Time
-        if (this.timeElement && this.engine.lightingManager) {
-            // timeOfDay is 0.0 to 1.0. Multiply by 24 to get total hours float.
-            const totalHours = this.engine.lightingManager.timeOfDay * 24.0;
-            const hours24 = Math.floor(totalHours);
-            const minutes = Math.floor((totalHours - hours24) * 60);
+        // Text HUD values do not need a DOM write every rendered frame.
+        if (time - this.lastHudUpdateTime >= 0.1) {
+            this.lastHudUpdateTime = time;
 
-            // Map 24H -> 12H (AM/PM)
-            const ampm = hours24 >= 12 ? 'PM' : 'AM';
-            let hours12 = hours24 % 12;
-            hours12 = hours12 ? hours12 : 12; // Modulo returns 0 for 12, so set to 12
+            // Debug info - In-Game Time
+            if (this.timeElement && this.engine.lightingManager) {
+                // timeOfDay is 0.0 to 1.0. Multiply by 24 to get total hours float.
+                const totalHours = this.engine.lightingManager.timeOfDay * 24.0;
+                const hours24 = Math.floor(totalHours);
+                const minutes = Math.floor((totalHours - hours24) * 60);
 
-            // Format minutes to be two digits (e.g., '05' instead of '5')
-            const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+                // Map 24H -> 12H (AM/PM)
+                const ampm = hours24 >= 12 ? 'PM' : 'AM';
+                let hours12 = hours24 % 12;
+                hours12 = hours12 ? hours12 : 12; // Modulo returns 0 for 12, so set to 12
+                const minutesStr = minutes < 10 ? '0' + minutes : minutes;
 
-            this.timeElement.innerText = `${hours12}:${minutesStr} ${ampm}`;
-        }
-
-        // Coordinates Update
-        if (this.coordsElement && this.playerSystem) {
-            const pos = this.playerSystem.position;
-            this.coordsElement.innerText = `X: ${pos.x.toFixed(1)} Y: ${pos.y.toFixed(1)} Z: ${pos.z.toFixed(1)}`;
-        }
-
-        // Debug info - Selected Block
-        if (this.playerSystem.selectedBlock) {
-            const sb = this.playerSystem.selectedBlock;
-            const blockId = this.playerSystem.physics.getBlockAt(sb.q, sb.y, sb.r); // physics uses world coords, wait getBlockAt takes x,y,z!
-
-            // Actually playerSystem.selectedBlock gives q, r, y in grid coords.
-            // Let's get the global block ID from chunk system directly.
-            const CHUNK_SIZE = 16;
-            const cq = Math.floor(sb.q / CHUNK_SIZE);
-            const cr = Math.floor(sb.r / CHUNK_SIZE);
-            const chunk = this.playerSystem.chunkSystem.chunks.get(`${cq},${cr}`);
-
-            let bName = "Unknown";
-            if (chunk) {
-                const lq = sb.q - cq * CHUNK_SIZE;
-                const lr = sb.r - cr * CHUNK_SIZE;
-                const id = chunk.getBlock(lq, lr, sb.y);
-                const def = this.blockSystem.getBlockDef(id);
-                if (def) bName = def.name;
+                this.timeElement.innerText = `${hours12}:${minutesStr} ${ampm}`;
             }
 
-            this.selectedBlockElement.innerText = `Target: ${bName} (q:${sb.q}, r:${sb.r}, y:${sb.y})`;
-        } else {
-            this.selectedBlockElement.innerText = "Target: None";
-        }
+            // Coordinates Update
+            if (this.coordsElement && this.playerSystem) {
+                const pos = this.playerSystem.position;
+                this.coordsElement.innerText = `X: ${pos.x.toFixed(1)} Y: ${pos.y.toFixed(1)} Z: ${pos.z.toFixed(1)}`;
+            }
 
-        // Fly Mode Info
-        if (this.playerSystem.isFlying) {
-            const noclipTag = this.playerSystem.isNoclip ? ' | NOCLIP ON (N)' : '';
-            this.flyElement.innerText = `[ FLY MODE ENABLED - Space: Up, Shift: Down${noclipTag} ]`;
-        } else {
-            this.flyElement.innerText = "";
+            // Debug info - Selected Block
+            if (this.playerSystem.selectedBlock) {
+                const sb = this.playerSystem.selectedBlock;
+                const CHUNK_SIZE = 16;
+                const cq = Math.floor(sb.q / CHUNK_SIZE);
+                const cr = Math.floor(sb.r / CHUNK_SIZE);
+                const chunk = this.playerSystem.chunkSystem.chunks.get(`${cq},${cr}`);
+
+                let bName = "Unknown";
+                if (chunk) {
+                    const lq = sb.q - cq * CHUNK_SIZE;
+                    const lr = sb.r - cr * CHUNK_SIZE;
+                    const id = chunk.getBlock(lq, lr, sb.y);
+                    const def = this.blockSystem.getBlockDef(id);
+                    if (def) bName = def.name;
+                }
+
+                this.selectedBlockElement.innerText = `Target: ${bName} (q:${sb.q}, r:${sb.r}, y:${sb.y})`;
+            } else {
+                this.selectedBlockElement.innerText = "Target: None";
+            }
+
+            // Fly Mode Info
+            if (this.playerSystem.isFlying) {
+                const noclipTag = this.playerSystem.isNoclip ? ' | NOCLIP ON (N)' : '';
+                this.flyElement.innerText = `[ FLY MODE ENABLED - Space: Up, Shift: Down${noclipTag} ]`;
+            } else {
+                this.flyElement.innerText = "";
+            }
         }
 
         // Handle Graphics Toggle

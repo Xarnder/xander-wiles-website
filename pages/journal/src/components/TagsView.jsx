@@ -2,13 +2,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, getDocs, where, updateDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, where, updateDoc } from 'firebase/firestore';
 import { format, subDays, subMonths, subYears, startOfDay, parseISO } from 'date-fns';
 import { Tag, Plus, Trash2, TrendingUp, Calendar, ArrowRight, Edit2, Check, X as XIcon, Star } from 'lucide-react';
 import ConfirmModal from './ConfirmModal';
+import { useToast } from '../context/ToastContext';
 
 export default function TagsView() {
     const { currentUser } = useAuth();
+    const { success, error: toastError } = useToast();
     const navigate = useNavigate();
     const [tags, setTags] = useState([]);
     const [entries, setEntries] = useState([]);
@@ -42,6 +44,9 @@ export default function TagsView() {
             // Sort by name
             fetchedTags.sort((a, b) => a.name.localeCompare(b.name));
             setTags(fetchedTags);
+        }, (error) => {
+            console.error('Error loading tags:', error);
+            toastError('Tags could not be loaded.');
         });
 
         // We need all entries from the past year to compute stats
@@ -61,13 +66,17 @@ export default function TagsView() {
             });
             setEntries(fetchedEntries);
             setLoading(false);
+        }, (error) => {
+            console.error('Error loading tagged entries:', error);
+            setLoading(false);
+            toastError('Tagged entries could not be loaded.');
         });
 
         return () => {
             unsubscribeTags();
             unsubscribeEntries();
         };
-    }, [currentUser]);
+    }, [currentUser, toastError]);
 
     const handleAddTag = async (e) => {
         e.preventDefault();
@@ -81,9 +90,11 @@ export default function TagsView() {
                 createdAt: serverTimestamp()
             });
             setNewTagName('');
+            success('Tag created.');
             // Optional: generate a random color or keep same
         } catch (error) {
             console.error("Error adding tag:", error);
+            toastError('Tag could not be created.');
         } finally {
             setIsAdding(false);
         }
@@ -103,8 +114,10 @@ export default function TagsView() {
             if (selectedTagId === tagToDelete) {
                 setSelectedTagId(null);
             }
+            success('Tag deleted.');
         } catch (error) {
             console.error("Error deleting tag:", error);
+            toastError('Tag could not be deleted.');
         } finally {
             setTagToDelete(null);
             setIsDeleteModalOpen(false);
@@ -136,8 +149,10 @@ export default function TagsView() {
                 color: editTagColor
             });
             setEditingTagId(null);
+            success('Tag updated.');
         } catch (error) {
             console.error("Error updating tag:", error);
+            toastError('Tag could not be updated.');
         } finally {
             setIsSavingEdit(false);
         }
@@ -452,10 +467,11 @@ export default function TagsView() {
                                 const validDate = !isNaN(entryDate.getTime());
 
                                 return (
-                                    <div
+                                    <button
+                                        type="button"
                                         key={entry.id}
                                         onClick={() => navigate(`/entry/${entry.id}`, { state: { from: '/tags' } })}
-                                        className="bg-white/5 border border-white/10 p-4 rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all cursor-pointer group flex flex-col justify-between min-h-[100px]"
+                                        className="bg-white/5 border border-white/10 p-4 rounded-xl hover:bg-white/10 hover:border-primary/50 transition-all cursor-pointer group flex flex-col justify-between min-h-[100px] text-left focus:outline-none focus:ring-2 focus:ring-primary"
                                     >
                                         <div>
                                             <div className="text-xs text-primary font-bold mb-1 uppercase tracking-wider">
@@ -468,7 +484,7 @@ export default function TagsView() {
                                         <div className="flex items-center text-xs text-text-muted group-hover:text-white transition-colors mt-auto">
                                             Read Entry <ArrowRight className="w-3 h-3 ml-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                                         </div>
-                                    </div>
+                                    </button>
                                 );
                             })}
                         </div>

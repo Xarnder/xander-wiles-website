@@ -19,14 +19,14 @@ There is **no build step**, no bundler, and no Node server. It runs directly via
 
 ## 2. Phase Numbering Convention ⚠️
 
-All development work on this engine is tracked by **Phase numbers**. The most recent completed phase is **Phase 41** (redesigned the pause menu as a responsive translucent left sidebar that keeps most of the 3D scene visible).
+All development work on this engine is tracked by **Phase numbers**. The most recent completed phase is **Phase 42** (performance pass: half-resolution GTAO, instanced/event-driven clouds, local interaction raycasts, lower hot-path allocation, functional distant LOD, and finer time-sliced world generation/meshing).
 
 **When you add a new feature or fix, always:**
-1. Name it **Phase 42**, then **Phase 43**, etc. — never reset or repeat numbers.
+1. Name it **Phase 43**, then **Phase 44**, etc. — never reset or repeat numbers.
 2. Record it in the conversation walkthrough or any documentation you maintain.
 3. Keep this file updated with the current highest phase number.
 
-> **Current highest phase: 41**
+> **Current highest phase: 42**
 
 ---
 
