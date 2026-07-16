@@ -381,6 +381,35 @@
   border-left-color: #8b5cf6 !important;
 }
 
+.EasyMDEContainer .cm-spell-error {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #f87171;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+}
+
+.EasyMDEContainer .cm-harper-spelling {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #fb7185;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+  background: rgba(251, 113, 133, 0.08);
+}
+
+.EasyMDEContainer .cm-harper-grammar {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #fbbf24;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+  background: rgba(251, 191, 36, 0.07);
+}
+
 .EasyMDEContainer .editor-preview {
   @apply bg-surface text-text;
 }

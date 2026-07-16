@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +20,7 @@ import ImageWithSkeleton from './ImageWithSkeleton';
 import SpecialDayAnimation from './SpecialDayAnimation';
 import LocalSummaryPanel from './LocalSummaryPanel';
 import Modal from './Modal';
+import HarperProofreader from './HarperProofreader';
 import { LOCAL_SUMMARISER_MODEL_ID } from '../lib/localSummariser';
 import {
     cleanSubEntriesForSave,
@@ -964,11 +965,34 @@ export default function EntryEditor() {
     const mdeOptions = useMemo(() => {
         return {
             autofocus: true,
-            spellChecker: false,
+            // EasyMDE highlights misspellings while the native checker powers
+            // platform suggestions and iOS autocorrection.
+            spellChecker: true,
+            nativeSpellcheck: true,
+            inputStyle: 'contenteditable',
             status: false,
             placeholder: "Capture the moment...",
             toolbar: false,
         };
+    }, []);
+
+    const configureMdeInstance = useCallback((codeMirror) => {
+        setMdeInstance(codeMirror);
+        if (!codeMirror) return;
+
+        codeMirror.setOption('spellcheck', true);
+        codeMirror.setOption('autocorrect', true);
+        codeMirror.setOption('autocapitalize', true);
+
+        const input = codeMirror.getInputField?.();
+        if (!input) return;
+
+        input.setAttribute('spellcheck', 'true');
+        input.setAttribute('autocorrect', 'on');
+        input.setAttribute('autocapitalize', 'sentences');
+        input.setAttribute('autocomplete', 'on');
+        input.setAttribute('lang', navigator.language || 'en-GB');
+        input.setAttribute('aria-label', 'Main journal entry');
     }, []);
 
     // Navigation handlers
@@ -1290,6 +1314,10 @@ export default function EntryEditor() {
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="Give this day a title..."
+                                spellCheck={true}
+                                autoCorrect="on"
+                                autoCapitalize="sentences"
+                                autoComplete="on"
                                 readOnly={isInferredTitle}
                                 rows={1}
                                 className={`w-full bg-transparent text-2xl font-serif font-bold text-white border-none focus:ring-0 placeholder-white/20 mb-1 sm:mb-2 p-0 resize-none overflow-hidden ${isInferredTitle ? 'cursor-not-allowed opacity-80' : ''}`}
@@ -1491,8 +1519,13 @@ export default function EntryEditor() {
                                     value={content}
                                     onChange={setContent}
                                     options={mdeOptions}
-                                    getMdeInstance={setMdeInstance}
+                                    getMdeInstance={configureMdeInstance}
                                     className="prose-dark"
+                                />
+                                <HarperProofreader
+                                    text={content}
+                                    onTextChange={setContent}
+                                    editor={mdeInstance}
                                 />
                             </div>
 
@@ -1685,6 +1718,10 @@ export default function EntryEditor() {
                                                         value={subEntry.title || ''}
                                                         onChange={(event) => updateSubEntry(section.id, 'title', event.target.value)}
                                                         placeholder={`${section.name} title`}
+                                                        spellCheck={true}
+                                                        autoCorrect="on"
+                                                        autoCapitalize="sentences"
+                                                        autoComplete="on"
                                                         className="mb-2 w-full min-w-0 rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 sm:px-3 sm:py-2 text-sm sm:text-base text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
                                                     />
                                                 )}
@@ -1693,6 +1730,10 @@ export default function EntryEditor() {
                                                     value={subEntry.content || ''}
                                                     onChange={(event) => updateSubEntry(section.id, 'content', event.target.value)}
                                                     placeholder={`Write ${section.name.toLowerCase()}...`}
+                                                    spellCheck={true}
+                                                    autoCorrect="on"
+                                                    autoCapitalize="sentences"
+                                                    autoComplete="on"
                                                     rows={5}
                                                     className="w-full min-w-0 resize-y rounded-lg border border-white/10 bg-black/20 px-2.5 py-2.5 sm:px-3 sm:py-3 text-sm sm:text-base text-white outline-none transition-colors placeholder-white/30 focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
                                                 />
@@ -1955,6 +1996,10 @@ export default function EntryEditor() {
                             value={tempCaption}
                             onChange={(e) => setTempCaption(e.target.value)}
                             placeholder="Enter a caption for this image..."
+                            spellCheck={true}
+                            autoCorrect="on"
+                            autoCapitalize="sentences"
+                            autoComplete="on"
                             className="w-full h-32 glass-input mb-6 resize-none"
                             autoFocus
                         />
