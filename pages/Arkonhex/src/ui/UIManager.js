@@ -176,27 +176,38 @@ export class UIManager {
             });
         }
 
-        const gtaoSlider = document.getElementById('gtao-slider');
-        const gtaoValDisplay = document.getElementById('gtao-val');
-        if (gtaoSlider && gtaoValDisplay) {
-            gtaoSlider.addEventListener('input', (e) => {
-                gtaoValDisplay.innerText = e.target.value;
-            }, { signal: this.abortController.signal });
+        const bindGtaoSlider = (sliderId, valueId, updateSetting) => {
+            const slider = document.getElementById(sliderId);
+            const valueDisplay = document.getElementById(valueId);
+            if (!slider || !valueDisplay) return;
 
-            gtaoSlider.addEventListener('change', (e) => {
-                const intensity = parseFloat(e.target.value);
-                if (this.engine.rendererSystem && this.engine.rendererSystem.gtaoPass) {
-                    this.engine.rendererSystem.gtaoPass.blendIntensity = intensity;
-                    this.engine.rendererSystem.gtaoPass.enabled = intensity > 0; // Dynamically eliminate VRAM footprint when turned off
-                }
-            }, { signal: this.abortController.signal });
+            const applyValue = () => {
+                const value = parseFloat(slider.value);
+                valueDisplay.innerText = slider.value;
+                updateSetting(value);
+            };
 
-            // Initialize the GTAO pass state from the slider's initial HTML value
-            const initialGtaoIntensity = parseFloat(gtaoSlider.value);
-            if (this.engine.rendererSystem && this.engine.rendererSystem.gtaoPass) {
-                this.engine.rendererSystem.gtaoPass.blendIntensity = initialGtaoIntensity;
-                this.engine.rendererSystem.gtaoPass.enabled = initialGtaoIntensity > 0;
-            }
+            slider.addEventListener('input', applyValue, { signal: this.abortController.signal });
+            applyValue();
+        };
+
+        bindGtaoSlider('gtao-slider', 'gtao-val', (value) => {
+            this.engine.rendererSystem?.setGtaoIntensity(value);
+        });
+
+        const gtaoMaterialSliders = [
+            ['gtao-radius-slider', 'gtao-radius-val', 'radius'],
+            ['gtao-falloff-slider', 'gtao-falloff-val', 'distanceFallOff'],
+            ['gtao-scale-slider', 'gtao-scale-val', 'scale'],
+            ['gtao-thickness-slider', 'gtao-thickness-val', 'thickness'],
+            ['gtao-exponent-slider', 'gtao-exponent-val', 'distanceExponent'],
+            ['gtao-denoise-slider', 'gtao-denoise-val', 'denoiseRadius']
+        ];
+
+        for (const [sliderId, valueId, settingName] of gtaoMaterialSliders) {
+            bindGtaoSlider(sliderId, valueId, (value) => {
+                this.engine.rendererSystem?.updateGtaoSettings({ [settingName]: value });
+            });
         }
 
         const ambientSlider = document.getElementById('ambient-slider');

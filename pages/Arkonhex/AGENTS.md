@@ -19,14 +19,14 @@ There is **no build step**, no bundler, and no Node server. It runs directly via
 
 ## 2. Phase Numbering Convention ⚠️
 
-All development work on this engine is tracked by **Phase numbers**. The most recent completed phase is **Phase 36**.
+All development work on this engine is tracked by **Phase numbers**. The most recent completed phase is **Phase 41** (redesigned the pause menu as a responsive translucent left sidebar that keeps most of the 3D scene visible).
 
 **When you add a new feature or fix, always:**
-1. Name it **Phase 36**, then **Phase 37**, etc. — never reset or repeat numbers.
+1. Name it **Phase 42**, then **Phase 43**, etc. — never reset or repeat numbers.
 2. Record it in the conversation walkthrough or any documentation you maintain.
 3. Keep this file updated with the current highest phase number.
 
-> **Current highest phase: 36**
+> **Current highest phase: 41**
 
 ---
 
@@ -271,6 +271,7 @@ el.classList.remove('hidden'); // Show
 The settings panel in the pause menu (`#settings-tab`) currently exposes:
 - **Render Distance** slider (`#rd-slider`) — controls `ChunkSystem` load radius
 - **Field of View** slider (`#fov-slider`) — controls `PlayerSystem.baseFov`
+- **GTAO controls** (`#gtao-slider` and `#gtao-*-slider`) — tune live edge-shadow strength, radius, falloff, and denoising
 
 Settings are wired in `UIManager.js`. Add new settings there.
 
@@ -280,7 +281,7 @@ Settings are wired in `UIManager.js`. Add new settings there.
 
 When starting any new feature:
 
-1. **Assign the next Phase number** (currently continuing from Phase 36).
+1. **Assign the next Phase number** (currently continuing from Phase 41).
 2. **Check block names are lowercase** before any `def.name` comparison.
 3. **Use `physics.getBlockAt(x, y, z)`** for any voxel world queries — don't manually compute chunk keys.
 4. **Use `axialToWorld / worldToAxial`** from `HexUtils.js` for all coordinate conversions — never hardcode hex math.

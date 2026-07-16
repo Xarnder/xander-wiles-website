@@ -55,17 +55,17 @@ export class Renderer {
         this.gtaoPass.blendIntensity = 1.0; // Default visible intensity when enabled
         this.gtaoPass.enabled = false; // Off by default until slider turned up; explicitly enabled from UIManager when slider > 0
         this.gtaoPass.updateGtaoMaterial({
-            radius: 8.0,          // Large world-space radius to cover inter-block distances
+            radius: 1.0,          // ~1 block in world units. Large radii (e.g. 8) spread the occlusion so thin it denoises to invisible
             distanceExponent: 1.0,
-            thickness: 1.5,       // Slightly thicker AO to pick up block edges
-            distanceFallOff: 1.0,
-            scale: 1.0
+            thickness: 1.0,
+            distanceFallOff: 0.3, // Sharp falloff hugs concave block corners
+            scale: 1.5            // Boost so edge shading survives tone mapping
         });
         this.gtaoPass.updatePdMaterial({
             lumaPhi: 10,
             depthPhi: 2,
             normalPhi: 3,
-            radius: 12,           // Larger denoise radius for smoother AO
+            radius: 4,            // Small denoise radius preserves thin per-edge shading
             rings: 2,
             samples: 16
         });
@@ -74,6 +74,33 @@ export class Renderer {
         // 3. Output (Tonemapping/Coloring)
         this.outputPass = new OutputPass();
         this.composer.addPass(this.outputPass);
+    }
+
+    setGtaoIntensity(intensity) {
+        if (!this.gtaoPass) return;
+
+        // GTAOPass extrapolates its AO multiplier above 1.0, producing negative
+        // HDR colors that ACES tone mapping can turn white or highly saturated.
+        const safeIntensity = THREE.MathUtils.clamp(intensity, 0, 1);
+        this.gtaoPass.blendIntensity = safeIntensity;
+        this.gtaoPass.enabled = safeIntensity > 0;
+    }
+
+    updateGtaoSettings(settings) {
+        if (!this.gtaoPass) return;
+
+        const {
+            denoiseRadius,
+            ...gtaoSettings
+        } = settings;
+
+        if (Object.keys(gtaoSettings).length > 0) {
+            this.gtaoPass.updateGtaoMaterial(gtaoSettings);
+        }
+
+        if (denoiseRadius !== undefined) {
+            this.gtaoPass.updatePdMaterial({ radius: denoiseRadius });
+        }
     }
 
     onWindowResize() {
