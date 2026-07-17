@@ -96,8 +96,8 @@ declare module '$env/static/private' {
 	export const INIT_CWD: string;
 	export const VITE_FIREBASE_AUTH_DOMAIN: string;
 	export const npm_config_user_agent: string;
-	export const VITE_FIREBASE_PROJECT_ID: string;
 	export const npm_config_local_prefix: string;
+	export const VITE_FIREBASE_PROJECT_ID: string;
 	export const HOME: string;
 	export const TERM_PROGRAM: string;
 	export const PWD: string;
@@ -286,8 +286,8 @@ declare module '$env/dynamic/private' {
 		INIT_CWD: string;
 		VITE_FIREBASE_AUTH_DOMAIN: string;
 		npm_config_user_agent: string;
-		VITE_FIREBASE_PROJECT_ID: string;
 		npm_config_local_prefix: string;
+		VITE_FIREBASE_PROJECT_ID: string;
 		HOME: string;
 		TERM_PROGRAM: string;
 		PWD: string;

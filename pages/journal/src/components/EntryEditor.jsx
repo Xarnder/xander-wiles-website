@@ -11,7 +11,7 @@ import SimpleMdeReact from 'react-simplemde-editor';
 import "easymde/dist/easymde.min.css";
 import { format, parseISO, addDays, differenceInMonths, differenceInWeeks, differenceInDays, addMonths, addWeeks } from 'date-fns';
 import { useBackup } from '../context/BackupContext';
-import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, BookOpen, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2 } from 'lucide-react';
+import { ArrowLeft, Edit2, Save, X, Calendar, PenTool, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Loader, Trash2, Tag, Star, Sparkles, Clock, Target, Smile, Meh, Frown, Heart, Zap, BookOpen, Hash, Type, Bold, Italic, List, ListOrdered, Heading, Quote, Link2, ClipboardPaste, Square } from 'lucide-react';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { compressImage } from '../utils/imageUtils';
 import StorageStats from './StorageStats';
@@ -91,6 +91,8 @@ export default function EntryEditor() {
     const [entrySettingsLoaded, setEntrySettingsLoaded] = useState(false);
     const [mdeInstance, setMdeInstance] = useState(null);
     const [showFormatting, setShowFormatting] = useState(false);
+    const [isClipboardTyping, setIsClipboardTyping] = useState(false);
+    const [clipboardTypingProgress, setClipboardTypingProgress] = useState(0);
 
     // Image State
     const [images, setImages] = useState([]); // Array of { url, path, size }
@@ -202,6 +204,27 @@ export default function EntryEditor() {
     };
 
     const titleTextareaRef = useRef(null);
+    const clipboardAnimationRef = useRef(null);
+
+    const stopClipboardTyping = useCallback(() => {
+        const animation = clipboardAnimationRef.current;
+        if (!animation) return;
+
+        window.cancelAnimationFrame(animation.frameId);
+        animation.editor.off('beforeChange', animation.handleBeforeChange);
+        clipboardAnimationRef.current = null;
+        setIsClipboardTyping(false);
+        setClipboardTypingProgress(0);
+    }, []);
+
+    useEffect(() => () => {
+        const animation = clipboardAnimationRef.current;
+        if (!animation) return;
+
+        window.cancelAnimationFrame(animation.frameId);
+        animation.editor.off('beforeChange', animation.handleBeforeChange);
+        clipboardAnimationRef.current = null;
+    }, []);
 
     // Auto-resize title textarea
     useEffect(() => {
@@ -217,11 +240,14 @@ export default function EntryEditor() {
             // Save: Cmd+S or Ctrl+S
             if ((e.metaKey || e.ctrlKey) && e.key === 's') {
                 e.preventDefault();
+                stopClipboardTyping();
                 if (isEditing) handleSave();
             }
             // Cancel: Esc
             if (e.key === 'Escape') {
-                if (lightboxImage) {
+                if (clipboardAnimationRef.current) {
+                    stopClipboardTyping();
+                } else if (lightboxImage) {
                     setLightboxImage(null);
                     setZoomLevel(1);
                 } else if (editingCaptionIndex !== null) {
@@ -256,7 +282,7 @@ export default function EntryEditor() {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, images, date, lightboxImage, editingCaptionIndex, showDeleteConfirm, showDuplicateConfirm]);
+    }, [isEditing, content, title, selectedTags, mood, subEntries, numericEntries, images, date, lightboxImage, editingCaptionIndex, showDeleteConfirm, showDuplicateConfirm, stopClipboardTyping]);
 
     // Auto-save logic
     useEffect(() => {
@@ -726,6 +752,95 @@ export default function EntryEditor() {
         if (imageFiles.length > 0) {
             e.preventDefault(); // Prevent default pasting behavior if images are detected
             await uploadImageFiles(imageFiles);
+        }
+    };
+
+    const handleAnimatedClipboardPaste = async () => {
+        if (isClipboardTyping) {
+            stopClipboardTyping();
+            return;
+        }
+
+        if (!mdeInstance) {
+            toastError('The main entry editor is not ready yet.');
+            return;
+        }
+
+        if (!navigator.clipboard?.readText) {
+            toastError('Clipboard access is unavailable. Please paste into the entry normally.');
+            return;
+        }
+
+        try {
+            const clipboardText = (await navigator.clipboard.readText()).replace(/\r\n?/g, '\n');
+            if (!clipboardText) {
+                toastError('There is no text on the clipboard.');
+                return;
+            }
+
+            const editor = mdeInstance;
+            const selectionStart = editor.getCursor('from');
+            const selectionEnd = editor.getCursor('to');
+            const insertionIndex = editor.indexFromPos(selectionStart);
+            let typedLength = 0;
+            const duration = Math.min(6500, Math.max(700, clipboardText.length * 24));
+            const startedAt = performance.now();
+
+            const handleBeforeChange = (_editor, change) => {
+                if (change.origin !== 'clipboard-typing' && change.origin !== 'setValue') {
+                    stopClipboardTyping();
+                }
+            };
+
+            editor.on('beforeChange', handleBeforeChange);
+            editor.replaceRange('', selectionStart, selectionEnd, 'clipboard-typing');
+
+            const animation = {
+                editor,
+                frameId: 0,
+                handleBeforeChange
+            };
+            clipboardAnimationRef.current = animation;
+            setIsClipboardTyping(true);
+            setClipboardTypingProgress(0);
+
+            const typeNextChunk = (now) => {
+                if (clipboardAnimationRef.current !== animation) return;
+
+                const elapsed = now - startedAt;
+                const nextLength = Math.min(
+                    clipboardText.length,
+                    Math.max(typedLength + 1, Math.floor((elapsed / duration) * clipboardText.length))
+                );
+
+                if (nextLength > typedLength) {
+                    const chunk = clipboardText.slice(typedLength, nextLength);
+                    const insertAt = editor.posFromIndex(insertionIndex + typedLength);
+                    editor.replaceRange(chunk, insertAt, insertAt, 'clipboard-typing');
+                    typedLength = nextLength;
+                    const cursor = editor.posFromIndex(insertionIndex + typedLength);
+                    editor.setCursor(cursor);
+                    editor.scrollIntoView(cursor, 80);
+                    setClipboardTypingProgress(Math.round((typedLength / clipboardText.length) * 100));
+                }
+
+                if (typedLength < clipboardText.length) {
+                    animation.frameId = window.requestAnimationFrame(typeNextChunk);
+                    return;
+                }
+
+                editor.off('beforeChange', handleBeforeChange);
+                clipboardAnimationRef.current = null;
+                setIsClipboardTyping(false);
+                setClipboardTypingProgress(100);
+                editor.focus();
+                success('Clipboard text added to your entry');
+            };
+
+            animation.frameId = window.requestAnimationFrame(typeNextChunk);
+        } catch (clipboardError) {
+            console.error('Failed to read clipboard:', clipboardError);
+            toastError('Clipboard access was blocked. Allow Paste, then try again.');
         }
     };
 
@@ -1511,9 +1626,32 @@ export default function EntryEditor() {
                             </div>
 
                             <div className="mb-4 sm:mb-6">
-                                <div className="mb-1.5 sm:mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
-                                    <BookOpen className="h-4 w-4 text-primary" />
-                                    Main entry
+                                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 sm:mb-3">
+                                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
+                                        <BookOpen className="h-4 w-4 text-primary" />
+                                        Main entry
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleAnimatedClipboardPaste()}
+                                        className={`relative inline-flex min-h-9 items-center gap-1.5 overflow-hidden rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                                            isClipboardTyping
+                                                ? 'border-secondary/40 bg-secondary/10 text-secondary hover:bg-secondary/15'
+                                                : 'border-white/10 bg-white/5 text-text-secondary hover:border-primary/30 hover:text-primary'
+                                        }`}
+                                        title={isClipboardTyping ? 'Stop typing clipboard text' : 'Paste clipboard text with a typing animation'}
+                                        aria-label={isClipboardTyping ? 'Stop typing clipboard text' : 'Paste clipboard text with typing animation'}
+                                    >
+                                        {isClipboardTyping ? <Square className="h-3.5 w-3.5 fill-current" /> : <ClipboardPaste className="h-3.5 w-3.5" />}
+                                        {isClipboardTyping ? `Stop · ${clipboardTypingProgress}%` : 'Type clipboard'}
+                                        {isClipboardTyping && (
+                                            <span
+                                                className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-secondary transition-transform duration-100"
+                                                style={{ transform: `scaleX(${clipboardTypingProgress / 100})` }}
+                                                aria-hidden="true"
+                                            />
+                                        )}
+                                    </button>
                                 </div>
                                 <SimpleMdeReact
                                     value={content}

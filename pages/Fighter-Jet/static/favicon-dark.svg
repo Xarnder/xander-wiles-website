@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Viper Strike</title>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1">
+      <stop stop-color="#102d43"/>
+      <stop offset="1" stop-color="#040a0f"/>
+    </linearGradient>
+    <linearGradient id="jet" x2="1" y2="1">
+      <stop stop-color="#f8f3dc"/>
+      <stop offset="1" stop-color="#7fa6b7"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#sky)"/>
+  <circle cx="48" cy="15" r="8" fill="#ff8a45" opacity=".9"/>
+  <path d="m32 7 5 18 18 9-2 5-17-4-1 13 7 5-1 4-9-3-9 3-1-4 7-5-1-13-17 4-2-5 18-9z" fill="url(#jet)" stroke="#d8faff" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M29 54h6l-3 7z" fill="#ff8a45"/>
+</svg>

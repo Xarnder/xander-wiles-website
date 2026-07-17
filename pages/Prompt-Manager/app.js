@@ -1397,10 +1397,23 @@ function createPromptCard(item, searchTerm = '') {
     // If it was the old single-color format, we use it as 33% opacity background
     let finalBg = (data.categoryColor && !data.categoryBgColor) ? `${bg}33` : bg;
     
-    let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${escapeHTML(data.category)}</span>` : '<span></span>';
+    let tagHTML = data.category ? `<span class="prompt-tag" style="background: ${finalBg}; color: ${text}; border-color: ${bg}55;">${escapeHTML(data.category)}</span>` : '';
 
     const isCommand = (data.mode === 'command');
     const isLink = (data.mode === 'link');
+
+    const createdDate = toJsDate(data.createdAt);
+    const lastUsedDate = toJsDate(data.lastUsed);
+    const addedAge = createdDate ? formatCompactAge(createdDate) : '—';
+    const usedAge = lastUsedDate ? formatCompactAge(lastUsedDate) : 'never';
+    const addedTitle = createdDate ? `Added ${createdDate.toLocaleString()}` : 'Added date unknown';
+    const usedTitle = lastUsedDate ? `Last used ${lastUsedDate.toLocaleString()}` : 'Never used';
+    const timeMetaHTML = `
+        <div class="card-time-meta">
+            <span class="time-meta-item" title="${addedTitle}"><span class="time-meta-label">Added</span> <span class="time-meta-value">${addedAge}</span></span>
+            <span class="time-meta-sep" aria-hidden="true">·</span>
+            <span class="time-meta-item" title="${usedTitle}"><span class="time-meta-label">Used</span> <span class="time-meta-value">${usedAge}</span></span>
+        </div>`;
     
     let contentHTML = '';
     // Check if prompt has variables
@@ -1428,6 +1441,7 @@ function createPromptCard(item, searchTerm = '') {
                 <h3>${highlightSearch(escapeHTML(data.title), searchTerm)}</h3>
                 <div class="card-tag-container">
                     ${tagHTML}
+                    ${timeMetaHTML}
                 </div>
             </div>
             <div class="card-header-actions">
@@ -2213,6 +2227,42 @@ function timeAgo(date) {
     if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
     const years = Math.floor(months / 12);
     return `${years} year${years > 1 ? 's' : ''} ago`;
+}
+
+function toJsDate(value) {
+    if (!value) return null;
+    if (typeof value.toDate === 'function') return value.toDate();
+    if (typeof value.toMillis === 'function') return new Date(value.toMillis());
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** Compact age like "2m 3w 2d" (months, weeks, days). Sub-day uses h/min. */
+function formatCompactAge(date) {
+    const ms = Date.now() - date.getTime();
+    if (ms < 0) return '0d';
+
+    const minuteMs = 60 * 1000;
+    const hourMs = 60 * minuteMs;
+    const dayMs = 24 * hourMs;
+
+    if (ms < dayMs) {
+        if (ms < minuteMs) return 'now';
+        if (ms < hourMs) return `${Math.max(1, Math.floor(ms / minuteMs))}min`;
+        return `${Math.max(1, Math.floor(ms / hourMs))}h`;
+    }
+
+    let remainingDays = Math.floor(ms / dayMs);
+    const months = Math.floor(remainingDays / 30);
+    remainingDays %= 30;
+    const weeks = Math.floor(remainingDays / 7);
+    const days = remainingDays % 7;
+
+    const parts = [];
+    if (months > 0) parts.push(`${months}m`);
+    if (weeks > 0) parts.push(`${weeks}w`);
+    if (days > 0 || parts.length === 0) parts.push(`${days}d`);
+    return parts.join(' ');
 }
 
 // --- Input History Logic ---

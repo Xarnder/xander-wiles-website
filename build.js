@@ -15,6 +15,7 @@ const rootDir = __dirname;
 const deployOut = path.join(rootDir, 'deploy_out');
 const journalSrc = path.join(rootDir, 'pages', 'journal');
 const zImageSrc = path.join(rootDir, 'pages', 'z-image-turbo-sveltekit');
+const fighterJetSrc = path.join(rootDir, 'pages', 'Fighter-Jet');
 
 // 1. Clean Start
 console.log('Cleaning deploy_out...');
@@ -48,6 +49,12 @@ for (const item of items) {
             if (
                 rel === path.join('pages', 'z-image-turbo-sveltekit') ||
                 rel.startsWith(path.join('pages', 'z-image-turbo-sveltekit') + path.sep)
+            ) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'Fighter-Jet') ||
+                rel.startsWith(path.join('pages', 'Fighter-Jet') + path.sep)
             ) {
                 return false;
             }
@@ -109,7 +116,40 @@ if (fs.existsSync(zImageDist)) {
     process.exit(1);
 }
 
-// 6. Replace Environment Variables in Static Files
+// 6. Build and Inject Fighter-Jet (Viper Strike) SvelteKit app
+const fighterJetModelSrc = path.join(rootDir, 'assets', 'models', 'Fighter_Jet.glb');
+const fighterJetModelDest = path.join(fighterJetSrc, 'static', 'models', 'fighter-jet.glb');
+if (fs.existsSync(fighterJetModelSrc)) {
+    fs.mkdirSync(path.dirname(fighterJetModelDest), { recursive: true });
+    fs.copyFileSync(fighterJetModelSrc, fighterJetModelDest);
+    console.log('Synced fighter jet GLB from assets/models/Fighter_Jet.glb');
+}
+
+console.log('Building Fighter-Jet (Viper Strike)...');
+try {
+    process.chdir(fighterJetSrc);
+    execSync('npm install', { stdio: 'inherit' });
+    execSync('npm run build', { stdio: 'inherit' });
+} catch (error) {
+    console.error('Failed to build Fighter-Jet:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+
+console.log('Injecting Fighter-Jet build...');
+const fighterJetDest = path.join(deployOut, 'pages', 'Fighter-Jet');
+fs.mkdirSync(fighterJetDest, { recursive: true });
+
+const fighterJetDist = path.join(fighterJetSrc, 'dist');
+if (fs.existsSync(fighterJetDist)) {
+    fs.cpSync(fighterJetDist, fighterJetDest, { recursive: true });
+} else {
+    console.error('Fighter-Jet dist folder not found!');
+    process.exit(1);
+}
+
+// 7. Replace Environment Variables in Static Files
 console.log('Injecting environment variables into static files...');
 
 function processDirectory(dir) {

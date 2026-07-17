@@ -1608,6 +1608,7 @@ select:focus {
 
 .archived-card:hover h3,
 .archived-card:hover .card-tag-container,
+.archived-card:hover .card-time-meta,
 .archived-card:hover .prompt-body,
 .archived-card:hover .variable-status-icon {
     opacity: 0.8 !important;
@@ -2460,12 +2461,54 @@ select:focus {
 
 .card-tag-container {
     display: flex;
-    justify-content: flex-start;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    min-width: 0;
 }
 
 .card-tag-container .prompt-tag {
     font-size: 0.75rem;
     padding: 3px 10px;
+    margin-bottom: 0;
+}
+
+.card-time-meta {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    font-size: 0.68rem;
+    line-height: 1.2;
+    color: var(--text-muted);
+    letter-spacing: 0.01em;
+    min-width: 0;
+}
+
+.time-meta-item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.time-meta-label {
+    opacity: 0.7;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+}
+
+.time-meta-value {
+    color: rgba(255, 255, 255, 0.55);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.time-meta-sep {
+    opacity: 0.35;
+    user-select: none;
 }
 
 /* --- Slim Mobile Optimization --- */
@@ -2499,6 +2542,15 @@ select:focus {
     .card-tag-container .prompt-tag {
         font-size: 0.7rem;
         padding: 2px 8px;
+    }
+
+    .card-time-meta {
+        font-size: 0.62rem;
+        width: 100%;
+    }
+
+    .time-meta-label {
+        font-size: 0.58rem;
     }
 
     .card-header-actions {

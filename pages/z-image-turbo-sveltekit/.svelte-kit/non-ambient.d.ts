@@ -38,6 +38,6 @@ declare module "$app/types" {
 		};
 		Pathname(): "/";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
-		Asset(): "/onnx/ort-wasm-simd-threaded.asyncify.wasm" | "/onnx/ort-wasm-simd-threaded.jsep.wasm" | "/onnx/ort-wasm-simd-threaded.jspi.wasm" | "/onnx/ort-wasm-simd-threaded.wasm" | string & {};
+		Asset(): "/.DS_Store" | "/onnx/ort-wasm-simd-threaded.asyncify.wasm" | "/onnx/ort-wasm-simd-threaded.jsep.wasm" | "/onnx/ort-wasm-simd-threaded.jspi.wasm" | "/onnx/ort-wasm-simd-threaded.wasm" | string & {};
 	}
 }

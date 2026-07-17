@@ -2,6 +2,24 @@ const CUSTOM_WORDS_KEY = 'journal-harper-custom-words';
 
 let linterPromise;
 
+async function setupWithTimeout(linter, timeoutMs = 12000) {
+    let timeoutId;
+
+    try {
+        await Promise.race([
+            linter.setup(),
+            new Promise((_, reject) => {
+                timeoutId = window.setTimeout(
+                    () => reject(new Error('Harper worker setup timed out')),
+                    timeoutMs
+                );
+            })
+        ]);
+    } finally {
+        window.clearTimeout(timeoutId);
+    }
+}
+
 function getPreferredDialect(Dialect) {
     const locale = (navigator.languages?.[0] || navigator.language || 'en-GB').toLowerCase();
 
@@ -37,10 +55,10 @@ async function createLinter() {
 
     try {
         linter = new WorkerLinter(init);
-        await linter.setup();
+        await setupWithTimeout(linter);
     } catch (workerError) {
         console.warn('Harper worker unavailable; using the on-device fallback.', workerError);
-        await linter?.dispose?.().catch(() => undefined);
+        void linter?.dispose?.().catch(() => undefined);
         linter = new LocalLinter(init);
         await linter.setup();
     }
