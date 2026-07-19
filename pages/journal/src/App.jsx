@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { BackupProvider } from './context/BackupContext';
@@ -15,10 +15,21 @@ import ImageView from './components/ImageView';
 import MemoriesView from './components/MemoriesView';
 import TagsView from './components/TagsView';
 import SettingsView from './components/SettingsView';
+import EntryErrorBoundary from './components/EntryErrorBoundary';
 
 function PrivateRoute({ children }) {
   const { currentUser } = useAuth();
   return currentUser ? children : <Navigate to="/login" />;
+}
+
+function EntryEditorRoute() {
+  const { date } = useParams();
+
+  return (
+    <EntryErrorBoundary key={date}>
+      <EntryEditor />
+    </EntryErrorBoundary>
+  );
 }
 
 function App() {
@@ -35,7 +46,8 @@ function App() {
               </PrivateRoute>
             }>
               <Route path="/" element={<CalendarView />}>
-                <Route path="entry/:date" element={<EntryEditor />} />
+                <Route path="entry/:date" element={<EntryEditorRoute />} />
+                <Route path="entry/*" element={<Navigate to="/" replace />} />
               </Route>
               <Route path="/month" element={<MonthView />} />
               <Route path="/images" element={<ImageView />} />

@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { db } from '../firebase';
-import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, getDocFromCache, setDoc, deleteDoc, serverTimestamp, collection, query, onSnapshot } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
 import EasyMDE from 'easymde';
 import SimpleMdeReact from 'react-simplemde-editor';
@@ -33,6 +33,33 @@ import {
     numericEntriesToPlainText,
     subEntriesToPlainText
 } from '../utils/entrySections';
+
+const ENTRY_LOAD_TIMEOUT_MS = 12000;
+const ENTRY_LOAD_TIMEOUT_CODE = 'journal/entry-load-timeout';
+
+function getDocWithTimeout(docRef) {
+    let timeoutId;
+
+    return Promise.race([
+        getDoc(docRef),
+        new Promise((_, reject) => {
+            timeoutId = window.setTimeout(() => {
+                const error = new Error('Entry load timed out');
+                error.code = ENTRY_LOAD_TIMEOUT_CODE;
+                reject(error);
+            }, ENTRY_LOAD_TIMEOUT_MS);
+        })
+    ]).finally(() => window.clearTimeout(timeoutId));
+}
+
+function shouldUseNativeEditor() {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches
+        || navigator.standalone === true;
+
+    return isIOS && isStandalone;
+}
 
 function cleanConfiguredNumericEntries(numericEntries, numericFields, shouldFilterByFields) {
     const cleanedEntries = cleanNumericEntriesForSave(numericEntries);
@@ -93,6 +120,7 @@ export default function EntryEditor() {
     const [showFormatting, setShowFormatting] = useState(false);
     const [isClipboardTyping, setIsClipboardTyping] = useState(false);
     const [clipboardTypingProgress, setClipboardTypingProgress] = useState(0);
+    const useNativeEditor = useMemo(shouldUseNativeEditor, []);
 
     // Image State
     const [images, setImages] = useState([]); // Array of { url, path, size }
@@ -488,6 +516,8 @@ export default function EntryEditor() {
     }, [content]);
 
     useEffect(() => {
+        let cancelled = false;
+
         async function fetchEntry() {
             setLoading(true);
             setLoadError('');
@@ -498,7 +528,19 @@ export default function EntryEditor() {
 
             try {
                 const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
-                const docSnap = await getDoc(docRef);
+                let docSnap;
+
+                try {
+                    docSnap = await getDocWithTimeout(docRef);
+                } catch (networkError) {
+                    try {
+                        docSnap = await getDocFromCache(docRef);
+                    } catch {
+                        throw networkError;
+                    }
+                }
+
+                if (cancelled) return;
 
                 if (docSnap.exists()) {
                     const data = docSnap.data();
@@ -574,14 +616,23 @@ export default function EntryEditor() {
                     isFirstLoad.current = true;
                 }
             } catch (error) {
+                if (cancelled) return;
                 console.error("Error fetching entry:", error);
-                setLoadError('This entry could not be loaded. Check your connection and try again.');
+                setLoadError(
+                    error?.code === ENTRY_LOAD_TIMEOUT_CODE
+                        ? 'This entry took too long to load. iOS may have paused the connection. Try again.'
+                        : 'This entry could not be loaded. Check your connection and try again.'
+                );
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         }
 
         fetchEntry();
+
+        return () => {
+            cancelled = true;
+        };
     }, [date, currentUser, reloadKey]);
 
     // Fetch configurable entry fields
@@ -1653,18 +1704,35 @@ export default function EntryEditor() {
                                         )}
                                     </button>
                                 </div>
-                                <SimpleMdeReact
-                                    value={content}
-                                    onChange={setContent}
-                                    options={mdeOptions}
-                                    getMdeInstance={configureMdeInstance}
-                                    className="prose-dark"
-                                />
-                                <HarperProofreader
-                                    text={content}
-                                    onTextChange={setContent}
-                                    editor={mdeInstance}
-                                />
+                                {useNativeEditor ? (
+                                    <textarea
+                                        value={content}
+                                        onChange={(event) => setContent(event.target.value)}
+                                        rows={16}
+                                        spellCheck
+                                        autoCorrect="on"
+                                        autoCapitalize="sentences"
+                                        autoComplete="on"
+                                        aria-label="Main journal entry"
+                                        placeholder="Capture the moment..."
+                                        className="min-h-[22rem] w-full resize-y rounded-xl border border-white/10 bg-black/20 p-4 text-base leading-relaxed text-text outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+                                    />
+                                ) : (
+                                    <>
+                                        <SimpleMdeReact
+                                            value={content}
+                                            onChange={setContent}
+                                            options={mdeOptions}
+                                            getMdeInstance={configureMdeInstance}
+                                            className="prose-dark"
+                                        />
+                                        <HarperProofreader
+                                            text={content}
+                                            onTextChange={setContent}
+                                            editor={mdeInstance}
+                                        />
+                                    </>
+                                )}
                             </div>
 
                             {/* Combined Mood Picker and Formatting Tool Row */}
