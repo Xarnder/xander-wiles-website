@@ -8,6 +8,7 @@ import {
 } from '../lib/harperProofreader';
 
 const MAX_VISIBLE_ISSUES = 5;
+const HARPER_START_ERROR = 'The enhanced proofreader could not start. Your writing is safe.';
 
 function isSpellingIssue(issue) {
     return /spell|typo/i.test(issue.kind);
@@ -55,7 +56,7 @@ export default function HarperProofreader({ text, onTextChange, editor }) {
         } catch (checkError) {
             console.error('Harper check failed', checkError);
             if (mountedRef.current && requestId === requestRef.current) {
-                setError('Harper could not start. Native iOS spelling support is still on.');
+                setError(HARPER_START_ERROR);
             }
         } finally {
             if (mountedRef.current && requestId === requestRef.current) {
@@ -214,9 +215,28 @@ export default function HarperProofreader({ text, onTextChange, editor }) {
             </div>
 
             {error && (
-                <p className="border-t border-amber-400/15 bg-amber-400/[0.06] px-3 py-2 text-xs text-amber-300 sm:px-4" role="status">
-                    {error}
-                </p>
+                <div className="border-t border-amber-400/15 bg-amber-400/[0.06] px-3 py-2.5 text-xs text-amber-200 sm:px-4" role="status">
+                    <p>{error}</p>
+                    {error === HARPER_START_ERROR && (
+                        <details className="mt-2 rounded-lg border border-amber-300/15 bg-black/10">
+                            <summary className="cursor-pointer px-3 py-2 font-semibold text-amber-100">
+                                Enable spelling help on iPhone or iPad
+                            </summary>
+                            <div className="space-y-2 border-t border-amber-300/10 px-3 py-3 leading-relaxed text-text-secondary">
+                                <ol className="list-decimal space-y-1.5 pl-5">
+                                    <li>Open the <strong className="text-text">Settings</strong> app.</li>
+                                    <li>Choose <strong className="text-text">General</strong>, then <strong className="text-text">Keyboard</strong>.</li>
+                                    <li>Turn on <strong className="text-text">Check Spelling</strong> and <strong className="text-text">Auto-Correction</strong>.</li>
+                                    <li>Optionally turn on <strong className="text-text">Predictive Text</strong> for suggestions above the keyboard.</li>
+                                    <li>Return to Journal, then tap or long-press an underlined word to see corrections.</li>
+                                </ol>
+                                <p className="text-[11px] text-text-muted">
+                                    If the options were already enabled, fully close and reopen the Journal app. Harper itself requires no iOS permission.
+                                </p>
+                            </div>
+                        </details>
+                    )}
+                </div>
             )}
 
             {!checking && !error && result.source === text && visibleIssues.length === 0 && text.trim().length >= 3 && (

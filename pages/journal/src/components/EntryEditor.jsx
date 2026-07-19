@@ -55,10 +55,46 @@ function getDocWithTimeout(docRef) {
 function shouldUseNativeEditor() {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
         || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches
-        || navigator.standalone === true;
 
-    return isIOS && isStandalone;
+    return isIOS;
+}
+
+function normalizeEntryText(value) {
+    return typeof value === 'string' ? value : '';
+}
+
+function normalizeEntryRecord(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function normalizeMood(value) {
+    const numericValue = typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : value;
+
+    return Number.isInteger(numericValue) && numericValue >= 1 && numericValue <= 5
+        ? numericValue
+        : null;
+}
+
+function normalizeImages(data) {
+    if (Array.isArray(data.images)) return data.images;
+    if (typeof data.imageUrl === 'string' && data.imageUrl) {
+        return [{
+            url: data.imageUrl,
+            path: data.imagePath || null,
+            size: data.imageSize || 0
+        }];
+    }
+    if (data.imageMetadata && typeof data.imageMetadata === 'object' && typeof data.imageMetadata.url === 'string') {
+        return [{
+            url: data.imageMetadata.url,
+            path: data.imageMetadata.path || null,
+            size: data.imageMetadata.sizeInBytes || 0
+        }];
+    }
+
+    return [];
 }
 
 function cleanConfiguredNumericEntries(numericEntries, numericFields, shouldFilterByFields) {
@@ -180,6 +216,8 @@ export default function EntryEditor() {
         { icon: Heart, label: 'Great', value: 4, color: '#4ade80' },
         { icon: Zap, label: 'Amazing', value: 5, color: '#8b5cf6' },
     ];
+    const selectedMoodDetails = MOODS.find((item) => item.value === mood) || null;
+    const SelectedMoodIcon = selectedMoodDetails?.icon;
 
     const fromPath = location.state?.from;
     const isFromGallery = location.state?.fromGallery;
@@ -232,6 +270,7 @@ export default function EntryEditor() {
     };
 
     const titleTextareaRef = useRef(null);
+    const nativeTextareaRef = useRef(null);
     const clipboardAnimationRef = useRef(null);
 
     const stopClipboardTyping = useCallback(() => {
@@ -239,7 +278,9 @@ export default function EntryEditor() {
         if (!animation) return;
 
         window.cancelAnimationFrame(animation.frameId);
-        animation.editor.off('beforeChange', animation.handleBeforeChange);
+        if (animation.editor && animation.handleBeforeChange) {
+            animation.editor.off('beforeChange', animation.handleBeforeChange);
+        }
         clipboardAnimationRef.current = null;
         setIsClipboardTyping(false);
         setClipboardTypingProgress(0);
@@ -250,7 +291,9 @@ export default function EntryEditor() {
         if (!animation) return;
 
         window.cancelAnimationFrame(animation.frameId);
-        animation.editor.off('beforeChange', animation.handleBeforeChange);
+        if (animation.editor && animation.handleBeforeChange) {
+            animation.editor.off('beforeChange', animation.handleBeforeChange);
+        }
         clipboardAnimationRef.current = null;
     }, []);
 
@@ -544,51 +587,37 @@ export default function EntryEditor() {
 
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    setContent(data.content || '');
-                    setTitle(data.title || '');
-                    setSelectedTags(data.tags || []);
-                    setIsSpecial(data.isSpecial || false);
-                    setMood(data.mood || null);
+                    const normalizedContent = normalizeEntryText(data.content);
+                    const normalizedTitle = normalizeEntryText(data.title);
+                    const normalizedTags = Array.isArray(data.tags) ? data.tags : [];
+                    const normalizedMood = normalizeMood(data.mood);
+                    const normalizedSubEntries = normalizeEntryRecord(data.subEntries);
+                    const normalizedNumericEntries = normalizeEntryRecord(data.numericEntries);
+                    const normalizedImages = normalizeImages(data);
+
+                    setContent(normalizedContent);
+                    setTitle(normalizedTitle);
+                    setSelectedTags(normalizedTags);
+                    setIsSpecial(Boolean(data.isSpecial));
+                    setMood(normalizedMood);
                     setLocalAiSummaryRecord(data.aiSummary?.local || null);
-                    setSubEntries(data.subEntries || {});
-                    setNumericEntries(data.numericEntries || {});
+                    setSubEntries(normalizedSubEntries);
+                    setNumericEntries(normalizedNumericEntries);
+                    setImages(normalizedImages);
                     lastSavedSignature.current = createEntrySignature({
-                        content: data.content || '',
-                        title: data.title || '',
-                        selectedTags: data.tags || [],
-                        mood: data.mood || null,
-                        isSpecial: data.isSpecial || false,
-                        images: data.images || (data.imageUrl ? [{
-                            url: data.imageUrl,
-                            path: data.imagePath || null,
-                            size: data.imageSize || 0
-                        }] : []),
-                        subEntries: data.subEntries || {},
-                        numericEntries: data.numericEntries || {},
+                        content: normalizedContent,
+                        title: normalizedTitle,
+                        selectedTags: normalizedTags,
+                        mood: normalizedMood,
+                        isSpecial: Boolean(data.isSpecial),
+                        images: normalizedImages,
+                        subEntries: normalizedSubEntries,
+                        numericEntries: normalizedNumericEntries,
                         numericFields: [],
                         entrySettingsLoaded: false
                     });
                     isFirstLoad.current = true;
 
-                    // Handle new schema vs legacy schema
-                    if (data.images && Array.isArray(data.images)) {
-                        setImages(data.images);
-                    } else if (data.imageUrl) {
-                        setImages([{
-                            url: data.imageUrl,
-                            path: data.imagePath || null,
-                            size: data.imageSize || 0
-                        }]);
-                    } else if (data.imageMetadata) {
-                        // Legacy fallback
-                        setImages([{
-                            url: data.imageMetadata.url,
-                            path: data.imageMetadata.path,
-                            size: data.imageMetadata.sizeInBytes
-                        }]);
-                    } else {
-                        setImages([]);
-                    }
                     setIsEditing(false); // Ensure we start in view mode for existing entries
                 } else {
                     // New entry
@@ -812,7 +841,8 @@ export default function EntryEditor() {
             return;
         }
 
-        if (!mdeInstance) {
+        const nativeTextarea = useNativeEditor ? nativeTextareaRef.current : null;
+        if (!mdeInstance && !nativeTextarea) {
             toastError('The main entry editor is not ready yet.');
             return;
         }
@@ -826,6 +856,67 @@ export default function EntryEditor() {
             const clipboardText = (await navigator.clipboard.readText()).replace(/\r\n?/g, '\n');
             if (!clipboardText) {
                 toastError('There is no text on the clipboard.');
+                return;
+            }
+
+            if (nativeTextarea) {
+                const selectionStart = nativeTextarea.selectionStart ?? content.length;
+                const selectionEnd = nativeTextarea.selectionEnd ?? selectionStart;
+                const contentBeforeSelection = content.slice(0, selectionStart);
+                const contentAfterSelection = content.slice(selectionEnd);
+                let typedLength = 0;
+                const duration = Math.min(6500, Math.max(700, clipboardText.length * 24));
+                const startedAt = performance.now();
+                const animation = {
+                    editor: null,
+                    frameId: 0,
+                    handleBeforeChange: null,
+                    type: 'native'
+                };
+
+                clipboardAnimationRef.current = animation;
+                setIsClipboardTyping(true);
+                setClipboardTypingProgress(0);
+
+                const typeNextNativeChunk = (now) => {
+                    if (clipboardAnimationRef.current !== animation) return;
+
+                    const elapsed = now - startedAt;
+                    const nextLength = Math.min(
+                        clipboardText.length,
+                        Math.max(typedLength + 1, Math.floor((elapsed / duration) * clipboardText.length))
+                    );
+
+                    if (nextLength > typedLength) {
+                        typedLength = nextLength;
+                        setContent(
+                            contentBeforeSelection
+                            + clipboardText.slice(0, typedLength)
+                            + contentAfterSelection
+                        );
+                        setClipboardTypingProgress(Math.round((typedLength / clipboardText.length) * 100));
+                    }
+
+                    if (typedLength < clipboardText.length) {
+                        animation.frameId = window.requestAnimationFrame(typeNextNativeChunk);
+                        return;
+                    }
+
+                    clipboardAnimationRef.current = null;
+                    setIsClipboardTyping(false);
+                    setClipboardTypingProgress(100);
+
+                    window.requestAnimationFrame(() => {
+                        const textarea = nativeTextareaRef.current;
+                        if (!textarea) return;
+                        const cursorPosition = selectionStart + clipboardText.length;
+                        textarea.focus();
+                        textarea.setSelectionRange(cursorPosition, cursorPosition);
+                    });
+                    success('Clipboard text added to your entry');
+                };
+
+                animation.frameId = window.requestAnimationFrame(typeNextNativeChunk);
                 return;
             }
 
@@ -1142,7 +1233,7 @@ export default function EntryEditor() {
         };
     }, []);
 
-    const configureMdeInstance = useCallback((codeMirror) => {
+    const configureCodeMirrorInstance = useCallback((codeMirror) => {
         setMdeInstance(codeMirror);
         if (!codeMirror) return;
 
@@ -1706,8 +1797,14 @@ export default function EntryEditor() {
                                 </div>
                                 {useNativeEditor ? (
                                     <textarea
+                                        ref={nativeTextareaRef}
                                         value={content}
-                                        onChange={(event) => setContent(event.target.value)}
+                                        onChange={(event) => {
+                                            if (clipboardAnimationRef.current?.type === 'native') {
+                                                stopClipboardTyping();
+                                            }
+                                            setContent(event.target.value);
+                                        }}
                                         rows={16}
                                         spellCheck
                                         autoCorrect="on"
@@ -1723,7 +1820,7 @@ export default function EntryEditor() {
                                             value={content}
                                             onChange={setContent}
                                             options={mdeOptions}
-                                            getMdeInstance={configureMdeInstance}
+                                            getCodemirrorInstance={configureCodeMirrorInstance}
                                             className="prose-dark"
                                         />
                                         <HarperProofreader
@@ -2024,20 +2121,20 @@ export default function EntryEditor() {
                     <>
                         <div className="flex-1 overflow-y-auto custom-scrollbar -mr-4 pr-4">
                             <div className="max-w-none">
-                                {mood && (
+                                {selectedMoodDetails && SelectedMoodIcon && (
                                     <div className="flex items-center gap-3 mb-8 p-3 rounded-2xl bg-white/5 border border-white/10 w-fit">
                                         <div 
                                             className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
-                                            style={{ backgroundColor: `${MOODS.find(m => m.value === mood)?.color}20` }}
+                                            style={{ backgroundColor: `${selectedMoodDetails.color}20` }}
                                         >
-                                            {React.createElement(MOODS.find(m => m.value === mood)?.icon, { 
-                                                className: "w-6 h-6",
-                                                style: { color: MOODS.find(m => m.value === mood)?.color }
-                                            })}
+                                            <SelectedMoodIcon
+                                                className="w-6 h-6"
+                                                style={{ color: selectedMoodDetails.color }}
+                                            />
                                         </div>
                                         <div>
                                             <p className="text-[10px] text-text-muted uppercase tracking-widest font-bold">Today's Mood</p>
-                                            <p className="text-white font-bold">{MOODS.find(m => m.value === mood)?.label}</p>
+                                            <p className="text-white font-bold">{selectedMoodDetails.label}</p>
                                         </div>
                                     </div>
                                 )}
