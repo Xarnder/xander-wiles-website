@@ -23,6 +23,8 @@
 9. **Protect user text first.** Refactors must not clear editor state, navigate away, or replace cached content merely because an optional network request failed.
 10. **Keep editor APIs correctly separated.** `getMdeInstance` returns EasyMDE; clipboard and Harper require CodeMirror from `getCodemirrorInstance`. Never pass the EasyMDE object to CodeMirror-only methods such as `setOption`, `markText`, `on`, or `off`.
 11. **Validate persisted entry data.** Firestore fields must be normalized before entering React state so malformed text, mood, tag, image, or structured-field values cannot crash rendering.
+12. **Keep the gallery recoverable.** Gallery reads must remain cache-first, time-bounded, cancellable, and independent of avoidable Firestore ordering/index requirements. Preserve animated collection and per-image skeletons.
+13. **Keep feedback audio optional and iOS-safe.** Save and 100-word sounds live in `pages/journal/public/audio/` and are served from `${import.meta.env.BASE_URL}audio/...`. Prime audio on editor interaction, play save synchronously when Save is tapped, and play progress during the typing handler (not in a later effect).
 
 ## Regression history
 
@@ -37,6 +39,8 @@ In July 2026, opening a day could remain on “Summoning your memories...” bec
 - Open edit mode outside iOS and confirm the CodeMirror instance initializes without triggering the entry error boundary.
 - Simulate Harper startup failure and confirm writing remains available and the expandable iPhone/iPad spelling instructions are readable.
 - Simulate a slow or failed Firestore read; the UI must leave loading and show retry/recovery controls.
+- Open the photo gallery with a slow network and from cache after an interrupted request; skeletons must animate and retry must start a fresh load.
+- Confirm `Progress.mp3` plays once when crossing each new 100-word threshold and `Save.mp3` plays only after a successful manual save, including in iOS standalone mode.
 - Change days rapidly and confirm the final screen matches the final URL.
 - Test backgrounding/resuming while loading and while editing.
 - Confirm a malformed legacy URL such as `/entry/entry/2026-07-19` returns to the calendar.

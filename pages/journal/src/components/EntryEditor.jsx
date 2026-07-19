@@ -18,10 +18,12 @@ import StorageStats from './StorageStats';
 import ConfirmModal from './ConfirmModal';
 import ImageWithSkeleton from './ImageWithSkeleton';
 import SpecialDayAnimation from './SpecialDayAnimation';
+import SaveConfetti from './SaveConfetti';
 import LocalSummaryPanel from './LocalSummaryPanel';
 import Modal from './Modal';
 import HarperProofreader from './HarperProofreader';
 import { LOCAL_SUMMARISER_MODEL_ID } from '../lib/localSummariser';
+import { playProgressSound, playSaveSound, unlockJournalAudio } from '../lib/journalAudio';
 import {
     cleanSubEntriesForSave,
     cleanNumericEntriesForSave,
@@ -156,6 +158,7 @@ export default function EntryEditor() {
     const [showFormatting, setShowFormatting] = useState(false);
     const [isClipboardTyping, setIsClipboardTyping] = useState(false);
     const [clipboardTypingProgress, setClipboardTypingProgress] = useState(0);
+    const [saveConfettiActive, setSaveConfettiActive] = useState(false);
     const useNativeEditor = useMemo(shouldUseNativeEditor, []);
 
     // Image State
@@ -192,7 +195,14 @@ export default function EntryEditor() {
     const lastSavedSignature = useRef('');
     const isFirstLoad = useRef(true);
     const lastWordMilestoneRef = useRef(0);
+    const wordMilestoneTimerRef = useRef(null);
     const [wordMilestoneFlash, setWordMilestoneFlash] = useState(null);
+
+    useEffect(() => () => {
+        if (wordMilestoneTimerRef.current) {
+            window.clearTimeout(wordMilestoneTimerRef.current);
+        }
+    }, []);
 
     const WRITING_PROMPTS = [
         "What made you smile today?",
@@ -272,6 +282,88 @@ export default function EntryEditor() {
     const titleTextareaRef = useRef(null);
     const nativeTextareaRef = useRef(null);
     const clipboardAnimationRef = useRef(null);
+    const clipboardFocusRef = useRef(null);
+    const savedEntryViewRef = useRef(null);
+    const lastClipboardFocusScrollRef = useRef(0);
+
+    const scrollClipboardFocusIntoView = useCallback((force = false) => {
+        const focusEl = clipboardFocusRef.current;
+        if (!focusEl) return;
+
+        const now = performance.now();
+        if (!force && now - lastClipboardFocusScrollRef.current < 450) return;
+
+        let scrollParent = focusEl.parentElement;
+        while (scrollParent && scrollParent !== document.body) {
+            const style = window.getComputedStyle(scrollParent);
+            const canScroll = /(auto|scroll)/.test(style.overflowY)
+                && scrollParent.scrollHeight > scrollParent.clientHeight + 8;
+            if (canScroll) break;
+            scrollParent = scrollParent.parentElement;
+        }
+
+        if (scrollParent && scrollParent !== document.body) {
+            const parentRect = scrollParent.getBoundingClientRect();
+            const focusRect = focusEl.getBoundingClientRect();
+            const topGap = focusRect.top - parentRect.top;
+            const needsScroll = force || topGap < 8 || topGap > scrollParent.clientHeight * 0.35;
+
+            if (needsScroll) {
+                lastClipboardFocusScrollRef.current = now;
+                scrollParent.scrollTo({
+                    top: Math.max(0, scrollParent.scrollTop + topGap - 12),
+                    behavior: force ? 'smooth' : 'auto'
+                });
+            }
+            return;
+        }
+
+        const stickyOffset = 120;
+        const rect = focusEl.getBoundingClientRect();
+        const isAbove = rect.top < stickyOffset;
+        const isBelow = rect.top > window.innerHeight * 0.45;
+
+        if (force || isAbove || isBelow) {
+            lastClipboardFocusScrollRef.current = now;
+            focusEl.scrollIntoView({
+                behavior: force ? 'smooth' : 'auto',
+                block: 'start',
+                inline: 'nearest'
+            });
+        }
+    }, []);
+
+    const scrollSavedEntryIntoView = useCallback(() => {
+        window.requestAnimationFrame(() => {
+            const viewEl = savedEntryViewRef.current;
+            if (!viewEl) return;
+
+            let scrollParent = viewEl.parentElement;
+            while (scrollParent && scrollParent !== document.body) {
+                const style = window.getComputedStyle(scrollParent);
+                const canScroll = /(auto|scroll)/.test(style.overflowY)
+                    && scrollParent.scrollHeight > scrollParent.clientHeight + 8;
+                if (canScroll) break;
+                scrollParent = scrollParent.parentElement;
+            }
+
+            if (scrollParent && scrollParent !== document.body) {
+                const parentRect = scrollParent.getBoundingClientRect();
+                const viewRect = viewEl.getBoundingClientRect();
+                scrollParent.scrollTo({
+                    top: Math.max(0, scrollParent.scrollTop + (viewRect.top - parentRect.top) - 12),
+                    behavior: 'smooth'
+                });
+                return;
+            }
+
+            viewEl.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+                inline: 'nearest'
+            });
+        });
+    }, []);
 
     const stopClipboardTyping = useCallback(() => {
         const animation = clipboardAnimationRef.current;
@@ -439,11 +531,38 @@ export default function EntryEditor() {
     }, [date]);
 
     // Prepare content for display
-    const displayContent = useMemo(() => {
-        if (!content) return '';
-        if (showRawHeader) return content;
-        return content.replace(/(?:\*\*)?\+\+.*?\+\+(?:\*\*)?/g, '').trim();
-    }, [content, showRawHeader]);
+    const getDisplayContent = useCallback((value) => {
+        if (!value) return '';
+        if (showRawHeader) return value;
+        return value.replace(/(?:\*\*)?\+\+.*?\+\+(?:\*\*)?/g, '').trim();
+    }, [showRawHeader]);
+
+    const displayContent = useMemo(() => getDisplayContent(content), [content, getDisplayContent]);
+
+    const handleMainContentChange = useCallback((nextContent) => {
+        setContent(nextContent);
+
+        if (!isEditing) return;
+
+        const nextWordCount = countWordsInText(getDisplayContent(nextContent));
+        const milestone = Math.floor(nextWordCount / 100) * 100;
+
+        if (milestone >= 100 && milestone > lastWordMilestoneRef.current) {
+            lastWordMilestoneRef.current = milestone;
+            setWordMilestoneFlash(milestone);
+            playProgressSound();
+
+            if (wordMilestoneTimerRef.current) {
+                window.clearTimeout(wordMilestoneTimerRef.current);
+            }
+            wordMilestoneTimerRef.current = window.setTimeout(() => {
+                setWordMilestoneFlash(null);
+                wordMilestoneTimerRef.current = null;
+            }, 1400);
+        } else if (milestone < lastWordMilestoneRef.current) {
+            lastWordMilestoneRef.current = milestone;
+        }
+    }, [getDisplayContent, isEditing]);
 
     const visibleSubEntries = useMemo(() => {
         return entrySections
@@ -485,23 +604,10 @@ export default function EntryEditor() {
 
     const totalWordCount = wordCount + subEntryWordCount;
 
-    // Celebrate every 100 main-entry words while typing (skip initial load / existing counts)
+    // Keep milestone tracking aligned when leaving edit mode or loading existing counts.
     useEffect(() => {
         if (!isEditing) {
             lastWordMilestoneRef.current = Math.floor(wordCount / 100) * 100;
-            return;
-        }
-
-        const milestone = Math.floor(wordCount / 100) * 100;
-        if (milestone >= 100 && milestone > lastWordMilestoneRef.current) {
-            lastWordMilestoneRef.current = milestone;
-            setWordMilestoneFlash(milestone);
-            const timer = window.setTimeout(() => setWordMilestoneFlash(null), 1400);
-            return () => window.clearTimeout(timer);
-        }
-
-        if (milestone < lastWordMilestoneRef.current) {
-            lastWordMilestoneRef.current = milestone;
         }
     }, [wordCount, isEditing]);
 
@@ -877,6 +983,7 @@ export default function EntryEditor() {
                 clipboardAnimationRef.current = animation;
                 setIsClipboardTyping(true);
                 setClipboardTypingProgress(0);
+                scrollClipboardFocusIntoView(true);
 
                 const typeNextNativeChunk = (now) => {
                     if (clipboardAnimationRef.current !== animation) return;
@@ -895,6 +1002,7 @@ export default function EntryEditor() {
                             + contentAfterSelection
                         );
                         setClipboardTypingProgress(Math.round((typedLength / clipboardText.length) * 100));
+                        scrollClipboardFocusIntoView();
                     }
 
                     if (typedLength < clipboardText.length) {
@@ -905,6 +1013,7 @@ export default function EntryEditor() {
                     clipboardAnimationRef.current = null;
                     setIsClipboardTyping(false);
                     setClipboardTypingProgress(100);
+                    scrollClipboardFocusIntoView(true);
 
                     window.requestAnimationFrame(() => {
                         const textarea = nativeTextareaRef.current;
@@ -945,6 +1054,7 @@ export default function EntryEditor() {
             clipboardAnimationRef.current = animation;
             setIsClipboardTyping(true);
             setClipboardTypingProgress(0);
+            scrollClipboardFocusIntoView(true);
 
             const typeNextChunk = (now) => {
                 if (clipboardAnimationRef.current !== animation) return;
@@ -964,6 +1074,7 @@ export default function EntryEditor() {
                     editor.setCursor(cursor);
                     editor.scrollIntoView(cursor, 80);
                     setClipboardTypingProgress(Math.round((typedLength / clipboardText.length) * 100));
+                    scrollClipboardFocusIntoView();
                 }
 
                 if (typedLength < clipboardText.length) {
@@ -975,6 +1086,7 @@ export default function EntryEditor() {
                 clipboardAnimationRef.current = null;
                 setIsClipboardTyping(false);
                 setClipboardTypingProgress(100);
+                scrollClipboardFocusIntoView(true);
                 editor.focus();
                 success('Clipboard text added to your entry');
             };
@@ -1070,6 +1182,7 @@ export default function EntryEditor() {
     async function performSave() {
         if (!currentUser) return;
         setSaving(true);
+        playSaveSound();
         try {
             const docRef = doc(db, 'users', currentUser.uid, 'entries', date);
             const trimmedContent = content.trim();
@@ -1123,6 +1236,8 @@ export default function EntryEditor() {
             });
             setIsEditing(false);
             setShowDuplicateConfirm(false);
+            setSaveConfettiActive(true);
+            scrollSavedEntryIntoView();
             success('Entry saved successfully');
 
             // Trigger backup popup on every save with dynamic day name
@@ -1131,7 +1246,7 @@ export default function EntryEditor() {
             setTimeout(() => {
                 openBackupReminder(`It's ${dayName}! Great time to reflect and download a backup of your entries.`)
                     .catch((error) => console.error('Failed to open scheduled backup reminder:', error));
-            }, 1500);
+            }, 2800);
         } catch (err) {
             console.error("Error saving entry:", err);
 
@@ -1420,7 +1535,10 @@ export default function EntryEditor() {
                                         <Sparkles className="w-5 h-5" />
                                     </button>
                                     <button
-                                        onClick={() => handleSave()}
+                                        onClick={() => {
+                                            unlockJournalAudio();
+                                            handleSave();
+                                        }}
                                         className="px-6 py-2 rounded-lg bg-gradient-to-r from-primary to-secondary text-white font-bold shadow-lg shadow-primary/30 hover:shadow-primary/50 hover:scale-105 transition-all duration-200 flex items-center justify-center relative group"
                                         disabled={saving}
                                     >
@@ -1716,6 +1834,10 @@ export default function EntryEditor() {
                         </div>
 
                         <div className="flex-1 overflow-auto custom-scrollbar -mr-4 pr-4">
+                            <div
+                                ref={clipboardFocusRef}
+                                className="scroll-mt-28 sm:scroll-mt-32"
+                            >
                             {/* Writing progress — cycles every 100 main-entry words */}
                             <div
                                 className={`mb-4 sm:mb-5 rounded-xl border p-3 sm:p-4 transition-colors ${
@@ -1767,7 +1889,7 @@ export default function EntryEditor() {
                                 </div>
                             </div>
 
-                            <div className="mb-4 sm:mb-6">
+                            <div className="mb-4 sm:mb-6" onPointerDown={unlockJournalAudio}>
                                 <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 sm:mb-3">
                                     <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-text-muted">
                                         <BookOpen className="h-4 w-4 text-primary" />
@@ -1803,7 +1925,7 @@ export default function EntryEditor() {
                                             if (clipboardAnimationRef.current?.type === 'native') {
                                                 stopClipboardTyping();
                                             }
-                                            setContent(event.target.value);
+                                            handleMainContentChange(event.target.value);
                                         }}
                                         rows={16}
                                         spellCheck
@@ -1818,18 +1940,19 @@ export default function EntryEditor() {
                                     <>
                                         <SimpleMdeReact
                                             value={content}
-                                            onChange={setContent}
+                                            onChange={handleMainContentChange}
                                             options={mdeOptions}
                                             getCodemirrorInstance={configureCodeMirrorInstance}
                                             className="prose-dark"
                                         />
                                         <HarperProofreader
                                             text={content}
-                                            onTextChange={setContent}
+                                            onTextChange={handleMainContentChange}
                                             editor={mdeInstance}
                                         />
                                     </>
                                 )}
+                            </div>
                             </div>
 
                             {/* Combined Mood Picker and Formatting Tool Row */}
@@ -2120,7 +2243,7 @@ export default function EntryEditor() {
                 ) : (
                     <>
                         <div className="flex-1 overflow-y-auto custom-scrollbar -mr-4 pr-4">
-                            <div className="max-w-none">
+                            <div ref={savedEntryViewRef} className="max-w-none scroll-mt-28 sm:scroll-mt-32">
                                 {selectedMoodDetails && SelectedMoodIcon && (
                                     <div className="flex items-center gap-3 mb-8 p-3 rounded-2xl bg-white/5 border border-white/10 w-fit">
                                         <div 
@@ -2425,6 +2548,11 @@ export default function EntryEditor() {
                     buttonRect={buttonRect}
                     onComplete={() => setAnimationActive(false)}
                 />,
+                document.body
+            )}
+
+            {saveConfettiActive && createPortal(
+                <SaveConfetti onComplete={() => setSaveConfettiActive(false)} />,
                 document.body
             )}
         </div >

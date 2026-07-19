@@ -31,8 +31,13 @@ export default function ImageWithSkeleton({ src, alt, className, imgClassName, o
             <img
                 src={retryKey ? `${src}${src.includes('?') ? '&' : '?'}retry=${retryKey}` : src}
                 alt={alt}
+                loading="lazy"
+                decoding="async"
                 className={`block transition-opacity duration-500 ease-in-out ${isLoading ? 'opacity-0' : 'opacity-100'} ${imgClassName || 'w-full h-full object-cover'}`}
-                onLoad={() => setIsLoading(false)}
+                onLoad={() => {
+                    setIsLoading(false);
+                    setHasError(false);
+                }}
                 onError={() => {
                     setIsLoading(false);
                     setHasError(true);

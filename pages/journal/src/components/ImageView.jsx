@@ -2,9 +2,95 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, orderBy, getDocs, documentId } from 'firebase/firestore';
-import { format, parseISO } from 'date-fns';
+import { collection, getDocs, getDocsFromCache } from 'firebase/firestore';
+import { format, isValid, parseISO } from 'date-fns';
 import { Image as ImageIcon, Calendar, Star, LayoutGrid, Square } from 'lucide-react';
+import ImageWithSkeleton from './ImageWithSkeleton';
+
+const GALLERY_LOAD_TIMEOUT_MS = 12000;
+const GALLERY_LOAD_TIMEOUT_CODE = 'journal/gallery-load-timeout';
+
+function getGallerySnapshotWithTimeout(entriesRef) {
+    let timeoutId;
+
+    return Promise.race([
+        getDocs(entriesRef),
+        new Promise((_, reject) => {
+            timeoutId = window.setTimeout(() => {
+                const error = new Error('Gallery load timed out');
+                error.code = GALLERY_LOAD_TIMEOUT_CODE;
+                reject(error);
+            }, GALLERY_LOAD_TIMEOUT_MS);
+        })
+    ]).finally(() => window.clearTimeout(timeoutId));
+}
+
+function normalizeEntryImages(data) {
+    if (Array.isArray(data.images)) {
+        return data.images
+            .map((image) => typeof image === 'string' ? { url: image } : image)
+            .filter((image) => image && typeof image.url === 'string' && image.url);
+    }
+
+    if (typeof data.imageUrl === 'string' && data.imageUrl) {
+        return [{ url: data.imageUrl }];
+    }
+
+    if (data.imageMetadata && typeof data.imageMetadata.url === 'string' && data.imageMetadata.url) {
+        return [{ url: data.imageMetadata.url }];
+    }
+
+    return [];
+}
+
+function createGalleryEntries(snapshot) {
+    const imageEntries = [];
+
+    snapshot.forEach((entryDoc) => {
+        const entryDate = parseISO(entryDoc.id);
+        if (!isValid(entryDate)) return;
+
+        const data = entryDoc.data();
+        const images = normalizeEntryImages(data);
+        if (images.length === 0) return;
+
+        imageEntries.push({
+            id: entryDoc.id,
+            date: entryDate,
+            title: typeof data.title === 'string' && data.title.trim() ? data.title : 'Untitled',
+            images,
+            isSpecial: Boolean(data.isSpecial)
+        });
+    });
+
+    return imageEntries.sort((a, b) => b.id.localeCompare(a.id));
+}
+
+function GallerySkeleton({ mobileColumns }) {
+    return (
+        <div role="status" aria-label="Loading photo gallery" className="space-y-5">
+            <span className="sr-only">Loading gallery…</span>
+            <div className="h-6 w-40 rounded-lg bg-white/10 animate-pulse" />
+            <div className={`grid ${mobileColumns === 1 ? 'grid-cols-1' : 'grid-cols-2'} md:grid-cols-3 lg:grid-cols-4 gap-4`}>
+                {Array.from({ length: 8 }).map((_, index) => (
+                    <div
+                        key={index}
+                        className="relative aspect-square overflow-hidden rounded-xl border border-white/10 bg-white/5"
+                    >
+                        <div
+                            className="absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                            style={{ backgroundSize: '200% 100%' }}
+                        />
+                        <div className="absolute inset-x-3 bottom-3 space-y-2">
+                            <div className="h-3 w-24 rounded bg-white/10 animate-pulse" />
+                            <div className="h-4 w-2/3 rounded bg-white/10 animate-pulse" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
 export default function ImageView() {
     const { currentUser } = useAuth();
@@ -18,53 +104,57 @@ export default function ImageView() {
     const [reloadKey, setReloadKey] = useState(0);
 
     useEffect(() => {
+        let cancelled = false;
+
         async function fetchImages() {
-            if (!currentUser) return;
+            if (!currentUser) {
+                setEntries([]);
+                setLoading(false);
+                return;
+            }
+
             setLoading(true);
             setLoadError('');
+            const entriesRef = collection(db, 'users', currentUser.uid, 'entries');
+            let hasCachedEntries = false;
+
             try {
-                // Fetch all entries ordered by date desc
-                // We filter partially on client side to handle legacy schema differences effortlessly
-                const q = query(
-                    collection(db, 'users', currentUser.uid, 'entries'),
-                    orderBy(documentId(), 'desc')
-                );
-
-                const querySnapshot = await getDocs(q);
-                const imageEntries = [];
-
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    const entryImages = [];
-                    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-                        entryImages.push(...data.images);
-                    } else if (data.imageUrl) {
-                        entryImages.push({ url: data.imageUrl });
-                    } else if (data.imageMetadata) {
-                        entryImages.push({ url: data.imageMetadata.url });
+                try {
+                    const cachedSnapshot = await getDocsFromCache(entriesRef);
+                    if (!cancelled && !cachedSnapshot.empty) {
+                        hasCachedEntries = true;
+                        setEntries(createGalleryEntries(cachedSnapshot));
+                        setLoading(false);
                     }
+                } catch (cacheError) {
+                    console.info('No cached gallery entries were available:', cacheError);
+                }
 
-                    if (entryImages.length > 0) {
-                        imageEntries.push({
-                            id: doc.id,
-                            date: parseISO(doc.id),
-                            title: data.title || 'Untitled',
-                            images: entryImages, // Array of { url }
-                            isSpecial: data.isSpecial || false
-                        });
-                    }
-                });
+                const serverSnapshot = await getGallerySnapshotWithTimeout(entriesRef);
+                if (cancelled) return;
 
-                setEntries(imageEntries);
+                setEntries(createGalleryEntries(serverSnapshot));
+                setLoadError('');
             } catch (error) {
+                if (cancelled) return;
                 console.error("Error fetching images:", error);
-                setLoadError('The gallery could not be loaded. Check your connection and try again.');
+                if (!hasCachedEntries) {
+                    setLoadError(
+                        error?.code === GALLERY_LOAD_TIMEOUT_CODE
+                            ? 'The gallery took too long to load. iOS may have paused the connection. Try again.'
+                            : 'The gallery could not be loaded. Check your connection and try again.'
+                    );
+                }
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         }
 
         fetchImages();
+
+        return () => {
+            cancelled = true;
+        };
     }, [currentUser, reloadKey]);
 
     const ITEMS_PER_PAGE = 50;
@@ -161,10 +251,7 @@ export default function ImageView() {
             </div>
 
             {loading ? (
-                <div className="flex flex-col items-center justify-center h-64 text-text-muted animate-pulse">
-                    <div className="w-12 h-12 bg-white/10 rounded-full mb-4"></div>
-                    <p>Loading gallery...</p>
-                </div>
+                <GallerySkeleton mobileColumns={mobileColumns} />
             ) : loadError ? (
                 <div role="alert" className="glass-card p-8 text-center">
                     <p className="text-text-secondary mb-4">{loadError}</p>
@@ -192,20 +279,20 @@ export default function ImageView() {
                                     >
                                         <div className={`w-full h-full relative ${entry.images.length > 1 ? 'grid grid-cols-2 grid-rows-2 gap-[1px]' : ''}`}>
                                             {entry.images.length === 1 ? (
-                                                <img
+                                                <ImageWithSkeleton
                                                     src={entry.images[0].url}
                                                     alt={entry.title}
-                                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                                    loading="lazy"
+                                                    className="w-full h-full"
+                                                    imgClassName="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                                                 />
                                             ) : (
                                                 entry.images.slice(0, 4).map((img, i) => (
-                                                    <img
-                                                        key={i}
+                                                    <ImageWithSkeleton
+                                                        key={`${entry.id}-${img.url}-${i}`}
                                                         src={img.url}
                                                         alt={`${entry.title} ${i}`}
-                                                        className={`w-full h-full object-cover ${entry.images.length === 2 ? 'col-span-2 last:col-span-2 row-span-1' : ''} ${entry.images.length === 3 && i === 0 ? 'col-span-2' : ''}`}
-                                                        loading="lazy"
+                                                        className={`w-full h-full ${entry.images.length === 2 ? 'col-span-2 last:col-span-2 row-span-1' : ''} ${entry.images.length === 3 && i === 0 ? 'col-span-2' : ''}`}
+                                                        imgClassName="w-full h-full object-cover"
                                                     />
                                                 ))
                                             )}
