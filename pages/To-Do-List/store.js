@@ -1,5 +1,7 @@
 // --- STATE MANAGEMENT ---
 
+import { DEFAULT_MISC_TAG, MISC_TAG_ID } from './tags.js';
+
 export const state = {
     currentUser: null,
     lastSyncTime: Date.now(),
@@ -28,7 +30,9 @@ export const state = {
                 under_review: 'Under Review',
                 almost_done: 'Almost Done',
                 finished: 'Finished'
-            }
+            },
+            tags: [{ ...DEFAULT_MISC_TAG }],
+            activeTagId: MISC_TAG_ID
         },
         listOrder: [],
         boards: [],
@@ -95,7 +99,9 @@ export function resetState() {
                 under_review: 'Under Review',
                 almost_done: 'Almost Done',
                 finished: 'Finished'
-            }
+            },
+            tags: [{ ...DEFAULT_MISC_TAG }],
+            activeTagId: MISC_TAG_ID
         },
         listOrder: [],
         boards: [],

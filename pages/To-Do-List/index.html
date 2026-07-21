@@ -189,6 +189,11 @@
                     </svg>
                 </button>
             </div>
+
+            <!-- Tag Mode: which tag new tasks receive (desktop: bottom of panel; mobile: reordered to top via CSS) -->
+            <div id="tag-mode-row" class="header-row tag-mode-row" role="radiogroup" aria-label="Tag mode for new tasks">
+                <div id="tag-mode-buttons" class="tag-mode-buttons"></div>
+            </div>
         </header>
 
 
@@ -290,6 +295,23 @@
                         <span class="slider-small round"></span>
                     </div>
                 </label>
+
+                <div id="tags-settings-section" class="tags-settings-section options-span-all">
+                    <div class="tags-settings-header">
+                        <span><i class="ph ph-tag"></i> Task Tags</span>
+                    </div>
+                    <p class="tags-settings-hint">Manage tags and their glow colours. Misc has no glow.</p>
+                    <div id="tags-settings-list" class="tags-settings-list"></div>
+                    <div id="add-tag-form" class="add-tag-form hidden">
+                        <input type="text" id="new-tag-name-input" class="glass-select full-width" maxlength="24"
+                            placeholder="Tag name" spellcheck="true" autocomplete="off">
+                        <div class="add-tag-form-actions">
+                            <button type="button" id="confirm-add-tag-btn" class="btn primary">Add</button>
+                            <button type="button" id="cancel-add-tag-btn" class="btn secondary">Cancel</button>
+                        </div>
+                    </div>
+                    <button type="button" id="add-tag-btn" class="btn secondary tags-add-btn">+ Add Tag</button>
+                </div>
 
                 <div id="kanban-labels-settings" class="menu-action-item kanban-labels-settings hidden"
                     style="cursor: default; flex-direction: column; align-items: flex-start; gap: 10px;">
@@ -546,24 +568,10 @@
                 </div>
             </div>
 
-            <!-- GLOW COLOR PICKER -->
-            <div class="color-picker-section">
-                <h3>Card Glow Effect:</h3>
-                <div class="color-options" id="glow-color-options">
-                    <button class="color-btn" data-color="none" title="None"><i class="ph ph-prohibit"></i></button>
-                    <button class="color-btn" data-color="#ef4444" style="background:#ef4444;"></button>
-                    <!-- Red -->
-                    <button class="color-btn" data-color="#f97316" style="background:#f97316;"></button>
-                    <!-- Orange -->
-                    <button class="color-btn" data-color="#eab308" style="background:#eab308;"></button>
-                    <!-- Yellow -->
-                    <button class="color-btn" data-color="#22c55e" style="background:#22c55e;"></button>
-                    <!-- Green -->
-                    <button class="color-btn" data-color="#3b82f6" style="background:#3b82f6;"></button>
-                    <!-- Blue -->
-                    <button class="color-btn" data-color="#a855f7" style="background:#a855f7;"></button>
-                    <!-- Purple -->
-                </div>
+            <!-- TAG PICKER -->
+            <div class="tag-picker-section">
+                <h3>Tag:</h3>
+                <div class="tag-picker-options" id="edit-task-tag-options" role="radiogroup" aria-label="Task tag"></div>
             </div>
 
             <!-- Old actions bar location removed -->
@@ -595,18 +603,9 @@
                 <button id="multi-edit-close-modal-btn" class="icon-btn-large">&times;</button>
             </div>
 
-            <div class="color-picker-section">
-                <h3>Set Color for All:</h3>
-                <div class="color-options" id="multi-glow-color-options">
-                    <!-- Same colors as single edit -->
-                    <button class="color-btn" data-color="none" title="None"><i class="ph ph-prohibit"></i></button>
-                    <button class="color-btn" data-color="#ef4444" style="background:#ef4444;"></button>
-                    <button class="color-btn" data-color="#f97316" style="background:#f97316;"></button>
-                    <button class="color-btn" data-color="#eab308" style="background:#eab308;"></button>
-                    <button class="color-btn" data-color="#22c55e" style="background:#22c55e;"></button>
-                    <button class="color-btn" data-color="#3b82f6" style="background:#3b82f6;"></button>
-                    <button class="color-btn" data-color="#a855f7" style="background:#a855f7;"></button>
-                </div>
+            <div class="tag-picker-section">
+                <h3>Set Tag for All:</h3>
+                <div class="tag-picker-options" id="multi-tag-options" role="radiogroup" aria-label="Batch tag assignment"></div>
             </div>
 
             <div class="modal-divider"></div>

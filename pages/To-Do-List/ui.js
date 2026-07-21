@@ -12,11 +12,22 @@ import {
     hasIncompleteNested,
     taskMatchesSearch
 } from './nested.js';
-import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc } from './api.js';
+import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
 import { isWorkToolsEnabled, isKanbanFocused, renderKanbanFocus, KANBAN_STAGES, getKanbanColumnLabel, resolveKanbanStatus, buildKanbanStatusUpdate, getAdjacentKanbanStages, isValidKanbanStatus, isImportantTask } from './kanban.js';
+import {
+    MISC_TAG_ID,
+    ensureDefaultTags,
+    getTagsById,
+    resolveTaskGlow,
+    resolveTaskTagId,
+    getTagNameForTask,
+    sortTags,
+    canAddMoreTags,
+    isMiscTag
+} from './tags.js';
 
 // Global DOM Elements
 const boardContainer = document.getElementById('board-container');
@@ -525,6 +536,7 @@ export function renderBoard() {
             updateTotalTaskCount();
             applyStaticLayouts();
             layoutSlimChrome();
+            renderTagModeBar();
             kanbanRendered = true;
 
             if (savedKanbanScroll) {
@@ -597,6 +609,7 @@ export function renderBoard() {
         updateTotalTaskCount();
         applyStaticLayouts();
         layoutSlimChrome();
+        renderTagModeBar();
     }
 
     // Restore Focus/Typing State
@@ -896,6 +909,175 @@ export function layoutSlimChrome() {
     const top = header.getBoundingClientRect().top;
     const clearance = Math.max(120, Math.ceil(window.innerHeight - top) + 12);
     root.style.setProperty('--slim-bottom-clearance', `${clearance}px`);
+}
+
+function getTagButtonStyle(tag) {
+    if (!tag || !tag.glowColor) {
+        return '--tag-btn-bg: var(--glass-bg); --tag-btn-border: var(--glass-border); --tag-btn-text: var(--text-primary);';
+    }
+    return `--tag-btn-bg: ${tag.glowColor}; --tag-btn-border: ${tag.glowColor}; --tag-btn-text: #fff;`;
+}
+
+function buildTagButton(tag, selectedId, onSelect, { compact = false } = {}) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `tag-mode-btn${compact ? ' tag-mode-btn-compact' : ''}${tag.id === selectedId ? ' is-selected' : ''}`;
+    btn.dataset.tagId = tag.id;
+    btn.setAttribute('role', 'radio');
+    btn.setAttribute('aria-checked', tag.id === selectedId ? 'true' : 'false');
+    btn.setAttribute('aria-label', `Tag mode: ${tag.name}${tag.id === selectedId ? ', selected' : ''}`);
+    btn.style.cssText = getTagButtonStyle(tag);
+    btn.textContent = tag.name;
+    btn.onclick = (e) => {
+        e.preventDefault();
+        onSelect(tag.id);
+    };
+    return btn;
+}
+
+export function renderTagModeBar() {
+    const container = document.getElementById('tag-mode-buttons');
+    if (!container) return;
+
+    const ensured = ensureDefaultTags(state.appData.settings);
+    state.appData.settings.tags = ensured.tags;
+    state.appData.settings.activeTagId = ensured.activeTagId;
+
+    const tags = sortTags(ensured.tags);
+    const activeId = ensured.activeTagId || MISC_TAG_ID;
+
+    container.innerHTML = '';
+    tags.forEach((tag) => {
+        container.appendChild(buildTagButton(tag, activeId, (tagId) => {
+            setActiveTagId(tagId);
+            renderTagModeBar();
+        }, { compact: true }));
+    });
+
+    requestAnimationFrame(() => layoutSlimChrome());
+}
+
+export function renderTaskTagPicker(containerId, selectedId, onSelect) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const ensured = ensureDefaultTags(state.appData.settings);
+    const tags = sortTags(ensured.tags);
+
+    container.innerHTML = '';
+    tags.forEach((tag) => {
+        const btn = buildTagButton(tag, selectedId, (tagId) => {
+            onSelect(tagId);
+            renderTaskTagPicker(containerId, tagId, onSelect);
+        });
+        container.appendChild(btn);
+    });
+}
+
+export function renderTagsSettingsPanel() {
+    const list = document.getElementById('tags-settings-list');
+    const addBtn = document.getElementById('add-tag-btn');
+    const addForm = document.getElementById('add-tag-form');
+    if (!list || !addBtn) return;
+
+    const ensured = ensureDefaultTags(state.appData.settings);
+    state.appData.settings.tags = ensured.tags;
+    const tags = sortTags(ensured.tags);
+
+    list.innerHTML = '';
+    tags.forEach((tag) => {
+        const row = document.createElement('div');
+        row.className = 'tags-settings-item';
+
+        const swatch = document.createElement('span');
+        swatch.className = 'tags-settings-swatch';
+        if (tag.glowColor) {
+            swatch.style.background = tag.glowColor;
+        } else {
+            swatch.classList.add('is-misc');
+        }
+
+        if (isMiscTag(tag.id)) {
+            const name = document.createElement('span');
+            name.className = 'tags-settings-name';
+            name.textContent = tag.name;
+            row.appendChild(swatch);
+            row.appendChild(name);
+        } else {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'glass-select tags-settings-name-input';
+            input.value = tag.name;
+            input.maxLength = 24;
+            input.spellcheck = true;
+            input.onchange = () => {
+                renameTag(tag.id, input.value);
+            };
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'icon-btn danger tags-settings-delete';
+            deleteBtn.title = 'Delete tag';
+            deleteBtn.innerHTML = '<i class="ph ph-trash"></i>';
+            deleteBtn.onclick = () => {
+                if (typeof window.confirmDeleteTag === 'function') {
+                    window.confirmDeleteTag(tag.id, tag.name);
+                }
+            };
+            row.appendChild(swatch);
+            row.appendChild(input);
+            row.appendChild(deleteBtn);
+        }
+
+        list.appendChild(row);
+    });
+
+    addBtn.classList.toggle('hidden', !canAddMoreTags(tags));
+    if (addForm && addForm.classList.contains('hidden') === false && !canAddMoreTags(tags)) {
+        addForm.classList.add('hidden');
+    }
+}
+
+export function initTagsSettingsUI() {
+    const addBtn = document.getElementById('add-tag-btn');
+    const addForm = document.getElementById('add-tag-form');
+    const confirmBtn = document.getElementById('confirm-add-tag-btn');
+    const cancelBtn = document.getElementById('cancel-add-tag-btn');
+    const nameInput = document.getElementById('new-tag-name-input');
+    if (!addBtn || !addForm || !confirmBtn || !cancelBtn || !nameInput) return;
+
+    addBtn.onclick = () => {
+        addForm.classList.remove('hidden');
+        addBtn.classList.add('hidden');
+        nameInput.value = '';
+        nameInput.focus();
+    };
+
+    cancelBtn.onclick = () => {
+        addForm.classList.add('hidden');
+        addBtn.classList.remove('hidden');
+        nameInput.value = '';
+    };
+
+    confirmBtn.onclick = () => {
+        createTag(nameInput.value).then((ok) => {
+            if (!ok) return;
+            addForm.classList.add('hidden');
+            addBtn.classList.remove('hidden');
+            nameInput.value = '';
+            renderTagsSettingsPanel();
+            renderTagModeBar();
+        });
+    };
+
+    nameInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            confirmBtn.click();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelBtn.click();
+        }
+    };
 }
 
 function renderListColumn(list, isOrphan, isCustomSort) {
@@ -1563,9 +1745,11 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
     el.className = classes;
     el.dataset.taskId = task.id;
 
-    if (task.glowColor && task.glowColor !== 'none') {
-        el.style.boxShadow = `0 0 10px ${task.glowColor}, inset 0 0 5px ${task.glowColor}20`;
-        el.style.borderColor = task.glowColor;
+    const tagsById = getTagsById(state.appData.settings.tags);
+    const glowColor = resolveTaskGlow(task, tagsById);
+    if (glowColor) {
+        el.style.boxShadow = `0 0 10px ${glowColor}, inset 0 0 5px ${glowColor}20`;
+        el.style.borderColor = glowColor;
     }
 
     let imagesHtml = '';
@@ -2297,15 +2481,8 @@ export function openEditModal(taskId, listId) {
 
     renderCurrentLocations(taskId);
 
-    const colorBtns = document.querySelectorAll('#glow-color-options .color-btn');
-    colorBtns.forEach(btn => {
-        btn.classList.toggle('selected', btn.dataset.color === (task.glowColor || 'none'));
-        btn.onclick = () => {
-            updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), { glowColor: btn.dataset.color })
-                .catch(e => handleSyncError(e));
-            colorBtns.forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-        }
+    renderTaskTagPicker('edit-task-tag-options', resolveTaskTagId(task), (tagId) => {
+        setTaskTag(taskId, tagId).catch(e => handleSyncError(e));
     });
 
     // Add Image Button in Modal
@@ -2624,22 +2801,28 @@ export function performSearch(query) {
         if (!(state.searchShowArchived || !task.archived)) return;
 
         const searchHit = taskMatchesSearch(task, term);
-        if (!searchHit.matched) return;
+        const tagsById = getTagsById(state.appData.settings.tags);
+        const tagName = getTagNameForTask(task, tagsById).toLowerCase();
+        const tagMatched = tagName.includes(term);
+        if (!searchHit.matched && !tagMatched) return;
+        const hit = tagMatched && !searchHit.matched
+            ? { matched: true, source: 'tag' }
+            : searchHit;
 
         const context = getTaskContext(task.id);
         if (context.length > 0) {
-            matches.push({ task, context, searchHit });
+            matches.push({ task, context, searchHit: hit });
         } else if (state.showArchived && task.archived) {
             matches.push({
                 task,
                 context: [{ boardName: 'System', listName: 'Archived / Orphan', index: '-' }],
-                searchHit
+                searchHit: hit
             });
         } else if (getOrphanedTaskIds().includes(task.id)) {
             matches.push({
                 task,
                 context: [{ boardName: 'System', listName: 'Orphan', index: '-' }],
-                searchHit
+                searchHit: hit
             });
         }
     });
@@ -2962,7 +3145,7 @@ export function openEditListModal(listId) {
                 archived: false,
                 createdAt: Date.now(),
                 images: [],
-                glowColor: 'none',
+                tagId: state.appData.settings.activeTagId || MISC_TAG_ID,
                 listAddedAt: { [listId]: Date.now() }
             });
             batch.update(listRef, { taskIds: arrayUnion(newId) });

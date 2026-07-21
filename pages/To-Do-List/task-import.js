@@ -3,11 +3,11 @@ import { doc, writeBatch, arrayUnion } from 'https://www.gstatic.com/firebasejs/
 import { generateId, parseNestedMarkdown } from './utils.js';
 import { KANBAN_STAGES } from './kanban.js';
 import { migrateNestedTree } from './nested.js';
+import { MISC_TAG_ID, normalizeImportedTagId } from './tags.js';
 
 export const TASK_IMPORT_FORMAT_VERSION = 1;
 const BATCH_LIMIT = 450;
 const ARRAY_UNION_CHUNK = 100;
-const VALID_GLOW_COLORS = new Set(['none', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7']);
 const TASK_TEXT_KEYS = ['text', 'title', 'name', 'content', 'task', 'summary', 'description', 'label', 'body'];
 const LIST_TITLE_KEYS = ['title', 'name', 'listName', 'list', 'project', 'section', 'label', 'heading'];
 const LIST_TASK_KEYS = ['tasks', 'items', 'todos', 'entries', 'taskList', 'task_list'];
@@ -432,13 +432,6 @@ function normalizeKanbanStatus(value, completed) {
     return 'new';
 }
 
-function normalizeGlowColor(value) {
-    const color = pickString(value, 'none').toLowerCase();
-    if (color === 'none') return 'none';
-    const withHash = color.startsWith('#') ? color : `#${color}`;
-    return VALID_GLOW_COLORS.has(withHash) ? withHash : 'none';
-}
-
 function normalizeNestedIdeas(items, diagnostics, context, parentKanbanStatus = 'new') {
     const output = [];
 
@@ -510,7 +503,10 @@ function normalizeTask(task, diagnostics, context, index) {
     const completed = !!(task && typeof task === 'object' && asTruthy(task.completed));
     const archived = !!(task && typeof task === 'object' && asTruthy(task.archived));
     const kanbanStatus = normalizeKanbanStatus(task?.kanbanStatus, completed);
-    const glowColor = normalizeGlowColor(task?.glowColor);
+    const tagId = normalizeImportedTagId(
+        pickString(task?.tagId || task?.tag, MISC_TAG_ID),
+        { [MISC_TAG_ID]: true }
+    );
 
     if (task?.kanbanStatus) {
         const rawStatus = pickString(task.kanbanStatus);
@@ -519,8 +515,8 @@ function normalizeTask(task, diagnostics, context, index) {
             logFix(diagnostics, `Task "${text}" had kanbanStatus "${rawStatus}". Mapped to "${kanbanStatus}".`);
         }
     }
-    if (task?.glowColor && glowColor === 'none' && pickString(task.glowColor, 'none') !== 'none') {
-        logFix(diagnostics, `Task "${text}" had invalid glowColor "${task.glowColor}". Set to "none".`);
+    if (task?.glowColor && !task?.tagId && !task?.tag) {
+        logFix(diagnostics, `Task "${text}" had legacy glowColor only. Assigned to Misc tag.`);
     }
 
     const createdAt = Number.isFinite(Number(task?.createdAt))
@@ -536,7 +532,7 @@ function normalizeTask(task, diagnostics, context, index) {
         completedAt: completed ? (Number(task?.completedAt) || createdAt) : null,
         createdAt,
         updatedAt: Number.isFinite(Number(task?.updatedAt)) ? Number(task.updatedAt) : null,
-        glowColor,
+        tagId,
         images: Array.isArray(task?.images) ? task.images.filter(Boolean) : [],
         nestedIdeas: normalizeNestedIdeas(
             getSubtaskSource(task),

@@ -12,6 +12,15 @@ import {
     canShiftAllNestedKanban,
     shiftAllNestedKanbanStatuses
 } from './nested.js';
+import {
+    MISC_TAG_ID,
+    ensureDefaultTags,
+    createTagDefinition,
+    validateTagName,
+    isMiscTag,
+    sortTags,
+    getTagsById
+} from './tags.js';
 
 // --- API ACTIONS ---
 
@@ -39,6 +48,10 @@ export function handleAddTask(e, listId) {
     input.value = '';
 
     const newId = 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const activeTagId = state.appData.settings.activeTagId || MISC_TAG_ID;
+    const tagsById = getTagsById(state.appData.settings.tags);
+    const tagId = tagsById[activeTagId] ? activeTagId : MISC_TAG_ID;
+
     const newTask = {
         text: text,
         completed: false,
@@ -47,7 +60,7 @@ export function handleAddTask(e, listId) {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         images: [],
-        glowColor: 'none',
+        tagId,
         listAddedAt: { [listId]: Date.now() }
     };
 
@@ -521,6 +534,129 @@ export function updateSetting(settingKey, value) {
 
     return updateDoc(doc(db, "users", state.currentUser.uid), updateObj)
         .catch(e => handleSyncError(e));
+}
+
+export function setActiveTagId(tagId) {
+    const tagsById = getTagsById(state.appData.settings.tags);
+    const nextId = tagsById[tagId] ? tagId : MISC_TAG_ID;
+    state.appData.settings.activeTagId = nextId;
+    return updateSetting('activeTagId', nextId);
+}
+
+export function setTaskTag(taskId, tagId) {
+    const tagsById = getTagsById(state.appData.settings.tags);
+    const nextId = tagsById[tagId] ? tagId : MISC_TAG_ID;
+    return updateDoc(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+        tagId: nextId,
+        updatedAt: Date.now()
+    }).catch(e => handleSyncError(e));
+}
+
+export function createTag(name) {
+    const current = ensureDefaultTags(state.appData.settings);
+    const result = createTagDefinition(name, current.tags);
+    if (!result.ok) {
+        showToast(result.error, 'warning');
+        return Promise.resolve(false);
+    }
+
+    const nextTags = sortTags([...current.tags, result.tag]);
+    state.appData.settings.tags = nextTags;
+    return updateSetting('tags', nextTags).then(() => {
+        showToast(`Tag "${result.tag.name}" created.`, 'success');
+        return true;
+    });
+}
+
+export function renameTag(tagId, name) {
+    if (isMiscTag(tagId)) {
+        showToast('Misc cannot be renamed.', 'warning');
+        return Promise.resolve(false);
+    }
+
+    const validation = validateTagName(name);
+    if (!validation.ok) {
+        showToast(validation.error, 'warning');
+        return Promise.resolve(false);
+    }
+
+    const current = ensureDefaultTags(state.appData.settings);
+    const nextTags = current.tags.map((tag) => (
+        tag.id === tagId ? { ...tag, name: validation.value } : tag
+    ));
+    state.appData.settings.tags = nextTags;
+    return updateSetting('tags', nextTags).then(() => true);
+}
+
+export async function deleteTag(tagId) {
+    if (isMiscTag(tagId)) {
+        showToast('Misc cannot be deleted.', 'warning');
+        return false;
+    }
+
+    if (!state.currentUser) return false;
+
+    const current = ensureDefaultTags(state.appData.settings);
+    const taskIds = Object.keys(state.appData.tasks).filter(
+        (id) => state.appData.tasks[id]?.tagId === tagId
+    );
+
+    try {
+        const BATCH_SIZE = 450;
+        for (let i = 0; i < taskIds.length; i += BATCH_SIZE) {
+            const batch = writeBatch(db);
+            taskIds.slice(i, i + BATCH_SIZE).forEach((id) => {
+                batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), {
+                    tagId: MISC_TAG_ID,
+                    updatedAt: Date.now()
+                });
+            });
+            await batch.commit();
+        }
+
+        const nextTags = current.tags.filter((tag) => tag.id !== tagId);
+        state.appData.settings.tags = nextTags;
+
+        const updates = { 'settings.tags': nextTags };
+        if (state.appData.settings.activeTagId === tagId) {
+            state.appData.settings.activeTagId = MISC_TAG_ID;
+            updates['settings.activeTagId'] = MISC_TAG_ID;
+        }
+
+        await updateDoc(doc(db, "users", state.currentUser.uid), updates);
+        if (taskIds.length > 0) {
+            showToast(`Tag deleted. ${taskIds.length} task(s) moved to Misc.`, 'success');
+        } else {
+            showToast('Tag deleted.', 'success');
+        }
+        return true;
+    } catch (e) {
+        handleSyncError(e);
+        return false;
+    }
+}
+
+export function persistTagsSettingsIfNeeded() {
+    if (!state.currentUser) return Promise.resolve();
+
+    const ensured = ensureDefaultTags(state.appData.settings);
+    const tagsChanged = JSON.stringify(state.appData.settings.tags || []) !== JSON.stringify(ensured.tags);
+    const activeChanged = state.appData.settings.activeTagId !== ensured.activeTagId;
+
+    if (!tagsChanged && !activeChanged) {
+        state.appData.settings.tags = ensured.tags;
+        state.appData.settings.activeTagId = ensured.activeTagId;
+        return Promise.resolve();
+    }
+
+    state.appData.settings.tags = ensured.tags;
+    state.appData.settings.activeTagId = ensured.activeTagId;
+
+    const updateObj = {
+        'settings.tags': ensured.tags,
+        'settings.activeTagId': ensured.activeTagId
+    };
+    return updateDoc(doc(db, "users", state.currentUser.uid), updateObj).catch(e => handleSyncError(e));
 }
 
 let automationConfirmationOpen = false;

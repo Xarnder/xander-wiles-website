@@ -22,10 +22,35 @@ import {
     getParentKanbanStatus,
     allSubtasksComplete
 } from './nested.js';
+import { MISC_TAG_ID, ensureDefaultTags, getTagsById, getTagNameForTask } from './tags.js';
 
 const nestedRollupPromptedTaskIds = new Set();
 
 let nestedMigrationPersistInFlight = false;
+let tagMigrationPersistInFlight = false;
+
+async function persistTagMigrations(updates) {
+    if (!state.currentUser || !updates.length || tagMigrationPersistInFlight) return;
+
+    tagMigrationPersistInFlight = true;
+    try {
+        const BATCH_SIZE = 450;
+        for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+            const batch = writeBatch(db);
+            updates.slice(i, i + BATCH_SIZE).forEach(({ id, tagId }) => {
+                batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), {
+                    tagId,
+                    updatedAt: Date.now()
+                });
+            });
+            await batch.commit();
+        }
+    } catch (e) {
+        console.warn('[tags] Failed to persist tagId migration:', e);
+    } finally {
+        tagMigrationPersistInFlight = false;
+    }
+}
 
 async function persistNestedMigrations(updates) {
     if (!state.currentUser || !updates.length || nestedMigrationPersistInFlight) return;
@@ -259,6 +284,17 @@ window.openBoardManager = UI.openBoardManager;
 window.clearCompletedInList = API.clearCompletedInList;
 window.showConfirmModal = showConfirmModal;
 window.triggerSingleListCSVExport = triggerSingleListCSVExport;
+window.confirmDeleteTag = (tagId, tagName) => {
+    showConfirmModal(
+        'Delete Tag?',
+        `Delete "${tagName}"? Tasks using this tag will move to Misc.`,
+        () => API.deleteTag(tagId).then(() => {
+            UI.renderTagsSettingsPanel();
+            UI.renderTagModeBar();
+        }),
+        'ph-trash'
+    );
+};
 
 // --- BOARD MANAGEMENT EXPOSURE ---
 window.switchBoard = API.switchBoard;
@@ -466,6 +502,20 @@ function setupFirestoreListeners(uid) {
         if (docSnap.exists()) {
             const data = docSnap.data();
             state.appData.settings = { ...state.appData.settings, ...data.settings };
+            const ensuredTags = ensureDefaultTags(state.appData.settings);
+            state.appData.settings.tags = ensuredTags.tags;
+            state.appData.settings.activeTagId = ensuredTags.activeTagId;
+
+            if (state.currentUser && !docSnap.metadata.hasPendingWrites) {
+                const rawTags = data.settings?.tags;
+                const rawActive = data.settings?.activeTagId;
+                const needsPersist = !Array.isArray(rawTags)
+                    || !rawTags.some((t) => t && t.id === MISC_TAG_ID)
+                    || !rawTags.some((t) => t && t.id === rawActive);
+                if (needsPersist) {
+                    API.persistTagsSettingsIfNeeded();
+                }
+            }
 
             // Auto-detect drag capability if not set
             if (state.appData.settings.dragEnabled === undefined || state.appData.settings.dragEnabled === null) {
@@ -536,6 +586,9 @@ function setupFirestoreListeners(uid) {
 
             // Manage fancy theme orbs
             manageFancyOrbs(state.appData.settings.theme);
+
+            UI.renderTagModeBar();
+            UI.renderTagsSettingsPanel();
 
         } else {
             setDoc(userDocRef, {
@@ -617,6 +670,7 @@ function setupFirestoreListeners(uid) {
         if (!snapshot.metadata.fromCache) updateLastSync();
         state.appData.tasks = {};
         const migrationUpdates = [];
+        const tagMigrationUpdates = [];
 
         snapshot.forEach(docSnap => {
             const task = { id: docSnap.id, ...docSnap.data() };
@@ -627,11 +681,20 @@ function setupFirestoreListeners(uid) {
                 migrationUpdates.push({ id: task.id, nestedIdeas: task.nestedIdeas });
             }
 
+            if (!task.tagId) {
+                task.tagId = MISC_TAG_ID;
+                tagMigrationUpdates.push({ id: task.id, tagId: MISC_TAG_ID });
+            }
+
             state.appData.tasks[docSnap.id] = task;
         });
 
         if (migrationUpdates.length > 0 && state.currentUser && !nestedMigrationPersistInFlight) {
             persistNestedMigrations(migrationUpdates);
+        }
+
+        if (tagMigrationUpdates.length > 0 && state.currentUser && !tagMigrationPersistInFlight) {
+            persistTagMigrations(tagMigrationUpdates);
         }
 
         UI.renderBoard();
@@ -650,6 +713,8 @@ function setupFirestoreListeners(uid) {
 // --- GLOBAL LISTENERS & INIT ---
 
 document.addEventListener('DOMContentLoaded', () => {
+    UI.initTagsSettingsUI();
+
     // Add List
     document.getElementById('add-list-btn').onclick = API.addNewList;
 
@@ -855,6 +920,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cutBtn.classList.toggle('active', state.dragMode === 'move');
             copyBtn.classList.toggle('active', state.dragMode === 'copy');
         }
+        UI.renderTagsSettingsPanel();
         optionsModal.classList.remove('hidden');
     };
     
@@ -1000,6 +1066,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         multiEditModal.classList.remove('hidden');
+        UI.renderTaskTagPicker('multi-tag-options', null, (tagId) => {
+            multiEditModal.classList.add('hidden');
+            const batch = writeBatch(db);
+            state.selectedTaskIds.forEach((id) => {
+                batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), {
+                    tagId,
+                    updatedAt: Date.now()
+                });
+            });
+            batch.commit().then(() => {
+                Utils.showToast(`Updated tag for ${state.selectedTaskIds.size} tasks`);
+            }).catch(e => API.handleSyncError(e));
+        });
     };
     document.getElementById('multi-edit-close-modal-btn').onclick = () => {
         multiEditModal.classList.add('hidden');
@@ -1015,20 +1094,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('quick-move-close-modal-btn').onclick = UI.closeQuickMoveModal;
     document.getElementById('quick-move-cancel-btn').onclick = UI.closeQuickMoveModal;
 
-    // Multi Color
-    document.getElementById('multi-glow-color-options').addEventListener('click', (e) => {
-        const btn = e.target.closest('.color-btn');
-        if (!btn) return;
-        const color = btn.dataset.color;
-        multiEditModal.classList.add('hidden'); // Close immediately
-        const batch = writeBatch(db);
-        state.selectedTaskIds.forEach(id => {
-            batch.update(doc(db, "users", state.currentUser.uid, "tasks", id), { glowColor: color });
-        });
-        batch.commit().then(() => {
-            Utils.showToast(`Updated color for ${state.selectedTaskIds.size} tasks`);
-        }).catch(e => API.handleSyncError(e));
+    // Multi Tag (batch via tag picker in modal)
+    document.getElementById('multi-tag-options')?.addEventListener('click', (e) => {
+        e.stopPropagation();
     });
+
+    // Legacy multi-glow handler removed — tags replace glow
 
     // Multi Delete
     document.getElementById('multi-delete-btn').onclick = () => {
@@ -1249,9 +1320,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     nestedIdeas: item.nestedIdeas || [],
                     completed: false,
                     archived: false,
+                    kanbanStatus: 'new',
                     createdAt: Date.now(),
                     images: [],
-                    glowColor: 'none',
+                    tagId: state.appData.settings.activeTagId || MISC_TAG_ID,
                     listAddedAt: { [listId]: Date.now() }
                 };
                 batch.set(doc(db, "users", state.currentUser.uid, "tasks", newId), newTask);
@@ -1869,11 +1941,17 @@ function syncKanbanLabelsUI() {
 
 function triggerBackupDownload() {
     // Generate JSON backup data
-    // Map tasks to ensure clean structure (glowColor, images, etc)
+    // Map tasks to ensure clean structure (tagId, images, etc)
+    const backupTags = ensureDefaultTags(state.appData.settings);
+    const backupSettings = {
+        ...state.appData.settings,
+        tags: backupTags.tags,
+        activeTagId: backupTags.activeTagId
+    };
     const backupData = {
         exportDate: new Date().toISOString(),
         projectTitle: state.appData.projectTitle,
-        settings: state.appData.settings,
+        settings: backupSettings,
         listOrder: state.appData.listOrder,
         lists: state.appData.rawLists.map(list => ({
             id: list.id,
@@ -1891,7 +1969,7 @@ function triggerBackupDownload() {
                 completedAt: task.completedAt ?? null,
                 createdAt: task.createdAt,
                 updatedAt: task.updatedAt ?? null,
-                glowColor: task.glowColor || 'none',
+                tagId: task.tagId || MISC_TAG_ID,
                 images: task.images || [],
                 nestedIdeas: migrateNestedTree(task.nestedIdeas || [], parentKanban)
             };
@@ -1976,19 +2054,19 @@ async function triggerSingleListCSVExport(listId) {
     headers[0] = "Created";
     headers[1] = "Last Edited";
     headers[2] = "Important";
-    headers[3] = "Glow Effect";
-    headers[4] = "Glow Color";
-    headers[5] = "Archived";
-    headers[6] = "Done";
-    headers[7] = "main body";
+    headers[3] = "Tag Name";
+    headers[4] = "Archived";
+    headers[5] = "Done";
+    headers[6] = "main body";
     for (let i = 1; i <= listDepth; i++) {
-        headers[7 + i] = `Sub ${getTerm(true, true)} Level ${i}`;
+        headers[6 + i] = `Sub ${getTerm(true, true)} Level ${i}`;
     }
 
+    const tagsById = getTagsById(state.appData.settings.tags);
     const rowsForList = [];
     const flattenToRows = (node, depth, currentRow, rootTask) => {
         const myRow = [...currentRow];
-        myRow[depth + 7] = node.text || "";
+        myRow[depth + 6] = node.text || "";
         
         if (node.nestedIdeas && node.nestedIdeas.length > 0) {
             node.nestedIdeas.forEach(child => flattenToRows(child, depth + 1, myRow, rootTask));
@@ -1996,15 +2074,14 @@ async function triggerSingleListCSVExport(listId) {
             myRow[0] = Utils.formatDateTime(rootTask.createdAt);
             myRow[1] = Utils.formatDateTime(rootTask.updatedAt || rootTask.createdAt);
             myRow[2] = (node.text || "").includes('!') ? "YES" : "NO";
-            myRow[3] = (rootTask.glowColor && rootTask.glowColor !== 'none') ? "YES" : "NO";
-            myRow[4] = rootTask.glowColor || "none";
-            myRow[5] = node.archived ? "ARCHIVED" : "ACTIVE";
-            myRow[6] = (node.completed === true) ? "DONE" : "ACTIVE";
+            myRow[3] = getTagNameForTask(rootTask, tagsById);
+            myRow[4] = node.archived ? "ARCHIVED" : "ACTIVE";
+            myRow[5] = (node.completed === true) ? "DONE" : "ACTIVE";
             rowsForList.push(myRow);
         }
     };
 
-    listTasks.forEach(t => flattenToRows(t, 0, new Array(listDepth + 8).fill(""), t));
+    listTasks.forEach(t => flattenToRows(t, 0, new Array(listDepth + 7).fill(""), t));
 
     const csvGrid = [];
     rowsForList.forEach((r, idx) => {
@@ -2043,6 +2120,7 @@ function generateBoardGridData(board) {
     const csvGrid = [];
     const headers = [];
     let currentColumnOffset = 0;
+    const tagsById = getTagsById(state.appData.settings.tags);
 
     lists.forEach(list => {
         const listTasks = (list.taskIds || []).map(id => state.appData.tasks[id]).filter(Boolean);
@@ -2050,12 +2128,11 @@ function generateBoardGridData(board) {
             headers[currentColumnOffset] = `${list.title} Created`;
             headers[currentColumnOffset + 1] = `${list.title} Last Edited`;
             headers[currentColumnOffset + 2] = `${list.title} Important`;
-            headers[currentColumnOffset + 3] = `${list.title} Glow Effect`;
-            headers[currentColumnOffset + 4] = `${list.title} Glow Color`;
-            headers[currentColumnOffset + 5] = `${list.title} Archived`;
-            headers[currentColumnOffset + 6] = `${list.title} Done`;
-            headers[currentColumnOffset + 7] = `${list.title} - main body`;
-            currentColumnOffset += 8;
+            headers[currentColumnOffset + 3] = `${list.title} Tag Name`;
+            headers[currentColumnOffset + 4] = `${list.title} Archived`;
+            headers[currentColumnOffset + 5] = `${list.title} Done`;
+            headers[currentColumnOffset + 6] = `${list.title} - main body`;
+            currentColumnOffset += 7;
             return;
         }
 
@@ -2069,19 +2146,18 @@ function generateBoardGridData(board) {
         headers[currentColumnOffset] = `${list.title} Created`;
         headers[currentColumnOffset + 1] = `${list.title} Last Edited`;
         headers[currentColumnOffset + 2] = `${list.title} Important`;
-        headers[currentColumnOffset + 3] = `${list.title} Glow Effect`;
-        headers[currentColumnOffset + 4] = `${list.title} Glow Color`;
-        headers[currentColumnOffset + 5] = `${list.title} Archived`;
-        headers[currentColumnOffset + 6] = `${list.title} Done`;
-        headers[currentColumnOffset + 7] = `${list.title} - main body`;
+        headers[currentColumnOffset + 3] = `${list.title} Tag Name`;
+        headers[currentColumnOffset + 4] = `${list.title} Archived`;
+        headers[currentColumnOffset + 5] = `${list.title} Done`;
+        headers[currentColumnOffset + 6] = `${list.title} - main body`;
         for (let i = 1; i <= listDepth; i++) {
-            headers[currentColumnOffset + 7 + i] = `${list.title} - Sub ${getTerm(true, true)} Level ${i}`;
+            headers[currentColumnOffset + 6 + i] = `${list.title} - Sub ${getTerm(true, true)} Level ${i}`;
         }
 
         const rowsForList = [];
         const flattenToRows = (node, depth, currentRow, rootTask) => {
             const myRow = [...currentRow];
-            myRow[depth + 7] = node.text || "";
+            myRow[depth + 6] = node.text || "";
             
             if (node.nestedIdeas && node.nestedIdeas.length > 0) {
                 node.nestedIdeas.forEach(child => flattenToRows(child, depth + 1, myRow, rootTask));
@@ -2089,15 +2165,14 @@ function generateBoardGridData(board) {
                 myRow[0] = Utils.formatDateTime(rootTask.createdAt);
                 myRow[1] = Utils.formatDateTime(rootTask.updatedAt || rootTask.createdAt);
                 myRow[2] = (node.text || "").includes('!') ? "YES" : "NO";
-                myRow[3] = (rootTask.glowColor && rootTask.glowColor !== 'none') ? "YES" : "NO";
-                myRow[4] = rootTask.glowColor || "none";
-                myRow[5] = node.archived ? "ARCHIVED" : "ACTIVE";
-                myRow[6] = (node.completed === true) ? "DONE" : "ACTIVE";
+                myRow[3] = getTagNameForTask(rootTask, tagsById);
+                myRow[4] = node.archived ? "ARCHIVED" : "ACTIVE";
+                myRow[5] = (node.completed === true) ? "DONE" : "ACTIVE";
                 rowsForList.push(myRow);
             }
         };
 
-        listTasks.forEach(t => flattenToRows(t, 0, new Array(listDepth + 8).fill(""), t));
+        listTasks.forEach(t => flattenToRows(t, 0, new Array(listDepth + 7).fill(""), t));
 
         rowsForList.forEach((r, idx) => {
             if (!csvGrid[idx]) csvGrid[idx] = [];
@@ -2106,7 +2181,7 @@ function generateBoardGridData(board) {
             }
         });
 
-        currentColumnOffset += (listDepth + 8);
+        currentColumnOffset += (listDepth + 7);
     });
 
     return { headers, csvGrid };
@@ -2175,9 +2250,14 @@ async function restoreBackup(data) {
         const userRef = doc(db, "users", state.currentUser.uid);
 
         // 1. Restore Settings & Project Title
+        const restoredSettings = ensureDefaultTags(data.settings || {});
         batch.set(userRef, {
             projectTitle: data.projectTitle || "My Project",
-            settings: data.settings || {},
+            settings: {
+                ...(data.settings || {}),
+                tags: restoredSettings.tags,
+                activeTagId: restoredSettings.activeTagId
+            },
             listOrder: data.listOrder || []
         }, { merge: true });
 
@@ -2215,6 +2295,7 @@ async function restoreBackup(data) {
                         }
                         const parentKanban = taskFields.kanbanStatus || (taskFields.completed ? 'finished' : 'new');
                         taskFields.nestedIdeas = migrateNestedTree(taskFields.nestedIdeas || [], parentKanban);
+                        if (!taskFields.tagId) taskFields.tagId = MISC_TAG_ID;
                         batch.set(doc(db, "users", state.currentUser.uid, "tasks", id), taskFields);
                     } else {
                         console.warn("Skipping invalid task in restore (array format):", task);
@@ -2232,6 +2313,7 @@ async function restoreBackup(data) {
                         }
                         const parentKanban = taskFields.kanbanStatus || (taskFields.completed ? 'finished' : 'new');
                         taskFields.nestedIdeas = migrateNestedTree(taskFields.nestedIdeas || [], parentKanban);
+                        if (!taskFields.tagId) taskFields.tagId = MISC_TAG_ID;
                         batch.set(doc(db, "users", state.currentUser.uid, "tasks", tid), taskFields);
                     }
                 });
@@ -2285,9 +2367,10 @@ async function importTodoistData(rows) {
                 text: t.Content || "Untitled Task",
                 completed: false,
                 archived: false,
+                kanbanStatus: 'new',
                 createdAt: Date.now(),
                 images: [],
-                glowColor: 'none'
+                tagId: MISC_TAG_ID
             });
         });
 
