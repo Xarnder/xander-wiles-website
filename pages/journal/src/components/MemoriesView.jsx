@@ -42,6 +42,31 @@ const extractImageUrl = (data) => {
     return null;
 };
 
+const formatYearsAgoLabel = (years) => {
+    if (years === 1) return 'One year ago';
+    if (years === 2) return 'Two years ago';
+    if (years === 3) return 'Three years ago';
+    return `${years} years ago`;
+};
+
+const parseEntry = (doc) => {
+    const data = doc.data();
+    const text = [data.content || data.text || '', subEntriesToPlainText(data.subEntries)].filter(Boolean).join('\n\n');
+    const wordCount = countWords(text);
+    const title = extractTitle(data.content || data.text, data.title);
+    const img = extractImageUrl(data);
+
+    return {
+        id: doc.id,
+        date: parseISO(doc.id),
+        title: title || 'Untitled Entry',
+        wordCount,
+        imageUrl: img,
+        isSpecial: data.isSpecial || false,
+        contentPreview: text.substring(0, 100) + '...'
+    };
+};
+
 export default function MemoriesView() {
     const { currentUser } = useAuth();
     const navigate = useNavigate();
@@ -50,42 +75,22 @@ export default function MemoriesView() {
     const [loadError, setLoadError] = useState('');
     const [reloadKey, setReloadKey] = useState(0);
 
-    // Fetch past year of entries
+    // Fetch all entries up to today (needed for multi-year "on this day" memories)
     useEffect(() => {
         if (!currentUser) return;
 
-        const endDate = new Date();
-        const startDate = subYears(endDate, 1);
-
-        const startId = format(startDate, 'yyyy-MM-dd');
-        const endId = format(endDate, 'yyyy-MM-dd');
+        const endId = format(new Date(), 'yyyy-MM-dd');
 
         const q = query(
             collection(db, 'users', currentUser.uid, 'entries'),
-            where(documentId(), '>=', startId),
             where(documentId(), '<=', endId)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const fetched = [];
             snapshot.forEach(doc => {
-                const data = doc.data();
-                const text = [data.content || data.text || '', subEntriesToPlainText(data.subEntries)].filter(Boolean).join('\n\n');
-                const wordCount = countWords(text);
-                const title = extractTitle(data.content || data.text, data.title);
-                const img = extractImageUrl(data);
-
-                fetched.push({
-                    id: doc.id,
-                    date: parseISO(doc.id),
-                    title: title || 'Untitled Entry',
-                    wordCount,
-                    imageUrl: img,
-                    isSpecial: data.isSpecial || false,
-                    contentPreview: text.substring(0, 100) + '...'
-                });
+                fetched.push(parseEntry(doc));
             });
-            // Sort by most recent
             fetched.sort((a, b) => b.id.localeCompare(a.id));
             setEntries(fetched);
             setLoading(false);
@@ -100,20 +105,39 @@ export default function MemoriesView() {
 
     const memories = useMemo(() => {
         const today = new Date();
-        const targets = [
-            { label: 'One week ago', targetDate: subDays(today, 7), id: format(subDays(today, 7), 'yyyy-MM-dd') },
-            { label: 'One month ago', targetDate: subMonths(today, 1), id: format(subMonths(today, 1), 'yyyy-MM-dd') },
-            { label: 'Six months ago', targetDate: subMonths(today, 6), id: format(subMonths(today, 6), 'yyyy-MM-dd') },
-            { label: 'One year ago', targetDate: subYears(today, 1), id: format(subYears(today, 1), 'yyyy-MM-dd') },
+        const entryById = new Map(entries.map(e => [e.id, e]));
+        const exactMatches = [];
+
+        const fixedTargets = [
+            { label: 'One week ago', id: format(subDays(today, 7), 'yyyy-MM-dd') },
+            { label: 'One month ago', id: format(subMonths(today, 1), 'yyyy-MM-dd') },
+            { label: 'Six months ago', id: format(subMonths(today, 6), 'yyyy-MM-dd') },
         ];
 
-        const exactMatches = [];
-        targets.forEach(t => {
-            const match = entries.find(e => e.id === t.id);
+        fixedTargets.forEach(({ label, id }) => {
+            const match = entryById.get(id);
             if (match) {
-                exactMatches.push({ ...match, memoryLabel: t.label });
+                exactMatches.push({ ...match, memoryLabel: label });
             }
         });
+
+        const oldestId = entries.length > 0
+            ? entries.reduce((oldest, entry) => (entry.id < oldest ? entry.id : oldest), entries[0].id)
+            : null;
+
+        if (oldestId) {
+            let years = 1;
+            while (years <= 50) {
+                const anniversaryId = format(subYears(today, years), 'yyyy-MM-dd');
+                if (anniversaryId < oldestId) break;
+
+                const match = entryById.get(anniversaryId);
+                if (match) {
+                    exactMatches.push({ ...match, memoryLabel: formatYearsAgoLabel(years) });
+                }
+                years += 1;
+            }
+        }
 
         return exactMatches;
     }, [entries]);
@@ -259,7 +283,7 @@ export default function MemoriesView() {
                     Memories
                 </h2>
                 <p className="text-text-muted mt-2 relative z-10 max-w-2xl">
-                    Look back on your journey. Rediscover entries from exactly "on this day" in the past, or browse your deepest thoughts from recent weeks and months.
+                    Look back on your journey. Rediscover entries from exactly &quot;on this day&quot; in the past — a week, a month, or years ago — or browse your deepest thoughts from recent weeks and months.
                 </p>
             </div>
 
@@ -329,7 +353,7 @@ export default function MemoriesView() {
             {memories.length === 0 && highlights.length === 0 && (
                 <div className="glass-card p-12 text-center text-text-muted">
                     <p className="mb-2">Keep writing to generate memories!</p>
-                    <p className="text-sm opacity-60">"On this day" recaps and weekly/monthly highlights will appear here as your journal grows over the next few weeks.</p>
+                    <p className="text-sm opacity-60">&quot;On this day&quot; recaps and weekly/monthly highlights will appear here as your journal grows.</p>
                 </div>
             )}
         </div>
