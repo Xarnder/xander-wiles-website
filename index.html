@@ -142,16 +142,28 @@
             </div>
         </div>
 
+        <nav class="section-jump-bar" aria-label="Page sections">
+            <div class="section-jump-bar-inner">
+                <a href="#recent" class="section-jump-link" data-section="recent" hidden>Recent</a>
+                <a href="#featured" class="section-jump-link" data-section="featured">Featured</a>
+                <a href="#utilities" class="section-jump-link" data-section="utilities">Utilities</a>
+                <a href="#images" class="section-jump-link" data-section="images">Images</a>
+                <a href="#games" class="section-jump-link" data-section="games">Games</a>
+                <a href="#guides" class="section-jump-link" data-section="guides">Guides</a>
+                <a href="#playlists" class="section-jump-link" data-section="playlists">Playlists</a>
+                <a href="#contact" class="section-jump-link" data-section="contact">Contact</a>
+            </div>
+        </nav>
 
-        <!-- === Best Pages === -->
-        <h2 class="section-title">Best Pages</h2>
+        <!-- === Recent (from local cache) === -->
+        <section id="recent-section" class="recent-section" hidden>
+            <h2 id="recent" class="section-title">Recent</h2>
+            <div id="recent-pages-grid" class="page-grid recent-pages-grid"></div>
+        </section>
+
+        <!-- === Featured === -->
+        <h2 id="featured" class="section-title">Featured</h2>
         <div class="page-grid best-pages-grid">
-            <!-- <a href="/pages/Group-Availability/" class="page-card glass-card">
-                <img src="/pages/Group-Availability/favicon-dark.svg" class="page-icon" alt="When To Hang Icon"
-                    loading="lazy">
-                <h3>When To Hang</h3>
-                <p>Find a time everyone is free — collaborative availability scheduling.</p>
-            </a> -->
             <a href="https://www.shoutitoutgame.com" class="page-card glass-card">
                 <img src="/pages/Shout-It-Out/favicon-dark.svg" class="page-icon" alt="Shout It Out Icon"
                     loading="lazy">
@@ -169,80 +181,22 @@
                 <h3>Rocket Lander 2</h3>
                 <p>A challenging physics-based game. Can you land the rocket safely?</p>
             </a>
-            <a href="/pages/Fighter-Jet/" class="page-card glass-card">
-                <img src="/pages/Fighter-Jet/favicon-dark.svg" class="page-icon" alt="Viper Strike Icon" loading="lazy">
-                <h3>Viper Strike</h3>
-                <p>Arcade 3D fighter jet missile-strike mission in the browser.</p>
-            </a>
             <a href="/pages/Prompt-Manager/" class="page-card glass-card special-prompt-manager-card">
                 <img src="/pages/Prompt-Manager/favicon-dark.svg" class="page-icon" alt="Prompt Manager Icon"
                     loading="lazy">
                 <h3>Prompt Manager</h3>
                 <p>A tool for managing prompts</p>
             </a>
-            <a href="/pages/colour-pro/" class="page-card glass-card special-social-network-card">
-                <img src="/pages/colour-pro/favicon-dark.svg" class="page-icon" alt="Colour Pro Icon" loading="lazy">
-                <h3>Colour Pro</h3>
-                <p>A advanced colour picker tool</p>
-            </a>
-            <a href="/pages/Icon_Maker/" class="page-card glass-card">
-                <img src="/pages/Icon_Maker/favicon-dark.svg" class="page-icon" alt="Favicon Maker Icon" loading="lazy">
-                <h3>Icon Maker</h3>
-                <p>A tool for generating icons from images.</p>
-            </a>
             <a href="/pages/Arkonhex/" class="page-card glass-card special-social-network-card">
                 <img src="/pages/Arkonhex/favicon-dark.svg" class="page-icon" alt="Arkonhex Icon" loading="lazy">
                 <h3>Arkonhex</h3>
                 <p>A voxel game</p>
-            </a>
-            <a href="/pages/Story-Manager/" class="page-card glass-card special-social-network-card">
-                <img src="/pages/Story-Manager/favicon-dark.svg" class="page-icon" alt="Story Manager Icon"
-                    loading="lazy">
-                <h3>Story Manager</h3>
-                <p>A tool for managing stories</p>
-            </a>
-            <a href="/pages/Puzzle-Game/" class="page-card glass-card special-puzzle-game-card">
-                <img src="/pages/Puzzle-Game/favicon-dark.svg" class="page-icon" alt="Puzzle Game Icon" loading="lazy">
-                <h3>Puzzle Game</h3>
-                <p>A puzzle game</p>
-            </a>
-            <a href="/pages/To-Do-List/" class="page-card glass-card">
-                <img src="/pages/To-Do-List/favicon-dark.svg" class="page-icon" alt="To Do List Icon" loading="lazy">
-                <h3>To Do List</h3>
-                <p>A tool for managing tasks and to-dos with features like drag-and-drop and linked tasks.</p>
-            </a>
-            <a href="/pages/Local-AI/" class="page-card glass-card">
-                <img src="/pages/Local-AI/favicon-dark.svg" class="page-icon" alt="Local AI Icon" loading="lazy">
-                <h3>Local AI</h3>
-                <p>A tool for running AI models locally.</p>
-            </a>
-            <a href="/pages/z-image-turbo-sveltekit/" class="page-card glass-card">
-                <img src="/pages/Local-AI/favicon-dark.svg" class="page-icon" alt="Z-Image Turbo Icon" loading="lazy">
-                <h3>Z-Image Turbo</h3>
-                <p>On-device text-to-image generation with ONNX Runtime Web and WebGPU.</p>
-            </a>
-            <a href="/pages/Poster_Gen/" class="page-card glass-card">
-                <img src="/pages/Poster_Gen/favicon-dark.svg" class="page-icon" alt="Poster Maker Icon" loading="lazy">
-                <h3>Poster Maker</h3>
-                <p>A tool for creating custom posters with editable text and colors.</p>
             </a>
             <a href="/pages/life-counter-extension/" class="page-card glass-card">
                 <img src="/pages/life-counter-extension/favicon-dark.svg" class="page-icon"
                     alt="Your life in weeks Icon" loading="lazy">
                 <h3>Your life in weeks</h3>
                 <p>Visualize your life in weeks with this simple tool.</p>
-            </a>
-            <a href="pages/Essential_Items/" class="page-card glass-card">
-                <img src="/pages/Essential_Items/favicon-dark.svg" class="page-icon"
-                    alt="Essential Items Checklist Icon" loading="lazy">
-                <h3>Essential Items Checklist</h3>
-                <p>A checklist of basic needs to ensure you're prepared.</p>
-            </a>
-            <a href="/pages/Batch_Image_Manger/" class="page-card glass-card">
-                <img src="/pages/Batch_Image_Manger/favicon-dark.svg" class="page-icon" alt="Batch Image Manger Icon"
-                    loading="lazy">
-                <h3>Batch Image Manger</h3>
-                <p>Simple Batch Image Manger</p>
             </a>
             <a href="/pages/tax_bracket_visualizer/" class="page-card glass-card">
                 <img src="/pages/tax_bracket_visualizer/favicon-dark.svg" class="page-icon"
@@ -256,23 +210,14 @@
                 <h3>FOV Screen Calculator</h3>
                 <p>A tool for calculating the field of view of a screen.</p>
             </a>
-            <a href="/pages/Akensile/" class="page-card glass-card special-akensile-card">
-                <img src="/pages/Akensile/favicon-dark.svg" class="page-icon" alt="Akensile Icon" loading="lazy">
-                <h3>Akensile</h3>
-                <p>Discover more about the book Akensile</p>
-            </a>
-            <a href="/pages/video-portfolio/" class="page-card glass-card">
-                <img src="/favicon-dark.svg" class="page-icon" alt="Video Portfolio Icon" loading="lazy">
-                <h3>Video Portfolio</h3>
-                <p>A collection of my video work and creative projects.</p>
-            </a>
+ 
 
         </div>
 
 
 
         <!-- === UTILITIES & PRODUCTIVITY === -->
-        <h2 class="section-title">Utilities & Productivity</h2>
+        <h2 id="utilities" class="section-title">Utilities & Productivity</h2>
         <div class="page-grid">
             <a href="/pages/Prompt-Manager/" class="page-card glass-card special-prompt-manager-card">
                 <img src="/pages/Prompt-Manager/favicon-dark.svg" class="page-icon" alt="Prompt Manager Icon"
@@ -427,7 +372,7 @@
 
 
         <!-- === IMAGE & GRAPHICS TOOLS === -->
-        <h2 class="section-title">Image & Graphics Tools</h2>
+        <h2 id="images" class="section-title">Image & Graphics Tools</h2>
         <div class="page-grid">
             <a href="/pages/Poster_Gen/" class="page-card glass-card">
                 <img src="/pages/Poster_Gen/favicon-dark.svg" class="page-icon" alt="Poster Maker Icon" loading="lazy">
@@ -506,7 +451,7 @@
 
 
         <!-- === GAMES === -->
-        <h2 class="section-title">Games</h2>
+        <h2 id="games" class="section-title">Games</h2>
         <div class="page-grid">
             <a href="/pages/Fighter-Jet/" class="page-card glass-card">
                 <img src="/pages/Fighter-Jet/favicon-dark.svg" class="page-icon" alt="Viper Strike Icon" loading="lazy">
@@ -568,7 +513,7 @@
         </div>
 
         <!-- === GUIDES, DEMOS & MEMORIALS === -->
-        <h2 class="section-title">Guides, Demos & More</h2>
+        <h2 id="guides" class="section-title">Guides, Demos & More</h2>
         <div class="page-grid">
             <a href="/pages/Countdown/" class="page-card glass-card">
                 <img src="/pages/Countdown/favicon-dark.svg" class="page-icon" alt="Countdown Icon" loading="lazy">
@@ -670,7 +615,7 @@
 
 
         <!-- === MUSIC PLAYLISTS === -->
-        <h2 class="section-title">Music Playlists</h2>
+        <h2 id="playlists" class="section-title">Music Playlists</h2>
         <div id="homepage-playlist-grid" class="page-grid">
             <!-- Dynamically populated from playlists.json -->
             <div class="loading-spinner"></div>
@@ -738,7 +683,7 @@
 
 
         <!-- Contact Card -->
-        <div class="contact-card glass-card">
+        <div id="contact" class="contact-card glass-card">
             <div class="contact-icon">✉️</div>
             <div class="contact-content">
                 <h3>Get in Touch</h3>
@@ -773,13 +718,23 @@
             </a>
         </div>
 
+        <section id="recent-editor" class="recent-editor glass-card" aria-labelledby="recent-editor-title">
+            <h2 id="recent-editor-title" class="recent-editor-title">Edit Recent Pages</h2>
+            <p class="recent-editor-copy">Search for a page and manually add it to your local Recent section.</p>
 
+            <label class="recent-editor-label" for="recent-editor-search">Search pages</label>
+            <input id="recent-editor-search" class="recent-editor-search" type="search" placeholder="Type a page name…"
+                autocomplete="off" spellcheck="false">
 
+            <div id="recent-editor-results" class="recent-editor-results" role="listbox"
+                aria-label="Search results"></div>
 
+            <div class="recent-editor-divider"></div>
 
-
-
-
+            <h3 class="recent-editor-subtitle">Currently in Recent</h3>
+            <p class="recent-editor-hint">Drag rows or use the arrows to reorder. Your order is saved in local cache.</p>
+            <div id="recent-editor-current" class="recent-editor-current" aria-live="polite"></div>
+        </section>
 
         <!-- Hidden Test Pages Section -->
         <div id="hidden-test-pages" class="hidden-pages-container" style="display: none;">
@@ -858,6 +813,7 @@
         </div>
     </main>
 
+    <script src="/assets/js/recent-pages.js"></script>
     <script src="assets/js/particle-background.js"></script>
     <script src="assets/js/main.js"></script>
     <script src="/assets/js/nav-loader.js"></script> <!-- ADD THIS LINE -->

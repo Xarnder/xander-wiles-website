@@ -1,6 +1,33 @@
 // --- UPDATED: assets/js/nav-loader.js ---
 
 document.addEventListener("DOMContentLoaded", function() {
+    // Track last-used pages for the homepage Recent section
+    const ensureRecentTracker = () => new Promise((resolve) => {
+        if (window.XWRecentPages) {
+            resolve(window.XWRecentPages);
+            return;
+        }
+        const existing = document.querySelector('script[data-xw-recent-pages]');
+        if (existing) {
+            existing.addEventListener('load', () => resolve(window.XWRecentPages), { once: true });
+            existing.addEventListener('error', () => resolve(null), { once: true });
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = '/assets/js/recent-pages.js';
+        script.async = true;
+        script.dataset.xwRecentPages = 'true';
+        script.addEventListener('load', () => resolve(window.XWRecentPages), { once: true });
+        script.addEventListener('error', () => resolve(null), { once: true });
+        document.head.appendChild(script);
+    });
+
+    ensureRecentTracker().then((api) => {
+        if (api && typeof api.recordCurrentPage === 'function') {
+            api.recordCurrentPage();
+        }
+    });
+
     // 1. Find the placeholder element
     const navPlaceholder = document.getElementById('main-nav-placeholder');
 
