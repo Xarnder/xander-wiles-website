@@ -63,8 +63,8 @@
     <svg width="0" height="0" style="position: absolute; pointer-events: none;">
         <defs>
             <linearGradient id="loader-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
-                <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                <stop offset="0%" style="stop-color:oklch(1 0 0);stop-opacity:1" />
+                <stop offset="100%" style="stop-color:oklch(0.623 0.188 259.8);stop-opacity:1" />
             </linearGradient>
         </defs>
     </svg>
@@ -132,7 +132,7 @@
                         placeholder="Project Name">
                     <div id="board-toggle-container"></div>
                     <span id="total-task-count" class="total-count-badge"></span>
-                    <span id="daily-completed-count" class="total-count-badge" style="color: #22c55e; border-color: rgba(34, 197, 94, 0.3); display: none; align-items: center;" title="Tasks completed today">0</span>
+                    <span id="daily-completed-count" class="total-count-badge" style="color: var(--accent-green); border-color: color-mix(in oklch, var(--accent-green) 30%, transparent); display: none; align-items: center;" title="Tasks completed today">0</span>
                 </div>
             </div>
 
@@ -205,14 +205,18 @@
     <!-- Hidden File Input -->
     <input type="file" id="hidden-image-input" accept="image/*" style="display: none;">
 
-    <!-- OPTIONS MODAL -->
-    <div id="options-modal-overlay" class="modal-overlay hidden">
-        <div class="modal glass-panel options-modal">
-            <div class="modal-header-row">
-                <h2>App Options</h2>
-                <button id="close-options-btn" class="icon-btn-large">&times;</button>
-            </div>
-            <div class="options-list">
+    <!-- SETTINGS PAGE (full-page view; id kept for compatibility) -->
+    <div id="options-modal-overlay" class="settings-page hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="settings-page-title">
+        <div class="settings-page-shell">
+            <header class="settings-page-header">
+                <button type="button" id="close-options-btn" class="btn secondary settings-back-btn" title="Back to board" aria-label="Back to board">
+                    <i class="ph ph-arrow-left"></i>
+                    <span>Back</span>
+                </button>
+                <h2 id="settings-page-title">Settings</h2>
+                <div class="settings-header-spacer" aria-hidden="true"></div>
+            </header>
+            <div class="options-list settings-page-content">
                 <button id="archive-mode-btn" class="menu-action-item" title="Open Archived Tasks">
                     <i class="ph ph-archive-box"></i> Archived Tasks
                 </button>
@@ -248,7 +252,7 @@
                 <hr class="dropdown-divider options-span-all">
                 <div class="dropdown-item-toggle" style="cursor: default;">
                     <span>Drag Mode</span>
-                    <div class="toggle-group" style="background: rgba(0,0,0,0.2); padding: 2px; border-radius: 8px; display: flex;">
+                    <div class="toggle-group" style="background: oklch(0 0 0 / 0.2); padding: 2px; border-radius: 8px; display: flex;">
                         <button id="mode-cut-btn" class="mode-btn active" style="padding: 4px 10px; font-size: 0.8rem;">Cut</button>
                         <button id="mode-copy-btn" class="mode-btn" style="padding: 4px 10px; font-size: 0.8rem;">Copy</button>
                     </div>
@@ -295,13 +299,28 @@
                         <span class="slider-small round"></span>
                     </div>
                 </label>
+                <label class="dropdown-item-toggle" title="When off, the AI summarise button lives in the Edit Task modal">
+                    <span><i class="ph ph-sparkle"></i> AI Button on Cards</span>
+                    <div class="switch-small">
+                        <input type="checkbox" id="ai-summary-on-cards-toggle">
+                        <span class="slider-small round"></span>
+                    </div>
+                </label>
 
                 <div id="tags-settings-section" class="tags-settings-section options-span-all">
                     <div class="tags-settings-header">
                         <span><i class="ph ph-tag"></i> Task Tags</span>
                     </div>
-                    <p class="tags-settings-hint">Manage tags and their glow colours. Misc has no glow.</p>
+                    <p id="tags-settings-hint" class="tags-settings-hint">Tap a colour circle to swap it with another tag. Misc has no colour.</p>
+                    <div class="tags-display-mode" style="cursor: default;">
+                        <span class="tags-display-mode-label">Tag style on cards</span>
+                        <div class="toggle-group tags-display-mode-toggle">
+                            <button type="button" id="tag-display-glow-btn" class="mode-btn active" data-tag-display-mode="glow">Glow</button>
+                            <button type="button" id="tag-display-fill-btn" class="mode-btn" data-tag-display-mode="fill">Full highlight</button>
+                        </div>
+                    </div>
                     <div id="tags-settings-list" class="tags-settings-list"></div>
+                    <div id="tags-settings-free-colors" class="tags-settings-free-colors hidden" aria-live="polite"></div>
                     <div id="add-tag-form" class="add-tag-form hidden">
                         <input type="text" id="new-tag-name-input" class="glass-select full-width" maxlength="24"
                             placeholder="Tag name" spellcheck="true" autocomplete="off">
@@ -389,12 +408,12 @@
                     Backup</label>
                 <input type="file" id="upload-json" accept=".json" style="display: none;">
 
-                <button id="open-task-import-btn" class="menu-action-item" style="color: #38bdf8;">
+                <button id="open-task-import-btn" class="menu-action-item" style="color: oklch(0.746 0.140 230);">
                     <i class="ph ph-sparkle"></i> Import Project Tasks (AI)
                 </button>
 
                 <!-- TODOIST IMPORT (NEW) -->
-                <label for="import-todoist-csv" class="menu-action-item" style="color: #e44332;">
+                <label for="import-todoist-csv" class="menu-action-item" style="color: oklch(0.620 0.210 28);">
                     <i class="ph ph-file-csv"></i> Import Todoist CSV
                 </label>
                 <input type="file" id="import-todoist-csv" accept=".csv" style="display: none;">
@@ -467,7 +486,7 @@
             </div>
             <div style="margin-bottom: 10px; display: flex; justify-content: flex-end;">
                 <label class="dropdown-item-toggle"
-                    style="padding: 6px 12px; font-size: 0.9rem; background: rgba(0,0,0,0.2);">
+                    style="padding: 6px 12px; font-size: 0.9rem; background: oklch(0 0 0 / 0.2);">
                     <span style="margin-right: 10px;">Show Archived</span>
                     <div class="switch-small">
                         <input type="checkbox" id="search-show-archived-toggle">
@@ -511,6 +530,7 @@
     <!-- EDIT TASK MODAL -->
     <div id="modal-overlay" class="modal-overlay hidden">
         <div class="modal glass-panel">
+            <div class="modal-scroll">
             <div class="modal-header-sticky">
                 <div class="modal-header-row">
                     <h2>Edit Task</h2>
@@ -520,9 +540,14 @@
                     </div>
                 </div>
                 <!-- Image Add moved here as well to keep it accessible -->
-                <button id="modal-add-image-btn" class="btn secondary mini-action" style="margin-top: 10px; width: 100%;">
-                    <i class="ph ph-image"></i> Add Image
-                </button>
+                <div class="modal-header-extra-actions">
+                    <button id="modal-add-image-btn" class="btn secondary mini-action">
+                        <i class="ph ph-image"></i> Add Image
+                    </button>
+                    <button id="modal-ai-summary-btn" class="btn secondary mini-action" type="button">
+                        <i class="ph ph-sparkle"></i> AI Summarise
+                    </button>
+                </div>
             </div>
             
             <textarea id="modal-task-input" rows="10" placeholder="Task description..." style="margin-top: 15px;" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"></textarea>
@@ -583,14 +608,18 @@
 
                 <h3>Add to another List:</h3>
                 <div class="move-controls">
-                    <select id="manual-move-select" class="glass-select full-width">
+                    <label class="manual-transfer-mode-label" for="manual-transfer-mode">
+                        <span>Mode</span>
+                        <select id="manual-transfer-mode" class="glass-select" aria-label="Transfer mode">
+                            <option value="move" selected>Move (Cut)</option>
+                            <option value="link">Link (Copy)</option>
+                        </select>
+                    </label>
+                    <select id="manual-move-select" class="glass-select full-width" aria-label="Destination list">
                         <option value="" disabled selected>Select Destination...</option>
                     </select>
-                    <div class="move-buttons">
-                        <button id="manual-link-btn" class="btn secondary">Link (Copy)</button>
-                        <button id="manual-move-btn" class="btn secondary">Move (Cut)</button>
-                    </div>
                 </div>
+            </div>
             </div>
         </div>
     </div>
@@ -685,7 +714,7 @@
     </div>
 
     <!-- Image Lightbox -->
-    <div id="image-modal-overlay" class="modal-overlay hidden" style="background: rgba(0,0,0,0.95);">
+    <div id="image-modal-overlay" class="modal-overlay hidden" style="background: oklch(0 0 0 / 0.95);">
         <div class="image-modal-content">
             <button id="image-modal-close" class="icon-btn-large"
                 style="position: absolute; top: 20px; right: 20px; color: white; z-index: 2000;">&times;</button>
@@ -905,7 +934,7 @@
                 </div>
 
                 <div id="automation-settings-container" class="hidden"
-                    style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    style="background: oklch(0 0 0 / 0.2); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                     <label style="font-size: 0.9em; display: block; margin-bottom: 5px;">Trigger Type:</label>
                     <select id="automation-trigger-select" class="glass-select full-width" style="margin-bottom: 10px;">
                         <option value="duration">After Time in List</option>
@@ -969,6 +998,16 @@
             <div class="modal-divider"></div>
 
             <div class="modal-section">
+                <h3>Quick Tag Tasks:</h3>
+                <p class="quick-tag-section-hint">Go through each task in this list and assign a tag one by one.</p>
+                <button id="edit-list-quick-tag-btn" class="btn secondary full-width" type="button">
+                    <i class="ph ph-tag"></i> Quick Tag
+                </button>
+            </div>
+
+            <div class="modal-divider"></div>
+
+            <div class="modal-section">
                 <h3>Export List:</h3>
                 <button id="edit-list-export-csv-btn" class="btn secondary full-width">
                     <i class="ph ph-file-csv"></i> Export List to CSV
@@ -982,6 +1021,36 @@
                     <i class="ph ph-trash"></i> Delete List
                 </button>
                 <button id="edit-list-close-btn" class="btn secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- QUICK TAG WALKTHROUGH MODAL -->
+    <div id="quick-tag-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel quick-tag-modal">
+            <div class="modal-header-row">
+                <h2 id="quick-tag-title">Quick Tag</h2>
+                <button id="quick-tag-close-btn" class="icon-btn-large" type="button" title="Cancel">&times;</button>
+            </div>
+            <p id="quick-tag-progress" class="quick-tag-progress" aria-live="polite">0 completed · 0 to go</p>
+            <div class="quick-tag-progress-bar" aria-hidden="true">
+                <div id="quick-tag-progress-fill" class="quick-tag-progress-fill"></div>
+            </div>
+            <div class="quick-tag-task-card">
+                <span class="quick-tag-current-label">Current tag</span>
+                <span id="quick-tag-current-tag" class="quick-tag-current-tag">Misc</span>
+                <p id="quick-tag-task-text" class="quick-tag-task-text"></p>
+            </div>
+            <h3 class="quick-tag-picker-heading">Assign tag:</h3>
+            <div id="quick-tag-options" class="tag-picker-options" role="radiogroup" aria-label="Assign tag"></div>
+            <p class="quick-tag-helper">Tap a tag to assign it and move to the next task automatically.</p>
+            <div class="modal-actions-bar quick-tag-actions">
+                <button id="quick-tag-back-btn" class="btn secondary" type="button" disabled>
+                    <i class="ph ph-arrow-left"></i> Back
+                </button>
+                <button id="quick-tag-cancel-btn" class="btn secondary" type="button">
+                    Cancel
+                </button>
             </div>
         </div>
     </div>
@@ -1003,7 +1072,7 @@
                 <h3 style="color: var(--text-primary); margin: 0 0 5px 0; font-size: 1rem;">On a specific Schedule:</h3>
                 <p style="margin-bottom: 10px;">Checks the list at the <strong>Time of Day</strong> you set, moving any
                     tasks that meet your age requirements.</p>
-                <p style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; font-style: italic;">
+                <p style="background: oklch(0 0 0 / 0.2); padding: 10px; border-radius: 8px; font-style: italic;">
                     <strong>Pro Tip:</strong> Set Schedule to 'Daily' at '00:00', and Age to '0', to migrate all tasks
                     in a 'Tomorrow' list to a 'Today' list every Midnight!
                 </p>

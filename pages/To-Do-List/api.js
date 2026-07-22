@@ -19,7 +19,9 @@ import {
     validateTagName,
     isMiscTag,
     sortTags,
-    getTagsById
+    getTagsById,
+    swapTagGlowColors,
+    assignTagGlowColor
 } from './tags.js';
 
 // --- API ACTIONS ---
@@ -586,6 +588,36 @@ export function renameTag(tagId, name) {
     ));
     state.appData.settings.tags = nextTags;
     return updateSetting('tags', nextTags).then(() => true);
+}
+
+export function swapTagColors(tagIdA, tagIdB) {
+    const current = ensureDefaultTags(state.appData.settings);
+    const result = swapTagGlowColors(current.tags, tagIdA, tagIdB);
+    if (!result.ok) {
+        showToast(result.error, 'warning');
+        return Promise.resolve(false);
+    }
+
+    state.appData.settings.tags = result.tags;
+    return updateSetting('tags', result.tags).then(() => {
+        showToast('Colours swapped.', 'success');
+        return true;
+    });
+}
+
+export function setTagColor(tagId, glowColor) {
+    const current = ensureDefaultTags(state.appData.settings);
+    const result = assignTagGlowColor(current.tags, tagId, glowColor);
+    if (!result.ok) {
+        showToast(result.error, 'warning');
+        return Promise.resolve(false);
+    }
+
+    state.appData.settings.tags = result.tags;
+    return updateSetting('tags', result.tags).then(() => {
+        showToast('Colour updated.', 'success');
+        return true;
+    });
 }
 
 export async function deleteTag(tagId) {

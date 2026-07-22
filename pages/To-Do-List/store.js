@@ -25,6 +25,7 @@ export const state = {
             timeAutomationConfirm: true,
             disableImportantPinning: false,
             workToolsEnabled: false,
+            aiSummaryOnCards: false,
             kanbanColumnLabels: {
                 new: 'New',
                 under_review: 'Under Review',
@@ -32,7 +33,8 @@ export const state = {
                 finished: 'Finished'
             },
             tags: [{ ...DEFAULT_MISC_TAG }],
-            activeTagId: MISC_TAG_ID
+            activeTagId: MISC_TAG_ID,
+            tagDisplayMode: 'glow'
         },
         listOrder: [],
         boards: [],
@@ -52,6 +54,7 @@ export const state = {
     // Multi-Edit State
     multiEditMode: false,
     selectedTaskIds: new Set(),
+    quickMoveTaskIds: null, // optional override for single-task quick move
     expandedTaskId: null,
     listSearchTerm: "",
 
@@ -94,6 +97,7 @@ export function resetState() {
             timeAutomationConfirm: true,
             disableImportantPinning: false,
             workToolsEnabled: false,
+            aiSummaryOnCards: false,
             kanbanColumnLabels: {
                 new: 'New',
                 under_review: 'Under Review',
@@ -101,7 +105,8 @@ export function resetState() {
                 finished: 'Finished'
             },
             tags: [{ ...DEFAULT_MISC_TAG }],
-            activeTagId: MISC_TAG_ID
+            activeTagId: MISC_TAG_ID,
+            tagDisplayMode: 'glow'
         },
         listOrder: [],
         boards: [],

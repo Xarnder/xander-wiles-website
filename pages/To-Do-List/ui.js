@@ -12,7 +12,7 @@ import {
     hasIncompleteNested,
     taskMatchesSearch
 } from './nested.js';
-import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag } from './api.js';
+import { handleAddTask, updateListTitle, deleteList, emptyOrphans, archiveTask, unarchiveTask, deleteTaskForever, toggleTaskComplete, reorderNestedSiblings, updateNestedIdeaKanbanStatus, shiftAllNestedKanban, handleSyncError, updateDoc, updateSetting, setActiveTagId, setTaskTag, createTag, renameTag, deleteTag, swapTagColors, setTagColor } from './api.js';
 import { db } from './firebase-config.js';
 import { doc, writeBatch, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getLocalAIModelId, shouldSummarise, summariseTaskText } from './local-ai.js';
@@ -26,7 +26,12 @@ import {
     getTagNameForTask,
     sortTags,
     canAddMoreTags,
-    isMiscTag
+    isMiscTag,
+    getTagDisplayMode,
+    TAG_DISPLAY_MODE_FILL,
+    TAG_DISPLAY_MODE_GLOW,
+    getContrastingInk,
+    getUnusedGlowColors
 } from './tags.js';
 
 // Global DOM Elements
@@ -34,6 +39,7 @@ const boardContainer = document.getElementById('board-container');
 const totalTaskCountEl = document.getElementById('total-task-count');
 const syncStatusText = document.getElementById('sync-status-text');
 let aiPanelInitialized = false;
+let tagColorSwapSourceId = null;
 let aiPanelTaskId = null;
 
 // --- RENDERING HELPERS ---
@@ -915,7 +921,8 @@ function getTagButtonStyle(tag) {
     if (!tag || !tag.glowColor) {
         return '--tag-btn-bg: var(--glass-bg); --tag-btn-border: var(--glass-border); --tag-btn-text: var(--text-primary);';
     }
-    return `--tag-btn-bg: ${tag.glowColor}; --tag-btn-border: ${tag.glowColor}; --tag-btn-text: #fff;`;
+    const ink = getContrastingInk(tag.glowColor);
+    return `--tag-btn-bg: ${tag.glowColor}; --tag-btn-border: ${tag.glowColor}; --tag-btn-text: ${ink};`;
 }
 
 function buildTagButton(tag, selectedId, onSelect, { compact = false } = {}) {
@@ -978,23 +985,61 @@ export function renderTagsSettingsPanel() {
     const list = document.getElementById('tags-settings-list');
     const addBtn = document.getElementById('add-tag-btn');
     const addForm = document.getElementById('add-tag-form');
+    const hintEl = document.getElementById('tags-settings-hint');
+    const freeColorsEl = document.getElementById('tags-settings-free-colors');
     if (!list || !addBtn) return;
+
+    syncTagDisplayModeUI();
 
     const ensured = ensureDefaultTags(state.appData.settings);
     state.appData.settings.tags = ensured.tags;
     const tags = sortTags(ensured.tags);
 
+    if (tagColorSwapSourceId && !tags.some((t) => t.id === tagColorSwapSourceId && !isMiscTag(t.id))) {
+        tagColorSwapSourceId = null;
+    }
+
+    const sourceTag = tagColorSwapSourceId
+        ? tags.find((t) => t.id === tagColorSwapSourceId)
+        : null;
+
+    if (hintEl) {
+        if (sourceTag) {
+            hintEl.textContent = `Swap: tap another tag's colour to trade with "${sourceTag.name}", or pick a free colour below. Tap again to cancel.`;
+        } else {
+            hintEl.textContent = 'Tap a colour circle to swap it with another tag. Misc has no colour.';
+        }
+    }
+
     list.innerHTML = '';
     tags.forEach((tag) => {
         const row = document.createElement('div');
         row.className = 'tags-settings-item';
+        if (tagColorSwapSourceId && tag.id === tagColorSwapSourceId) {
+            row.classList.add('is-color-swap-source');
+        } else if (tagColorSwapSourceId && !isMiscTag(tag.id)) {
+            row.classList.add('is-color-swap-target');
+        }
 
-        const swatch = document.createElement('span');
+        const swatch = document.createElement(isMiscTag(tag.id) ? 'span' : 'button');
         swatch.className = 'tags-settings-swatch';
         if (tag.glowColor) {
             swatch.style.background = tag.glowColor;
         } else {
             swatch.classList.add('is-misc');
+        }
+
+        if (!isMiscTag(tag.id)) {
+            swatch.type = 'button';
+            swatch.title = tagColorSwapSourceId === tag.id
+                ? 'Cancel colour swap'
+                : (tagColorSwapSourceId ? `Swap colour with ${tag.name}` : `Change colour for ${tag.name}`);
+            swatch.setAttribute('aria-label', swatch.title);
+            swatch.setAttribute('aria-pressed', tagColorSwapSourceId === tag.id ? 'true' : 'false');
+            if (tagColorSwapSourceId === tag.id) swatch.classList.add('is-selected');
+            swatch.onclick = () => {
+                handleTagColorSwatchClick(tag.id);
+            };
         }
 
         if (isMiscTag(tag.id)) {
@@ -1031,10 +1076,81 @@ export function renderTagsSettingsPanel() {
         list.appendChild(row);
     });
 
+    if (freeColorsEl) {
+        freeColorsEl.innerHTML = '';
+        const unused = getUnusedGlowColors(tags);
+        if (sourceTag && unused.length > 0) {
+            freeColorsEl.classList.remove('hidden');
+            const label = document.createElement('span');
+            label.className = 'tags-settings-free-label';
+            label.textContent = 'Free colours:';
+            freeColorsEl.appendChild(label);
+
+            unused.forEach((color) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'tags-settings-free-swatch';
+                btn.style.background = color;
+                btn.title = 'Assign this colour';
+                btn.setAttribute('aria-label', 'Assign free colour');
+                btn.onclick = () => {
+                    setTagColor(sourceTag.id, color).then((ok) => {
+                        if (!ok) return;
+                        tagColorSwapSourceId = null;
+                        afterTagColorChange();
+                    });
+                };
+                freeColorsEl.appendChild(btn);
+            });
+        } else {
+            freeColorsEl.classList.add('hidden');
+        }
+    }
+
     addBtn.classList.toggle('hidden', !canAddMoreTags(tags));
     if (addForm && addForm.classList.contains('hidden') === false && !canAddMoreTags(tags)) {
         addForm.classList.add('hidden');
     }
+}
+
+function handleTagColorSwatchClick(tagId) {
+    if (isMiscTag(tagId)) return;
+
+    if (!tagColorSwapSourceId) {
+        tagColorSwapSourceId = tagId;
+        renderTagsSettingsPanel();
+        return;
+    }
+
+    if (tagColorSwapSourceId === tagId) {
+        tagColorSwapSourceId = null;
+        renderTagsSettingsPanel();
+        return;
+    }
+
+    const sourceId = tagColorSwapSourceId;
+    swapTagColors(sourceId, tagId).then((ok) => {
+        tagColorSwapSourceId = null;
+        if (!ok) {
+            renderTagsSettingsPanel();
+            return;
+        }
+        afterTagColorChange();
+    });
+}
+
+function afterTagColorChange() {
+    renderTagsSettingsPanel();
+    renderTagModeBar();
+    renderBoard();
+}
+
+export function syncTagDisplayModeUI() {
+    const mode = getTagDisplayMode(state.appData.settings);
+    const glowBtn = document.getElementById('tag-display-glow-btn');
+    const fillBtn = document.getElementById('tag-display-fill-btn');
+    if (glowBtn) glowBtn.classList.toggle('active', mode === TAG_DISPLAY_MODE_GLOW);
+    if (fillBtn) fillBtn.classList.toggle('active', mode === TAG_DISPLAY_MODE_FILL);
 }
 
 export function initTagsSettingsUI() {
@@ -1043,6 +1159,34 @@ export function initTagsSettingsUI() {
     const confirmBtn = document.getElementById('confirm-add-tag-btn');
     const cancelBtn = document.getElementById('cancel-add-tag-btn');
     const nameInput = document.getElementById('new-tag-name-input');
+    const glowBtn = document.getElementById('tag-display-glow-btn');
+    const fillBtn = document.getElementById('tag-display-fill-btn');
+
+    const setTagDisplayMode = (mode) => {
+        const next = mode === TAG_DISPLAY_MODE_FILL ? TAG_DISPLAY_MODE_FILL : TAG_DISPLAY_MODE_GLOW;
+        state.appData.settings.tagDisplayMode = next;
+        syncTagDisplayModeUI();
+        if (state.currentUser) {
+            updateSetting('tagDisplayMode', next);
+        }
+        renderBoard();
+    };
+
+    if (glowBtn) {
+        glowBtn.onclick = () => setTagDisplayMode(TAG_DISPLAY_MODE_GLOW);
+    }
+    if (fillBtn) {
+        fillBtn.onclick = () => setTagDisplayMode(TAG_DISPLAY_MODE_FILL);
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape' || !tagColorSwapSourceId) return;
+        const settingsOpen = document.body.classList.contains('settings-page-open');
+        if (!settingsOpen) return;
+        tagColorSwapSourceId = null;
+        renderTagsSettingsPanel();
+    });
+
     if (!addBtn || !addForm || !confirmBtn || !cancelBtn || !nameInput) return;
 
     addBtn.onclick = () => {
@@ -1748,8 +1892,22 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
     const tagsById = getTagsById(state.appData.settings.tags);
     const glowColor = resolveTaskGlow(task, tagsById);
     if (glowColor) {
-        el.style.boxShadow = `0 0 10px ${glowColor}, inset 0 0 5px ${glowColor}20`;
-        el.style.borderColor = glowColor;
+        const displayMode = getTagDisplayMode(state.appData.settings);
+        el.style.setProperty('--tag-color', glowColor);
+        if (displayMode === TAG_DISPLAY_MODE_FILL) {
+            const ink = getContrastingInk(glowColor);
+            el.classList.add('tag-fill');
+            el.style.setProperty('--tag-fill-color', glowColor);
+            el.style.setProperty('--tag-fill-ink', ink);
+            el.style.backgroundColor = glowColor;
+            el.style.borderColor = glowColor;
+            el.style.color = ink;
+            el.style.boxShadow = `0 1px 4px color-mix(in oklch, ${glowColor} 40%, transparent)`;
+        } else {
+            el.classList.add('tag-glow');
+            el.style.boxShadow = `0 0 10px ${glowColor}, inset 0 0 5px color-mix(in oklch, ${glowColor} 12%, transparent)`;
+            el.style.borderColor = glowColor;
+        }
     }
 
     let imagesHtml = '';
@@ -1769,10 +1927,15 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
             <button class="icon-btn danger delete-task-btn" title="Delete Forever" onclick="event.stopPropagation(); window.deleteTaskForever('${task.id}')" ontouchstart="event.stopPropagation(); window.deleteTaskForever('${task.id}')"><i class="ph ph-trash"></i></button>
         `;
     } else {
+        const showAiOnCard = !!state.appData.settings.aiSummaryOnCards;
+        const aiBtnHtml = showAiOnCard
+            ? `<button class="icon-btn ai-summary-btn" title="Summarise locally with ${getLocalAIModelId()}" onclick="event.stopPropagation(); window.summariseTask('${task.id}')" ontouchstart="event.preventDefault(); event.stopPropagation(); window.summariseTask('${task.id}')"><i class="ph ph-sparkle"></i></button>`
+            : '';
         actionsHtml = `
             <button class="icon-btn copy-task-btn" title="Copy Text" onclick="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')" ontouchstart="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')"><i class="ph ph-copy"></i></button>
             <button class="icon-btn edit-task-btn" title="Edit" onclick="event.stopPropagation(); window.openEditModal('${task.id}', '${sourceListId}')"><i class="ph ph-pencil-simple"></i></button>
-            <button class="icon-btn ai-summary-btn" title="Summarise locally with ${getLocalAIModelId()}" onclick="event.stopPropagation(); window.summariseTask('${task.id}')" ontouchstart="event.preventDefault(); event.stopPropagation(); window.summariseTask('${task.id}')"><i class="ph ph-sparkle"></i></button>
+            <button class="icon-btn move-task-btn" title="Move task" onclick="event.stopPropagation(); window.openQuickMoveForTask('${task.id}')" ontouchstart="event.preventDefault(); event.stopPropagation(); window.openQuickMoveForTask('${task.id}')"><i class="ph ph-arrow-bend-up-right"></i></button>
+            ${aiBtnHtml}
             <button class="icon-btn archive-task-btn" title="Archive" onclick="event.stopPropagation(); window.archiveTask('${task.id}')"><i class="ph ph-archive"></i></button>
         `;
     }
@@ -2076,7 +2239,7 @@ export async function summariseTask(taskId, options = {}) {
     }
 
     const card = document.querySelector(`.task-card[data-task-id="${taskId}"]`);
-    const button = card?.querySelector('.ai-summary-btn');
+    const button = card?.querySelector('.ai-summary-btn') || document.getElementById('modal-ai-summary-btn');
     if (button) {
         button.disabled = true;
         button.classList.add('is-loading');
@@ -2479,6 +2642,9 @@ export function openEditModal(taskId, listId) {
     const select = document.getElementById('manual-move-select');
     renderGroupedListSelect(select);
 
+    const transferMode = document.getElementById('manual-transfer-mode');
+    if (transferMode) transferMode.value = 'move';
+
     renderCurrentLocations(taskId);
 
     renderTaskTagPicker('edit-task-tag-options', resolveTaskTagId(task), (tagId) => {
@@ -2490,6 +2656,16 @@ export function openEditModal(taskId, listId) {
     if (modalAddImageBtn) {
         modalAddImageBtn.onclick = () => {
             window.triggerImageUpload(taskId);
+        };
+    }
+
+    const modalAiBtn = document.getElementById('modal-ai-summary-btn');
+    const showAiOnCards = !!state.appData.settings.aiSummaryOnCards;
+    if (modalAiBtn) {
+        modalAiBtn.classList.toggle('hidden', showAiOnCards);
+        modalAiBtn.title = `Summarise locally with ${getLocalAIModelId()}`;
+        modalAiBtn.onclick = () => {
+            window.summariseTask(taskId);
         };
     }
 
@@ -2640,7 +2816,12 @@ export function selectAllInList(listId) {
     updateMultiFloatingBar();
 }
 
-export function openQuickMoveModal() {
+export function openQuickMoveForTask(taskId) {
+    if (!taskId || !state.appData.tasks[taskId]) return;
+    openQuickMoveModal({ taskIds: [taskId] });
+}
+
+export function openQuickMoveModal(options = {}) {
     const modal = document.getElementById('quick-move-modal-overlay');
     const container = document.getElementById('quick-move-list-container');
     const bar = document.getElementById('multi-edit-floating-bar');
@@ -2648,13 +2829,23 @@ export function openQuickMoveModal() {
     const helpEl = modal?.querySelector('.manual-move-section > p');
     if (!modal || !container) return;
 
-    if (bar) bar.classList.add('hidden'); // Hide the pill
+    const explicitIds = Array.isArray(options?.taskIds)
+        ? options.taskIds.filter((id) => id && state.appData.tasks[id])
+        : null;
+    state.quickMoveTaskIds = explicitIds && explicitIds.length > 0 ? explicitIds : null;
+    const isSingle = state.quickMoveTaskIds?.length === 1;
+
+    if (bar && !state.quickMoveTaskIds) bar.classList.add('hidden'); // Hide the pill for multi-select flow
     container.innerHTML = '';
 
     // Kanban focus: pick a stage instead of a list (same Move button flow)
     if (isKanbanFocused()) {
-        if (titleEl) titleEl.textContent = 'Move to Kanban Section';
-        if (helpEl) helpEl.textContent = 'Select a Kanban section to move the selected items into.';
+        if (titleEl) titleEl.textContent = isSingle ? 'Move Task to Section' : 'Move to Kanban Section';
+        if (helpEl) {
+            helpEl.textContent = isSingle
+                ? 'Select a Kanban section to move this task into.'
+                : 'Select a Kanban section to move the selected items into.';
+        }
 
         KANBAN_STAGES.forEach((stage) => {
             const label = getKanbanColumnLabel(stage);
@@ -2674,8 +2865,12 @@ export function openQuickMoveModal() {
         return;
     }
 
-    if (titleEl) titleEl.textContent = 'Move Selected Items';
-    if (helpEl) helpEl.textContent = 'Select a destination list to move items to.';
+    if (titleEl) titleEl.textContent = isSingle ? 'Move Task' : 'Move Selected Items';
+    if (helpEl) {
+        helpEl.textContent = isSingle
+            ? 'Select a destination list to move this task to.'
+            : 'Select a destination list to move items to.';
+    }
 
     const boards = state.appData.boards;
     const rawLists = state.appData.rawLists || [];
@@ -2737,6 +2932,7 @@ export function openQuickMoveModal() {
 export function closeQuickMoveModal() {
     const modal = document.getElementById('quick-move-modal-overlay');
     if (modal) modal.classList.add('hidden');
+    state.quickMoveTaskIds = null;
     updateMultiFloatingBar(); // Restore the pill if still in multi-mode
 }
 
@@ -2926,12 +3122,14 @@ let mobileSortableInstance = null;
 export function openMobileReorderModal() {
     const modal = document.getElementById('mobile-reorder-modal-overlay');
     const container = document.getElementById('mobile-reorder-list-container');
+    if (!modal || !container) return;
 
     // Clear old
     container.innerHTML = '';
 
-    // Get lists excluding orphan-archive
-    const activeLists = state.appData.lists.filter(l => l.id !== 'orphan-archive');
+    // Use the current board's canonical order. This avoids stale rendered-list
+    // state and ensures the modal only contains lists assigned to this board.
+    const activeLists = getSortedListObjects().filter(l => l.id !== 'orphan-archive');
 
     activeLists.forEach(list => {
         const item = document.createElement('div');
@@ -2949,7 +3147,9 @@ export function openMobileReorderModal() {
     if (mobileSortableInstance) mobileSortableInstance.destroy();
 
     mobileSortableInstance = new Sortable(container, {
-        disabled: !state.appData.settings.dragEnabled,
+        // This is a dedicated reorder screen, so it must remain draggable even
+        // when freeform board dragging is disabled (the mobile default).
+        disabled: false,
         animation: 150,
         handle: '.mobile-reorder-list-item', // They drag the whole card
         forceFallback: true,
@@ -2961,22 +3161,223 @@ export function openMobileReorderModal() {
     modal.classList.remove('hidden');
 }
 
-export function saveMobileReorder() {
+export async function saveMobileReorder() {
     const container = document.getElementById('mobile-reorder-list-container');
-    const newOrder = Array.from(container.children).map(el => el.dataset.listId);
+    const modal = document.getElementById('mobile-reorder-modal-overlay');
+    const saveBtn = document.getElementById('save-mobile-reorder-btn');
+    if (!container || !modal || !state.currentUser) return;
 
-    // Update DB
-    updateDoc(doc(db, "users", state.currentUser.uid), { listOrder: newOrder })
-        .then(() => {
-            document.getElementById('mobile-reorder-modal-overlay').classList.add('hidden');
-            showToast("Lists reordered");
-        })
-        .catch(e => handleSyncError(e));
+    const newOrder = Array.from(container.children).map(el => el.dataset.listId);
+    const currentOrder = getSortedListObjects()
+        .filter(list => list.id !== 'orphan-archive')
+        .map(list => list.id);
+
+    // Refuse to persist an incomplete/corrupt order if the DOM was disrupted.
+    if (
+        newOrder.length !== currentOrder.length
+        || new Set(newOrder).size !== newOrder.length
+        || currentOrder.some(id => !newOrder.includes(id))
+    ) {
+        showToast("Couldn't save list order. Please reopen the reorder screen.", "warning");
+        return;
+    }
+
+    const boardId = state.appData.currentBoardId;
+    const orderRef = boardId
+        ? doc(db, "users", state.currentUser.uid, "boards", boardId)
+        : doc(db, "users", state.currentUser.uid);
+
+    if (saveBtn) saveBtn.disabled = true;
+
+    try {
+        await updateDoc(orderRef, { listOrder: newOrder });
+
+        // Update local state immediately instead of waiting for Firestore's
+        // board listener, so closing the modal visibly applies the new order.
+        state.appData.listOrder = [...newOrder];
+        const currentBoard = state.appData.boards.find(board => board.id === boardId);
+        if (currentBoard) currentBoard.listOrder = [...newOrder];
+        state.appData.lists = getSortedListObjects();
+
+        modal.classList.add('hidden');
+        renderBoard();
+        showToast("Lists reordered", "success");
+    } catch (e) {
+        handleSyncError(e);
+    } finally {
+        if (saveBtn) saveBtn.disabled = false;
+    }
 }
 
-/**
- * Opens the new Edit List Modal
- */
+// --- QUICK TAG WALKTHROUGH ---
+let quickTagSession = null;
+
+function getListTasksForQuickTag(listId) {
+    const list = state.appData.rawLists.find((l) => l.id === listId);
+    if (!list || !Array.isArray(list.taskIds)) return [];
+
+    return list.taskIds
+        .map((id) => state.appData.tasks[id])
+        .filter((task) => task && !task.archived);
+}
+
+function updateQuickTagProgressUI() {
+    if (!quickTagSession) return;
+    const progressEl = document.getElementById('quick-tag-progress');
+    const fillEl = document.getElementById('quick-tag-progress-fill');
+    const titleEl = document.getElementById('quick-tag-title');
+    const backBtn = document.getElementById('quick-tag-back-btn');
+    const { completed, taskIds, index } = quickTagSession;
+    const total = taskIds.length;
+    const remaining = Math.max(0, total - completed);
+    const step = Math.min(index + 1, total);
+
+    if (progressEl) {
+        progressEl.textContent = `${completed} completed · ${remaining} to go`;
+    }
+    if (fillEl) {
+        const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+        fillEl.style.width = `${pct}%`;
+    }
+    if (titleEl) {
+        titleEl.textContent = total > 0
+            ? `Quick Tag (${step}/${total})`
+            : 'Quick Tag';
+    }
+    if (backBtn) {
+        backBtn.disabled = index <= 0 || !!quickTagSession.busy;
+    }
+}
+
+function renderQuickTagStep({ animate = true } = {}) {
+    if (!quickTagSession) return;
+
+    const taskTextEl = document.getElementById('quick-tag-task-text');
+    const currentTagEl = document.getElementById('quick-tag-current-tag');
+    const taskCardEl = document.querySelector('#quick-tag-modal-overlay .quick-tag-task-card');
+    const { taskIds, index } = quickTagSession;
+
+    if (index >= taskIds.length) {
+        closeQuickTagWalkthrough({ finished: true });
+        return;
+    }
+
+    const taskId = taskIds[index];
+    const task = state.appData.tasks[taskId];
+    if (!task) {
+        quickTagSession.index += 1;
+        renderQuickTagStep({ animate: false });
+        return;
+    }
+
+    updateQuickTagProgressUI();
+
+    const tagsById = getTagsById(state.appData.settings.tags);
+    const currentTagId = resolveTaskTagId(task);
+    const currentTagName = getTagNameForTask(task, tagsById) || 'Misc';
+
+    if (taskTextEl) taskTextEl.textContent = task.text || `(Untitled ${getTerm(true)})`;
+    if (currentTagEl) {
+        currentTagEl.textContent = currentTagName;
+        const tag = tagsById[currentTagId];
+        if (tag?.glowColor) {
+            currentTagEl.style.background = tag.glowColor;
+            currentTagEl.style.color = getContrastingInk(tag.glowColor);
+            currentTagEl.style.borderColor = tag.glowColor;
+        } else {
+            currentTagEl.style.background = '';
+            currentTagEl.style.color = '';
+            currentTagEl.style.borderColor = '';
+        }
+    }
+
+    if (animate && taskCardEl) {
+        taskCardEl.classList.remove('is-step-enter');
+        // Retrigger enter animation when advancing/going back.
+        void taskCardEl.offsetWidth;
+        taskCardEl.classList.add('is-step-enter');
+    }
+
+    renderTaskTagPicker('quick-tag-options', currentTagId, async (tagId) => {
+        if (!quickTagSession || quickTagSession.busy) return;
+        quickTagSession.busy = true;
+        updateQuickTagProgressUI();
+        try {
+            await setTaskTag(taskId, tagId);
+            // Keep local cache in sync for subsequent steps / board refresh.
+            if (state.appData.tasks[taskId]) {
+                state.appData.tasks[taskId].tagId = tagId;
+            }
+            quickTagSession.completed = quickTagSession.index + 1;
+            quickTagSession.index += 1;
+            renderQuickTagStep();
+        } catch (e) {
+            handleSyncError(e);
+        } finally {
+            if (quickTagSession) {
+                quickTagSession.busy = false;
+                updateQuickTagProgressUI();
+            }
+        }
+    });
+}
+
+export function goBackQuickTagStep() {
+    if (!quickTagSession || quickTagSession.busy) return;
+    if (quickTagSession.index <= 0) return;
+
+    quickTagSession.index -= 1;
+    quickTagSession.completed = quickTagSession.index;
+    renderQuickTagStep();
+}
+
+export function openQuickTagWalkthrough(listId) {
+    const list = state.appData.rawLists.find((l) => l.id === listId);
+    const modal = document.getElementById('quick-tag-modal-overlay');
+    if (!list || !modal) return;
+
+    const taskIds = getListTasksForQuickTag(listId).map((task) => task.id);
+    if (taskIds.length === 0) {
+        showToast(`No ${getTerm(false)} in this list to tag.`, 'warning');
+        return;
+    }
+
+    const editListModal = document.getElementById('edit-list-modal-overlay');
+    if (editListModal) editListModal.classList.add('hidden');
+
+    quickTagSession = {
+        listId,
+        listTitle: list.title || 'List',
+        taskIds,
+        index: 0,
+        completed: 0,
+        busy: false
+    };
+
+    modal.classList.remove('hidden');
+    renderQuickTagStep({ animate: false });
+}
+
+export function closeQuickTagWalkthrough({ finished = false } = {}) {
+    const modal = document.getElementById('quick-tag-modal-overlay');
+    const completed = quickTagSession?.completed || 0;
+    const total = quickTagSession?.taskIds?.length || 0;
+    quickTagSession = null;
+
+    if (modal) modal.classList.add('hidden');
+
+    if (finished) {
+        showToast(
+            completed > 0
+                ? `Quick Tag complete — ${completed} of ${total} tagged.`
+                : 'Quick Tag complete.',
+            'success'
+        );
+    }
+
+    renderBoard();
+}
+
 export function openEditListModal(listId) {
     const list = state.appData.rawLists.find(l => l.id === listId);
     if (!list) return;
@@ -2989,6 +3390,7 @@ export function openEditListModal(listId) {
     const deleteBtn = document.getElementById('edit-list-delete-btn');
     const moveBtn = document.getElementById('edit-list-move-btn');
     const bulkAddBtn = document.getElementById('edit-list-bulk-add-btn');
+    const quickTagBtn = document.getElementById('edit-list-quick-tag-btn');
 
     modal.dataset.listId = listId;
     titleEl.textContent = `Manage: ${list.title}`;
@@ -3120,6 +3522,14 @@ export function openEditListModal(listId) {
     const exportCsvBtn = document.getElementById('edit-list-export-csv-btn');
     const newExportCsv = exportCsvBtn.cloneNode(true);
     exportCsvBtn.parentNode.replaceChild(newExportCsv, exportCsvBtn);
+
+    if (quickTagBtn) {
+        const newQuickTag = quickTagBtn.cloneNode(true);
+        quickTagBtn.parentNode.replaceChild(newQuickTag, quickTagBtn);
+        newQuickTag.onclick = () => {
+            openQuickTagWalkthrough(listId);
+        };
+    }
 
     // Handlers
     newExportCsv.onclick = () => {

@@ -77,6 +77,53 @@ async function persistNestedMigrations(updates) {
 
 console.log("[DEBUG] Main Module Initialized - v1.3 PWA Fixes");
 
+const SETTINGS_PAGE_ID = 'options-modal-overlay';
+
+function getSettingsPageEl() {
+    return document.getElementById(SETTINGS_PAGE_ID);
+}
+
+function isSettingsPageOpen() {
+    const el = getSettingsPageEl();
+    return !!(el && !el.classList.contains('hidden'));
+}
+
+function openSettingsPage() {
+    const el = getSettingsPageEl();
+    if (!el) return;
+
+    UI.renderDefaultBoardSelect();
+    const cutBtn = document.getElementById('mode-cut-btn');
+    const copyBtn = document.getElementById('mode-copy-btn');
+    if (cutBtn && copyBtn) {
+        cutBtn.classList.toggle('active', state.dragMode === 'move');
+        copyBtn.classList.toggle('active', state.dragMode === 'copy');
+    }
+    if (typeof UI.renderTagsSettingsPanel === 'function') {
+        UI.renderTagsSettingsPanel();
+    }
+
+    el.classList.remove('hidden');
+    el.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('settings-page-open');
+
+    const content = el.querySelector('.settings-page-content');
+    if (content) content.scrollTop = 0;
+
+    const backBtn = document.getElementById('close-options-btn');
+    if (backBtn) {
+        requestAnimationFrame(() => backBtn.focus({ preventScroll: true }));
+    }
+}
+
+function closeSettingsPage() {
+    const el = getSettingsPageEl();
+    if (!el) return;
+    el.classList.add('hidden');
+    el.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('settings-page-open');
+}
+
 // GLOBAL ERROR HANDLER FOR DEBUGGING
 window.onerror = function (msg, url, line, col, error) {
     console.error("Global Error (details):", {
@@ -244,18 +291,23 @@ window.updateKanbanStatus = function (taskId, status) {
 };
 
 window.handleQuickKanbanMove = function (status) {
-    const ids = Array.from(state.selectedTaskIds);
+    const ids = Array.isArray(state.quickMoveTaskIds) && state.quickMoveTaskIds.length > 0
+        ? [...state.quickMoveTaskIds]
+        : Array.from(state.selectedTaskIds);
+    const isSingleQuickMove = Array.isArray(state.quickMoveTaskIds) && state.quickMoveTaskIds.length > 0;
     if (ids.length === 0) {
         Utils.showToast('No items selected');
         return;
     }
     API.batchUpdateKanbanStatus(ids, status).then((count) => {
-        Utils.showToast(`Moved ${count || ids.length} items`);
+        Utils.showToast(ids.length === 1 ? 'Task moved' : `Moved ${count || ids.length} items`);
         UI.closeQuickMoveModal();
-        state.selectedTaskIds.clear();
-        UI.updateMultiFloatingBar();
-        state.multiEditMode = false;
-        UI.toggleMultiEditUI();
+        if (!isSingleQuickMove) {
+            state.selectedTaskIds.clear();
+            UI.updateMultiFloatingBar();
+            state.multiEditMode = false;
+            UI.toggleMultiEditUI();
+        }
         UI.renderBoard();
     });
 };
@@ -272,6 +324,7 @@ window.emptyOrphans = API.emptyOrphans;
 
 window.openEditModal = UI.openEditModal;
 window.summariseTask = UI.summariseTask;
+window.openQuickMoveForTask = UI.openQuickMoveForTask;
 window.triggerImageUpload = UI.triggerImageUpload;
 window.openImageLightbox = UI.openImageLightbox;
 window.openBulkAddModal = UI.openBulkAddModal;
@@ -280,6 +333,9 @@ window.removeTaskFromList = UI.removeTaskFromList;
 // window.handleDragEnd is not called by HTML mostly, but by Sortable configs which are inside UI.js
 window.openArchivedTaskModal = UI.openArchivedTaskModal;
 window.openEditListModal = UI.openEditListModal;
+window.openQuickTagWalkthrough = UI.openQuickTagWalkthrough;
+window.closeQuickTagWalkthrough = UI.closeQuickTagWalkthrough;
+window.goBackQuickTagStep = UI.goBackQuickTagStep;
 window.openBoardManager = UI.openBoardManager;
 window.clearCompletedInList = API.clearCompletedInList;
 window.showConfirmModal = showConfirmModal;
@@ -414,6 +470,7 @@ onAuthStateChanged(auth, (user) => {
         setupFirestoreListeners(user.uid);
     } else {
         console.log("Logged out");
+        closeSettingsPage();
         loginOverlay.classList.remove('hidden');
         logoutBtn.style.display = 'none';
         syncConsoleEl.classList.add('hidden');
@@ -554,7 +611,9 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('show-site-header-toggle')) document.getElementById('show-site-header-toggle').checked = !!state.appData.settings.showSiteHeader;
             if (document.getElementById('disable-important-pinning-toggle')) document.getElementById('disable-important-pinning-toggle').checked = !!state.appData.settings.disableImportantPinning;
             if (document.getElementById('work-tools-toggle')) document.getElementById('work-tools-toggle').checked = !!state.appData.settings.workToolsEnabled;
+            if (document.getElementById('ai-summary-on-cards-toggle')) document.getElementById('ai-summary-on-cards-toggle').checked = !!state.appData.settings.aiSummaryOnCards;
             syncKanbanLabelsUI();
+            if (typeof UI.syncTagDisplayModeUI === 'function') UI.syncTagDisplayModeUI();
             if (document.getElementById('time-automation-confirm-toggle')) document.getElementById('time-automation-confirm-toggle').checked = state.appData.settings.timeAutomationConfirm !== false;
             if (document.getElementById('daily-reset-time-input')) document.getElementById('daily-reset-time-input').value = state.appData.settings.dailyResetTime || '04:00';
             if (document.getElementById('auto-add-time-input')) {
@@ -721,7 +780,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Mobile Reorder
     document.getElementById('mobile-reorder-lists-btn').onclick = () => {
         UI.openMobileReorderModal();
-        document.getElementById('options-modal-overlay').classList.add('hidden');
+        closeSettingsPage();
     };
     document.getElementById('close-mobile-reorder-btn').onclick = () => document.getElementById('mobile-reorder-modal-overlay').classList.add('hidden');
     document.getElementById('save-mobile-reorder-btn').onclick = UI.saveMobileReorder;
@@ -744,9 +803,8 @@ document.addEventListener('DOMContentLoaded', () => {
         state.showArchived = !state.showArchived;
         const btn = this;
 
-        // Close options modal if open
-        const optionsModal = document.getElementById('options-modal-overlay');
-        if (optionsModal) optionsModal.classList.add('hidden');
+        // Close settings if open when entering archived view
+        closeSettingsPage();
 
         if (state.showArchived) {
             btn.classList.add('active');
@@ -878,6 +936,15 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => UI.renderBoard(), 0);
         return checked;
     });
+    setupSettingListener('ai-summary-on-cards-toggle', 'aiSummaryOnCards', true, (checked) => {
+        state.appData.settings.aiSummaryOnCards = checked;
+        const modalAiBtn = document.getElementById('modal-ai-summary-btn');
+        if (modalAiBtn && !document.getElementById('modal-overlay')?.classList.contains('hidden')) {
+            modalAiBtn.classList.toggle('hidden', checked);
+        }
+        setTimeout(() => UI.renderBoard(), 0);
+        return checked;
+    });
 
     const saveKanbanLabelsBtn = document.getElementById('save-kanban-labels-btn');
     if (saveKanbanLabelsBtn) {
@@ -909,42 +976,31 @@ document.addEventListener('DOMContentLoaded', () => {
         UI.renderBoard();
     };
 
-    // Options Modal
-    const optionsModal = document.getElementById('options-modal-overlay');
-    document.getElementById('options-btn').onclick = () => {
-        UI.renderDefaultBoardSelect();
-        // Set correct drag mode active state
-        const cutBtn = document.getElementById('mode-cut-btn');
-        const copyBtn = document.getElementById('mode-copy-btn');
-        if (cutBtn && copyBtn) {
-            cutBtn.classList.toggle('active', state.dragMode === 'move');
-            copyBtn.classList.toggle('active', state.dragMode === 'copy');
-        }
-        UI.renderTagsSettingsPanel();
-        optionsModal.classList.remove('hidden');
-    };
-    
+    // Settings full-page view (element id kept for compatibility)
+    const optionsModal = getSettingsPageEl();
+    document.getElementById('options-btn').onclick = () => openSettingsPage();
+
     document.getElementById('export-board-csv-btn').onclick = () => {
         triggerCSVExport();
-        optionsModal.classList.add('hidden');
+        closeSettingsPage();
     };
 
     document.getElementById('export-all-boards-csv-btn').onclick = () => {
         triggerAllBoardsCSVExport();
-        optionsModal.classList.add('hidden');
+        closeSettingsPage();
     };
 
-    document.getElementById('close-options-btn').onclick = () => optionsModal.classList.add('hidden');
+    document.getElementById('close-options-btn').onclick = () => closeSettingsPage();
 
     // Time Automation Help Modal
     const timeHelpModal = document.getElementById('time-automation-help-modal-overlay');
     if (timeHelpModal) {
         document.getElementById('time-automation-help-btn').onclick = () => {
-            optionsModal.classList.add('hidden');
+            // Keep settings open underneath help overlay
             timeHelpModal.classList.remove('hidden');
         };
-        document.getElementById('close-time-help-btn').onclick = () => timeHelpModal.classList.remove('hidden');
-        document.getElementById('close-time-help-btn-bottom').onclick = () => timeHelpModal.classList.remove('hidden');
+        document.getElementById('close-time-help-btn').onclick = () => timeHelpModal.classList.add('hidden');
+        document.getElementById('close-time-help-btn-bottom').onclick = () => timeHelpModal.classList.add('hidden');
     }
 
     // Automation Report Modal
@@ -958,7 +1014,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const recentAutoMovedBtn = document.getElementById('recent-auto-moved-btn');
     if (recentAutoMovedBtn) {
         recentAutoMovedBtn.onclick = () => {
-            optionsModal.classList.add('hidden');
+            closeSettingsPage();
             UI.showRecentAutoMovedTasks();
         };
     }
@@ -1128,13 +1184,22 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('multi-link-btn').onclick = () => handleBatchMoveCopy('copy', multiMoveSelect, multiEditModal);
     document.getElementById('multi-move-btn').onclick = () => handleBatchMoveCopy('move', multiMoveSelect, multiEditModal);
 
-    async function handleBatchMoveCopy(mode, selectEl, modalEl, directTargetId = null) {
+    async function handleBatchMoveCopy(mode, selectEl, modalEl, directTargetId = null, taskIdsOverride = null) {
         const targetListId = directTargetId || (selectEl ? selectEl.value : null);
         if (!targetListId) {
             alert("Please select a destination.");
             return;
         }
+        const idsArr = Array.isArray(taskIdsOverride) && taskIdsOverride.length > 0
+            ? taskIdsOverride
+            : Array.from(state.selectedTaskIds);
+        if (idsArr.length === 0) {
+            Utils.showToast('No items selected');
+            return;
+        }
+        const isSingleQuickMove = Array.isArray(taskIdsOverride) && taskIdsOverride.length > 0;
         if (modalEl) modalEl.classList.add('hidden'); // Close immediately
+        state.quickMoveTaskIds = null;
         let finalTargetId = targetListId;
         const batch = writeBatch(db);
 
@@ -1150,7 +1215,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        const idsArr = Array.from(state.selectedTaskIds);
+        const idSet = new Set(idsArr);
         batch.update(doc(db, "users", state.currentUser.uid, "lists", finalTargetId), {
             taskIds: arrayUnion(...idsArr)
         });
@@ -1165,7 +1230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (mode === 'move') {
             state.appData.rawLists.forEach(list => {
                 if (list.id === finalTargetId) return;
-                const toRemove = list.taskIds ? list.taskIds.filter(id => state.selectedTaskIds.has(id)) : [];
+                const toRemove = list.taskIds ? list.taskIds.filter(id => idSet.has(id)) : [];
                 if (toRemove.length > 0) {
                     batch.update(doc(db, "users", state.currentUser.uid, "lists", list.id), {
                         taskIds: arrayRemove(...toRemove)
@@ -1175,16 +1240,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         await batch.commit().then(() => {
-            Utils.showToast(mode === 'move' ? 'Items moved successfully' : 'Items linked successfully');
-            state.selectedTaskIds.clear();
-            UI.updateMultiFloatingBar();
-            state.multiEditMode = false;
-            UI.toggleMultiEditUI();
+            Utils.showToast(
+                mode === 'move'
+                    ? (idsArr.length === 1 ? 'Task moved' : 'Items moved successfully')
+                    : 'Items linked successfully'
+            );
+            if (!isSingleQuickMove) {
+                state.selectedTaskIds.clear();
+                UI.updateMultiFloatingBar();
+                state.multiEditMode = false;
+                UI.toggleMultiEditUI();
+            } else {
+                UI.renderBoard();
+            }
         }).catch(e => API.handleSyncError(e));
     }
 
     window.handleQuickMoveAction = (targetListId) => {
-        handleBatchMoveCopy('move', null, document.getElementById('quick-move-modal-overlay'), targetListId);
+        const override = Array.isArray(state.quickMoveTaskIds) && state.quickMoveTaskIds.length > 0
+            ? [...state.quickMoveTaskIds]
+            : null;
+        handleBatchMoveCopy('move', null, document.getElementById('quick-move-modal-overlay'), targetListId, override);
     };
 
     // Modal Edit Save
@@ -1228,13 +1304,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('modal-close-btn').onclick = () => document.getElementById('modal-overlay').classList.add('hidden');
 
-    // Manual Move/Link (Single)
-    document.getElementById('manual-move-btn').onclick = () => {
+    // Manual Move/Link (Single) — mode dropdown + instant on destination pick
+    const manualMoveSelect = document.getElementById('manual-move-select');
+    const manualTransferMode = document.getElementById('manual-transfer-mode');
+
+    function resetManualTransferControls() {
+        if (manualTransferMode) manualTransferMode.value = 'move';
+        if (manualMoveSelect) {
+            manualMoveSelect.value = '';
+            const placeholder = manualMoveSelect.querySelector('option[value=""]');
+            if (placeholder) placeholder.selected = true;
+        }
+    }
+
+    function applyManualTransfer(targetListId) {
         const modalOverlay = document.getElementById('modal-overlay');
-        const taskId = modalOverlay.dataset.taskId;
-        const targetListId = document.getElementById('manual-move-select').value;
-        if (!targetListId) {
-            Utils.showToast("Please select a destination list.");
+        const taskId = modalOverlay?.dataset.taskId;
+        const mode = manualTransferMode?.value === 'link' ? 'link' : 'move';
+        if (!taskId || !targetListId) {
+            Utils.showToast('Please select a destination list.');
+            return;
+        }
+
+        if (mode === 'link') {
+            const targetList = state.appData.rawLists.find(l => l.id === targetListId);
+            if (targetList && targetList.taskIds && targetList.taskIds.includes(taskId)) {
+                Utils.showToast(`${getTerm(true, true)} is already in that list.`);
+                resetManualTransferControls();
+                UI.renderGroupedListSelect(manualMoveSelect);
+                return;
+            }
+            const batch = writeBatch(db);
+            batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
+                taskIds: arrayUnion(taskId)
+            });
+            batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
+                archived: false,
+                [`listAddedAt.${targetListId}`]: Date.now(),
+                lastAutoMovedAt: null
+            });
+
+            batch.commit().then(() => {
+                Utils.showToast(`${getTerm(true, true)} linked successfully.`);
+                UI.renderCurrentLocations(taskId);
+                resetManualTransferControls();
+                UI.renderGroupedListSelect(manualMoveSelect);
+            }).catch(e => API.handleSyncError(e));
             return;
         }
 
@@ -1256,39 +1371,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         batch.commit().then(() => {
-            Utils.showToast("Task moved successfully.");
+            Utils.showToast('Task moved successfully.');
             modalOverlay.classList.add('hidden');
         }).catch(e => API.handleSyncError(e));
-    };
+    }
 
-    document.getElementById('manual-link-btn').onclick = () => {
-        const modalOverlay = document.getElementById('modal-overlay');
-        const taskId = modalOverlay.dataset.taskId;
-        const targetListId = document.getElementById('manual-move-select').value;
-        if (!targetListId) {
-            Utils.showToast("Please select a destination list.");
-            return;
-        }
-        const targetList = state.appData.rawLists.find(l => l.id === targetListId);
-        if (targetList && targetList.taskIds && targetList.taskIds.includes(taskId)) {
-            Utils.showToast(`${getTerm(true, true)} is already in that list.`);
-            return;
-        }
-        const batch = writeBatch(db);
-        batch.update(doc(db, "users", state.currentUser.uid, "lists", targetListId), {
-            taskIds: arrayUnion(taskId)
-        });
-        batch.update(doc(db, "users", state.currentUser.uid, "tasks", taskId), {
-            archived: false,
-            [`listAddedAt.${targetListId}`]: Date.now(),
-            lastAutoMovedAt: null
-        });
-
-        batch.commit().then(() => {
-            Utils.showToast(`${getTerm(true, true)} linked successfully.`);
-            UI.renderCurrentLocations(taskId);
-        }).catch(e => API.handleSyncError(e));
-    };
+    if (manualMoveSelect) {
+        manualMoveSelect.onchange = () => {
+            const targetListId = manualMoveSelect.value;
+            if (!targetListId) return;
+            applyManualTransfer(targetListId);
+        };
+    }
 
     // Bulk Add
     document.getElementById('bulk-add-close-btn').onclick = () => {
@@ -1483,7 +1577,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // I missed the bulk import logic in API.js. I'll add a helper here.
             await importTodoistData(rows);
             e.target.value = '';
-            optionsModal.classList.add('hidden');
+            closeSettingsPage();
         };
         reader.readAsText(file);
     };
@@ -1559,6 +1653,20 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('edit-list-close-btn').onclick = () => editListModal.classList.add('hidden');
         editListModal.onclick = (e) => {
             if (e.target === editListModal) editListModal.classList.add('hidden');
+        };
+    }
+
+    // Quick Tag walkthrough
+    const quickTagModal = document.getElementById('quick-tag-modal-overlay');
+    if (quickTagModal) {
+        const cancelQuickTag = () => UI.closeQuickTagWalkthrough({ finished: false });
+        document.getElementById('quick-tag-cancel-btn')?.addEventListener('click', cancelQuickTag);
+        document.getElementById('quick-tag-close-btn')?.addEventListener('click', cancelQuickTag);
+        document.getElementById('quick-tag-back-btn')?.addEventListener('click', () => {
+            UI.goBackQuickTagStep();
+        });
+        quickTagModal.onclick = (e) => {
+            if (e.target === quickTagModal) cancelQuickTag();
         };
     }
 
@@ -1772,7 +1880,7 @@ function setupTaskImportModal(optionsModal) {
             Utils.showToast('Sign in to import project tasks.', 'warning');
             return;
         }
-        if (optionsModal) optionsModal.classList.add('hidden');
+        closeSettingsPage();
         resetModal();
         modal.classList.remove('hidden');
         textInput.focus();
@@ -2398,7 +2506,7 @@ async function importTodoistData(rows) {
 // Re-implement Reset Slider Logic if crucial, else basic button
 // Original had a complex slider.
 document.getElementById('trigger-reset-btn').onclick = () => {
-    document.getElementById('options-modal-overlay').classList.add('hidden');
+    closeSettingsPage();
     document.getElementById('reset-modal-overlay').classList.remove('hidden');
 };
 document.getElementById('reset-cancel-btn').onclick = () => document.getElementById('reset-modal-overlay').classList.add('hidden');
@@ -2583,20 +2691,27 @@ async function performBulkDeleteForever() {
 
 // --- GLOBAL KEYBOARD SHORTCUTS ---
 window.addEventListener('keydown', (e) => {
-    // 1. Esc to close all modals, or exit Kanban focus
+    // 1. Esc to close topmost modal overlays first, then settings page, then Kanban focus
     if (e.key === 'Escape') {
         const openModals = document.querySelectorAll('.modal-overlay:not(.hidden)');
         if (openModals.length > 0) {
             openModals.forEach(modal => {
                 modal.classList.add('hidden');
             });
-        } else if (isKanbanFocused()) {
+            return;
+        }
+        if (isSettingsPageOpen()) {
+            closeSettingsPage();
+            return;
+        }
+        if (isKanbanFocused()) {
             exitKanbanFocus();
         }
     }
     // 2. Cmd/Ctrl + K for search
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
+        if (isSettingsPageOpen()) return;
         const searchBtn = document.getElementById('search-btn');
         if (searchBtn) searchBtn.click();
     }
