@@ -735,7 +735,8 @@
 [data-theme="fancy"] .archive-task-btn,
 [data-theme="fancy"] .unarchive-task-btn,
 [data-theme="fancy"] .delete-task-btn,
-[data-theme="fancy"] .copy-task-btn {
+[data-theme="fancy"] .copy-task-btn,
+[data-theme="fancy"] .move-task-btn {
     background: oklch(1 0 0 / 0.08);
     /* Translucent, no blur */
     border: 1px solid oklch(1 0 0 / 0.1);
@@ -2118,10 +2119,6 @@ body {
     background: oklch(0.623 0.188 259.8 / 0.45) !important;
 }
 
-.move-task-btn:hover {
-    color: var(--accent-blue);
-}
-
 .ai-summary-btn.is-loading i {
     animation: aiSpin 1s linear infinite;
 }
@@ -2349,6 +2346,15 @@ body {
 
 .copy-task-btn:hover {
     background: oklch(0.320 0 0 / 0.7) !important;
+}
+
+.move-task-btn {
+    background: oklch(0.220 0 0 / 0.72) !important;
+    color: oklch(1 0 0) !important;
+}
+
+.move-task-btn:hover {
+    background: oklch(0.340 0 0 / 0.72) !important;
 }
 
 
