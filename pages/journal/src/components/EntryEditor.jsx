@@ -147,7 +147,7 @@ export default function EntryEditor() {
     const [isSpecial, setIsSpecial] = useState(false);
     const [animationActive, setAnimationActive] = useState(false);
     const [buttonRect, setButtonRect] = useState(null);
-    const [showRawHeader, setShowRawHeader] = useState(false);
+    const [showRawHeader, setShowRawHeader] = useState(() => localStorage.getItem('journal-show-raw-header') === 'true');
     const [localAiSummaryRecord, setLocalAiSummaryRecord] = useState(null);
     const [entrySections, setEntrySections] = useState([]);
     const [subEntries, setSubEntries] = useState({});
@@ -202,6 +202,24 @@ export default function EntryEditor() {
         if (wordMilestoneTimerRef.current) {
             window.clearTimeout(wordMilestoneTimerRef.current);
         }
+    }, []);
+
+    useEffect(() => {
+        const handlePreferenceChange = (event) => {
+            setShowRawHeader(Boolean(event.detail));
+        };
+        const handleStorageChange = (event) => {
+            if (event.key === 'journal-show-raw-header') {
+                setShowRawHeader(event.newValue === 'true');
+            }
+        };
+
+        window.addEventListener('journal-show-raw-header-changed', handlePreferenceChange);
+        window.addEventListener('storage', handleStorageChange);
+        return () => {
+            window.removeEventListener('journal-show-raw-header-changed', handlePreferenceChange);
+            window.removeEventListener('storage', handleStorageChange);
+        };
     }, []);
 
     const WRITING_PROMPTS = [
@@ -1548,21 +1566,6 @@ export default function EntryEditor() {
                                 </>
                             ) : (
                                 <>
-                                    <div className="flex items-center mr-2">
-                                        <label className="flex items-center space-x-2 text-xs text-text-muted cursor-pointer hover:text-white transition-colors group">
-                                            <div className="relative">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={showRawHeader}
-                                                    onChange={(e) => setShowRawHeader(e.target.checked)}
-                                                    className="sr-only peer"
-                                                />
-                                                <div className="w-9 h-5 bg-white/10 border border-white/10 rounded-full peer-checked:bg-primary/30 peer-checked:border-primary/50 transition-all duration-300"></div>
-                                                <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-text-muted rounded-full transition-all duration-300 peer-checked:translate-x-4 peer-checked:bg-primary peer-checked:shadow-[0_0_8px_rgba(139,92,246,0.6)]"></div>
-                                            </div>
-                                            <span className="hidden sm:inline group-hover:text-white transition-colors">Raw Header</span>
-                                        </label>
-                                    </div>
                                     <button
                                         onClick={handleCopy}
                                         className="glass-button px-4 py-2 text-primary hover:text-white hover:bg-primary/20 hover:border-primary/30 flex items-center justify-center"

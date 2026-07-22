@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Archive, Bell, BookOpen, Check, FolderInput, Hash, Lock, Loader2, Moon, Plus, Settings, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Archive, Bell, BookOpen, Check, Code2, FolderInput, Hash, Lock, Loader2, Moon, Plus, Settings, Sun, Trash2, Type, Wrench, X } from 'lucide-react';
 import { collection, deleteField, doc, getDocs, onSnapshot, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useBackup } from '../context/BackupContext';
@@ -37,10 +37,16 @@ const THEME_OPTIONS = [
     }
 ];
 
+const SHOW_RAW_HEADER_KEY = 'journal-show-raw-header';
+
 function getInitialTheme() {
     const savedTheme = localStorage.getItem('journal-theme');
     if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
     return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function getInitialShowRawHeader() {
+    return localStorage.getItem(SHOW_RAW_HEADER_KEY) === 'true';
 }
 
 function formatMergedSubEntryBlock(section, subEntry) {
@@ -73,6 +79,7 @@ export default function SettingsView() {
     const { currentUser } = useAuth();
     const { backupReminderSettings, openBackup, updateBackupReminderSettings } = useBackup();
     const [theme, setTheme] = useState(getInitialTheme);
+    const [showRawHeader, setShowRawHeader] = useState(getInitialShowRawHeader);
     const [entrySections, setEntrySections] = useState([]);
     const [numericFields, setNumericFields] = useState([]);
     const [newSectionName, setNewSectionName] = useState('');
@@ -101,6 +108,11 @@ export default function SettingsView() {
         document.documentElement.dataset.theme = theme;
         localStorage.setItem('journal-theme', theme);
     }, [theme]);
+
+    useEffect(() => {
+        localStorage.setItem(SHOW_RAW_HEADER_KEY, String(showRawHeader));
+        window.dispatchEvent(new CustomEvent('journal-show-raw-header-changed', { detail: showRawHeader }));
+    }, [showRawHeader]);
 
     useEffect(() => {
         if (!currentUser) return undefined;
@@ -602,7 +614,7 @@ export default function SettingsView() {
             <section className="glass-card overflow-hidden">
                 <div className="border-b border-white/10 px-4 py-4 sm:px-6">
                     <h3 className="text-base font-bold text-white">Appearance</h3>
-                    <p className="mt-1 text-sm text-text-muted">Choose the colour mode for the whole journal.</p>
+                    <p className="mt-1 text-sm text-text-muted">Choose how the journal looks and how entries are shown.</p>
                 </div>
 
                 <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-6">
@@ -641,6 +653,31 @@ export default function SettingsView() {
                             </button>
                         );
                     })}
+                </div>
+
+                <div className="border-t border-white/10 px-4 py-4 sm:px-6">
+                    <button
+                        type="button"
+                        onClick={() => setShowRawHeader((current) => !current)}
+                        className="flex w-full cursor-pointer items-center justify-between gap-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-left transition-colors hover:bg-white/10"
+                        role="switch"
+                        aria-checked={showRawHeader}
+                    >
+                        <span className="flex min-w-0 items-start gap-3">
+                            <span className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${showRawHeader ? 'bg-primary/20 text-primary' : 'bg-white/5 text-text-muted'}`}>
+                                <Code2 className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">Raw Header</span>
+                                <span className="mt-1 block text-xs leading-snug text-text-muted">
+                                    Show the ++header++ markup at the top of each entry instead of hiding it.
+                                </span>
+                            </span>
+                        </span>
+                        <span className="relative h-6 w-11 shrink-0 rounded-full border border-white/10 bg-white/10 transition-colors data-[checked=true]:border-primary/50 data-[checked=true]:bg-primary/40" data-checked={showRawHeader}>
+                            <span className={`absolute left-1 top-1 h-4 w-4 rounded-full transition-transform ${showRawHeader ? 'translate-x-5 bg-white' : 'bg-text-muted'}`} />
+                        </span>
+                    </button>
                 </div>
             </section>
 
