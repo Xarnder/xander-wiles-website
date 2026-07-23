@@ -231,6 +231,7 @@
                         <button id="open-grid-modal-btn" class="secondary-btn">Create Grid</button>
                         <button id="open-reorder-modal-btn" class="secondary-btn">Reorder Images</button>
                         <button id="open-downscale-modal-btn" class="secondary-btn">Batch Downscale</button>
+                        <button id="open-upscale-modal-btn" class="secondary-btn" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">Batch Upscale</button>
                         <button id="open-crop-modal-btn" class="secondary-btn" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">Batch Fast Crop</button>
                     </div>
                 </div>
@@ -574,6 +575,158 @@
             <div class="popup-actions">
                 <button id="downscale-generate-btn" class="popup-generate-btn">Generate & Download ZIP</button>
                 <p id="downscale-status" class="status-message"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Upscale Popup -->
+    <div id="upscale-popup" class="popup-overlay hidden">
+        <div class="popup-card glass-card" style="max-width: 640px;">
+            <button class="popup-close-btn">&times;</button>
+            <h3>Batch Bicubic Upscaler</h3>
+            <p class="upscale-help">
+                Upscale every loaded image with a bicubic kernel. Processing is local — large batches can take a while.
+            </p>
+
+            <div class="popup-main-content">
+                <p id="upscale-original-resolution" class="status-message" style="margin: -0.5rem 0 0.75rem 0;"></p>
+                <p id="upscale-output-preview" class="upscale-output-preview">Output preview: —</p>
+
+                <div class="inline-controls">
+                    <div class="control-group">
+                        <label for="upscale-mode-select">Upscale By</label>
+                        <select id="upscale-mode-select">
+                            <option value="factor" selected>Scale Factor</option>
+                            <option value="dimensions">Target Dimensions (Px)</option>
+                            <option value="megapixels">Target Megapixels (MP)</option>
+                        </select>
+                    </div>
+
+                    <div id="upscale-factor-controls" class="inline-controls" style="gap: 0.5rem;">
+                        <div class="control-group">
+                            <label for="upscale-factor-select">Factor</label>
+                            <select id="upscale-factor-select">
+                                <option value="2" selected>2×</option>
+                                <option value="3">3×</option>
+                                <option value="4">4×</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div id="upscale-custom-factor-wrapper" class="control-group hidden">
+                            <label for="upscale-custom-factor-input">Custom ×</label>
+                            <input type="number" id="upscale-custom-factor-input" min="1.01" max="8" step="0.1" value="1.5" style="width: 80px;" />
+                        </div>
+                    </div>
+
+                    <div id="upscale-dimensions-controls" class="inline-controls hidden" style="gap: 0.5rem;">
+                        <div class="control-group">
+                            <label>W</label>
+                            <input type="number" id="upscale-width-input" min="1" value="3840" style="width: 90px;" />
+                        </div>
+                        <div class="control-group">
+                            <label>H</label>
+                            <input type="number" id="upscale-height-input" min="1" value="2160" style="width: 90px;" />
+                        </div>
+                        <div class="control-group">
+                            <label for="upscale-aspect-lock-toggle" class="checkbox-label toggle-switch" title="Lock Aspect Ratio">
+                                <input type="checkbox" id="upscale-aspect-lock-toggle" checked />
+                                <span class="toggle-knob"></span>
+                                Lock
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="upscale-mp-controls" class="hidden">
+                        <div class="control-group">
+                            <label for="upscale-mp-input">Target MP</label>
+                            <input type="number" id="upscale-mp-input" min="0.1" step="0.1" value="8.0" style="width: 90px;" />
+                        </div>
+                    </div>
+                </div>
+
+                <div id="upscale-warning-box" class="upscale-warning-box hidden"></div>
+
+                <div class="control-group-divider" style="width: 100%; height: 1px; margin: 1.5rem 0;"></div>
+
+                <div class="inline-controls">
+                    <div class="control-group">
+                        <label>Prefix / Suffix</label>
+                        <div class="filename-inputs">
+                            <input type="text" id="upscale-prefix" placeholder="Prefix_" style="width: 80px;" />
+                            <input type="text" id="upscale-suffix" placeholder="_upscaled" style="width: 100px;" value="_upscaled" />
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="upscale-format-select">Format</label>
+                        <select id="upscale-format-select">
+                            <option value="image/png" selected>PNG</option>
+                            <option value="image/jpeg">JPG</option>
+                            <option value="image/webp">WebP</option>
+                            <option value="image/avif">AVIF</option>
+                        </select>
+                    </div>
+                    <div id="upscale-quality-wrapper" class="control-group hidden">
+                        <label for="upscale-quality-slider">Quality: <span id="upscale-quality-value">92</span>%</label>
+                        <input type="range" id="upscale-quality-slider" min="1" max="100" value="92" step="1" />
+                    </div>
+                </div>
+
+                <div class="inline-controls" style="margin-top: 1rem;">
+                    <div class="control-group">
+                        <label for="upscale-apply-titles-toggle" class="checkbox-label toggle-switch">
+                            <input type="checkbox" id="upscale-apply-titles-toggle" />
+                            <span class="toggle-knob"></span>
+                            Apply Titles
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label for="upscale-spacing-select">Filename Spacing</label>
+                        <select id="upscale-spacing-select">
+                            <option value="spaces" selected>Spaces (Default)</option>
+                            <option value="underscores">Underscores</option>
+                            <option value="hyphens">Hyphens</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="upscale-use-subfolders-toggle" class="checkbox-label toggle-switch">
+                            <input type="checkbox" id="upscale-use-subfolders-toggle" checked />
+                            <span class="toggle-knob"></span>
+                            Keep Folders
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dual progress: batch + current image -->
+            <div id="upscale-progress-container" class="upscale-progress-container hidden">
+                <div class="upscale-progress-block">
+                    <div class="upscale-progress-header">
+                        <span id="upscale-batch-label">Batch progress</span>
+                        <span id="upscale-batch-percent">0%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div id="upscale-batch-bar" class="progress-fill"></div>
+                    </div>
+                    <p id="upscale-batch-detail" class="upscale-progress-detail">Waiting…</p>
+                </div>
+                <div class="upscale-progress-block">
+                    <div class="upscale-progress-header">
+                        <span id="upscale-image-label">Current image</span>
+                        <span id="upscale-image-percent">0%</span>
+                    </div>
+                    <div class="progress-track progress-track-tall">
+                        <div id="upscale-image-bar" class="progress-fill progress-fill-accent"></div>
+                    </div>
+                    <p id="upscale-image-detail" class="upscale-progress-detail">—</p>
+                </div>
+            </div>
+
+            <p id="upscale-error-message" class="status-message" style="color: var(--accent-orange);"></p>
+
+            <div class="popup-actions">
+                <button id="upscale-cancel-btn" class="secondary-btn hidden">Cancel</button>
+                <button id="upscale-generate-btn" class="popup-generate-btn">Upscale & Download ZIP</button>
+                <p id="upscale-status" class="status-message"></p>
             </div>
         </div>
     </div>

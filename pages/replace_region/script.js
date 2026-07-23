@@ -71,11 +71,18 @@ document.addEventListener('DOMContentLoaded', () => {
         cropDisplayScale: 1,
         paintWorkScale: 1,
 
+        // Pending base-scale plan when uploaded crop resolution differs
+        scalePlan: null,
+
         // Reused offscreen buffers (avoid allocating full canvases every redraw)
         _revealedEditCanvas: null,
         _overlayCanvas: null,
         _constraintCanvas: null,
-        _combinedMaskCanvas: null
+        _combinedMaskCanvas: null,
+
+        // Cached 256-entry tone LUTs (black/highlight + curve) — avoid SVG canvas filters
+        _overlayToneLut: null,
+        _baseToneLut: null
     };
 
     // Keep interactive layers deliberately small: Step 4 uses several canvases.
@@ -87,6 +94,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const EXPORT_TILE_SIZE = 1024;
     const MAX_PREVIEW_DIM = 1200;
     const MAX_MASK_THUMB_DIM = 320;
+
+    // High-res management thresholds (below hard canvas limits)
+    const SAFE_MANAGE_DIM = 8192;
+    const SAFE_MANAGE_AREA = 67_108_864; // ~8192²
+    const HIGH_RES_MP = 16;
+    const VERY_HIGH_RES_MP = 36;
+    const EXTREME_RES_MP = 64;
+    const UPSCALE_CAUTION_FACTOR = 2;
+    const UPSCALE_WARNING_FACTOR = 4;
 
     function getSafeScale(width, height, maxDim = MAX_WORK_DIM, maxArea = MAX_CANVAS_AREA) {
         if (!width || !height) return 1;
@@ -151,10 +167,549 @@ document.addEventListener('DOMContentLoaded', () => {
         return canvas;
     }
 
+    function formatRes(w, h) {
+        return `${Math.round(w)} × ${Math.round(h)}`;
+    }
+
+    function formatScale(n) {
+        const rounded = Math.round(n * 1000) / 1000;
+        return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(3).replace(/\.?0+$/, '');
+    }
+
+    function megapixels(w, h) {
+        return (w * h) / 1_000_000;
+    }
+
+    function formatMP(w, h) {
+        const mp = megapixels(w, h);
+        return mp >= 10 ? `${mp.toFixed(1)} MP` : `${mp.toFixed(2)} MP`;
+    }
+
+    /** Rough RGBA canvas RAM estimate. */
+    function formatApproxRAM(w, h, layers = 1) {
+        const bytes = w * h * 4 * layers;
+        if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(2)} GB`;
+        if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
+        return `${(bytes / 1e3).toFixed(0)} KB`;
+    }
+
+    function getSafeManageScale(width, height) {
+        return getSafeScale(width, height, SAFE_MANAGE_DIM, SAFE_MANAGE_AREA);
+    }
+
+    function canManageSafely(width, height) {
+        return getSafeManageScale(width, height) === 1;
+    }
+
+    function describeImageRisk(width, height, { label = 'Image' } = {}) {
+        const warnings = [];
+        const mp = megapixels(width, height);
+        const exportScale = getExportScale(width, height);
+        const manageScale = getSafeManageScale(width, height);
+
+        if (exportScale < 1) {
+            const cappedW = Math.max(1, Math.round(width * exportScale));
+            const cappedH = Math.max(1, Math.round(height * exportScale));
+            warnings.push({
+                level: 'danger',
+                title: 'Exceeds browser canvas limit',
+                body: `${label} at ${formatRes(width, height)} (${formatMP(width, height)}) cannot be held at full size in this browser. Max workable size is about ${formatRes(cappedW, cappedH)}.`
+            });
+        } else if (manageScale < 1 || mp >= EXTREME_RES_MP) {
+            warnings.push({
+                level: 'danger',
+                title: 'Extreme resolution',
+                body: `${label} is ${formatRes(width, height)} (${formatMP(width, height)}). Expect slow masking, high memory use (~${formatApproxRAM(width, height, 3)} for working layers), and possible tab crashes.`
+            });
+        } else if (mp >= VERY_HIGH_RES_MP) {
+            warnings.push({
+                level: 'warning',
+                title: 'Very high resolution',
+                body: `${label} is ${formatMP(width, height)}. Interactive editing will use a downscaled preview; full-res export may be slow or memory-heavy (~${formatApproxRAM(width, height)} per full canvas).`
+            });
+        } else if (mp >= HIGH_RES_MP) {
+            warnings.push({
+                level: 'caution',
+                title: 'High resolution',
+                body: `${label} is ${formatMP(width, height)}. The editor will work on a capped preview and export at full resolution when possible.`
+            });
+        }
+
+        return warnings;
+    }
+
+    function assessScalePlanRisks(plan) {
+        const warnings = [];
+        const maxFactor = Math.max(plan.scaleX, plan.scaleY);
+        const targetW = plan.newBaseW;
+        const targetH = plan.newBaseH;
+        const appliedW = plan.appliedBaseW;
+        const appliedH = plan.appliedBaseH;
+        const targetMP = megapixels(targetW, targetH);
+
+        if (plan.direction === 'upscale' || plan.direction === 'rescale') {
+            if (maxFactor >= UPSCALE_WARNING_FACTOR) {
+                warnings.push({
+                    level: 'danger',
+                    title: `Large upscale (${formatScale(maxFactor)}×)`,
+                    body: 'Bicubic upscaling cannot invent real detail. Results will look soft/blurry, especially past ~4×. Prefer upscaling the crop with a dedicated AI/upscaler tool before uploading when possible.'
+                });
+            } else if (maxFactor >= UPSCALE_CAUTION_FACTOR) {
+                warnings.push({
+                    level: 'warning',
+                    title: `Upscale quality notice (${formatScale(maxFactor)}×)`,
+                    body: 'Upscaling the base to match the crop invents pixels by interpolation. Fine for layout/alignment, but expect some softness versus a native high-res original.'
+                });
+            } else if (maxFactor > 1.001) {
+                warnings.push({
+                    level: 'caution',
+                    title: `Mild upscale (${formatScale(maxFactor)}×)`,
+                    body: 'Small upscales are usually fine. Bicubic keeps edges smoother than nearest-neighbor.'
+                });
+            }
+        }
+
+        if (plan.clamped) {
+            warnings.push({
+                level: 'danger',
+                title: 'Target exceeds browser canvas limit',
+                body: `Ideal size ${formatRes(targetW, targetH)} (${formatMP(targetW, targetH)}) is above this browser’s limit. It will be clamped to ${formatRes(appliedW, appliedH)}. The crop and base may no longer match the uploaded crop 1:1.`
+            });
+        } else {
+            warnings.push(...describeImageRisk(appliedW, appliedH, { label: 'Scaled base' }));
+        }
+
+        if (!plan.clamped && !canManageSafely(targetW, targetH) && canExportAtFullResolution(targetW, targetH)) {
+            warnings.push({
+                level: 'warning',
+                title: 'Recommended: use a safer working size',
+                body: `You can still apply the full ${formatRes(targetW, targetH)} scale, or choose “Scale to Recommended Safe Size” (~${formatRes(plan.safeBaseW, plan.safeBaseH)}) for better stability.`
+            });
+        }
+
+        if (Math.abs(plan.scaleX - plan.scaleY) > 0.02) {
+            warnings.push({
+                level: 'warning',
+                title: 'Non-uniform scale',
+                body: `Width and height scale differently (${formatScale(plan.scaleX)}× vs ${formatScale(plan.scaleY)}×). The base aspect ratio will change.`
+            });
+        }
+
+        // Deduplicate by title
+        const seen = new Set();
+        const unique = [];
+        for (const w of warnings) {
+            if (seen.has(w.title)) continue;
+            seen.add(w.title);
+            unique.push(w);
+        }
+
+        const needsConfirm = unique.some((w) => w.level === 'danger') ||
+            maxFactor >= UPSCALE_WARNING_FACTOR ||
+            targetMP >= EXTREME_RES_MP ||
+            plan.clamped;
+
+        const showSafeOption = plan.safeBaseW !== plan.appliedBaseW || plan.safeBaseH !== plan.appliedBaseH;
+
+        return { warnings: unique, needsConfirm, showSafeOption };
+    }
+
+    function renderScaleWarnings(warnings) {
+        if (!scaleWarningsEl) return;
+        scaleWarningsEl.innerHTML = '';
+        if (!warnings.length) {
+            scaleWarningsEl.classList.add('hidden');
+            return;
+        }
+        scaleWarningsEl.classList.remove('hidden');
+        for (const w of warnings) {
+            const el = document.createElement('div');
+            el.className = `scale-warning ${w.level}`;
+            el.innerHTML = `<strong>${w.title}</strong>${w.body}`;
+            scaleWarningsEl.appendChild(el);
+        }
+    }
+
+    function renderScaleMemoryMeta(plan) {
+        if (!scaleMemoryMetaEl) return;
+        const w = plan.appliedBaseW;
+        const h = plan.appliedBaseH;
+        scaleMemoryMetaEl.classList.remove('hidden');
+        scaleMemoryMetaEl.innerHTML =
+            `Target: <strong>${formatRes(w, h)}</strong> · <strong>${formatMP(w, h)}</strong> · ` +
+            `~<strong>${formatApproxRAM(w, h)}</strong> per full RGBA canvas` +
+            (plan.showSafeOption
+                ? `<br>Recommended safe: <strong>${formatRes(plan.safeBaseW, plan.safeBaseH)}</strong> · <strong>${formatMP(plan.safeBaseW, plan.safeBaseH)}</strong>`
+                : '');
+    }
+
+    function setImageRiskStatus(statusEl, img, label) {
+        if (!statusEl || !img) return;
+        const risks = describeImageRisk(img.width, img.height, { label });
+        if (!risks.length) {
+            statusEl.textContent = `${label} loaded (${formatRes(img.width, img.height)}, ${formatMP(img.width, img.height)}).`;
+            statusEl.style.color = '';
+            return;
+        }
+        const top = risks[0];
+        statusEl.textContent = `${top.title}: ${top.body}`;
+        statusEl.style.color = top.level === 'danger' ? '#fca5a5' : top.level === 'warning' ? '#fde68a' : 'var(--accent-cyan)';
+    }
+
+    /** Catmull-Rom / cubic Hermite sample used by bicubic resize. */
+    function cubicHermite(a, b, c, d, t) {
+        const t2 = t * t;
+        const t3 = t2 * t;
+        return 0.5 * (
+            (2 * b) +
+            (-a + c) * t +
+            (2 * a - 5 * b + 4 * c - d) * t2 +
+            (-a + 3 * b - 3 * c + d) * t3
+        );
+    }
+
+    function sampleChannelBicubic(data, width, height, x, y, channel) {
+        const x0 = Math.floor(x);
+        const y0 = Math.floor(y);
+        const fx = x - x0;
+        const fy = y - y0;
+        const cols = new Array(4);
+
+        for (let j = 0; j < 4; j++) {
+            const sy = Math.min(height - 1, Math.max(0, y0 - 1 + j));
+            const row = new Array(4);
+            for (let i = 0; i < 4; i++) {
+                const sx = Math.min(width - 1, Math.max(0, x0 - 1 + i));
+                row[i] = data[(sy * width + sx) * 4 + channel];
+            }
+            cols[j] = cubicHermite(row[0], row[1], row[2], row[3], fx);
+        }
+
+        return cubicHermite(cols[0], cols[1], cols[2], cols[3], fy);
+    }
+
+    /**
+     * Resize an image/canvas with a true bicubic kernel.
+     * Falls back to canvas high-quality smoothing if pixel buffers are too large.
+     */
+    function resizeImageBicubic(source, destW, destH) {
+        destW = Math.max(1, Math.round(destW));
+        destH = Math.max(1, Math.round(destH));
+
+        const srcW = source.width;
+        const srcH = source.height;
+        if (srcW === destW && srcH === destH) {
+            const copy = createSafeCanvas(destW, destH);
+            copy.getContext('2d').drawImage(source, 0, 0);
+            return copy;
+        }
+
+        const dest = createSafeCanvas(destW, destH);
+        const destCtx = dest.getContext('2d');
+        if (!destCtx) throw new Error('Could not create destination canvas');
+
+        // Prefer true bicubic when source+dest buffers are manageable.
+        const MAX_BICUBIC_PIXELS = 16_777_216; // ~4096²
+        const canUseKernel =
+            srcW * srcH <= MAX_BICUBIC_PIXELS &&
+            destW * destH <= MAX_BICUBIC_PIXELS;
+
+        if (canUseKernel) {
+            try {
+                const srcCanvas = createSafeCanvas(srcW, srcH);
+                const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
+                srcCtx.drawImage(source, 0, 0);
+                const srcData = srcCtx.getImageData(0, 0, srcW, srcH).data;
+                const out = destCtx.createImageData(destW, destH);
+                const outData = out.data;
+
+                const xRatio = srcW / destW;
+                const yRatio = srcH / destH;
+
+                for (let y = 0; y < destH; y++) {
+                    const srcY = (y + 0.5) * yRatio - 0.5;
+                    for (let x = 0; x < destW; x++) {
+                        const srcX = (x + 0.5) * xRatio - 0.5;
+                        const idx = (y * destW + x) * 4;
+                        outData[idx] = Math.min(255, Math.max(0, sampleChannelBicubic(srcData, srcW, srcH, srcX, srcY, 0)));
+                        outData[idx + 1] = Math.min(255, Math.max(0, sampleChannelBicubic(srcData, srcW, srcH, srcX, srcY, 1)));
+                        outData[idx + 2] = Math.min(255, Math.max(0, sampleChannelBicubic(srcData, srcW, srcH, srcX, srcY, 2)));
+                        outData[idx + 3] = Math.min(255, Math.max(0, sampleChannelBicubic(srcData, srcW, srcH, srcX, srcY, 3)));
+                    }
+                }
+
+                destCtx.putImageData(out, 0, 0);
+                return dest;
+            } catch (err) {
+                console.warn('Bicubic kernel resize failed, falling back to canvas high-quality:', err);
+            }
+        }
+
+        destCtx.imageSmoothingEnabled = true;
+        destCtx.imageSmoothingQuality = 'high';
+        destCtx.drawImage(source, 0, 0, destW, destH);
+        return dest;
+    }
+
+    function buildScalePlan(editedImg) {
+        if (!state.originalImage || !state.cropRect || !editedImg) return null;
+
+        const origCropW = state.cropRect.width;
+        const origCropH = state.cropRect.height;
+        const newCropW = editedImg.width;
+        const newCropH = editedImg.height;
+
+        if (origCropW <= 0 || origCropH <= 0) return null;
+        // Ignore 1px rounding differences from external editors.
+        if (Math.abs(newCropW - origCropW) <= 1 && Math.abs(newCropH - origCropH) <= 1) return null;
+
+        const scaleX = newCropW / origCropW;
+        const scaleY = newCropH / origCropH;
+        const origBaseW = state.originalImage.width;
+        const origBaseH = state.originalImage.height;
+        let newBaseW = Math.max(1, Math.round(origBaseW * scaleX));
+        let newBaseH = Math.max(1, Math.round(origBaseH * scaleY));
+
+        const exportScale = getExportScale(newBaseW, newBaseH);
+        let clamped = false;
+        let appliedBaseW = newBaseW;
+        let appliedBaseH = newBaseH;
+        if (exportScale < 1) {
+            clamped = true;
+            appliedBaseW = Math.max(1, Math.round(newBaseW * exportScale));
+            appliedBaseH = Math.max(1, Math.round(newBaseH * exportScale));
+        }
+
+        const manageScale = getSafeManageScale(newBaseW, newBaseH);
+        let safeBaseW = newBaseW;
+        let safeBaseH = newBaseH;
+        if (manageScale < 1) {
+            safeBaseW = Math.max(1, Math.round(newBaseW * manageScale));
+            safeBaseH = Math.max(1, Math.round(newBaseH * manageScale));
+        }
+        // Safe size must also respect hard export clamp.
+        const safeExportScale = getExportScale(safeBaseW, safeBaseH);
+        if (safeExportScale < 1) {
+            safeBaseW = Math.max(1, Math.round(safeBaseW * safeExportScale));
+            safeBaseH = Math.max(1, Math.round(safeBaseH * safeExportScale));
+        }
+
+        const direction = (scaleX > 1.001 || scaleY > 1.001)
+            ? (scaleX < 0.999 || scaleY < 0.999 ? 'rescale' : 'upscale')
+            : 'downscale';
+
+        const plan = {
+            origCropW, origCropH,
+            newCropW, newCropH,
+            origBaseW, origBaseH,
+            newBaseW, newBaseH,
+            appliedBaseW, appliedBaseH,
+            safeBaseW, safeBaseH,
+            scaleX, scaleY,
+            clamped,
+            direction
+        };
+
+        const risk = assessScalePlanRisks(plan);
+        plan.warnings = risk.warnings;
+        plan.needsConfirm = risk.needsConfirm;
+        plan.showSafeOption = risk.showSafeOption &&
+            (safeBaseW !== appliedBaseW || safeBaseH !== appliedBaseH);
+
+        return plan;
+    }
+
+    function showScaleBaseStep(plan) {
+        state.scalePlan = plan;
+
+        const verb = plan.direction === 'downscale' ? 'downscale' : 'upscale';
+        if (scaleBaseIntroEl) {
+            scaleBaseIntroEl.textContent =
+                `The uploaded crop is a different resolution than the original crop region. ` +
+                `Do you want to ${verb} the base image so it matches the new crop scale?`;
+        }
+
+        if (scaleOrigCropEl) scaleOrigCropEl.textContent = formatRes(plan.origCropW, plan.origCropH);
+        if (scaleNewCropEl) scaleNewCropEl.textContent = formatRes(plan.newCropW, plan.newCropH);
+        if (scaleOrigBaseEl) scaleOrigBaseEl.textContent = formatRes(plan.origBaseW, plan.origBaseH);
+        if (scaleNewBaseEl) {
+            scaleNewBaseEl.textContent = plan.clamped
+                ? `${formatRes(plan.appliedBaseW, plan.appliedBaseH)} (clamped)`
+                : formatRes(plan.newBaseW, plan.newBaseH);
+        }
+
+        if (scaleFormulaEl) {
+            scaleFormulaEl.innerHTML =
+                `Width: <strong>${plan.newCropW}</strong> ÷ <strong>${plan.origCropW}</strong> = ` +
+                `<strong>${formatScale(plan.scaleX)}×</strong> → ` +
+                `<strong>${plan.origBaseW}</strong> × ${formatScale(plan.scaleX)} = ` +
+                `<strong>${plan.newBaseW}</strong><br>` +
+                `Height: <strong>${plan.newCropH}</strong> ÷ <strong>${plan.origCropH}</strong> = ` +
+                `<strong>${formatScale(plan.scaleY)}×</strong> → ` +
+                `<strong>${plan.origBaseH}</strong> × ${formatScale(plan.scaleY)} = ` +
+                `<strong>${plan.newBaseH}</strong>`;
+        }
+
+        if (scaleFactorSummaryEl) {
+            const same = Math.abs(plan.scaleX - plan.scaleY) < 0.0005;
+            scaleFactorSummaryEl.textContent = same
+                ? `Uniform scale factor: ${formatScale(plan.scaleX)}× (${verb})`
+                : `Scale factors: ${formatScale(plan.scaleX)}× width, ${formatScale(plan.scaleY)}× height (${verb})`;
+        }
+
+        renderScaleWarnings(plan.warnings || []);
+        renderScaleMemoryMeta(plan);
+
+        if (applyBaseScaleBtn) {
+            const label = plan.direction === 'downscale'
+                ? 'Downscale Base Image (Bicubic)'
+                : plan.direction === 'upscale'
+                    ? 'Upscale Base Image (Bicubic)'
+                    : 'Rescale Base Image (Bicubic)';
+            applyBaseScaleBtn.textContent = plan.clamped
+                ? `${label} to Max Allowed`
+                : label;
+            applyBaseScaleBtn.disabled = false;
+        }
+
+        if (applySafeScaleBtn) {
+            if (plan.showSafeOption) {
+                applySafeScaleBtn.classList.remove('hidden');
+                applySafeScaleBtn.textContent =
+                    `Scale to Recommended Safe Size (${formatRes(plan.safeBaseW, plan.safeBaseH)})`;
+                applySafeScaleBtn.disabled = false;
+            } else {
+                applySafeScaleBtn.classList.add('hidden');
+            }
+        }
+
+        if (skipBaseScaleBtn) skipBaseScaleBtn.disabled = false;
+        if (cancelBaseScaleBtn) cancelBaseScaleBtn.disabled = false;
+
+        if (scaleBaseStatusEl) {
+            scaleBaseStatusEl.textContent = '';
+            scaleBaseStatusEl.style.color = '';
+        }
+
+        uploadStep.classList.add('hidden');
+        cropStep.classList.add('hidden');
+        reUploadStep.classList.add('hidden');
+        paintEditorStep.classList.add('hidden');
+        maskStep.classList.add('hidden');
+        if (scaleBaseStep) scaleBaseStep.classList.remove('hidden');
+    }
+
+    function proceedWithEditedImage(editedImg, { checkScale = true } = {}) {
+        state.editedImage = editedImg;
+        if (checkScale) {
+            const plan = buildScalePlan(editedImg);
+            if (plan) {
+                showScaleBaseStep(plan);
+                return;
+            }
+            // Same crop pixel size, but still warn if the overlay itself is huge.
+            const risks = describeImageRisk(editedImg.width, editedImg.height, { label: 'Uploaded crop' });
+            if (risks.length && reUploadStatus) {
+                const top = risks[0];
+                reUploadStatus.textContent = `${top.title}: ${top.body}`;
+                reUploadStatus.style.color = top.level === 'danger' ? '#fca5a5' : top.level === 'warning' ? '#fde68a' : 'var(--accent-cyan)';
+            }
+        }
+        state.scalePlan = null;
+        setupMasking();
+    }
+
+    function setScaleActionButtonsDisabled(disabled) {
+        if (applyBaseScaleBtn) applyBaseScaleBtn.disabled = disabled;
+        if (applySafeScaleBtn) applySafeScaleBtn.disabled = disabled;
+        if (skipBaseScaleBtn) skipBaseScaleBtn.disabled = disabled;
+        if (cancelBaseScaleBtn) cancelBaseScaleBtn.disabled = disabled;
+    }
+
+    async function applyBaseScalePlan({ useSafeSize = false } = {}) {
+        const plan = state.scalePlan;
+        if (!plan || !state.originalImage || !state.cropRect) {
+            setupMasking();
+            return;
+        }
+
+        const targetW = useSafeSize ? plan.safeBaseW : plan.appliedBaseW;
+        const targetH = useSafeSize ? plan.safeBaseH : plan.appliedBaseH;
+
+        const runResize = async () => {
+            setScaleActionButtonsDisabled(true);
+            if (scaleBaseStatusEl) {
+                scaleBaseStatusEl.style.color = '';
+                scaleBaseStatusEl.textContent =
+                    `Rescaling base image to ${formatRes(targetW, targetH)} with bicubic…`;
+            }
+
+            try {
+                await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+
+                const scaledBase = resizeImageBicubic(
+                    state.originalImage,
+                    targetW,
+                    targetH
+                );
+
+                const actualScaleX = scaledBase.width / plan.origBaseW;
+                const actualScaleY = scaledBase.height / plan.origBaseH;
+                const oldCrop = state.cropRect;
+
+                state.originalImage = scaledBase;
+                state.cropRect = {
+                    x: Math.round(oldCrop.x * actualScaleX),
+                    y: Math.round(oldCrop.y * actualScaleY),
+                    width: Math.round(oldCrop.width * actualScaleX),
+                    height: Math.round(oldCrop.height * actualScaleY)
+                };
+
+                state.userPaintLayer = null;
+                state.tempStrokeLayer = null;
+                state.scalePlan = null;
+
+                if (scaleBaseStatusEl) {
+                    scaleBaseStatusEl.textContent =
+                        `Base image scaled to ${formatRes(scaledBase.width, scaledBase.height)} (${formatMP(scaledBase.width, scaledBase.height)}).`;
+                }
+
+                setupMasking();
+            } catch (err) {
+                console.error(err);
+                if (scaleBaseStatusEl) {
+                    scaleBaseStatusEl.style.color = '#fca5a5';
+                    scaleBaseStatusEl.textContent =
+                        'Failed to rescale base image (likely out of memory). Try the recommended safe size, or keep the current base scale.';
+                }
+                setScaleActionButtonsDisabled(false);
+            }
+        };
+
+        const needsConfirm = useSafeSize
+            ? megapixels(targetW, targetH) >= VERY_HIGH_RES_MP
+            : plan.needsConfirm;
+
+        if (needsConfirm) {
+            const title = useSafeSize ? 'Confirm Safe Upscale' : 'Confirm High-Risk Upscale';
+            const message = useSafeSize
+                ? `Scale the base image to the recommended safe size ${formatRes(targetW, targetH)} (${formatMP(targetW, targetH)})? This still uses significant memory (~${formatApproxRAM(targetW, targetH)} per canvas).`
+                : `You are about to scale the base to ${formatRes(targetW, targetH)} (${formatMP(targetW, targetH)}, ~${formatApproxRAM(targetW, targetH)} per canvas). This may be slow or crash the tab. Continue?`;
+
+            showCustomConfirm(title, message, () => {
+                runResize();
+            });
+            return;
+        }
+
+        await runResize();
+    }
+
     // --- DOM SELECTORS ---
     const uploadStep = document.getElementById('upload-step');
     const cropStep = document.getElementById('crop-step');
     const reUploadStep = document.getElementById('re-upload-step');
+    const scaleBaseStep = document.getElementById('scale-base-step');
     const paintEditorStep = document.getElementById('paint-editor-step'); // Step 3.5
     const maskStep = document.getElementById('mask-step'); // Step 4
 
@@ -178,6 +733,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const goToPaintEditorBtn = document.getElementById('go-to-paint-editor-btn');
     const step3DlImg = document.getElementById('step3-dl-img');
     const step3DlJson = document.getElementById('step3-dl-json');
+
+    // Step 3.6 — Scale base to crop resolution
+    const applyBaseScaleBtn = document.getElementById('apply-base-scale-btn');
+    const applySafeScaleBtn = document.getElementById('apply-safe-scale-btn');
+    const skipBaseScaleBtn = document.getElementById('skip-base-scale-btn');
+    const cancelBaseScaleBtn = document.getElementById('cancel-base-scale-btn');
+    const scaleOrigCropEl = document.getElementById('scale-orig-crop');
+    const scaleNewCropEl = document.getElementById('scale-new-crop');
+    const scaleOrigBaseEl = document.getElementById('scale-orig-base');
+    const scaleNewBaseEl = document.getElementById('scale-new-base');
+    const scaleFormulaEl = document.getElementById('scale-formula');
+    const scaleFactorSummaryEl = document.getElementById('scale-factor-summary');
+    const scaleWarningsEl = document.getElementById('scale-warnings');
+    const scaleMemoryMetaEl = document.getElementById('scale-memory-meta');
+    const scaleBaseStatusEl = document.getElementById('scale-base-status');
+    const scaleBaseIntroEl = document.getElementById('scale-base-intro');
+    const uploadStatus = document.getElementById('upload-status');
+    const reUploadStatus = document.getElementById('re-upload-status');
 
     // Step 3.5 (Paint Editor)
     const paintEditorCanvas = document.getElementById('paint-editor-canvas');
@@ -296,8 +869,10 @@ document.addEventListener('DOMContentLoaded', () => {
             state.userPaintLayer = null; // Reset mask for new original image
             state.editedImage = null;
             state.workScale = 1;
+            state.scalePlan = null;
             initialUploadContainer.classList.add('hidden');
             step1Actions.classList.remove('hidden');
+            setImageRiskStatus(uploadStatus, img, 'Original image');
         } catch (err) {
             console.error(err);
             alert('Failed to load image. The file may be corrupted or unsupported.');
@@ -365,14 +940,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             loadImageFromFile(file).then((img) => {
                 // Keep the source image intact. Only the interactive canvas is reduced.
-                state.editedImage = img;
-
-                // 3. Skip to Masking Step
-                uploadStep.classList.add('hidden');
-                cropStep.classList.add('hidden');
-                reUploadStep.classList.add('hidden');
-
-                setupMasking();
+                // If overlay resolution differs from the full-frame crop, offer base rescale.
+                proceedWithEditedImage(img, { checkScale: true });
             }).catch((err) => {
                 console.error(err);
                 alert('Failed to load overlay image.');
@@ -406,13 +975,43 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const img = await loadImageFromFile(file);
             // Keep full source resolution for the tiled final export.
-            state.editedImage = img;
-            setupMasking();
+            // If the uploaded crop resolution differs, offer to scale the base first.
+            proceedWithEditedImage(img, { checkScale: true });
         } catch (err) {
             console.error(err);
             alert('Failed to load edited image.');
+        } finally {
+            e.target.value = '';
         }
     });
+
+    // 5.5 SCALE BASE STEP CONTROLS
+    if (applyBaseScaleBtn) {
+        applyBaseScaleBtn.addEventListener('click', () => {
+            applyBaseScalePlan({ useSafeSize: false });
+        });
+    }
+    if (applySafeScaleBtn) {
+        applySafeScaleBtn.addEventListener('click', () => {
+            applyBaseScalePlan({ useSafeSize: true });
+        });
+    }
+    if (skipBaseScaleBtn) {
+        skipBaseScaleBtn.addEventListener('click', () => {
+            state.scalePlan = null;
+            setScaleActionButtonsDisabled(false);
+            setupMasking();
+        });
+    }
+    if (cancelBaseScaleBtn) {
+        cancelBaseScaleBtn.addEventListener('click', () => {
+            state.scalePlan = null;
+            state.editedImage = null;
+            if (scaleBaseStep) scaleBaseStep.classList.add('hidden');
+            reUploadStep.classList.remove('hidden');
+            setScaleActionButtonsDisabled(false);
+        });
+    }
 
     // 6. GO TO PAINT EDITOR (Step 3 -> Step 3.5)
     goToPaintEditorBtn.addEventListener('click', () => {
@@ -442,7 +1041,8 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.drawImage(state.peUserLayer, 0, 0, outW, outH);
 
         state.editedImage = finalPaint;
-        setupMasking(); // Go to Step 4
+        // Paint editor intentionally matches (or safely caps) crop size — skip scale prompt.
+        proceedWithEditedImage(finalPaint, { checkScale: false });
     });
 
     peBrushBtn.addEventListener('click', () => {
@@ -505,6 +1105,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 8. MASK CONTROLS (Step 4)
     backToStep3Btn.addEventListener('click', () => {
         maskStep.classList.add('hidden');
+        if (scaleBaseStep) scaleBaseStep.classList.add('hidden');
         reUploadStep.classList.remove('hidden');
         brushCursor.style.opacity = '0';
     });
@@ -1412,8 +2013,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- STEP 4: MASKING LOGIC ---
     function setupMasking() {
+        uploadStep.classList.add('hidden');
+        cropStep.classList.add('hidden');
         reUploadStep.classList.add('hidden');
         paintEditorStep.classList.add('hidden');
+        if (scaleBaseStep) scaleBaseStep.classList.add('hidden');
         maskStep.classList.remove('hidden');
 
         const fullW = state.originalImage.width;
@@ -1473,28 +2077,60 @@ document.addEventListener('DOMContentLoaded', () => {
             points[1].x === 1 && points[1].y === 1;
     }
 
+    function needsToneCurve(target) {
+        const isBase = target === 'base';
+        const black = isBase ? state.baseBlackLevel : state.blackLevel;
+        const highlight = isBase ? state.baseHighlightLevel : state.highlightLevel;
+        const points = isBase ? state.baseCurvePoints : state.curvePoints;
+        return black !== 0 || highlight !== 100 || !isDefaultCurve(points);
+    }
+
+    /** CSS-only adjustments. SVG url(#…-curves) blanks canvas draws in many browsers. */
     function setAdjustmentFilter(ctx, target) {
         const isBase = target === 'base';
         const hue = isBase ? state.baseHue : state.hue;
         const saturation = isBase ? state.baseSaturation : state.saturation;
         const lightness = isBase ? state.baseLightness : state.lightness;
-        const black = isBase ? state.baseBlackLevel : state.blackLevel;
-        const highlight = isBase ? state.baseHighlightLevel : state.highlightLevel;
-        const points = isBase ? state.baseCurvePoints : state.curvePoints;
-        const standardFilter = `hue-rotate(${hue || 0}deg) saturate(${saturation ?? 100}%) brightness(${lightness ?? 100}%)`;
-        const needsCurveFilter = black !== 0 || highlight !== 100 || !isDefaultCurve(points);
+        ctx.filter = `hue-rotate(${hue || 0}deg) saturate(${saturation ?? 100}%) brightness(${lightness ?? 100}%)`;
+    }
 
-        // Some browsers render a canvas blank when an SVG URL filter is present,
-        // even when that filter is an identity transform. Only use it when needed.
-        ctx.filter = needsCurveFilter
-            ? `${standardFilter} url(#${isBase ? 'base' : 'overlay'}-curves)`
-            : standardFilter;
+    function getToneLut(target) {
+        const key = target === 'base' ? '_baseToneLut' : '_overlayToneLut';
+        if (!state[key]) updateToneLut(target);
+        return state[key];
+    }
 
-        // Unsupported filter syntax resets CanvasRenderingContext2D.filter to "none".
-        // Keep hue/saturation/lightness working rather than losing the entire draw.
-        if (!ctx.filter || ctx.filter === 'none') {
-            ctx.filter = standardFilter;
+    /**
+     * Apply a 256-entry RGB tone LUT to a canvas region. Alpha is preserved.
+     * Skips fully transparent pixels for speed on masked overlays.
+     */
+    function applyToneLutToCanvas(canvas, lut, x = 0, y = 0, w = canvas.width, h = canvas.height) {
+        if (!canvas || !lut) return;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return;
+
+        const sx = Math.max(0, Math.floor(x));
+        const sy = Math.max(0, Math.floor(y));
+        const sw = Math.max(0, Math.min(Math.ceil(w), canvas.width - sx));
+        const sh = Math.max(0, Math.min(Math.ceil(h), canvas.height - sy));
+        if (sw <= 0 || sh <= 0) return;
+
+        let imageData;
+        try {
+            imageData = ctx.getImageData(sx, sy, sw, sh);
+        } catch (err) {
+            console.warn('Tone LUT getImageData failed:', err);
+            return;
         }
+
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] === 0) continue;
+            data[i] = lut[data[i]];
+            data[i + 1] = lut[data[i + 1]];
+            data[i + 2] = lut[data[i + 2]];
+        }
+        ctx.putImageData(imageData, sx, sy);
     }
 
     function composeFullResolutionExport() {
@@ -1513,6 +2149,9 @@ document.addEventListener('DOMContentLoaded', () => {
         setAdjustmentFilter(exportCtx, 'base');
         exportCtx.drawImage(state.originalImage, 0, 0, fullW, fullH);
         exportCtx.restore();
+        if (needsToneCurve('base')) {
+            applyToneLutToCanvas(exportCanvas, getToneLut('base'));
+        }
 
         if (state.hideEdit) return exportCanvas;
 
@@ -1551,6 +2190,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     0, 0, tileW, tileH
                 );
                 tileCtx.restore();
+                if (needsToneCurve('overlay')) {
+                    applyToneLutToCanvas(tileCanvas, getToneLut('overlay'), 0, 0, tileW, tileH);
+                }
 
                 tileCtx.globalCompositeOperation = 'destination-in';
                 tileCtx.drawImage(
@@ -1600,6 +2242,9 @@ document.addEventListener('DOMContentLoaded', () => {
         setAdjustmentFilter(ctx, 'base');
         ctx.drawImage(state.originalImage, 0, 0, width, height);
         ctx.restore();
+        if (needsToneCurve('base')) {
+            applyToneLutToCanvas(canvas, getToneLut('base'));
+        }
 
         // 2. Get Combined Mask
         const combinedMaskCanvas = getFinalMaskCanvas();
@@ -1614,6 +2259,9 @@ document.addEventListener('DOMContentLoaded', () => {
         setAdjustmentFilter(revealedEditCtx, 'overlay');
         revealedEditCtx.drawImage(state.editedImage, cx, cy, cw, ch);
         revealedEditCtx.restore();
+        if (needsToneCurve('overlay')) {
+            applyToneLutToCanvas(revealedEditCanvas, getToneLut('overlay'), cx, cy, cw, ch);
+        }
 
         revealedEditCtx.globalCompositeOperation = 'destination-in';
         revealedEditCtx.drawImage(combinedMaskCanvas, 0, 0);
@@ -2174,29 +2822,32 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function updateSVGFilter(target = 'overlay') {
-        // Calculate 256 values for the LUT
-        const lut = new Array(256);
+    function updateToneLut(target = 'overlay') {
+        const lut = new Uint8ClampedArray(256);
         const points = target === 'base' ? state.baseCurvePoints : state.curvePoints;
-        const black = (target === 'base' ? state.baseBlackLevel : state.blackLevel) / 100;
-        const highlight = (target === 'base' ? state.baseHighlightLevel : state.highlightLevel) / 100;
+        let black = (target === 'base' ? state.baseBlackLevel : state.blackLevel) / 100;
+        let highlight = (target === 'base' ? state.baseHighlightLevel : state.highlightLevel) / 100;
+
+        // Avoid divide-by-zero / inverted ranges from slider edge cases.
+        if (highlight <= black) {
+            highlight = Math.min(1, black + 0.01);
+        }
 
         const spline = getSplineFunction(points);
 
         for (let i = 0; i < 256; i++) {
             const x = i / 255;
-            
-            // 1. Apply Black/Highlight levels
             let val = (x - black) / (highlight - black);
             val = Math.max(0, Math.min(1, val));
-
-            // 2. Apply Curve
-            let curveVal = spline(val);
-            
-            lut[i] = Math.max(0, Math.min(1, curveVal)).toFixed(3);
+            const curveVal = spline(val);
+            lut[i] = Math.round(Math.max(0, Math.min(1, curveVal)) * 255);
         }
 
-        const tableValues = lut.join(' ');
+        if (target === 'base') state._baseToneLut = lut;
+        else state._overlayToneLut = lut;
+
+        // Keep SVG tableValues in sync for any external/debug use (not used on canvas).
+        const tableValues = Array.from(lut, (v) => (v / 255).toFixed(3)).join(' ');
         const prefix = target === 'base' ? 'base' : 'overlay';
         const r = document.getElementById(`${prefix}CurveR`);
         const g = document.getElementById(`${prefix}CurveG`);
@@ -2204,6 +2855,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (r) r.setAttribute('tableValues', tableValues);
         if (g) g.setAttribute('tableValues', tableValues);
         if (b) b.setAttribute('tableValues', tableValues);
+    }
+
+    // Back-compat alias used by existing call sites
+    function updateSVGFilter(target = 'overlay') {
+        updateToneLut(target);
     }
 
     // Call init

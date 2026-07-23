@@ -188,6 +188,70 @@
             <p id="re-upload-status" class="status-message"></p>
         </section>
 
+        <!-- Step 3.6: Scale base to match uploaded crop resolution -->
+        <section id="scale-base-step" class="glass-card hidden">
+            <h2>Step 3.6: Scale Base to Crop Resolution</h2>
+            <p id="scale-base-intro">
+                The uploaded crop is a different resolution than the original crop region.
+                You can upscale or downscale the base image so the crop region matches the new resolution.
+            </p>
+
+            <div class="scale-calc-card">
+                <div class="scale-calc-grid">
+                    <div class="scale-calc-col">
+                        <h3>Crop Region</h3>
+                        <div class="scale-res-row">
+                            <span class="scale-res-label">Original</span>
+                            <span id="scale-orig-crop" class="scale-res-value">—</span>
+                        </div>
+                        <div class="scale-res-row">
+                            <span class="scale-res-label">New (uploaded)</span>
+                            <span id="scale-new-crop" class="scale-res-value accent">—</span>
+                        </div>
+                    </div>
+                    <div class="scale-calc-col">
+                        <h3>Base Image</h3>
+                        <div class="scale-res-row">
+                            <span class="scale-res-label">Original</span>
+                            <span id="scale-orig-base" class="scale-res-value">—</span>
+                        </div>
+                        <div class="scale-res-row">
+                            <span class="scale-res-label">New (calculated)</span>
+                            <span id="scale-new-base" class="scale-res-value accent">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="scale-formula" id="scale-formula">
+                    <!-- Filled by script -->
+                </div>
+
+                <p id="scale-factor-summary" class="scale-factor-summary"></p>
+                <div id="scale-warnings" class="scale-warnings hidden" aria-live="polite"></div>
+                <div id="scale-memory-meta" class="scale-memory-meta hidden"></div>
+            </div>
+
+            <div class="centered-content"
+                style="display: flex; flex-direction: column; gap: 1rem; align-items: center; margin-top: 1.5rem;">
+                <button id="apply-base-scale-btn" class="action-btn" style="width: 100%; max-width: 360px;">
+                    Upscale Base Image (Bicubic)
+                </button>
+                <button id="apply-safe-scale-btn" class="action-btn hidden"
+                    style="background: var(--bg-secondary); border: 1px solid #fbbf24; width: 100%; max-width: 360px;">
+                    Scale to Recommended Safe Size
+                </button>
+                <button id="skip-base-scale-btn" class="action-btn"
+                    style="background: var(--bg-secondary); border: 1px solid var(--glass-border); width: 100%; max-width: 360px;">
+                    Keep Current Base Scale
+                </button>
+                <button id="cancel-base-scale-btn" class="action-btn small-btn"
+                    style="background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted);">
+                    ← Back to Edited Image
+                </button>
+            </div>
+            <p id="scale-base-status" class="status-message"></p>
+        </section>
+
         <!-- NEW Step 3.5: Paint Editor -->
         <section id="paint-editor-step" class="glass-card hidden">
             <div class="editor-layout">

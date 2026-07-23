@@ -147,6 +147,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const downscaleUseSubfoldersToggle = document.getElementById('downscale-use-subfolders-toggle');
 
+    // Upscale DOM
+    const openUpscaleModalBtn = document.getElementById('open-upscale-modal-btn');
+    const upscalePopup = document.getElementById('upscale-popup');
+    const closeUpscalePopupBtn = upscalePopup.querySelector('.popup-close-btn');
+    const upscaleModeSelect = document.getElementById('upscale-mode-select');
+    const upscaleFactorControls = document.getElementById('upscale-factor-controls');
+    const upscaleFactorSelect = document.getElementById('upscale-factor-select');
+    const upscaleCustomFactorWrapper = document.getElementById('upscale-custom-factor-wrapper');
+    const upscaleCustomFactorInput = document.getElementById('upscale-custom-factor-input');
+    const upscaleDimensionsControls = document.getElementById('upscale-dimensions-controls');
+    const upscaleMpControls = document.getElementById('upscale-mp-controls');
+    const upscaleAspectLockToggle = document.getElementById('upscale-aspect-lock-toggle');
+    const upscaleWidthInput = document.getElementById('upscale-width-input');
+    const upscaleHeightInput = document.getElementById('upscale-height-input');
+    const upscaleMpInput = document.getElementById('upscale-mp-input');
+    const upscaleFormatSelect = document.getElementById('upscale-format-select');
+    const upscaleQualityWrapper = document.getElementById('upscale-quality-wrapper');
+    const upscaleQualitySlider = document.getElementById('upscale-quality-slider');
+    const upscaleQualityValue = document.getElementById('upscale-quality-value');
+    const upscalePrefixInput = document.getElementById('upscale-prefix');
+    const upscaleSuffixInput = document.getElementById('upscale-suffix');
+    const upscaleGenerateBtn = document.getElementById('upscale-generate-btn');
+    const upscaleCancelBtn = document.getElementById('upscale-cancel-btn');
+    const upscaleStatus = document.getElementById('upscale-status');
+    const upscaleErrorMessage = document.getElementById('upscale-error-message');
+    const upscaleOriginalResolution = document.getElementById('upscale-original-resolution');
+    const upscaleOutputPreview = document.getElementById('upscale-output-preview');
+    const upscaleWarningBox = document.getElementById('upscale-warning-box');
+    const upscaleApplyTitlesToggle = document.getElementById('upscale-apply-titles-toggle');
+    const upscaleSpacingSelect = document.getElementById('upscale-spacing-select');
+    const upscaleUseSubfoldersToggle = document.getElementById('upscale-use-subfolders-toggle');
+    const upscaleProgressContainer = document.getElementById('upscale-progress-container');
+    const upscaleBatchBar = document.getElementById('upscale-batch-bar');
+    const upscaleBatchPercent = document.getElementById('upscale-batch-percent');
+    const upscaleBatchDetail = document.getElementById('upscale-batch-detail');
+    const upscaleImageBar = document.getElementById('upscale-image-bar');
+    const upscaleImagePercent = document.getElementById('upscale-image-percent');
+    const upscaleImageDetail = document.getElementById('upscale-image-detail');
+    const upscaleImageLabel = document.getElementById('upscale-image-label');
+
+    let upscaleCancelRequested = false;
+    let upscaleRunning = false;
+
     // Reorder DOM
     const openReorderModalBtn = document.getElementById('open-reorder-modal-btn');
     const reorderPopup = document.getElementById('reorder-popup');
@@ -352,6 +395,31 @@ document.addEventListener('DOMContentLoaded', () => {
         downscaleQualityValue.textContent = downscaleQualitySlider.value;
     });
     downscaleGenerateBtn.addEventListener('click', handleDownscaleGeneration);
+
+    // Upscale Listeners
+    openUpscaleModalBtn.addEventListener('click', openUpscaleModal);
+    closeUpscalePopupBtn.addEventListener('click', closeUpscaleModal);
+    upscalePopup.addEventListener('click', (e) => { if (e.target === upscalePopup && !upscaleRunning) closeUpscaleModal(); });
+    upscaleModeSelect.addEventListener('input', () => { updateUpscaleUI(); refreshUpscalePreview(); });
+    upscaleFactorSelect.addEventListener('input', () => { updateUpscaleUI(); refreshUpscalePreview(); });
+    upscaleCustomFactorInput.addEventListener('input', refreshUpscalePreview);
+    upscaleAspectLockToggle.addEventListener('input', () => handleUpscaleAspectInputChange());
+    upscaleWidthInput.addEventListener('input', () => { handleUpscaleAspectInputChange('width'); refreshUpscalePreview(); });
+    upscaleHeightInput.addEventListener('input', () => { handleUpscaleAspectInputChange('height'); refreshUpscalePreview(); });
+    upscaleMpInput.addEventListener('input', refreshUpscalePreview);
+    upscaleFormatSelect.addEventListener('input', updateUpscaleUI);
+    upscaleQualitySlider.addEventListener('input', () => {
+        upscaleQualityValue.textContent = upscaleQualitySlider.value;
+    });
+    upscaleGenerateBtn.addEventListener('click', handleUpscaleGeneration);
+    upscaleCancelBtn.addEventListener('click', () => {
+        if (upscaleRunning) {
+            upscaleCancelRequested = true;
+            upscaleCancelBtn.disabled = true;
+            upscaleCancelBtn.textContent = 'Cancelling…';
+            showStatus(upscaleStatus, 'Cancel requested — finishing current image…', false);
+        }
+    });
 
     // Reorder Listeners
     openReorderModalBtn.addEventListener('click', openReorderModal);
@@ -1083,7 +1151,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleKeyPress(e) {
-        if (editorSection.classList.contains('hidden') || document.activeElement.tagName === 'INPUT' || !gridPopup.classList.contains('hidden') || !downscalePopup.classList.contains('hidden') || !colourMatchPopup.classList.contains('hidden')) { return; }
+        if (editorSection.classList.contains('hidden') || document.activeElement.tagName === 'INPUT' || !gridPopup.classList.contains('hidden') || !downscalePopup.classList.contains('hidden') || !upscalePopup.classList.contains('hidden') || !colourMatchPopup.classList.contains('hidden')) { return; }
         if (e.key === 'ArrowLeft') { e.preventDefault(); navigatePrev(); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); navigateNext(); }
     }
@@ -1755,6 +1823,480 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             downscaleGenerateBtn.disabled = false;
             downscaleGenerateBtn.textContent = 'Generate & Download ZIP';
+        }
+    }
+
+    // --- Batch Bicubic Upscale Feature ---
+
+    const UPSCALE_MAX_DIM = 16384;
+    const UPSCALE_MAX_AREA = 268_435_456;
+
+    function cubicHermite(a, b, c, d, t) {
+        const t2 = t * t;
+        const t3 = t2 * t;
+        return 0.5 * (
+            (2 * b) +
+            (-a + c) * t +
+            (2 * a - 5 * b + 4 * c - d) * t2 +
+            (-a + 3 * b - 3 * c + d) * t3
+        );
+    }
+
+    function sampleChannelBicubic(data, width, height, x, y, channel) {
+        const x0 = Math.floor(x);
+        const y0 = Math.floor(y);
+        const fx = x - x0;
+        const fy = y - y0;
+        const cols = new Array(4);
+        for (let j = 0; j < 4; j++) {
+            const sy = Math.min(height - 1, Math.max(0, y0 - 1 + j));
+            const row = new Array(4);
+            for (let i = 0; i < 4; i++) {
+                const sx = Math.min(width - 1, Math.max(0, x0 - 1 + i));
+                row[i] = data[(sy * width + sx) * 4 + channel];
+            }
+            cols[j] = cubicHermite(row[0], row[1], row[2], row[3], fx);
+        }
+        return cubicHermite(cols[0], cols[1], cols[2], cols[3], fy);
+    }
+
+    function getUpscaleSafeScale(width, height) {
+        if (!width || !height) return 1;
+        let scale = 1;
+        const maxSide = Math.max(width, height);
+        if (maxSide > UPSCALE_MAX_DIM) scale = UPSCALE_MAX_DIM / maxSide;
+        const area = width * height * scale * scale;
+        if (area > UPSCALE_MAX_AREA) scale *= Math.sqrt(UPSCALE_MAX_AREA / area);
+        return Math.min(1, scale);
+    }
+
+    function yieldToUI() {
+        return new Promise((resolve) => {
+            requestAnimationFrame(() => setTimeout(resolve, 0));
+        });
+    }
+
+    /**
+     * True bicubic resize with per-row progress callbacks.
+     * Falls back to canvas high-quality for oversized buffers.
+     */
+    async function resizeImageBicubicWithProgress(source, destW, destH, onProgress) {
+        destW = Math.max(1, Math.round(destW));
+        destH = Math.max(1, Math.round(destH));
+
+        const srcW = source.width;
+        const srcH = source.height;
+        const dest = document.createElement('canvas');
+        dest.width = destW;
+        dest.height = destH;
+        const destCtx = dest.getContext('2d');
+
+        if (srcW === destW && srcH === destH) {
+            destCtx.drawImage(source, 0, 0);
+            if (onProgress) onProgress(1);
+            return dest;
+        }
+
+        const MAX_KERNEL_PIXELS = 16_777_216;
+        const canUseKernel = srcW * srcH <= MAX_KERNEL_PIXELS && destW * destH <= MAX_KERNEL_PIXELS;
+
+        if (canUseKernel) {
+            try {
+                const srcCanvas = document.createElement('canvas');
+                srcCanvas.width = srcW;
+                srcCanvas.height = srcH;
+                const srcCtx = srcCanvas.getContext('2d', { willReadFrequently: true });
+                srcCtx.drawImage(source, 0, 0);
+                if (onProgress) onProgress(0.02);
+                await yieldToUI();
+
+                const srcData = srcCtx.getImageData(0, 0, srcW, srcH).data;
+                const out = destCtx.createImageData(destW, destH);
+                const outData = out.data;
+                const xRatio = srcW / destW;
+                const yRatio = srcH / destH;
+                const yieldEvery = Math.max(1, Math.floor(destH / 40));
+
+                for (let y = 0; y < destH; y++) {
+                    if (upscaleCancelRequested) throw new Error('Cancelled');
+                    const srcY = (y + 0.5) * yRatio - 0.5;
+                    for (let x = 0; x < destW; x++) {
+                        const srcX = (x + 0.5) * xRatio - 0.5;
+                        const idx = (y * destW + x) * 4;
+                        outData[idx] = Math.min(255, Math.max(0, sampleChannelBicubic(srcData, srcW, srcH, srcX, srcY, 0)));
+                        outData[idx + 1] = Math.min(255, Math.max(0, sampleChannelBicubic(srcData, srcW, srcH, srcX, srcY, 1)));
+                        outData[idx + 2] = Math.min(255, Math.max(0, sampleChannelBicubic(srcData, srcW, srcH, srcX, srcY, 2)));
+                        outData[idx + 3] = Math.min(255, Math.max(0, sampleChannelBicubic(srcData, srcW, srcH, srcX, srcY, 3)));
+                    }
+                    if (y % yieldEvery === 0 || y === destH - 1) {
+                        if (onProgress) onProgress(0.05 + 0.9 * ((y + 1) / destH));
+                        await yieldToUI();
+                    }
+                }
+
+                destCtx.putImageData(out, 0, 0);
+                if (onProgress) onProgress(1);
+                return dest;
+            } catch (err) {
+                if (err.message === 'Cancelled') throw err;
+                console.warn('Bicubic kernel failed, using canvas high-quality fallback:', err);
+            }
+        }
+
+        // Fallback: staged canvas draws so the individual bar still moves.
+        if (onProgress) onProgress(0.15);
+        await yieldToUI();
+        destCtx.imageSmoothingEnabled = true;
+        destCtx.imageSmoothingQuality = 'high';
+        if (onProgress) onProgress(0.45);
+        await yieldToUI();
+        destCtx.drawImage(source, 0, 0, destW, destH);
+        if (onProgress) onProgress(1);
+        return dest;
+    }
+
+    function getUpscaleFactorValue() {
+        if (upscaleFactorSelect.value === 'custom') {
+            return Math.max(1.01, parseFloat(upscaleCustomFactorInput.value) || 1.5);
+        }
+        return parseFloat(upscaleFactorSelect.value) || 2;
+    }
+
+    function computeUpscaleTargetSize(srcW, srcH) {
+        const mode = upscaleModeSelect.value;
+        let targetW;
+        let targetH;
+
+        if (mode === 'factor') {
+            const factor = getUpscaleFactorValue();
+            targetW = srcW * factor;
+            targetH = srcH * factor;
+        } else if (mode === 'megapixels') {
+            const targetMP = Math.max(0.1, parseFloat(upscaleMpInput.value) || 8) * 1_000_000;
+            const aspect = srcW / srcH;
+            targetH = Math.sqrt(targetMP / aspect);
+            targetW = targetH * aspect;
+        } else {
+            targetW = parseInt(upscaleWidthInput.value, 10) || srcW;
+            targetH = parseInt(upscaleHeightInput.value, 10) || srcH;
+            if (upscaleAspectLockToggle.checked) {
+                const aspect = srcW / srcH;
+                // Prefer width as driver when locked
+                targetH = targetW / aspect;
+            }
+        }
+
+        targetW = Math.max(1, Math.round(targetW));
+        targetH = Math.max(1, Math.round(targetH));
+
+        const safeScale = getUpscaleSafeScale(targetW, targetH);
+        const clamped = safeScale < 1;
+        const appliedW = Math.max(1, Math.round(targetW * safeScale));
+        const appliedH = Math.max(1, Math.round(targetH * safeScale));
+
+        return {
+            idealW: targetW,
+            idealH: targetH,
+            appliedW,
+            appliedH,
+            clamped,
+            scaleX: appliedW / srcW,
+            scaleY: appliedH / srcH
+        };
+    }
+
+    function setUpscaleBatchProgress(pct, detail) {
+        const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+        upscaleBatchBar.style.width = `${clamped}%`;
+        upscaleBatchPercent.textContent = `${clamped}%`;
+        if (detail != null) upscaleBatchDetail.textContent = detail;
+    }
+
+    function setUpscaleImageProgress(pct, detail) {
+        const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+        upscaleImageBar.style.width = `${clamped}%`;
+        upscaleImagePercent.textContent = `${clamped}%`;
+        if (detail != null) upscaleImageDetail.textContent = detail;
+    }
+
+    function resetUpscaleProgressUI() {
+        upscaleProgressContainer.classList.add('hidden');
+        setUpscaleBatchProgress(0, 'Waiting…');
+        setUpscaleImageProgress(0, '—');
+        upscaleImageLabel.textContent = 'Current image';
+        upscaleCancelBtn.classList.add('hidden');
+        upscaleCancelBtn.disabled = false;
+        upscaleCancelBtn.textContent = 'Cancel';
+    }
+
+    async function openUpscaleModal() {
+        upscaleStatus.textContent = '';
+        upscaleErrorMessage.textContent = '';
+        resetUpscaleProgressUI();
+        upscaleCancelRequested = false;
+        upscaleRunning = false;
+
+        document.body.classList.add('popup-open');
+        upscalePopup.classList.remove('hidden');
+        updateUpscaleUI();
+        await refreshUpscalePreview();
+    }
+
+    function closeUpscaleModal() {
+        if (upscaleRunning) return;
+        document.body.classList.remove('popup-open');
+        upscalePopup.classList.add('hidden');
+    }
+
+    function updateUpscaleUI() {
+        const mode = upscaleModeSelect.value;
+        upscaleFactorControls.classList.toggle('hidden', mode !== 'factor');
+        upscaleDimensionsControls.classList.toggle('hidden', mode !== 'dimensions');
+        upscaleMpControls.classList.toggle('hidden', mode !== 'megapixels');
+        upscaleCustomFactorWrapper.classList.toggle(
+            'hidden',
+            mode !== 'factor' || upscaleFactorSelect.value !== 'custom'
+        );
+
+        const format = upscaleFormatSelect.value;
+        upscaleQualityWrapper.classList.toggle('hidden', format === 'image/png');
+        upscaleQualityValue.textContent = upscaleQualitySlider.value;
+    }
+
+    async function handleUpscaleAspectInputChange(source) {
+        if (!upscaleAspectLockToggle.checked || imageFiles.length === 0) return;
+        const img = await loadImage(imageFiles[currentIndex]);
+        const aspectRatio = img.width / img.height;
+        const w = parseInt(upscaleWidthInput.value, 10);
+        const h = parseInt(upscaleHeightInput.value, 10);
+
+        if (source === 'width' && w > 0) upscaleHeightInput.value = Math.round(w / aspectRatio);
+        else if (source === 'height' && h > 0) upscaleWidthInput.value = Math.round(h * aspectRatio);
+        else if (w > 0) upscaleHeightInput.value = Math.round(w / aspectRatio);
+    }
+
+    async function refreshUpscalePreview() {
+        if (imageFiles.length === 0) {
+            upscaleOriginalResolution.textContent = 'No images loaded.';
+            upscaleOutputPreview.textContent = 'Output preview: —';
+            upscaleWarningBox.classList.add('hidden');
+            return;
+        }
+
+        try {
+            const img = await loadImage(imageFiles[currentIndex]);
+            const srcW = img.width;
+            const srcH = img.height;
+            upscaleOriginalResolution.textContent =
+                `Current image: ${srcW} × ${srcH} px · Batch: ${imageFiles.length} image${imageFiles.length === 1 ? '' : 's'}`;
+
+            const target = computeUpscaleTargetSize(srcW, srcH);
+            const mp = (target.appliedW * target.appliedH) / 1_000_000;
+            upscaleOutputPreview.textContent =
+                `Output preview: ${target.appliedW} × ${target.appliedH} px (${mp.toFixed(2)} MP)` +
+                (target.clamped ? ' — clamped to browser limit' : '');
+
+            const maxFactor = Math.max(target.scaleX, target.scaleY);
+            const warnings = [];
+            if (target.clamped) {
+                warnings.push(
+                    `Ideal size ${target.idealW} × ${target.idealH} exceeds browser canvas limits. Will clamp to ${target.appliedW} × ${target.appliedH}.`
+                );
+            }
+            if (maxFactor >= 4) {
+                warnings.push(`Large ${maxFactor.toFixed(2)}× upscale — bicubic cannot invent real detail; expect softness.`);
+            } else if (maxFactor >= 2) {
+                warnings.push(`${maxFactor.toFixed(2)}× upscale uses interpolated pixels. Fine for size, soft on fine detail.`);
+            }
+            if (mp >= 36) {
+                warnings.push(`Very high output (~${mp.toFixed(1)} MP). Batch processing may be slow and memory-heavy.`);
+            } else if (mp >= 16) {
+                warnings.push(`High output (~${mp.toFixed(1)} MP). Expect longer processing per image.`);
+            }
+            if (target.appliedW < srcW && target.appliedH < srcH) {
+                warnings.push('Target is smaller than the source — this will downscale, not upscale.');
+            }
+
+            if (warnings.length) {
+                upscaleWarningBox.classList.remove('hidden');
+                upscaleWarningBox.classList.toggle('danger', target.clamped || maxFactor >= 4 || mp >= 36);
+                upscaleWarningBox.innerHTML = warnings.map((w) => `<div>${w}</div>`).join('');
+            } else {
+                upscaleWarningBox.classList.add('hidden');
+                upscaleWarningBox.innerHTML = '';
+            }
+        } catch (err) {
+            console.error(err);
+            upscaleOriginalResolution.textContent = 'Could not read current image size.';
+        }
+    }
+
+    async function handleUpscaleGeneration() {
+        if (imageFiles.length === 0 || upscaleRunning) return;
+
+        upscaleCancelRequested = false;
+        upscaleRunning = true;
+        upscaleGenerateBtn.disabled = true;
+        upscaleGenerateBtn.textContent = 'Processing…';
+        upscaleCancelBtn.classList.remove('hidden');
+        upscaleCancelBtn.disabled = false;
+        upscaleCancelBtn.textContent = 'Cancel';
+        upscaleErrorMessage.textContent = '';
+        upscaleProgressContainer.classList.remove('hidden');
+        setUpscaleBatchProgress(0, `Starting batch of ${imageFiles.length}…`);
+        setUpscaleImageProgress(0, 'Preparing…');
+        showStatus(upscaleStatus, 'Upscaling with bicubic…', false, true);
+
+        const zip = new JSZip();
+        const format = upscaleFormatSelect.value;
+        const quality = parseInt(upscaleQualitySlider.value, 10) / 100;
+        const ext = getFileExtension(format);
+        const prefix = upscalePrefixInput.value || '';
+        const suffix = upscaleSuffixInput.value || '';
+        const applyTitles = upscaleApplyTitlesToggle.checked;
+        const useSubfolders = upscaleUseSubfoldersToggle.checked;
+
+        let processed = 0;
+        let failed = 0;
+
+        try {
+            for (let i = 0; i < imageFiles.length; i++) {
+                if (upscaleCancelRequested) break;
+
+                const title = imageTitles[i] || imageFiles[i].name;
+                upscaleImageLabel.textContent = `Image ${i + 1} of ${imageFiles.length}`;
+                setUpscaleBatchProgress(
+                    (processed / imageFiles.length) * 100,
+                    `Processing ${i + 1}/${imageFiles.length}: ${title}`
+                );
+                setUpscaleImageProgress(0, 'Loading…');
+                await yieldToUI();
+
+                try {
+                    const sourceOptions = getTitleOptionsFromUI();
+                    sourceOptions.addTitle = applyTitles;
+                    const sourceImage = await getProcessedImage(imageFiles[i], imageTitles[i], sourceOptions);
+
+                    const target = computeUpscaleTargetSize(sourceImage.width, sourceImage.height);
+                    setUpscaleImageProgress(
+                        3,
+                        `Bicubic → ${target.appliedW} × ${target.appliedH}` +
+                        (target.clamped ? ' (clamped)' : '')
+                    );
+                    await yieldToUI();
+
+                    const upscaled = await resizeImageBicubicWithProgress(
+                        sourceImage,
+                        target.appliedW,
+                        target.appliedH,
+                        (p) => {
+                            const pct = Math.round(p * 100);
+                            setUpscaleImageProgress(
+                                pct,
+                                pct < 100
+                                    ? `Upscaling rows… ${pct}%`
+                                    : 'Encoding…'
+                            );
+                            const overall = ((processed + p) / imageFiles.length) * 100;
+                            setUpscaleBatchProgress(
+                                overall,
+                                `Processing ${i + 1}/${imageFiles.length}: ${title} (${pct}%)`
+                            );
+                        }
+                    );
+
+                    if (upscaleCancelRequested) break;
+
+                    setUpscaleImageProgress(97, 'Creating file…');
+                    await yieldToUI();
+                    const blob = await new Promise((resolve, reject) => {
+                        upscaled.toBlob((b) => (b ? resolve(b) : reject(new Error('Failed to encode image'))), format, quality);
+                    });
+
+                    let baseName = imageTitles[i];
+                    baseName = applySpacing(baseName, upscaleSpacingSelect.value);
+                    const finalName = `${prefix}${baseName}${suffix}${ext}`;
+
+                    if (useSubfolders && imageFolders[i] !== '(Root)') {
+                        zip.folder(imageFolders[i]).file(finalName, blob);
+                    } else {
+                        zip.file(finalName, blob);
+                    }
+
+                    processed++;
+                    setUpscaleImageProgress(100, `Done — ${target.appliedW} × ${target.appliedH}`);
+                    setUpscaleBatchProgress(
+                        (processed / imageFiles.length) * 100,
+                        `Finished ${processed}/${imageFiles.length}`
+                    );
+                } catch (imgErr) {
+                    if (imgErr.message === 'Cancelled') throw imgErr;
+                    failed++;
+                    processed++;
+                    console.error(`Upscale failed for ${imageFiles[i].name}:`, imgErr);
+                    setUpscaleImageProgress(100, `Failed: ${imgErr.message}`);
+                    setUpscaleBatchProgress(
+                        (processed / imageFiles.length) * 100,
+                        `Finished ${processed}/${imageFiles.length} (${failed} failed)`
+                    );
+                }
+            }
+
+            if (upscaleCancelRequested) {
+                const ok = processed - failed;
+                showStatus(upscaleStatus, `Cancelled after ${ok} image(s). Partial ZIP not downloaded.`, true);
+                setUpscaleBatchProgress(
+                    (processed / imageFiles.length) * 100,
+                    `Cancelled — ${processed}/${imageFiles.length} processed`
+                );
+            } else {
+                setUpscaleBatchProgress(100, 'Building ZIP…');
+                setUpscaleImageProgress(100, 'Packaging download…');
+                await yieldToUI();
+
+                const zipBlob = await zip.generateAsync(
+                    { type: 'blob', streamFiles: true },
+                    (meta) => {
+                        const pct = Math.round(meta.percent || 0);
+                        setUpscaleImageProgress(pct, `Zipping… ${pct}%`);
+                    }
+                );
+
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(zipBlob);
+                link.download = 'batch_upscaled_images.zip';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+
+                const ok = processed - failed;
+                const msg = failed
+                    ? `Download started — ${ok} ok, ${failed} failed.`
+                    : `Download started! Upscaled ${ok} image(s).`;
+                showStatus(upscaleStatus, msg, failed > 0, false);
+                setUpscaleBatchProgress(100, 'Complete');
+                setUpscaleImageProgress(100, 'ZIP ready');
+            }
+        } catch (error) {
+            console.error('DEBUG: Upscale Error', error);
+            if (error.message === 'Cancelled') {
+                showStatus(upscaleStatus, 'Cancelled.', true);
+            } else {
+                showStatus(upscaleErrorMessage, error.message, true);
+                showStatus(upscaleStatus, 'Upscale failed.', true);
+            }
+        } finally {
+            upscaleRunning = false;
+            upscaleCancelRequested = false;
+            upscaleGenerateBtn.disabled = false;
+            upscaleGenerateBtn.textContent = 'Upscale & Download ZIP';
+            upscaleCancelBtn.classList.add('hidden');
+            upscaleCancelBtn.disabled = false;
+            upscaleCancelBtn.textContent = 'Cancel';
+            // Remove spinner from status if present
+            const loader = upscaleStatus.parentElement.querySelector('.loader-container');
+            if (loader) loader.remove();
         }
     }
 

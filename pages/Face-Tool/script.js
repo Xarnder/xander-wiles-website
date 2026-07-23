@@ -1526,6 +1526,11 @@ processBtn.addEventListener('click', async () => {
 
     // Restore preview so user can adjust and re-run
     previewCard.style.display = 'block';
+    if (firstImageCache && firstFaceBox) {
+        const title = previewCard.querySelector('h3');
+        if (title) title.innerText = 'Live Preview';
+        updatePreviewCanvas();
+    }
 });
 
 // 3. Core Logic for Batch
@@ -2069,7 +2074,8 @@ async function processImage(file, batchIndex) {
     }
 
     const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
-    const detections = await getDetections(img, false, processAll);
+    // Thorough detection for batch so crop/censor matches preview fallbacks
+    const detections = await getDetections(img, false, true);
 
     if (currentMode === 'censor') {
         const canvas = document.createElement('canvas');
@@ -2100,6 +2106,8 @@ async function processImage(file, batchIndex) {
                 edge: currentCensorEdge
             }, img);
         }
+
+        showLiveBatchPreview(canvas, `Processing [${batchIndex}]: ${file.name}`);
 
         const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'censored');
 
@@ -2155,6 +2163,8 @@ async function processImage(file, batchIndex) {
             }, img);
         }
 
+        showLiveBatchPreview(canvas, `Processing [${batchIndex}]: ${file.name}`);
+
         const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'framed');
 
         await new Promise((resolve) => {
@@ -2196,8 +2206,11 @@ async function processImage(file, batchIndex) {
             if (faceBox) {
                 log(`Inpainting face [${i + 1}/${facesToMagic.length}]...`, "info");
                 currentResult = await runMagicInpaint(currentResult, faceBox);
+                showLiveBatchPreview(currentResult, `Magic [${batchIndex}/${facesToMagic.length}]: ${file.name}`);
             }
         }
+
+        showLiveBatchPreview(currentResult, `Processing [${batchIndex}]: ${file.name}`);
 
         const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'magic');
 
@@ -2256,6 +2269,8 @@ async function processImage(file, batchIndex) {
             }
         }
 
+        showLiveBatchPreview(canvas, `Processing [${batchIndex}]: ${file.name}`);
+
         const finalFileName = generateOutputName(file.name, 0, 1, batchIndex, 'replaced');
 
         await new Promise((resolve) => {
@@ -2278,17 +2293,24 @@ async function processImage(file, batchIndex) {
             }, 'image/jpeg', 0.95);
         });
     } else if (currentMode === 'feature') {
-        const detections = await getDetections(img, true, processAll);
-        const processAll = processAllFacesInput ? processAllFacesInput.checked : false;
+        const landmarkDetections = await getDetections(img, true, true);
 
-        if (!detections || detections.length === 0) {
+        if (!landmarkDetections || landmarkDetections.length === 0) {
             log(`No faces detected in ${file.name} for feature extraction.`, "warning");
             createErrorCard(file.name);
             return;
         }
 
-        const largest = getLargestFace(detections);
-        const facesToProcess = processAll ? detections : (largest ? [largest] : []);
+        const largest = getLargestFace(landmarkDetections.filter(d => d.landmarks) || landmarkDetections);
+        const facesToProcess = processAll
+            ? landmarkDetections.filter(d => d.landmarks)
+            : (largest && largest.landmarks ? [largest] : []);
+
+        if (!facesToProcess.length) {
+            log(`No landmark data for feature extraction in ${file.name}.`, "warning");
+            createErrorCard(file.name);
+            return;
+        }
 
         for (let i = 0; i < facesToProcess.length; i++) {
             const landmarks = facesToProcess[i].landmarks;
@@ -2333,6 +2355,8 @@ async function processImage(file, batchIndex) {
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
 
+                showLiveBatchPreview(canvas, `Feature ${feature.name} [${batchIndex}]: ${file.name}`);
+
                 await new Promise((resolve) => {
                     canvas.toBlob((blob) => {
                         if (blob) {
@@ -2365,14 +2389,39 @@ async function processImage(file, batchIndex) {
             facesToCrop = processAll ? detections.map(d => d.box) : (largest ? [largest.box] : []);
         }
 
+        // Overview preview: full image with all crop boxes when processing multiple faces
+        if (facesToCrop.length > 1) {
+            const overview = document.createElement('canvas');
+            overview.width = img.width;
+            overview.height = img.height;
+            const octx = overview.getContext('2d');
+            octx.drawImage(img, 0, 0);
+            octx.lineWidth = Math.max(2, Math.round(Math.min(img.width, img.height) / 200));
+            octx.setLineDash([10, 8]);
+            facesToCrop.forEach((faceBox, index) => {
+                const rect = calculateCropRect(img, faceBox);
+                octx.strokeStyle = index === 0 ? '#fbbf24' : '#00f5ff';
+                octx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+            });
+            showLiveBatchPreview(overview, `Cropping ${facesToCrop.length} faces [${batchIndex}]: ${file.name}`);
+            await new Promise(r => setTimeout(r, 120));
+        }
+
         for (let i = 0; i < facesToCrop.length; i++) {
             const faceBox = facesToCrop[i];
             const rect = calculateCropRect(img, faceBox);
             const canvas = document.createElement('canvas');
-            canvas.width = rect.width;
-            canvas.height = rect.height;
+            canvas.width = Math.max(1, Math.round(rect.width));
+            canvas.height = Math.max(1, Math.round(rect.height));
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+            ctx.drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
+
+            showLiveBatchPreview(
+                canvas,
+                facesToCrop.length > 1
+                    ? `Crop ${i + 1}/${facesToCrop.length} [${batchIndex}]: ${file.name}`
+                    : `Cropping [${batchIndex}]: ${file.name}`
+            );
 
             await new Promise((resolve) => {
                 canvas.toBlob((blob) => {
@@ -2383,8 +2432,8 @@ async function processImage(file, batchIndex) {
                             blob: blob,
                             isError: rect.isError,
                             originalFile: file,
-                            outputWidth: rect.width,
-                            outputHeight: rect.height,
+                            outputWidth: canvas.width,
+                            outputHeight: canvas.height,
                             cropWidth: rect.width,
                             cropHeight: rect.height,
                             cropX: rect.x,
@@ -2525,9 +2574,13 @@ async function updatePreviewCanvas() {
     if (!firstImageCache || !firstFaceBox) return;
 
     const multi = processAllFacesInput ? processAllFacesInput.checked : false;
-    const detections = await getDetections(firstImageCache, false, multi);
+    // Always use thorough detection so preview matches batch (MediaPipe/YOLO fallbacks)
+    const detections = await getDetections(firstImageCache, false, true);
 
     const ctx = previewCanvas.getContext('2d');
+    const skeleton = document.getElementById('previewSkeleton');
+    if (skeleton) skeleton.style.display = 'none';
+    if (previewLoader) previewLoader.style.display = 'none';
 
     if (currentMode === 'censor') {
         previewCanvas.width = firstImageCache.width;
@@ -2627,24 +2680,29 @@ async function updatePreviewCanvas() {
             }
         }
     } else if (currentMode === 'feature') {
-        const detections = await faceapi.detectAllFaces(firstImageCache).withFaceLandmarks();
-        const multi = processAllFacesInput ? processAllFacesInput.checked : false;
+        const landmarkDetections = await getDetections(firstImageCache, true, true);
         
         previewCanvas.width = firstImageCache.width;
         previewCanvas.height = firstImageCache.height;
         ctx.drawImage(firstImageCache, 0, 0);
 
-        if (detections && detections.length > 0) {
-            const facesToPreview = multi ? detections : [detections.sort((a,b) => (b.detection.box.width * b.detection.box.height) - (a.detection.box.width * a.detection.box.height))[0]];
+        if (landmarkDetections && landmarkDetections.length > 0) {
+            const facesToPreview = multi
+                ? landmarkDetections.filter(d => d.landmarks)
+                : (() => {
+                    const largest = getLargestFace(landmarkDetections.filter(d => d.landmarks));
+                    return largest ? [largest] : [];
+                })();
             
             ctx.strokeStyle = '#00ff00';
-            ctx.lineWidth = 8;
+            ctx.lineWidth = Math.max(2, Math.round(Math.min(firstImageCache.width, firstImageCache.height) / 200));
             ctx.setLineDash([12, 12]);
             ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
             ctx.shadowBlur = 4;
 
             for (const face of facesToPreview) {
                 const landmarks = face.landmarks;
+                if (!landmarks) continue;
                 const features = [];
                 if (cropEyesInput.checked) {
                     if (combineFeaturesInput.checked) {
@@ -2681,13 +2739,82 @@ async function updatePreviewCanvas() {
             ctx.setLineDash([]);
         }
     } else {
-        // Crop Mode Preview (Always shows the first/largest detected face)
-        const faceBox = (detections && detections.length > 0) ? (multi ? detections[0].box : getLargestFace(detections).box) : null;
-        const rect = calculateCropRect(firstImageCache, faceBox);
-        previewCanvas.width = rect.width;
-        previewCanvas.height = rect.height;
-        ctx.drawImage(firstImageCache, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
+        // Crop / Vertical Mode Preview
+        let facesToPreview = [];
+        if (!detections || detections.length === 0) {
+            facesToPreview = [null];
+        } else {
+            const largest = getLargestFace(detections);
+            facesToPreview = multi ? detections.map(d => d.box) : (largest ? [largest.box] : []);
+        }
+
+        if (multi && facesToPreview.length > 1) {
+            // Show full image with all crop regions outlined (batch crop preview)
+            previewCanvas.width = firstImageCache.width;
+            previewCanvas.height = firstImageCache.height;
+            ctx.drawImage(firstImageCache, 0, 0);
+
+            ctx.lineWidth = Math.max(2, Math.round(Math.min(firstImageCache.width, firstImageCache.height) / 200));
+            ctx.setLineDash([10, 8]);
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+            ctx.shadowBlur = 4;
+
+            facesToPreview.forEach((faceBox, index) => {
+                const rect = calculateCropRect(firstImageCache, faceBox);
+                ctx.strokeStyle = index === 0 ? '#fbbf24' : '#00f5ff';
+                ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.font = `${Math.max(14, Math.round(ctx.lineWidth * 6))}px Outfit, sans-serif`;
+                ctx.shadowBlur = 0;
+                ctx.setLineDash([]);
+                ctx.fillText(String(index + 1), rect.x + 8, rect.y + Math.max(18, ctx.lineWidth * 8));
+                ctx.setLineDash([10, 8]);
+                ctx.shadowBlur = 4;
+            });
+
+            ctx.shadowBlur = 0;
+            ctx.setLineDash([]);
+        } else {
+            // Single-face crop: show the exact cropped output
+            const faceBox = facesToPreview[0] || null;
+            const rect = calculateCropRect(firstImageCache, faceBox);
+            const outW = Math.max(1, Math.round(rect.width));
+            const outH = Math.max(1, Math.round(rect.height));
+            previewCanvas.width = outW;
+            previewCanvas.height = outH;
+            ctx.drawImage(
+                firstImageCache,
+                rect.x, rect.y, rect.width, rect.height,
+                0, 0, outW, outH
+            );
+        }
     }
+}
+
+/** Live preview while batch-processing each file (matches video behaviour). */
+function showLiveBatchPreview(source, titleText) {
+    if (!previewCanvas || !previewCard || !source) return;
+
+    const w = source.width || source.videoWidth || 0;
+    const h = source.height || source.videoHeight || 0;
+    if (!w || !h) return;
+
+    previewCard.style.display = 'block';
+    if (previewLoader) previewLoader.style.display = 'none';
+    const skeleton = document.getElementById('previewSkeleton');
+    if (skeleton) skeleton.style.display = 'none';
+
+    const title = previewCard.querySelector('h3');
+    if (title && titleText) title.innerText = titleText;
+
+    if (previewCanvas.width !== w || previewCanvas.height !== h) {
+        previewCanvas.width = w;
+        previewCanvas.height = h;
+    }
+
+    const ctx = previewCanvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(source, 0, 0, w, h);
 }
 
 // 5. Lightbox Logic
