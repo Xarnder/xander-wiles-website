@@ -155,6 +155,36 @@ body {
     min-height: 1.2em;
 }
 
+.dual-base-summary {
+    width: 100%;
+    max-width: 430px;
+    padding: 1rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: rgba(0, 0, 0, 0.16);
+}
+
+.base-upload-summary {
+    margin: 0.6rem auto !important;
+    font-size: 0.9rem;
+}
+
+.base-upload-summary.loaded {
+    color: var(--accent-cyan) !important;
+    font-weight: 600;
+}
+
+.base-pair-warning {
+    margin: 0.75rem auto 0 !important;
+    padding: 0.7rem;
+    border: 1px solid rgba(251, 191, 36, 0.45);
+    border-radius: var(--radius-md);
+    background: rgba(251, 191, 36, 0.1);
+    color: #fde68a !important;
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
 .canvas-container {
     width: 100%;
     margin: 1rem 0;
@@ -315,6 +345,52 @@ input[type="color"]::-webkit-color-swatch {
 }
 .preview-box .action-btn {
     margin-top: 1rem;
+}
+
+/* --- Final base selection --- */
+.base-choice-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+    max-width: 650px;
+    margin: 1.5rem auto 0;
+}
+
+.base-choice-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 1.4rem;
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.base-choice-card:hover {
+    border-color: var(--accent-cyan);
+    background: rgba(6, 182, 212, 0.08);
+    transform: translateY(-2px);
+}
+
+.base-choice-title {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.base-choice-size {
+    color: var(--accent-cyan);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.base-choice-crop {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
 }
 
 /* --- Scale Base Step --- */
@@ -745,6 +821,14 @@ input[type="color"]::-webkit-color-swatch {
 .modal-actions .small-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-primary);
+}
+
+.final-replace-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.6rem;
+    width: 100%;
 }
 
 /* --- Curve Editor Styles --- */

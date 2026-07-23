@@ -3,6 +3,9 @@
 document.addEventListener('DOMContentLoaded', () => {
   // --- GLOBAL STATE ---
   let numImages = 2, imagesData = [], activeSlider = null, lastMagnifyEvent = null;
+  let pixelViewEnabled = false;
+  // Show the Smooth/Pixel toggle when any image is short enough that the preview upscales it.
+  const LOW_RES_MAX_EDGE = 640;
 
   const BLEND_MODES = [
     'normal','multiply','screen','overlay','darken','lighten','color-dodge','color-burn',
@@ -33,6 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const resetToolBtn = document.getElementById('reset-tool-btn');
   const fullscreenBtn = document.getElementById('fullscreen-btn');
   const comparisonContainer = document.getElementById('comparison-container');
+  const upscaleModeControl = document.getElementById('upscale-mode-control');
+  const pixelViewToggle = document.getElementById('pixel-view-toggle');
   
   // Selects the links ONLY from the tool's navigation bar
   const navLinks = document.querySelectorAll('.tool-nav .nav-link'); 
@@ -140,6 +145,75 @@ document.addEventListener('DOMContentLoaded', () => {
     window.open(url, '_blank', 'noopener');
   }
 
+  // --- PREVIEW UPSCALING MODE (bicubic vs nearest-neighbor / pixel) ---
+  const isImageLowRes = (imgData) => {
+    if (!imgData) return false;
+    const longest = Math.max(imgData.naturalWidth, imgData.naturalHeight);
+    return longest <= LOW_RES_MAX_EDGE;
+  };
+
+  const hasLowResImages = () => imagesData.some(isImageLowRes);
+
+  const applyUpscaleMode = () => {
+    comparisonContainer.classList.toggle('rendering-pixelated', pixelViewEnabled);
+    upscaleModeControl.classList.toggle('pixel-active', pixelViewEnabled);
+    if (pixelViewToggle) pixelViewToggle.checked = pixelViewEnabled;
+  };
+
+  const updateUpscaleModeControl = () => {
+    const show = hasLowResImages() && imagesData.some(Boolean);
+    upscaleModeControl.classList.toggle('hidden', !show);
+    if (!show) {
+      pixelViewEnabled = false;
+    }
+    applyUpscaleMode();
+  };
+
+  const formatResolution = (w, h) => `${w.toLocaleString()} × ${h.toLocaleString()}`;
+
+  const truncateFilename = (name, max = 14) => {
+    if (!name) return '';
+    if (name.length <= max) return name;
+    const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';
+    const base = name.slice(0, Math.max(1, max - ext.length - 1));
+    return `${base}…${ext}`;
+  };
+
+  const updateUploadSlotDisplay = (index, { converting = false, failed = false } = {}) => {
+    const label = document.querySelector(`label[for="img-upload-${index}"]`);
+    if (!label) return;
+
+    const nameEl = label.querySelector('.upload-filename');
+    const resEl = label.querySelector('.upload-resolution');
+    if (!nameEl || !resEl) return;
+
+    if (converting) {
+      nameEl.textContent = 'Converting HEIC...';
+      resEl.textContent = '';
+      label.classList.remove('uploaded');
+      return;
+    }
+    if (failed) {
+      nameEl.textContent = 'Conversion Failed!';
+      resEl.textContent = '';
+      label.classList.remove('uploaded');
+      return;
+    }
+
+    const data = imagesData[index];
+    if (!data) {
+      nameEl.textContent = `Image ${index + 1}`;
+      resEl.textContent = '';
+      label.classList.remove('uploaded');
+      return;
+    }
+
+    nameEl.textContent = `✓ ${truncateFilename(data.filename)}`;
+    resEl.textContent = formatResolution(data.naturalWidth, data.naturalHeight);
+    label.classList.add('uploaded');
+    label.title = `${data.filename} — ${formatResolution(data.naturalWidth, data.naturalHeight)}`;
+  };
+
   // --- SETUP UI ---
   const setupUI = (preserveData = false) => {
     const requestedNum = parseInt(imageCountInput.value);
@@ -166,7 +240,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const box = document.createElement('div');
       box.className = 'upload-box';
       box.innerHTML = `
-        <label for="img-upload-${i}">Image ${i + 1}</label>
+        <label for="img-upload-${i}">
+          <span class="upload-filename">Image ${i + 1}</span>
+          <span class="upload-resolution"></span>
+        </label>
         <input type="file" id="img-upload-${i}" data-index="${i}" accept="image/*,.heic,.heif">
         <button class="remove-img-btn" data-index="${i}" title="Remove this image">&times;</button>
       `;
@@ -187,11 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         removeImage(parseInt(e.target.dataset.index));
       });
 
-      if (imagesData[i]) {
-        const label = box.querySelector('label');
-        label.textContent = `✓ ${imagesData[i].filename.substring(0, 10)}...`;
-        label.classList.add('uploaded');
-      }
+      if (imagesData[i]) updateUploadSlotDisplay(i);
     }
 
     // magnify base + loupe
@@ -286,6 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSliders();
 
     const loadedCount = imagesData.filter(Boolean).length;
+    updateUpscaleModeControl();
     if (loadedCount >= 2) {
       updateFadeSelectors();
       updateHeatmapSelectors();
@@ -399,8 +473,6 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const processAndLoadImage = (file, index) => {
-    const label = document.querySelector(`label[for="img-upload-${index}"]`);
-
     const processFileBlob = (fileBlob) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -415,8 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
             filename: file.name
           };
 
-          label.textContent = `✓ ${file.name.substring(0, 10)}...`;
-          label.classList.add('uploaded');
+          updateUploadSlotDisplay(index);
 
           const splitImg = document.getElementById(`split-img-${index}`);
           splitImg.src = imageUrl;
@@ -432,6 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
 
           comparisonContainer.classList.remove('hidden');
+          updateUpscaleModeControl();
 
           const loadedImages = imagesData.filter(Boolean);
           if (loadedImages.length >= 2) {
@@ -453,12 +525,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (looksHeic) {
       if (window.heic2any) {
-        label.textContent = 'Converting HEIC...';
+        updateUploadSlotDisplay(index, { converting: true });
         window.heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 })
           .then(processFileBlob)
           .catch(err => {
             console.error("HEIC Conversion Error:", err);
-            label.textContent = 'Conversion Failed!';
+            updateUploadSlotDisplay(index, { failed: true });
             showErrorPopup('HEIC Conversion Failed', 'The HEIC file could not be converted (unsupported or corrupted).');
           });
       } else {
@@ -892,6 +964,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setupUI(false);
   });
   fullscreenBtn.addEventListener('click', toggleFullscreen);
+  const setPixelView = (enabled) => {
+    pixelViewEnabled = enabled;
+    applyUpscaleMode();
+  };
+  pixelViewToggle.addEventListener('change', () => setPixelView(pixelViewToggle.checked));
+  document.getElementById('upscale-smooth-btn').addEventListener('click', () => setPixelView(false));
+  document.getElementById('upscale-pixel-btn').addEventListener('click', () => setPixelView(true));
   directoryUploadInput.addEventListener('change', handleDirectoryUpload);
 
   window.addEventListener('dragover', (e) => e.preventDefault());

@@ -51,25 +51,33 @@
     </header>
 
     <main class="app-container">
-        <!-- Step 1: Upload Original Image -->
+        <!-- Step 1: Upload base images -->
         <section id="upload-step" class="glass-card">
             <h2>Step 1: Start Project</h2>
-            <p>Select the full-size original image to begin.</p>
+            <p>Upload the high-resolution base image used for crop selection. You can also add an optional low-resolution version of the same image.</p>
 
             <div class="centered-content">
                 <!-- Initial Upload Button -->
                 <div id="initial-upload-container">
-                    <label for="image-upload" class="action-btn">Upload Original Image</label>
+                    <label for="image-upload" class="action-btn">Upload High-Resolution Base</label>
                     <input type="file" id="image-upload" accept="image/*" style="display:none;" />
                 </div>
 
                 <!-- Post-Upload Actions (Hidden until image is selected) -->
                 <div id="step1-actions" class="hidden"
                     style="display: flex; flex-direction: column; gap: 1rem; align-items: center; margin-top: 1.5rem;">
-                    <p style="color: var(--accent-cyan); font-weight: 600;">Image Loaded!</p>
+                    <div class="dual-base-summary">
+                        <p id="high-base-summary" class="base-upload-summary loaded">High-resolution base loaded</p>
+                        <label for="low-res-image-upload" class="action-btn small-btn">
+                            Add Optional Low-Resolution Base
+                        </label>
+                        <input type="file" id="low-res-image-upload" accept="image/*" style="display:none;" />
+                        <p id="low-base-summary" class="base-upload-summary">No low-resolution base added.</p>
+                        <p id="base-pair-warning" class="base-pair-warning hidden"></p>
+                    </div>
 
                     <button id="start-new-crop-btn" class="action-btn" style="width: 100%; max-width: 250px;">
-                        Start New Crop
+                        Start Crop on High-Resolution Base
                     </button>
 
                     <div style="display: flex; align-items: center; width: 100%; max-width: 250px; gap: 10px;">
@@ -131,10 +139,11 @@
 
                 <div class="btn-group-vertical">
                     <div class="btn-group">
-                        <button id="step2-dl-img" class="action-btn small-btn" disabled>1. Download Image</button>
-                        <button id="step2-dl-json" class="action-btn small-btn" disabled>2. Download JSON</button>
+                        <button id="step2-dl-img" class="action-btn small-btn" disabled>Download High-Res Crop</button>
+                        <button id="step2-dl-low-img" class="action-btn small-btn hidden" disabled>Download Low-Res Crop</button>
+                        <button id="step2-dl-json" class="action-btn small-btn" disabled>Download Project JSON</button>
                     </div>
-                    <button id="step2-next" class="action-btn" disabled>3. Continue to Next Step &rarr;</button>
+                    <button id="step2-next" class="action-btn" disabled>Continue to Next Step &rarr;</button>
                 </div>
             </div>
         </section>
@@ -151,13 +160,14 @@
                     </div>
                 </div>
                 <div class="preview-box">
-                    <h3>Your Cropped Image</h3>
+                    <h3>Your High-Resolution Crop</h3>
                     <div class="canvas-container">
                         <canvas id="cropped-preview-canvas"></canvas>
                     </div>
                     <div class="btn-group">
-                        <button id="step3-dl-img" class="action-btn small-btn">Download Image</button>
-                        <button id="step3-dl-json" class="action-btn small-btn">Download JSON</button>
+                        <button id="step3-dl-img" class="action-btn small-btn">Download High-Res Crop</button>
+                        <button id="step3-dl-low-img" class="action-btn small-btn hidden">Download Low-Res Crop</button>
+                        <button id="step3-dl-json" class="action-btn small-btn">Download Project JSON</button>
                     </div>
                 </div>
             </div>
@@ -188,9 +198,31 @@
             <p id="re-upload-status" class="status-message"></p>
         </section>
 
+        <!-- Step 3.6: Choose output base -->
+        <section id="base-choice-step" class="glass-card hidden">
+            <h2>Step 3.6: Choose Final Base Resolution</h2>
+            <p>Choose which base image should be used for blending and final export. The crop coordinates will be mapped from the high-resolution selection.</p>
+            <div class="base-choice-grid">
+                <button id="choose-high-base-btn" class="base-choice-card" type="button">
+                    <span class="base-choice-title">High-Resolution Base</span>
+                    <span id="choose-high-base-size" class="base-choice-size">—</span>
+                    <span id="choose-high-crop-size" class="base-choice-crop">Crop region: —</span>
+                </button>
+                <button id="choose-low-base-btn" class="base-choice-card hidden" type="button">
+                    <span class="base-choice-title">Low-Resolution Base</span>
+                    <span id="choose-low-base-size" class="base-choice-size">—</span>
+                    <span id="choose-low-crop-size" class="base-choice-crop">Crop region: —</span>
+                </button>
+            </div>
+            <button id="cancel-base-choice-btn" class="action-btn small-btn"
+                style="display:block; margin: 1rem auto 0; background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted);">
+                ← Back to Edited Image
+            </button>
+        </section>
+
         <!-- Step 3.6: Scale base to match uploaded crop resolution -->
         <section id="scale-base-step" class="glass-card hidden">
-            <h2>Step 3.6: Scale Base to Crop Resolution</h2>
+            <h2>Step 3.7: Scale Base to Crop Resolution</h2>
             <p id="scale-base-intro">
                 The uploaded crop is a different resolution than the original crop region.
                 You can upscale or downscale the base image so the crop region matches the new resolution.
@@ -512,6 +544,17 @@
                         <button id="back-to-step3-btn" class="action-btn"
                             style="background: var(--bg-secondary); border: 1px solid var(--glass-border);">Change Edited
                             Image</button>
+                        <div class="final-replace-controls">
+                            <label for="final-overlay-upload" class="action-btn small-btn">
+                                Replace Cropped Image
+                            </label>
+                            <input type="file" id="final-overlay-upload" accept="image/*" style="display:none;" />
+                            <label for="final-base-upload" class="action-btn small-btn">
+                                Replace Base Image
+                            </label>
+                            <input type="file" id="final-base-upload" accept="image/*" style="display:none;" />
+                        </div>
+                        <p id="final-replace-status" class="status-message"></p>
                         <button id="swap-images-btn" class="action-btn"
                             style="background: var(--bg-secondary); border: 1px solid var(--accent-purple);">Swap Base & Overlay</button>
                         <div class="btn-group" style="width: 100%;">

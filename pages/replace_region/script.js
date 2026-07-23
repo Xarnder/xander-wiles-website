@@ -1,10 +1,16 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- STATE MANAGEMENT ---
     const state = {
+        highResImage: null,
+        lowResImage: null,
+        highResFilename: 'image',
+        lowResFilename: '',
         originalImage: null,
         originalFilename: 'image',
         editedImage: null,
         cropRect: null, // { x, y, width, height }
+        highResCropRect: null, // Canonical crop coordinates, always relative to highResImage
+        selectedBaseKind: 'high', // 'high' | 'low' | 'custom' | 'scaled'
 
         // Layers for Step 4 (Masking)
         maskCanvas: null,
@@ -73,6 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Pending base-scale plan when uploaded crop resolution differs
         scalePlan: null,
+        scaleOrigin: 'step3',
+        previousEditedImage: null,
 
         // Reused offscreen buffers (avoid allocating full canvases every redraw)
         _revealedEditCanvas: null,
@@ -165,6 +173,58 @@ document.addEventListener('DOMContentLoaded', () => {
         const canvas = createSafeCanvas(targetW * scale, targetH * scale);
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
         return canvas;
+    }
+
+    function cloneRect(rect) {
+        return rect ? {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height
+        } : null;
+    }
+
+    function mapCropRectBetweenImages(rect, sourceImage, targetImage) {
+        if (!rect || !sourceImage || !targetImage) return null;
+        const scaleX = targetImage.width / sourceImage.width;
+        const scaleY = targetImage.height / sourceImage.height;
+        const x = Math.max(0, Math.round(rect.x * scaleX));
+        const y = Math.max(0, Math.round(rect.y * scaleY));
+        const right = Math.min(targetImage.width, Math.round((rect.x + rect.width) * scaleX));
+        const bottom = Math.min(targetImage.height, Math.round((rect.y + rect.height) * scaleY));
+        return {
+            x,
+            y,
+            width: Math.max(1, right - x),
+            height: Math.max(1, bottom - y)
+        };
+    }
+
+    function getCropRectForBase(baseImage) {
+        const highImage = state.highResImage || state.originalImage;
+        const highCrop = state.highResCropRect || state.cropRect;
+        if (!highImage || !highCrop || !baseImage) return null;
+        return mapCropRectBetweenImages(highCrop, highImage, baseImage);
+    }
+
+    function aspectRatioDifference(imageA, imageB) {
+        if (!imageA || !imageB || !imageA.height || !imageB.height) return 0;
+        const a = imageA.width / imageA.height;
+        const b = imageB.width / imageB.height;
+        return Math.abs(a - b) / Math.max(a, b);
+    }
+
+    function activateBaseImage(image, kind, filename) {
+        if (!image) return false;
+        const mappedCrop = getCropRectForBase(image);
+        if (!mappedCrop) return false;
+        state.originalImage = image;
+        state.originalFilename = filename || state.highResFilename || 'image';
+        state.selectedBaseKind = kind;
+        state.cropRect = mappedCrop;
+        state.userPaintLayer = null;
+        state.tempStrokeLayer = null;
+        return true;
     }
 
     function formatRes(w, h) {
@@ -594,20 +654,47 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadStep.classList.add('hidden');
         cropStep.classList.add('hidden');
         reUploadStep.classList.add('hidden');
+        baseChoiceStep.classList.add('hidden');
         paintEditorStep.classList.add('hidden');
         maskStep.classList.add('hidden');
         if (scaleBaseStep) scaleBaseStep.classList.remove('hidden');
     }
 
-    function proceedWithEditedImage(editedImg, { checkScale = true } = {}) {
-        state.editedImage = editedImg;
+    function showBaseChoiceStep() {
+        const highImage = state.highResImage;
+        const lowImage = state.lowResImage;
+        if (!highImage || !state.highResCropRect) return;
+
+        const highCrop = getCropRectForBase(highImage);
+        if (chooseHighBaseSize) chooseHighBaseSize.textContent = formatRes(highImage.width, highImage.height);
+        if (chooseHighCropSize) chooseHighCropSize.textContent = `Crop region: ${formatRes(highCrop.width, highCrop.height)}`;
+
+        if (lowImage) {
+            const lowCrop = getCropRectForBase(lowImage);
+            chooseLowBaseBtn.classList.remove('hidden');
+            chooseLowBaseSize.textContent = formatRes(lowImage.width, lowImage.height);
+            chooseLowCropSize.textContent = `Crop region: ${formatRes(lowCrop.width, lowCrop.height)}`;
+        } else {
+            chooseLowBaseBtn.classList.add('hidden');
+        }
+
+        uploadStep.classList.add('hidden');
+        cropStep.classList.add('hidden');
+        reUploadStep.classList.add('hidden');
+        paintEditorStep.classList.add('hidden');
+        scaleBaseStep.classList.add('hidden');
+        maskStep.classList.add('hidden');
+        baseChoiceStep.classList.remove('hidden');
+    }
+
+    function continueWithSelectedBase(editedImg, checkScale = true) {
         if (checkScale) {
             const plan = buildScalePlan(editedImg);
             if (plan) {
                 showScaleBaseStep(plan);
                 return;
             }
-            // Same crop pixel size, but still warn if the overlay itself is huge.
+
             const risks = describeImageRisk(editedImg.width, editedImg.height, { label: 'Uploaded crop' });
             if (risks.length && reUploadStatus) {
                 const top = risks[0];
@@ -616,7 +703,36 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         state.scalePlan = null;
+        state.previousEditedImage = null;
         setupMasking();
+    }
+
+    function selectFinalBase(kind) {
+        const useLow = kind === 'low' && state.lowResImage;
+        const image = useLow ? state.lowResImage : state.highResImage;
+        const filename = useLow ? state.lowResFilename : state.highResFilename;
+        if (!activateBaseImage(image, useLow ? 'low' : 'high', filename)) {
+            alert('Could not map the crop region to the selected base image.');
+            return;
+        }
+        baseChoiceStep.classList.add('hidden');
+        continueWithSelectedBase(state.editedImage, true);
+    }
+
+    function proceedWithEditedImage(editedImg, { checkScale = true, source = 'step3' } = {}) {
+        state.scaleOrigin = source;
+        state.previousEditedImage = source === 'mask' ? state.editedImage : null;
+        state.editedImage = editedImg;
+
+        if (source === 'step3' && state.lowResImage) {
+            showBaseChoiceStep();
+            return;
+        }
+
+        if (source === 'step3') {
+            activateBaseImage(state.highResImage, 'high', state.highResFilename);
+        }
+        continueWithSelectedBase(editedImg, checkScale);
     }
 
     function setScaleActionButtonsDisabled(disabled) {
@@ -658,6 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const oldCrop = state.cropRect;
 
                 state.originalImage = scaledBase;
+                state.selectedBaseKind = 'scaled';
                 state.cropRect = {
                     x: Math.round(oldCrop.x * actualScaleX),
                     y: Math.round(oldCrop.y * actualScaleY),
@@ -668,6 +785,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.userPaintLayer = null;
                 state.tempStrokeLayer = null;
                 state.scalePlan = null;
+                state.previousEditedImage = null;
 
                 if (scaleBaseStatusEl) {
                     scaleBaseStatusEl.textContent =
@@ -709,6 +827,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const uploadStep = document.getElementById('upload-step');
     const cropStep = document.getElementById('crop-step');
     const reUploadStep = document.getElementById('re-upload-step');
+    const baseChoiceStep = document.getElementById('base-choice-step');
     const scaleBaseStep = document.getElementById('scale-base-step');
     const paintEditorStep = document.getElementById('paint-editor-step'); // Step 3.5
     const maskStep = document.getElementById('mask-step'); // Step 4
@@ -718,13 +837,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const step1Actions = document.getElementById('step1-actions');
     const startNewCropBtn = document.getElementById('start-new-crop-btn');
     const imageUploadInput = document.getElementById('image-upload');
+    const lowResImageUploadInput = document.getElementById('low-res-image-upload');
     const jsonUploadInput = document.getElementById('json-upload');
+    const highBaseSummary = document.getElementById('high-base-summary');
+    const lowBaseSummary = document.getElementById('low-base-summary');
+    const basePairWarning = document.getElementById('base-pair-warning');
 
     // Step 2
     const cropCanvas = document.getElementById('crop-canvas');
     const cropCtx = cropCanvas.getContext('2d');
     const aspectRatioSelect = document.getElementById('aspect-ratio-select');
     const step2DlImg = document.getElementById('step2-dl-img');
+    const step2DlLowImg = document.getElementById('step2-dl-low-img');
     const step2DlJson = document.getElementById('step2-dl-json');
     const step2Next = document.getElementById('step2-next');
 
@@ -732,7 +856,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const editedUploadInput = document.getElementById('edited-upload');
     const goToPaintEditorBtn = document.getElementById('go-to-paint-editor-btn');
     const step3DlImg = document.getElementById('step3-dl-img');
+    const step3DlLowImg = document.getElementById('step3-dl-low-img');
     const step3DlJson = document.getElementById('step3-dl-json');
+
+    // Step 3.6 — Choose final base
+    const chooseHighBaseBtn = document.getElementById('choose-high-base-btn');
+    const chooseLowBaseBtn = document.getElementById('choose-low-base-btn');
+    const cancelBaseChoiceBtn = document.getElementById('cancel-base-choice-btn');
+    const chooseHighBaseSize = document.getElementById('choose-high-base-size');
+    const chooseLowBaseSize = document.getElementById('choose-low-base-size');
+    const chooseHighCropSize = document.getElementById('choose-high-crop-size');
+    const chooseLowCropSize = document.getElementById('choose-low-crop-size');
 
     // Step 3.6 — Scale base to crop resolution
     const applyBaseScaleBtn = document.getElementById('apply-base-scale-btn');
@@ -777,6 +911,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveMaskBtn = document.getElementById('save-mask-btn');
     const backToStep3Btn = document.getElementById('back-to-step3-btn');
     const swapImagesBtn = document.getElementById('swap-images-btn');
+    const finalOverlayUploadInput = document.getElementById('final-overlay-upload');
+    const finalBaseUploadInput = document.getElementById('final-base-upload');
+    const finalReplaceStatus = document.getElementById('final-replace-status');
 
     // Step 4 Controls
     const brushBtn = document.getElementById('brush-btn');
@@ -864,14 +1001,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const img = await loadImageFromFile(file);
+            state.highResImage = img;
+            state.highResFilename = file.name;
+            state.lowResImage = null;
+            state.lowResFilename = '';
             state.originalImage = img;
+            state.originalFilename = file.name;
             state.maskCanvas = null;
             state.userPaintLayer = null; // Reset mask for new original image
             state.editedImage = null;
+            state.cropRect = null;
+            state.highResCropRect = null;
+            state.selectedBaseKind = 'high';
             state.workScale = 1;
             state.scalePlan = null;
             initialUploadContainer.classList.add('hidden');
             step1Actions.classList.remove('hidden');
+            highBaseSummary.textContent = `High-res: ${file.name} — ${formatRes(img.width, img.height)}`;
+            lowBaseSummary.textContent = 'No low-resolution base added.';
+            lowBaseSummary.classList.remove('loaded');
+            basePairWarning.classList.add('hidden');
+            step2DlLowImg.classList.add('hidden');
+            step3DlLowImg.classList.add('hidden');
             setImageRiskStatus(uploadStatus, img, 'Original image');
         } catch (err) {
             console.error(err);
@@ -879,9 +1030,45 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    lowResImageUploadInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file || !state.highResImage) return;
+        try {
+            const img = await loadImageFromFile(file);
+            state.lowResImage = img;
+            state.lowResFilename = file.name;
+            lowBaseSummary.textContent = `Low-res: ${file.name} — ${formatRes(img.width, img.height)}`;
+            lowBaseSummary.classList.add('loaded');
+            step2DlLowImg.classList.remove('hidden');
+            step3DlLowImg.classList.remove('hidden');
+
+            const difference = aspectRatioDifference(state.highResImage, img);
+            if (difference > 0.01) {
+                basePairWarning.textContent =
+                    `Aspect-ratio warning: the low-res base differs from the high-res base by ${(difference * 100).toFixed(1)}%. ` +
+                    'Crop coordinates will be mapped by width and height independently.';
+                basePairWarning.classList.remove('hidden');
+            } else {
+                basePairWarning.classList.add('hidden');
+                basePairWarning.textContent = '';
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Failed to load the low-resolution base image.');
+        } finally {
+            e.target.value = '';
+        }
+    });
+
     // 2. ACTION: START NEW CROP
     startNewCropBtn.addEventListener('click', () => {
-        if (state.originalImage) setupCropping();
+        if (state.highResImage) {
+            state.originalImage = state.highResImage;
+            state.originalFilename = state.highResFilename;
+            state.selectedBaseKind = 'high';
+            state.cropRect = cloneRect(state.highResCropRect);
+            setupCropping();
+        }
     });
 
     // 3. ACTION: JSON RESTORE UPLOAD
@@ -897,7 +1084,8 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const data = JSON.parse(event.target.result);
                 if (data.cropRect && typeof data.cropRect.x === 'number') {
-                    state.cropRect = data.cropRect;
+                    state.highResCropRect = cloneRect(data.highResCropRect || data.cropRect);
+                    state.cropRect = cloneRect(state.highResCropRect);
 
                     if (state.cropRect.width <= 0 || state.cropRect.height <= 0) {
                         throw new Error("Invalid crop dimensions in JSON");
@@ -937,6 +1125,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 width: state.originalImage.width,
                 height: state.originalImage.height
             };
+            state.highResCropRect = cloneRect(state.cropRect);
 
             loadImageFromFile(file).then((img) => {
                 // Keep the source image intact. Only the interactive canvas is reduced.
@@ -950,7 +1139,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 4. STEP 2 & 3: EXPORT BUTTONS
-    if (step2DlImg) step2DlImg.addEventListener('click', () => downloadCropImage());
+    if (step2DlImg) step2DlImg.addEventListener('click', () => downloadCropImage('high'));
+    if (step2DlLowImg) step2DlLowImg.addEventListener('click', () => downloadCropImage('low'));
     if (step2DlJson) step2DlJson.addEventListener('click', () => downloadCropJSON());
     if (step2Next) step2Next.addEventListener('click', () => {
         if (!state.cropRect) return;
@@ -959,7 +1149,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setupStep3Previews();
     });
 
-    if (step3DlImg) step3DlImg.addEventListener('click', () => downloadCropImage());
+    if (step3DlImg) step3DlImg.addEventListener('click', () => downloadCropImage('high'));
+    if (step3DlLowImg) step3DlLowImg.addEventListener('click', () => downloadCropImage('low'));
     if (step3DlJson) step3DlJson.addEventListener('click', () => downloadCropJSON());
 
     // 5. EDITED IMAGE UPLOAD (External)
@@ -985,7 +1176,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 5.5 SCALE BASE STEP CONTROLS
+    // 5.5 BASE CHOICE CONTROLS
+    chooseHighBaseBtn.addEventListener('click', () => selectFinalBase('high'));
+    chooseLowBaseBtn.addEventListener('click', () => selectFinalBase('low'));
+    cancelBaseChoiceBtn.addEventListener('click', () => {
+        state.editedImage = null;
+        state.previousEditedImage = null;
+        baseChoiceStep.classList.add('hidden');
+        reUploadStep.classList.remove('hidden');
+    });
+
+    // 5.6 SCALE BASE STEP CONTROLS
     if (applyBaseScaleBtn) {
         applyBaseScaleBtn.addEventListener('click', () => {
             applyBaseScalePlan({ useSafeSize: false });
@@ -999,6 +1200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (skipBaseScaleBtn) {
         skipBaseScaleBtn.addEventListener('click', () => {
             state.scalePlan = null;
+            state.previousEditedImage = null;
             setScaleActionButtonsDisabled(false);
             setupMasking();
         });
@@ -1006,10 +1208,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cancelBaseScaleBtn) {
         cancelBaseScaleBtn.addEventListener('click', () => {
             state.scalePlan = null;
-            state.editedImage = null;
             if (scaleBaseStep) scaleBaseStep.classList.add('hidden');
-            reUploadStep.classList.remove('hidden');
             setScaleActionButtonsDisabled(false);
+
+            if (state.scaleOrigin === 'mask') {
+                if (state.previousEditedImage) state.editedImage = state.previousEditedImage;
+                state.previousEditedImage = null;
+                setupMasking();
+            } else {
+                state.editedImage = null;
+                state.previousEditedImage = null;
+                reUploadStep.classList.remove('hidden');
+            }
         });
     }
 
@@ -1117,6 +1327,60 @@ document.addEventListener('DOMContentLoaded', () => {
                 "This will swap the base image and the overlay image. Your current mask will be preserved. Proceed?",
                 () => swapImages()
             );
+        });
+    }
+
+    if (finalOverlayUploadInput) {
+        finalOverlayUploadInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const img = await loadImageFromFile(file);
+                if (finalReplaceStatus) {
+                    finalReplaceStatus.textContent = `Loaded replacement crop: ${formatRes(img.width, img.height)}.`;
+                    finalReplaceStatus.style.color = 'var(--accent-cyan)';
+                }
+                proceedWithEditedImage(img, { checkScale: true, source: 'mask' });
+            } catch (err) {
+                console.error(err);
+                if (finalReplaceStatus) {
+                    finalReplaceStatus.textContent = 'Failed to load replacement cropped image.';
+                    finalReplaceStatus.style.color = '#fca5a5';
+                }
+            } finally {
+                e.target.value = '';
+            }
+        });
+    }
+
+    if (finalBaseUploadInput) {
+        finalBaseUploadInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const img = await loadImageFromFile(file);
+                const difference = aspectRatioDifference(state.originalImage, img);
+                const applyReplacement = () => replaceFinalBaseImage(img, file.name, difference);
+
+                if (difference > 0.01) {
+                    showCustomConfirm(
+                        'Base Aspect Ratio Warning',
+                        `The replacement base is ${formatRes(img.width, img.height)} and differs from the current base aspect ratio by ${(difference * 100).toFixed(1)}%. ` +
+                        'The crop coordinates and mask will be remapped, which may shift or stretch the selected region. Continue?',
+                        applyReplacement
+                    );
+                } else {
+                    applyReplacement();
+                }
+            } catch (err) {
+                console.error(err);
+                if (finalReplaceStatus) {
+                    finalReplaceStatus.textContent = 'Failed to load replacement base image.';
+                    finalReplaceStatus.style.color = '#fca5a5';
+                }
+            } finally {
+                e.target.value = '';
+            }
         });
     }
 
@@ -1475,29 +1739,56 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    function downloadCropImage() {
-        if (!state.cropRect) { alert('No crop selected.'); return; }
-        const { x, y, width, height } = state.cropRect;
-        const baseName = getBaseFilename();
+    function downloadCropImage(kind = 'high') {
+        const useLow = kind === 'low';
+        const sourceImage = useLow ? state.lowResImage : state.highResImage;
+        if (!sourceImage) {
+            alert(useLow ? 'No low-resolution base image was uploaded.' : 'No high-resolution base image is available.');
+            return;
+        }
+        const cropRect = getCropRectForBase(sourceImage);
+        if (!cropRect) { alert('No crop selected.'); return; }
+        const { x, y, width, height } = cropRect;
+        const filename = useLow ? state.lowResFilename : state.highResFilename;
+        const lastDot = filename ? filename.lastIndexOf('.') : -1;
+        const baseName = lastDot !== -1 ? filename.substring(0, lastDot) : (filename || getBaseFilename());
         if (width <= 0 || height <= 0) return;
 
-        const scale = getSafeScale(width, height);
+        const scale = getExportScale(width, height);
         const outW = Math.round(width * scale);
         const outH = Math.round(height * scale);
+        if (scale < 1) {
+            alert(
+                `${formatRes(width, height)} exceeds this browser's canvas limit. ` +
+                `The downloaded crop will be limited to ${formatRes(outW, outH)}.`
+            );
+        }
         const tempCanvas = createSafeCanvas(outW, outH);
         const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(state.originalImage, x, y, width, height, 0, 0, outW, outH);
+        tempCtx.drawImage(sourceImage, x, y, width, height, 0, 0, outW, outH);
 
-        handleImageExport(tempCanvas, `${baseName}-cropped.png`);
+        handleImageExport(tempCanvas, `${baseName}-${useLow ? 'low-res' : 'high-res'}-cropped.png`);
     }
 
     function downloadCropJSON() {
-        if (!state.cropRect) { alert('No crop selected.'); return; }
+        if (!state.highResCropRect) { alert('No crop selected.'); return; }
         const baseName = getBaseFilename();
         const projectData = {
-            cropRect: state.cropRect,
+            cropRect: state.highResCropRect,
+            highResCropRect: state.highResCropRect,
             timestamp: new Date().toISOString(),
-            originalDimensions: { width: state.originalImage.width, height: state.originalImage.height }
+            originalDimensions: {
+                width: state.highResImage.width,
+                height: state.highResImage.height
+            },
+            highResDimensions: {
+                width: state.highResImage.width,
+                height: state.highResImage.height
+            },
+            lowResDimensions: state.lowResImage ? {
+                width: state.lowResImage.width,
+                height: state.lowResImage.height
+            } : null
         };
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projectData, null, 2));
         const jsonLink = document.createElement('a');
@@ -1532,6 +1823,38 @@ document.addEventListener('DOMContentLoaded', () => {
         state.showMaskOverlay = maskState;
         state.showCropGuide = guideState;
         composeMaskAndDraw();
+    }
+
+    function replaceFinalBaseImage(newBaseImage, filename, aspectDifference = 0) {
+        if (!state.originalImage || !state.cropRect || !newBaseImage) return;
+
+        const oldBase = state.originalImage;
+        const oldCrop = cloneRect(state.cropRect);
+        const mappedCrop = mapCropRectBetweenImages(oldCrop, oldBase, newBaseImage);
+        if (!mappedCrop) {
+            if (finalReplaceStatus) {
+                finalReplaceStatus.textContent = 'Could not map the crop region to the replacement base.';
+                finalReplaceStatus.style.color = '#fca5a5';
+            }
+            return;
+        }
+
+        state.originalImage = newBaseImage;
+        state.originalFilename = filename || state.originalFilename;
+        state.selectedBaseKind = 'custom';
+        state.cropRect = mappedCrop;
+        state.scaleOrigin = 'mask';
+        state.previousEditedImage = null;
+
+        if (finalReplaceStatus) {
+            finalReplaceStatus.textContent =
+                `Base replaced: ${formatRes(newBaseImage.width, newBaseImage.height)}. ` +
+                `Mapped crop: ${formatRes(mappedCrop.width, mappedCrop.height)}.` +
+                (aspectDifference > 0.01 ? ' Aspect ratios differ; inspect alignment carefully.' : '');
+            finalReplaceStatus.style.color = aspectDifference > 0.01 ? '#fde68a' : 'var(--accent-cyan)';
+        }
+
+        continueWithSelectedBase(state.editedImage, true);
     }
 
     function swapImages() {
@@ -1711,7 +2034,9 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadStep.classList.add('hidden');
         cropStep.classList.remove('hidden');
 
-        const img = state.originalImage;
+        const img = state.highResImage || state.originalImage;
+        state.originalImage = img;
+        state.selectedBaseKind = 'high';
         state.cropDisplayScale = getSafeScale(img.width, img.height);
         cropCanvas.width = Math.max(1, Math.round(img.width * state.cropDisplayScale));
         cropCanvas.height = Math.max(1, Math.round(img.height * state.cropDisplayScale));
@@ -1786,9 +2111,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (finalY + finalH > img.height) finalH = img.height - finalY;
 
                 state.cropRect = { x: finalX, y: finalY, width: finalW, height: finalH };
+                state.highResCropRect = cloneRect(state.cropRect);
 
                 if (state.cropRect.width > 0 && state.cropRect.height > 0) {
                     if (step2DlImg) step2DlImg.disabled = false;
+                    if (step2DlLowImg) step2DlLowImg.disabled = !state.lowResImage;
                     if (step2DlJson) step2DlJson.disabled = false;
                     if (step2Next) step2Next.disabled = false;
                 }
@@ -1811,7 +2138,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const originalPreviewCtx = originalPreviewCanvas.getContext('2d');
         const croppedPreviewCtx = croppedPreviewCanvas.getContext('2d');
-        const { originalImage, cropRect } = state;
+        const originalImage = state.highResImage || state.originalImage;
+        const cropRect = state.highResCropRect || state.cropRect;
 
         if (!originalImage || !cropRect) return;
 
@@ -2016,6 +2344,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadStep.classList.add('hidden');
         cropStep.classList.add('hidden');
         reUploadStep.classList.add('hidden');
+        baseChoiceStep.classList.add('hidden');
         paintEditorStep.classList.add('hidden');
         if (scaleBaseStep) scaleBaseStep.classList.add('hidden');
         maskStep.classList.remove('hidden');
