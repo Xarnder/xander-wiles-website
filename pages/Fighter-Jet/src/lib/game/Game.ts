@@ -1,5 +1,6 @@
 import {
 	ACESFilmicToneMapping,
+	Object3D,
 	PCFShadowMap,
 	PerspectiveCamera,
 	Scene,
@@ -26,6 +27,7 @@ import { TargetManager } from './combat/TargetManager';
 import { TargetingSystem } from './combat/TargetingSystem';
 import { BALANCE } from './config/balance';
 import { GAME_CONFIG } from './config/gameConfig';
+import { JetTrailSystem, type TrailSource } from './effects/JetTrailSystem';
 import { AudioManager } from './game/AudioManager';
 import { InputManager } from './game/InputManager';
 import { MissionManager, type MissionEvent } from './game/MissionManager';
@@ -54,6 +56,8 @@ const INTRO_INPUT = {
 	fire: false,
 	cycleTarget: false,
 	cycleCamera: false,
+	toggleSquadMode: false,
+	toggleSquadDebug: false,
 	pause: false,
 	map: false,
 	method: 'keyboard-mouse'
@@ -62,6 +66,12 @@ const INTRO_INPUT = {
 const _impactPosition = new Vector3();
 const _debugPosition = new Vector3();
 const _debugDirection = new Vector3();
+const _trailSources: TrailSource[] = Array.from({ length: 5 }, () => ({
+	object: new Object3D(),
+	intensity: 0,
+	afterburner: 0,
+	active: false
+}));
 
 export class Game {
 	private readonly scene = new Scene();
@@ -92,6 +102,7 @@ export class Game {
 	private projectiles: ProjectileManager | null = null;
 	private damage: DamageSystem | null = null;
 	private explosions: ExplosionSystem | null = null;
+	private trails: JetTrailSystem | null = null;
 	private cameraController: CameraController | null = null;
 	private animationFrame = 0;
 	private lastFrameTime = 0;
@@ -176,9 +187,13 @@ export class Game {
 			this.flight.reset(new Vector3(0, 300, 1050), 0);
 			this.squadron = new SquadronController();
 			this.scene.add(this.squadron);
+			const squadronLoaded = await this.squadron.initialize();
 			this.squadron.reset(this.player);
 
-			this.setLoading(0.65, aircraftLoaded ? 'Arming weapons' : 'Using backup aircraft');
+			this.setLoading(
+				0.65,
+				aircraftLoaded && squadronLoaded ? 'Arming weapons' : 'Using backup aircraft'
+			);
 			this.missiles = new MissileManager(this.onMissileEnd);
 			this.scene.add(this.missiles);
 			const missileLoaded = await this.missiles.initialize();
@@ -190,7 +205,12 @@ export class Game {
 				this.cameraController?.addShake(intensity * 0.46);
 				this.audio.playExplosion(intensity);
 			});
-			this.scene.add(this.projectiles, this.explosions);
+			this.trails = new JetTrailSystem(
+				this.settingsManager.current.quality,
+				this.settingsManager.current.trailLength,
+				this.settingsManager.current.trailBrightness
+			);
+			this.scene.add(this.projectiles, this.explosions, this.trails);
 
 			this.setLoading(0.84, missileLoaded ? 'Calibrating targeting' : 'Using backup missiles');
 			this.cameraController = new CameraController(this.camera, this.settingsManager.current);
@@ -268,14 +288,8 @@ export class Game {
 
 	fire(): void {
 		if (this.stateValue !== 'playing') return;
-		const target = this.targeting?.target;
-		const simplifiedLock =
-			this.settingsManager.current.simplifiedFiring && Boolean(this.targeting?.visible);
-		if (!target || (!this.targeting?.locked && !simplifiedLock)) {
-			this.notify('Hold target in the lock circle', 'warning', 1.2);
-			return;
-		}
 		if (!this.player || !this.flight || !this.missiles) return;
+		const target = this.targeting?.target ?? null;
 		const missile = this.missiles.launchFromPlayer(this.player, this.flight, target);
 		if (!missile) {
 			this.notify(this.missiles.ammo <= 0 ? 'MISSILES DEPLETED' : 'WEAPON COOLING', 'warning', 1);
@@ -305,6 +319,28 @@ export class Game {
 		}
 	}
 
+	toggleSquadMode(): void {
+		if (this.stateValue !== 'playing' && this.stateValue !== 'intro') return;
+		const mode = this.squadron?.toggleMode();
+		if (!mode) return;
+		this.cameraController?.setSquadMode(mode);
+		this.notify(
+			mode === 'formation' ? 'SQUADRON — FORMATION' : 'SQUADRON — FREE SQUAD',
+			'info',
+			1.4
+		);
+		this.audio.playUi(true);
+		this.emitSnapshot();
+	}
+
+	toggleSquadDebug(): void {
+		if (this.stateValue !== 'playing' && this.stateValue !== 'intro') return;
+		const enabled = this.squadron?.toggleDebugVisuals();
+		if (enabled === undefined) return;
+		this.notify(`SQUAD DEBUG ${enabled ? 'ON' : 'OFF'}`, 'info', 1);
+		this.audio.playUi(true);
+	}
+
 	toggleMap(): void {
 		this.mapOpen = !this.mapOpen;
 		this.audio.playUi(true);
@@ -328,6 +364,9 @@ export class Game {
 					? GAME_CONFIG.renderer.bloomStrength * 0.5
 					: GAME_CONFIG.renderer.bloomStrength;
 		}
+		this.trails?.setQuality(settings.quality);
+		this.trails?.setTrailLength(settings.trailLength);
+		this.trails?.setTrailBrightness(settings.trailBrightness);
 		this.emitSnapshot();
 	}
 
@@ -426,6 +465,7 @@ export class Game {
 
 	debugSetPaths(enabled: boolean): void {
 		if (!import.meta.env.DEV) return;
+		this.squadron?.setDebugVisuals(enabled);
 		this.notify(`DEBUG: PATHS ${enabled ? 'ON' : 'OFF'}`, 'info', 0.9);
 	}
 
@@ -443,6 +483,7 @@ export class Game {
 		this.applyPixelRatio();
 		this.renderer.setSize(width, height, false);
 		this.composer.setSize(width, height);
+		this.trails?.setViewportSize(width, height);
 	};
 
 	snapshot(): GameSnapshot {
@@ -463,6 +504,7 @@ export class Game {
 		this.removeTestHooks();
 		this.world?.dispose();
 		this.player?.dispose();
+		this.trails?.dispose();
 		this.composer?.dispose();
 		this.renderer?.dispose();
 		this.scene.clear();
@@ -530,11 +572,20 @@ export class Game {
 				delta,
 				'approach',
 				this.player,
+				this.flight.velocity,
 				this.targetManager.targets,
 				this.onSquadronAttack
 			);
 			this.player.updateEffects(0, this.damage.healthRatio, this.elapsed);
-			this.cameraController.update(delta, this.player, this.flight, this.world.terrain, 0);
+			this.updateTrails(delta, 0.35, 0);
+			this.cameraController.update(
+				delta,
+				this.player,
+				this.flight,
+				this.world.terrain,
+				0,
+				this.squadron.mode
+			);
 			this.world.update(this.elapsed);
 			const introDuration = this.testMode
 				? GAME_CONFIG.mission.testIntroSeconds
@@ -550,7 +601,14 @@ export class Game {
 			this.crashElapsed += delta;
 			this.explosions.update(delta);
 			this.player.updateEffects(0, 0, this.elapsed);
-			this.cameraController.update(delta, this.player, this.flight, this.world.terrain, 0);
+			this.cameraController.update(
+				delta,
+				this.player,
+				this.flight,
+				this.world.terrain,
+				0,
+				this.squadron.mode
+			);
 			this.world.update(this.elapsed);
 			if (this.crashElapsed >= 1.45) {
 				this.completeMission(false, 'Aircraft impacted terrain');
@@ -568,6 +626,8 @@ export class Game {
 		}
 		if (this.input.consume('cycleTarget')) this.cycleTarget();
 		if (this.input.consume('cycleCamera')) this.cycleCamera();
+		if (this.input.consume('toggleSquadMode')) this.toggleSquadMode();
+		if (this.input.consume('toggleSquadDebug')) this.toggleSquadDebug();
 		if (this.input.consume('map')) this.toggleMap();
 		if (controls.fire || this.input.consume('fire')) this.fire();
 
@@ -601,6 +661,7 @@ export class Game {
 			delta,
 			this.mission.phase,
 			this.player,
+			this.flight.velocity,
 			this.targetManager.targets,
 			this.onSquadronAttack
 		);
@@ -614,16 +675,23 @@ export class Game {
 			this.damage.healthRatio,
 			this.elapsed
 		);
+		this.updateTrails(
+			delta,
+			0.55 + this.flight.speed / BALANCE.flight.maxSpeed,
+			this.flight.afterburnerActive ? 1 : 0
+		);
 		this.cameraController.update(
 			delta,
 			this.player,
 			this.flight,
 			this.world.terrain,
-			this.targeting.progress
+			this.targeting.progress,
+			this.squadron.mode
 		);
 		this.audio.updateEngine(
 			this.flight.speed / BALANCE.flight.maxSpeed,
 			this.flight.afterburnerActive ? 1 : 0,
+			controls.throttle,
 			delta
 		);
 		this.world.update(this.elapsed);
@@ -737,6 +805,26 @@ export class Game {
 		this.handleMissionEvents(this.mission.forceSuccess());
 	}
 
+	private updateTrails(delta: number, playerIntensity: number, playerAfterburner: number): void {
+		if (!this.trails || !this.player || !this.squadron) return;
+		const playerSource = _trailSources[0];
+		playerSource.object = this.player;
+		playerSource.intensity = playerIntensity;
+		playerSource.afterburner = playerAfterburner;
+		playerSource.active = true;
+
+		const jets = this.squadron.jets;
+		for (let index = 0; index < jets.length; index += 1) {
+			const jet = jets[index];
+			const source = _trailSources[index + 1];
+			source.object = jet;
+			source.intensity = this.squadron.mode === 'free-squad' ? 0.9 : 0.45;
+			source.afterburner = 0;
+			source.active = jet.active && jet.visible;
+		}
+		this.trails.update(delta, _trailSources);
+	}
+
 	private resetMissionSystems(): void {
 		if (!this.player || !this.flight) return;
 		this.crashed = false;
@@ -748,8 +836,9 @@ export class Game {
 		this.missiles?.reset();
 		this.projectiles?.reset();
 		this.explosions?.reset();
-		this.squadron?.reset(this.player);
-		this.cameraController?.reset(this.player);
+		this.trails?.reset();
+		this.squadron?.reset(this.player, this.flight.velocity);
+		this.cameraController?.reset(this.player, 'formation');
 		this.mission.reset();
 		this.score.reset();
 		this.notifications.length = 0;
@@ -837,6 +926,7 @@ export class Game {
 					Math.max(1, this.canvas.clientWidth || this.canvas.width),
 					Math.max(1, this.canvas.clientHeight || this.canvas.height)
 				) ?? null,
+			squadMode: this.squadron?.mode ?? 'formation',
 			squad: this.squadron?.snapshot(playerPosition) ?? [],
 			notifications: this.notifications.map((notification) => ({ ...notification })),
 			radio: this.mission.radio ? { ...this.mission.radio } : null,

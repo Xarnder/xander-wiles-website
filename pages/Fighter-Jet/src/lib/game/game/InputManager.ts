@@ -15,24 +15,28 @@ export type GameAction =
 	| 'fire'
 	| 'cycleTarget'
 	| 'cycleCamera'
+	| 'toggleSquadMode'
+	| 'toggleSquadDebug'
 	| 'pause'
 	| 'map';
 
 export type InputBindings = Record<GameAction, readonly string[]>;
 
 export const DEFAULT_BINDINGS: InputBindings = {
-	pitchUp: ['ArrowUp'],
-	pitchDown: ['ArrowDown'],
+	pitchUp: ['KeyW'],
+	pitchDown: ['KeyS'],
 	rollLeft: ['KeyA'],
 	rollRight: ['KeyD'],
 	yawLeft: ['KeyQ', 'ArrowLeft'],
 	yawRight: ['KeyE', 'ArrowRight'],
-	throttleUp: ['KeyW'],
-	throttleDown: ['KeyS'],
+	throttleUp: ['KeyR'],
+	throttleDown: ['KeyF'],
 	afterburner: ['ShiftLeft', 'ShiftRight'],
 	fire: ['Space'],
 	cycleTarget: ['Tab'],
 	cycleCamera: ['KeyC'],
+	toggleSquadMode: ['KeyB'],
+	toggleSquadDebug: ['KeyT'],
 	pause: ['Escape', 'KeyP'],
 	map: ['KeyM']
 };
@@ -67,6 +71,8 @@ export class InputManager {
 		fire: false,
 		cycleTarget: false,
 		cycleCamera: false,
+		toggleSquadMode: false,
+		toggleSquadDebug: false,
 		pause: false,
 		map: false,
 		method: 'keyboard-mouse'
@@ -157,14 +163,17 @@ export class InputManager {
 		}
 
 		const pitchDirection = this.settings.invertPitch ? -1 : 1;
+		const rollDirection = this.settings.invertRoll ? -1 : 1;
 		this.output.pitch = clamp(pitch * pitchDirection, -1, 1);
-		this.output.roll = clamp(roll, -1, 1);
+		this.output.roll = clamp(roll * rollDirection, -1, 1);
 		this.output.yaw = clamp(yaw, -1, 1);
 		this.output.throttle = clamp(this.throttle, 0, 1);
 		this.output.afterburner = afterburner;
 		this.output.fire = fire;
 		this.output.cycleTarget = this.pressed.has('cycleTarget');
 		this.output.cycleCamera = this.pressed.has('cycleCamera');
+		this.output.toggleSquadMode = this.pressed.has('toggleSquadMode');
+		this.output.toggleSquadDebug = this.pressed.has('toggleSquadDebug');
 		this.output.pause = this.pressed.has('pause');
 		this.output.map = this.pressed.has('map');
 		this.output.method = this.method;

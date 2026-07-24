@@ -2,7 +2,7 @@ import { PerspectiveCamera, Vector3 } from 'three';
 import type { FlightController } from '../aircraft/FlightController';
 import type { PlayerJet } from '../aircraft/PlayerJet';
 import { GAME_CONFIG } from '../config/gameConfig';
-import type { CameraMode, CameraState, GameSettings } from '../types';
+import type { CameraMode, CameraState, GameSettings, SquadronMode } from '../types';
 import { damp } from '../utils/math';
 import type { Missile } from '../combat/Missile';
 import type { Terrain } from '../world/Terrain';
@@ -11,7 +11,8 @@ const _desiredPosition = new Vector3();
 const _desiredLook = new Vector3();
 const _local = new Vector3();
 const _missileDirection = new Vector3();
-const _up = new Vector3(0, 1, 0);
+const _worldUp = new Vector3(0, 1, 0);
+const _cameraUp = new Vector3(0, 1, 0);
 
 export class CameraController {
 	private modeValue: CameraMode = 'chase';
@@ -21,6 +22,7 @@ export class CameraController {
 	private settings: Readonly<GameSettings>;
 	private missileCamera: Missile | null = null;
 	private missileCameraTime = 0;
+	private squadMode: SquadronMode = 'formation';
 
 	constructor(
 		readonly camera: PerspectiveCamera,
@@ -43,6 +45,10 @@ export class CameraController {
 
 	setMode(mode: CameraMode): void {
 		this.modeValue = mode;
+	}
+
+	setSquadMode(mode: SquadronMode): void {
+		this.squadMode = mode;
 	}
 
 	updateSettings(settings: Readonly<GameSettings>): void {
@@ -73,8 +79,10 @@ export class CameraController {
 		player: PlayerJet,
 		flight: FlightController,
 		terrain: Terrain,
-		lockProgress: number
+		lockProgress: number,
+		squadMode: SquadronMode = this.squadMode
 	): void {
+		this.squadMode = squadMode;
 		this.elapsed += delta;
 		this.missileCameraTime = Math.max(0, this.missileCameraTime - delta);
 		if (
@@ -119,14 +127,27 @@ export class CameraController {
 		};
 	}
 
-	reset(player: PlayerJet): void {
+	reset(player: PlayerJet, squadMode: SquadronMode = 'formation'): void {
 		this.modeValue = this.settings.lastCamera;
-		_local.set(0, GAME_CONFIG.camera.chaseHeight, GAME_CONFIG.camera.chaseDistance);
+		this.squadMode = squadMode;
+		const distance =
+			squadMode === 'formation'
+				? GAME_CONFIG.camera.formationChaseDistance
+				: GAME_CONFIG.camera.chaseDistance;
+		const height =
+			squadMode === 'formation'
+				? GAME_CONFIG.camera.formationChaseHeight
+				: GAME_CONFIG.camera.chaseHeight;
+		_local.set(0, height, distance);
 		_desiredPosition.copy(_local).applyQuaternion(player.quaternion).add(player.position);
 		this.camera.position.copy(_desiredPosition);
-		_desiredLook.set(0, 0, -GAME_CONFIG.camera.lookAhead).applyQuaternion(player.quaternion);
+		const lookAhead =
+			squadMode === 'formation'
+				? GAME_CONFIG.camera.formationLookAhead
+				: GAME_CONFIG.camera.lookAhead;
+		_desiredLook.set(0, 0, -lookAhead).applyQuaternion(player.quaternion);
 		this.smoothedLook.copy(player.position).add(_desiredLook);
-		this.camera.lookAt(this.smoothedLook);
+		this.alignCameraToAircraft(player);
 		this.shakeAmount = 0;
 		this.missileCameraTime = 0;
 	}
@@ -142,31 +163,35 @@ export class CameraController {
 			_desiredLook.set(0, 0, -180).applyQuaternion(player.quaternion).add(_desiredPosition);
 			this.camera.position.lerp(_desiredPosition, 1 - Math.exp(-18 * delta));
 			this.smoothedLook.lerp(_desiredLook, 1 - Math.exp(-14 * delta));
-			this.camera.lookAt(this.smoothedLook);
+			this.alignCameraToAircraft(player);
 			return;
 		}
+		const formation = this.squadMode === 'formation';
 		const baseDistance =
 			this.modeValue === 'wide'
-				? GAME_CONFIG.camera.wideDistance
-				: GAME_CONFIG.camera.chaseDistance;
+				? formation
+					? GAME_CONFIG.camera.formationWideDistance
+					: GAME_CONFIG.camera.wideDistance
+				: formation
+					? GAME_CONFIG.camera.formationChaseDistance
+					: GAME_CONFIG.camera.chaseDistance;
 		const lockTightening = lockProgress * (this.modeValue === 'wide' ? 8 : 4.5);
 		const pullback = flight.afterburnerActive ? 8 : 0;
 		const distance = baseDistance - lockTightening + pullback;
 		const height =
-			GAME_CONFIG.camera.chaseHeight +
+			(formation ? GAME_CONFIG.camera.formationChaseHeight : GAME_CONFIG.camera.chaseHeight) +
 			(this.modeValue === 'wide' ? 11 : 0) +
 			Math.abs(flight.roll) * 2;
 		_local.set(-flight.roll * 4.2, height, distance);
 		_desiredPosition.copy(_local).applyQuaternion(player.quaternion).add(player.position);
+		const lookAhead = formation
+			? GAME_CONFIG.camera.formationLookAhead
+			: GAME_CONFIG.camera.lookAhead;
 		_desiredLook
-			.set(
-				flight.roll * 5,
-				flight.pitch * 18,
-				-(GAME_CONFIG.camera.lookAhead + flight.speed * 0.12)
-			)
+			.set(flight.roll * 5, Math.sin(flight.pitch) * 18, -(lookAhead + flight.speed * 0.12))
 			.applyQuaternion(player.quaternion)
 			.add(player.position);
-		const positionSharpness = this.modeValue === 'wide' ? 3.8 : 6;
+		const positionSharpness = this.modeValue === 'wide' ? 3.8 : formation ? 4.2 : 6;
 		this.camera.position.set(
 			damp(this.camera.position.x, _desiredPosition.x, positionSharpness, delta),
 			damp(this.camera.position.y, _desiredPosition.y, positionSharpness, delta),
@@ -177,8 +202,14 @@ export class CameraController {
 			damp(this.smoothedLook.y, _desiredLook.y, 7, delta),
 			damp(this.smoothedLook.z, _desiredLook.z, 7, delta)
 		);
+		this.alignCameraToAircraft(player);
+	}
+
+	/** Keep chase/cockpit cameras locked to the jet's up axis so loops can go fully inverted. */
+	private alignCameraToAircraft(player: PlayerJet): void {
+		_cameraUp.set(0, 1, 0).applyQuaternion(player.quaternion).normalize();
+		this.camera.up.copy(_cameraUp);
 		this.camera.lookAt(this.smoothedLook);
-		this.camera.rotateZ(-flight.roll * 0.08);
 	}
 
 	private updateMissileCamera(delta: number): void {
@@ -187,10 +218,11 @@ export class CameraController {
 		_desiredPosition
 			.copy(this.missileCamera.position)
 			.addScaledVector(_missileDirection, -6)
-			.addScaledVector(_up, 2.2);
+			.addScaledVector(_worldUp, 2.2);
 		_desiredLook.copy(this.missileCamera.position).addScaledVector(_missileDirection, 30);
 		this.camera.position.lerp(_desiredPosition, 1 - Math.exp(-14 * delta));
 		this.smoothedLook.lerp(_desiredLook, 1 - Math.exp(-16 * delta));
+		this.camera.up.copy(_worldUp);
 		this.camera.lookAt(this.smoothedLook);
 	}
 

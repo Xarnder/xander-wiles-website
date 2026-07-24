@@ -19,6 +19,8 @@
 		onTarget: () => void;
 		onCamera: () => void;
 		onMap: () => void;
+		onSquadMode: () => void;
+		onSquadDebug: () => void;
 		onPause: () => void;
 	}
 
@@ -32,6 +34,8 @@
 		onTarget,
 		onCamera,
 		onMap,
+		onSquadMode,
+		onSquadDebug,
 		onPause
 	}: Props = $props();
 
@@ -44,7 +48,13 @@
 	let stickY = $state(0);
 	let stickPointer: number | null = null;
 	let firePointer: number | null = null;
+	let yawLeftPointer: number | null = null;
+	let yawRightPointer: number | null = null;
+	let afterburnerPointer: number | null = null;
 	let firing = $state(false);
+	let yawLeft = $state(false);
+	let yawRight = $state(false);
+	let afterburning = $state(false);
 	let localThrottle = $state(0.55);
 	let permission = $state<MotionPermission>('prompt');
 	let permissionMessage = $state('Motion access is required for tilt controls.');
@@ -84,7 +94,8 @@
 		const scale = magnitude > radius ? radius / magnitude : 1;
 		stickX = rawX * scale;
 		stickY = rawY * scale;
-		onInput({ roll: clamp(stickX / radius), pitch: clamp(stickY / radius) });
+		// Screen Y grows downward; negate so dragging up pitches up like W / mouse.
+		onInput({ roll: clamp(stickX / radius), pitch: clamp(-stickY / radius) });
 	}
 
 	function startStick(event: PointerEvent): void {
@@ -201,10 +212,14 @@
 		haptic(8);
 	}
 
+	function throttleAfterburner(): boolean {
+		return localThrottle >= 0.92;
+	}
+
 	function updateThrottle(event: Event): void {
 		if (!active) return;
 		localThrottle = Number((event.currentTarget as HTMLInputElement).value);
-		onInput({ throttle: localThrottle, afterburner: localThrottle >= 0.92 });
+		onInput({ throttle: localThrottle, afterburner: afterburning || throttleAfterburner() });
 	}
 
 	function fireStart(event: PointerEvent): void {
@@ -226,12 +241,75 @@
 		onInput({ fire: false });
 	}
 
+	function syncYaw(): void {
+		if (yawLeft && !yawRight) onInput({ yaw: -1 });
+		else if (yawRight && !yawLeft) onInput({ yaw: 1 });
+		else onInput({ yaw: 0 });
+	}
+
+	function yawLeftStart(event: PointerEvent): void {
+		if (!active || yawLeftPointer !== null) return;
+		event.preventDefault();
+		yawLeftPointer = event.pointerId;
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+		yawLeft = true;
+		syncYaw();
+		haptic(8);
+	}
+
+	function yawLeftEnd(event?: PointerEvent): void {
+		if (event && yawLeftPointer !== null && event.pointerId !== yawLeftPointer) return;
+		yawLeftPointer = null;
+		if (!yawLeft) return;
+		yawLeft = false;
+		syncYaw();
+	}
+
+	function yawRightStart(event: PointerEvent): void {
+		if (!active || yawRightPointer !== null) return;
+		event.preventDefault();
+		yawRightPointer = event.pointerId;
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+		yawRight = true;
+		syncYaw();
+		haptic(8);
+	}
+
+	function yawRightEnd(event?: PointerEvent): void {
+		if (event && yawRightPointer !== null && event.pointerId !== yawRightPointer) return;
+		yawRightPointer = null;
+		if (!yawRight) return;
+		yawRight = false;
+		syncYaw();
+	}
+
+	function afterburnerStart(event: PointerEvent): void {
+		if (!active || afterburnerPointer !== null) return;
+		event.preventDefault();
+		afterburnerPointer = event.pointerId;
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+		afterburning = true;
+		onInput({ afterburner: true });
+		haptic(10);
+	}
+
+	function afterburnerEnd(event?: PointerEvent): void {
+		if (event && afterburnerPointer !== null && event.pointerId !== afterburnerPointer) return;
+		afterburnerPointer = null;
+		if (!afterburning) return;
+		afterburning = false;
+		onInput({ afterburner: throttleAfterburner() });
+	}
+
 	function stopFlightInput(): void {
 		releaseStick();
 		fireEnd();
+		yawLeftEnd();
+		yawRightEnd();
+		afterburnerEnd();
 		tiltPitch = 0;
 		tiltRoll = 0;
-		onInput({ pitch: 0, roll: 0, fire: false });
+		onInput({ pitch: 0, roll: 0, yaw: 0, fire: false, afterburner: throttleAfterburner() });
 	}
 
 	function runAction(action: () => void): void {
@@ -368,6 +446,34 @@
 			<div class="utility-row">
 				<button type="button" onclick={() => runAction(onTarget)}>TARGET</button>
 				<button type="button" onclick={() => runAction(onCamera)}>CAMERA</button>
+				<button type="button" onclick={() => runAction(onSquadMode)}>SQUAD</button>
+				<button type="button" onclick={() => runAction(onSquadDebug)}>DEBUG</button>
+			</div>
+			<div class="yaw-row" aria-label="Yaw controls">
+				<button
+					type="button"
+					class={['yaw', { engaged: yawLeft }]}
+					aria-label="Yaw left"
+					aria-pressed={yawLeft}
+					onpointerdown={yawLeftStart}
+					onpointerup={yawLeftEnd}
+					onpointercancel={yawLeftEnd}
+					onlostpointercapture={yawLeftEnd}
+				>
+					YAW◀
+				</button>
+				<button
+					type="button"
+					class={['yaw', { engaged: yawRight }]}
+					aria-label="Yaw right"
+					aria-pressed={yawRight}
+					onpointerdown={yawRightStart}
+					onpointerup={yawRightEnd}
+					onpointercancel={yawRightEnd}
+					onlostpointercapture={yawRightEnd}
+				>
+					YAW▶
+				</button>
 			</div>
 			<button
 				type="button"
@@ -380,6 +486,19 @@
 			>
 				<span>FIRE</span>
 				<small>MISSILE</small>
+			</button>
+			<button
+				type="button"
+				class={['afterburner', { engaged: afterburning || localThrottle >= 0.92 }]}
+				aria-label="Afterburner"
+				aria-pressed={afterburning}
+				onpointerdown={afterburnerStart}
+				onpointerup={afterburnerEnd}
+				onpointercancel={afterburnerEnd}
+				onlostpointercapture={afterburnerEnd}
+			>
+				<span>AB</span>
+				<small>HOLD</small>
 			</button>
 		</div>
 	</div>
@@ -424,7 +543,8 @@
 
 	.mode-switch,
 	.top-actions,
-	.utility-row {
+	.utility-row,
+	.yaw-row {
 		display: flex;
 		gap: 0.4rem;
 	}
@@ -676,12 +796,34 @@
 
 	.action-cluster {
 		display: grid;
-		gap: 0.55rem;
+		gap: 0.45rem;
 		justify-self: end;
+		justify-items: end;
+	}
+
+	.utility-row {
+		flex-wrap: wrap;
+		justify-content: flex-end;
+		max-width: 12rem;
 	}
 
 	.utility-row button {
 		width: 4.4rem;
+	}
+
+	.yaw-row {
+		justify-self: end;
+	}
+
+	.yaw {
+		min-width: 4.4rem;
+		touch-action: none;
+	}
+
+	.yaw.engaged {
+		color: #061319;
+		border-color: #8ce9f7;
+		background: #8ce9f7;
 	}
 
 	.fire {
@@ -715,6 +857,40 @@
 	.fire.firing {
 		background: #ed713d;
 		transform: scale(0.94);
+	}
+
+	.afterburner {
+		display: grid;
+		justify-self: end;
+		width: clamp(5.7rem, 16vw, 7rem);
+		min-height: 44px;
+		place-content: center;
+		padding: 0.45rem 0.55rem;
+		color: #ffe0c7;
+		border: 1px solid rgba(255, 156, 98, 0.55);
+		background: rgba(48, 22, 10, 0.82);
+		touch-action: none;
+	}
+
+	.afterburner span {
+		font-size: 0.72rem;
+	}
+
+	.afterburner small {
+		margin-top: 0.15rem;
+		color: rgba(255, 190, 145, 0.7);
+		font-size: 0.42rem;
+	}
+
+	.afterburner.engaged {
+		color: #1a0c05;
+		border-color: #ff9c62;
+		background: #ff9c62;
+		box-shadow: 0 0 16px rgba(255, 125, 55, 0.35);
+	}
+
+	.afterburner.engaged small {
+		color: rgba(26, 12, 5, 0.72);
 	}
 
 	.portrait-hint {
@@ -765,11 +941,17 @@
 			padding-left: max(0.4rem, env(safe-area-inset-left));
 		}
 
-		.utility-row {
+		.utility-row,
+		.yaw-row {
 			gap: 0.25rem;
 		}
 
-		.utility-row button {
+		.utility-row {
+			max-width: 8.2rem;
+		}
+
+		.utility-row button,
+		.yaw {
 			width: 3.75rem;
 			padding-inline: 0.25rem;
 			font-size: 0.46rem;
@@ -787,8 +969,13 @@
 			width: clamp(6.5rem, 22vh, 7.7rem);
 		}
 
-		.fire {
+		.fire,
+		.afterburner {
 			width: clamp(5rem, 20vh, 5.8rem);
+		}
+
+		.action-cluster {
+			gap: 0.3rem;
 		}
 
 		.throttle input {

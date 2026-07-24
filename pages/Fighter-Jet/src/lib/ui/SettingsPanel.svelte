@@ -6,6 +6,7 @@
 		SubtitleSize,
 		TouchControlMode
 	} from '$lib/game/types';
+	import { BALANCE } from '$lib/game/config/balance';
 
 	type VolumeKey =
 		'masterVolume' | 'effectsVolume' | 'engineVolume' | 'musicVolume' | 'radioVolume';
@@ -18,6 +19,7 @@
 
 	let { settings, onUpdate, onClose }: Props = $props();
 
+	const trailDurationSeconds = $derived(settings.trailLength * BALANCE.trails.lifetime);
 	const volumeChannels = $derived([
 		{ key: 'masterVolume', label: 'Master', value: settings.masterVolume },
 		{ key: 'effectsVolume', label: 'Effects', value: settings.effectsVolume },
@@ -118,6 +120,37 @@
 				/>
 			</label>
 
+			<label class="range-field">
+				<span
+					><b>Jet trail length</b><output
+						>{settings.trailLength.toFixed(1)}× · {trailDurationSeconds.toFixed(1)}s</output
+					></span
+				>
+				<input
+					type="range"
+					min="0.5"
+					max="12"
+					step="0.25"
+					value={settings.trailLength}
+					oninput={(event) => update('trailLength', rangeValue(event))}
+				/>
+			</label>
+
+			<label class="range-field">
+				<span
+					><b>Jet trail brightness</b><output>{Math.round(settings.trailBrightness * 100)}%</output
+					></span
+				>
+				<input
+					type="range"
+					min="0.15"
+					max="2"
+					step="0.05"
+					value={settings.trailBrightness}
+					oninput={(event) => update('trailBrightness', rangeValue(event))}
+				/>
+			</label>
+
 			<div class="toggle-grid">
 				<label class="toggle">
 					<input
@@ -214,15 +247,26 @@
 					oninput={(event) => update('mouseSensitivity', rangeValue(event))}
 				/>
 			</label>
-			<label class="toggle single">
-				<input
-					type="checkbox"
-					checked={settings.invertPitch}
-					onchange={(event) => update('invertPitch', checked(event))}
-				/>
-				<span aria-hidden="true"></span>
-				<b>Invert pitch</b>
-			</label>
+			<div class="toggle-grid">
+				<label class="toggle">
+					<input
+						type="checkbox"
+						checked={settings.invertPitch}
+						onchange={(event) => update('invertPitch', checked(event))}
+					/>
+					<span aria-hidden="true"></span>
+					<b>Invert pitch (W / S)</b>
+				</label>
+				<label class="toggle">
+					<input
+						type="checkbox"
+						checked={settings.invertRoll}
+						onchange={(event) => update('invertRoll', checked(event))}
+					/>
+					<span aria-hidden="true"></span>
+					<b>Invert roll (A / D)</b>
+				</label>
+			</div>
 		</section>
 
 		<section class="group">

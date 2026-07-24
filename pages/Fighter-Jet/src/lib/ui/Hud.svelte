@@ -24,6 +24,7 @@
 	);
 	const target = $derived(snapshot.target);
 	const recentNotifications = $derived(snapshot.notifications.slice(-3));
+	const squadModeLabel = $derived(snapshot.squadMode === 'formation' ? 'FORMATION' : 'FREE SQUAD');
 
 	function formatTime(seconds: number): string {
 		const minutes = Math.floor(seconds / 60);
@@ -227,7 +228,9 @@
 	</aside>
 
 	<aside class="squad">
-		<div class="squad-title"><span>VIPER FLIGHT</span><i></i><b>LINKED</b></div>
+		<div class="squad-title">
+			<span>VIPER FLIGHT</span><i></i><b data-testid="squad-mode">{squadModeLabel}</b>
+		</div>
 		{#each snapshot.squad as member (member.callsign)}
 			<div class="wingman" class:inactive={!member.active}>
 				<span aria-hidden="true">◇</span>

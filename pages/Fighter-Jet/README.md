@@ -115,19 +115,24 @@ Asset URLs resolve relative to the current page, so they work under
 
 ## Controls
 
-- Mouse or arrow keys: pitch and yaw
+- Mouse or `W` / `S`: pitch
 - `A` / `D`: roll
-- `W` / `S`: throttle
+- `Q` / `E`: yaw
+- `R` / `F`: throttle
 - `Shift`: afterburner
 - `Space`: fire
 - `Tab`: cycle targets
 - `C`: cycle camera
+- `B`: toggle Formation / Free Squad
+- `T`: toggle squad target and forward-direction debug visuals
 - `M`: tactical map
 - `Escape`: pause
-- `R`: restart after mission end
+- `R`: restart after mission end (also throttle up while flying)
 - `F2`: debug panel (development)
 
-Gamepad and touch controls are supported.
+Gamepad and touch controls are supported. Touch mode includes stick/tilt flight,
+throttle, yaw, fire, afterburner, target, camera, squad mode, squad debug, map,
+and pause.
 
 ## Custom audio (MP3)
 

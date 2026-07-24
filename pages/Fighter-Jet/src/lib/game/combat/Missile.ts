@@ -104,7 +104,7 @@ export class Missile extends Group {
 		position: Vector3,
 		direction: Vector3,
 		initialVelocity: Vector3,
-		target: Target,
+		target: Target | null,
 		source: DamageSource,
 		canDamage: boolean
 	): void {
@@ -126,10 +126,9 @@ export class Missile extends Group {
 		if (!this.active) return null;
 		this.age += delta;
 		if (this.age >= BALANCE.missile.lifetimeSeconds) return 'expired';
-		if (!this.target || this.target.destroyed || !this.target.enabled) {
-			this.position.addScaledVector(this.velocity, delta);
-			return null;
-		}
+
+		const target = this.target;
+		const guided = target !== null && !target.destroyed && target.enabled;
 
 		if (this.age < BALANCE.missile.separationSeconds) {
 			this.velocity.y -= 18 * delta;
@@ -143,13 +142,21 @@ export class Missile extends Group {
 			BALANCE.missile.maxSpeed,
 			this.speed + BALANCE.missile.acceleration * delta
 		);
-		solveInterceptPoint(
-			this.position,
-			this.target.position,
-			this.target.velocity,
-			this.speed,
-			_desiredPoint
-		);
+
+		if (!guided) {
+			if (this.velocity.lengthSq() > 0.001) {
+				_steeredDirection.copy(this.velocity).normalize();
+			} else {
+				_steeredDirection.copy(_forward);
+			}
+			this.velocity.copy(_steeredDirection).multiplyScalar(this.speed);
+			this.position.addScaledVector(this.velocity, delta);
+			this.setDirection(_steeredDirection);
+			this.updateEffects();
+			return null;
+		}
+
+		solveInterceptPoint(this.position, target.position, target.velocity, this.speed, _desiredPoint);
 		_desiredDirection.copy(_desiredPoint).sub(this.position).normalize();
 		if (this.velocity.lengthSq() > 0.001) {
 			_steeredDirection.copy(this.velocity).normalize();
@@ -166,8 +173,8 @@ export class Missile extends Group {
 		this.position.addScaledVector(this.velocity, delta);
 		this.setDirection(_steeredDirection);
 		this.updateEffects();
-		const hitDistance = this.target.hitRadius + BALANCE.missile.hitRadius;
-		return this.position.distanceToSquared(this.target.position) <= hitDistance * hitDistance
+		const hitDistance = target.hitRadius + BALANCE.missile.hitRadius;
+		return this.position.distanceToSquared(target.position) <= hitDistance * hitDistance
 			? 'impact'
 			: null;
 	}

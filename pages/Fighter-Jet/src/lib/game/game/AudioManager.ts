@@ -50,11 +50,12 @@ export class AudioManager {
 		this.radioBus?.gain.setTargetAtTime(settings.radioVolume, now, 0.03);
 	}
 
-	updateEngine(speedRatio: number, afterburner: number, delta: number): void {
+	updateEngine(speedRatio: number, afterburner: number, throttle: number, delta: number): void {
 		if (!this.context || !this.engineGain || !this.windGain) return;
+		const throttleRatio = clamp(throttle, 0, 1);
 		this.currentEngine = damp(
 			this.currentEngine,
-			clamp(speedRatio + afterburner * 0.35, 0, 1.35),
+			clamp(throttleRatio * 0.72 + speedRatio * 0.35 + afterburner * 0.35, 0, 1.35),
 			5,
 			delta
 		);
@@ -63,7 +64,7 @@ export class AudioManager {
 		if (this.engineOscillator) {
 			this.engineOscillator.frequency.setTargetAtTime(58 + this.currentEngine * 94, now, 0.025);
 		}
-		this.engineGain.gain.setTargetAtTime(0.055 + this.currentEngine * 0.1, now, 0.04);
+		this.engineGain.gain.setTargetAtTime(0.04 + this.currentEngine * 0.14, now, 0.04);
 		this.windGain.gain.setTargetAtTime(this.currentWind * 0.045, now, 0.05);
 	}
 

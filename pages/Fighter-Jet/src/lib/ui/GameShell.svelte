@@ -42,6 +42,7 @@
 		},
 		target: null,
 		squad: [],
+		squadMode: 'formation',
 		notifications: [],
 		radio: null,
 		tacticalEntities: [],
@@ -296,6 +297,20 @@
 
 		if (
 			!editing &&
+			event.code === 'KeyB' &&
+			testMode &&
+			(snapshot.state === 'playing' || snapshot.state === 'intro')
+		) {
+			event.preventDefault();
+			snapshot = {
+				...snapshot,
+				squadMode: snapshot.squadMode === 'formation' ? 'free-squad' : 'formation'
+			};
+			return;
+		}
+
+		if (
+			!editing &&
 			event.code === 'KeyR' &&
 			['paused', 'success', 'failure'].includes(snapshot.state)
 		) {
@@ -419,6 +434,8 @@
 			onTarget={() => game?.cycleTarget()}
 			onCamera={() => game?.cycleCamera()}
 			onMap={() => game?.toggleMap()}
+			onSquadMode={() => game?.toggleSquadMode()}
+			onSquadDebug={() => game?.toggleSquadDebug()}
 			onPause={pauseMission}
 		/>
 	{/if}
@@ -465,8 +482,9 @@
 				{/each}
 			</div>
 			<p class="controller-note">
-				Missiles fire only on a completed lock unless simplified firing is enabled in settings.
-				Gamepad, keyboard, mouse, and touch are detected automatically.
+				Missiles can fire without a lock; selected targets still guide when available. Gamepad,
+				keyboard, mouse, and touch are detected automatically — touch mode includes buttons for
+				fire, afterburner, yaw, target, camera, squad, debug, map, and pause.
 			</p>
 		</dialog>
 	{/if}

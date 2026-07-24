@@ -79,7 +79,11 @@ export class MissileManager extends Group {
 		});
 	}
 
-	launchFromPlayer(player: PlayerJet, flight: FlightController, target: Target): Missile | null {
+	launchFromPlayer(
+		player: PlayerJet,
+		flight: FlightController,
+		target: Target | null
+	): Missile | null {
 		if ((!this.infiniteAmmo && this.ammoValue <= 0) || this.cooldownRemaining > 0) return null;
 		player.getHardpointWorldPosition(this.hardpointIndex, _launchPosition);
 		player.getForward(_launchDirection);
@@ -121,7 +125,7 @@ export class MissileManager extends Group {
 		position: Vector3,
 		direction: Vector3,
 		initialVelocity: Vector3,
-		target: Target,
+		target: Target | null,
 		source: DamageSource,
 		canDamage: boolean
 	): Missile | null {

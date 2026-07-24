@@ -38,13 +38,19 @@ export class FlightController {
 		groundCollisionEnabled = true
 	): boolean {
 		const desiredRoll = input.roll * 1.12;
-		const desiredPitch = input.pitch * 0.62;
 		this.roll = damp(this.roll, desiredRoll, 4.6, delta);
-		this.pitch = damp(this.pitch, desiredPitch, 3.8, delta);
-		this.pitch = clamp(this.pitch, -0.72, 0.78);
 		this.roll = clamp(this.roll, -1.25, 1.25);
 
-		const turnFromBank = Math.sin(this.roll) * BALANCE.flight.yawRate;
+		// Rate-based pitch so holding up/down can carry through a full loop.
+		this.pitch = wrapAngle(this.pitch + input.pitch * BALANCE.flight.pitchRate * delta);
+		if (Math.abs(input.pitch) < 0.04 && Math.abs(this.pitch) < 0.55) {
+			// Soft settle only while near level — do not fight inverted / looping attitudes.
+			this.pitch = damp(this.pitch, 0, 1.4, delta);
+		}
+
+		// Positive yaw turns toward local left for the jet's -Z forward axis,
+		// while positive roll banks right, so bank-induced yaw uses the opposite sign.
+		const turnFromBank = -Math.sin(this.roll) * BALANCE.flight.yawRate;
 		const directYaw = input.yaw * BALANCE.flight.yawRate * 0.72;
 		this.yaw = wrapAngle(this.yaw + (turnFromBank + directYaw) * delta);
 		if (autoLevel && Math.abs(input.roll) < 0.04) {
@@ -83,7 +89,8 @@ export class FlightController {
 				this.altitude = BALANCE.flight.crashClearance;
 				return true;
 			}
-			this.pitch = Math.max(this.pitch, 0.12);
+			// Nudge toward a climbing attitude without blocking later loops.
+			if (Math.abs(this.pitch) < 0.9) this.pitch = Math.max(this.pitch, 0.12);
 			this.speed = Math.max(BALANCE.flight.minSpeed, this.speed * 0.96);
 			this.applyRotation();
 		}

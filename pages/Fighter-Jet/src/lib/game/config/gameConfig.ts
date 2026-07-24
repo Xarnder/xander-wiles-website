@@ -40,7 +40,12 @@ export const GAME_CONFIG = {
 		wideDistance: 58,
 		chaseHeight: 10,
 		lookAhead: 95,
-		terrainClearance: 5
+		terrainClearance: 5,
+		/** Pull back far enough to keep the full five-ship V in frame. */
+		formationChaseDistance: 112,
+		formationWideDistance: 155,
+		formationChaseHeight: 30,
+		formationLookAhead: 70
 	},
 
 	// The normal mission pacing targets roughly four minutes for a first playthrough.

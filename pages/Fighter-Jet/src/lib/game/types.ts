@@ -11,6 +11,7 @@ export type SubtitleSize = 'small' | 'medium' | 'large';
 export type ColourBlindMode = 'off' | 'deuteranopia' | 'protanopia' | 'tritanopia';
 export type TargetType = 'radar' | 'sam' | 'fuel' | 'hangar' | 'command' | 'weak-point';
 export type TargetLockState = 'none' | 'acquiring' | 'locked' | 'retaining';
+export type SquadronMode = 'formation' | 'free-squad';
 export type SquadronState =
 	'formation' | 'approach' | 'break' | 'attack-run' | 'egress' | 'regroup' | 'victory-flyover';
 
@@ -42,6 +43,8 @@ export interface InputState {
 	fire: boolean;
 	cycleTarget: boolean;
 	cycleCamera: boolean;
+	toggleSquadMode: boolean;
+	toggleSquadDebug: boolean;
 	pause: boolean;
 	map: boolean;
 	method: InputMethod;
@@ -139,10 +142,13 @@ export interface GameSettings {
 	mouseSensitivity: number;
 	gamepadSensitivity: number;
 	invertPitch: boolean;
+	invertRoll: boolean;
 	reducedMotion: boolean;
 	missileCamera: boolean;
 	highContrast: boolean;
 	screenShake: number;
+	trailLength: number;
+	trailBrightness: number;
 	colourBlindMode: ColourBlindMode;
 	simplifiedFlight: boolean;
 	autoLevel: boolean;
@@ -166,6 +172,7 @@ export interface GameSnapshot {
 	objective: string;
 	player: PlayerSnapshot;
 	target: TargetMarkerSnapshot | null;
+	squadMode: SquadronMode;
 	squad: readonly SquadronMemberSnapshot[];
 	notifications: readonly NotificationSnapshot[];
 	radio: RadioSnapshot | null;
@@ -206,6 +213,8 @@ export interface GameCommands {
 	fire(): void;
 	cycleTarget(): void;
 	cycleCamera(): void;
+	toggleSquadMode(): void;
+	toggleSquadDebug(): void;
 	toggleMap(): void;
 	updateSettings(partial: Partial<GameSettings>): void;
 	setTouchInput(input: TouchInput): void;

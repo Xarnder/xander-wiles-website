@@ -140,9 +140,10 @@
 
 		<div class="controls-summary">
 			<p>PRIMARY FLIGHT CONTROL</p>
-			<strong>Mouse / Arrows</strong>
+			<strong>Mouse / W S</strong>
+			<span><kbd>Mouse / W S</kbd> PITCH</span>
 			<span><kbd>A / D</kbd> ROLL</span>
-			<span><kbd>W / S</kbd> THROTTLE</span>
+			<span><kbd>R / F</kbd> THROTTLE</span>
 			<span><kbd>Shift</kbd> AFTERBURNER</span>
 			<span><kbd>Space</kbd> FIRE</span>
 			<span><kbd>Tab</kbd> TARGET</span>

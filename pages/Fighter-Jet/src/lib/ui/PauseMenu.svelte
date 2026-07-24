@@ -50,7 +50,7 @@
 			<b aria-hidden="true">⌁</b>
 		</button>
 		<button class="return" type="button" onclick={onReturnToMenu}>
-			<span><small>ABORT SORTIE</small>Return to Main Menu</span>
+			<span><small>ABORT SORTIE</small>Return to Start Screen</span>
 			<b aria-hidden="true">×</b>
 		</button>
 	</nav>

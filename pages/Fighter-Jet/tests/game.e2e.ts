@@ -6,6 +6,7 @@ type ViperTestApi = {
 	resume: () => void;
 	restart: () => void;
 	success: () => void;
+	snapshot: () => { state: string; squadMode: 'formation' | 'free-squad' };
 };
 
 async function openTestMission(page: Page): Promise<void> {
@@ -30,6 +31,21 @@ test('starts a mission and renders the flight HUD', async ({ page }) => {
 	await expect(page.getByText('MISSILES', { exact: true })).toBeVisible();
 	await expect(page.getByText('ALT', { exact: true })).toBeVisible();
 	await expect(page.getByTestId('current-objective')).toBeVisible();
+});
+
+test('toggles between Formation and Free Squad with B', async ({ page }) => {
+	await openTestMission(page);
+	await page.waitForFunction(
+		() =>
+			(window as Window & { __VIPER_TEST__?: ViperTestApi }).__VIPER_TEST__?.snapshot().state ===
+			'playing'
+	);
+
+	await expect(page.getByTestId('squad-mode')).toHaveText('FORMATION');
+	await page.keyboard.press('KeyB');
+	await expect(page.getByTestId('squad-mode')).toHaveText('FREE SQUAD');
+	await page.keyboard.press('KeyB');
+	await expect(page.getByTestId('squad-mode')).toHaveText('FORMATION');
 });
 
 test('opens and closes pause without advancing the game', async ({ page }) => {
