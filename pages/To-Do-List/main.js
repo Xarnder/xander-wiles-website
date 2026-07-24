@@ -563,13 +563,21 @@ function setupFirestoreListeners(uid) {
             state.appData.settings.tags = ensuredTags.tags;
             state.appData.settings.activeTagId = ensuredTags.activeTagId;
 
-            if (state.currentUser && !docSnap.metadata.hasPendingWrites) {
+            // Only seed from a confirmed server snapshot. Writing from IndexedDB
+            // cache can overwrite custom tags set in another PWA/session.
+            if (
+                state.currentUser
+                && !docSnap.metadata.fromCache
+                && !docSnap.metadata.hasPendingWrites
+            ) {
                 const rawTags = data.settings?.tags;
                 const rawActive = data.settings?.activeTagId;
-                const needsPersist = !Array.isArray(rawTags)
-                    || !rawTags.some((t) => t && t.id === MISC_TAG_ID)
-                    || !rawTags.some((t) => t && t.id === rawActive);
-                if (needsPersist) {
+                const hasTagsArray = Array.isArray(rawTags);
+                const hasMisc = hasTagsArray && rawTags.some((t) => t && t.id === MISC_TAG_ID);
+                const activeIsValid = hasTagsArray && rawTags.some((t) => t && t.id === rawActive);
+                // Persist when tags were never seeded, Misc is missing, or activeTagId
+                // is missing/orphaned. (rawActive == null is intentionally invalid.)
+                if (!hasTagsArray || !hasMisc || !activeIsValid) {
                     API.persistTagsSettingsIfNeeded();
                 }
             }
@@ -748,11 +756,15 @@ function setupFirestoreListeners(uid) {
             state.appData.tasks[docSnap.id] = task;
         });
 
-        if (migrationUpdates.length > 0 && state.currentUser && !nestedMigrationPersistInFlight) {
+        // Migrations must wait for a server snapshot. Cache-first PWA opens can
+        // see pre-tag task docs and wrongly write tag_misc over real tagIds.
+        const safeToMigrate = !snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites;
+
+        if (safeToMigrate && migrationUpdates.length > 0 && state.currentUser && !nestedMigrationPersistInFlight) {
             persistNestedMigrations(migrationUpdates);
         }
 
-        if (tagMigrationUpdates.length > 0 && state.currentUser && !tagMigrationPersistInFlight) {
+        if (safeToMigrate && tagMigrationUpdates.length > 0 && state.currentUser && !tagMigrationPersistInFlight) {
             persistTagMigrations(tagMigrationUpdates);
         }
 

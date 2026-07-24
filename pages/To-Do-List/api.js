@@ -668,19 +668,17 @@ export async function deleteTag(tagId) {
     }
 }
 
+/**
+ * Seed Misc / repair activeTagId into Firestore when the server doc is incomplete.
+ * Caller must only invoke after a non-cache server snapshot confirmed the need.
+ *
+ * Always writes: the listener usually already applied ensureDefaultTags() to
+ * local state, so a diff-based early-return would skip the seed entirely.
+ */
 export function persistTagsSettingsIfNeeded() {
     if (!state.currentUser) return Promise.resolve();
 
     const ensured = ensureDefaultTags(state.appData.settings);
-    const tagsChanged = JSON.stringify(state.appData.settings.tags || []) !== JSON.stringify(ensured.tags);
-    const activeChanged = state.appData.settings.activeTagId !== ensured.activeTagId;
-
-    if (!tagsChanged && !activeChanged) {
-        state.appData.settings.tags = ensured.tags;
-        state.appData.settings.activeTagId = ensured.activeTagId;
-        return Promise.resolve();
-    }
-
     state.appData.settings.tags = ensured.tags;
     state.appData.settings.activeTagId = ensured.activeTagId;
 

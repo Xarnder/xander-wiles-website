@@ -145,14 +145,18 @@ function normalizeTagDefinition(tag) {
     if (!tag || typeof tag !== 'object' || !tag.id) return null;
     const name = typeof tag.name === 'string' ? tag.name.trim() : '';
     if (!name) return null;
-    const glowColor = tag.id === MISC_TAG_ID
-        ? null
-        : normalizeGlowColorValue(tag.glowColor);
-    if (tag.id !== MISC_TAG_ID && !glowColor) return null;
+
+    // Never drop custom tags over an unrecognized colour (e.g. old PWA JS vs
+    // newer OKLCH values). Fall back to a palette colour so the tag survives.
+    let glowColor = null;
+    if (tag.id !== MISC_TAG_ID) {
+        glowColor = normalizeGlowColorValue(tag.glowColor) || GLOW_PALETTE[0];
+    }
+
     return {
         id: tag.id,
         name: name.slice(0, MAX_TAG_NAME_LENGTH),
-        glowColor: tag.id === MISC_TAG_ID ? null : glowColor,
+        glowColor,
         order: Number.isFinite(tag.order) ? tag.order : 0
     };
 }

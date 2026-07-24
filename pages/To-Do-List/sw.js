@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskmaster-todo-v70';
+const CACHE_NAME = 'taskmaster-todo-v71';
 const OWNED_CACHE_PREFIXES = ['taskmaster-todo-', 'taskmaster-v'];
 const ASSETS_TO_CACHE = [
     './',
@@ -86,36 +86,42 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Fetch Event - Network First for Navigation, Cache First for Assets
+// Fetch Event - Network First for Navigation + core JS, Cache First for other assets
 self.addEventListener('fetch', (event) => {
     // Ignore Firebase Auth endpoints to prevent redirect loops and SW interference
     if (event.request.url.includes('/__/auth/')) {
         return;
     }
 
+    const cachePut = (request, response) => {
+        if (!request.url.startsWith('http')) return;
+        const responseToCache = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+            try {
+                cache.put(request, responseToCache);
+            } catch (e) { /* ignore scheme errors */ }
+        });
+    };
+
+    const unwrapRedirect = async (response) => {
+        if (!response || !response.redirected) return response;
+        const cloned = response.clone();
+        const newHeaders = new Headers();
+        cloned.headers.forEach((v, k) => newHeaders.append(k, v));
+        return new Response(cloned.body, {
+            headers: newHeaders,
+            status: cloned.status,
+            statusText: cloned.statusText
+        });
+    };
+
     // Network-First for HTML/Navigation to avoid Safari PWA redirect caching errors
     if (event.request.mode === 'navigate') {
         event.respondWith(
             fetch(event.request)
-                .then((response) => {
-                    let finalResponse = response;
-                    if (response.redirected) {
-                        const cloned = response.clone();
-                        finalResponse = new Response(cloned.body, {
-                            headers: cloned.headers,
-                            status: cloned.status,
-                            statusText: cloned.statusText
-                        });
-                    }
-                    // Cache the latest version
-                    const responseToCache = finalResponse.clone();
-                    if (event.request.url.startsWith('http')) {
-                        caches.open(CACHE_NAME).then((cache) => {
-                            try {
-                                cache.put(event.request, responseToCache);
-                            } catch(e) { /* ignore */ }
-                        });
-                    }
+                .then(async (response) => {
+                    const finalResponse = await unwrapRedirect(response);
+                    cachePut(event.request, finalResponse);
                     return finalResponse;
                 })
                 .catch(() => {
@@ -124,6 +130,39 @@ self.addEventListener('fetch', (event) => {
                         return cached || caches.match('./');
                     });
                 })
+        );
+        return;
+    }
+
+    // Network-first for core app JS so tag/migration fixes reach installed PWAs
+    // instead of staying stuck on a stale cache-first shell.
+    const NETWORK_FIRST_JS = [
+        'main.js',
+        'api.js',
+        'tags.js',
+        'store.js',
+        'ui.js',
+        'nested.js',
+        'kanban.js',
+        'task-import.js',
+        'utils.js',
+        'firebase-config.js',
+        'sw.js'
+    ];
+    const isCoreAppJs = NETWORK_FIRST_JS.some((file) => event.request.url.includes(file));
+
+    if (isCoreAppJs && event.request.method === 'GET') {
+        event.respondWith(
+            fetch(new Request(event.request, { cache: 'no-store' }))
+                .then(async (response) => {
+                    if (!response || response.status !== 200) {
+                        throw new Error('Network response not ok');
+                    }
+                    const finalResponse = await unwrapRedirect(response);
+                    cachePut(event.request, finalResponse);
+                    return finalResponse;
+                })
+                .catch(() => caches.match(event.request))
         );
         return;
     }
@@ -145,36 +184,14 @@ self.addEventListener('fetch', (event) => {
                         return response;
                     }
                     return fetch(event.request).then(
-                        (response) => {
+                        async (response) => {
                             // Check if we received a valid response
                             if (!response || response.status !== 200 || (response.type !== 'basic' && response.type !== 'cors')) {
                                 return response;
                             }
 
-                            let finalResponse = response;
-                            if (response.redirected) {
-                                const cloned = response.clone();
-                                const newHeaders = new Headers();
-                                cloned.headers.forEach((v, k) => newHeaders.append(k, v));
-                                finalResponse = new Response(cloned.body, {
-                                    headers: newHeaders,
-                                    status: cloned.status,
-                                    statusText: cloned.statusText
-                                });
-                            }
-
-                            // Clone the response
-                            const responseToCache = finalResponse.clone();
-
-                            if (event.request.url.startsWith('http')) {
-                                caches.open(CACHE_NAME)
-                                    .then((cache) => {
-                                        try {
-                                            cache.put(event.request, responseToCache);
-                                        } catch(e) { /* ignore scheme errors */ }
-                                    });
-                            }
-
+                            const finalResponse = await unwrapRedirect(response);
+                            cachePut(event.request, finalResponse);
                             return finalResponse;
                         }
                     ).catch(err => {
