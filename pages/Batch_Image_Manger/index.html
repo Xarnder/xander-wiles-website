@@ -61,17 +61,18 @@
         <section id="upload-section" class="glass-card">
             <h2>1. Upload Images & Data</h2>
             <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem;">
-                Select a folder containing your images. Optionally, upload a CSV to auto-categorize them.
+                Select a folder of images or SVGs. Optionally upload a CSV to auto-categorize.
+                For SVG rename, set Format to Original or SVG so vectors are kept.
             </p>
             <div class="setup-options">
                 <div class="setup-directory">
-                    <label for="directory-upload" class="directory-btn">1a. Upload Image Folder</label>
-                    <input type="file" id="directory-upload" webkitdirectory directory multiple style="display:none;" />
+                    <label for="directory-upload" class="directory-btn">1a. Upload Image / SVG Folder</label>
+                    <input type="file" id="directory-upload" webkitdirectory directory multiple accept="image/*,.svg,image/svg+xml" style="display:none;" />
                 </div>
                 <!-- PHOTO LIBRARY UPLOAD (Better for iPhone) -->
                 <div class="setup-photos">
-                    <label for="photo-upload" class="directory-btn">1b. Select Photos from Library</label>
-                    <input type="file" id="photo-upload" multiple accept="image/*" style="display:none;" />
+                    <label for="photo-upload" class="directory-btn">1b. Select Photos / SVGs</label>
+                    <input type="file" id="photo-upload" multiple accept="image/*,.svg,image/svg+xml" style="display:none;" />
                 </div>
                 <!-- CSV UPLOAD -->
                 <div class="setup-csv">
@@ -207,11 +208,13 @@
 
                             <div class="control-group">
                                 <label for="export-format-select">Format</label>
-                                <select id="export-format-select" style="width: 100px;">
+                                <select id="export-format-select" style="width: 160px;">
                                     <option value="image/png" selected>PNG</option>
                                     <option value="image/jpeg">JPG</option>
                                     <option value="image/webp">WebP</option>
                                     <option value="image/avif">AVIF</option>
+                                    <option value="image/svg+xml">SVG</option>
+                                    <option value="original">Original (Rename Only)</option>
                                 </select>
                             </div>
                         </div>

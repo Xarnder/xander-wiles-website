@@ -339,8 +339,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // New Format Listeners
     exportFormatSelect.addEventListener('change', () => {
-        const isPng = exportFormatSelect.value === 'image/png';
-        mainQualityWrapper.classList.toggle('hidden', isPng);
+        const format = exportFormatSelect.value;
+        const hideQuality = format === 'image/png' || format === 'original' || format === 'image/svg+xml';
+        mainQualityWrapper.classList.toggle('hidden', hideQuality);
+        updateNamingUI();
     });
     mainQualitySlider.addEventListener('input', () => {
         mainQualityValue.textContent = mainQualitySlider.value;
@@ -512,12 +514,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const imageRegex = /\.(jpe?g|png|gif|webp|bmp|svg|avif)$/i;
         const pdfRegex = /\.pdf$/i;
 
-        // Separate Images and PDFs
+        // Separate Images/SVGs and PDFs (extension check covers empty/odd MIME types like text/xml for SVG)
         imageFiles = files.filter(file => file.type.startsWith('image/') || imageRegex.test(file.name));
         originalImageFiles = [...imageFiles]; // Store originals
         pdfFiles = files.filter(file => file.type === 'application/pdf' || pdfRegex.test(file.name));
 
-        console.log(`DEBUG: Found ${imageFiles.length} images and ${pdfFiles.length} PDFs.`);
+        console.log(`DEBUG: Found ${imageFiles.length} images/SVGs and ${pdfFiles.length} PDFs.`);
 
         // 1. If we have PDFs, interrupt flow
         if (pdfFiles.length > 0) {
@@ -530,11 +532,66 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 2. If only images
+        // 2. If only images / SVGs
         if (imageFiles.length > 0) {
             prepImages(true);
         } else {
-            showStatus(uploadStatus, 'No valid image or PDF files found.', true);
+            showStatus(uploadStatus, 'No valid image, SVG, or PDF files found.', true);
+        }
+    }
+
+    function isSvgFile(file) {
+        if (!file) return false;
+        return file.type === 'image/svg+xml' || /\.svg$/i.test(file.name || '');
+    }
+
+    function getOriginalExtension(file) {
+        if (!file || !file.name) return '';
+        const idx = file.name.lastIndexOf('.');
+        return idx >= 0 ? file.name.slice(idx) : '';
+    }
+
+    function isPassthroughExportFormat(format) {
+        return format === 'original' || format === 'image/svg+xml';
+    }
+
+    /** Ensure SVGs without width/height still draw on canvas (use viewBox). */
+    async function prepareFileForCanvas(file) {
+        if (!isSvgFile(file)) return file;
+
+        try {
+            const text = await file.text();
+            const rootMatch = text.match(/<svg\b[^>]*>/i);
+            if (!rootMatch) return file;
+
+            const rootTag = rootMatch[0];
+            const hasWidth = /\swidth\s*=/i.test(rootTag);
+            const hasHeight = /\sheight\s*=/i.test(rootTag);
+            if (hasWidth && hasHeight) {
+                return file.type === 'image/svg+xml'
+                    ? file
+                    : new File([text], file.name, { type: 'image/svg+xml' });
+            }
+
+            let width = 512;
+            let height = 512;
+            const viewBoxMatch = rootTag.match(/viewBox\s*=\s*["']?\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/i);
+            if (viewBoxMatch) {
+                width = Math.max(1, Math.abs(parseFloat(viewBoxMatch[3])) || 512);
+                height = Math.max(1, Math.abs(parseFloat(viewBoxMatch[4])) || 512);
+            }
+
+            let patchedRoot = rootTag;
+            if (!hasWidth) patchedRoot = patchedRoot.replace(/<svg\b/i, `<svg width="${width}"`);
+            if (!/\sheight\s*=/i.test(patchedRoot)) {
+                patchedRoot = patchedRoot.replace(/<svg\b/i, `<svg height="${height}"`);
+            }
+
+            const patched = text.replace(rootTag, patchedRoot);
+            return new File([patched], file.name, { type: 'image/svg+xml' });
+        } catch (err) {
+            console.warn('SVG prepare failed, using original file:', err);
+            return file;
         }
     }
 
@@ -552,12 +609,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupEditor() {
-        showStatus(uploadStatus, `Loaded ${imageFiles.length} images. You can now Upload a CSV or scroll down to customize.`, false);
+        const svgCount = imageFiles.filter(isSvgFile).length;
+        const label = svgCount === imageFiles.length
+            ? `Loaded ${imageFiles.length} SVG${imageFiles.length === 1 ? '' : 's'}. Format set to Original (Rename Only) — export to ZIP with new names.`
+            : `Loaded ${imageFiles.length} file${imageFiles.length === 1 ? '' : 's'}${svgCount ? ` (${svgCount} SVG)` : ''}. You can now Upload a CSV or scroll down to customize.`;
+        showStatus(uploadStatus, label, false);
         editorSection.classList.remove('hidden');
         previewControls.classList.remove('hidden');
         updateFolderDropdown();
         handleControlsChange();
         updateUIForCurrentIndex();
+
+        // SVG-only batches: default to rename-only so vectors stay vectors
+        if (svgCount === imageFiles.length && imageFiles.length > 0) {
+            exportFormatSelect.value = 'original';
+            addTitleToggle.checked = false;
+            updateTitleControlState();
+            mainQualityWrapper.classList.add('hidden');
+            updateNamingUI();
+            handleControlsChange();
+        }
     }
 
     async function handlePdfConversion() {
@@ -720,13 +791,39 @@ document.addEventListener('DOMContentLoaded', () => {
         return nameWithoutExt.replace(/_/g, ' ').replace(/-/g, ' ');
     }
 
-    function getFileExtension(mimeType) {
+    function getFileExtension(mimeType, file) {
         switch (mimeType) {
-            case 'image/jpeg': return '.jpg';
-            case 'image/webp': return '.webp';
-            case 'image/avif': return '.avif';
-            default: return '.png';
+            case 'original':
+                return getOriginalExtension(file) || '.png';
+            case 'image/svg+xml':
+                return '.svg';
+            case 'image/jpeg':
+                return '.jpg';
+            case 'image/webp':
+                return '.webp';
+            case 'image/avif':
+                return '.avif';
+            default:
+                return '.png';
         }
+    }
+
+    async function getExportBlobForFile(file, index, options, format, quality, processCtx) {
+        // Rename-only / SVG passthrough: keep original vector (or bytes) intact
+        if (format === 'original') {
+            return file;
+        }
+        if (format === 'image/svg+xml') {
+            if (!isSvgFile(file)) {
+                throw new Error(`${file.name} is not an SVG — skip or choose PNG/JPG to rasterize.`);
+            }
+            return file;
+        }
+
+        await drawImageWithTitle(processCtx, file, imageTitles[index], options);
+        const blob = await new Promise(resolve => processCtx.canvas.toBlob(resolve, format, quality));
+        if (!blob) throw new Error(`Failed to create blob for ${file.name}`);
+        return blob;
     }
 
     function updateAdjustmentLabels() {
@@ -817,16 +914,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function drawImageWithTitle(ctx, imageFile, title, options) {
+        const drawableFile = await prepareFileForCanvas(imageFile);
         return new Promise((resolve, reject) => {
             const img = new Image();
             // Use object URL
-            const url = URL.createObjectURL(imageFile);
+            const url = URL.createObjectURL(drawableFile);
 
             img.onload = () => {
+                const imgW = img.naturalWidth || img.width || 512;
+                const imgH = img.naturalHeight || img.height || 512;
+
                 if (!options.addTitle) {
-                    ctx.canvas.width = img.width;
-                    ctx.canvas.height = img.height;
-                    drawAdjustedImage(ctx, img, 0, 0, img.width, img.height, options.adjustments);
+                    ctx.canvas.width = imgW;
+                    ctx.canvas.height = imgH;
+                    drawAdjustedImage(ctx, img, 0, 0, imgW, imgH, options.adjustments);
                     URL.revokeObjectURL(url); // Clean up
                     return resolve();
                 }
@@ -836,21 +937,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     headerHeight = options.headerHeight;
                 }
 
-                ctx.canvas.width = img.width;
-                ctx.canvas.height = (options.mode === 'add-space') ? img.height + headerHeight : img.height;
+                ctx.canvas.width = imgW;
+                ctx.canvas.height = (options.mode === 'add-space') ? imgH + headerHeight : imgH;
 
                 if (options.mode === 'add-space') {
                     const isBelow = options.position === 'below';
                     const imageY = isBelow ? 0 : headerHeight;
-                    const headerY = isBelow ? img.height : 0;
+                    const headerY = isBelow ? imgH : 0;
                     ctx.fillStyle = options.bgColor;
                     ctx.fillRect(0, headerY, ctx.canvas.width, headerHeight);
-                    drawAdjustedImage(ctx, img, 0, imageY, img.width, img.height, options.adjustments);
+                    drawAdjustedImage(ctx, img, 0, imageY, imgW, imgH, options.adjustments);
                 } else {
-                    drawAdjustedImage(ctx, img, 0, 0, img.width, img.height, options.adjustments);
+                    drawAdjustedImage(ctx, img, 0, 0, imgW, imgH, options.adjustments);
                     if (options.mode === 'bleed') {
                         const isBelow = options.position === 'below';
-                        const rectY = isBelow ? img.height - headerHeight : 0;
+                        const rectY = isBelow ? imgH - headerHeight : 0;
                         ctx.fillStyle = options.bgColor;
                         ctx.fillRect(0, rectY, ctx.canvas.width, headerHeight);
                     }
@@ -883,11 +984,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     textY = ctx.canvas.height * (options.textYPercent / 100);
                 } else if (options.mode === 'add-space') {
                     const isBelow = options.position === 'below';
-                    const headerY = isBelow ? img.height : 0;
+                    const headerY = isBelow ? imgH : 0;
                     textY = headerY + (headerHeight / 2);
                 } else { // bleed
                     const isBelow = options.position === 'below';
-                    const rectY = isBelow ? img.height - headerHeight : 0;
+                    const rectY = isBelow ? imgH - headerHeight : 0;
                     textY = rectY + (headerHeight / 2) + options.textOffset;
                 }
 
@@ -931,20 +1032,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         exportBtn.disabled = true;
         exportBtn.textContent = 'Processing...';
-        showStatus(exportStatus, `Processing ${imageFiles.length} images...`, false, true);
-
-        // Show Progress Bar
-        // Re-using the grid progress container for the main export to provide feedback
-        // We move it or clone it? Let's just grab the elements.
-        const progressBarContainer = document.getElementById('grid-progress-container');
-        const progressBar = document.getElementById('grid-progress-bar');
-        const progressText = document.getElementById('grid-progress-text');
-
-        // Use inline style to show it near the export button if we can, 
-        // or just rely on the one in the popup? 
-        // Actually, the user might not see it if it's inside the hidden grid popup.
-        // But the previous request asked to fix the grid progress.
-        // Let's rely on status text for now, but make the status updates frequent.
+        showStatus(exportStatus, `Processing ${imageFiles.length} files...`, false, true);
 
         const zip = new JSZip();
         const options = getTitleOptionsFromUI();
@@ -952,25 +1040,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const processCtx = processCanvas.getContext('2d');
         const format = exportFormatSelect.value;
         const quality = parseInt(mainQualitySlider.value, 10) / 100;
-        const ext = getFileExtension(format);
-        const prefix = filenamePrefixInput.value || "";
-        const suffix = filenameSuffixInput.value || "";
+        const passthrough = isPassthroughExportFormat(format);
 
         let successCount = 0;
+        let skippedCount = 0;
 
         try {
             for (let i = 0; i < imageFiles.length; i++) {
-                // Update status every image so user knows it's moving
                 const pct = Math.round(((i + 1) / imageFiles.length) * 100);
                 showStatus(exportStatus, `Processing ${i + 1}/${imageFiles.length} (${pct}%)`, false);
                 exportBtn.textContent = `Processing ${pct}%...`;
 
                 try {
-                    // Wrapped in TRY/CATCH so one bad image doesn't kill the batch
-                    await drawImageWithTitle(processCtx, imageFiles[i], imageTitles[i], options);
-                    const blob = await new Promise(resolve => processCanvas.toBlob(resolve, format, quality));
-                    if (!blob) throw new Error(`Failed to create blob for image ${i}`);
-
+                    const file = imageFiles[i];
+                    const blob = await getExportBlobForFile(file, i, options, format, quality, processCtx);
+                    const ext = getFileExtension(format, file);
                     const finalName = generateFilename(i, imageTitles[i], ext);
 
                     if (imageFolders[i] !== "(Root)") {
@@ -980,24 +1064,31 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     successCount++;
 
-                    // Explicitly clear canvas to help memory
-                    processCtx.clearRect(0, 0, processCanvas.width, processCanvas.height);
-
+                    if (!passthrough) {
+                        processCtx.clearRect(0, 0, processCanvas.width, processCanvas.height);
+                    }
                 } catch (imgError) {
                     console.error(`Error processing image ${imageFiles[i].name}:`, imgError);
-                    // Continue to next image
+                    skippedCount++;
                 }
             }
 
-            showStatus(exportStatus, `Zipping ${successCount} images...`, false);
+            if (successCount === 0) {
+                throw new Error(skippedCount
+                    ? 'No files exported. For SVG rename, set Format to Original or SVG.'
+                    : 'No files to export.');
+            }
+
+            showStatus(exportStatus, `Zipping ${successCount} file${successCount === 1 ? '' : 's'}...`, false);
             const zipBlob = await zip.generateAsync({ type: 'blob' });
 
             const link = document.createElement('a');
             link.href = URL.createObjectURL(zipBlob);
-            link.download = 'processed_images.zip';
+            link.download = passthrough ? 'renamed_files.zip' : 'processed_images.zip';
             document.body.appendChild(link); link.click(); document.body.removeChild(link);
 
-            showStatus(exportStatus, `Download Started!`, false);
+            const skipNote = skippedCount ? ` (${skippedCount} skipped)` : '';
+            showStatus(exportStatus, `Download Started!${skipNote}`, false);
         } catch (error) {
             console.error("DEBUG: Export Error", error);
             showStatus(exportStatus, `Error: ${error.message}`, true);
@@ -1012,13 +1103,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const format = exportFormatSelect.value;
         const quality = parseInt(mainQualitySlider.value, 10) / 100;
-        const ext = getFileExtension(format);
+        const file = imageFiles[currentIndex];
+        const ext = getFileExtension(format, file);
         const finalName = generateFilename(currentIndex, imageTitles[currentIndex], ext);
 
-        previewCanvas.toBlob(async (blob) => {
-            if (!blob) return;
-            await safeDownload(blob, finalName);
-        }, format, quality);
+        try {
+            if (isPassthroughExportFormat(format)) {
+                if (format === 'image/svg+xml' && !isSvgFile(file)) {
+                    showStatus(exportStatus, 'Current file is not an SVG. Choose PNG/JPG or Original.', true);
+                    return;
+                }
+                await safeDownload(file, finalName);
+                return;
+            }
+
+            previewCanvas.toBlob(async (blob) => {
+                if (!blob) return;
+                await safeDownload(blob, finalName);
+            }, format, quality);
+        } catch (err) {
+            showStatus(exportStatus, `Error: ${err.message}`, true);
+        }
     }
 
     async function handleOpenGridInTab() {
@@ -2892,12 +2997,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return imageFolders.map((folder, index) => (folder === source ? index : -1)).filter(index => index !== -1);
     }
 
-    function loadImage(file) {
+    async function loadImage(file) {
+        const drawableFile = await prepareFileForCanvas(file);
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.onload = () => resolve(img);
             img.onerror = () => reject(new Error(`Could not load image ${file.name}`));
-            img.src = URL.createObjectURL(file);
+            img.src = URL.createObjectURL(drawableFile);
         });
     }
 
@@ -2941,9 +3047,14 @@ document.addEventListener('DOMContentLoaded', () => {
         namingSequentialInputs.classList.toggle('hidden', mode !== 'sequential');
 
         // Update example
-        const ext = getFileExtension(exportFormatSelect.value);
+        const format = exportFormatSelect.value;
+        const sampleFile = imageFiles[0] || { name: 'icon.svg' };
+        const ext = getFileExtension(format, sampleFile);
         const exampleName = generateFilename(0, "Image Name", ext);
-        namingExampleText.textContent = `Example: ${exampleName}`;
+        const passthroughHint = isPassthroughExportFormat(format)
+            ? ' — keeps original file bytes (ideal for SVG rename)'
+            : '';
+        namingExampleText.textContent = `Example: ${exampleName}${passthroughHint}`;
     }
 
     // --- Batch Fast Crop Logic ---
