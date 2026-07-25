@@ -12,6 +12,7 @@ import {
   IconArrowLeft,
   IconArrowRight,
   IconArrowUp,
+  IconFlip,
 } from './icons'
 
 interface ControlsProps {
@@ -248,23 +249,25 @@ export function Controls({
               </button>
               <button
                 type="button"
-                className={`btn ${settings.mirror ? 'active' : ''}`}
+                className={`btn icon-label-btn ${settings.mirror ? 'active' : ''}`}
                 onClick={() => onUpdateSettings({ mirror: !settings.mirror })}
                 title="Script mirror — flip script text only"
                 aria-pressed={settings.mirror}
               >
-                Script ↔
+                <IconFlip className="btn-icon" />
+                <span>Script</span>
               </button>
               <button
                 type="button"
-                className={`btn ${settings.uiMirror ? 'active' : ''}`}
+                className={`btn icon-label-btn ${settings.uiMirror ? 'active' : ''}`}
                 onClick={() =>
                   onUpdateSettings({ uiMirror: !settings.uiMirror })
                 }
-                title="UI mirror — flip the whole interface horizontally"
+                title="UI mirror — flip icons and text only (layout stays put)"
                 aria-pressed={settings.uiMirror}
               >
-                UI ↔
+                <IconFlip className="btn-icon" />
+                <span>UI</span>
               </button>
               <button
                 type="button"
@@ -280,6 +283,17 @@ export function Controls({
                 aria-pressed={settings.chromeBottom}
               >
                 {settings.chromeBottom ? 'Header' : 'Footer'}
+              </button>
+              <button
+                type="button"
+                className={`btn ${settings.largeControls ? 'active' : ''}`}
+                onClick={() =>
+                  onUpdateSettings({ largeControls: !settings.largeControls })
+                }
+                title="Large controls — chunkier UI for iPad / touch"
+                aria-pressed={settings.largeControls}
+              >
+                Large
               </button>
               <button
                 type="button"
@@ -542,7 +556,7 @@ export function Controls({
                   onUpdateSettings({ uiMirror: e.target.checked })
                 }
               />
-              <span>UI mirror</span>
+              <span>UI mirror (text/icons)</span>
             </label>
             <label className="toggle">
               <input
@@ -553,6 +567,16 @@ export function Controls({
                 }
               />
               <span>Controls at bottom</span>
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.largeControls}
+                onChange={(e) =>
+                  onUpdateSettings({ largeControls: e.target.checked })
+                }
+              />
+              <span>Large controls (iPad)</span>
             </label>
             <label className={`toggle${settings.oledMode ? ' is-disabled' : ''}`}>
               <input

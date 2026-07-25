@@ -37,8 +37,8 @@ export function HowToUse({ onClose }: HowToUseProps) {
           <li>
             Optionally open <strong>Settings</strong> to pick a mic, font size,
             line width, dark/light mode, <strong>script mirror</strong> (text
-            only), or <strong>UI mirror</strong> (flips the whole interface
-            horizontally for a beam-splitter rig).
+            only), or <strong>UI mirror</strong> (flips icons and labels without
+            rearranging the layout).
           </li>
           <li>
             Press <strong>Start</strong> and allow microphone access. The first
@@ -220,12 +220,17 @@ export function HowToUse({ onClose }: HowToUseProps) {
             teleprompter glass.
           </li>
           <li>
-            <strong>UI mirror</strong> — flip the whole interface horizontally
-            (stats, buttons, panels). Independent of script mirror.
+            <strong>UI mirror</strong> — flip icons and text in buttons, titles,
+            and headers. Layout positions stay the same (independent of script
+            mirror).
           </li>
           <li>
             <strong>Controls at bottom</strong> — move the whole header to a
             footer for easier reach (thumb-friendly).
+          </li>
+          <li>
+            <strong>Large controls</strong> — chunkier buttons, stats, and
+            chrome for iPad / touch (header can grow; layout still wraps cleanly).
           </li>
           <li>
             <strong>Preload model</strong> — download the speech model before you

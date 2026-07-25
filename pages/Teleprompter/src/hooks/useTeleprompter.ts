@@ -15,10 +15,12 @@ export interface TeleprompterSettings {
   lineWidth: number
   /** Horizontally flip script text only (beam-splitter / glass). */
   mirror: boolean
-  /** Horizontally flip the whole UI (chrome, stats, panels). Separate from script mirror. */
+  /** Flip chrome text/icons horizontally without rearranging layout. */
   uiMirror: boolean
   /** Dock the controls chrome at the bottom (footer) for easier reach. */
   chromeBottom: boolean
+  /** Larger, chunkier chrome controls for iPad / touch. */
+  largeControls: boolean
   darkMode: boolean
   /** Pure black background + pure white text (OLED-friendly). */
   oledMode: boolean
@@ -63,6 +65,7 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   mirror: false,
   uiMirror: false,
   chromeBottom: false,
+  largeControls: false,
   darkMode: true,
   oledMode: false,
   boldText: false,
@@ -123,6 +126,10 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
       typeof p.chromeBottom === 'boolean'
         ? p.chromeBottom
         : DEFAULT_SETTINGS.chromeBottom,
+    largeControls:
+      typeof p.largeControls === 'boolean'
+        ? p.largeControls
+        : DEFAULT_SETTINGS.largeControls,
     darkMode:
       typeof p.darkMode === 'boolean' ? p.darkMode : DEFAULT_SETTINGS.darkMode,
     oledMode:
