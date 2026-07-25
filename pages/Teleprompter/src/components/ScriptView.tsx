@@ -81,75 +81,78 @@ export function ScriptView({
   return (
     <div
       ref={containerRef}
-      className={`script-view ${mirror ? 'is-mirrored' : ''}`}
+      className="script-view"
       data-scroll-anchor={scrollAnchor}
+      data-mirrored={mirror ? 'true' : undefined}
       style={{
         fontSize: `${fontSize}px`,
         maxWidth: `${lineWidth}ch`,
       }}
       aria-live="off"
     >
-      <div className="script-pad script-pad-top" />
-      <div className="script-text">
-        {words.map((word, i) => {
-          const isPast = showCursorHighlight && word.index < cursor
-          const isCurrent = showCursorHighlight && word.index === cursor
-          const className = [
-            'script-word',
-            isPast ? 'is-past' : '',
-            isCurrent ? 'is-current' : '',
-            isCurrent && alignState === 'off_script' ? 'is-frozen' : '',
-            onSeek ? 'is-seekable' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
+      <div className="script-mirror">
+        <div className="script-pad script-pad-top" />
+        <div className="script-text">
+          {words.map((word, i) => {
+            const isPast = showCursorHighlight && word.index < cursor
+            const isCurrent = showCursorHighlight && word.index === cursor
+            const className = [
+              'script-word',
+              isPast ? 'is-past' : '',
+              isCurrent ? 'is-current' : '',
+              isCurrent && alignState === 'off_script' ? 'is-frozen' : '',
+              onSeek ? 'is-seekable' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')
 
-          const br = breakAfterWord(
-            script,
-            word,
-            words[i + 1],
-            preserveBreaks,
-            sentenceBreak,
-          )
+            const br = breakAfterWord(
+              script,
+              word,
+              words[i + 1],
+              preserveBreaks,
+              sentenceBreak,
+            )
 
-          return (
-            <span key={word.index} className="script-token">
-              <span
-                ref={(el) => registerWordRef(word.index, el)}
-                className={className}
-                data-index={word.index}
-                onClick={
-                  onSeek
-                    ? (e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        onSeek(word.index)
-                      }
-                    : undefined
-                }
-                title={onSeek ? 'Click to jump here' : undefined}
-              >
-                {word.raw}
-              </span>
-              {br === 'paragraph' ? (
-                <>
-                  <br />
-                  <br />
-                </>
-              ) : br === 'line' ? (
-                <br />
-              ) : br === 'tab' ? (
-                <span className="sentence-tab" aria-hidden>
-                  {'\u00A0\u00A0\u00A0\u00A0'}
+            return (
+              <span key={word.index} className="script-token">
+                <span
+                  ref={(el) => registerWordRef(word.index, el)}
+                  className={className}
+                  data-index={word.index}
+                  onClick={
+                    onSeek
+                      ? (e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          onSeek(word.index)
+                        }
+                      : undefined
+                  }
+                  title={onSeek ? 'Click to jump here' : undefined}
+                >
+                  {word.raw}
                 </span>
-              ) : (
-                ' '
-              )}
-            </span>
-          )
-        })}
+                {br === 'paragraph' ? (
+                  <>
+                    <br />
+                    <br />
+                  </>
+                ) : br === 'line' ? (
+                  <br />
+                ) : br === 'tab' ? (
+                  <span className="sentence-tab" aria-hidden>
+                    {'\u00A0\u00A0\u00A0\u00A0'}
+                  </span>
+                ) : (
+                  ' '
+                )}
+              </span>
+            )
+          })}
+        </div>
+        <div className="script-pad script-pad-bottom" />
       </div>
-      <div className="script-pad script-pad-bottom" />
     </div>
   )
 }

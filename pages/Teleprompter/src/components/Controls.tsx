@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { MicDevice } from '../hooks/useMicDevices'
 import {
   DEFAULT_SETTINGS,
@@ -5,6 +6,13 @@ import {
 } from '../hooks/useTeleprompter'
 import type { SpeechStatus } from '../asr/useSpeechStream'
 import type { AlignmentState } from '../alignment/AlignmentEngine'
+import { ConfirmModal } from './Modal'
+import {
+  IconArrowDown,
+  IconArrowLeft,
+  IconArrowRight,
+  IconArrowUp,
+} from './icons'
 
 interface ControlsProps {
   isRunning: boolean
@@ -39,6 +47,7 @@ interface ControlsProps {
   onToggleHowTo: () => void
   onToggleFullscreen: () => void
   onNudge: (delta: number) => void
+  onNudgeSentence: (direction: 'up' | 'down') => void
   onUpdateSettings: (patch: Partial<TeleprompterSettings>) => void
   onResetSettings: () => void
 }
@@ -129,9 +138,11 @@ export function Controls({
   onToggleHowTo,
   onToggleFullscreen,
   onNudge,
+  onNudgeSentence,
   onUpdateSettings,
   onResetSettings,
 }: ControlsProps) {
+  const [resetSettingsOpen, setResetSettingsOpen] = useState(false)
   const isLiveScroll = status === 'listening' && alignState === 'tracking'
   const isHoldingOffScript = status === 'listening' && alignState === 'off_script'
   const scrollMode: 'live' | 'paused' = isLiveScroll ? 'live' : 'paused'
@@ -321,19 +332,39 @@ export function Controls({
         <div className="nudge-group" role="group" aria-label="Nudge cursor">
           <button
             type="button"
-            className="btn ghost nudge-btn"
-            onClick={() => onNudge(-1)}
-            title="Back one word (←)"
+            className="btn ghost nudge-btn icon-btn"
+            onClick={() => onNudgeSentence('up')}
+            title="Previous sentence boundary (↑)"
+            aria-label="Previous sentence boundary"
           >
-            ←
+            <IconArrowUp className="btn-icon" />
           </button>
           <button
             type="button"
-            className="btn ghost nudge-btn"
+            className="btn ghost nudge-btn icon-btn"
+            onClick={() => onNudge(-1)}
+            title="Back one word (←)"
+            aria-label="Back one word"
+          >
+            <IconArrowLeft className="btn-icon" />
+          </button>
+          <button
+            type="button"
+            className="btn ghost nudge-btn icon-btn"
             onClick={() => onNudge(1)}
             title="Forward one word (→)"
+            aria-label="Forward one word"
           >
-            →
+            <IconArrowRight className="btn-icon" />
+          </button>
+          <button
+            type="button"
+            className="btn ghost nudge-btn icon-btn"
+            onClick={() => onNudgeSentence('down')}
+            title="Next sentence boundary (↓)"
+            aria-label="Next sentence boundary"
+          >
+            <IconArrowDown className="btn-icon" />
           </button>
         </div>
       </div>
@@ -456,15 +487,36 @@ export function Controls({
               />
               <span>Mirror mode</span>
             </label>
-            <label className="toggle">
+            <label className={`toggle${settings.oledMode ? ' is-disabled' : ''}`}>
               <input
                 type="checkbox"
                 checked={settings.darkMode}
+                disabled={settings.oledMode}
                 onChange={(e) =>
                   onUpdateSettings({ darkMode: e.target.checked })
                 }
               />
               <span>Dark mode</span>
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.oledMode}
+                onChange={(e) =>
+                  onUpdateSettings({ oledMode: e.target.checked })
+                }
+              />
+              <span>OLED black mode</span>
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.boldText}
+                onChange={(e) =>
+                  onUpdateSettings({ boldText: e.target.checked })
+                }
+              />
+              <span>Bold text</span>
             </label>
             <label className="toggle">
               <input
@@ -606,11 +658,7 @@ export function Controls({
             <button
               type="button"
               className="btn ghost"
-              onClick={() => {
-                if (window.confirm('Reset all settings to defaults?')) {
-                  onResetSettings()
-                }
-              }}
+              onClick={() => setResetSettingsOpen(true)}
             >
               Reset settings
             </button>
@@ -620,6 +668,20 @@ export function Controls({
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={resetSettingsOpen}
+        title="Reset settings?"
+        message="Restore every setting to its default value. Your script and microphone choice are kept."
+        confirmLabel="Reset settings"
+        cancelLabel="Cancel"
+        tone="danger"
+        onCancel={() => setResetSettingsOpen(false)}
+        onConfirm={() => {
+          onResetSettings()
+          setResetSettingsOpen(false)
+        }}
+      />
     </header>
   )
 }

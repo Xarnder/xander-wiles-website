@@ -4,7 +4,6 @@ import { HowToUse } from './components/HowToUse'
 import { ScriptEditor } from './components/ScriptEditor'
 import { ScriptView } from './components/ScriptView'
 import { useMicDevices } from './hooks/useMicDevices'
-import { usePresentationChrome } from './hooks/usePresentationChrome'
 import { useTeleprompter } from './hooks/useTeleprompter'
 import { useWakeLock } from './hooks/useWakeLock'
 
@@ -33,7 +32,6 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   const isListening = tp.speech.status === 'listening'
-  const chromeVisible = usePresentationChrome(isListening)
   useWakeLock(isListening)
 
   useEffect(() => {
@@ -43,10 +41,15 @@ export default function App() {
   }, [selectedDeviceId, tp.setDeviceId])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = tp.settings.darkMode
-      ? 'dark'
-      : 'light'
-  }, [tp.settings.darkMode])
+    document.documentElement.dataset.theme = tp.settings.oledMode
+      ? 'oled'
+      : tp.settings.darkMode
+        ? 'dark'
+        : 'light'
+    document.documentElement.dataset.boldScript = tp.settings.boldText
+      ? 'true'
+      : 'false'
+  }, [tp.settings.darkMode, tp.settings.oledMode, tp.settings.boldText])
 
   useEffect(() => {
     if (tp.speech.status === 'listening') {
@@ -146,11 +149,11 @@ export default function App() {
           break
         case 'ArrowUp':
           e.preventDefault()
-          tp.nudge(-5)
+          tp.nudgeSentence('up')
           break
         case 'ArrowDown':
           e.preventDefault()
-          tp.nudge(5)
+          tp.nudgeSentence('down')
           break
         default:
           break
@@ -170,16 +173,8 @@ export default function App() {
     tp,
   ])
 
-  const shellClass = [
-    'app-shell',
-    isListening ? 'is-presenting' : '',
-    isListening && !chromeVisible ? 'is-chrome-hidden' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-
   return (
-    <div className={shellClass}>
+    <div className="app-shell">
       <div className="atmosphere" aria-hidden>
         <span className="glow-orb glow-orb-a" />
         <span className="glow-orb glow-orb-b" />
@@ -226,6 +221,7 @@ export default function App() {
         }}
         onToggleFullscreen={() => void toggleFullscreen()}
         onNudge={tp.nudge}
+        onNudgeSentence={tp.nudgeSentence}
         onUpdateSettings={tp.updateSettings}
         onResetSettings={tp.resetSettings}
       />

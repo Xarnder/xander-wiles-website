@@ -3,7 +3,7 @@ import { AlignmentEngine, type AlignmentState } from '../alignment/AlignmentEngi
 import { useSpeechStream } from '../asr/useSpeechStream'
 import { useScrollController, type ScrollAnchorMode } from '../scroll/useScrollController'
 import { tokenizeTranscript } from '../utils/tokenize'
-import { isSentenceEnd } from '../utils/sentences'
+import { isSentenceEnd, nextSentenceBoundary } from '../utils/sentences'
 import { DEFAULT_SCRIPT } from '../utils/defaultScript'
 
 /** Extra spacing after a full stop in the displayed script. */
@@ -15,6 +15,10 @@ export interface TeleprompterSettings {
   lineWidth: number
   mirror: boolean
   darkMode: boolean
+  /** Pure black background + pure white text (OLED-friendly). */
+  oledMode: boolean
+  /** Heavier weight for teleprompter script text. */
+  boldText: boolean
   confidenceThreshold: number
   scrollSensitivity: number
   /** Keep original newlines / blank lines in the teleprompter display. */
@@ -53,6 +57,8 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   lineWidth: 42,
   mirror: false,
   darkMode: true,
+  oledMode: false,
+  boldText: false,
   confidenceThreshold: 0.62,
   scrollSensitivity: 1,
   preserveBreaks: true,
@@ -106,6 +112,10 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
     mirror: typeof p.mirror === 'boolean' ? p.mirror : DEFAULT_SETTINGS.mirror,
     darkMode:
       typeof p.darkMode === 'boolean' ? p.darkMode : DEFAULT_SETTINGS.darkMode,
+    oledMode:
+      typeof p.oledMode === 'boolean' ? p.oledMode : DEFAULT_SETTINGS.oledMode,
+    boldText:
+      typeof p.boldText === 'boolean' ? p.boldText : DEFAULT_SETTINGS.boldText,
     confidenceThreshold: clamp(
       typeof p.confidenceThreshold === 'number'
         ? p.confidenceThreshold
@@ -501,6 +511,15 @@ export function useTeleprompter() {
     [cursor, seekTo],
   )
 
+  /** Jump to the previous/next sentence start or end boundary. */
+  const nudgeSentence = useCallback(
+    (direction: 'up' | 'down') => {
+      const next = nextSentenceBoundary(script, scriptWords, cursor, direction)
+      seekTo(next)
+    },
+    [cursor, script, scriptWords, seekTo],
+  )
+
   const updateSettings = useCallback(
     (patch: Partial<TeleprompterSettings>) => {
       setSettings((prev) => ({ ...prev, ...patch }))
@@ -562,6 +581,7 @@ export function useTeleprompter() {
     cursor,
     seekTo,
     nudge,
+    nudgeSentence,
     progress,
     wpm,
     alignState,

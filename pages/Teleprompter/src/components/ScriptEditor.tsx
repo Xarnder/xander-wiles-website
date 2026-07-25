@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { AlertModal, ConfirmModal } from './Modal'
+import { IconClose } from './icons'
 
 interface ScriptEditorProps {
   script: string
@@ -16,13 +18,20 @@ function countStats(text: string) {
 
 export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
   const [copied, setCopied] = useState(false)
+  const [clearOpen, setClearOpen] = useState(false)
+  const [alert, setAlert] = useState<{ title: string; message: string } | null>(
+    null,
+  )
   const stats = useMemo(() => countStats(script), [script])
 
   const onFile = async (file: File | null) => {
     if (!file) return
     const name = file.name.toLowerCase()
     if (!name.endsWith('.txt') && file.type && !file.type.startsWith('text/')) {
-      window.alert('Please import a .txt file.')
+      setAlert({
+        title: 'Import failed',
+        message: 'Please import a plain .txt file.',
+      })
       return
     }
     const text = await file.text()
@@ -35,7 +44,10 @@ export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1600)
     } catch {
-      window.alert('Could not copy to clipboard.')
+      setAlert({
+        title: 'Copy failed',
+        message: 'Could not copy to the clipboard. Check browser permissions.',
+      })
     }
   }
 
@@ -49,12 +61,6 @@ export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
     URL.revokeObjectURL(url)
   }
 
-  const clearScript = () => {
-    if (!script.trim()) return
-    if (!window.confirm('Clear the entire script?')) return
-    onChange('')
-  }
-
   return (
     <section className="script-editor-page glass-panel">
       <div className="panel-header">
@@ -66,8 +72,15 @@ export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
             <span className="editor-stats-note"> · autosaved</span>
           </p>
         </div>
-        <button type="button" className="btn ghost" onClick={onClose}>
-          Done
+        <button
+          type="button"
+          className="btn ghost icon-btn"
+          onClick={onClose}
+          title="Done"
+          aria-label="Done"
+        >
+          <IconClose className="btn-icon" />
+          <span>Done</span>
         </button>
       </div>
       <textarea
@@ -93,10 +106,36 @@ export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
         <button type="button" className="btn" onClick={downloadScript}>
           Download
         </button>
-        <button type="button" className="btn ghost" onClick={clearScript}>
+        <button
+          type="button"
+          className="btn ghost"
+          onClick={() => {
+            if (script.trim()) setClearOpen(true)
+          }}
+        >
           Clear
         </button>
       </div>
+
+      <ConfirmModal
+        open={clearOpen}
+        title="Clear script?"
+        message="This removes the entire script from the editor. Your autosave will update — this can’t be undone."
+        confirmLabel="Clear script"
+        cancelLabel="Keep script"
+        tone="danger"
+        onCancel={() => setClearOpen(false)}
+        onConfirm={() => {
+          onChange('')
+          setClearOpen(false)
+        }}
+      />
+      <AlertModal
+        open={alert != null}
+        title={alert?.title}
+        message={alert?.message ?? ''}
+        onClose={() => setAlert(null)}
+      />
     </section>
   )
 }

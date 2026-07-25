@@ -1,3 +1,5 @@
+import { IconArrowRight, IconClose } from './icons'
+
 interface HowToUseProps {
   onClose: () => void
 }
@@ -7,8 +9,15 @@ export function HowToUse({ onClose }: HowToUseProps) {
     <section className="howto-page glass-panel" aria-labelledby="howto-title">
       <div className="panel-header">
         <h2 id="howto-title">How to use</h2>
-        <button type="button" className="btn ghost" onClick={onClose}>
-          Done
+        <button
+          type="button"
+          className="btn ghost icon-btn"
+          onClick={onClose}
+          title="Done"
+          aria-label="Done"
+        >
+          <IconClose className="btn-icon" />
+          <span>Done</span>
         </button>
       </div>
 
@@ -50,19 +59,25 @@ export function HowToUse({ onClose }: HowToUseProps) {
             <strong>Mic</strong>
             <p>Audio stays in your browser</p>
           </div>
-          <span className="howto-flow-arrow">→</span>
+          <span className="howto-flow-arrow" aria-hidden>
+            <IconArrowRight className="howto-flow-arrow-icon" />
+          </span>
           <div className="howto-flow-step">
             <span className="howto-flow-num">2</span>
             <strong>Speech</strong>
             <p>On-device Moonshine ASR</p>
           </div>
-          <span className="howto-flow-arrow">→</span>
+          <span className="howto-flow-arrow" aria-hidden>
+            <IconArrowRight className="howto-flow-arrow-icon" />
+          </span>
           <div className="howto-flow-step">
             <span className="howto-flow-num">3</span>
             <strong>Match</strong>
             <p>Aligns words to the script</p>
           </div>
-          <span className="howto-flow-arrow">→</span>
+          <span className="howto-flow-arrow" aria-hidden>
+            <IconArrowRight className="howto-flow-arrow-icon" />
+          </span>
           <div className="howto-flow-step">
             <span className="howto-flow-num">4</span>
             <strong>Scroll</strong>
@@ -88,11 +103,8 @@ export function HowToUse({ onClose }: HowToUseProps) {
         <ul className="howto-list">
           <li>
             Click any word — while paused or live — to jump the cursor there. Use
-            ← → to nudge one word, or ↑ ↓ to jump five.
-          </li>
-          <li>
-            While live, controls auto-hide — move the mouse to the top edge to
-            bring them back.
+            ← → to nudge one word, or ↑ ↓ to jump between sentence starts and
+            ends.
           </li>
           <li>
             Your script, settings, and mic choice are saved in this browser.
@@ -126,7 +138,7 @@ export function HowToUse({ onClose }: HowToUseProps) {
             <kbd>←</kbd> <kbd>→</kbd> — Nudge one word
           </li>
           <li>
-            <kbd>↑</kbd> <kbd>↓</kbd> — Nudge five words
+            <kbd>↑</kbd> <kbd>↓</kbd> — Jump sentence start / end
           </li>
         </ul>
 
@@ -192,6 +204,14 @@ export function HowToUse({ onClose }: HowToUseProps) {
           <li>
             <strong>Highlight cursor</strong> — turn off the current-word glow
             entirely (scroll still follows your speech).
+          </li>
+          <li>
+            <strong>OLED black mode</strong> — pure black background and pure
+            white script text (best for OLED screens). Overrides dark/light.
+          </li>
+          <li>
+            <strong>Bold text</strong> — heavier weight for the teleprompter
+            script.
           </li>
           <li>
             <strong>Mirror mode</strong> — flip the text for physical teleprompter
