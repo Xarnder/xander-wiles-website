@@ -16,6 +16,7 @@ const deployOut = path.join(rootDir, 'deploy_out');
 const journalSrc = path.join(rootDir, 'pages', 'journal');
 const zImageSrc = path.join(rootDir, 'pages', 'z-image-turbo-sveltekit');
 const fighterJetSrc = path.join(rootDir, 'pages', 'Fighter-Jet');
+const teleprompterSrc = path.join(rootDir, 'pages', 'Teleprompter');
 
 // 1. Clean Start
 console.log('Cleaning deploy_out...');
@@ -24,10 +25,17 @@ if (fs.existsSync(deployOut)) {
 }
 fs.mkdirSync(deployOut, { recursive: true });
 
+// Prevent `npx serve deploy_out` from treating the output as gitignored
+// (repo .gitignore contains `deploy_out/`, which makes serve return 404 for everything).
+fs.writeFileSync(
+    path.join(deployOut, '.gitignore'),
+    '# Preview build — do not ignore served files\n!*\n',
+);
+
 // 2. Copy Everything (The Global Site)
 console.log('Copying global site...');
 const items = fs.readdirSync(rootDir);
-const excludeList = ['.git', 'node_modules', 'deploy_out', '.DS_Store', '.env', '.env.local', 'package.json', 'package-lock.json', 'build.js'];
+const excludeList = ['.git', 'node_modules', 'deploy_out', '.DS_Store', '.env', '.env.local', 'package.json', 'package-lock.json', 'build.js', '.gitignore'];
 
 for (const item of items) {
     if (excludeList.includes(item)) {
@@ -55,6 +63,12 @@ for (const item of items) {
             if (
                 rel === path.join('pages', 'Fighter-Jet') ||
                 rel.startsWith(path.join('pages', 'Fighter-Jet') + path.sep)
+            ) {
+                return false;
+            }
+            if (
+                rel === path.join('pages', 'Teleprompter') ||
+                rel.startsWith(path.join('pages', 'Teleprompter') + path.sep)
             ) {
                 return false;
             }
@@ -149,7 +163,45 @@ if (fs.existsSync(fighterJetDist)) {
     process.exit(1);
 }
 
-// 7. Replace Environment Variables in Static Files
+// 7. Build and Inject Teleprompter (Vite + React)
+console.log('Building Teleprompter App...');
+try {
+    process.chdir(teleprompterSrc);
+    execSync('npm install', { stdio: 'inherit' });
+    execSync('npm run build', { stdio: 'inherit' });
+} catch (error) {
+    console.error('Failed to build Teleprompter:', error);
+    process.exit(1);
+} finally {
+    process.chdir(rootDir);
+}
+
+console.log('Injecting Teleprompter build...');
+const teleprompterDest = path.join(deployOut, 'pages', 'Teleprompter');
+fs.mkdirSync(teleprompterDest, { recursive: true });
+
+const teleprompterDist = path.join(teleprompterSrc, 'dist');
+if (fs.existsSync(teleprompterDist)) {
+    fs.cpSync(teleprompterDist, teleprompterDest, { recursive: true });
+} else {
+    console.error('Teleprompter dist folder not found!');
+    process.exit(1);
+}
+
+// Homepage card icons live beside source (excluded from deploy copy); sync into deploy output.
+for (const name of ['favicon-dark.svg', 'favicon-light.svg']) {
+    const srcIcon = path.join(teleprompterSrc, name);
+    if (fs.existsSync(srcIcon)) {
+        fs.copyFileSync(srcIcon, path.join(teleprompterDest, name));
+    }
+}
+
+const rootServeJson = path.join(rootDir, 'serve.json');
+if (fs.existsSync(rootServeJson)) {
+    fs.copyFileSync(rootServeJson, path.join(deployOut, 'serve.json'));
+}
+
+// 8. Replace Environment Variables in Static Files
 console.log('Injecting environment variables into static files...');
 
 function processDirectory(dir) {
