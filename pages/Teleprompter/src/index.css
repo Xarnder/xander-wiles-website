@@ -577,17 +577,13 @@ html[data-theme='light'] .progress-meter {
   border-right-color: rgba(255, 255, 255, 0.12);
 }
 
+/* Quarters use .progress-tick only — skip the segment border so it isn't doubled. */
 .progress-segment.is-quarter {
-  border-right-width: 2px;
-  border-right-color: rgba(255, 220, 160, 0.55);
+  border-right: none;
 }
 
 html[data-theme='light'] .progress-segment.is-eighth {
   border-right-color: rgba(80, 40, 10, 0.12);
-}
-
-html[data-theme='light'] .progress-segment.is-quarter {
-  border-right-color: rgba(80, 40, 10, 0.38);
 }
 
 .progress-ticks {
