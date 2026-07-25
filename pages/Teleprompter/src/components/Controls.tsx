@@ -176,24 +176,12 @@ export function Controls({
 
   return (
     <header className="controls">
-      <div className="controls-top">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden />
-          <h1 className="brand-name">Teleprompter Flow</h1>
-        </div>
-        <div
-          className={`mode-badge mode-${scrollMode}${isHoldingOffScript ? ' is-holding' : ''}`}
-          role="status"
-          aria-live="polite"
-        >
-          <span className="mode-dot" />
-          <span className="mode-label">{statusLabel}</span>
-        </div>
-        <div className="control-row primary-actions">
+      <div className="controls-main">
+        <div className="controls-start">
           {!isRunning || status !== 'listening' ? (
             <button
               type="button"
-              className="btn primary"
+              className="btn primary start-btn"
               onClick={onStart}
               title="Start (Space)"
             >
@@ -202,170 +190,229 @@ export function Controls({
           ) : (
             <button
               type="button"
-              className="btn primary"
+              className="btn primary start-btn"
               onClick={onPause}
               title="Pause (Space)"
             >
               Pause
             </button>
           )}
-          <button
-            type="button"
-            className="btn"
-            onClick={onReset}
-            title="Reset to start (R)"
-          >
-            Reset
-          </button>
-          <button
-            type="button"
-            className={`btn ${editorOpen ? 'active' : ''}`}
-            onClick={onToggleEditor}
-            title="Edit script (E)"
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className={`btn ${settingsOpen ? 'active' : ''}`}
-            onClick={onToggleSettings}
-            title="Settings (,)"
-          >
-            Settings
-          </button>
-          <button
-            type="button"
-            className={`btn ${howToOpen ? 'active' : ''}`}
-            onClick={onToggleHowTo}
-            title="How to use (?)"
-          >
-            Help
-          </button>
-          <button
-            type="button"
-            className={`btn ${isFullscreen ? 'active' : ''}`}
-            onClick={onToggleFullscreen}
-            title="Fullscreen (F)"
-          >
-            {isFullscreen ? 'Exit' : 'Full'}
-          </button>
         </div>
-      </div>
 
-      <div className="control-row secondary-actions">
-        {showAnyStat ? (
-          <div className="stats-strip" aria-live="polite">
-            {s.showProgressBar && (
-              <div
-                className="progress-readout"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progress.percent}
-                aria-label="Script progress"
+        <div className="controls-rest">
+          <div className="controls-top">
+            <div className="brand">
+              <span className="brand-mark" aria-hidden />
+              <h1 className="brand-name">Teleprompter Flow</h1>
+            </div>
+            <div
+              className={`mode-badge mode-${scrollMode}${isHoldingOffScript ? ' is-holding' : ''}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className="mode-dot" />
+              <span className="mode-label">{statusLabel}</span>
+            </div>
+            <div className="control-row primary-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={onReset}
+                title="Reset to start (R)"
               >
-                <div className="progress-meter" aria-hidden>
-                  <div
-                    className="progress-meter-fill"
-                    style={{ width: `${progress.fillPercent}%` }}
-                  />
-                  <div className="progress-segments">
-                    {Array.from({ length: 8 }, (_, i) => {
-                      const eighth = i + 1
-                      const isQuarter = eighth % 2 === 0
-                      return (
-                        <span
-                          key={eighth}
-                          className={`progress-segment ${isQuarter ? 'is-quarter' : 'is-eighth'}`}
-                        />
-                      )
-                    })}
-                  </div>
-                  <div className="progress-ticks">
-                    {[1, 2, 3, 4, 5, 6, 7].map((eighth) => (
-                      <span
-                        key={eighth}
-                        className={`progress-tick ${eighth % 2 === 0 ? 'is-quarter' : 'is-eighth'}`}
-                        style={{ left: `${(eighth / 8) * 100}%` }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="stat-chips">
-              {s.showPercent && (
-                <span className="stat-chip" title="Progress through script">
-                  <em>{progress.total === 0 ? '—' : `${progress.percent}%`}</em>
-                  <span>done</span>
-                </span>
-              )}
-              {s.showWpm && (
-                <span className="stat-chip" title="Words per minute (last sentence)">
-                  <em>{wpm == null ? '—' : wpm}</em>
-                  <span>wpm</span>
-                </span>
-              )}
-              {s.showWordsSaid && (
-                <span className="stat-chip" title="Words already passed">
-                  <em>{progress.said}</em>
-                  <span>said</span>
-                </span>
-              )}
-              {s.showWordsRemaining && (
-                <span className="stat-chip" title="Words still ahead">
-                  <em>{progress.remaining}</em>
-                  <span>left</span>
-                </span>
-              )}
-              {s.showWordsTotal && (
-                <span className="stat-chip" title="Total words in script">
-                  <em>{progress.total}</em>
-                  <span>total</span>
-                </span>
-              )}
+                Reset
+              </button>
+              <button
+                type="button"
+                className={`btn ${editorOpen ? 'active' : ''}`}
+                onClick={onToggleEditor}
+                title="Edit script (E)"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className={`btn ${settingsOpen ? 'active' : ''}`}
+                onClick={onToggleSettings}
+                title="Settings (,)"
+              >
+                Settings
+              </button>
+              <button
+                type="button"
+                className={`btn ${howToOpen ? 'active' : ''}`}
+                onClick={onToggleHowTo}
+                title="How to use (?)"
+              >
+                Help
+              </button>
+              <button
+                type="button"
+                className={`btn ${settings.mirror ? 'active' : ''}`}
+                onClick={() => onUpdateSettings({ mirror: !settings.mirror })}
+                title="Script mirror — flip script text only"
+                aria-pressed={settings.mirror}
+              >
+                Script ↔
+              </button>
+              <button
+                type="button"
+                className={`btn ${settings.uiMirror ? 'active' : ''}`}
+                onClick={() =>
+                  onUpdateSettings({ uiMirror: !settings.uiMirror })
+                }
+                title="UI mirror — flip the whole interface horizontally"
+                aria-pressed={settings.uiMirror}
+              >
+                UI ↔
+              </button>
+              <button
+                type="button"
+                className={`btn ${settings.chromeBottom ? 'active' : ''}`}
+                onClick={() =>
+                  onUpdateSettings({ chromeBottom: !settings.chromeBottom })
+                }
+                title={
+                  settings.chromeBottom
+                    ? 'Move controls back to the top'
+                    : 'Move controls to the bottom for easier reach'
+                }
+                aria-pressed={settings.chromeBottom}
+              >
+                {settings.chromeBottom ? 'Header' : 'Footer'}
+              </button>
+              <button
+                type="button"
+                className={`btn ${isFullscreen ? 'active' : ''}`}
+                onClick={onToggleFullscreen}
+                title="Fullscreen (F)"
+              >
+                {isFullscreen ? 'Exit' : 'Full'}
+              </button>
             </div>
           </div>
-        ) : (
-          <div className="stats-strip is-empty" aria-hidden />
-        )}
-        <div className="nudge-group" role="group" aria-label="Nudge cursor">
-          <button
-            type="button"
-            className="btn ghost nudge-btn icon-btn"
-            onClick={() => onNudgeSentence('up')}
-            title="Previous sentence boundary (↑)"
-            aria-label="Previous sentence boundary"
-          >
-            <IconArrowUp className="btn-icon" />
-          </button>
-          <button
-            type="button"
-            className="btn ghost nudge-btn icon-btn"
-            onClick={() => onNudge(-1)}
-            title="Back one word (←)"
-            aria-label="Back one word"
-          >
-            <IconArrowLeft className="btn-icon" />
-          </button>
-          <button
-            type="button"
-            className="btn ghost nudge-btn icon-btn"
-            onClick={() => onNudge(1)}
-            title="Forward one word (→)"
-            aria-label="Forward one word"
-          >
-            <IconArrowRight className="btn-icon" />
-          </button>
-          <button
-            type="button"
-            className="btn ghost nudge-btn icon-btn"
-            onClick={() => onNudgeSentence('down')}
-            title="Next sentence boundary (↓)"
-            aria-label="Next sentence boundary"
-          >
-            <IconArrowDown className="btn-icon" />
-          </button>
+
+          <div className="control-row secondary-actions">
+            {showAnyStat ? (
+              <div className="stats-strip" aria-live="polite">
+                {s.showProgressBar && (
+                  <div
+                    className="progress-readout"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progress.percent}
+                    aria-label="Script progress"
+                  >
+                    <div className="progress-meter" aria-hidden>
+                      <div
+                        className="progress-meter-fill"
+                        style={{ width: `${progress.fillPercent}%` }}
+                      />
+                      <div className="progress-segments">
+                        {Array.from({ length: 8 }, (_, i) => {
+                          const eighth = i + 1
+                          const isQuarter = eighth % 2 === 0
+                          return (
+                            <span
+                              key={eighth}
+                              className={`progress-segment ${isQuarter ? 'is-quarter' : 'is-eighth'}`}
+                            />
+                          )
+                        })}
+                      </div>
+                      <div className="progress-ticks">
+                        {[1, 2, 3, 4, 5, 6, 7].map((eighth) => (
+                          <span
+                            key={eighth}
+                            className={`progress-tick ${eighth % 2 === 0 ? 'is-quarter' : 'is-eighth'}`}
+                            style={{ left: `${(eighth / 8) * 100}%` }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="stat-chips">
+                  {s.showPercent && (
+                    <span className="stat-chip" title="Progress through script">
+                      <em>
+                        {progress.total === 0 ? '—' : `${progress.percent}%`}
+                      </em>
+                      <span>done</span>
+                    </span>
+                  )}
+                  {s.showWpm && (
+                    <span
+                      className="stat-chip"
+                      title="Words per minute (last sentence)"
+                    >
+                      <em>{wpm == null ? '—' : wpm}</em>
+                      <span>wpm</span>
+                    </span>
+                  )}
+                  {s.showWordsSaid && (
+                    <span className="stat-chip" title="Words already passed">
+                      <em>{progress.said}</em>
+                      <span>said</span>
+                    </span>
+                  )}
+                  {s.showWordsRemaining && (
+                    <span className="stat-chip" title="Words still ahead">
+                      <em>{progress.remaining}</em>
+                      <span>left</span>
+                    </span>
+                  )}
+                  {s.showWordsTotal && (
+                    <span className="stat-chip" title="Total words in script">
+                      <em>{progress.total}</em>
+                      <span>total</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="stats-strip is-empty" aria-hidden />
+            )}
+            <div className="nudge-group" role="group" aria-label="Nudge cursor">
+              <button
+                type="button"
+                className="btn ghost nudge-btn icon-btn"
+                onClick={() => onNudgeSentence('up')}
+                title="Previous sentence boundary (↑)"
+                aria-label="Previous sentence boundary"
+              >
+                <IconArrowUp className="btn-icon" />
+              </button>
+              <button
+                type="button"
+                className="btn ghost nudge-btn icon-btn"
+                onClick={() => onNudge(-1)}
+                title="Back one word (←)"
+                aria-label="Back one word"
+              >
+                <IconArrowLeft className="btn-icon" />
+              </button>
+              <button
+                type="button"
+                className="btn ghost nudge-btn icon-btn"
+                onClick={() => onNudge(1)}
+                title="Forward one word (→)"
+                aria-label="Forward one word"
+              >
+                <IconArrowRight className="btn-icon" />
+              </button>
+              <button
+                type="button"
+                className="btn ghost nudge-btn icon-btn"
+                onClick={() => onNudgeSentence('down')}
+                title="Next sentence boundary (↓)"
+                aria-label="Next sentence boundary"
+              >
+                <IconArrowDown className="btn-icon" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -485,7 +532,27 @@ export function Controls({
                 checked={settings.mirror}
                 onChange={(e) => onUpdateSettings({ mirror: e.target.checked })}
               />
-              <span>Mirror mode</span>
+              <span>Script mirror</span>
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.uiMirror}
+                onChange={(e) =>
+                  onUpdateSettings({ uiMirror: e.target.checked })
+                }
+              />
+              <span>UI mirror</span>
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.chromeBottom}
+                onChange={(e) =>
+                  onUpdateSettings({ chromeBottom: e.target.checked })
+                }
+              />
+              <span>Controls at bottom</span>
             </label>
             <label className={`toggle${settings.oledMode ? ' is-disabled' : ''}`}>
               <input

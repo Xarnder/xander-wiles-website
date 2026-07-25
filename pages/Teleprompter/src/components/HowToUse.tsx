@@ -36,7 +36,9 @@ export function HowToUse({ onClose }: HowToUseProps) {
           </li>
           <li>
             Optionally open <strong>Settings</strong> to pick a mic, font size,
-            line width, dark/light mode, or mirror mode for a beam-splitter rig.
+            line width, dark/light mode, <strong>script mirror</strong> (text
+            only), or <strong>UI mirror</strong> (flips the whole interface
+            horizontally for a beam-splitter rig).
           </li>
           <li>
             Press <strong>Start</strong> and allow microphone access. The first
@@ -214,8 +216,16 @@ export function HowToUse({ onClose }: HowToUseProps) {
             script.
           </li>
           <li>
-            <strong>Mirror mode</strong> — flip the text for physical teleprompter
-            glass.
+            <strong>Script mirror</strong> — flip script text only for physical
+            teleprompter glass.
+          </li>
+          <li>
+            <strong>UI mirror</strong> — flip the whole interface horizontally
+            (stats, buttons, panels). Independent of script mirror.
+          </li>
+          <li>
+            <strong>Controls at bottom</strong> — move the whole header to a
+            footer for easier reach (thumb-friendly).
           </li>
           <li>
             <strong>Preload model</strong> — download the speech model before you

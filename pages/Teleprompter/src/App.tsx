@@ -174,7 +174,11 @@ export default function App() {
   ])
 
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      data-ui-mirrored={tp.settings.uiMirror ? 'true' : undefined}
+      data-chrome-dock={tp.settings.chromeBottom ? 'bottom' : 'top'}
+    >
       <div className="atmosphere" aria-hidden>
         <span className="glow-orb glow-orb-a" />
         <span className="glow-orb glow-orb-b" />

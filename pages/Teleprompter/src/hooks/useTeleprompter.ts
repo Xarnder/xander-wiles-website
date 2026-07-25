@@ -13,7 +13,12 @@ export type { ScrollAnchorMode }
 export interface TeleprompterSettings {
   fontSize: number
   lineWidth: number
+  /** Horizontally flip script text only (beam-splitter / glass). */
   mirror: boolean
+  /** Horizontally flip the whole UI (chrome, stats, panels). Separate from script mirror. */
+  uiMirror: boolean
+  /** Dock the controls chrome at the bottom (footer) for easier reach. */
+  chromeBottom: boolean
   darkMode: boolean
   /** Pure black background + pure white text (OLED-friendly). */
   oledMode: boolean
@@ -56,6 +61,8 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   fontSize: 36,
   lineWidth: 42,
   mirror: false,
+  uiMirror: false,
+  chromeBottom: false,
   darkMode: true,
   oledMode: false,
   boldText: false,
@@ -110,6 +117,12 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
       140,
     ),
     mirror: typeof p.mirror === 'boolean' ? p.mirror : DEFAULT_SETTINGS.mirror,
+    uiMirror:
+      typeof p.uiMirror === 'boolean' ? p.uiMirror : DEFAULT_SETTINGS.uiMirror,
+    chromeBottom:
+      typeof p.chromeBottom === 'boolean'
+        ? p.chromeBottom
+        : DEFAULT_SETTINGS.chromeBottom,
     darkMode:
       typeof p.darkMode === 'boolean' ? p.darkMode : DEFAULT_SETTINGS.darkMode,
     oledMode:

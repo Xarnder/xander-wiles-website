@@ -186,6 +186,34 @@ textarea {
   padding-left: env(safe-area-inset-left, 0px);
 }
 
+/* Horizontal flip of chrome + stats + panels (not vertical). Independent of script mirror. */
+.app-shell[data-ui-mirrored='true'] {
+  transform: scaleX(-1);
+}
+
+/* Dock the whole controls chrome as a footer for easier reach. */
+.app-shell[data-chrome-dock='bottom'] .controls {
+  order: 3;
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
+}
+
+.app-shell[data-chrome-dock='bottom'] .stage {
+  order: 2;
+}
+
+.app-shell[data-chrome-dock='bottom'] .settings-panel {
+  order: -1;
+  margin: 0 0 0.45rem;
+}
+
+.app-shell[data-chrome-dock='bottom'] .error-banner,
+.app-shell[data-chrome-dock='bottom'] .loading-bar {
+  order: -1;
+}
+
 .atmosphere {
   pointer-events: none;
   position: absolute;
@@ -327,6 +355,45 @@ textarea {
   z-index: 5;
 }
 
+.controls-main {
+  display: flex;
+  align-items: stretch;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.controls-start {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+}
+
+.controls-start .start-btn {
+  height: 100%;
+  min-height: 100%;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 1.15rem;
+  min-width: 5.25rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: calc(var(--radius) - 2px);
+  writing-mode: horizontal-tb;
+}
+
+.controls-rest {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
 .controls-top {
   display: flex;
   align-items: center;
@@ -452,7 +519,7 @@ textarea {
 }
 
 .control-row.secondary-actions {
-  margin-top: 0.35rem;
+  margin-top: 0;
   align-items: center;
   justify-content: space-between;
   gap: 0.4rem 0.5rem;
@@ -1650,6 +1717,21 @@ html[data-bold-script='true'] .script-editor-input {
   .controls {
     padding: 0.35rem 0.55rem calc(0.4rem + env(safe-area-inset-bottom, 0px) * 0);
     border-radius: 0 0 14px 14px;
+  }
+
+  .app-shell[data-chrome-dock='bottom'] .controls {
+    border-radius: 14px 14px 0 0;
+    padding-bottom: max(0.4rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .controls-main {
+    gap: 0.4rem;
+  }
+
+  .controls-start .start-btn {
+    min-width: 4.5rem;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.85rem;
   }
 
   .controls-top {
