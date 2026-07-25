@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Controls } from './components/Controls'
+import { HowToUse } from './components/HowToUse'
 import { ScriptEditor } from './components/ScriptEditor'
 import { ScriptView } from './components/ScriptView'
 import { useMicDevices } from './hooks/useMicDevices'
@@ -15,6 +16,7 @@ export default function App() {
   } = useMicDevices()
   const [editorOpen, setEditorOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [howToOpen, setHowToOpen] = useState(false)
 
   useEffect(() => {
     if (selectedDeviceId) {
@@ -36,7 +38,11 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <div className="atmosphere" aria-hidden />
+      <div className="atmosphere" aria-hidden>
+        <span className="glow-orb glow-orb-a" />
+        <span className="glow-orb glow-orb-b" />
+        <span className="glow-orb glow-orb-c" />
+      </div>
       <Controls
         isRunning={tp.isRunning}
         status={tp.speech.status}
@@ -44,15 +50,16 @@ export default function App() {
         confidence={tp.confidence}
         modelReady={tp.speech.modelReady}
         errorMessage={tp.speech.errorMessage}
-        partialTranscript={tp.speech.partialTranscript}
         devices={devices}
         deviceId={tp.deviceId}
         settings={tp.settings}
         editorOpen={editorOpen}
         settingsOpen={settingsOpen}
+        howToOpen={howToOpen}
         onStart={() => {
           setEditorOpen(false)
           setSettingsOpen(false)
+          setHowToOpen(false)
           void tp.start()
         }}
         onPause={tp.pause}
@@ -65,33 +72,47 @@ export default function App() {
         onToggleEditor={() => {
           setEditorOpen((v) => !v)
           setSettingsOpen(false)
+          setHowToOpen(false)
         }}
         onToggleSettings={() => {
           setSettingsOpen((v) => !v)
           setEditorOpen(false)
+          setHowToOpen(false)
+        }}
+        onToggleHowTo={() => {
+          setHowToOpen((v) => !v)
+          setEditorOpen(false)
+          setSettingsOpen(false)
         }}
         onUpdateSettings={tp.updateSettings}
       />
 
-      {editorOpen && (
-        <ScriptEditor
-          script={tp.script}
-          onChange={tp.setScript}
-          onClose={() => setEditorOpen(false)}
-        />
-      )}
-
       <main className="stage">
-        <ScriptView
-          words={tp.scriptWords}
-          cursor={tp.cursor}
-          alignState={tp.alignState}
-          fontSize={tp.settings.fontSize}
-          lineWidth={tp.settings.lineWidth}
-          mirror={tp.settings.mirror}
-          containerRef={tp.containerRef}
-          registerWordRef={tp.registerWordRef}
-        />
+        {howToOpen ? (
+          <HowToUse onClose={() => setHowToOpen(false)} />
+        ) : editorOpen ? (
+          <ScriptEditor
+            script={tp.script}
+            onChange={tp.setScript}
+            onClose={() => setEditorOpen(false)}
+          />
+        ) : (
+          <ScriptView
+            script={tp.script}
+            words={tp.scriptWords}
+            cursor={tp.cursor}
+            alignState={tp.alignState}
+            fontSize={tp.settings.fontSize}
+            lineWidth={tp.settings.lineWidth}
+            mirror={tp.settings.mirror}
+            preserveBreaks={tp.settings.preserveBreaks}
+            sentenceBreak={tp.settings.sentenceBreak}
+            showCursorHighlight={tp.settings.showCursorHighlight}
+            scrollAnchor={tp.settings.scrollAnchor}
+            containerRef={tp.containerRef}
+            registerWordRef={tp.registerWordRef}
+          />
+        )}
       </main>
     </div>
   )

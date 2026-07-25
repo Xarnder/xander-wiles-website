@@ -1,5 +1,8 @@
 import type { MicDevice } from '../hooks/useMicDevices'
-import type { TeleprompterSettings } from '../hooks/useTeleprompter'
+import {
+  DEFAULT_SETTINGS,
+  type TeleprompterSettings,
+} from '../hooks/useTeleprompter'
 import type { SpeechStatus } from '../asr/useSpeechStream'
 import type { AlignmentState } from '../alignment/AlignmentEngine'
 
@@ -10,12 +13,12 @@ interface ControlsProps {
   confidence: number
   modelReady: boolean
   errorMessage: string | null
-  partialTranscript: string
   devices: MicDevice[]
   deviceId: string | null
   settings: TeleprompterSettings
   editorOpen: boolean
   settingsOpen: boolean
+  howToOpen: boolean
   onStart: () => void
   onPause: () => void
   onReset: () => void
@@ -23,7 +26,68 @@ interface ControlsProps {
   onDeviceChange: (id: string) => void
   onToggleEditor: () => void
   onToggleSettings: () => void
+  onToggleHowTo: () => void
   onUpdateSettings: (patch: Partial<TeleprompterSettings>) => void
+}
+
+type SliderKey =
+  | 'fontSize'
+  | 'lineWidth'
+  | 'confidenceThreshold'
+  | 'scrollSensitivity'
+  | 'cursorOffset'
+
+function SliderField({
+  label,
+  valueLabel,
+  min,
+  max,
+  step = 1,
+  value,
+  onChange,
+  onReset,
+  isDefault,
+  disabled = false,
+}: {
+  label: string
+  valueLabel: string
+  min: number
+  max: number
+  step?: number
+  value: number
+  onChange: (value: number) => void
+  onReset: () => void
+  isDefault: boolean
+  disabled?: boolean
+}) {
+  return (
+    <div className={`slider-field${disabled ? ' is-disabled' : ''}`}>
+      <div className="slider-field-header">
+        <span>{label}</span>
+        <div className="slider-field-meta">
+          <em>{valueLabel}</em>
+          <button
+            type="button"
+            className="btn ghost slider-reset"
+            onClick={onReset}
+            disabled={disabled || isDefault}
+            title={`Reset ${label.toLowerCase()} to default`}
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+    </div>
+  )
 }
 
 export function Controls({
@@ -33,12 +97,12 @@ export function Controls({
   confidence,
   modelReady,
   errorMessage,
-  partialTranscript,
   devices,
   deviceId,
   settings,
   editorOpen,
   settingsOpen,
+  howToOpen,
   onStart,
   onPause,
   onReset,
@@ -46,6 +110,7 @@ export function Controls({
   onDeviceChange,
   onToggleEditor,
   onToggleSettings,
+  onToggleHowTo,
   onUpdateSettings,
 }: ControlsProps) {
   const isLiveScroll = status === 'listening' && alignState === 'tracking'
@@ -63,6 +128,10 @@ export function Controls({
         : status === 'error'
           ? 'Error'
           : 'Paused'
+
+  const resetSlider = (key: SliderKey) => {
+    onUpdateSettings({ [key]: DEFAULT_SETTINGS[key] })
+  }
 
   return (
     <header className="controls">
@@ -111,6 +180,13 @@ export function Controls({
         >
           Settings
         </button>
+        <button
+          type="button"
+          className={`btn ${howToOpen ? 'active' : ''}`}
+          onClick={onToggleHowTo}
+        >
+          How to use
+        </button>
       </div>
 
       {errorMessage && (
@@ -127,64 +203,102 @@ export function Controls({
       )}
 
       {settingsOpen && (
-        <div className="panel settings-panel">
+        <div className="panel settings-panel glass-panel">
           <div className="settings-grid">
-            <label>
-              <span>Font size</span>
-              <input
-                type="range"
-                min={22}
-                max={64}
-                value={settings.fontSize}
-                onChange={(e) =>
-                  onUpdateSettings({ fontSize: Number(e.target.value) })
-                }
-              />
-              <em>{settings.fontSize}px</em>
-            </label>
-            <label>
-              <span>Line width</span>
-              <input
-                type="range"
-                min={24}
-                max={56}
-                value={settings.lineWidth}
-                onChange={(e) =>
-                  onUpdateSettings({ lineWidth: Number(e.target.value) })
-                }
-              />
-              <em>{settings.lineWidth}ch</em>
-            </label>
-            <label>
-              <span>Match confidence</span>
-              <input
-                type="range"
-                min={40}
-                max={85}
-                value={Math.round(settings.confidenceThreshold * 100)}
+            <SliderField
+              label="Font size"
+              valueLabel={`${settings.fontSize}px`}
+              min={22}
+              max={64}
+              value={settings.fontSize}
+              onChange={(fontSize) => onUpdateSettings({ fontSize })}
+              onReset={() => resetSlider('fontSize')}
+              isDefault={settings.fontSize === DEFAULT_SETTINGS.fontSize}
+            />
+            <SliderField
+              label="Line width"
+              valueLabel={`${settings.lineWidth}ch`}
+              min={24}
+              max={140}
+              value={settings.lineWidth}
+              onChange={(lineWidth) => onUpdateSettings({ lineWidth })}
+              onReset={() => resetSlider('lineWidth')}
+              isDefault={settings.lineWidth === DEFAULT_SETTINGS.lineWidth}
+            />
+            <SliderField
+              label="Match confidence"
+              valueLabel={`${Math.round(settings.confidenceThreshold * 100)}%`}
+              min={40}
+              max={85}
+              value={Math.round(settings.confidenceThreshold * 100)}
+              onChange={(v) =>
+                onUpdateSettings({ confidenceThreshold: v / 100 })
+              }
+              onReset={() => resetSlider('confidenceThreshold')}
+              isDefault={
+                settings.confidenceThreshold ===
+                DEFAULT_SETTINGS.confidenceThreshold
+              }
+            />
+            <SliderField
+              label="Scroll sensitivity"
+              valueLabel={`${settings.scrollSensitivity.toFixed(2)}×`}
+              min={50}
+              max={180}
+              value={Math.round(settings.scrollSensitivity * 100)}
+              onChange={(v) =>
+                onUpdateSettings({ scrollSensitivity: v / 100 })
+              }
+              onReset={() => resetSlider('scrollSensitivity')}
+              isDefault={
+                settings.scrollSensitivity === DEFAULT_SETTINGS.scrollSensitivity
+              }
+            />
+            <label className="settings-mic">
+              <span>Cursor position</span>
+              <select
+                value={settings.scrollAnchor}
                 onChange={(e) =>
                   onUpdateSettings({
-                    confidenceThreshold: Number(e.target.value) / 100,
+                    scrollAnchor: e.target.value as
+                      | 'top'
+                      | 'middle'
+                      | 'hybrid',
                   })
                 }
-              />
-              <em>{Math.round(settings.confidenceThreshold * 100)}%</em>
+              >
+                <option value="top">Keep at top</option>
+                <option value="middle">Keep in middle</option>
+                <option value="hybrid">Hybrid (top → middle)</option>
+              </select>
             </label>
-            <label>
-              <span>Scroll sensitivity</span>
+            <label className="toggle">
               <input
-                type="range"
-                min={50}
-                max={180}
-                value={Math.round(settings.scrollSensitivity * 100)}
+                type="checkbox"
+                checked={settings.showCursorHighlight}
                 onChange={(e) =>
-                  onUpdateSettings({
-                    scrollSensitivity: Number(e.target.value) / 100,
-                  })
+                  onUpdateSettings({ showCursorHighlight: e.target.checked })
                 }
               />
-              <em>{settings.scrollSensitivity.toFixed(2)}×</em>
+              <span>Highlight cursor</span>
             </label>
+            <SliderField
+              label="Cursor lead"
+              valueLabel={
+                !settings.showCursorHighlight
+                  ? 'Highlight off'
+                  : settings.cursorOffset === 0
+                    ? 'On spoken word'
+                    : `${settings.cursorOffset} word${settings.cursorOffset === 1 ? '' : 's'} ahead`
+              }
+              min={0}
+              max={12}
+              value={settings.cursorOffset}
+              onChange={(cursorOffset) => onUpdateSettings({ cursorOffset })}
+              onReset={() => resetSlider('cursorOffset')}
+              isDefault={settings.cursorOffset === DEFAULT_SETTINGS.cursorOffset}
+              disabled={!settings.showCursorHighlight}
+            />
             <label className="toggle">
               <input
                 type="checkbox"
@@ -203,7 +317,45 @@ export function Controls({
               />
               <span>Dark mode</span>
             </label>
-            <label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.allowJumpBack}
+                onChange={(e) =>
+                  onUpdateSettings({ allowJumpBack: e.target.checked })
+                }
+              />
+              <span>Jump back mode</span>
+            </label>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.preserveBreaks}
+                onChange={(e) =>
+                  onUpdateSettings({ preserveBreaks: e.target.checked })
+                }
+              />
+              <span>Keep line &amp; paragraph breaks</span>
+            </label>
+            <label className="settings-mic">
+              <span>After each full stop (.)</span>
+              <select
+                value={settings.sentenceBreak}
+                onChange={(e) =>
+                  onUpdateSettings({
+                    sentenceBreak: e.target.value as
+                      | 'off'
+                      | 'tab'
+                      | 'line',
+                  })
+                }
+              >
+                <option value="off">No change</option>
+                <option value="tab">Insert tab space</option>
+                <option value="line">Insert line break</option>
+              </select>
+            </label>
+            <label className="settings-mic">
               <span>Microphone</span>
               <select
                 value={deviceId ?? ''}
@@ -219,14 +371,15 @@ export function Controls({
                 ))}
               </select>
             </label>
-            <button type="button" className="btn" onClick={onPreload}>
+          </div>
+          <div className="settings-footer">
+            <button type="button" className="btn settings-preload" onClick={onPreload}>
               {modelReady ? 'Reload model' : 'Preload model'}
             </button>
+            <p className="confidence-readout">
+              Live confidence: {(confidence * 100).toFixed(0)}%
+            </p>
           </div>
-          <p className="confidence-readout">
-            Live confidence: {(confidence * 100).toFixed(0)}%
-            {partialTranscript ? ` · “${partialTranscript}”` : ''}
-          </p>
         </div>
       )}
     </header>

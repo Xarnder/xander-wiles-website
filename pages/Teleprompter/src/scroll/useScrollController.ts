@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 
+/** Where the live cursor should sit in the viewport. */
+export type ScrollAnchorMode = 'top' | 'middle' | 'hybrid'
+
 export interface ScrollControllerOptions {
-  /** Fraction of viewport height where the active word should sit (0–1). */
-  focusRatio?: number
+  /**
+   * top — keep the active word near the top of the viewport
+   * middle — keep it vertically centered
+   * hybrid — stay at scroll 0 until the word reaches mid-viewport, then pin center
+   */
+  anchorMode?: ScrollAnchorMode
   /** Extra scroll speed multiplier (user sensitivity). */
   sensitivity?: number
   /**
@@ -10,6 +17,13 @@ export interface ScrollControllerOptions {
    * When false, the user can scroll freely — the rAF loop will not touch scrollTop.
    */
   active?: boolean
+}
+
+const FOCUS_RATIO: Record<ScrollAnchorMode, number> = {
+  top: 0.12,
+  middle: 0.5,
+  // Hybrid uses middle once scrolling begins; clamp-to-0 keeps early words at top.
+  hybrid: 0.5,
 }
 
 /**
@@ -20,7 +34,9 @@ export function useScrollController(
   containerRef: RefObject<HTMLElement | null>,
   options: ScrollControllerOptions = {},
 ) {
-  const focusRatio = options.focusRatio ?? 0.38
+  const anchorModeRef = useRef<ScrollAnchorMode>(options.anchorMode ?? 'hybrid')
+  anchorModeRef.current = options.anchorMode ?? 'hybrid'
+
   const sensitivityRef = useRef(options.sensitivity ?? 1)
   sensitivityRef.current = options.sensitivity ?? 1
 
@@ -130,10 +146,13 @@ export function useScrollController(
       const wordRect = wordEl.getBoundingClientRect()
       const offsetWithin =
         wordRect.top - containerRect.top + container.scrollTop
-      const focusY = offsetWithin - container.clientHeight * focusRatio
+      const ratio = FOCUS_RATIO[anchorModeRef.current]
+      const focusY = offsetWithin - container.clientHeight * ratio
+      // Hybrid & early top/middle: clamp keeps the first lines at the top until
+      // the active word reaches the focus line, then scrolls to hold it there.
       targetYRef.current = Math.max(0, focusY)
     },
-    [containerRef, focusRatio],
+    [containerRef],
   )
 
   const reset = useCallback(() => {

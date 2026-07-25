@@ -17,28 +17,30 @@ export function ScriptEditor({ script, onChange, onClose }: ScriptEditorProps) {
   }
 
   return (
-    <div className="panel script-editor">
+    <section className="script-editor-page glass-panel">
       <div className="panel-header">
-        <h2>Script</h2>
+        <h2>Edit script</h2>
         <button type="button" className="btn ghost" onClick={onClose}>
           Done
         </button>
       </div>
       <textarea
+        className="script-editor-input"
         value={script}
         onChange={(e) => onChange(e.target.value)}
         spellCheck
         placeholder="Paste or type your script…"
-        rows={14}
       />
-      <label className="file-import">
-        <span>Import .txt</span>
-        <input
-          type="file"
-          accept=".txt,text/plain"
-          onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
-        />
-      </label>
-    </div>
+      <div className="script-editor-toolbar">
+        <label className="file-import glass-upload">
+          <span className="file-import-label">Import .txt</span>
+          <input
+            type="file"
+            accept=".txt,text/plain"
+            onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      </div>
+    </section>
   )
 }

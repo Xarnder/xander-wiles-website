@@ -142,6 +142,50 @@ describe('AlignmentEngine', () => {
     expect(result.cursor).toBe(engine.findSentenceStartIndex(0))
   })
 
+  it('does not search or move behind the cursor when jump-back is disabled', () => {
+    const engine = new AlignmentEngine(SAMPLE, { allowJumpBack: false })
+    const script = engine.getScriptWords().map((w) => w.normalized)
+
+    engine.processSpokenWords(script.slice(0, 18))
+    const ahead = engine.getSnapshot().cursor
+    expect(ahead).toBeGreaterThan(10)
+
+    const result = engine.processSpokenWords(script.slice(0, 5))
+    expect(result.cursor).toBe(ahead)
+  })
+
+  it('does not jump ahead on common stop words alone', () => {
+    const script = `
+The cat sat on the mat.
+Later the dog ran to the park.
+Then the bird flew over the lake.
+`.trim()
+    const engine = new AlignmentEngine(script)
+    const words = engine.getScriptWords().map((w) => w.normalized)
+
+    // Establish position in the first sentence around "the mat"
+    engine.processSpokenWords(['the', 'cat', 'sat', 'on', 'the', 'mat'])
+    const at = engine.getSnapshot().cursor
+    expect(at).toBeLessThan(10)
+
+    // Saying only stop words that appear many times later must not leap ahead
+    const stuck = engine.processSpokenWords(['the', 'to', 'the', 'a', 'and', 'the'])
+    expect(stuck.cursor).toBeLessThanOrEqual(at + 2)
+    expect(stuck.cursor).toBeLessThan(words.length - 5)
+  })
+
+  it('still jumps ahead when distinctive content words are spoken', () => {
+    const engine = new AlignmentEngine(SAMPLE)
+    const script = engine.getScriptWords().map((w) => w.normalized)
+
+    engine.processSpokenWords(script.slice(0, 5))
+    const later = script.slice(20, 28)
+    const result = engine.processSpokenWords(later)
+
+    expect(result.state).toBe('tracking')
+    expect(result.cursor).toBeGreaterThanOrEqual(20)
+  })
+
   it('replayAlignment returns a sequence of results', () => {
     const results = replayAlignment(SAMPLE, [
       'welcome to the voice',
