@@ -15,6 +15,7 @@ interface ScriptViewProps {
   sentenceBreak: SentenceBreakMode
   showCursorHighlight: boolean
   scrollAnchor: ScrollAnchorMode
+  onSeek?: (index: number) => void
   containerRef: RefObject<HTMLDivElement | null>
   registerWordRef: (index: number, el: HTMLSpanElement | null) => void
 }
@@ -73,6 +74,7 @@ export function ScriptView({
   sentenceBreak,
   showCursorHighlight,
   scrollAnchor,
+  onSeek,
   containerRef,
   registerWordRef,
 }: ScriptViewProps) {
@@ -97,6 +99,7 @@ export function ScriptView({
             isPast ? 'is-past' : '',
             isCurrent ? 'is-current' : '',
             isCurrent && alignState === 'off_script' ? 'is-frozen' : '',
+            onSeek ? 'is-seekable' : '',
           ]
             .filter(Boolean)
             .join(' ')
@@ -115,6 +118,16 @@ export function ScriptView({
                 ref={(el) => registerWordRef(word.index, el)}
                 className={className}
                 data-index={word.index}
+                onClick={
+                  onSeek
+                    ? (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onSeek(word.index)
+                      }
+                    : undefined
+                }
+                title={onSeek ? 'Click to jump here' : undefined}
               >
                 {word.raw}
               </span>

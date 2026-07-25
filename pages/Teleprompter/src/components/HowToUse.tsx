@@ -14,7 +14,7 @@ export function HowToUse({ onClose }: HowToUseProps) {
 
       <div className="howto-body">
         <p className="howto-lead">
-          Voice Follow is an on-device teleprompter. It listens to your microphone,
+          Teleprompter Flow is an on-device teleprompter. It listens to your microphone,
           matches what you say to your script, and scrolls automatically — no cloud
           speech API, and it works offline after the model loads once.
         </p>
@@ -84,6 +84,52 @@ export function HowToUse({ onClose }: HowToUseProps) {
           </li>
         </ul>
 
+        <h3>Tips</h3>
+        <ul className="howto-list">
+          <li>
+            Click any word — while paused or live — to jump the cursor there. Use
+            ← → to nudge one word, or ↑ ↓ to jump five.
+          </li>
+          <li>
+            While live, controls auto-hide — move the mouse to the top edge to
+            bring them back.
+          </li>
+          <li>
+            Your script, settings, and mic choice are saved in this browser.
+          </li>
+        </ul>
+
+        <h3>Keyboard shortcuts</h3>
+        <ul className="howto-list howto-keys">
+          <li>
+            <kbd>Space</kbd> — Start / Pause
+          </li>
+          <li>
+            <kbd>R</kbd> — Reset to the beginning
+          </li>
+          <li>
+            <kbd>E</kbd> — Edit script
+          </li>
+          <li>
+            <kbd>,</kbd> — Settings
+          </li>
+          <li>
+            <kbd>?</kbd> — How to use
+          </li>
+          <li>
+            <kbd>F</kbd> — Fullscreen
+          </li>
+          <li>
+            <kbd>Esc</kbd> — Close panel / exit fullscreen
+          </li>
+          <li>
+            <kbd>←</kbd> <kbd>→</kbd> — Nudge one word
+          </li>
+          <li>
+            <kbd>↑</kbd> <kbd>↓</kbd> — Nudge five words
+          </li>
+        </ul>
+
         <h3>Reading tips</h3>
         <ul className="howto-list">
           <li>Speak the script words — not a paraphrase — for best tracking.</li>
@@ -120,6 +166,11 @@ export function HowToUse({ onClose }: HowToUseProps) {
             <strong>Cursor position</strong> — keep the live word at the top, in
             the middle, or hybrid (starts at the top, then locks to the middle
             once you reach it).
+          </li>
+          <li>
+            <strong>Stats</strong> — show or hide the progress bar, %, WPM (from
+            your last sentence), words said / left / total — or hide all stats
+            at once.
           </li>
           <li>
             <strong>Jump back mode</strong> — when on, re-speaking earlier text

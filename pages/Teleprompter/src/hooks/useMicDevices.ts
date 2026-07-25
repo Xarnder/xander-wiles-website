@@ -5,9 +5,11 @@ export interface MicDevice {
   label: string
 }
 
-export function useMicDevices() {
+export function useMicDevices(preferredDeviceId: string | null = null) {
   const [devices, setDevices] = useState<MicDevice[]>([])
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null)
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(
+    preferredDeviceId,
+  )
 
   const refresh = useCallback(async () => {
     if (!navigator.mediaDevices?.enumerateDevices) {
@@ -25,12 +27,15 @@ export function useMicDevices() {
       setDevices(mics)
       setSelectedDeviceId((prev) => {
         if (prev && mics.some((m) => m.deviceId === prev)) return prev
+        if (preferredDeviceId && mics.some((m) => m.deviceId === preferredDeviceId)) {
+          return preferredDeviceId
+        }
         return mics[0]?.deviceId ?? null
       })
     } catch {
       setDevices([])
     }
-  }, [])
+  }, [preferredDeviceId])
 
   useEffect(() => {
     void refresh()

@@ -20,8 +20,8 @@ export default defineConfig({
         'android-chrome-512x512.png',
       ],
       manifest: {
-        name: 'Voice Follow Teleprompter',
-        short_name: 'Teleprompter',
+        name: 'Teleprompter Flow',
+        short_name: 'Teleprompter Flow',
         description:
           'On-device voice-follow teleprompter — scrolls with your speech, fully offline after first load.',
         theme_color: '#0b0d0f',

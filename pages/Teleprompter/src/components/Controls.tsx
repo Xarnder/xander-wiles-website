@@ -19,6 +19,16 @@ interface ControlsProps {
   editorOpen: boolean
   settingsOpen: boolean
   howToOpen: boolean
+  progress: {
+    current: number
+    total: number
+    percent: number
+    fillPercent: number
+    said: number
+    remaining: number
+  }
+  wpm: number | null
+  isFullscreen: boolean
   onStart: () => void
   onPause: () => void
   onReset: () => void
@@ -27,7 +37,10 @@ interface ControlsProps {
   onToggleEditor: () => void
   onToggleSettings: () => void
   onToggleHowTo: () => void
+  onToggleFullscreen: () => void
+  onNudge: (delta: number) => void
   onUpdateSettings: (patch: Partial<TeleprompterSettings>) => void
+  onResetSettings: () => void
 }
 
 type SliderKey =
@@ -103,6 +116,9 @@ export function Controls({
   editorOpen,
   settingsOpen,
   howToOpen,
+  progress,
+  wpm,
+  isFullscreen,
   onStart,
   onPause,
   onReset,
@@ -111,7 +127,10 @@ export function Controls({
   onToggleEditor,
   onToggleSettings,
   onToggleHowTo,
+  onToggleFullscreen,
+  onNudge,
   onUpdateSettings,
+  onResetSettings,
 }: ControlsProps) {
   const isLiveScroll = status === 'listening' && alignState === 'tracking'
   const isHoldingOffScript = status === 'listening' && alignState === 'off_script'
@@ -133,15 +152,23 @@ export function Controls({
     onUpdateSettings({ [key]: DEFAULT_SETTINGS[key] })
   }
 
+  const s = settings
+  const statsEnabled = s.showStats
+  const showAnyStat =
+    statsEnabled &&
+    (s.showProgressBar ||
+      s.showPercent ||
+      s.showWpm ||
+      s.showWordsSaid ||
+      s.showWordsRemaining ||
+      s.showWordsTotal)
+
   return (
     <header className="controls">
-      <div className="brand-row">
+      <div className="controls-top">
         <div className="brand">
           <span className="brand-mark" aria-hidden />
-          <div>
-            <p className="brand-name">Voice Follow</p>
-            <p className="brand-sub">On-device teleprompter</p>
-          </div>
+          <h1 className="brand-name">Teleprompter Flow</h1>
         </div>
         <div
           className={`mode-badge mode-${scrollMode}${isHoldingOffScript ? ' is-holding' : ''}`}
@@ -151,42 +178,164 @@ export function Controls({
           <span className="mode-dot" />
           <span className="mode-label">{statusLabel}</span>
         </div>
+        <div className="control-row primary-actions">
+          {!isRunning || status !== 'listening' ? (
+            <button
+              type="button"
+              className="btn primary"
+              onClick={onStart}
+              title="Start (Space)"
+            >
+              {status === 'loading' ? 'Loading…' : 'Start'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn primary"
+              onClick={onPause}
+              title="Pause (Space)"
+            >
+              Pause
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn"
+            onClick={onReset}
+            title="Reset to start (R)"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            className={`btn ${editorOpen ? 'active' : ''}`}
+            onClick={onToggleEditor}
+            title="Edit script (E)"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className={`btn ${settingsOpen ? 'active' : ''}`}
+            onClick={onToggleSettings}
+            title="Settings (,)"
+          >
+            Settings
+          </button>
+          <button
+            type="button"
+            className={`btn ${howToOpen ? 'active' : ''}`}
+            onClick={onToggleHowTo}
+            title="How to use (?)"
+          >
+            Help
+          </button>
+          <button
+            type="button"
+            className={`btn ${isFullscreen ? 'active' : ''}`}
+            onClick={onToggleFullscreen}
+            title="Fullscreen (F)"
+          >
+            {isFullscreen ? 'Exit' : 'Full'}
+          </button>
+        </div>
       </div>
 
-      <div className="control-row primary-actions">
-        {!isRunning || status !== 'listening' ? (
-          <button type="button" className="btn primary" onClick={onStart}>
-            {status === 'loading' ? 'Loading…' : 'Start'}
-          </button>
+      <div className="control-row secondary-actions">
+        {showAnyStat ? (
+          <div className="stats-strip" aria-live="polite">
+            {s.showProgressBar && (
+              <div
+                className="progress-readout"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress.percent}
+                aria-label="Script progress"
+              >
+                <div className="progress-meter" aria-hidden>
+                  <div
+                    className="progress-meter-fill"
+                    style={{ width: `${progress.fillPercent}%` }}
+                  />
+                  <div className="progress-segments">
+                    {Array.from({ length: 8 }, (_, i) => {
+                      const eighth = i + 1
+                      const isQuarter = eighth % 2 === 0
+                      return (
+                        <span
+                          key={eighth}
+                          className={`progress-segment ${isQuarter ? 'is-quarter' : 'is-eighth'}`}
+                        />
+                      )
+                    })}
+                  </div>
+                  <div className="progress-ticks">
+                    {[1, 2, 3, 4, 5, 6, 7].map((eighth) => (
+                      <span
+                        key={eighth}
+                        className={`progress-tick ${eighth % 2 === 0 ? 'is-quarter' : 'is-eighth'}`}
+                        style={{ left: `${(eighth / 8) * 100}%` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="stat-chips">
+              {s.showPercent && (
+                <span className="stat-chip" title="Progress through script">
+                  <em>{progress.total === 0 ? '—' : `${progress.percent}%`}</em>
+                  <span>done</span>
+                </span>
+              )}
+              {s.showWpm && (
+                <span className="stat-chip" title="Words per minute (last sentence)">
+                  <em>{wpm == null ? '—' : wpm}</em>
+                  <span>wpm</span>
+                </span>
+              )}
+              {s.showWordsSaid && (
+                <span className="stat-chip" title="Words already passed">
+                  <em>{progress.said}</em>
+                  <span>said</span>
+                </span>
+              )}
+              {s.showWordsRemaining && (
+                <span className="stat-chip" title="Words still ahead">
+                  <em>{progress.remaining}</em>
+                  <span>left</span>
+                </span>
+              )}
+              {s.showWordsTotal && (
+                <span className="stat-chip" title="Total words in script">
+                  <em>{progress.total}</em>
+                  <span>total</span>
+                </span>
+              )}
+            </div>
+          </div>
         ) : (
-          <button type="button" className="btn primary" onClick={onPause}>
-            Pause
-          </button>
+          <div className="stats-strip is-empty" aria-hidden />
         )}
-        <button type="button" className="btn" onClick={onReset}>
-          Reset
-        </button>
-        <button
-          type="button"
-          className={`btn ${editorOpen ? 'active' : ''}`}
-          onClick={onToggleEditor}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          className={`btn ${settingsOpen ? 'active' : ''}`}
-          onClick={onToggleSettings}
-        >
-          Settings
-        </button>
-        <button
-          type="button"
-          className={`btn ${howToOpen ? 'active' : ''}`}
-          onClick={onToggleHowTo}
-        >
-          How to use
-        </button>
+        <div className="nudge-group" role="group" aria-label="Nudge cursor">
+          <button
+            type="button"
+            className="btn ghost nudge-btn"
+            onClick={() => onNudge(-1)}
+            title="Back one word (←)"
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            className="btn ghost nudge-btn"
+            onClick={() => onNudge(1)}
+            title="Forward one word (→)"
+          >
+            →
+          </button>
+        </div>
       </div>
 
       {errorMessage && (
@@ -371,10 +520,99 @@ export function Controls({
                 ))}
               </select>
             </label>
+
+            <div className="settings-section-label">Stats</div>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.showStats}
+                onChange={(e) =>
+                  onUpdateSettings({ showStats: e.target.checked })
+                }
+              />
+              <span>Show stats</span>
+            </label>
+            <label className={`toggle${!settings.showStats ? ' is-disabled' : ''}`}>
+              <input
+                type="checkbox"
+                checked={settings.showProgressBar}
+                disabled={!settings.showStats}
+                onChange={(e) =>
+                  onUpdateSettings({ showProgressBar: e.target.checked })
+                }
+              />
+              <span>Progress bar</span>
+            </label>
+            <label className={`toggle${!settings.showStats ? ' is-disabled' : ''}`}>
+              <input
+                type="checkbox"
+                checked={settings.showPercent}
+                disabled={!settings.showStats}
+                onChange={(e) =>
+                  onUpdateSettings({ showPercent: e.target.checked })
+                }
+              />
+              <span>Percentage</span>
+            </label>
+            <label className={`toggle${!settings.showStats ? ' is-disabled' : ''}`}>
+              <input
+                type="checkbox"
+                checked={settings.showWpm}
+                disabled={!settings.showStats}
+                onChange={(e) =>
+                  onUpdateSettings({ showWpm: e.target.checked })
+                }
+              />
+              <span>Words per minute</span>
+            </label>
+            <label className={`toggle${!settings.showStats ? ' is-disabled' : ''}`}>
+              <input
+                type="checkbox"
+                checked={settings.showWordsSaid}
+                disabled={!settings.showStats}
+                onChange={(e) =>
+                  onUpdateSettings({ showWordsSaid: e.target.checked })
+                }
+              />
+              <span>Words said</span>
+            </label>
+            <label className={`toggle${!settings.showStats ? ' is-disabled' : ''}`}>
+              <input
+                type="checkbox"
+                checked={settings.showWordsRemaining}
+                disabled={!settings.showStats}
+                onChange={(e) =>
+                  onUpdateSettings({ showWordsRemaining: e.target.checked })
+                }
+              />
+              <span>Words left</span>
+            </label>
+            <label className={`toggle${!settings.showStats ? ' is-disabled' : ''}`}>
+              <input
+                type="checkbox"
+                checked={settings.showWordsTotal}
+                disabled={!settings.showStats}
+                onChange={(e) =>
+                  onUpdateSettings({ showWordsTotal: e.target.checked })
+                }
+              />
+              <span>Words total</span>
+            </label>
           </div>
           <div className="settings-footer">
             <button type="button" className="btn settings-preload" onClick={onPreload}>
               {modelReady ? 'Reload model' : 'Preload model'}
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => {
+                if (window.confirm('Reset all settings to defaults?')) {
+                  onResetSettings()
+                }
+              }}
+            >
+              Reset settings
             </button>
             <p className="confidence-readout">
               Live confidence: {(confidence * 100).toFixed(0)}%

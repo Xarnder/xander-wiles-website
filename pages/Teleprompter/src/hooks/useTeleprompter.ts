@@ -3,6 +3,7 @@ import { AlignmentEngine, type AlignmentState } from '../alignment/AlignmentEngi
 import { useSpeechStream } from '../asr/useSpeechStream'
 import { useScrollController, type ScrollAnchorMode } from '../scroll/useScrollController'
 import { tokenizeTranscript } from '../utils/tokenize'
+import { isSentenceEnd } from '../utils/sentences'
 import { DEFAULT_SCRIPT } from '../utils/defaultScript'
 
 /** Extra spacing after a full stop in the displayed script. */
@@ -37,6 +38,14 @@ export interface TeleprompterSettings {
   allowJumpBack: boolean
   /** Where the live cursor sits in the viewport while scrolling. */
   scrollAnchor: ScrollAnchorMode
+  /** Master switch — hide the entire stats strip when false. */
+  showStats: boolean
+  showProgressBar: boolean
+  showPercent: boolean
+  showWpm: boolean
+  showWordsSaid: boolean
+  showWordsRemaining: boolean
+  showWordsTotal: boolean
 }
 
 export const DEFAULT_SETTINGS: TeleprompterSettings = {
@@ -52,9 +61,18 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   showCursorHighlight: true,
   allowJumpBack: true,
   scrollAnchor: 'hybrid',
+  showStats: true,
+  showProgressBar: true,
+  showPercent: true,
+  showWpm: true,
+  showWordsSaid: true,
+  showWordsRemaining: true,
+  showWordsTotal: true,
 }
 
 const SETTINGS_STORAGE_KEY = 'voice-follow-settings'
+const SCRIPT_STORAGE_KEY = 'voice-follow-script'
+const DEVICE_STORAGE_KEY = 'voice-follow-mic'
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n))
@@ -123,6 +141,30 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
         ? p.allowJumpBack
         : DEFAULT_SETTINGS.allowJumpBack,
     scrollAnchor,
+    showStats:
+      typeof p.showStats === 'boolean' ? p.showStats : DEFAULT_SETTINGS.showStats,
+    showProgressBar:
+      typeof p.showProgressBar === 'boolean'
+        ? p.showProgressBar
+        : DEFAULT_SETTINGS.showProgressBar,
+    showPercent:
+      typeof p.showPercent === 'boolean'
+        ? p.showPercent
+        : DEFAULT_SETTINGS.showPercent,
+    showWpm:
+      typeof p.showWpm === 'boolean' ? p.showWpm : DEFAULT_SETTINGS.showWpm,
+    showWordsSaid:
+      typeof p.showWordsSaid === 'boolean'
+        ? p.showWordsSaid
+        : DEFAULT_SETTINGS.showWordsSaid,
+    showWordsRemaining:
+      typeof p.showWordsRemaining === 'boolean'
+        ? p.showWordsRemaining
+        : DEFAULT_SETTINGS.showWordsRemaining,
+    showWordsTotal:
+      typeof p.showWordsTotal === 'boolean'
+        ? p.showWordsTotal
+        : DEFAULT_SETTINGS.showWordsTotal,
   }
 }
 
@@ -144,15 +186,52 @@ function persistSettings(settings: TeleprompterSettings): void {
   }
 }
 
+function loadStoredScript(): string {
+  try {
+    const raw = localStorage.getItem(SCRIPT_STORAGE_KEY)
+    if (typeof raw === 'string' && raw.length > 0) return raw
+  } catch {
+    // ignore
+  }
+  return DEFAULT_SCRIPT
+}
+
+function persistScript(script: string): void {
+  try {
+    localStorage.setItem(SCRIPT_STORAGE_KEY, script)
+  } catch {
+    // ignore
+  }
+}
+
+function loadStoredDeviceId(): string | null {
+  try {
+    return localStorage.getItem(DEVICE_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function persistDeviceId(deviceId: string | null): void {
+  try {
+    if (deviceId) localStorage.setItem(DEVICE_STORAGE_KEY, deviceId)
+    else localStorage.removeItem(DEVICE_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 export function useTeleprompter() {
-  const [script, setScript] = useState(DEFAULT_SCRIPT)
+  const [script, setScriptState] = useState(loadStoredScript)
   const [settings, setSettings] = useState<TeleprompterSettings>(loadStoredSettings)
   const [cursor, setCursor] = useState(0)
   const [alignState, setAlignState] = useState<AlignmentState>('tracking')
   const [confidence, setConfidence] = useState(0)
-  const [deviceId, setDeviceId] = useState<string | null>(null)
+  const [deviceId, setDeviceIdState] = useState<string | null>(loadStoredDeviceId)
   const [isRunning, setIsRunning] = useState(false)
   const [liveScroll, setLiveScroll] = useState(false)
+  /** Words-per-minute from the most recently completed sentence. */
+  const [wpm, setWpm] = useState<number | null>(null)
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const wordRefs = useRef<Map<number, HTMLSpanElement>>(new Map())
@@ -163,19 +242,41 @@ export function useTeleprompter() {
   thresholdRef.current = settings.confidenceThreshold
   const allowJumpBackRef = useRef(settings.allowJumpBack)
   allowJumpBackRef.current = settings.allowJumpBack
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+  const prevCursorRef = useRef(0)
+  const sentenceStartIndexRef = useRef(0)
+  const sentenceStartTsRef = useRef<number>(performance.now())
+  const scriptRef = useRef(script)
+  scriptRef.current = script
+  const listeningRef = useRef(false)
 
   useEffect(() => {
     persistSettings(settings)
   }, [settings])
 
-  const { setCursor: scrollToCursor, reset: resetScroll } = useScrollController(
-    containerRef,
-    {
+  useEffect(() => {
+    persistScript(script)
+  }, [script])
+
+  useEffect(() => {
+    persistDeviceId(deviceId)
+  }, [deviceId])
+
+  const setScript = useCallback((value: string) => {
+    setScriptState(value)
+  }, [])
+
+  const setDeviceId = useCallback((id: string | null) => {
+    setDeviceIdState(id)
+  }, [])
+
+  const { setCursor: scrollToCursor, jumpToWord, reset: resetScroll } =
+    useScrollController(containerRef, {
       sensitivity: settings.scrollSensitivity,
       anchorMode: settings.scrollAnchor,
       active: liveScroll,
-    },
-  )
+    })
 
   const scriptWords = useMemo(() => {
     const engine = new AlignmentEngine(script, {
@@ -187,6 +288,52 @@ export function useTeleprompter() {
     partialWordsRef.current = []
     return engine.getScriptWords()
   }, [script])
+
+  const resetPaceTracking = useCallback((atIndex = 0) => {
+    prevCursorRef.current = atIndex
+    sentenceStartIndexRef.current = atIndex
+    sentenceStartTsRef.current = performance.now()
+    setWpm(null)
+  }, [])
+
+  // Sentence-based WPM: when the cursor advances past a sentence end, score that sentence.
+  useEffect(() => {
+    const words = scriptWords
+    const prev = prevCursorRef.current
+    const next = cursor
+
+    if (next < prev) {
+      // Seek / rewind — restart the open sentence clock from the new spot.
+      prevCursorRef.current = next
+      sentenceStartIndexRef.current = next
+      sentenceStartTsRef.current = performance.now()
+      return
+    }
+
+    if (next === prev) return
+
+    if (listeningRef.current && next > prev) {
+      const now = performance.now()
+      for (let i = prev; i < next; i++) {
+        if (!isSentenceEnd(scriptRef.current, words, i)) continue
+        const start = sentenceStartIndexRef.current
+        const wordCount = i - start + 1
+        const elapsedMs = now - sentenceStartTsRef.current
+        if (wordCount >= 2 && elapsedMs >= 600) {
+          const rate = Math.round(wordCount / (elapsedMs / 60000))
+          setWpm(Math.max(1, Math.min(400, rate)))
+        }
+        sentenceStartIndexRef.current = i + 1
+        sentenceStartTsRef.current = now
+      }
+    }
+
+    prevCursorRef.current = next
+  }, [cursor, scriptWords])
+
+  useEffect(() => {
+    resetPaceTracking(0)
+  }, [script, resetPaceTracking])
 
   const applyCursorOffset = useCallback(
     (detected: number) => {
@@ -282,10 +429,22 @@ export function useTeleprompter() {
     setLiveScroll(status === 'listening' && alignState === 'tracking')
   }, [status, alignState])
 
+  useEffect(() => {
+    const wasListening = listeningRef.current
+    listeningRef.current = status === 'listening'
+    if (!wasListening && status === 'listening') {
+      sentenceStartIndexRef.current = prevCursorRef.current
+      sentenceStartTsRef.current = performance.now()
+    }
+  }, [status])
+
   const start = useCallback(async () => {
     setIsRunning(true)
+    sentenceStartIndexRef.current = cursor
+    sentenceStartTsRef.current = performance.now()
+    prevCursorRef.current = cursor
     await startSpeech()
-  }, [startSpeech])
+  }, [cursor, startSpeech])
 
   const pause = useCallback(() => {
     stopSpeech()
@@ -303,7 +462,44 @@ export function useTeleprompter() {
     setConfidence(0)
     setIsRunning(false)
     resetScroll()
-  }, [applyCursorOffset, resetScroll, resetTranscript, stopSpeech])
+    resetPaceTracking(0)
+  }, [applyCursorOffset, resetPaceTracking, resetScroll, resetTranscript, stopSpeech])
+
+  /** Jump the reading position to a display word (click-to-seek / keyboard nudge). */
+  const seekTo = useCallback(
+    (displayIndex: number) => {
+      const last = Math.max(0, scriptWords.length - 1)
+      if (last < 0) return
+      const display = Math.max(0, Math.min(displayIndex, last))
+      const s = settingsRef.current
+      const offset = s.showCursorHighlight ? Math.max(0, s.cursorOffset) : 0
+      const detected = Math.max(0, display - offset)
+
+      // Clear ASR + alignment memory so live listening continues from the new spot.
+      resetTranscript()
+      committedWordsRef.current = []
+      partialWordsRef.current = []
+      engineRef.current?.reset(detected)
+      setCursor(display)
+      setAlignState('tracking')
+      setConfidence(1)
+
+      prevCursorRef.current = display
+      sentenceStartIndexRef.current = display
+      sentenceStartTsRef.current = performance.now()
+
+      const wordEl = wordRefs.current.get(display) ?? null
+      jumpToWord(display, wordEl)
+    },
+    [jumpToWord, resetTranscript, scriptWords.length],
+  )
+
+  const nudge = useCallback(
+    (deltaWords: number) => {
+      seekTo(cursor + deltaWords)
+    },
+    [cursor, seekTo],
+  )
 
   const updateSettings = useCallback(
     (patch: Partial<TeleprompterSettings>) => {
@@ -311,6 +507,10 @@ export function useTeleprompter() {
     },
     [],
   )
+
+  const resetSettings = useCallback(() => {
+    setSettings({ ...DEFAULT_SETTINGS })
+  }, [])
 
   const registerWordRef = useCallback(
     (index: number, el: HTMLSpanElement | null) => {
@@ -326,13 +526,44 @@ export function useTeleprompter() {
     scrollToCursor(cursor, wordEl)
   }, [cursor, liveScroll, scrollToCursor, settings.fontSize, settings.lineWidth, settings.cursorOffset, settings.scrollAnchor])
 
+  const progress = useMemo(() => {
+    const total = scriptWords.length
+    if (total <= 0) {
+      return {
+        total: 0,
+        current: 0,
+        percent: 0,
+        fillPercent: 0,
+        said: 0,
+        remaining: 0,
+      }
+    }
+    const said = Math.min(cursor, total)
+    const remaining = Math.max(0, total - said)
+    const current = Math.min(cursor + 1, total)
+    const fillPercent = (current / total) * 100
+    return {
+      total,
+      current,
+      percent: Math.round(fillPercent),
+      fillPercent,
+      said,
+      remaining,
+    }
+  }, [cursor, scriptWords.length])
+
   return {
     script,
     setScript,
     scriptWords,
     settings,
     updateSettings,
+    resetSettings,
     cursor,
+    seekTo,
+    nudge,
+    progress,
+    wpm,
     alignState,
     confidence,
     containerRef,

@@ -119,11 +119,8 @@ export function useScrollController(
     targetYRef.current = el.scrollTop
   }, [containerRef])
 
-  const setCursor = useCallback(
-    (cursor: number, wordEl: HTMLElement | null) => {
-      // Ignore target updates while unlocked — prevents stale targets snapping on resume.
-      if (!activeRef.current) return
-
+  const applyWordTarget = useCallback(
+    (cursor: number, wordEl: HTMLElement | null, snap: boolean) => {
       const now = performance.now()
       const prevCursor = lastCursorRef.current
       const prevTs = lastCursorTsRef.current
@@ -147,12 +144,31 @@ export function useScrollController(
       const offsetWithin =
         wordRect.top - containerRect.top + container.scrollTop
       const ratio = FOCUS_RATIO[anchorModeRef.current]
-      const focusY = offsetWithin - container.clientHeight * ratio
-      // Hybrid & early top/middle: clamp keeps the first lines at the top until
-      // the active word reaches the focus line, then scrolls to hold it there.
-      targetYRef.current = Math.max(0, focusY)
+      const focusY = Math.max(0, offsetWithin - container.clientHeight * ratio)
+      targetYRef.current = focusY
+      if (snap) {
+        currentYRef.current = focusY
+        container.scrollTop = focusY
+      }
     },
     [containerRef],
+  )
+
+  const setCursor = useCallback(
+    (cursor: number, wordEl: HTMLElement | null) => {
+      // Ignore target updates while unlocked — prevents stale targets snapping on resume.
+      if (!activeRef.current) return
+      applyWordTarget(cursor, wordEl, false)
+    },
+    [applyWordTarget],
+  )
+
+  /** Instantly jump scroll to a word (works paused or live — used for click-to-seek). */
+  const jumpToWord = useCallback(
+    (cursor: number, wordEl: HTMLElement | null) => {
+      applyWordTarget(cursor, wordEl, true)
+    },
+    [applyWordTarget],
   )
 
   const reset = useCallback(() => {
@@ -165,5 +181,5 @@ export function useScrollController(
     if (el) el.scrollTop = 0
   }, [containerRef])
 
-  return { setCursor, reset, syncFromDom }
+  return { setCursor, jumpToWord, reset, syncFromDom }
 }

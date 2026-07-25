@@ -143,7 +143,7 @@ export class AlignmentEngine {
     let bestStart = -1
     let bestEnd = this.cursor
     let bestSpokenLen = spoken.length
-    let bestSpoken = spoken
+    let bestSpoken: readonly string[] = spoken
 
     const consider = (span: readonly string[], start: number, lengthBoost: number) => {
       const { score: raw, end } = rankCandidate(

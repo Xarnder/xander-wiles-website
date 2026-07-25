@@ -1,10 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Controls } from './components/Controls'
 import { HowToUse } from './components/HowToUse'
 import { ScriptEditor } from './components/ScriptEditor'
 import { ScriptView } from './components/ScriptView'
 import { useMicDevices } from './hooks/useMicDevices'
+import { usePresentationChrome } from './hooks/usePresentationChrome'
 import { useTeleprompter } from './hooks/useTeleprompter'
+import { useWakeLock } from './hooks/useWakeLock'
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    target.isContentEditable
+  )
+}
 
 export default function App() {
   const tp = useTeleprompter()
@@ -13,10 +26,15 @@ export default function App() {
     selectedDeviceId,
     setSelectedDeviceId,
     refresh: refreshMics,
-  } = useMicDevices()
+  } = useMicDevices(tp.deviceId)
   const [editorOpen, setEditorOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [howToOpen, setHowToOpen] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  const isListening = tp.speech.status === 'listening'
+  const chromeVisible = usePresentationChrome(isListening)
+  useWakeLock(isListening)
 
   useEffect(() => {
     if (selectedDeviceId) {
@@ -36,8 +54,132 @@ export default function App() {
     }
   }, [refreshMics, tp.speech.status])
 
+  useEffect(() => {
+    const onFs = () => setIsFullscreen(Boolean(document.fullscreenElement))
+    document.addEventListener('fullscreenchange', onFs)
+    return () => document.removeEventListener('fullscreenchange', onFs)
+  }, [])
+
+  const closePanels = useCallback(() => {
+    setEditorOpen(false)
+    setSettingsOpen(false)
+    setHowToOpen(false)
+  }, [])
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      } else {
+        await document.documentElement.requestFullscreen()
+      }
+    } catch {
+      // Browser denied / unsupported.
+    }
+  }, [])
+
+  const startSession = useCallback(() => {
+    closePanels()
+    void tp.start()
+  }, [closePanels, tp])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+
+      if (e.key === 'Escape') {
+        if (document.fullscreenElement) {
+          void document.exitFullscreen()
+          return
+        }
+        if (editorOpen || settingsOpen || howToOpen) {
+          e.preventDefault()
+          closePanels()
+        }
+        return
+      }
+
+      if (isTypingTarget(e.target)) return
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault()
+          if (isListening) tp.pause()
+          else void startSession()
+          break
+        case 'r':
+        case 'R':
+          e.preventDefault()
+          tp.reset()
+          break
+        case 'e':
+        case 'E':
+          e.preventDefault()
+          setEditorOpen((v) => !v)
+          setSettingsOpen(false)
+          setHowToOpen(false)
+          break
+        case ',':
+          e.preventDefault()
+          setSettingsOpen((v) => !v)
+          setEditorOpen(false)
+          setHowToOpen(false)
+          break
+        case '?':
+          e.preventDefault()
+          setHowToOpen((v) => !v)
+          setEditorOpen(false)
+          setSettingsOpen(false)
+          break
+        case 'f':
+        case 'F':
+          e.preventDefault()
+          void toggleFullscreen()
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          tp.nudge(-1)
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          tp.nudge(1)
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          tp.nudge(-5)
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          tp.nudge(5)
+          break
+        default:
+          break
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [
+    closePanels,
+    editorOpen,
+    howToOpen,
+    isListening,
+    settingsOpen,
+    startSession,
+    toggleFullscreen,
+    tp,
+  ])
+
+  const shellClass = [
+    'app-shell',
+    isListening ? 'is-presenting' : '',
+    isListening && !chromeVisible ? 'is-chrome-hidden' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <div className="app-shell">
+    <div className={shellClass}>
       <div className="atmosphere" aria-hidden>
         <span className="glow-orb glow-orb-a" />
         <span className="glow-orb glow-orb-b" />
@@ -56,12 +198,10 @@ export default function App() {
         editorOpen={editorOpen}
         settingsOpen={settingsOpen}
         howToOpen={howToOpen}
-        onStart={() => {
-          setEditorOpen(false)
-          setSettingsOpen(false)
-          setHowToOpen(false)
-          void tp.start()
-        }}
+        progress={tp.progress}
+        wpm={tp.wpm}
+        isFullscreen={isFullscreen}
+        onStart={startSession}
         onPause={tp.pause}
         onReset={tp.reset}
         onPreload={() => void tp.speech.preload()}
@@ -84,7 +224,10 @@ export default function App() {
           setEditorOpen(false)
           setSettingsOpen(false)
         }}
+        onToggleFullscreen={() => void toggleFullscreen()}
+        onNudge={tp.nudge}
         onUpdateSettings={tp.updateSettings}
+        onResetSettings={tp.resetSettings}
       />
 
       <main className="stage">
@@ -109,6 +252,7 @@ export default function App() {
             sentenceBreak={tp.settings.sentenceBreak}
             showCursorHighlight={tp.settings.showCursorHighlight}
             scrollAnchor={tp.settings.scrollAnchor}
+            onSeek={tp.seekTo}
             containerRef={tp.containerRef}
             registerWordRef={tp.registerWordRef}
           />
