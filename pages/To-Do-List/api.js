@@ -654,6 +654,9 @@ export async function deleteTag(tagId) {
             state.appData.settings.activeTagId = MISC_TAG_ID;
             updates['settings.activeTagId'] = MISC_TAG_ID;
         }
+        if (state.tagFilterId === tagId) {
+            state.tagFilterId = null;
+        }
 
         await updateDoc(doc(db, "users", state.currentUser.uid), updates);
         if (taskIds.length > 0) {

@@ -2467,6 +2467,22 @@ body.is-archived-view .project-title-input {
     box-shadow: 0 4px 15px oklch(0 0 0 / 0.4);
 }
 
+body.is-tag-filter-view .app-header {
+    border-color: color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 55%, var(--glass-border)) !important;
+    box-shadow:
+        0 0 0 1px color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 40%, transparent),
+        0 0 24px color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 28%, transparent) !important;
+}
+
+body.is-tag-filter-view .tag-mode-row {
+    border-top-color: color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 50%, var(--glass-border));
+}
+
+body.is-tag-filter-view .board-container {
+    outline: 2px solid color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 45%, transparent);
+    outline-offset: -2px;
+}
+
 @keyframes pulse-gold {
     0% {
         box-shadow: 0 0 0 0 oklch(0.861 0.173 91.9 / 0.4);
@@ -2538,6 +2554,195 @@ body.settings-page-open #automation-confirm-modal-overlay,
 body.settings-page-open #reset-modal-overlay,
 body.settings-page-open #backup-reminder-modal-overlay {
     z-index: 9400;
+}
+
+/* --- FEATURES HELP & GUIDES --- */
+.features-help-modal {
+    max-width: 560px;
+    width: min(560px, 94vw);
+    max-height: min(88vh, 820px);
+    display: flex;
+    flex-direction: column;
+    /* Keep modal chrome from clipping accordion content */
+    overflow: hidden;
+}
+
+.features-help-modal .modal-header-row,
+.features-help-modal .features-help-intro,
+.features-help-modal .modal-actions-bar {
+    flex-shrink: 0;
+}
+
+.features-help-modal .modal-header-row h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.features-help-intro {
+    margin: 0 0 12px;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.4;
+}
+
+.features-help-body {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Avoid display:flex here — details/summary expand unreliably as flex items */
+    display: block;
+    padding-right: 2px;
+    text-align: left;
+    -webkit-overflow-scrolling: touch;
+}
+
+.features-help-section {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 0;
+    margin: 0 0 8px;
+    background: oklch(1 0 0 / 0.03);
+    overflow: visible;
+    height: auto;
+}
+
+.features-help-section:last-child {
+    margin-bottom: 0;
+}
+
+[data-theme="light"] .features-help-section {
+    background: oklch(0 0 0 / 0.03);
+}
+
+.features-help-section summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 14px 14px;
+    min-height: 48px;
+    box-sizing: border-box;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    user-select: none;
+    overflow: visible;
+    position: relative;
+    z-index: 1;
+}
+
+.features-help-section summary::-webkit-details-marker,
+.features-help-section summary::marker {
+    display: none;
+    content: '';
+}
+
+.features-help-section summary::after {
+    content: '';
+    margin-left: auto;
+    width: 0.5em;
+    height: 0.5em;
+    border-right: 2px solid var(--text-secondary);
+    border-bottom: 2px solid var(--text-secondary);
+    transform: rotate(45deg);
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+}
+
+.features-help-section[open] > summary::after {
+    transform: rotate(-135deg);
+}
+
+.features-help-section summary i {
+    color: var(--accent-blue);
+    font-size: 1.15rem;
+    flex-shrink: 0;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.features-help-section summary .features-help-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: visible;
+    white-space: normal;
+    word-break: break-word;
+    pointer-events: none;
+}
+
+/* Force content visibility when open (robust against flex/overflow quirks) */
+.features-help-section > .features-help-content {
+    display: none;
+    height: auto;
+    overflow: visible;
+}
+
+.features-help-section[open] > .features-help-content {
+    display: block;
+    padding: 0 12px 12px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.45;
+    border-top: 1px solid var(--glass-border);
+    padding-top: 10px;
+}
+
+.features-help-content h4 {
+    margin: 10px 0 4px;
+    color: var(--text-primary);
+    font-size: 0.88rem;
+}
+
+.features-help-content h4:first-child {
+    margin-top: 0;
+}
+
+.features-help-content p,
+.features-help-content ul,
+.features-help-content ol {
+    margin: 0 0 8px;
+}
+
+.features-help-content ul,
+.features-help-content ol {
+    padding-left: 1.2rem;
+}
+
+.features-help-content li + li {
+    margin-top: 4px;
+}
+
+.features-help-content code {
+    font-size: 0.85em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: oklch(0 0 0 / 0.2);
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .features-help-content code {
+    background: oklch(0 0 0 / 0.06);
+}
+
+.features-help-tip {
+    background: oklch(0 0 0 / 0.18);
+    padding: 10px;
+    border-radius: 8px;
+    font-style: italic;
+    margin: 8px 0 0 !important;
+}
+
+[data-theme="light"] .features-help-tip {
+    background: oklch(0 0 0 / 0.05);
 }
 
 .settings-page-shell {
@@ -2854,6 +3059,11 @@ input:checked+.slider-small:before {
     max-height: 85vh;
     overflow-y: auto;
     /* Allow scrolling for long lists */
+}
+
+.features-help-modal.modal {
+    overflow: hidden;
+    max-height: min(88vh, 820px);
 }
 
 /* Edit modal: keep chrome/border on the outer frame; scroll inside */
@@ -3290,7 +3500,7 @@ input:checked+.slider-small:before {
     }
 
     .control-item {
-        margin-bottom: 5px;
+        margin-bottom: 0;
     }
 
     .list-column {
@@ -3325,18 +3535,18 @@ input:checked+.slider-small:before {
         .app-header {
             position: fixed !important;
             top: auto !important;
-            bottom: calc(15px + env(safe-area-inset-bottom, 0px)) !important;
-            left: 10px !important;
-            right: 10px !important;
+            bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+            left: 8px !important;
+            right: 8px !important;
             margin: 0 !important;
-            padding: 15px !important;
+            padding: 7px 8px !important;
             display: flex !important;
             flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
-            gap: 12px !important;
+            gap: 4px !important;
             z-index: 9000 !important;
-            border-radius: 30px !important;
+            border-radius: 20px !important;
             background: var(--dropdown-bg-glass) !important;
             border: 1px solid var(--glass-border) !important;
             box-shadow: 0 10px 40px oklch(0 0 0 / 0.6) !important;
@@ -3350,17 +3560,44 @@ input:checked+.slider-small:before {
             width: 100% !important;
             justify-content: center !important;
             align-items: center !important;
-            gap: 10px !important;
+            gap: 5px !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
         }
 
         .header-row.tag-mode-row {
             align-items: stretch !important;
             overflow: visible !important;
-            padding-top: 6px !important;
-            padding-bottom: 4px !important;
+            padding: 0 !important;
             order: 1 !important;
             border-top: none !important;
-            margin-top: 0 !important;
+            margin: 0 !important;
+            flex-direction: column !important;
+            gap: 0 !important;
+        }
+
+        .header-row.tag-mode-row.is-filtering {
+            gap: 3px !important;
+        }
+
+        .tag-mode-row.is-filtering .tag-filter-label:not([hidden]) {
+            margin-bottom: 2px !important;
+        }
+
+        .tag-mode-row.is-filtering .tag-mode-buttons {
+            padding-bottom: 2px !important;
+        }
+
+        /* Mobile dock (header at bottom): filter label above tag buttons */
+        .tag-mode-row .tag-filter-label {
+            order: 1 !important;
+            align-self: center !important;
+            text-align: center !important;
+        }
+
+        .tag-mode-row .tag-mode-buttons {
+            order: 2 !important;
         }
 
         .header-row-1 {
@@ -3379,7 +3616,239 @@ input:checked+.slider-small:before {
             flex-wrap: wrap !important;
             overflow: visible !important;
             justify-content: center !important;
-            row-gap: 6px !important;
+            row-gap: 3px !important;
+            column-gap: 4px !important;
+            padding: 0 !important;
+        }
+
+        .control-item {
+            margin-bottom: 0 !important;
+        }
+
+        /* --- Unified header ACTION buttons (tappable) --- */
+        .app-header button.btn:not(.multi-select-btn),
+        .app-header button.icon-btn-large,
+        .app-header .options-btn-styled,
+        .app-header .board-dropdown-btn {
+            min-height: 30px !important;
+            height: 30px !important;
+            min-width: 30px !important;
+            padding: 0 9px !important;
+            margin: 0 !important;
+            border-radius: 9px !important;
+            border: 1px solid color-mix(in oklch, var(--glass-border) 70%, white) !important;
+            background: color-mix(in oklch, var(--accent-blue) 22%, oklch(1 0 0 / 0.12)) !important;
+            color: var(--text-primary) !important;
+            box-shadow: none !important;
+            font-size: 0.7rem !important;
+            font-weight: 650 !important;
+            line-height: 1 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 4px !important;
+            transform: none !important;
+            flex-shrink: 0 !important;
+            white-space: nowrap !important;
+        }
+
+        .app-header button.icon-btn-large {
+            width: 30px !important;
+            padding: 0 !important;
+            font-size: 1.2rem !important;
+        }
+
+        .app-header button.icon-btn-large.active {
+            color: var(--accent-blue) !important;
+            border-color: color-mix(in oklch, var(--accent-blue) 55%, var(--glass-border)) !important;
+            background: color-mix(in oklch, var(--accent-blue) 28%, oklch(1 0 0 / 0.08)) !important;
+        }
+
+        .app-header .options-btn-styled {
+            width: 32px !important;
+            min-width: 32px !important;
+            height: 32px !important;
+            min-height: 32px !important;
+            padding: 0 !important;
+        }
+
+        .app-header .options-btn-styled svg {
+            width: 17px !important;
+            height: 17px !important;
+        }
+
+        /* Multi-select: exclude from unified 1px border — bolder blue chrome */
+        .app-header button.btn.multi-select-btn {
+            min-height: 32px !important;
+            height: 32px !important;
+            width: 32px !important;
+            min-width: 32px !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 9px !important;
+            border: 2.5px solid var(--accent-blue) !important;
+            background: color-mix(in oklch, var(--accent-blue) 42%, oklch(1 0 0 / 0.08)) !important;
+            color: var(--text-primary) !important;
+            box-shadow: 0 0 10px color-mix(in oklch, var(--accent-blue) 35%, transparent) !important;
+            font-size: 0.7rem !important;
+            line-height: 1 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transform: none !important;
+            flex-shrink: 0 !important;
+        }
+
+        .app-header button.btn.multi-select-btn svg {
+            width: 20px !important;
+            height: 20px !important;
+        }
+
+        .app-header button.btn.multi-select-btn.active {
+            background: color-mix(in oklch, var(--accent-blue) 58%, oklch(1 0 0 / 0.06)) !important;
+            border: 2.5px solid color-mix(in oklch, var(--accent-blue) 80%, white) !important;
+            box-shadow: 0 0 14px color-mix(in oklch, var(--accent-blue) 55%, transparent) !important;
+            transform: none !important;
+        }
+
+        .app-header .board-dropdown-btn {
+            max-width: 42vw !important;
+        }
+
+        .app-header .board-dropdown-btn span {
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            max-width: 28vw !important;
+        }
+
+        .app-header .tag-mode-btn {
+            min-height: 24px !important;
+            padding: 2px 7px !important;
+            font-size: 0.62rem !important;
+            box-shadow: none !important;
+        }
+
+        .app-header .tag-mode-btn.is-selected {
+            box-shadow: 0 0 0 1.5px oklch(0.623 0.188 259.8 / 0.7) !important;
+        }
+
+        .app-header .floating-bar-buttons {
+            gap: 4px !important;
+        }
+
+        /* --- Unified header META (stats / non-buttons) --- */
+        .app-header .header-meta:not([hidden]),
+        .app-header .total-count-badge:not([hidden]),
+        .app-header .tag-filter-label.header-meta:not([hidden]) {
+            min-height: 24px !important;
+            height: auto !important;
+            padding: 3px 8px !important;
+            margin: 0 !important;
+            border-radius: 7px !important;
+            border: 1px dashed color-mix(in oklch, var(--text-secondary) 35%, transparent) !important;
+            background: oklch(1 0 0 / 0.04) !important;
+            color: var(--text-secondary) !important;
+            box-shadow: none !important;
+            font-size: 0.62rem !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.01em !important;
+            line-height: 1.2 !important;
+            text-transform: none !important;
+            cursor: default !important;
+            pointer-events: none !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+            align-self: center !important;
+        }
+
+        .app-header .header-meta[hidden],
+        .app-header .tag-filter-label[hidden] {
+            display: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            min-height: 0 !important;
+            height: 0 !important;
+        }
+
+        .app-header #daily-completed-count.header-meta:not([hidden]) {
+            color: var(--accent-green) !important;
+            border-color: color-mix(in oklch, var(--accent-green) 40%, transparent) !important;
+        }
+
+        .app-header .tag-filter-label.header-meta:not([hidden]) {
+            color: var(--tag-filter-color, var(--accent-blue)) !important;
+            border-style: solid !important;
+            border-color: var(--tag-filter-color, var(--accent-blue)) !important;
+            background: color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 12%, transparent) !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.04em !important;
+            font-size: 0.6rem !important;
+            margin-bottom: 2px !important;
+        }
+
+        .app-header .tag-mode-row.is-filtering .tag-mode-buttons {
+            padding-bottom: 2px !important;
+        }
+
+        /* Meta controls (interactive but not action buttons): recessed look */
+        .app-header .header-meta-control {
+            min-height: 30px !important;
+            height: 30px !important;
+            padding: 0 6px !important;
+            margin: 0 !important;
+            border-radius: 9px !important;
+            border: 1px solid color-mix(in oklch, var(--glass-border) 80%, transparent) !important;
+            background: oklch(0 0 0 / 0.22) !important;
+            box-shadow: inset 0 1px 2px oklch(0 0 0 / 0.25) !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 4px !important;
+        }
+
+        [data-theme="light"] .app-header .header-meta-control {
+            background: oklch(0 0 0 / 0.05) !important;
+            box-shadow: inset 0 1px 2px oklch(0 0 0 / 0.06) !important;
+        }
+
+        .app-header .header-meta-control .glass-select {
+            background: transparent !important;
+            border: none !important;
+            padding: 0 2px !important;
+            font-size: 0.68rem !important;
+            min-height: 0 !important;
+            height: auto !important;
+            color: var(--text-secondary) !important;
+        }
+
+        .app-header .header-meta-control .label,
+        .app-header .header-meta-control label {
+            font-size: 0.65rem !important;
+            color: var(--text-secondary) !important;
+            margin: 0 !important;
+        }
+
+        .app-header .header-meta-control.toggle-group,
+        .app-header .toggle-group.header-meta-control {
+            background: oklch(0 0 0 / 0.22) !important;
+            padding: 0 6px !important;
+            gap: 4px !important;
+        }
+
+        [data-theme="light"] .app-header .toggle-group.header-meta-control {
+            background: oklch(0 0 0 / 0.05) !important;
+        }
+
+        .app-header .header-meta-control .switch-small {
+            margin: 0 !important;
+            transform: scale(0.85);
+            transform-origin: center;
+        }
+
+        .app-header .action-group {
+            gap: 4px !important;
         }
 
         /* Adjust main container to fill more height */
@@ -3441,10 +3910,11 @@ input:checked+.slider-small:before {
         /* Multi-select is inside the header panel — no separate floating bar clearance */
         .floating-action-bar.header-multi-select {
             margin: 0 !important;
-            padding: 4px 0 10px !important;
+            padding: 0 0 4px !important;
             width: 100% !important;
             border-bottom: 1px solid var(--glass-border) !important;
             z-index: 1 !important;
+            gap: 5px !important;
         }
 
         /* When multi-select row is visible the header is taller; JS remeasures --slim-bottom-clearance.
@@ -3462,26 +3932,12 @@ input:checked+.slider-small:before {
         .header-left {
             width: auto !important;
             justify-content: center !important;
+            gap: 5px !important;
+            flex-wrap: wrap !important;
         }
-
-        .total-count-badge {
-            font-size: 0.7rem !important;
-        }
-
-        .btn {
-            white-space: nowrap !important;
-            padding: 8px 12px !important;
-            font-size: 0.75rem !important;
-        }
-
-        .icon-btn-large {
-            font-size: 1.2rem !important;
-            flex-shrink: 0 !important;
-        }
-
 
         .toast {
-            bottom: calc(260px + env(safe-area-inset-bottom, 0px)) !important;
+            bottom: calc(var(--slim-bottom-clearance, 160px) + 12px) !important;
             z-index: 10001 !important;
         }
     }
@@ -3550,6 +4006,9 @@ input:checked+.slider-small:before {
 
 /* --- TAG MODE & TAG PICKERS --- */
 .tag-mode-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
     flex-shrink: 0;
     width: 100%;
     padding: 4px 0;
@@ -3561,6 +4020,7 @@ input:checked+.slider-small:before {
     border-top: 1px solid var(--glass-border);
     padding-top: 10px;
     margin-top: 2px;
+    gap: 0;
 }
 
 .tag-mode-buttons {
@@ -3573,6 +4033,44 @@ input:checked+.slider-small:before {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     padding: 4px 2px;
+    order: 1;
+}
+
+/* Desktop (header at top): filter label sits below the tag buttons */
+.tag-filter-label {
+    order: 2;
+    display: none;
+    align-self: flex-start;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--tag-filter-color, var(--accent-blue));
+    margin: 0;
+    padding: 4px 10px;
+    line-height: 1.2;
+    text-align: left;
+    border: 1.5px solid var(--tag-filter-color, var(--accent-blue));
+    border-radius: 8px;
+    background: color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 14%, transparent);
+    box-sizing: border-box;
+}
+
+.tag-mode-row.is-filtering .tag-filter-label:not([hidden]) {
+    display: inline-block;
+    margin-bottom: 2px;
+}
+
+.tag-filter-label[hidden] {
+    display: none !important;
+}
+
+[data-theme="light"] .tag-filter-label {
+    background: color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 10%, white);
+}
+
+.tag-mode-row.is-filtering .tag-mode-buttons {
+    padding-bottom: 2px;
 }
 
 .tag-picker-options {
@@ -3745,6 +4243,23 @@ input:checked+.slider-small:before {
     transform: none;
 }
 
+.tag-mode-btn.is-filtering {
+    border-color: var(--tag-filter-color, var(--accent-blue));
+    box-shadow:
+        0 0 0 2px color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 70%, transparent),
+        0 0 12px color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 45%, transparent);
+    outline: 2px dashed color-mix(in oklch, var(--tag-filter-color, var(--accent-blue)) 80%, white);
+    outline-offset: 2px;
+}
+
+.tag-mode-row.is-filtering {
+    gap: 4px;
+}
+
+.tag-mode-row:not(.is-filtering) {
+    gap: 0;
+}
+
 .tag-picker-section {
     margin: 12px 0;
 }
@@ -3768,7 +4283,13 @@ input:checked+.slider-small:before {
     font-weight: 600;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
+    width: 100%;
+}
+
+.tags-help-btn {
+    flex-shrink: 0;
 }
 
 .tags-settings-hint {
@@ -4079,12 +4600,24 @@ button.tags-settings-swatch.is-selected {
 
 @media (max-width: 500px) {
     .tag-mode-row {
-        padding: 6px 0 4px;
+        padding: 0;
         overflow: visible;
         order: 1;
         border-top: none;
         margin-top: 0;
-        padding-top: 6px;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    /* Mobile dock: label above buttons so pills shift down when filtering */
+    .tag-mode-row .tag-filter-label {
+        order: 1;
+        align-self: center;
+        text-align: center;
+    }
+
+    .tag-mode-row .tag-mode-buttons {
+        order: 2;
     }
 
     .header-row-1 {
@@ -4104,18 +4637,18 @@ button.tags-settings-swatch.is-selected {
         overflow: visible;
         justify-content: center;
         align-content: flex-start;
-        row-gap: 6px;
-        column-gap: 6px;
-        padding: 4px 2px;
+        row-gap: 3px;
+        column-gap: 4px;
+        padding: 0;
     }
 
     .tag-mode-btn-compact {
-        flex: 1 1 calc(25% - 6px);
-        min-width: 4.25rem;
-        max-width: calc(50% - 3px);
-        min-height: 26px;
-        padding: 3px 6px;
-        font-size: 0.65rem;
+        flex: 1 1 calc(25% - 4px);
+        min-width: 4rem;
+        max-width: calc(50% - 2px);
+        min-height: 24px;
+        padding: 2px 6px;
+        font-size: 0.62rem;
         text-align: center;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -4489,12 +5022,15 @@ button.tags-settings-swatch.is-selected {
 
 @media (max-width: 500px) {
     .floating-action-bar.header-multi-select .btn {
-        padding: 6px 10px !important;
+        /* Match unified mobile header action buttons */
+        min-height: 30px !important;
+        height: 30px !important;
+        padding: 0 9px !important;
         font-size: 0.7rem !important;
     }
 
     #multi-selected-count {
-        font-size: 0.85rem;
+        font-size: 0.62rem !important;
         white-space: nowrap;
     }
 }

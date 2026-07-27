@@ -45,6 +45,8 @@ export const state = {
     dragMode: 'move',
     showArchived: false,
     showRecentCompleted: false,
+    /** Session-only: when set, board shows only tasks with this tagId */
+    tagFilterId: null,
     compactView: true,
     focusedKanbanListId: null,
     sortableInstances: [],
@@ -115,6 +117,7 @@ export function resetState() {
     state.selectedTaskIds.clear();
     state.expandedTaskId = null;
     state.focusedKanbanListId = null;
+    state.tagFilterId = null;
 }
 
 export function cleanupListeners() {

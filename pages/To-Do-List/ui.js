@@ -1,5 +1,5 @@
 import { state } from './store.js';
-import { escapeHtml, showToast, generateId, formatDateTime, getTerm, parseNestedMarkdown, isUserTyping } from './utils.js';
+import { escapeHtml, showToast, generateId, formatDateTime, getTerm, parseNestedMarkdown, isUserTyping, debounce } from './utils.js';
 import {
     sanitizeNestedForSave,
     countNestedNodes,
@@ -41,6 +41,73 @@ const syncStatusText = document.getElementById('sync-status-text');
 let aiPanelInitialized = false;
 let tagColorSwapSourceId = null;
 let aiPanelTaskId = null;
+
+const TAG_FILTER_DEBOUNCE_MS = 280;
+const debouncedRenderBoardForTagFilter = debounce(() => {
+    renderBoard();
+}, TAG_FILTER_DEBOUNCE_MS);
+
+function taskMatchesTagFilter(task) {
+    if (!state.tagFilterId) return true;
+    return resolveTaskTagId(task) === state.tagFilterId;
+}
+
+function syncTagFilterChrome() {
+    const filtering = !!state.tagFilterId;
+    document.body.classList.toggle('is-tag-filter-view', filtering);
+
+    const tagsById = getTagsById(state.appData.settings.tags);
+    const filterTag = filtering ? tagsById[state.tagFilterId] : null;
+    const filterColor = filterTag?.glowColor || null;
+
+    if (filtering && filterColor) {
+        document.body.style.setProperty('--tag-filter-color', filterColor);
+    } else {
+        document.body.style.removeProperty('--tag-filter-color');
+    }
+
+    const row = document.getElementById('tag-mode-row');
+    if (row) {
+        row.classList.toggle('is-filtering', filtering);
+        const baseLabel = 'Tag mode for new tasks';
+        row.setAttribute(
+            'aria-label',
+            filtering
+                ? `${baseLabel}. Board filtered to tag ${filterTag?.name || 'selected'}. Press the selected tag again to clear filter.`
+                : baseLabel
+        );
+    }
+
+    const filterLabel = document.getElementById('tag-filter-label');
+    if (filterLabel) {
+        if (filtering) {
+            const name = filterTag?.name || 'tag';
+            filterLabel.textContent = `Filtering: ${name}`;
+            filterLabel.hidden = false;
+        } else {
+            filterLabel.hidden = true;
+            filterLabel.textContent = 'Filtering board';
+        }
+    }
+
+    document.getElementById('tag-filter-badge')?.remove();
+
+    updateTotalTaskCount();
+    requestAnimationFrame(() => layoutSlimChrome());
+}
+
+function clearTagFilter(options = {}) {
+    const { rerender = true } = options;
+    debouncedRenderBoardForTagFilter.cancel();
+    if (!state.tagFilterId) {
+        syncTagFilterChrome();
+        return false;
+    }
+    state.tagFilterId = null;
+    syncTagFilterChrome();
+    if (rerender) renderBoard();
+    return true;
+}
 
 // --- RENDERING HELPERS ---
 
@@ -111,6 +178,7 @@ function populateKanbanFocus(list) {
     taskIds.forEach((taskId) => {
         const task = state.appData.tasks[taskId];
         if (!task || task.archived) return;
+        if (!taskMatchesTagFilter(task)) return;
 
         const shouldPin = isImportantTask(task) && !pinningDisabled;
 
@@ -438,6 +506,7 @@ export function renderBoard() {
     if (!state.currentUser) return;
 
     document.body.classList.toggle('is-archived-view', state.showArchived);
+    syncTagFilterChrome();
 
     // Capture Scroll Positions
     const scrollMap = new Map();
@@ -925,14 +994,20 @@ function getTagButtonStyle(tag) {
     return `--tag-btn-bg: ${tag.glowColor}; --tag-btn-border: ${tag.glowColor}; --tag-btn-text: ${ink};`;
 }
 
-function buildTagButton(tag, selectedId, onSelect, { compact = false } = {}) {
+function buildTagButton(tag, selectedId, onSelect, { compact = false, filterId = null } = {}) {
     const btn = document.createElement('button');
+    const isSelected = tag.id === selectedId;
+    const isFiltering = !!filterId && tag.id === filterId;
     btn.type = 'button';
-    btn.className = `tag-mode-btn${compact ? ' tag-mode-btn-compact' : ''}${tag.id === selectedId ? ' is-selected' : ''}`;
+    btn.className = `tag-mode-btn${compact ? ' tag-mode-btn-compact' : ''}${isSelected ? ' is-selected' : ''}${isFiltering ? ' is-filtering' : ''}`;
     btn.dataset.tagId = tag.id;
     btn.setAttribute('role', 'radio');
-    btn.setAttribute('aria-checked', tag.id === selectedId ? 'true' : 'false');
-    btn.setAttribute('aria-label', `Tag mode: ${tag.name}${tag.id === selectedId ? ', selected' : ''}`);
+    btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+    let aria = `Tag mode: ${tag.name}`;
+    if (isSelected) aria += ', selected';
+    if (isFiltering) aria += ', filtering board';
+    else if (isSelected) aria += '. Press again to filter board by this tag';
+    btn.setAttribute('aria-label', aria);
     btn.style.cssText = getTagButtonStyle(tag);
     btn.textContent = tag.name;
     btn.onclick = (e) => {
@@ -950,17 +1025,38 @@ export function renderTagModeBar() {
     state.appData.settings.tags = ensured.tags;
     state.appData.settings.activeTagId = ensured.activeTagId;
 
+    // Drop stale filter if the tag no longer exists
+    if (state.tagFilterId && !ensured.tags.some((t) => t.id === state.tagFilterId)) {
+        state.tagFilterId = null;
+    }
+
     const tags = sortTags(ensured.tags);
     const activeId = ensured.activeTagId || MISC_TAG_ID;
+    const filterId = state.tagFilterId;
 
     container.innerHTML = '';
     tags.forEach((tag) => {
         container.appendChild(buildTagButton(tag, activeId, (tagId) => {
+            if (tagId === activeId) {
+                // Already selected: 2nd press turns filter on, 3rd turns it off
+                const nextFilter = state.tagFilterId === tagId ? null : tagId;
+                state.tagFilterId = nextFilter;
+                syncTagFilterChrome();
+                renderTagModeBar();
+                debouncedRenderBoardForTagFilter();
+                return;
+            }
+
+            // Selecting any other tag clears the filter
+            const hadFilter = !!state.tagFilterId;
+            clearTagFilter({ rerender: false });
             setActiveTagId(tagId);
             renderTagModeBar();
-        }, { compact: true }));
+            if (hadFilter) renderBoard();
+        }, { compact: true, filterId }));
     });
 
+    syncTagFilterChrome();
     requestAnimationFrame(() => layoutSlimChrome());
 }
 
@@ -1321,6 +1417,10 @@ function renderListColumn(list, isOrphan, isCustomSort) {
                 show = state.showArchived ? task.archived === true : !task.archived;
             }
 
+            if (show && !taskMatchesTagFilter(task)) {
+                show = false;
+            }
+
             if (show) {
                 const isImportant = task.text.includes('!!') || task.text.includes('!');
                 const taskEl = createTaskElement(task, list.id, visibleIndex);
@@ -1348,7 +1448,13 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     if (visibleCount === 0) {
         const emptyMsg = document.createElement('div');
         emptyMsg.className = 'empty-list-msg';
-        emptyMsg.innerHTML = `<i class="ph ph-shooting-star"></i> No ${getTerm(false)} here!`;
+        if (state.tagFilterId) {
+            const tagsById = getTagsById(state.appData.settings.tags);
+            const filterName = tagsById[state.tagFilterId]?.name || 'tag';
+            emptyMsg.innerHTML = `<i class="ph ph-funnel-simple"></i> No ${getTerm(false)} with tag “${escapeHtml(filterName)}”`;
+        } else {
+            emptyMsg.innerHTML = `<i class="ph ph-shooting-star"></i> No ${getTerm(false)} here!`;
+        }
         normalContainer.appendChild(emptyMsg);
     }
 
@@ -2285,8 +2391,10 @@ export async function summariseTask(taskId, options = {}) {
 export function updateTotalTaskCount() {
     let totalAll = 0;
     let totalBoard = 0;
+    let filteredBoard = 0;
     let dailyCompleted = 0;
     const isArchivedView = state.showArchived;
+    const filtering = !!state.tagFilterId;
 
     // Daily completed count logic
     const resetTimeStr = state.appData.settings.dailyResetTime || '04:00';
@@ -2325,7 +2433,12 @@ export function updateTotalTaskCount() {
                     const task = state.appData.tasks[tid];
                     if (task) {
                         const match = isArchivedView ? task.archived : !task.archived;
-                        if (match) boardTaskIds.add(tid);
+                        if (match) {
+                            boardTaskIds.add(tid);
+                            if (filtering && taskMatchesTagFilter(task)) {
+                                filteredBoard++;
+                            }
+                        }
                     }
                 });
             }
@@ -2335,7 +2448,13 @@ export function updateTotalTaskCount() {
 
     if (totalAll > 0) {
         const prefix = isArchivedView ? "Archived " : "";
-        totalTaskCountEl.textContent = `${prefix}Total All: ${totalAll} | In Board: ${totalBoard}`;
+        if (filtering) {
+            totalTaskCountEl.textContent = `${prefix}Total All: ${totalAll} | In Board: ${filteredBoard}/${totalBoard}`;
+            totalTaskCountEl.title = `${filteredBoard} tasks match the tag filter out of ${totalBoard} on this board`;
+        } else {
+            totalTaskCountEl.textContent = `${prefix}Total All: ${totalAll} | In Board: ${totalBoard}`;
+            totalTaskCountEl.removeAttribute('title');
+        }
         totalTaskCountEl.classList.remove('hidden');
     } else {
         totalTaskCountEl.classList.add('hidden');
@@ -2462,6 +2581,24 @@ export function handleDragEnd(evt) {
         });
     };
 
+    const getHiddenTagFilterIds = (listId) => {
+        if (!state.tagFilterId) return [];
+        const listObj = state.appData.rawLists.find(l => l.id === listId);
+        if (!listObj || !listObj.taskIds) return [];
+        return listObj.taskIds.filter(tid => {
+            const task = state.appData.tasks[tid];
+            if (!task) return false;
+            const inView = state.showArchived ? task.archived === true : !task.archived;
+            if (!inView) return false;
+            return resolveTaskTagId(task) !== state.tagFilterId;
+        });
+    };
+
+    const getHiddenTaskIds = (listId) => [
+        ...getHiddenArchivedIds(listId),
+        ...getHiddenTagFilterIds(listId)
+    ];
+
     const getFrozenIds = (listId) => {
         const frozenContainer = document.getElementById(`frozen-container-${listId}`);
         if (!frozenContainer) return [];
@@ -2479,7 +2616,7 @@ export function handleDragEnd(evt) {
             .filter(el => !el.classList.contains('sortable-ghost'))
             .map(el => el.dataset.taskId);
 
-        const hiddenToIds = getHiddenArchivedIds(toIdRaw);
+        const hiddenToIds = getHiddenTaskIds(toIdRaw);
         const finalToIds = [...frozenToIds, ...newToIds, ...hiddenToIds];
 
         batch.update(doc(db, "users", state.currentUser.uid, "lists", toIdRaw), { taskIds: finalToIds });
@@ -2503,7 +2640,7 @@ export function handleDragEnd(evt) {
         const newFromIds = Array.from(fromContainer.children)
             .map(el => el.dataset.taskId); // Note: Sortable already removed item from DOM if move
 
-        const hiddenFromIds = getHiddenArchivedIds(fromIdRaw);
+        const hiddenFromIds = getHiddenTaskIds(fromIdRaw);
         const finalFromIds = [...frozenFromIds, ...newFromIds, ...hiddenFromIds];
 
         batch.update(doc(db, "users", state.currentUser.uid, "lists", fromIdRaw), { taskIds: finalFromIds });
@@ -2513,7 +2650,7 @@ export function handleDragEnd(evt) {
         const container = document.getElementById(`container-${fromIdRaw}`);
         const frozenIds = getFrozenIds(fromIdRaw);
         const newIds = Array.from(container.children).map(el => el.dataset.taskId);
-        const hiddenIds = getHiddenArchivedIds(fromIdRaw);
+        const hiddenIds = getHiddenTaskIds(fromIdRaw);
         const finalIds = [...frozenIds, ...newIds, ...hiddenIds];
         batch.update(doc(db, "users", state.currentUser.uid, "lists", fromIdRaw), { taskIds: finalIds });
     }

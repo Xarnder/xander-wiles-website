@@ -1015,6 +1015,50 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('close-time-help-btn-bottom').onclick = () => timeHelpModal.classList.add('hidden');
     }
 
+    // Features Help & Guides Modal
+    const featuresHelpModal = document.getElementById('features-help-modal-overlay');
+    const openFeaturesHelp = (sectionId = null) => {
+        if (!featuresHelpModal) return;
+        const sections = featuresHelpModal.querySelectorAll('details.features-help-section');
+        if (sectionId) {
+            sections.forEach((el) => {
+                el.open = el.id === sectionId;
+            });
+        }
+        featuresHelpModal.classList.remove('hidden');
+        if (sectionId) {
+            const target = document.getElementById(sectionId);
+            if (target) {
+                requestAnimationFrame(() => {
+                    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                });
+            }
+        }
+    };
+    const closeFeaturesHelp = () => {
+        if (featuresHelpModal) featuresHelpModal.classList.add('hidden');
+    };
+    if (featuresHelpModal) {
+        document.getElementById('features-help-btn')?.addEventListener('click', () => openFeaturesHelp());
+        document.getElementById('tags-help-btn')?.addEventListener('click', () => openFeaturesHelp('help-section-tags'));
+        document.getElementById('close-features-help-btn')?.addEventListener('click', closeFeaturesHelp);
+        document.getElementById('close-features-help-btn-bottom')?.addEventListener('click', closeFeaturesHelp);
+        featuresHelpModal.addEventListener('click', (e) => {
+            if (e.target === featuresHelpModal) closeFeaturesHelp();
+        });
+
+        // Explicit toggle — native <details> can fail inside nested flex/overflow modals
+        featuresHelpModal.querySelectorAll('details.features-help-section > summary').forEach((summary) => {
+            summary.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const details = summary.parentElement;
+                if (!(details instanceof HTMLDetailsElement)) return;
+                details.open = !details.open;
+            });
+        });
+    }
+
     // Automation Report Modal
     const automationReportModal = document.getElementById('automation-report-modal-overlay');
     if (automationReportModal) {

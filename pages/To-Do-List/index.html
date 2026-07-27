@@ -116,7 +116,7 @@
         <header class="app-header glass-panel">
             <!-- Multi-select actions: shown inside the tool panel above other controls -->
             <div id="multi-edit-floating-bar" class="header-row header-multi-select floating-action-bar hidden">
-                <span id="multi-selected-count">0 Selected</span>
+                <span id="multi-selected-count" class="header-meta">0 Selected</span>
                 <div class="floating-bar-buttons">
                     <button id="multi-edit-action-btn" class="btn primary">Edit Selected</button>
                     <button id="multi-move-quick-btn" class="btn primary">Move</button>
@@ -131,14 +131,14 @@
                     <input type="text" id="project-title-input" class="project-title-input" value="Task Master"
                         placeholder="Project Name">
                     <div id="board-toggle-container"></div>
-                    <span id="total-task-count" class="total-count-badge"></span>
-                    <span id="daily-completed-count" class="total-count-badge" style="color: var(--accent-green); border-color: color-mix(in oklch, var(--accent-green) 30%, transparent); display: none; align-items: center;" title="Tasks completed today">0</span>
+                    <span id="total-task-count" class="total-count-badge header-meta"></span>
+                    <span id="daily-completed-count" class="total-count-badge header-meta" style="color: var(--accent-green); border-color: color-mix(in oklch, var(--accent-green) 30%, transparent); display: none; align-items: center;" title="Tasks completed today">0</span>
                 </div>
             </div>
 
             <!-- Row 2: Configuration & Toggles -->
             <div class="header-row header-row-2">
-                <div class="sort-container control-item">
+                <div class="sort-container control-item header-meta-control">
                     <label for="sort-select"><i class="ph ph-sort-ascending"></i></label>
                     <select id="sort-select" class="glass-select">
                         <option value="custom">Custom</option>
@@ -148,7 +148,7 @@
                     </select>
                 </div>
 
-                <div class="toggle-group control-item" title="Enable Dragging">
+                <div class="toggle-group control-item header-meta-control" title="Enable Dragging">
                     <span class="label">Drag:</span>
                     <label class="switch-small">
                         <input type="checkbox" id="drag-tasks-toggle">
@@ -192,6 +192,7 @@
 
             <!-- Tag Mode: which tag new tasks receive (desktop: bottom of panel; mobile: reordered to top via CSS) -->
             <div id="tag-mode-row" class="header-row tag-mode-row" role="radiogroup" aria-label="Tag mode for new tasks">
+                <div id="tag-filter-label" class="tag-filter-label header-meta" hidden aria-live="polite">Filtering board</div>
                 <div id="tag-mode-buttons" class="tag-mode-buttons"></div>
             </div>
         </header>
@@ -228,6 +229,9 @@
                 </button>
                 <button id="time-automation-help-btn" class="menu-action-item" title="Time Automation Help">
                     <i class="ph ph-question"></i> Time Automation Help
+                </button>
+                <button id="features-help-btn" class="menu-action-item" title="Help & Guides">
+                    <i class="ph ph-book-open-text"></i> Help &amp; Guides
                 </button>
                 <button id="recent-auto-moved-btn" class="menu-action-item" title="Recent Auto-Moved Tasks">
                     <i class="ph ph-clock-counter-clockwise"></i> Recent Auto-Moved Tasks
@@ -310,8 +314,11 @@
                 <div id="tags-settings-section" class="tags-settings-section options-span-all">
                     <div class="tags-settings-header">
                         <span><i class="ph ph-tag"></i> Task Tags</span>
+                        <button type="button" id="tags-help-btn" class="icon-btn tags-help-btn" title="Tag help" aria-label="How to use tags and filtering">
+                            <i class="ph ph-question"></i>
+                        </button>
                     </div>
-                    <p id="tags-settings-hint" class="tags-settings-hint">Tap a colour circle to swap it with another tag. Misc has no colour.</p>
+                    <p id="tags-settings-hint" class="tags-settings-hint">Tap a colour circle to swap it with another tag. Misc has no colour. Press a selected tag again on the board to filter.</p>
                     <div class="tags-display-mode" style="cursor: default;">
                         <span class="tags-display-mode-label">Tag style on cards</span>
                         <div class="toggle-group tags-display-mode-toggle">
@@ -1079,6 +1086,158 @@
             </div>
             <div class="modal-actions-bar" style="margin-top: 20px;">
                 <button id="close-time-help-btn-bottom" class="btn primary full-width">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FEATURES HELP & GUIDES MODAL -->
+    <div id="features-help-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel features-help-modal">
+            <div class="modal-header-row">
+                <h2><i class="ph ph-book-open-text"></i> Help &amp; Guides</h2>
+                <button type="button" id="close-features-help-btn" class="icon-btn-large" aria-label="Close help">&times;</button>
+            </div>
+            <p class="features-help-intro">Quick guides for the trickier parts of Task Master. Tap a topic to expand.</p>
+            <div class="features-help-body">
+
+                <details class="features-help-section" id="help-section-tags" open>
+                    <summary><i class="ph ph-tag"></i> <span class="features-help-title">Tags &amp; filtering</span></summary>
+                    <div class="features-help-content">
+                        <h4>Tag Mode (new tasks)</h4>
+                        <p>The coloured tag pills in the header set which tag <strong>new</strong> tasks get. Tap a tag once to select it — that tag stays selected until you pick another.</p>
+                        <h4>Filter the board by tag</h4>
+                        <ol>
+                            <li>Select a tag in the header (first press).</li>
+                            <li>Press that <strong>same selected tag again</strong> to turn filtering on. Only tasks with that tag stay visible.</li>
+                            <li>A bordered <strong>Filtering: …</strong> label appears, and the header count shows matching tasks vs the board total (e.g. <code>12/40</code>).</li>
+                        </ol>
+                        <h4>Turn filtering off</h4>
+                        <ul>
+                            <li>Press the filtering tag <strong>a third time</strong>, or</li>
+                            <li>Press <strong>any other</strong> tag (that also switches Tag Mode).</li>
+                        </ul>
+                        <p class="features-help-tip"><strong>Note:</strong> Filtering is temporary for this session — it is not saved. Manage tag names and colours under <strong>Task Tags</strong> in Settings.</p>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-kanban">
+                    <summary><i class="ph ph-kanban"></i> <span class="features-help-title">Work Tools &amp; Kanban</span></summary>
+                    <div class="features-help-content">
+                        <p>Turn on <strong>Work Tools</strong> in Settings to show a Kanban button on each list.</p>
+                        <ul>
+                            <li>Open Kanban on a list to work in four stages: New → Under Review → Almost Done → Finished.</li>
+                            <li>Drag cards between columns, or use the caret buttons.</li>
+                            <li>Checking a task complete moves it to Finished; unchecking moves it to Almost Done.</li>
+                            <li>Rename the columns under <strong>Kanban Column Names</strong> when Work Tools is on.</li>
+                        </ul>
+                        <p class="features-help-tip"><strong>Tip:</strong> Incomplete nested ideas can stretch across columns. Parent caret buttons shift all incomplete subtasks together.</p>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-nested">
+                    <summary><i class="ph ph-tree-structure"></i> <span class="features-help-title">Nested ideas (subtasks)</span></summary>
+                    <div class="features-help-content">
+                        <p>Open a task → <strong>Edit</strong> to manage nested ideas.</p>
+                        <ul>
+                            <li>Use <strong>+ Nested</strong>, row <strong>+</strong>, or <strong>Bulk Add</strong> (indent lines with spaces/tabs to build a tree).</li>
+                            <li>On the board, nested items show as checkable rows. Deeper levels may show “+N more in editor”.</li>
+                            <li>In the editor, turn on <strong>Multi</strong> to indent, outdent, or delete several rows at once.</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-drag">
+                    <summary><i class="ph ph-arrows-out-cardinal"></i> <span class="features-help-title">Drag: Cut vs Copy</span></summary>
+                    <div class="features-help-content">
+                        <ul>
+                            <li>Enable the header <strong>Drag</strong> toggle. Sort must be <strong>Custom</strong> to reorder freely.</li>
+                            <li>In Settings → <strong>Drag Mode</strong>: <strong>Cut</strong> moves a task; <strong>Copy</strong> links/clones it into another list (a task can live on multiple lists).</li>
+                            <li>Pinned / important tasks sit in a frozen zone and are not dragged with the normal list.</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-important">
+                    <summary><i class="ph ph-push-pin-simple"></i> <span class="features-help-title">Important pinning</span></summary>
+                    <div class="features-help-content">
+                        <p>Put <code>!</code> or <code>!!</code> anywhere in a task’s text to pin it to the top <strong>Pinned</strong> band.</p>
+                        <ul>
+                            <li>Remove the exclamation marks to unpin.</li>
+                            <li>Or turn on Settings → <strong>Disable Important Task Pinning</strong> to keep the text but stop auto-pinning.</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-multi">
+                    <summary><i class="ph ph-check-square"></i> <span class="features-help-title">Multi-edit</span></summary>
+                    <div class="features-help-content">
+                        <p>Use the header multi-select button, then tap cards to select them.</p>
+                        <ul>
+                            <li><strong>Edit Selected</strong> — change tag, move/link to another list, or archive.</li>
+                            <li><strong>Move</strong> — quick destinations for the selection.</li>
+                            <li>In Archive view, you can <strong>Delete Forever</strong> instead.</li>
+                            <li>Drag is paused while multi-edit is on. Toggle multi-edit off to finish.</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-quick-tag">
+                    <summary><i class="ph ph-tags"></i> <span class="features-help-title">Quick Tag</span></summary>
+                    <div class="features-help-content">
+                        <p>Open a list’s settings (sliders icon) → <strong>Quick Tag</strong>.</p>
+                        <ul>
+                            <li>Walks every non-archived task in that list.</li>
+                            <li>Tap a tag to assign it and jump to the next task automatically.</li>
+                            <li>Use Back to revisit, or Cancel to exit early.</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-boards">
+                    <summary><i class="ph ph-squares-four"></i> <span class="features-help-title">Boards</span></summary>
+                    <div class="features-help-content">
+                        <ul>
+                            <li>Use the board control in the header to switch or manage boards. Each board has its own list order.</li>
+                            <li>Settings → <strong>Default Board</strong> chooses what opens on load (empty = last used).</li>
+                            <li>Deleting a board can leave orphan lists — use <strong>Rescue Orphan Lists</strong> in Manage Boards to move them onto Main.</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-auto-add">
+                    <summary><i class="ph ph-hourglass"></i> <span class="features-help-title">Auto-add idle timer</span></summary>
+                    <div class="features-help-content">
+                        <p>When you type in an add-task field and pause, a countdown can submit the task for you.</p>
+                        <ul>
+                            <li>Set the delay under Settings → <strong>Auto-Add Idle Time (Seconds)</strong> (5–3600).</li>
+                            <li>Keep typing, clear the field, or submit manually to cancel the timer.</li>
+                            <li>There is no off switch — use a large value if you rarely want auto-add.</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-archive">
+                    <summary><i class="ph ph-archive-box"></i> <span class="features-help-title">Archive</span></summary>
+                    <div class="features-help-content">
+                        <ul>
+                            <li><strong>Auto-Archive Completed</strong> — completed tasks archive after a short delay when this setting is on.</li>
+                            <li>Settings → <strong>Archived Tasks</strong> opens archive view (only archived items). Exit the same way.</li>
+                            <li>Archive individual tasks from the task menu, or archive a multi-edit selection.</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="features-help-section" id="help-section-time">
+                    <summary><i class="ph ph-clock"></i> <span class="features-help-title">Time automation</span></summary>
+                    <div class="features-help-content">
+                        <p>Lists can auto-forward tasks by age or on a schedule. Configure this in each list’s settings (unlock → enable → destination).</p>
+                        <p>For a full walkthrough, use Settings → <strong>Time Automation Help</strong>.</p>
+                    </div>
+                </details>
+
+            </div>
+            <div class="modal-actions-bar" style="margin-top: 16px;">
+                <button type="button" id="close-features-help-btn-bottom" class="btn primary full-width">Got it</button>
             </div>
         </div>
     </div>
