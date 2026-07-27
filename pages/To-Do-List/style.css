@@ -25,7 +25,7 @@
     --accent-pink: oklch(0.656 0.212 354.3);
     --on-accent: oklch(0.99 0.01 100);
     --on-accent-dark: oklch(0.22 0.03 260);
-    --radius: 16px;
+    --radius: 18px;
     --shadow: 0 4px 30px oklch(0 0 0 / 0.3);
     --dropdown-bg: oklch(0.218 0 0);
     --dropdown-bg-glass: oklch(0.210 0 0 / 0.98);
@@ -238,7 +238,7 @@
     --accent-orange: oklch(0.705 0.187 47.6);
     --accent-purple: oklch(0.627 0.233 303.9);
     --accent-pink: oklch(0.656 0.212 354.3);
-    --radius: 18px;
+    /* --radius inherited from :root (shared layout); fancy only changes colours */
     --shadow: 0 8px 40px oklch(0 0 0 / 0.5), 0 0 80px oklch(0.580 0.200 280 / 0.05);
     --dropdown-bg: oklch(0.180 0.050 300 / 0.95);
     --dropdown-bg-glass: oklch(0.180 0.050 300 / 0.92);
@@ -268,9 +268,6 @@
     background: var(--bg-gradient);
     background-size: 300% 300%;
     animation: fancyGradient calc(20s / var(--fancy-speed-mult)) ease infinite;
-    font-family: 'Outfit', 'Inter', 'Segoe UI', sans-serif;
-    overflow: hidden;
-    position: relative;
 }
 
 @keyframes fancyGradient {
@@ -442,22 +439,13 @@
     }
 }
 
-/* Fancy Glass Panel Override */
+/* Fancy Glass Panel Override (colours / blur only — layout is shared) */
 [data-theme="fancy"] .glass-panel {
     background: oklch(0 0 0 / 0.05);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid;
-    border-image: linear-gradient(135deg, oklch(1 0 0 / 0.15), oklch(1 0 0 / 0.05), oklch(1 0 0 / 0.12)) 1;
-    border-radius: var(--radius);
-    box-shadow: 0 8px 32px oklch(0 0 0 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.06);
-}
-
-/* Fix: border-image breaks border-radius, use a wrapper approach with solid border */
-[data-theme="fancy"] .glass-panel {
-    border-image: none;
     border: 1px solid oklch(1 0 0 / 0.1);
-    position: relative;
+    box-shadow: 0 8px 32px oklch(0 0 0 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.06);
 }
 
 [data-theme="fancy"] .glass-panel::after {
@@ -500,12 +488,9 @@
     box-shadow: 0 8px 25px oklch(0.580 0.200 280 / 0.15), 0 0 15px oklch(0.580 0.200 280 / 0.08);
 }
 
-/* Fancy Buttons Base Refinement */
+/* Fancy Buttons Base Refinement (motion / glow only) */
 [data-theme="fancy"] .btn {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    position: relative;
     overflow: hidden;
 }
 
@@ -527,19 +512,12 @@
     text-shadow: 0 0 8px oklch(1 0 0 / 0.3);
 }
 
-/* Specific Glassmorphism for Add Task Button inside form */
+/* Specific Glassmorphism for Add Task Button inside form (fancy colours only) */
 [data-theme="fancy"] .add-task-form .btn.primary {
     background: oklch(1 0 0 / 0.05);
     backdrop-filter: blur(12px);
     border: 1px solid oklch(0.680 0.158 276.9 / 0.4);
     color: var(--accent-blue);
-    width: 42px;
-    height: 42px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    padding: 0;
 }
 
 [data-theme="fancy"] .add-task-form .btn.primary:hover {
@@ -631,7 +609,6 @@
     background: oklch(0 0 0 / 0.4);
     border: 1px solid oklch(1 0 0 / 0.08);
     backdrop-filter: blur(8px);
-    padding: 3px;
 }
 
 /* Fancy Modal Override */
@@ -730,7 +707,7 @@
     transform: scale(1.1);
 }
 
-/* Specific Glass Look for Task Actions */
+/* Specific Glass Look for Task Actions (fancy colours only) */
 [data-theme="fancy"] .edit-task-btn,
 [data-theme="fancy"] .archive-task-btn,
 [data-theme="fancy"] .unarchive-task-btn,
@@ -738,10 +715,8 @@
 [data-theme="fancy"] .copy-task-btn,
 [data-theme="fancy"] .move-task-btn {
     background: oklch(1 0 0 / 0.08);
-    /* Translucent, no blur */
     border: 1px solid oklch(1 0 0 / 0.1);
     border-radius: 8px;
-    margin-left: 4px;
 }
 
 [data-theme="fancy"] .icon-btn:active {
@@ -868,22 +843,13 @@
     filter: brightness(1.1);
 }
 
-/* Fancy Toggle Switch Track: Thicker with modern encapsulated look */
-[data-theme="fancy"] .switch-small {
-    width: 44px;
-    height: 24px;
-}
-
+/* Fancy Toggle Switch Track: colours only (size is shared) */
 [data-theme="fancy"] .slider-small {
     background-color: oklch(1 0 0 / 0.1);
     border: 1px solid oklch(1 0 0 / 0.05);
 }
 
 [data-theme="fancy"] .slider-small:before {
-    height: 16px;
-    width: 16px;
-    left: 4px;
-    bottom: 3px;
     background: oklch(0.940 0.010 290);
     box-shadow: 0 2px 4px oklch(0 0 0 / 0.4);
 }
@@ -895,7 +861,6 @@
 }
 
 [data-theme="fancy"] input:checked+.slider-small:before {
-    transform: translateX(20px);
     background: oklch(1 0 0);
     box-shadow: 0 0 10px oklch(0.680 0.158 276.9 / 0.6);
 }
@@ -962,17 +927,7 @@
     box-shadow: 0 0 20px oklch(0.680 0.158 276.9 / 0.15);
 }
 
-/* z-index for orbs to be behind everything */
-[data-theme="fancy"] .app-wrapper {
-    position: relative;
-    z-index: 1;
-}
-
-[data-theme="fancy"] #main-nav-placeholder {
-    position: relative;
-    z-index: 2001;
-}
-
+/* z-index for orbs to be behind everything (fancy decoration only) */
 [data-theme="fancy"] #login-overlay {
     background: var(--bg-gradient);
     background-size: 300% 300%;
@@ -984,18 +939,23 @@ html {
     background: oklch(0 0 0);
 }
 
+[data-theme="light"] html {
+    background: oklch(0.960 0 0);
+}
+
 body {
     background: var(--bg-gradient);
     background-size: 400% 400%;
     animation: gradientBG 15s ease infinite;
     color: var(--text-primary);
-    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-family: 'Outfit', 'Segoe UI', sans-serif;
     margin: 0;
     display: flex;
     flex-direction: column;
     /* Use 100dvh so the full body fits on screen including safe areas */
     height: 100dvh;
     overflow: hidden;
+    position: relative;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
     /* Push content below the iOS status bar, clear the home indicator at the bottom */
@@ -1006,10 +966,13 @@ body {
 
 #main-nav-placeholder {
     flex-shrink: 0;
-    z-index: 2000;
+    position: relative;
+    z-index: 2001;
 }
 
 .app-wrapper {
+    position: relative;
+    z-index: 1;
     flex-grow: 1;
     display: flex;
     flex-direction: column;
@@ -1032,6 +995,7 @@ body {
 }
 
 .glass-panel {
+    position: relative;
     background: var(--glass-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -1173,12 +1137,14 @@ body {
     cursor: pointer;
     font-weight: 600;
     font-size: 0.85rem;
+    letter-spacing: 0.02em;
     transition: all 0.2s;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-family: inherit;
     flex-shrink: 0;
+    position: relative;
 }
 
 .btn.primary {
@@ -1290,7 +1256,7 @@ body {
 .toggle-group {
     background: oklch(0 0 0 / 0.2);
     border-radius: 8px;
-    padding: 4px;
+    padding: 3px;
     display: flex;
     align-items: center;
     gap: 2px;
@@ -2100,6 +2066,15 @@ body {
     justify-content: center;
 }
 
+.edit-task-btn,
+.archive-task-btn,
+.unarchive-task-btn,
+.delete-task-btn,
+.copy-task-btn,
+.move-task-btn {
+    margin-left: 4px;
+}
+
 .icon-btn:hover {
     color: var(--text-primary);
     background: oklch(1 0 0 / 0.1);
@@ -2370,6 +2345,18 @@ body {
 .add-task-form {
     display: flex;
     gap: 8px;
+    align-items: center;
+}
+
+.add-task-form .btn.primary {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    padding: 0;
+    flex-shrink: 0;
 }
 
 .add-task-input {
@@ -2380,6 +2367,7 @@ body {
     padding: 8px;
     border-radius: 6px;
     font-size: 16px;
+    min-width: 0;
 }
 
 [data-theme="light"] .add-task-input {
@@ -2926,8 +2914,9 @@ body.settings-page-open #sync-console {
 .switch-small {
     position: relative;
     display: inline-block;
-    width: 34px;
-    height: 18px;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
 }
 
 .switch-small input {
@@ -2950,10 +2939,10 @@ body.settings-page-open #sync-console {
 .slider-small:before {
     position: absolute;
     content: "";
-    height: 14px;
-    width: 14px;
-    left: 2px;
-    bottom: 2px;
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 3px;
     background-color: var(--on-accent);
     transition: .4s;
 }
@@ -2963,7 +2952,7 @@ input:checked+.slider-small {
 }
 
 input:checked+.slider-small:before {
-    transform: translateX(16px);
+    transform: translateX(20px);
 }
 
 .slider-small.round {
