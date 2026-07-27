@@ -97,9 +97,31 @@
         <!-- Step 2: SVG Customization -->
         <section class="glass-card hidden" id="svg-controls-card">
             <h2>2. Customize Themes</h2>
-            <p class="description">We generated a Dark Mode version. Use the swap button to switch them if needed.</p>
+            <p class="description" id="theme-description">Light and dark both use the recolored (inverted) SVG.</p>
 
             <div class="svg-editor-layout">
+                <div class="toggle-row" style="margin-bottom: 1rem;">
+                    <div class="toggle-switch-wrapper">
+                        <input type="checkbox" id="same-theme-toggle" class="toggle-input" checked>
+                        <label for="same-theme-toggle" class="toggle-label"></label>
+                    </div>
+                    <label for="same-theme-toggle" class="toggle-text">Same light &amp; dark SVG</label>
+                </div>
+
+                <div class="mode-selector-wrapper" id="shared-svg-variant-group" style="margin-bottom: 1.25rem; width: 100%;">
+                    <span class="mode-label">Shared SVG colours</span>
+                    <div class="segmented-control">
+                        <input type="radio" name="shared-svg-variant" id="shared-original" value="original">
+                        <label for="shared-original">
+                            <span class="mode-text">Original</span>
+                        </label>
+                        <input type="radio" name="shared-svg-variant" id="shared-recolored" value="recolored" checked>
+                        <label for="shared-recolored">
+                            <span class="mode-text">Recolored</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="preview-header">
                     <h3>SVG Previews</h3>
                     <div class="preview-bg-controls" id="bg-controls">
@@ -122,7 +144,7 @@
                     </div>
 
                     <div class="swap-container">
-                        <button id="swap-themes-btn" title="Swap Light and Dark SVGs">
+                        <button id="swap-themes-btn" title="Swap Light and Dark SVGs" disabled style="opacity: 0.4; pointer-events: none;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor"
                                 viewBox="0 0 16 16">
                                 <path fill-rule="evenodd"
@@ -171,8 +193,8 @@
                     <!-- Padding Slider -->
                     <div class="control-group">
                         <label for="padding-slider">Icon Padding</label>
-                        <input type="range" id="padding-slider" min="0" max="50" value="0" step="5">
-                        <span id="padding-value">0%</span>
+                        <input type="range" id="padding-slider" min="0" max="50" value="20" step="5">
+                        <span id="padding-value">20%</span>
                     </div>
 
                     <!-- Small Icons Toggle -->
@@ -200,14 +222,14 @@
                         <!-- Transparent Toggle -->
                         <div class="toggle-row">
                             <div class="toggle-switch-wrapper">
-                                <input type="checkbox" id="bg-transparent-toggle" class="toggle-input">
+                                <input type="checkbox" id="bg-transparent-toggle" class="toggle-input" checked>
                                 <label for="bg-transparent-toggle" class="toggle-label"></label>
                             </div>
                             <label for="bg-transparent-toggle" class="toggle-text">Transparent Background</label>
                         </div>
 
                         <!-- Apply All Toggle -->
-                        <div class="toggle-row" id="bg-all-group">
+                        <div class="toggle-row" id="bg-all-group" style="opacity: 0.5; pointer-events: none;">
                             <div class="toggle-switch-wrapper">
                                 <input type="checkbox" id="bg-apply-all" class="toggle-input">
                                 <label for="bg-apply-all" class="toggle-label"></label>
@@ -216,7 +238,7 @@
                         </div>
 
                         <!-- Color Picker -->
-                        <div class="color-picker-row" id="bg-color-group">
+                        <div class="color-picker-row" id="bg-color-group" style="opacity: 0.5; pointer-events: none;">
                             <label for="bg-color-picker">Background Color:</label>
                             <div style="display: flex; gap: 10px; align-items: center;">
                                 <input type="color" id="bg-color-picker" value="#ffffff">
@@ -228,14 +250,14 @@
                         <!-- Squircle Background Toggle -->
                         <div class="toggle-row" id="squircle-group">
                             <div class="toggle-switch-wrapper">
-                                <input type="checkbox" id="squircle-toggle" class="toggle-input">
+                                <input type="checkbox" id="squircle-toggle" class="toggle-input" checked>
                                 <label for="squircle-toggle" class="toggle-label"></label>
                             </div>
                             <label for="squircle-toggle" class="toggle-text">Shape background as Squircle</label>
                         </div>
                         
                         <!-- Squircle Color Picker -->
-                        <div class="color-picker-row" id="squircle-color-group" style="opacity: 0.5; pointer-events: none;">
+                        <div class="color-picker-row" id="squircle-color-group">
                             <label for="squircle-color-picker">Squircle Color:</label>
                             <div style="display: flex; gap: 10px; align-items: center;">
                                 <input type="color" id="squircle-color-picker" value="#8b5cf6">
@@ -245,19 +267,19 @@
                         </div>
 
                         <!-- Squircle Padding Slider -->
-                        <div class="control-group" id="squircle-padding-group" style="opacity: 0.5; pointer-events: none; width: 100%;">
+                        <div class="control-group" id="squircle-padding-group" style="width: 100%;">
                             <label for="squircle-padding-slider">Squircle Padding</label>
                             <input type="range" id="squircle-padding-slider" min="0" max="40" value="0" step="5">
                             <span id="squircle-padding-value">0%</span>
                         </div>
 
                         <!-- Skip Squircle for Apple Touch Icon Toggle -->
-                        <div class="toggle-row" id="apple-touch-no-squircle-group" style="opacity: 0.5; pointer-events: none; margin-top: 0.5rem;">
+                        <div class="toggle-row" id="apple-touch-no-squircle-group" style="margin-top: 0.5rem;">
                             <div class="toggle-switch-wrapper">
-                                <input type="checkbox" id="apple-touch-no-squircle-toggle" class="toggle-input">
+                                <input type="checkbox" id="apple-touch-no-squircle-toggle" class="toggle-input" checked>
                                 <label for="apple-touch-no-squircle-toggle" class="toggle-label"></label>
                             </div>
-                            <label for="apple-touch-no-squircle-toggle" class="toggle-text">Skip squircle for Apple Touch Icon (use full background)</label>
+                            <label for="apple-touch-no-squircle-toggle" class="toggle-text">iOS home screen icon: use squircle color as full background (no squircle shape)</label>
                         </div>
                     </div>
 

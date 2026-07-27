@@ -17,6 +17,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const svgPreviewWrapperLight = document.getElementById('svg-preview-wrapper-light');
     const svgPreviewWrapperDark = document.getElementById('svg-preview-wrapper-dark');
     const swapBtn = document.getElementById('swap-themes-btn');
+    const sameThemeToggle = document.getElementById('same-theme-toggle');
+    const themeDescription = document.getElementById('theme-description');
+    const sharedSvgVariantGroup = document.getElementById('shared-svg-variant-group');
+    const sharedOriginalInput = document.getElementById('shared-original');
+    const sharedRecoloredInput = document.getElementById('shared-recolored');
 
     const bgControls = document.getElementById('bg-controls');
     const colorsSlider = document.getElementById('colors-slider');
@@ -82,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let lightSvgString = null;
     let darkSvgString = null;
+    let originalSvgString = null; // Clean/traced source before theme variants
     let baseLightSvgString = null;
     let baseDarkSvgString = null;
     let downloadBlob = null;
@@ -101,6 +107,18 @@ document.addEventListener('DOMContentLoaded', () => {
     bgControls.addEventListener('click', handleBgChange);
     swapBtn.addEventListener('click', handleSwapThemes);
 
+    sameThemeToggle.addEventListener('change', () => {
+        updateSameThemeUi();
+        applyThemeVariants();
+    });
+
+    document.querySelectorAll('input[name="shared-svg-variant"]').forEach(input => {
+        input.addEventListener('change', () => {
+            updateSameThemeUi();
+            applyThemeVariants();
+        });
+    });
+
     // Mode Selector listeners
     document.querySelectorAll('input[name="icon-mode"]').forEach(input => {
         input.addEventListener('change', async (e) => {
@@ -116,6 +134,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     paddingSlider.addEventListener('input', () => {
         paddingValue.textContent = paddingSlider.value + '%';
+        if (squircleToggle.checked) {
+            applySquircleToStateSvgs();
+            renderPreviewsInDOM();
+        }
         updatePaddingPreview();
     });
 
@@ -288,6 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         svgControlsCard.classList.add('hidden');
                         lightSvgString = null;
                         darkSvgString = null;
+                        originalSvgString = null;
                         baseLightSvgString = null;
                         baseDarkSvgString = null;
                     }
@@ -308,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
             svgControlsCard.classList.add('hidden');
             lightSvgString = null;
             darkSvgString = null;
+            originalSvgString = null;
             baseLightSvgString = null;
             baseDarkSvgString = null;
             generateBtn.disabled = false;
@@ -342,7 +366,58 @@ document.addEventListener('DOMContentLoaded', () => {
         swatch.classList.add('active');
     }
 
+    function getSharedSvgVariant() {
+        return sharedRecoloredInput.checked ? 'recolored' : 'original';
+    }
+
+    function updateSameThemeUi() {
+        const same = sameThemeToggle.checked;
+        if (themeDescription) {
+            if (same) {
+                const variant = getSharedSvgVariant();
+                themeDescription.textContent = variant === 'recolored'
+                    ? 'Light and dark both use the recolored (inverted) SVG.'
+                    : 'Light and dark both use the original SVG. Switch to Recolored to invert colours for both.';
+            } else {
+                themeDescription.textContent = 'Separate themes: original for light, recolored for dark. Use the swap button to switch them if needed.';
+            }
+        }
+        if (same) {
+            swapBtn.disabled = true;
+            swapBtn.style.opacity = '0.4';
+            swapBtn.style.pointerEvents = 'none';
+            sharedSvgVariantGroup.style.opacity = '1';
+            sharedSvgVariantGroup.style.pointerEvents = 'auto';
+        } else {
+            swapBtn.disabled = false;
+            swapBtn.style.opacity = '';
+            swapBtn.style.pointerEvents = '';
+            sharedSvgVariantGroup.style.opacity = '0.5';
+            sharedSvgVariantGroup.style.pointerEvents = 'none';
+        }
+    }
+
+    function applyThemeVariants() {
+        if (!originalSvgString) return;
+
+        const recoloredSvg = generateDarkSvg(originalSvgString);
+
+        if (sameThemeToggle.checked) {
+            const shared = getSharedSvgVariant() === 'recolored' ? recoloredSvg : originalSvgString;
+            baseLightSvgString = shared;
+            baseDarkSvgString = shared;
+        } else {
+            baseLightSvgString = originalSvgString;
+            baseDarkSvgString = recoloredSvg;
+        }
+
+        applySquircleToStateSvgs();
+        renderPreviewsInDOM();
+        updatePaddingPreview();
+    }
+
     function handleSwapThemes() {
+        if (sameThemeToggle.checked) return;
         if (!baseLightSvgString || !baseDarkSvgString) return;
         // Swap base strings
         const temp = baseLightSvgString;
@@ -371,24 +446,18 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (isVectorMode) {
                 // --- VECTOR PATH: Clean & Recoloring ---
-                baseLightSvgString = cleanSvg(sourceSvgText);
-                baseDarkSvgString = generateDarkSvg(baseLightSvgString);
+                originalSvgString = cleanSvg(sourceSvgText);
             } else {
                 // --- RASTER PATH: Tracing ---
                 const settings = { colors: parseInt(colorsSlider.value), detail: parseFloat(detailSlider.value), smoothing: parseInt(smoothingSlider.value) };
                 const lightPalette = await getSmartPalette(imagePreview.src, settings.colors);
 
-                // 1. Trace PNG to create Light SVG
+                // Trace PNG to create source SVG
                 const tracedSvg = traceImageDataToSvg(sourceImageData, lightPalette, settings);
-                baseLightSvgString = cleanSvg(tracedSvg);
-                // 2. Invert Traced SVG to create Dark SVG
-                baseDarkSvgString = generateDarkSvg(baseLightSvgString);
+                originalSvgString = cleanSvg(tracedSvg);
             }
 
-            // Apply squircle option
-            applySquircleToStateSvgs();
-
-            renderPreviewsInDOM();
+            applyThemeVariants();
 
         } catch (error) {
             console.error("SVG Processing failed:", error);
@@ -776,13 +845,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isAppleTouch = (size === 180);
                 const skipSquircleForApple = isAppleTouch && squircleToggle.checked && appleTouchNoSquircleToggle.checked;
 
-                if (!bgTransparentToggle.checked) {
+                if (skipSquircleForApple) {
+                    // Fill the full canvas with the squircle color (no squircle shape) for iOS home screen
+                    backgroundColor = squircleColorPicker.value;
+                } else if (!bgTransparentToggle.checked) {
                     if (isAppleTouch || bgApplyAllCheckbox.checked) {
                         backgroundColor = bgColorPicker.value;
                     }
-                } else if (skipSquircleForApple) {
-                    // Force background color for Apple Touch Icon if squircle is skipped and transparent is set
-                    backgroundColor = bgColorPicker.value;
                 }
 
                 let squircleColor = squircleToggle.checked ? squircleColorPicker.value : null;
@@ -1242,6 +1311,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sourceSvgText = null;
         lightSvgString = null;
         darkSvgString = null;
+        originalSvgString = null;
         baseLightSvgString = null;
         baseDarkSvgString = null;
         downloadBlob = null;
@@ -1261,7 +1331,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Reset/Hide preview
         paddingPreviewIcon.style.backgroundImage = 'none';
-        updatePaddingPreviewWrapperBg('#ffffff'); // Default to white
+        updatePaddingPreviewWrapperBg('transparent');
 
         svgControlsCard.classList.add('hidden');
         resultsCard.classList.add('hidden');
@@ -1280,19 +1350,35 @@ document.addEventListener('DOMContentLoaded', () => {
         overlayXSlider.value = 100; overlayXValue.textContent = '100%';
         overlayYSlider.value = 0; overlayYValue.textContent = '0%';
 
-        // Reset squircle controls
-        squircleToggle.checked = false;
+        // Reset padding (20% default)
+        paddingSlider.value = 20;
+        paddingValue.textContent = '20%';
+
+        // Reset background (transparent by default)
+        bgTransparentToggle.checked = true;
+        bgColorGroup.style.opacity = '0.5';
+        bgColorGroup.style.pointerEvents = 'none';
+        bgAllGroup.style.opacity = '0.5';
+        bgAllGroup.style.pointerEvents = 'none';
+
+        // Reset squircle controls (enabled by default)
+        squircleToggle.checked = true;
         squircleColorPicker.value = '#8b5cf6';
         squircleColorCode.textContent = '#8b5cf6';
-        squircleColorGroup.style.opacity = '0.5';
-        squircleColorGroup.style.pointerEvents = 'none';
+        squircleColorGroup.style.opacity = '1';
+        squircleColorGroup.style.pointerEvents = 'auto';
         squirclePaddingSlider.value = 0;
         squirclePaddingValue.textContent = '0%';
-        squirclePaddingGroup.style.opacity = '0.5';
-        squirclePaddingGroup.style.pointerEvents = 'none';
-        appleTouchNoSquircleToggle.checked = false;
-        appleTouchNoSquircleGroup.style.opacity = '0.5';
-        appleTouchNoSquircleGroup.style.pointerEvents = 'none';
+        squirclePaddingGroup.style.opacity = '1';
+        squirclePaddingGroup.style.pointerEvents = 'auto';
+        appleTouchNoSquircleToggle.checked = true;
+        appleTouchNoSquircleGroup.style.opacity = '1';
+        appleTouchNoSquircleGroup.style.pointerEvents = 'auto';
+
+        // Reset theme toggle (same light/dark + recolored by default)
+        sameThemeToggle.checked = true;
+        sharedRecoloredInput.checked = true;
+        updateSameThemeUi();
 
         paddingSmallIconsCheckbox.checked = true;
 
@@ -1442,11 +1528,13 @@ document.addEventListener('DOMContentLoaded', () => {
             squirclePath.setAttribute("fill", squircleColor);
             squirclePath.setAttribute("class", "svg-squircle-bg");
 
-            // Create group to scale original contents
+            // Create group to scale original contents — match PNG convertToSquare sizing:
+            // iconScale = (1 - 2*squirclePad) * (1 - 2*iconPad)
             const g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
             const cx = minX + width / 2;
             const cy = minY + height / 2;
-            const finalScale = 0.75 * (1 - 2 * squirclePaddingPercent);
+            const iconPaddingPercent = (parseInt(paddingSlider.value) || 0) / 100;
+            const finalScale = (1 - 2 * squirclePaddingPercent) * (1 - 2 * iconPaddingPercent);
             g.setAttribute("transform", `translate(${cx}, ${cy}) scale(${finalScale}) translate(${-cx}, ${-cy})`);
 
             // Move non-metadata children to group
@@ -1479,13 +1567,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (isSquircleActive && baseLightSvgString) {
             lightSvgString = injectSquircle(baseLightSvgString, squircleColor);
-            
-            const parsed = parseColorToRgb(squircleColor);
-            const darkSquircleColor = createDarkModeColor(parsed.r, parsed.g, parsed.b, parsed.a);
-            darkSvgString = injectSquircle(baseDarkSvgString, darkSquircleColor);
+
+            if (sameThemeToggle.checked) {
+                darkSvgString = injectSquircle(baseDarkSvgString, squircleColor);
+            } else {
+                const parsed = parseColorToRgb(squircleColor);
+                const darkSquircleColor = createDarkModeColor(parsed.r, parsed.g, parsed.b, parsed.a);
+                darkSvgString = injectSquircle(baseDarkSvgString, darkSquircleColor);
+            }
         } else {
             lightSvgString = baseLightSvgString;
             darkSvgString = baseDarkSvgString;
         }
     }
+
+    updateSameThemeUi();
+    updatePaddingPreviewWrapperBg('transparent');
 });
