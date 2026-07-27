@@ -34,7 +34,8 @@ export const state = {
             },
             tags: [{ ...DEFAULT_MISC_TAG }],
             activeTagId: MISC_TAG_ID,
-            tagDisplayMode: 'glow'
+            tagDisplayMode: 'glow',
+            mobileFeaturedHeaderBtn: 'multi-edit'
         },
         listOrder: [],
         boards: [],
@@ -108,7 +109,8 @@ export function resetState() {
             },
             tags: [{ ...DEFAULT_MISC_TAG }],
             activeTagId: MISC_TAG_ID,
-            tagDisplayMode: 'glow'
+            tagDisplayMode: 'glow',
+            mobileFeaturedHeaderBtn: 'multi-edit'
         },
         listOrder: [],
         boards: [],

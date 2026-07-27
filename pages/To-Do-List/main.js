@@ -620,6 +620,10 @@ function setupFirestoreListeners(uid) {
             if (document.getElementById('disable-important-pinning-toggle')) document.getElementById('disable-important-pinning-toggle').checked = !!state.appData.settings.disableImportantPinning;
             if (document.getElementById('work-tools-toggle')) document.getElementById('work-tools-toggle').checked = !!state.appData.settings.workToolsEnabled;
             if (document.getElementById('ai-summary-on-cards-toggle')) document.getElementById('ai-summary-on-cards-toggle').checked = !!state.appData.settings.aiSummaryOnCards;
+            const featuredHeaderSelect = document.getElementById('mobile-featured-header-btn');
+            if (featuredHeaderSelect) {
+                featuredHeaderSelect.value = UI.getMobileFeaturedHeaderBtn();
+            }
             syncKanbanLabelsUI();
             if (typeof UI.syncTagDisplayModeUI === 'function') UI.syncTagDisplayModeUI();
             if (document.getElementById('time-automation-confirm-toggle')) document.getElementById('time-automation-confirm-toggle').checked = state.appData.settings.timeAutomationConfirm !== false;
@@ -938,6 +942,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return checked;
     });
     setupSettingListener('disable-important-pinning-toggle', 'disableImportantPinning', true);
+    setupSettingListener('mobile-featured-header-btn', 'mobileFeaturedHeaderBtn', false, (val) => {
+        const valid = UI.MOBILE_FEATURED_HEADER_OPTIONS.some((o) => o.id === val);
+        const next = valid ? val : 'multi-edit';
+        state.appData.settings.mobileFeaturedHeaderBtn = next;
+        requestAnimationFrame(() => UI.layoutSlimChrome());
+        return next;
+    });
     setupSettingListener('work-tools-toggle', 'workToolsEnabled', true, (checked) => {
         state.appData.settings.workToolsEnabled = checked;
         if (!checked) {

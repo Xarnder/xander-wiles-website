@@ -3535,18 +3535,18 @@ input:checked+.slider-small:before {
         .app-header {
             position: fixed !important;
             top: auto !important;
-            bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+            bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important;
             left: 8px !important;
             right: 8px !important;
             margin: 0 !important;
-            padding: 7px 8px !important;
+            padding: 6px 8px 5px !important;
             display: flex !important;
             flex-direction: column !important;
-            align-items: center !important;
-            justify-content: center !important;
-            gap: 4px !important;
+            align-items: stretch !important;
+            justify-content: flex-start !important;
+            gap: 3px !important;
             z-index: 9000 !important;
-            border-radius: 20px !important;
+            border-radius: 18px !important;
             background: var(--dropdown-bg-glass) !important;
             border: 1px solid var(--glass-border) !important;
             box-shadow: 0 10px 40px oklch(0 0 0 / 0.6) !important;
@@ -3604,12 +3604,47 @@ input:checked+.slider-small:before {
             order: 2 !important;
         }
 
-        .header-row-2 {
+        .header-row-meta {
             order: 3 !important;
+            width: 100% !important;
+            justify-content: stretch !important;
+            gap: 6px !important;
         }
 
-        .header-row-3 {
+        .header-row-meta .header-meta-control {
+            flex: 1 1 0 !important;
+            justify-content: center !important;
+            min-width: 0 !important;
+        }
+
+        .header-action-slots {
             order: 4 !important;
+            width: 100% !important;
+        }
+
+        /* Dynamic equal slots — column count from JS (--slot-cols) */
+        .header-action-slots.is-slot-layout {
+            display: grid !important;
+            grid-template-columns: repeat(var(--slot-cols, 4), minmax(0, 1fr)) !important;
+            grid-auto-rows: var(--slot-row-h, 30px) !important;
+            grid-auto-flow: dense !important;
+            gap: var(--slot-gap, 4px) !important;
+            align-items: stretch !important;
+            justify-content: stretch !important;
+        }
+
+        .header-action-slots.is-slot-layout > [data-slot-id] {
+            width: 100% !important;
+            min-width: 0 !important;
+            height: var(--slot-row-h, 30px) !important;
+            min-height: var(--slot-row-h, 30px) !important;
+            max-height: var(--slot-row-h, 30px) !important;
+            box-sizing: border-box !important;
+        }
+
+        .header-action-slots.is-slot-layout > #add-list-btn {
+            font-size: 0.65rem !important;
+            padding: 0 4px !important;
         }
 
         .tag-mode-buttons {
@@ -3678,9 +3713,10 @@ input:checked+.slider-small:before {
         }
 
         /* Multi-select: exclude from unified 1px border — bolder blue chrome */
-        .app-header button.btn.multi-select-btn {
-            min-height: 32px !important;
-            height: 32px !important;
+        .app-header button.btn.multi-select-btn:not(.is-featured-slot),
+        .app-header .header-action-slots button.btn.multi-select-btn:not(.is-featured-slot) {
+            min-height: 30px !important;
+            height: 30px !important;
             width: 32px !important;
             min-width: 32px !important;
             padding: 0 !important;
@@ -3697,6 +3733,57 @@ input:checked+.slider-small:before {
             justify-content: center !important;
             transform: none !important;
             flex-shrink: 0 !important;
+        }
+
+        /* Featured multi-select keeps blue chrome but uses double-row height */
+        .app-header .header-action-slots.is-slot-layout > button.btn.multi-select-btn.is-featured-slot {
+            border: 2.5px solid var(--accent-blue) !important;
+            background: color-mix(in oklch, var(--accent-blue) 42%, oklch(1 0 0 / 0.08)) !important;
+            box-shadow: 0 0 10px color-mix(in oklch, var(--accent-blue) 35%, transparent) !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            padding: 0 !important;
+            border-radius: 9px !important;
+        }
+
+        .app-header .header-action-slots.is-slot-layout > [data-slot-id] {
+            width: 100% !important;
+            min-width: 0 !important;
+        }
+
+        .app-header .header-action-slots.is-slot-layout > button.btn.multi-select-btn:not(.is-featured-slot),
+        .app-header .header-action-slots.is-slot-layout > button.btn:not(.is-featured-slot),
+        .app-header .header-action-slots.is-slot-layout > button.icon-btn-large:not(.is-featured-slot),
+        .app-header .header-action-slots.is-slot-layout > .options-btn-styled:not(.is-featured-slot) {
+            width: 100% !important;
+            min-width: 0 !important;
+            height: var(--slot-row-h, 30px) !important;
+            min-height: var(--slot-row-h, 30px) !important;
+            max-height: var(--slot-row-h, 30px) !important;
+        }
+
+        /* Featured double-row slot — must win over unified button height rules */
+        .app-header .header-action-slots.is-slot-layout > button.is-featured-slot,
+        .app-header .header-action-slots.is-slot-layout > button.btn.is-featured-slot,
+        .app-header .header-action-slots.is-slot-layout > button.btn.multi-select-btn.is-featured-slot,
+        .app-header .header-action-slots.is-slot-layout > button.icon-btn-large.is-featured-slot,
+        .app-header .header-action-slots.is-slot-layout > button.options-btn-styled.is-featured-slot {
+            grid-row: 1 / span 2 !important;
+            grid-column: 1 !important;
+            width: 100% !important;
+            height: calc(var(--slot-row-h, 30px) * 2 + var(--slot-gap, 4px)) !important;
+            min-height: calc(var(--slot-row-h, 30px) * 2 + var(--slot-gap, 4px)) !important;
+            max-height: none !important;
+            align-self: stretch !important;
+        }
+
+        .app-header .header-action-slots.is-slot-layout > button.is-featured-slot svg {
+            width: 22px !important;
+            height: 22px !important;
+        }
+
+        .app-header .header-action-slots.is-slot-layout > button.is-featured-slot.icon-btn-large {
+            font-size: 1.35rem !important;
         }
 
         .app-header button.btn.multi-select-btn svg {
@@ -3991,17 +4078,29 @@ input:checked+.slider-small:before {
     order: 1;
 }
 
-.header-row-2,
-.header-row-3 {
+.header-row-meta {
     flex-shrink: 0;
-}
-
-.header-row-2 {
     order: 2;
 }
 
-.header-row-3 {
+.header-action-slots {
+    flex-shrink: 0;
     order: 3;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.header-action-slots .action-group {
+    display: contents;
+}
+
+/* Desktop keeps a familiar toolbar flow */
+@media (min-width: 501px) {
+    .header-action-slots {
+        justify-content: flex-end;
+    }
 }
 
 /* --- TAG MODE & TAG PICKERS --- */
@@ -4624,11 +4723,11 @@ button.tags-settings-swatch.is-selected {
         order: 2;
     }
 
-    .header-row-2 {
+    .header-row-meta {
         order: 3;
     }
 
-    .header-row-3 {
+    .header-action-slots {
         order: 4;
     }
 

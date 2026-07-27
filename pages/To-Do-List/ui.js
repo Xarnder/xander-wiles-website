@@ -971,6 +971,8 @@ function applyStaticLayouts() {
  * and set --slim-bottom-clearance so lists clear it. Same for normal + Kanban.
  */
 export function layoutSlimChrome() {
+    layoutMobileHeaderSlots();
+
     const root = document.documentElement;
     if (!window.matchMedia('(max-width: 500px)').matches) {
         root.style.removeProperty('--slim-bottom-clearance');
@@ -984,6 +986,103 @@ export function layoutSlimChrome() {
     const top = header.getBoundingClientRect().top;
     const clearance = Math.max(120, Math.ceil(window.innerHeight - top) + 12);
     root.style.setProperty('--slim-bottom-clearance', `${clearance}px`);
+}
+
+export const MOBILE_FEATURED_HEADER_OPTIONS = [
+    { id: 'multi-edit', label: 'Multi-select' },
+    { id: 'search', label: 'Search tasks' },
+    { id: 'search-list', label: 'Search lists' },
+    { id: 'recent-completed', label: 'Recent completed' },
+    { id: 'compact-view', label: 'Compact view' },
+    { id: 'add-list', label: 'Add list' },
+    { id: 'options', label: 'Settings' }
+];
+
+const DEFAULT_FEATURED_HEADER_BTN = 'multi-edit';
+
+export function getMobileFeaturedHeaderBtn() {
+    const raw = state.appData.settings?.mobileFeaturedHeaderBtn;
+    const valid = MOBILE_FEATURED_HEADER_OPTIONS.some((o) => o.id === raw);
+    return valid ? raw : DEFAULT_FEATURED_HEADER_BTN;
+}
+
+/**
+ * Mobile dock: compute how many equal-width action slots fit, pack buttons into a
+ * 2-row CSS grid, and give one chosen button a double-height (2-row) featured slot.
+ */
+export function layoutMobileHeaderSlots() {
+    const grid = document.getElementById('header-action-slots');
+    if (!grid) return;
+
+    const isMobile = window.matchMedia('(max-width: 500px)').matches;
+    const items = Array.from(grid.querySelectorAll('[data-slot-id]'));
+    if (!items.length) return;
+
+    if (!isMobile) {
+        grid.classList.remove('is-slot-layout');
+        grid.style.removeProperty('--slot-cols');
+        grid.style.removeProperty('--slot-row-h');
+        grid.style.removeProperty('--slot-gap');
+        items.forEach((el) => {
+            el.classList.remove('is-featured-slot');
+            el.style.removeProperty('grid-row');
+            el.style.removeProperty('grid-column');
+        });
+        return;
+    }
+
+    grid.classList.add('is-slot-layout');
+
+    const gap = 4;
+    const minCell = 38;
+    let width = Math.max(0, grid.clientWidth);
+    if (width < 40) {
+        width = Math.max(0, (grid.parentElement?.clientWidth || window.innerWidth) - 16);
+    }
+
+    const maxColsByWidth = Math.max(3, Math.min(7, Math.floor((width + gap) / (minCell + gap)) || 3));
+    const featuredId = getMobileFeaturedHeaderBtn();
+    const featured = items.find((el) => el.dataset.slotId === featuredId)
+        || items.find((el) => el.dataset.slotId === DEFAULT_FEATURED_HEADER_BTN);
+    const remaining = Math.max(0, items.length - (featured ? 1 : 0));
+
+    // Prefer a column count that fills a 2-row grid with minimal empty cells
+    // (featured uses 2 cells in one column).
+    let cols = maxColsByWidth;
+    let bestWaste = Infinity;
+    for (let c = 3; c <= maxColsByWidth; c++) {
+        const capacity = c * 2 - (featured ? 2 : 0);
+        if (capacity < remaining) continue;
+        const waste = capacity - remaining;
+        if (waste < bestWaste) {
+            bestWaste = waste;
+            cols = c;
+        }
+    }
+    // If nothing fits in 2 rows, use max width cols (grid may grow to 3+ rows)
+    if (bestWaste === Infinity) cols = maxColsByWidth;
+
+    const rowH = 30;
+    grid.style.setProperty('--slot-cols', String(cols));
+    grid.style.setProperty('--slot-row-h', `${rowH}px`);
+    grid.style.setProperty('--slot-gap', `${gap}px`);
+
+    const ordered = featured
+        ? [featured, ...items.filter((el) => el !== featured)]
+        : items;
+
+    ordered.forEach((el) => {
+        const isFeatured = !!featured && el === featured;
+        el.classList.toggle('is-featured-slot', isFeatured);
+        if (isFeatured) {
+            el.style.gridRow = '1 / span 2';
+            el.style.gridColumn = '1';
+        } else {
+            el.style.removeProperty('grid-row');
+            el.style.removeProperty('grid-column');
+        }
+        grid.appendChild(el);
+    });
 }
 
 function getTagButtonStyle(tag) {
