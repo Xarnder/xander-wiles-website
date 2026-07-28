@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Markdown Editor</title>
+    <meta name="description" content="Edit Markdown files from Google Drive on your phone.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MD Editor">
+    <base href="/pages/Markdown-Editor/">
+
+    <!-- Theme-aware SVG icons (modern browsers) -->
+    <link rel="icon" href="favicon.ico" sizes="any"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="favicon-light.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+
+    <!-- Fallback PNG icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <!-- Other essential links -->
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+
+<body>
+    <div id="app" class="app">
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <button type="button" id="btn-back" class="btn btn-ghost" hidden>Back</button>
+                <button type="button" id="btn-up" class="btn btn-ghost" hidden>Up</button>
+                <h1 id="view-title" class="view-title">Markdown Editor</h1>
+            </div>
+            <div class="top-bar-right">
+                <button type="button" id="btn-sign-out" class="btn btn-ghost" hidden>Sign out</button>
+                <button type="button" id="btn-save" class="btn btn-primary" hidden>Save</button>
+            </div>
+        </header>
+
+        <p id="status" class="status" role="status" aria-live="polite">Loading…</p>
+
+        <main id="main" class="main">
+            <section id="view-login" class="view" hidden>
+                <div class="login-card">
+                    <p class="brand">Markdown Editor</p>
+                    <p class="lede">Sign in with Google to browse Drive and edit your <code>.md</code> files.</p>
+                    <button type="button" id="btn-sign-in" class="btn btn-primary btn-large">Sign in with Google</button>
+                    <p id="config-error" class="error-text" hidden></p>
+                </div>
+            </section>
+
+            <section id="view-browse" class="view" hidden>
+                <div class="browse-toolbar">
+                    <div class="browse-mode-row" role="group" aria-label="Browse mode">
+                        <button type="button" id="btn-mode-folders" class="btn btn-ghost btn-mode is-active">My Drive</button>
+                        <button type="button" id="btn-mode-computers" class="btn btn-ghost btn-mode">Computers</button>
+                        <button type="button" id="btn-mode-search" class="btn btn-ghost btn-mode">Find .md</button>
+                    </div>
+                    <form id="search-form" class="search-form" hidden>
+                        <label class="sr-only" for="search-input">Search markdown file names</label>
+                        <input id="search-input" class="search-input" type="search" placeholder="Filter by name (optional)" enterkeyhint="search" autocomplete="off">
+                        <button type="submit" class="btn btn-primary">Search</button>
+                    </form>
+                    <p class="browse-hint">
+                        Prefer notes in <strong>My Drive</strong> for the most reliable sync with your phone.
+                        The <strong>Computers</strong> tab can work for Drive for Desktop folders, but Google’s API support for that section is unofficial/incomplete — if a computer doesn’t appear, move the folder into My Drive on
+                        <a href="https://drive.google.com" target="_blank" rel="noopener noreferrer">drive.google.com</a>.
+                    </p>
+                </div>
+                <p id="folder-path" class="folder-path"></p>
+                <div id="file-list" class="file-list" role="list"></div>
+                <button type="button" id="btn-load-more" class="btn btn-ghost btn-block" hidden>Load more</button>
+                <p id="browse-empty" class="empty-state" hidden>No folders or markdown files here.</p>
+            </section>
+
+            <section id="view-editor" class="view view-editor" hidden>
+                <div class="editor-meta">
+                    <p id="file-name" class="file-name"></p>
+                    <p id="dirty-label" class="dirty-label" hidden>Unsaved</p>
+                </div>
+                <label class="sr-only" for="editor">Markdown content</label>
+                <textarea id="editor" class="editor" spellcheck="true" autocomplete="off" autocapitalize="off"></textarea>
+            </section>
+        </main>
+    </div>
+
+    <dialog id="draft-dialog" class="dialog">
+        <form method="dialog" class="dialog-body">
+            <h2>Restore local draft?</h2>
+            <p>A newer unsaved draft was found on this device. Drive content will stay until you save.</p>
+            <div class="dialog-actions">
+                <button type="submit" value="discard" class="btn btn-ghost">Discard draft</button>
+                <button type="submit" value="restore" class="btn btn-primary">Restore draft</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>

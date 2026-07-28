@@ -50,6 +50,7 @@ declare module '$env/static/private' {
 	export const npm_package_json: string;
 	export const npm_lifecycle_script: string;
 	export const VSCODE_GIT_ASKPASS_NODE: string;
+	export const INIT_CWD: string;
 	export const SHLVL: string;
 	export const GEMINI_API_KEY: string;
 	export const VSCODE_INJECTION: string;
@@ -93,7 +94,6 @@ declare module '$env/static/private' {
 	export const MallocNanoZone: string;
 	export const TMPDIR: string;
 	export const VSCODE_GIT_IPC_AUTH_TOKEN: string;
-	export const INIT_CWD: string;
 	export const VITE_FIREBASE_AUTH_DOMAIN: string;
 	export const npm_config_user_agent: string;
 	export const npm_config_local_prefix: string;
@@ -152,6 +152,7 @@ declare module '$env/static/public' {
 	export const PUBLIC_HOME_DESIGN_FIREBASE_APP_ID: string;
 	export const PUBLIC_HOME_DESIGN_FIREBASE_AUTH_DOMAIN: string;
 	export const PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
+	export const PUBLIC_MARKDOWN_EDITOR_GOOGLE_CLIENT_ID: string;
 	export const PUBLIC_STORY_FIREBASE_PROJECT_ID: string;
 	export const PUBLIC_SOCIAL_FIREBASE_API_KEY: string;
 	export const PUBLIC_STORY_FIREBASE_STORAGE_BUCKET: string;
@@ -240,6 +241,7 @@ declare module '$env/dynamic/private' {
 		npm_package_json: string;
 		npm_lifecycle_script: string;
 		VSCODE_GIT_ASKPASS_NODE: string;
+		INIT_CWD: string;
 		SHLVL: string;
 		GEMINI_API_KEY: string;
 		VSCODE_INJECTION: string;
@@ -283,7 +285,6 @@ declare module '$env/dynamic/private' {
 		MallocNanoZone: string;
 		TMPDIR: string;
 		VSCODE_GIT_IPC_AUTH_TOKEN: string;
-		INIT_CWD: string;
 		VITE_FIREBASE_AUTH_DOMAIN: string;
 		npm_config_user_agent: string;
 		npm_config_local_prefix: string;
@@ -361,6 +362,7 @@ declare module '$env/dynamic/public' {
 		PUBLIC_HOME_DESIGN_FIREBASE_APP_ID: string;
 		PUBLIC_HOME_DESIGN_FIREBASE_AUTH_DOMAIN: string;
 		PUBLIC_STORY_FIREBASE_AUTH_DOMAIN: string;
+		PUBLIC_MARKDOWN_EDITOR_GOOGLE_CLIENT_ID: string;
 		PUBLIC_STORY_FIREBASE_PROJECT_ID: string;
 		PUBLIC_SOCIAL_FIREBASE_API_KEY: string;
 		PUBLIC_STORY_FIREBASE_STORAGE_BUCKET: string;
