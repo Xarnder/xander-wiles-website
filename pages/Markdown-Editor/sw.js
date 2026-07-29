@@ -1,4 +1,4 @@
-const CACHE_NAME = 'md-editor-shell-v10';
+const CACHE_NAME = 'md-editor-shell-v32';
 const OWNED_PREFIX = 'md-editor-shell-';
 
 const ASSETS = [
@@ -11,12 +11,17 @@ const ASSETS = [
     './drive.js',
     './editor.js',
     './ui.js',
+    './lists.js',
+    './lists-ui.js',
+    './markdown.js',
     './site.webmanifest',
     './favicon-dark.svg',
     './favicon-light.svg',
     './apple-touch-icon.png',
     './Assets/SVGs/markdown-icon.svg',
     './Assets/SVGs/open-folder-outline-icon.svg',
+    './Assets/SVGs/Up-ArrowIcons.svg',
+    './Assets/SVGs/Down-ArrowIcons.svg',
 ];
 
 self.addEventListener('install', (event) => {

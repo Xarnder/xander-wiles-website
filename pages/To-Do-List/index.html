@@ -712,6 +712,27 @@
         </div>
     </div>
 
+    <!-- REASSIGN TAG MODAL -->
+    <div id="reassign-tag-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel reassign-tag-modal">
+            <div class="modal-header-row">
+                <h2><i class="ph ph-tag"></i> Reassign Tag</h2>
+                <button id="reassign-tag-close-btn" class="icon-btn-large" type="button" title="Cancel">&times;</button>
+            </div>
+            <div class="quick-tag-task-card reassign-tag-task-card">
+                <span class="quick-tag-current-label">Current tag</span>
+                <span id="reassign-tag-current-tag" class="quick-tag-current-tag">Misc</span>
+                <p id="reassign-tag-task-text" class="quick-tag-task-text"></p>
+            </div>
+            <h3 class="quick-tag-picker-heading">Assign to:</h3>
+            <div id="reassign-tag-options" class="tag-picker-options" role="radiogroup" aria-label="Reassign tag"></div>
+            <p class="quick-tag-helper">Tap a tag to reassign this task.</p>
+            <div class="modal-actions-bar" style="margin-top: 16px; justify-content: flex-end;">
+                <button id="reassign-tag-cancel-btn" class="btn secondary" type="button">Cancel</button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- BULK DELETE FOREVER MODAL -->
     <div id="bulk-delete-modal-overlay" class="modal-overlay hidden">

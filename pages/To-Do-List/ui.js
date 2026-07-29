@@ -2140,6 +2140,7 @@ export function createTaskElement(task, sourceListId, number, options = {}) {
             <button class="icon-btn copy-task-btn" title="Copy Text" onclick="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')" ontouchstart="event.stopPropagation(); window.copyTaskToClipboard('${task.id}')"><i class="ph ph-copy"></i></button>
             <button class="icon-btn edit-task-btn" title="Edit" onclick="event.stopPropagation(); window.openEditModal('${task.id}', '${sourceListId}')"><i class="ph ph-pencil-simple"></i></button>
             <button class="icon-btn move-task-btn" title="Move task" onclick="event.stopPropagation(); window.openQuickMoveForTask('${task.id}')" ontouchstart="event.preventDefault(); event.stopPropagation(); window.openQuickMoveForTask('${task.id}')"><i class="ph ph-arrow-bend-up-right"></i></button>
+            <button class="icon-btn reassign-tag-btn" title="Reassign tag" onclick="event.stopPropagation(); window.openReassignTagModal('${task.id}')" ontouchstart="event.preventDefault(); event.stopPropagation(); window.openReassignTagModal('${task.id}')"><i class="ph ph-tag"></i></button>
             ${aiBtnHtml}
             <button class="icon-btn archive-task-btn" title="Archive" onclick="event.stopPropagation(); window.archiveTask('${task.id}')"><i class="ph ph-archive"></i></button>
         `;
@@ -3055,6 +3056,73 @@ export function selectAllInList(listId) {
 export function openQuickMoveForTask(taskId) {
     if (!taskId || !state.appData.tasks[taskId]) return;
     openQuickMoveModal({ taskIds: [taskId] });
+}
+
+let reassignTagBusy = false;
+
+export function openReassignTagModal(taskId) {
+    const modal = document.getElementById('reassign-tag-modal-overlay');
+    const taskTextEl = document.getElementById('reassign-tag-task-text');
+    const currentTagEl = document.getElementById('reassign-tag-current-tag');
+    if (!modal || !taskId) return;
+
+    const task = state.appData.tasks[taskId];
+    if (!task) return;
+
+    const tagsById = getTagsById(state.appData.settings.tags);
+    const currentTagId = resolveTaskTagId(task);
+    const currentTagName = getTagNameForTask(task, tagsById) || 'Misc';
+
+    if (taskTextEl) taskTextEl.textContent = task.text || `(Untitled ${getTerm(true)})`;
+    if (currentTagEl) {
+        currentTagEl.textContent = currentTagName;
+        const tag = tagsById[currentTagId];
+        if (tag?.glowColor) {
+            currentTagEl.style.background = tag.glowColor;
+            currentTagEl.style.color = getContrastingInk(tag.glowColor);
+            currentTagEl.style.borderColor = tag.glowColor;
+        } else {
+            currentTagEl.style.background = '';
+            currentTagEl.style.color = '';
+            currentTagEl.style.borderColor = '';
+        }
+    }
+
+    reassignTagBusy = false;
+    modal.dataset.taskId = taskId;
+    modal.classList.remove('hidden');
+
+    renderTaskTagPicker('reassign-tag-options', currentTagId, async (tagId) => {
+        if (reassignTagBusy) return;
+        if (tagId === currentTagId) {
+            closeReassignTagModal();
+            return;
+        }
+
+        reassignTagBusy = true;
+        try {
+            await setTaskTag(taskId, tagId);
+            if (state.appData.tasks[taskId]) {
+                state.appData.tasks[taskId].tagId = tagId;
+            }
+            const nextName = tagsById[tagId]?.name || 'Misc';
+            closeReassignTagModal();
+            showToast(`Tagged as ${nextName}`, 'success');
+            if (state.tagFilterId) renderBoard();
+        } catch (e) {
+            handleSyncError(e);
+            reassignTagBusy = false;
+        }
+    });
+}
+
+export function closeReassignTagModal() {
+    const modal = document.getElementById('reassign-tag-modal-overlay');
+    if (modal) {
+        modal.classList.add('hidden');
+        delete modal.dataset.taskId;
+    }
+    reassignTagBusy = false;
 }
 
 export function openQuickMoveModal(options = {}) {

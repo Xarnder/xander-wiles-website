@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="blue">
 
 <head>
     <meta charset="UTF-8">
@@ -23,8 +23,23 @@
 
     <!-- Other essential links -->
     <link rel="manifest" href="site.webmanifest">
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#111115" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" id="meta-theme-color" content="#0b1020">
+
+    <script>
+        (function () {
+            try {
+                var key = 'md-editor:theme';
+                var theme = localStorage.getItem(key);
+                if (theme !== 'blue' && theme !== 'oled' && theme !== 'light') theme = 'blue';
+                document.documentElement.setAttribute('data-theme', theme);
+                var colors = { blue: '#0b1020', oled: '#000000', light: '#e8ecf4' };
+                var meta = document.getElementById('meta-theme-color');
+                if (meta) meta.setAttribute('content', colors[theme] || colors.blue);
+            } catch (e) {
+                document.documentElement.setAttribute('data-theme', 'blue');
+            }
+        })();
+    </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,8 +52,16 @@
 <body>
     <div id="app" class="app">
         <div class="context-strip">
-            <h1 id="view-title" class="view-title">Markdown Editor</h1>
-            <p id="status" class="status" role="status" aria-live="polite">Loading…</p>
+            <div class="context-strip-main">
+                <h1 id="view-title" class="view-title">Markdown Editor</h1>
+                <p id="status" class="status" role="status" aria-live="polite">Loading…</p>
+            </div>
+            <div id="finder-path-bar" class="finder-path-bar" hidden>
+                <button type="button" id="btn-up" class="finder-up-btn" hidden aria-label="Go up one folder" title="Up">
+                    <span class="finder-up-icon" aria-hidden="true"></span>
+                </button>
+                <nav id="folder-path" class="folder-path" aria-label="Current folder path"></nav>
+            </div>
         </div>
 
         <main id="main" class="main">
@@ -57,8 +80,7 @@
                     <input id="search-input" class="search-input" type="search" placeholder="Filter by name (optional)" enterkeyhint="search" autocomplete="off">
                     <button type="submit" class="btn btn-primary">Search</button>
                 </form>
-                <p id="folder-path" class="folder-path"></p>
-                <div id="file-list" class="file-list" role="list"></div>
+                <div id="file-list" class="file-list" data-md-mobile="bottom" data-md-desktop="top" role="list"></div>
                 <button type="button" id="btn-load-more" class="btn btn-ghost btn-block" hidden>Load more</button>
                 <p id="browse-empty" class="empty-state" hidden>No folders or markdown files here.</p>
             </section>
@@ -69,11 +91,27 @@
                     <p class="empty-panel-copy">Open a markdown file from Finder to start editing.</p>
                     <button type="button" id="btn-go-finder" class="btn btn-primary">Go to Finder</button>
                 </div>
+                <div id="editor-loading" class="editor-loading" hidden aria-live="polite" aria-busy="true">
+                    <div class="loading-spinner" aria-hidden="true"></div>
+                    <p class="loading-title">Opening file…</p>
+                    <p id="loading-file-name" class="loading-file-name"></p>
+                    <div class="loading-bar" role="progressbar" aria-label="Loading progress" aria-valuetext="Loading">
+                        <div class="loading-bar-fill"></div>
+                    </div>
+                </div>
                 <div id="editor-active" class="editor-active" hidden>
                     <div class="editor-meta">
                         <p id="file-name" class="file-name"></p>
                         <p id="dirty-label" class="dirty-label" hidden>Unsaved</p>
                     </div>
+                    <div id="view-mode-bar" class="view-mode-bar" role="radiogroup" aria-label="Editor display mode" hidden>
+                        <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="list" id="mode-list">List</button>
+                        <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="preview" id="mode-preview">Preview</button>
+                        <button type="button" class="view-mode-btn is-active" role="radio" aria-checked="true" data-view-mode="raw" id="mode-raw">Raw</button>
+                    </div>
+                    <p id="lists-status" class="lists-status" hidden></p>
+                    <div id="lists-root" class="lists-root" hidden></div>
+                    <article id="markdown-preview" class="md-preview" hidden aria-label="Markdown preview"></article>
                     <label class="sr-only" for="editor">Markdown content</label>
                     <textarea id="editor" class="editor" spellcheck="true" autocomplete="off" autocapitalize="off"></textarea>
                 </div>
@@ -87,11 +125,47 @@
                         <button type="button" id="btn-mode-search" class="btn btn-primary btn-large">Find .md</button>
                         <button type="button" id="btn-sign-out" class="btn btn-ghost btn-large">Sign out</button>
                     </div>
+                    <div class="settings-prefs">
+                        <h3 class="settings-subheading">Appearance</h3>
+                        <p class="settings-prefs-lede">Choose a color theme for the editor.</p>
+                        <label class="settings-pref">
+                            <span class="settings-pref-label">Theme</span>
+                            <select id="pref-theme" class="settings-select">
+                                <option value="blue">Blue</option>
+                                <option value="oled">Pure black (OLED)</option>
+                                <option value="light">Light</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="settings-prefs">
+                        <h3 class="settings-subheading">Finder layout</h3>
+                        <p class="settings-prefs-lede">Choose where the Markdown section appears relative to Folders.</p>
+                        <label class="settings-pref">
+                            <span class="settings-pref-label">Mobile</span>
+                            <select id="pref-md-order-mobile" class="settings-select">
+                                <option value="bottom">Markdown at bottom</option>
+                                <option value="top">Markdown at top</option>
+                            </select>
+                        </label>
+                        <label class="settings-pref">
+                            <span class="settings-pref-label">Desktop</span>
+                            <select id="pref-md-order-desktop" class="settings-select">
+                                <option value="top">Markdown at top</option>
+                                <option value="bottom">Markdown at bottom</option>
+                            </select>
+                        </label>
+                    </div>
                     <p class="browse-hint settings-hint">
                         Prefer notes in <strong>My Drive</strong> for the most reliable sync with your phone.
                         The <strong>Computers</strong> location can work for Drive for Desktop folders, but Google’s API support for that section is unofficial/incomplete — if a computer doesn’t appear, move the folder into My Drive on
                         <a href="https://drive.google.com" target="_blank" rel="noopener noreferrer">drive.google.com</a>.
                     </p>
+                    <ul class="settings-tips">
+                        <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
+                        <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
+                        <li>Use <strong>List</strong> / <strong>Preview</strong> for ranked <code>mdlist</code> blocks.</li>
+                        <li>Tap a folder path segment in Finder to jump up the tree.</li>
+                    </ul>
                 </div>
             </section>
         </main>
@@ -104,7 +178,6 @@
                         <button type="button" id="btn-mode-computers" class="btn btn-ghost btn-mode">Computers</button>
                     </div>
                     <div class="finder-actions">
-                        <button type="button" id="btn-up" class="btn btn-ghost" hidden>Up</button>
                         <div id="create-actions" class="create-actions" hidden>
                             <button type="button" id="btn-new-note" class="btn btn-primary">+ Note</button>
                             <button type="button" id="btn-new-folder" class="btn btn-ghost">+ Folder</button>
@@ -112,8 +185,9 @@
                     </div>
                 </div>
                 <div id="nav-actions-editor" class="nav-actions-panel nav-actions-editor" hidden>
+                    <button type="button" id="btn-insert-list" class="btn btn-ghost" hidden>+ List</button>
                     <button type="button" id="btn-rename-current" class="btn btn-ghost" hidden>Rename</button>
-                    <button type="button" id="btn-save" class="btn btn-primary" hidden>Save</button>
+                    <button type="button" id="btn-save" class="btn btn-primary btn-save" hidden>Save</button>
                 </div>
             </div>
             <div class="nav-bar-inner" role="tablist" aria-label="App modes">
@@ -130,6 +204,18 @@
         </nav>
     </div>
 
+    <dialog id="unsaved-dialog" class="dialog">
+        <form method="dialog" class="dialog-body">
+            <h2>Unsaved changes</h2>
+            <p>You haven’t saved this file yet. Save your changes before leaving Edit?</p>
+            <div class="dialog-actions dialog-actions--triple">
+                <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+                <button type="submit" value="discard" class="btn btn-ghost">Don’t save</button>
+                <button type="submit" value="save" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </dialog>
+
     <dialog id="draft-dialog" class="dialog">
         <form method="dialog" class="dialog-body">
             <h2>Restore local draft?</h2>
@@ -137,6 +223,50 @@
             <div class="dialog-actions">
                 <button type="submit" value="discard" class="btn btn-ghost">Discard draft</button>
                 <button type="submit" value="restore" class="btn btn-primary">Restore draft</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="item-actions-dialog" class="dialog">
+        <form method="dialog" class="dialog-body">
+            <h2 id="item-actions-title">Actions</h2>
+            <p id="item-actions-name" class="dialog-hint"></p>
+            <div class="item-actions-list">
+                <button type="submit" value="rename" class="btn btn-ghost btn-block item-action-btn">Rename</button>
+                <button type="submit" value="move" class="btn btn-ghost btn-block item-action-btn">Move</button>
+                <button type="submit" value="download" id="item-action-download" class="btn btn-ghost btn-block item-action-btn">Download</button>
+                <button type="submit" value="cancel" class="btn btn-ghost btn-block" formnovalidate>Cancel</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="move-dialog" class="dialog dialog--move">
+        <div class="dialog-body">
+            <h2 id="move-dialog-title">Move</h2>
+            <p id="move-dialog-hint" class="dialog-hint">Choose a destination folder, then tap Move here.</p>
+            <div class="move-path-bar">
+                <button type="button" id="move-btn-up" class="finder-up-btn" hidden aria-label="Go up one folder" title="Up">
+                    <span class="finder-up-icon" aria-hidden="true"></span>
+                </button>
+                <p id="move-folder-path" class="folder-path folder-path--plain"></p>
+            </div>
+            <div id="move-folder-list" class="move-folder-list" role="list"></div>
+            <p id="move-empty" class="empty-state" hidden>No subfolders here.</p>
+            <div class="dialog-actions">
+                <button type="button" id="move-btn-cancel" class="btn btn-ghost">Cancel</button>
+                <button type="button" id="move-btn-here" class="btn btn-primary">Move here</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="delete-list-dialog" class="dialog dialog--danger">
+        <form method="dialog" class="dialog-body">
+            <h2>Delete list?</h2>
+            <p>This permanently removes the ranked list block from the markdown file. Items inside it will be lost.</p>
+            <p id="delete-list-dialog-name" class="dialog-emphasis" hidden></p>
+            <div class="dialog-actions">
+                <button type="submit" value="cancel" class="btn btn-ghost">Cancel</button>
+                <button type="submit" value="delete" class="btn btn-danger">Delete list</button>
             </div>
         </form>
     </dialog>

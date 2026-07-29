@@ -10,10 +10,46 @@ Live path: `/pages/Markdown-Editor/`
 3. **Create** new markdown notes and folders in the current location
 4. **Rename** notes and folders from the list (or Rename while editing)
 5. Open a `.md` / `text/markdown` file
-6. Edit in a plain textarea
+6. Edit in a plain textarea (**Standard** mode), or use **Custom** / **Mixed** modes for structured `mdlist` blocks
 7. Save back to the **same** Drive file
 8. Shows loading / dirty / saving / saved / error status
 9. Keeps a local draft on this device if the tab is killed (restore prompt on reopen)
+
+## Custom lists (`mdlist`)
+
+You can embed ranked lists inside a `.md` file using a fenced JSON block:
+
+````markdown
+<!-- For LLMs / coding agents: You may add items to this custom ranked list. Do not change the fenced mdlist JSON format — keep version, id, title, and items (unique scores; optional tags). Look carefully at the existing structure before editing. -->
+```mdlist
+{
+  "version": 1,
+  "id": "ideas",
+  "title": "Ideas",
+  "items": [
+    { "id": "i1", "text": "Ship custom lists", "score": 8, "tags": ["product"] },
+    { "id": "i2", "text": "Add tags later", "score": 5, "tags": ["meta"] }
+  ]
+}
+```
+````
+
+Each valid list is saved with that HTML comment immediately above the fence so Cursor / Codex / other agents can extend the list without breaking the schema. The comment is hidden in Preview / Mixed rendering.
+
+| Mode | Behavior |
+|------|----------|
+| **Custom** | Interactive list UI only (add/delete items, scores, tags, drag reorder) |
+| **Mixed** | List UI for `mdlist` blocks + rendered markdown elsewhere (Edit per section) |
+| **Edit** | Full-file textarea (raw markdown, including fences) |
+| **Preview** | Full-file rendered markdown (headings, lists, links, code, tables, tasks, …) |
+
+Rules locked for v1:
+
+- Scores are finite numbers, **unique within a list**, shown in the UI
+- Display order is **by score (highest first)**; drag/up/down reassigns scores to match
+- Tags are a string array; optional tag filter is view-only (Save keeps all items)
+- Mode choice is remembered per file in `localStorage`
+- Invalid blocks: best-effort repair when safe; otherwise warn and edit in Standard
 
 ## Auth approach & Drive scope
 
@@ -84,9 +120,12 @@ Create new files, markdown preview, autosave, conflict merge UI, offline sync, h
 1. Sign in on phone Safari / home-screen app
 2. Browse to a folder with `.md` files
 3. Open → edit → Save → refresh → reopen → content matches
-4. Unsaved Back shows confirm
+4. Unsaved navigation / sign-out shows confirm
 5. Airplane mode Save shows error and keeps text
 6. Kill tab with dirty text → reopen file → restore draft prompt
+7. Paste an `mdlist` fence → Custom/Mixed → reorder, score, tags → Save → reopen
+8. Duplicate score is rejected; tag filter hides items but Save keeps them
+9. Invalid JSON fence warns; Standard still editable
 
 ## Mac + Google Drive for Desktop
 

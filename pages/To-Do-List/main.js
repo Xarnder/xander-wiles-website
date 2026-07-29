@@ -325,6 +325,8 @@ window.emptyOrphans = API.emptyOrphans;
 window.openEditModal = UI.openEditModal;
 window.summariseTask = UI.summariseTask;
 window.openQuickMoveForTask = UI.openQuickMoveForTask;
+window.openReassignTagModal = UI.openReassignTagModal;
+window.closeReassignTagModal = UI.closeReassignTagModal;
 window.triggerImageUpload = UI.triggerImageUpload;
 window.openImageLightbox = UI.openImageLightbox;
 window.openBulkAddModal = UI.openBulkAddModal;
@@ -1216,6 +1218,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('multi-move-quick-btn').onclick = UI.openQuickMoveModal;
     document.getElementById('quick-move-close-modal-btn').onclick = UI.closeQuickMoveModal;
     document.getElementById('quick-move-cancel-btn').onclick = UI.closeQuickMoveModal;
+
+    // Reassign Tag (single task)
+    document.getElementById('reassign-tag-close-btn')?.addEventListener('click', UI.closeReassignTagModal);
+    document.getElementById('reassign-tag-cancel-btn')?.addEventListener('click', UI.closeReassignTagModal);
 
     // Multi Tag (batch via tag picker in modal)
     document.getElementById('multi-tag-options')?.addEventListener('click', (e) => {

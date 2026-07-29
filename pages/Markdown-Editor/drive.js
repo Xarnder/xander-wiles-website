@@ -48,11 +48,11 @@ export function isMarkdownCandidate(file) {
     return name.endsWith('.md') || name.endsWith('.markdown');
 }
 
-/** Markdown first, then folders, then other — alphabetical within each group. */
+/** Folders first, then markdown, then other — alphabetical within each group. */
 export function sortDriveEntries(files) {
     const rank = (file) => {
-        if (isMarkdownCandidate(file)) return 0;
-        if (isFolder(file)) return 1;
+        if (isFolder(file)) return 0;
+        if (isMarkdownCandidate(file)) return 1;
         return 2;
     };
     return [...files].sort((a, b) => {
@@ -172,7 +172,7 @@ export async function listComputerRootFolders() {
 
 export async function getFileMetadata(fileId) {
     const params = new URLSearchParams({
-        fields: 'id,name,mimeType,modifiedTime,size',
+        fields: 'id,name,mimeType,modifiedTime,size,parents',
     });
     const response = await driveFetch(
         `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params}`
@@ -268,7 +268,7 @@ export async function renameDriveItem(fileId, newName, { isMarkdown = false } = 
     if (isMarkdown) name = ensureMdExtension(name);
 
     const response = await driveFetch(
-        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,modifiedTime,size`,
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,modifiedTime,size,parents`,
         {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -276,4 +276,42 @@ export async function renameDriveItem(fileId, newName, { isMarkdown = false } = 
         }
     );
     return response.json();
+}
+
+/**
+ * Move a file/folder by swapping Drive parents.
+ * @param {string} fileId
+ * @param {{ addParentId: string, removeParentId: string }} parents
+ */
+export async function moveDriveItem(fileId, { addParentId, removeParentId }) {
+    if (!addParentId) throw new Error('Destination folder is required');
+    if (!removeParentId) throw new Error('Current folder is required');
+    if (addParentId === removeParentId) {
+        throw new Error('Already in that folder');
+    }
+
+    const params = new URLSearchParams({
+        addParents: addParentId,
+        removeParents: removeParentId,
+        fields: 'id,name,mimeType,modifiedTime,size,parents',
+    });
+
+    const response = await driveFetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params}`,
+        {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        }
+    );
+    return response.json();
+}
+
+/** List only child folders (for the Move picker). */
+export async function listChildFolders(parentId = ROOT_FOLDER_ID) {
+    const result = await listFolder(parentId);
+    return {
+        folders: (result.files || []).filter((f) => isFolder(f)),
+        nextPageToken: result.nextPageToken || null,
+    };
 }

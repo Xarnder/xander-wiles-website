@@ -4,6 +4,17 @@ import {
     LARGE_FILE_BYTES,
     ROOT_FOLDER_ID,
     ROOT_FOLDER_NAME,
+    VIEW_MODE_KEY_PREFIX,
+    FINDER_MD_ORDER_MOBILE_KEY,
+    FINDER_MD_ORDER_DESKTOP_KEY,
+    FINDER_MD_ORDER_MOBILE_DEFAULT,
+    FINDER_MD_ORDER_DESKTOP_DEFAULT,
+    THEME_KEY,
+    THEME_DEFAULT,
+    THEME_VALUES,
+    THEME_META_COLORS,
+    RECENT_FILES_KEY,
+    RECENT_FILES_MAX,
 } from './config.js';
 import {
     clearToken,
@@ -16,8 +27,10 @@ import {
     getFileContent,
     getFileMetadata,
     isFolder,
+    listChildFolders,
     listComputerRootFolders,
     listFolder,
+    moveDriveItem,
     renameDriveItem,
     searchMarkdownFiles,
     updateFileContent,
@@ -34,25 +47,53 @@ import {
     setEditorText,
 } from './editor.js';
 import {
+    addItem,
+    appendEmptyList,
+    parseDocument,
+    serializeDocument,
+} from './lists.js';
+import { applyEditingLists, applyTagFilters, renderListsUi } from './lists-ui.js';
+import {
+    getTextareaFocusLine,
+    scrollTextareaToLine,
+} from './markdown.js';
+import {
+    applyEditorDisplayMode,
+    applyFinderLayoutPrefs,
+    applyTheme,
     bindUi,
     confirmLeaveUnsaved,
     getEls,
     promptForName,
+    promptItemActions,
+    promptMoveDestination,
+    promptUnsavedChanges,
     renderFileList,
     renderFolderPath,
+    scrollFinderToMarkdownSection,
     setBrowseEmptyMessage,
     setBrowseModeUi,
     setConfigError,
     setCreateActionsVisible,
+    setEditorLoading,
+    setListsStatus,
     setLoadMoreVisible,
     setStatus,
     setUpEnabled,
     showView,
     syncEditorChrome,
+    syncFinderLayoutControls,
     syncNavLayout,
+    syncThemeControl,
 } from './ui.js';
 
 const COMPUTERS_ROOT = { id: '__computers__', name: 'Computers' };
+const VIEW_MODES = new Set(['list', 'preview', 'raw']);
+const LEGACY_VIEW_MODES = {
+    custom: 'list',
+    mixed: 'preview',
+    standard: 'raw',
+};
 
 const state = {
     browseMode: 'folder', // 'folder' | 'search' | 'computers'
@@ -62,6 +103,12 @@ const state = {
     nextPageToken: null,
     loadingFolder: false,
     editor: createEditorState(),
+    viewMode: 'raw', // 'list' | 'preview' | 'raw'
+    documentModel: null,
+    tagFilters: {},
+    editingListIds: {},
+    placingList: false,
+    parseWarnings: [],
 };
 
 function currentFolder() {
@@ -81,6 +128,347 @@ function readRememberedFolder() {
         return localStorage.getItem(LAST_FOLDER_KEY);
     } catch {
         return null;
+    }
+}
+
+function viewModeKey(fileId) {
+    return `${VIEW_MODE_KEY_PREFIX}${fileId}`;
+}
+
+function readViewMode(fileId) {
+    if (!fileId) return null;
+    try {
+        const raw = localStorage.getItem(viewModeKey(fileId));
+        if (!raw) return null;
+        if (VIEW_MODES.has(raw)) return raw;
+        if (LEGACY_VIEW_MODES[raw]) return LEGACY_VIEW_MODES[raw];
+    } catch {
+        // ignore
+    }
+    return null;
+}
+
+function readFinderLayoutPrefs() {
+    const read = (key, fallback) => {
+        try {
+            const raw = localStorage.getItem(key);
+            if (raw === 'top' || raw === 'bottom') return raw;
+        } catch {
+            // ignore
+        }
+        return fallback;
+    };
+    return {
+        mobile: read(FINDER_MD_ORDER_MOBILE_KEY, FINDER_MD_ORDER_MOBILE_DEFAULT),
+        desktop: read(FINDER_MD_ORDER_DESKTOP_KEY, FINDER_MD_ORDER_DESKTOP_DEFAULT),
+    };
+}
+
+function writeFinderLayoutPrefs(prefs) {
+    try {
+        if (prefs.mobile === 'top' || prefs.mobile === 'bottom') {
+            localStorage.setItem(FINDER_MD_ORDER_MOBILE_KEY, prefs.mobile);
+        }
+        if (prefs.desktop === 'top' || prefs.desktop === 'bottom') {
+            localStorage.setItem(FINDER_MD_ORDER_DESKTOP_KEY, prefs.desktop);
+        }
+    } catch {
+        // ignore
+    }
+}
+
+function applySavedFinderLayout() {
+    const prefs = readFinderLayoutPrefs();
+    applyFinderLayoutPrefs(prefs);
+    syncFinderLayoutControls(prefs);
+}
+
+function readTheme() {
+    try {
+        const raw = localStorage.getItem(THEME_KEY);
+        if (THEME_VALUES.has(raw)) return raw;
+    } catch {
+        // ignore
+    }
+    return THEME_DEFAULT;
+}
+
+function writeTheme(theme) {
+    if (!THEME_VALUES.has(theme)) return;
+    try {
+        localStorage.setItem(THEME_KEY, theme);
+    } catch {
+        // ignore
+    }
+}
+
+function applySavedTheme() {
+    const theme = readTheme();
+    applyTheme(theme, { metaColor: THEME_META_COLORS[theme] || THEME_META_COLORS.blue });
+    syncThemeControl(theme);
+}
+
+function readRecentFiles() {
+    try {
+        const raw = localStorage.getItem(RECENT_FILES_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .filter((entry) => entry && typeof entry.id === 'string' && entry.id)
+            .map((entry) => ({
+                id: entry.id,
+                name: entry.name || 'Untitled.md',
+                mimeType: entry.mimeType || 'text/markdown',
+                openedAt: Number(entry.openedAt) || 0,
+            }))
+            .sort((a, b) => b.openedAt - a.openedAt)
+            .slice(0, RECENT_FILES_MAX);
+    } catch {
+        return [];
+    }
+}
+
+function writeRecentFiles(entries) {
+    try {
+        localStorage.setItem(RECENT_FILES_KEY, JSON.stringify(entries.slice(0, RECENT_FILES_MAX)));
+    } catch {
+        // ignore
+    }
+}
+
+function rememberRecentFile(file) {
+    if (!file?.id) return;
+    const next = [
+        {
+            id: file.id,
+            name: file.name || 'Untitled.md',
+            mimeType: file.mimeType || 'text/markdown',
+            openedAt: Date.now(),
+        },
+        ...readRecentFiles().filter((entry) => entry.id !== file.id),
+    ].slice(0, RECENT_FILES_MAX);
+    writeRecentFiles(next);
+}
+
+function updateRecentFileName(fileId, name) {
+    if (!fileId || !name) return;
+    const entries = readRecentFiles();
+    let changed = false;
+    for (const entry of entries) {
+        if (entry.id === fileId) {
+            entry.name = name;
+            changed = true;
+        }
+    }
+    if (changed) writeRecentFiles(entries);
+}
+
+function isMyDriveRoot() {
+    return (
+        state.browseMode === 'folder' &&
+        state.folderStack.length === 1 &&
+        currentFolder()?.id === ROOT_FOLDER_ID
+    );
+}
+
+function writeViewMode(fileId, mode) {
+    if (!fileId || !VIEW_MODES.has(mode)) return;
+    try {
+        localStorage.setItem(viewModeKey(fileId), mode);
+    } catch {
+        // ignore
+    }
+}
+
+function resolveInitialViewMode(fileId, hasValidList) {
+    const saved = readViewMode(fileId);
+    if (saved) return saved;
+    return hasValidList ? 'preview' : 'raw';
+}
+
+function refreshDocumentModelFromText(text) {
+    const parsed = parseDocument(text);
+    applyTagFilters(parsed, state.tagFilters);
+    applyEditingLists(parsed, state.editingListIds);
+    state.documentModel = parsed;
+    state.parseWarnings = parsed.warnings || [];
+    return parsed;
+}
+
+function showParseWarnings() {
+    const parts = [];
+    if (state.parseWarnings.length) {
+        parts.push(state.parseWarnings.slice(0, 3).join(' · '));
+    }
+    const doc = state.documentModel;
+    if (doc?.hasError) {
+        parts.push('Some mdlist blocks are invalid — use Raw to fix the markdown/JSON.');
+    }
+    setListsStatus(parts.join(' ') || '', parts.length ? 'warn' : '');
+}
+
+function flushCurrentEditorContent() {
+    const els = getEls();
+    if (!state.editor.fileId) return;
+    if (state.viewMode === 'raw') {
+        setEditorText(state.editor, els.editor.value);
+    } else if (state.viewMode === 'list' || state.viewMode === 'preview') {
+        if (state.documentModel) {
+            const serialized = serializeDocument(state.documentModel);
+            setEditorText(state.editor, serialized);
+            els.editor.value = serialized;
+        }
+    }
+}
+
+function renderStructuredEditor(extra = {}) {
+    const els = getEls();
+    if (!state.documentModel || !els.listsRoot) return;
+    renderListsUi(els.listsRoot, {
+        mode: state.viewMode === 'list' ? 'list' : 'preview',
+        doc: state.documentModel,
+        focusItemId: extra.focusItemId || null,
+        placingList: state.viewMode === 'preview' && state.placingList,
+        onStatus: (msg, kind) => setStatus(msg, kind),
+        onChange: (doc, opts = {}) => {
+            if (typeof opts.placingList === 'boolean') {
+                state.placingList = opts.placingList;
+            }
+            if (opts.tagFilters) state.tagFilters = opts.tagFilters;
+            if (opts.editingListIds) state.editingListIds = opts.editingListIds;
+            if (opts.focusItemId) {
+                for (const seg of doc.segments || []) {
+                    if (
+                        seg.type === 'mdlist' &&
+                        seg.list &&
+                        (seg.list.items || []).some((item) => item.id === opts.focusItemId)
+                    ) {
+                        state.editingListIds = { ...state.editingListIds, [seg.list.id]: true };
+                        seg._editing = true;
+                        break;
+                    }
+                }
+            }
+            applyTagFilters(doc, state.tagFilters);
+            applyEditingLists(doc, state.editingListIds);
+            state.documentModel = doc;
+            if (opts.soft) {
+                renderStructuredEditor({ focusItemId: opts.focusItemId });
+                return;
+            }
+            const serialized = serializeDocument(doc);
+            setEditorText(state.editor, serialized);
+            els.editor.value = serialized;
+            syncEditorChrome(state.editor);
+            if (opts.skipRender) {
+                return;
+            }
+            refreshDocumentModelFromText(serialized);
+            applyTagFilters(state.documentModel, state.tagFilters);
+            applyEditingLists(state.documentModel, state.editingListIds);
+            showParseWarnings();
+            renderStructuredEditor({ focusItemId: opts.focusItemId });
+        },
+    });
+    syncInsertListButton();
+}
+
+function syncInsertListButton() {
+    const els = getEls();
+    if (!els.btnInsertList) return;
+    const placing = state.viewMode === 'preview' && state.placingList;
+    els.btnInsertList.textContent = placing ? 'Cancel' : '+ List';
+    els.btnInsertList.setAttribute(
+        'aria-label',
+        placing ? 'Cancel placing list' : 'Add ranked list'
+    );
+    els.btnInsertList.classList.toggle('btn-insert-list--cancel', placing);
+}
+
+function applyViewMode(mode, { persist = true, reparseFromTextarea = false } = {}) {
+    if (!VIEW_MODES.has(mode)) mode = 'raw';
+    const els = getEls();
+    const previousMode = state.viewMode;
+
+    let focusLine = null;
+    if (previousMode === 'raw' && mode === 'preview' && els.editor) {
+        focusLine = getTextareaFocusLine(els.editor);
+    }
+
+    // Leaving editable surfaces: flush first
+    if (state.viewMode === 'raw' || reparseFromTextarea) {
+        setEditorText(state.editor, els.editor.value);
+    } else if (state.viewMode === 'list' || state.viewMode === 'preview') {
+        if (state.documentModel) {
+            const serialized = serializeDocument(state.documentModel);
+            setEditorText(state.editor, serialized);
+            els.editor.value = serialized;
+        }
+    }
+
+    if (mode === 'list' || mode === 'preview') {
+        refreshDocumentModelFromText(state.editor.editorContent);
+    }
+
+    state.viewMode = mode;
+    if (mode !== 'preview') state.placingList = false;
+    if (persist && state.editor.fileId) writeViewMode(state.editor.fileId, mode);
+
+    applyEditorDisplayMode(mode, { hasFile: Boolean(state.editor.fileId) });
+    if (mode === 'list' || mode === 'preview') showParseWarnings();
+    else setListsStatus('');
+
+    if (mode === 'raw') {
+        els.editor.value = state.editor.editorContent;
+        syncNavLayout();
+        syncInsertListButton();
+        if (focusLine != null) {
+            requestAnimationFrame(() => {
+                scrollTextareaToLine(els.editor, focusLine);
+            });
+        }
+        return;
+    }
+
+    renderStructuredEditor();
+    syncNavLayout();
+}
+
+function setupEditorForOpenFile() {
+    const els = getEls();
+    state.tagFilters = {};
+    state.editingListIds = {};
+    state.placingList = false;
+    refreshDocumentModelFromText(state.editor.editorContent);
+
+    const repaired = (state.documentModel.segments || []).some((s) => s.repaired);
+    if (repaired) {
+        const serialized = serializeDocument(state.documentModel);
+        setEditorText(state.editor, serialized);
+        els.editor.value = serialized;
+        refreshDocumentModelFromText(serialized);
+    }
+
+    state.viewMode = resolveInitialViewMode(
+        state.editor.fileId,
+        Boolean(state.documentModel?.hasValidList)
+    );
+
+    applyEditorDisplayMode(state.viewMode, { hasFile: true });
+    if (state.viewMode === 'list' || state.viewMode === 'preview') showParseWarnings();
+    else setListsStatus('');
+    if (state.viewMode === 'raw') {
+        els.editor.value = state.editor.editorContent;
+        els.editor.focus();
+    } else {
+        renderStructuredEditor();
+    }
+    syncEditorChrome(state.editor);
+    if (repaired) {
+        setStatus('Repaired list data — Save to persist fixes.', 'warn');
+    } else if (state.documentModel?.hasValidList && !readViewMode(state.editor.fileId)) {
+        setStatus('Opened in Preview mode (lists detected).', 'ok');
     }
 }
 
@@ -107,11 +495,19 @@ function updateCreateActions() {
     setCreateActionsVisible(canCreateInCurrentLocation());
 }
 
-function renderCurrentFileList() {
+function renderCurrentFileList({ scrollToMarkdown = false } = {}) {
     renderFileList(state.files, {
         onOpen: handleOpenEntry,
-        onRename: handleRenameEntry,
+        onMenu: handleItemMenu,
+        recent: isMyDriveRoot() ? readRecentFiles() : [],
+        scrollToMarkdown,
     });
+}
+
+async function jumpToFolderCrumb(index) {
+    if (index < 0 || index >= state.folderStack.length - 1) return;
+    state.folderStack = state.folderStack.slice(0, index + 1);
+    await refreshBrowse(true);
 }
 
 async function loadBrowse(reset = true) {
@@ -120,7 +516,7 @@ async function loadBrowse(reset = true) {
     setBrowseModeUi('folder');
     setStatus('Loading folder…');
     setUpEnabled(state.folderStack.length > 1);
-    renderFolderPath(state.folderStack, 'folder');
+    renderFolderPath(state.folderStack, 'folder', '', jumpToFolderCrumb);
     rememberFolder(folder.id);
     updateCreateActions();
     setBrowseEmptyMessage(
@@ -136,7 +532,7 @@ async function loadBrowse(reset = true) {
             state.files = state.files.concat(result.files);
         }
         state.nextPageToken = result.nextPageToken;
-        renderCurrentFileList();
+        renderCurrentFileList({ scrollToMarkdown: reset });
         setLoadMoreVisible(Boolean(state.nextPageToken));
         setStatus(state.files.length ? '' : 'This folder is empty — create a note or folder.');
     } catch (err) {
@@ -166,7 +562,7 @@ async function loadSearch(reset = true) {
             state.files = state.files.concat(result.files);
         }
         state.nextPageToken = result.nextPageToken;
-        renderCurrentFileList();
+        renderCurrentFileList({ scrollToMarkdown: reset });
         setLoadMoreVisible(Boolean(state.nextPageToken));
         setStatus(
             state.files.length
@@ -194,12 +590,12 @@ async function loadComputers(reset = true) {
     try {
         if (atComputersRoot) {
             setUpEnabled(false);
-            renderFolderPath(state.folderStack, 'computers');
+            renderFolderPath(state.folderStack, 'computers', '', jumpToFolderCrumb);
             setStatus('Looking for Computers folders…');
             const computers = await listComputerRootFolders();
             state.files = computers;
             state.nextPageToken = null;
-            renderCurrentFileList();
+            renderCurrentFileList({ scrollToMarkdown: true });
             setLoadMoreVisible(false);
             setStatus(
                 computers.length
@@ -211,7 +607,7 @@ async function loadComputers(reset = true) {
 
         const folder = currentFolder();
         setUpEnabled(true);
-        renderFolderPath(state.folderStack, 'computers');
+        renderFolderPath(state.folderStack, 'computers', '', jumpToFolderCrumb);
         setStatus('Loading folder…');
         const pageToken = reset ? null : state.nextPageToken;
         const result = await listFolder(folder.id, pageToken);
@@ -221,7 +617,7 @@ async function loadComputers(reset = true) {
             state.files = state.files.concat(result.files);
         }
         state.nextPageToken = result.nextPageToken;
-        renderCurrentFileList();
+        renderCurrentFileList({ scrollToMarkdown: reset });
         setLoadMoreVisible(Boolean(state.nextPageToken));
         setStatus(state.files.length ? '' : 'No folders or markdown files here.');
     } catch (err) {
@@ -287,6 +683,110 @@ async function handleOpenEntry(file) {
     await openMarkdownFile(file);
 }
 
+async function handleItemMenu(file) {
+    const action = await promptItemActions(file);
+    if (action === 'rename') {
+        await handleRenameEntry(file);
+        return;
+    }
+    if (action === 'move') {
+        await handleMoveEntry(file);
+        return;
+    }
+    if (action === 'download') {
+        await handleDownloadEntry(file);
+    }
+}
+
+async function resolveCurrentParentId(file) {
+    if (Array.isArray(file.parents) && file.parents[0]) return file.parents[0];
+    if (
+        state.browseMode === 'folder' ||
+        (state.browseMode === 'computers' &&
+            !(state.folderStack.length === 1 && state.folderStack[0].id === COMPUTERS_ROOT.id))
+    ) {
+        const folder = currentFolder();
+        if (folder?.id && folder.id !== COMPUTERS_ROOT.id) return folder.id;
+    }
+    const meta = await getFileMetadata(file.id);
+    if (Array.isArray(meta.parents) && meta.parents[0]) return meta.parents[0];
+    throw new Error('Could not determine the current folder for this item');
+}
+
+async function handleMoveEntry(file) {
+    setStatus('Preparing move…');
+    let currentParentId;
+    try {
+        currentParentId = await resolveCurrentParentId(file);
+    } catch (err) {
+        setStatus(err.message || 'Could not prepare move', 'error');
+        return;
+    }
+
+    const destination = await promptMoveDestination({
+        item: file,
+        currentParentId,
+        listFolders: async (parentId) => {
+            const result = await listChildFolders(parentId);
+            return result.folders || [];
+        },
+    });
+    if (!destination) {
+        setStatus('');
+        return;
+    }
+    if (destination.folderId === currentParentId) {
+        setStatus('Already in that folder', 'warn');
+        return;
+    }
+    if (isFolder(file) && destination.folderId === file.id) {
+        setStatus('Cannot move a folder into itself', 'error');
+        return;
+    }
+
+    setStatus('Moving…');
+    try {
+        await moveDriveItem(file.id, {
+            addParentId: destination.folderId,
+            removeParentId: currentParentId,
+        });
+        state.files = state.files.filter((f) => f.id !== file.id);
+        renderCurrentFileList();
+        // If we moved a folder that is in the path stack, truncate path to before it
+        const pathIndex = state.folderStack.findIndex((frame) => frame.id === file.id);
+        if (pathIndex >= 0) {
+            state.folderStack = state.folderStack.slice(0, pathIndex);
+            if (!state.folderStack.length) {
+                state.folderStack = [{ id: ROOT_FOLDER_ID, name: ROOT_FOLDER_NAME }];
+            }
+            await refreshBrowse(true);
+        }
+        setStatus(`Moved to ${destination.folderName}`, 'ok');
+    } catch (err) {
+        setStatus(err.message || 'Move failed', 'error');
+    }
+}
+
+async function handleDownloadEntry(file) {
+    if (isFolder(file)) return;
+    setStatus('Downloading…');
+    try {
+        const text = await getFileContent(file.id);
+        const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = file.name || 'note.md';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        setStatus(`Downloaded ${file.name || 'file'}`, 'ok');
+    } catch (err) {
+        setStatus(err.message || 'Download failed', 'error');
+    }
+}
+
 async function handleRenameEntry(file) {
     const folder = isFolder(file);
     const name = await promptForName({
@@ -304,11 +804,14 @@ async function handleRenameEntry(file) {
         const idx = state.files.findIndex((f) => f.id === file.id);
         if (idx >= 0) {
             state.files[idx] = { ...state.files[idx], name: updated.name };
-            renderCurrentFileList();
         }
         if (state.editor.fileId === file.id) {
             state.editor.fileName = updated.name;
             syncEditorChrome(state.editor);
+        }
+        if (!folder) updateRecentFileName(file.id, updated.name);
+        if (idx >= 0 || (!folder && isMyDriveRoot())) {
+            renderCurrentFileList();
         }
         // Keep folder stack labels in sync if renaming current path folder
         for (const frame of state.folderStack) {
@@ -318,7 +821,8 @@ async function handleRenameEntry(file) {
             renderFolderPath(
                 state.folderStack,
                 state.browseMode === 'computers' ? 'computers' : 'folder',
-                state.searchQuery
+                state.searchQuery,
+                jumpToFolderCrumb
             );
         }
         setStatus(`Renamed to ${updated.name}`, 'ok');
@@ -379,19 +883,73 @@ async function handleRenameCurrentFile() {
     });
 }
 
+function insertRankedList() {
+    if (!state.editor.fileId) return;
+
+    if (state.viewMode === 'preview' && state.placingList) {
+        state.placingList = false;
+        renderStructuredEditor();
+        setStatus('Cancelled list placement');
+        return;
+    }
+
+    flushCurrentEditorContent();
+    refreshDocumentModelFromText(state.editor.editorContent);
+
+    if (state.viewMode === 'preview') {
+        state.placingList = true;
+        applyEditingLists(state.documentModel, state.editingListIds);
+        applyTagFilters(state.documentModel, state.tagFilters);
+        renderStructuredEditor();
+        setStatus('Choose where to place the new list', 'ok');
+        return;
+    }
+
+    const list = appendEmptyList(state.documentModel);
+    const item = addItem(list, '');
+    state.editingListIds = { ...state.editingListIds, [list.id]: true };
+    state.placingList = false;
+    applyEditingLists(state.documentModel, state.editingListIds);
+    const serialized = serializeDocument(state.documentModel);
+    setEditorText(state.editor, serialized);
+    const els = getEls();
+    els.editor.value = serialized;
+    applyViewMode('list', { persist: true });
+    renderStructuredEditor({ focusItemId: item.id });
+    syncEditorChrome(state.editor);
+    setStatus('Added ranked list', 'ok');
+}
+
 function hasOpenFile() {
     return Boolean(state.editor.fileId);
 }
 
-function showAppView(name) {
-    showView(name, { hasOpenFile: hasOpenFile() });
+function showAppView(name, extra = {}) {
+    showView(name, { hasOpenFile: hasOpenFile(), ...extra });
+    if (name === 'editor' && hasOpenFile() && !extra.loading) {
+        applyEditorDisplayMode(state.viewMode, { hasFile: true });
+        if (state.viewMode === 'list' || state.viewMode === 'preview') {
+            renderStructuredEditor();
+        }
+        syncNavLayout();
+    }
 }
 
 async function openMarkdownFile(file) {
+    flushCurrentEditorContent();
+    if (
+        state.editor.fileId &&
+        state.editor.fileId !== file.id &&
+        state.editor.dirty &&
+        !confirmLeaveUnsaved()
+    ) {
+        return;
+    }
+
     const els = getEls();
-    showAppView('editor');
     state.editor.status = 'loading';
-    syncEditorChrome(state.editor);
+    showAppView('editor', { loading: true });
+    setEditorLoading(true, file.name || 'Markdown file');
     setStatus('Opening file…');
 
     try {
@@ -402,6 +960,8 @@ async function openMarkdownFile(file) {
                 `This file is about ${Math.round(size / 1024 / 1024)} MB. Opening large files may be slow on iPhone. Continue?`
             );
             if (!ok) {
+                setEditorLoading(false);
+                state.editor.status = state.editor.dirty ? 'dirty' : 'idle';
                 showAppView('finder');
                 setStatus('');
                 return;
@@ -415,6 +975,11 @@ async function openMarkdownFile(file) {
             mimeType: meta.mimeType,
             content,
         });
+        rememberRecentFile({
+            id: meta.id,
+            name: meta.name,
+            mimeType: meta.mimeType,
+        });
 
         const draft = readDraft(meta.id);
         if (draft && draft.text !== content) {
@@ -426,20 +991,32 @@ async function openMarkdownFile(file) {
             }
         }
 
-        els.editor.value = state.editor.editorContent;
+        setEditorLoading(false);
         showAppView('editor');
         syncEditorChrome(state.editor);
-        els.editor.focus();
+        setupEditorForOpenFile();
     } catch (err) {
+        setEditorLoading(false);
         markError(state.editor, err.message || 'Failed to open file');
+        showAppView('editor');
         syncEditorChrome(state.editor);
+        if (hasOpenFile()) {
+            applyEditorDisplayMode(state.viewMode, { hasFile: true });
+        }
         setStatus(state.editor.errorMessage, 'error');
     }
 }
 
 async function saveCurrentFile() {
     const ed = state.editor;
-    if (!ed.fileId || !ed.dirty) return;
+    const els = getEls();
+    if (!ed.fileId) return;
+
+    flushCurrentEditorContent();
+    if (!ed.dirty) {
+        setStatus('Already saved', 'ok');
+        return;
+    }
 
     markSaving(ed);
     syncEditorChrome(ed);
@@ -448,6 +1025,10 @@ async function saveCurrentFile() {
         await updateFileContent(ed.fileId, ed.editorContent, ed.mimeType || 'text/markdown');
         markSaved(ed);
         syncEditorChrome(ed);
+        refreshDocumentModelFromText(ed.editorContent);
+        applyTagFilters(state.documentModel, state.tagFilters);
+        applyEditingLists(state.documentModel, state.editingListIds);
+        if (state.viewMode !== 'raw') renderStructuredEditor();
     } catch (err) {
         markError(ed, err.message || 'Save failed');
         ed.dirty = ed.editorContent !== ed.originalContent;
@@ -464,8 +1045,23 @@ async function saveCurrentFile() {
 async function switchAppMode(mode) {
     if (mode === 'editor') {
         showAppView('editor');
-        if (hasOpenFile()) syncEditorChrome(state.editor);
+        if (hasOpenFile()) {
+            syncEditorChrome(state.editor);
+            applyViewMode(state.viewMode, { persist: false });
+        }
         return;
+    }
+
+    const els = getEls();
+    const leavingEditor = els.viewEditor && !els.viewEditor.hidden;
+    if (leavingEditor && hasOpenFile() && state.editor.dirty) {
+        flushCurrentEditorContent();
+        const choice = await promptUnsavedChanges(els.unsavedDialog);
+        if (choice === 'cancel') return;
+        if (choice === 'save') {
+            await saveCurrentFile();
+            if (state.editor.dirty) return;
+        }
     }
 
     if (mode === 'finder') {
@@ -498,6 +1094,12 @@ function signOut() {
     state.browseMode = 'folder';
     state.searchQuery = '';
     state.folderStack = [{ id: ROOT_FOLDER_ID, name: ROOT_FOLDER_NAME }];
+    state.documentModel = null;
+    state.tagFilters = {};
+    state.editingListIds = {};
+    state.placingList = false;
+    state.viewMode = 'raw';
+    state.parseWarnings = [];
     showView('login');
     setStatus('Signed out');
 }
@@ -583,6 +1185,49 @@ function wireEvents() {
     els.btnRenameCurrent.addEventListener('click', () => {
         handleRenameCurrentFile();
     });
+    if (els.btnInsertList) {
+        els.btnInsertList.addEventListener('click', () => {
+            insertRankedList();
+        });
+    }
+
+    const prefs = readFinderLayoutPrefs();
+    applyFinderLayoutPrefs(prefs);
+    syncFinderLayoutControls(prefs);
+    applySavedTheme();
+    if (els.prefTheme) {
+        els.prefTheme.addEventListener('change', () => {
+            const theme = THEME_VALUES.has(els.prefTheme.value) ? els.prefTheme.value : THEME_DEFAULT;
+            writeTheme(theme);
+            applyTheme(theme, { metaColor: THEME_META_COLORS[theme] || THEME_META_COLORS.blue });
+            setStatus('Theme saved', 'ok');
+        });
+    }
+    if (els.prefMdOrderMobile) {
+        els.prefMdOrderMobile.addEventListener('change', () => {
+            const next = {
+                ...readFinderLayoutPrefs(),
+                mobile: els.prefMdOrderMobile.value === 'top' ? 'top' : 'bottom',
+            };
+            writeFinderLayoutPrefs(next);
+            applyFinderLayoutPrefs(next);
+            scrollFinderToMarkdownSection();
+            setStatus('Mobile Finder layout saved', 'ok');
+        });
+    }
+    if (els.prefMdOrderDesktop) {
+        els.prefMdOrderDesktop.addEventListener('change', () => {
+            const next = {
+                ...readFinderLayoutPrefs(),
+                desktop: els.prefMdOrderDesktop.value === 'top' ? 'top' : 'bottom',
+            };
+            writeFinderLayoutPrefs(next);
+            applyFinderLayoutPrefs(next);
+            scrollFinderToMarkdownSection();
+            setStatus('Desktop Finder layout saved', 'ok');
+        });
+    }
+
     els.searchForm.addEventListener('submit', (event) => {
         event.preventDefault();
         state.browseMode = 'search';
@@ -603,6 +1248,27 @@ function wireEvents() {
         syncEditorChrome(state.editor);
     });
 
+    const modeButtons = [els.modeList, els.modePreview, els.modeRaw];
+    for (const btn of modeButtons) {
+        if (!btn) continue;
+        btn.addEventListener('click', () => {
+            if (!hasOpenFile()) return;
+            const next = btn.dataset.viewMode;
+            applyViewMode(next, {
+                persist: true,
+                reparseFromTextarea: state.viewMode === 'raw',
+            });
+        });
+    }
+
+    window.addEventListener('keydown', (event) => {
+        const key = event.key?.toLowerCase();
+        if ((event.metaKey || event.ctrlKey) && key === 's') {
+            event.preventDefault();
+            if (hasOpenFile()) saveCurrentFile();
+        }
+    });
+
     window.addEventListener('beforeunload', (event) => {
         if (state.editor.dirty) {
             event.preventDefault();
@@ -612,7 +1278,11 @@ function wireEvents() {
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden' && state.editor.dirty && state.editor.fileId) {
-            setEditorText(state.editor, els.editor.value);
+            if (state.viewMode === 'raw') {
+                setEditorText(state.editor, els.editor.value);
+            } else if (state.documentModel) {
+                setEditorText(state.editor, serializeDocument(state.documentModel));
+            }
         }
     });
 
@@ -624,6 +1294,8 @@ function wireEvents() {
 async function boot() {
     bindUi();
     wireEvents();
+    applySavedFinderLayout();
+    applySavedTheme();
     registerServiceWorker();
 
     if (!isConfigured()) {

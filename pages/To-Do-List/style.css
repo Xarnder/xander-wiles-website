@@ -713,7 +713,8 @@
 [data-theme="fancy"] .unarchive-task-btn,
 [data-theme="fancy"] .delete-task-btn,
 [data-theme="fancy"] .copy-task-btn,
-[data-theme="fancy"] .move-task-btn {
+[data-theme="fancy"] .move-task-btn,
+[data-theme="fancy"] .reassign-tag-btn {
     background: oklch(1 0 0 / 0.08);
     border: 1px solid oklch(1 0 0 / 0.1);
     border-radius: 8px;
@@ -2071,7 +2072,8 @@ body {
 .unarchive-task-btn,
 .delete-task-btn,
 .copy-task-btn,
-.move-task-btn {
+.move-task-btn,
+.reassign-tag-btn {
     margin-left: 4px;
 }
 
@@ -2330,6 +2332,29 @@ body {
 
 .move-task-btn:hover {
     background: oklch(0.340 0 0 / 0.72) !important;
+}
+
+.reassign-tag-btn {
+    background: oklch(0.200 0 0 / 0.72) !important;
+    color: oklch(1 0 0) !important;
+}
+
+.reassign-tag-btn:hover {
+    background: oklch(0.330 0 0 / 0.72) !important;
+}
+
+.reassign-tag-modal {
+    max-width: 440px;
+}
+
+.reassign-tag-modal .modal-header-row h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.reassign-tag-task-card {
+    margin-bottom: 14px;
 }
 
 
