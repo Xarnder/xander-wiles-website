@@ -157,11 +157,222 @@ function withSourceLine(html, lineNum) {
     return html.replace(/^<([a-zA-Z][\w-]*)/, `<$1 data-md-line="${lineNum}"`);
 }
 
+const PLAIN_LIST_ITEM_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+
+function plainListId(prefix = 'pli') {
+    try {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
+        }
+    } catch {
+        // fall through
+    }
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isOrderedListMarker(marker) {
+    return /^\d+[.)]$/.test(marker);
+}
+
+/**
+ * Parse one plain markdown list starting at `start` (skips fenced code via caller).
+ * @param {string[]} lines
+ * @param {number} start
+ */
+function parsePlainListAt(lines, start) {
+    const first = lines[start].match(PLAIN_LIST_ITEM_RE);
+    if (!first || isHr(lines[start])) return null;
+
+    const ordered = isOrderedListMarker(first[2]);
+    /** @type {Array<{ id: string, text: string, checked: boolean | null, marker: string, indent: string }>} */
+    const items = [];
+    let i = start;
+    let hasTask = false;
+
+    while (i < lines.length) {
+        const m = lines[i].match(PLAIN_LIST_ITEM_RE);
+        if (!m || isHr(lines[i])) {
+            if (items.length && /^\s{2,}\S/.test(lines[i]) && lines[i].trim()) {
+                items[items.length - 1].text += `\n${lines[i].trim()}`;
+                i += 1;
+                continue;
+            }
+            break;
+        }
+        if (isOrderedListMarker(m[2]) !== ordered) break;
+
+        const rest = m[3];
+        const task = rest.match(/^\[([ xX])\]\s+(.*)$/);
+        if (task) {
+            hasTask = true;
+            items.push({
+                id: plainListId(),
+                text: task[2],
+                checked: task[1].toLowerCase() === 'x',
+                marker: m[2],
+                indent: m[1],
+            });
+        } else {
+            items.push({
+                id: plainListId(),
+                text: rest,
+                checked: null,
+                marker: m[2],
+                indent: m[1],
+            });
+        }
+        i += 1;
+    }
+
+    if (!items.length) return null;
+    return {
+        type: 'plainlist',
+        ordered,
+        task: hasTask,
+        items,
+        startLine: start + 1,
+        endLine: i,
+        start: start,
+        end: i,
+    };
+}
+
+/**
+ * Split markdown into prose chunks and detectable plain lists (ul/ol/task).
+ * Fenced code is kept inside prose so list-looking lines in code are ignored.
+ * @param {string} markdown
+ * @returns {Array<object>}
+ */
+export function splitMarkdownBlocks(markdown) {
+    const src = String(markdown ?? '').replace(/\r\n?/g, '\n');
+    const lines = src.split('\n');
+    /** @type {Array<object>} */
+    const blocks = [];
+    let i = 0;
+    let fence = null;
+    let proseStart = 0;
+
+    const flushProse = (end) => {
+        if (end <= proseStart) return;
+        blocks.push({
+            type: 'markdown',
+            text: lines.slice(proseStart, end).join('\n'),
+            startLine: proseStart + 1,
+            start: proseStart,
+            end,
+        });
+        proseStart = end;
+    };
+
+    while (i < lines.length) {
+        const line = lines[i];
+        const fenceOpen = line.match(/^(`{3,}|~{3,})(.*)$/);
+
+        if (fence) {
+            if (line.startsWith(fence.char) && line.trim().length >= fence.len) {
+                fence = null;
+            }
+            i += 1;
+            continue;
+        }
+
+        if (fenceOpen) {
+            fence = { char: fenceOpen[1][0], len: fenceOpen[1].length };
+            i += 1;
+            continue;
+        }
+
+        const list = parsePlainListAt(lines, i);
+        if (list) {
+            flushProse(i);
+            blocks.push(list);
+            i = list.end;
+            proseStart = i;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    flushProse(lines.length);
+    return blocks;
+}
+
+/**
+ * Serialize a plain list block back to markdown lines.
+ * @param {object} block
+ * @returns {string}
+ */
+export function serializePlainList(block) {
+    const items = Array.isArray(block?.items) ? block.items : [];
+    const ordered = Boolean(block?.ordered);
+    const lines = items.map((item, index) => {
+        const indent = typeof item.indent === 'string' ? item.indent : '';
+        let marker;
+        if (ordered) {
+            const close = String(item.marker || '1.').endsWith(')') ? ')' : '.';
+            marker = `${index + 1}${close}`;
+        } else {
+            marker = item.marker && /^[-*+]$/.test(item.marker) ? item.marker : '-';
+        }
+        const textLines = String(item.text ?? '').split('\n');
+        const first = textLines[0] ?? '';
+        let head;
+        if (item.checked === true || item.checked === false) {
+            const box = item.checked ? '[x]' : '[ ]';
+            head = `${indent}${marker} ${box} ${first}`;
+        } else {
+            head = `${indent}${marker} ${first}`;
+        }
+        const cont = textLines
+            .slice(1)
+            .map((part) => `${indent}  ${part}`)
+            .join('\n');
+        return cont ? `${head}\n${cont}` : head;
+    });
+    return lines.join('\n');
+}
+
+/**
+ * Rebuild markdown source from split blocks (lossless for prose chunks).
+ * @param {Array<object>} blocks
+ * @returns {string}
+ */
+export function joinMarkdownBlocks(blocks) {
+    const parts = [];
+    for (const block of blocks || []) {
+        if (block.type === 'plainlist') {
+            parts.push(serializePlainList(block));
+        } else {
+            parts.push(block.text ?? '');
+        }
+    }
+    return parts.join('\n');
+}
+
+/**
+ * Reorder items in a plain list by moving one index to another.
+ * @param {Array<object>} items
+ * @param {number} fromIndex
+ * @param {number} toIndex
+ */
+export function movePlainListItem(items, fromIndex, toIndex) {
+    const next = [...(items || [])];
+    if (fromIndex < 0 || fromIndex >= next.length) return next;
+    if (toIndex < 0 || toIndex >= next.length) return next;
+    if (fromIndex === toIndex) return next;
+    const [item] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, item);
+    return next;
+}
+
 /**
  * @param {string} markdown
+ * @param {{ lineOffset?: number }} [options]
  * @returns {string} sanitized HTML
  */
-export function renderMarkdown(markdown) {
+export function renderMarkdown(markdown, options = {}) {
+    const lineOffset = Number(options.lineOffset) || 0;
     // Drop HTML comments (including mdlist agent notes) from preview surfaces.
     const src = String(markdown ?? '')
         .replace(/\r\n?/g, '\n')
@@ -193,7 +404,7 @@ export function renderMarkdown(markdown) {
     while (i < lines.length) {
         const line = lines[i];
         const trimmed = line.trim();
-        const lineNo = i + 1;
+        const lineNo = i + 1 + lineOffset;
 
         // Fenced code
         const fence = line.match(/^(`{3,}|~{3,})(.*)$/);

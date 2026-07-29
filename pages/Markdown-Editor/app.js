@@ -56,7 +56,7 @@ import {
     serializeDocument,
 } from './lists.js';
 import { parseXanderListJson, xanderListToMdlist } from './list-import.js';
-import { applyEditingLists, applyTagFilters, readPreviewTocSticky, renderListsUi, writePreviewTocSticky } from './lists-ui.js';
+import { applyEditingLists, applyEditingPlainLists, applyTagFilters, readPreviewTocSticky, renderListsUi, writePreviewTocSticky } from './lists-ui.js';
 import {
     getTextareaViewportOffset,
     getVisiblePreviewBlock,
@@ -117,6 +117,7 @@ const state = {
     documentModel: null,
     tagFilters: {},
     editingListIds: {},
+    editingPlainLists: {},
     placingList: false,
     /** @type {object | null} */
     pendingImportList: null,
@@ -307,6 +308,7 @@ function refreshDocumentModelFromText(text) {
     const parsed = parseDocument(text);
     applyTagFilters(parsed, state.tagFilters);
     applyEditingLists(parsed, state.editingListIds);
+    applyEditingPlainLists(parsed, state.editingPlainLists);
     state.documentModel = parsed;
     state.parseWarnings = parsed.warnings || [];
     return parsed;
@@ -345,6 +347,7 @@ function renderStructuredEditor(extra = {}) {
         mode: state.viewMode === 'list' ? 'list' : 'preview',
         doc: state.documentModel,
         focusItemId: extra.focusItemId || null,
+        focusPlainItemId: extra.focusPlainItemId || null,
         placingList: state.viewMode === 'preview' && state.placingList,
         pendingImportList: state.viewMode === 'preview' && state.placingList ? state.pendingImportList : null,
         clickEdit: state.viewMode === 'preview' && state.clickEdit,
@@ -364,6 +367,7 @@ function renderStructuredEditor(extra = {}) {
             }
             if (opts.tagFilters) state.tagFilters = opts.tagFilters;
             if (opts.editingListIds) state.editingListIds = opts.editingListIds;
+            if (opts.editingPlainLists) state.editingPlainLists = opts.editingPlainLists;
             if (opts.focusItemId) {
                 for (const seg of doc.segments || []) {
                     if (
@@ -379,9 +383,19 @@ function renderStructuredEditor(extra = {}) {
             }
             applyTagFilters(doc, state.tagFilters);
             applyEditingLists(doc, state.editingListIds);
+            applyEditingPlainLists(doc, state.editingPlainLists);
             state.documentModel = doc;
             if (opts.soft) {
-                renderStructuredEditor({ focusItemId: opts.focusItemId });
+                if (opts.persist) {
+                    const serialized = serializeDocument(doc);
+                    setEditorText(state.editor, serialized);
+                    els.editor.value = serialized;
+                    syncEditorChrome(state.editor);
+                }
+                renderStructuredEditor({
+                    focusItemId: opts.focusItemId,
+                    focusPlainItemId: opts.focusPlainItemId,
+                });
                 return;
             }
             const serialized = serializeDocument(doc);
@@ -394,8 +408,12 @@ function renderStructuredEditor(extra = {}) {
             refreshDocumentModelFromText(serialized);
             applyTagFilters(state.documentModel, state.tagFilters);
             applyEditingLists(state.documentModel, state.editingListIds);
+            applyEditingPlainLists(state.documentModel, state.editingPlainLists);
             showParseWarnings();
-            renderStructuredEditor({ focusItemId: opts.focusItemId });
+            renderStructuredEditor({
+                focusItemId: opts.focusItemId,
+                focusPlainItemId: opts.focusPlainItemId,
+            });
         },
     });
     syncInsertListButton();
@@ -628,6 +646,7 @@ function setupEditorForOpenFile() {
     const els = getEls();
     state.tagFilters = {};
     state.editingListIds = {};
+    state.editingPlainLists = {};
     state.placingList = false;
     state.pendingImportList = null;
     state.clickEdit = false;
@@ -1413,6 +1432,7 @@ function signOut() {
     state.documentModel = null;
     state.tagFilters = {};
     state.editingListIds = {};
+    state.editingPlainLists = {};
     state.placingList = false;
     state.pendingImportList = null;
     state.clickEdit = false;

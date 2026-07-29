@@ -6,6 +6,7 @@ import {
     addItem,
     appendEmptyList,
     collectAllTags,
+    createId,
     deleteItem,
     deleteListFromDocument,
     filterItemsByTag,
@@ -22,7 +23,13 @@ import {
     setListTitle,
     stripMdlistAgentNotes,
 } from './lists.js';
-import { extractMarkdownHeadings, renderMarkdown } from './markdown.js';
+import {
+    extractMarkdownHeadings,
+    joinMarkdownBlocks,
+    movePlainListItem,
+    renderMarkdown,
+    splitMarkdownBlocks,
+} from './markdown.js';
 import { confirmDeleteList } from './ui.js';
 import { PREVIEW_TOC_OPEN_DEFAULT, PREVIEW_TOC_OPEN_KEY, PREVIEW_TOC_STICKY_DEFAULT, PREVIEW_TOC_STICKY_KEY } from './config.js';
 
@@ -75,6 +82,7 @@ export function writePreviewTocSticky(sticky) {
  * @param {(doc: object, opts?: object) => void} options.onChange
  * @param {(msg: string, kind?: string) => void} [options.onStatus]
  * @param {string} [options.focusItemId]
+ * @param {string} [options.focusPlainItemId]
  * @param {boolean} [options.placingList]
  * @param {object | null} [options.pendingImportList] — when placing, insert this list instead of an empty one
  * @param {boolean} [options.clickEdit]
@@ -87,12 +95,14 @@ export function renderListsUi(root, options) {
         onChange,
         onStatus,
         focusItemId,
+        focusPlainItemId,
         placingList = false,
         pendingImportList = null,
         clickEdit = false,
         onEditSpot = null,
     } = options;
     const scrollTop = root.scrollTop;
+    const plainListScroll = capturePlainListScroll(root);
     root.replaceChildren();
     const rootMods = [];
     if (placingList) rootMods.push('lists-root--placing');
@@ -135,7 +145,7 @@ export function renderListsUi(root, options) {
             });
             empty.append(p, btn);
             root.appendChild(empty);
-            restoreScroll(root, scrollTop);
+            restoreScroll(root, scrollTop, plainListScroll);
             return;
         }
         for (const seg of validLists) {
@@ -157,7 +167,7 @@ export function renderListsUi(root, options) {
             });
         });
         root.appendChild(addList);
-        restoreScroll(root, scrollTop);
+        restoreScroll(root, scrollTop, plainListScroll);
         focusItem(root, focusItemId);
         return;
     }
@@ -183,6 +193,7 @@ export function renderListsUi(root, options) {
                     onEditSpot,
                     pendingImportList,
                     root,
+                    focusPlainItemId,
                 })
             );
             continue;
@@ -274,8 +285,9 @@ export function renderListsUi(root, options) {
         root.appendChild(addList);
     }
 
-    restoreScroll(root, scrollTop);
+    restoreScroll(root, scrollTop, plainListScroll);
     focusItem(root, focusItemId);
+    focusPlainItem(root, focusPlainItemId);
 }
 
 function placeListAt(doc, onChange, target, pendingImportList = null) {
@@ -572,9 +584,32 @@ function enableListPlaceTarget(stackEl, segIndex, doc, onChange, root, pendingIm
     });
 }
 
-function restoreScroll(root, scrollTop) {
+function capturePlainListScroll(root) {
+    const positions = {};
+    const blocks = root.querySelectorAll(
+        '.mdplain-block[data-seg-index][data-plain-list-index]'
+    );
+    for (const block of blocks) {
+        const scroller = block.querySelector(':scope > .mdplain-items');
+        if (!scroller) continue;
+        const key = `${block.dataset.segIndex}:${block.dataset.plainListIndex}`;
+        positions[key] = scroller.scrollTop;
+    }
+    return positions;
+}
+
+function restoreScroll(root, scrollTop, plainListScroll = {}) {
     requestAnimationFrame(() => {
         root.scrollTop = scrollTop;
+        for (const [key, listScrollTop] of Object.entries(plainListScroll)) {
+            const [segIndex, listIndex] = key.split(':');
+            const block = root.querySelector(
+                `.mdplain-block[data-seg-index="${CSS.escape(segIndex)}"]` +
+                    `[data-plain-list-index="${CSS.escape(listIndex)}"]`
+            );
+            const scroller = block?.querySelector(':scope > .mdplain-items');
+            if (scroller) scroller.scrollTop = listScrollTop;
+        }
     });
 }
 
@@ -701,6 +736,7 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
     const onEditSpot = options.onEditSpot;
     const pendingImportList = options.pendingImportList || null;
     const listsRoot = options.root || null;
+    const focusPlainItemId = options.focusPlainItemId || null;
     const wrap = document.createElement('div');
     wrap.className = 'mixed-markdown-wrap';
     const editing = Boolean(seg._editing) && !placingList && !clickEdit;
@@ -721,11 +757,16 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
                 seg._editing = false;
             } else {
                 seg._editing = true;
+                // Whole-section raw edit exits structured plain-list edit
+                seg._editingPlainLists = {};
+                seg._plainBlocks = null;
+                seg._plainBlocksSource = null;
             }
             onChange(doc, {
                 soft: true,
                 tagFilters: collectTagFilters(doc),
                 editingListIds: collectEditingLists(doc),
+                editingPlainLists: collectEditingPlainLists(doc),
             });
         });
     }
@@ -746,39 +787,519 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
                 skipRender: true,
                 tagFilters: collectTagFilters(doc),
                 editingListIds: collectEditingLists(doc),
+                editingPlainLists: collectEditingPlainLists(doc),
             });
         });
         wrap.appendChild(ta);
         requestAnimationFrame(() => ta.focus());
     } else {
-        const preview = document.createElement('div');
-        preview.className = 'md-preview md-preview--segment';
-        preview.dataset.segIndex = String(segIndex);
-        // Keep source lines stable for TOC ids / place-list anchors (do not trim)
         const sourceText = stripMdlistAgentNotes(seg.text || '');
         if (!sourceText.trim()) {
+            const preview = document.createElement('div');
+            preview.className = 'md-preview md-preview--segment';
+            preview.dataset.segIndex = String(segIndex);
             preview.innerHTML = '<p class="md-empty">Empty markdown section — tap Edit to write.</p>';
-        } else {
+            wrap.appendChild(preview);
+        } else if (placingList || clickEdit) {
+            // Placement / click-edit need a single preview tree with data-md-line anchors
+            const preview = document.createElement('div');
+            preview.className = 'md-preview md-preview--segment';
+            preview.dataset.segIndex = String(segIndex);
             preview.innerHTML = renderMarkdown(sourceText);
             assignHeadingTocIds(preview, segIndex);
-        }
-        wrap.appendChild(preview);
-        if (placingList && listsRoot && sourceText.trim()) {
-            enableMarkdownPlaceTargets(
-                preview,
-                segIndex,
-                sourceText,
-                doc,
-                onChange,
-                listsRoot,
-                pendingImportList
-            );
-        } else if (clickEdit && typeof onEditSpot === 'function' && sourceText.trim()) {
-            enableMarkdownClickEditTargets(preview, segIndex, onEditSpot);
+            wrap.appendChild(preview);
+            if (placingList && listsRoot) {
+                enableMarkdownPlaceTargets(
+                    preview,
+                    segIndex,
+                    sourceText,
+                    doc,
+                    onChange,
+                    listsRoot,
+                    pendingImportList
+                );
+            } else if (clickEdit && typeof onEditSpot === 'function') {
+                enableMarkdownClickEditTargets(preview, segIndex, onEditSpot);
+            }
+        } else {
+            const blocks = getCachedPlainBlocks(seg);
+            // Prefer cached blocks when segment text still matches (edit session)
+            const editingMap = seg._editingPlainLists || {};
+            let plainListIndex = 0;
+            let renderedAny = false;
+
+            for (const block of blocks) {
+                if (block.type === 'plainlist') {
+                    const listIndex = plainListIndex;
+                    plainListIndex += 1;
+                    wrap.appendChild(
+                        renderPlainListBlock({
+                            block,
+                            listIndex,
+                            seg,
+                            segIndex,
+                            doc,
+                            onChange,
+                            editing: Boolean(editingMap[listIndex]),
+                            focusPlainItemId,
+                        })
+                    );
+                    renderedAny = true;
+                    continue;
+                }
+
+                const prose = block.text || '';
+                if (!prose.trim()) continue;
+                const preview = document.createElement('div');
+                preview.className = 'md-preview md-preview--segment md-preview--prose-chunk';
+                preview.dataset.segIndex = String(segIndex);
+                preview.innerHTML = renderMarkdown(prose, {
+                    lineOffset: Math.max(0, (block.startLine || 1) - 1),
+                });
+                assignHeadingTocIds(preview, segIndex);
+                wrap.appendChild(preview);
+                renderedAny = true;
+            }
+
+            if (!renderedAny) {
+                const preview = document.createElement('div');
+                preview.className = 'md-preview md-preview--segment';
+                preview.dataset.segIndex = String(segIndex);
+                preview.innerHTML = '<p class="md-empty">Empty markdown section — tap Edit to write.</p>';
+                wrap.appendChild(preview);
+            }
         }
     }
 
     return wrap;
+}
+
+/**
+ * Rewrite a markdown segment's plain list at `listIndex` via mutator, then notify.
+ * Keeps an in-memory block cache so item identity survives skipRender typing.
+ * @param {object} args
+ */
+function getCachedPlainBlocks(seg) {
+    const sourceText = stripMdlistAgentNotes(seg.text || '');
+    if (seg._plainBlocks && seg._plainBlocksSource === sourceText) {
+        return seg._plainBlocks;
+    }
+    const blocks = splitMarkdownBlocks(sourceText);
+    seg._plainBlocks = blocks;
+    seg._plainBlocksSource = sourceText;
+    return blocks;
+}
+
+function commitPlainBlocks(seg, blocks) {
+    seg.text = joinMarkdownBlocks(blocks);
+    seg._plainBlocks = blocks;
+    seg._plainBlocksSource = stripMdlistAgentNotes(seg.text || '');
+}
+
+function mutatePlainListInSegment({
+    seg,
+    segIndex,
+    listIndex,
+    doc,
+    onChange,
+    mutator,
+    opts = {},
+}) {
+    const blocks = getCachedPlainBlocks(seg);
+    const lists = blocks.filter((b) => b.type === 'plainlist');
+    const target = lists[listIndex];
+    if (!target) return;
+    mutator(target);
+    commitPlainBlocks(seg, blocks);
+    if (!seg._editingPlainLists) seg._editingPlainLists = {};
+    seg._editingPlainLists[listIndex] = true;
+    const nextOpts = {
+        ...changeOpts(doc, opts),
+        editingPlainLists: collectEditingPlainLists(doc),
+    };
+    // Keep the in-memory segment (and item ids) so typing/reorder stay stable.
+    if (!opts.skipRender) {
+        nextOpts.soft = true;
+        nextOpts.persist = true;
+    }
+    onChange(doc, nextOpts);
+}
+
+function plainListKindLabel(block) {
+    if (block.task) return 'Checklist';
+    if (block.ordered) return 'Numbered list';
+    return 'Bullet list';
+}
+
+function renderPlainListBlock({
+    block,
+    listIndex,
+    seg,
+    segIndex,
+    doc,
+    onChange,
+    editing,
+    focusPlainItemId,
+}) {
+    const wrap = document.createElement('section');
+    wrap.className = editing
+        ? 'mdplain-block mdplain-block--editing'
+        : 'mdplain-block mdplain-block--view';
+    wrap.dataset.segIndex = String(segIndex);
+    wrap.dataset.plainListIndex = String(listIndex);
+    wrap.dataset.mdLine = String(block.startLine || 1);
+    wrap.setAttribute('data-md-line', String(block.startLine || 1));
+
+    if (!editing) {
+        wrap.appendChild(renderPlainListViewHeader(block, seg, listIndex, doc, onChange));
+        const viewItems = renderPlainListViewItems(block);
+        viewItems.style.cursor = 'pointer';
+        viewItems.title = 'Tap to edit and reorder';
+        viewItems.addEventListener('click', () => {
+            if (!seg._editingPlainLists) seg._editingPlainLists = {};
+            seg._editingPlainLists[listIndex] = true;
+            onChange(doc, changeOpts(doc, { soft: true, editingPlainLists: collectEditingPlainLists(doc) }));
+        });
+        wrap.appendChild(viewItems);
+        return wrap;
+    }
+
+    const header = document.createElement('div');
+    header.className = 'mdplain-header';
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'mdlist-title-row';
+
+    const title = document.createElement('h3');
+    title.className = 'mdplain-title';
+    title.textContent = plainListKindLabel(block);
+
+    const count = document.createElement('span');
+    count.className = 'mdlist-count';
+    const n = (block.items || []).length;
+    count.textContent = `${n} item${n === 1 ? '' : 's'}`;
+
+    const doneBtn = document.createElement('button');
+    doneBtn.type = 'button';
+    doneBtn.className = 'btn btn-ghost btn-small';
+    doneBtn.textContent = 'Done';
+    doneBtn.setAttribute('aria-label', 'Done editing list');
+    doneBtn.addEventListener('click', () => {
+        if (seg._editingPlainLists) delete seg._editingPlainLists[listIndex];
+        onChange(doc, changeOpts(doc, { soft: true, editingPlainLists: collectEditingPlainLists(doc) }));
+    });
+
+    titleRow.append(title, count, doneBtn);
+    header.appendChild(titleRow);
+
+    const hint = document.createElement('p');
+    hint.className = 'mdplain-hint';
+    hint.textContent = 'Drag or use arrows to reorder. Changes save as normal markdown.';
+    header.appendChild(hint);
+    wrap.appendChild(header);
+
+    const ul = document.createElement('ul');
+    ul.className = 'mdlist-items mdplain-items';
+    ul.setAttribute('role', 'list');
+
+    const items = block.items || [];
+    if (!items.length) {
+        const empty = document.createElement('li');
+        empty.className = 'mdlist-empty-item';
+        empty.textContent = 'No items yet.';
+        ul.appendChild(empty);
+    }
+
+    items.forEach((item, index) => {
+        ul.appendChild(
+            renderPlainItemRow({
+                item,
+                index,
+                block,
+                total: items.length,
+                preferFocus: focusPlainItemId === item.id,
+                onMutate: (mutator, opts = {}) => {
+                    mutatePlainListInSegment({
+                        seg,
+                        segIndex,
+                        listIndex,
+                        doc,
+                        onChange,
+                        mutator: (listBlock) => {
+                            // Re-find item by id inside freshly parsed block
+                            mutator(listBlock);
+                        },
+                        opts,
+                    });
+                },
+            })
+        );
+    });
+
+    wrap.appendChild(ul);
+
+    const actions = document.createElement('div');
+    actions.className = 'mdlist-actions';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn btn-primary';
+    addBtn.textContent = '+ Item';
+    addBtn.addEventListener('click', () => {
+        const newId = createId('pli');
+        mutatePlainListInSegment({
+            seg,
+            segIndex,
+            listIndex,
+            doc,
+            onChange,
+            mutator: (listBlock) => {
+                const sample = listBlock.items[0];
+                listBlock.items.push({
+                    id: newId,
+                    text: '',
+                    checked: listBlock.task ? false : null,
+                    marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
+                    indent: sample?.indent || '',
+                });
+            },
+            opts: { focusPlainItemId: newId },
+        });
+    });
+    actions.appendChild(addBtn);
+    wrap.appendChild(actions);
+
+    return wrap;
+}
+
+function renderPlainListViewHeader(block, seg, listIndex, doc, onChange) {
+    const header = document.createElement('div');
+    header.className = 'mdplain-header';
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'mdlist-title-row';
+
+    const title = document.createElement('h3');
+    title.className = 'mdplain-title';
+    title.textContent = plainListKindLabel(block);
+
+    const count = document.createElement('span');
+    count.className = 'mdlist-count';
+    const n = (block.items || []).length;
+    count.textContent = `${n} item${n === 1 ? '' : 's'}`;
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'mdlist-edit-btn';
+    editBtn.setAttribute('aria-label', 'Edit list');
+    editBtn.title = 'Edit list order and items';
+    editBtn.innerHTML =
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h4.5L19 9.5 14.5 5 4 15.5V20z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M13.2 6.3l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+    editBtn.addEventListener('click', () => {
+        if (!seg._editingPlainLists) seg._editingPlainLists = {};
+        seg._editingPlainLists[listIndex] = true;
+        onChange(doc, changeOpts(doc, { soft: true, editingPlainLists: collectEditingPlainLists(doc) }));
+    });
+
+    titleRow.append(title, count, editBtn);
+    header.appendChild(titleRow);
+    return header;
+}
+
+function renderPlainListViewItems(block) {
+    const tag = block.ordered ? 'ol' : 'ul';
+    const listEl = document.createElement(tag);
+    listEl.className = 'mdplain-view-items';
+    if (block.task) listEl.classList.add('mdplain-view-items--task');
+    listEl.setAttribute('role', 'list');
+
+    const items = block.items || [];
+    if (!items.length) {
+        const empty = document.createElement('li');
+        empty.className = 'mdlist-empty-item';
+        empty.textContent = 'No items yet.';
+        listEl.appendChild(empty);
+        return listEl;
+    }
+
+    for (const item of items) {
+        const li = document.createElement('li');
+        li.className = 'mdplain-view-item';
+        li.setAttribute('role', 'listitem');
+
+        if (item.checked === true || item.checked === false) {
+            const label = document.createElement('label');
+            label.className = 'mdplain-task-label';
+            const box = document.createElement('input');
+            box.type = 'checkbox';
+            box.disabled = true;
+            box.checked = Boolean(item.checked);
+            const span = document.createElement('span');
+            span.textContent = item.text || 'Untitled item';
+            label.append(box, span);
+            li.appendChild(label);
+        } else {
+            const text = document.createElement('span');
+            text.className = 'mdplain-view-text';
+            text.textContent = item.text || 'Untitled item';
+            li.appendChild(text);
+        }
+        listEl.appendChild(li);
+    }
+
+    return listEl;
+}
+
+function renderPlainItemRow({ item, index, block, total, onMutate }) {
+    const li = document.createElement('li');
+    li.className = 'mdlist-item mdplain-item';
+    li.dataset.plainItemId = item.id;
+    li.setAttribute('role', 'listitem');
+
+    const rank = document.createElement('span');
+    rank.className = 'mdlist-rank';
+    rank.textContent = `#${index + 1}`;
+    rank.setAttribute('aria-hidden', 'true');
+
+    const handle = document.createElement('button');
+    handle.type = 'button';
+    handle.className = 'mdlist-handle';
+    handle.textContent = '⋮⋮';
+    handle.setAttribute('aria-label', 'Drag to reorder');
+
+    attachPointerDrag(handle, li, {
+        onDropIndex: (newIndex) => {
+            onMutate((listBlock) => {
+                const from = (listBlock.items || []).findIndex((it) => it.id === item.id);
+                if (from < 0) return;
+                listBlock.items = movePlainListItem(listBlock.items, from, newIndex);
+            });
+        },
+    });
+
+    const body = document.createElement('div');
+    body.className = 'mdlist-item-body';
+
+    if (item.checked === true || item.checked === false || block.task) {
+        const checkRow = document.createElement('label');
+        checkRow.className = 'mdplain-check-row';
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.className = 'mdplain-check';
+        check.checked = Boolean(item.checked);
+        check.setAttribute('aria-label', 'Completed');
+        check.addEventListener('change', () => {
+            onMutate((listBlock) => {
+                const target = (listBlock.items || []).find((it) => it.id === item.id);
+                if (target) target.checked = check.checked;
+                listBlock.task = true;
+            }, { skipRender: true });
+        });
+        checkRow.appendChild(check);
+        const checkLabel = document.createElement('span');
+        checkLabel.textContent = 'Done';
+        checkRow.appendChild(checkLabel);
+        body.appendChild(checkRow);
+    }
+
+    const textInput = document.createElement('textarea');
+    textInput.rows = 1;
+    textInput.className = 'mdlist-text';
+    textInput.value = item.text || '';
+    textInput.placeholder = 'Item text';
+    textInput.setAttribute('aria-label', 'Item text');
+
+    const syncTextHeight = () => {
+        const expanded = document.activeElement === textInput;
+        textInput.classList.toggle('is-expanded', expanded);
+        if (!expanded) {
+            textInput.style.removeProperty('height');
+            return;
+        }
+        textInput.style.height = '0px';
+        const maxPx = Math.round(window.innerHeight * 0.45);
+        const next = Math.max(44, Math.min(textInput.scrollHeight, maxPx));
+        textInput.style.height = `${next}px`;
+    };
+
+    textInput.addEventListener('focus', () => {
+        requestAnimationFrame(syncTextHeight);
+    });
+    textInput.addEventListener('input', () => {
+        onMutate((listBlock) => {
+            const target = (listBlock.items || []).find((it) => it.id === item.id);
+            if (target) target.text = textInput.value;
+        }, { skipRender: true });
+        syncTextHeight();
+    });
+    textInput.addEventListener('blur', syncTextHeight);
+    textInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            const newId = createId('pli');
+            onMutate((listBlock) => {
+                const from = (listBlock.items || []).findIndex((it) => it.id === item.id);
+                const sample = listBlock.items[from] || listBlock.items[0];
+                const nextItem = {
+                    id: newId,
+                    text: '',
+                    checked: listBlock.task ? false : null,
+                    marker: sample?.marker || (listBlock.ordered ? '1.' : '-'),
+                    indent: sample?.indent || '',
+                };
+                const at = from >= 0 ? from + 1 : listBlock.items.length;
+                listBlock.items.splice(at, 0, nextItem);
+            }, { focusPlainItemId: newId });
+        }
+    });
+
+    const moveRow = document.createElement('div');
+    moveRow.className = 'mdlist-move';
+
+    const upBtn = document.createElement('button');
+    upBtn.type = 'button';
+    upBtn.className = 'mdlist-move-btn';
+    upBtn.setAttribute('aria-label', 'Move up');
+    upBtn.title = 'Move up';
+    upBtn.innerHTML = '<span class="mdlist-arrow mdlist-arrow--up" aria-hidden="true"></span>';
+    upBtn.disabled = index === 0;
+    upBtn.addEventListener('click', () => {
+        onMutate((listBlock) => {
+            const from = (listBlock.items || []).findIndex((it) => it.id === item.id);
+            if (from > 0) listBlock.items = movePlainListItem(listBlock.items, from, from - 1);
+        });
+    });
+
+    const downBtn = document.createElement('button');
+    downBtn.type = 'button';
+    downBtn.className = 'mdlist-move-btn';
+    downBtn.setAttribute('aria-label', 'Move down');
+    downBtn.title = 'Move down';
+    downBtn.innerHTML = '<span class="mdlist-arrow mdlist-arrow--down" aria-hidden="true"></span>';
+    downBtn.disabled = index >= total - 1;
+    downBtn.addEventListener('click', () => {
+        onMutate((listBlock) => {
+            const from = (listBlock.items || []).findIndex((it) => it.id === item.id);
+            if (from >= 0 && from < listBlock.items.length - 1) {
+                listBlock.items = movePlainListItem(listBlock.items, from, from + 1);
+            }
+        });
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn-ghost btn-small mdlist-delete';
+    delBtn.textContent = 'Delete';
+    delBtn.addEventListener('click', () => {
+        if (!window.confirm('Delete this list item?')) return;
+        onMutate((listBlock) => {
+            listBlock.items = (listBlock.items || []).filter((it) => it.id !== item.id);
+        });
+    });
+
+    moveRow.append(upBtn, downBtn, delBtn);
+    body.append(textInput, moveRow);
+    li.append(rank, handle, body);
+    return li;
 }
 
 function assignHeadingTocIds(previewEl, segIndex) {
@@ -802,6 +1323,19 @@ function focusItem(root, focusItemId) {
     });
 }
 
+function focusPlainItem(root, focusPlainItemId) {
+    if (!focusPlainItemId) return;
+    requestAnimationFrame(() => {
+        const input = root.querySelector(
+            `[data-plain-item-id="${CSS.escape(focusPlainItemId)}"] .mdlist-text`
+        );
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    });
+}
+
 function ensureEditingForFocus(doc, focusItemId) {
     if (!focusItemId) return;
     for (const seg of doc.segments || []) {
@@ -817,6 +1351,7 @@ function changeOpts(doc, extra = {}) {
     return {
         tagFilters: collectTagFilters(doc),
         editingListIds: collectEditingLists(doc),
+        editingPlainLists: collectEditingPlainLists(doc),
         ...extra,
     };
 }
@@ -1128,6 +1663,60 @@ function collectEditingLists(doc) {
     return map;
 }
 
+function collectEditingPlainLists(doc) {
+    const map = {};
+    (doc.segments || []).forEach((seg, segIndex) => {
+        if (seg.type !== 'markdown' || !seg._editingPlainLists) return;
+        for (const [listIndex, on] of Object.entries(seg._editingPlainLists)) {
+            if (on) map[`${segIndex}:${listIndex}`] = true;
+        }
+    });
+    return map;
+}
+
+/**
+ * Re-apply tag filters onto freshly parsed segments.
+ */
+export function applyTagFilters(doc, tagFilters = {}) {
+    if (!tagFilters) return;
+    for (const seg of doc.segments || []) {
+        if (seg.type === 'mdlist' && seg.list && tagFilters[seg.list.id]) {
+            seg._tagFilter = tagFilters[seg.list.id];
+        }
+    }
+}
+
+/**
+ * Re-apply which lists are in edit mode onto freshly parsed segments.
+ */
+export function applyEditingLists(doc, editingListIds = {}) {
+    if (!editingListIds) return;
+    for (const seg of doc.segments || []) {
+        if (seg.type === 'mdlist' && seg.list && editingListIds[seg.list.id]) {
+            seg._editing = true;
+        }
+    }
+}
+
+/**
+ * Re-apply which plain markdown lists are in edit mode.
+ * Keys are `${segmentIndex}:${plainListIndex}`.
+ */
+export function applyEditingPlainLists(doc, editingPlainLists = {}) {
+    if (!editingPlainLists) return;
+    for (const [key, on] of Object.entries(editingPlainLists)) {
+        if (!on) continue;
+        const [segPart, listPart] = String(key).split(':');
+        const segIndex = Number(segPart);
+        const listIndex = Number(listPart);
+        if (!Number.isInteger(segIndex) || !Number.isInteger(listIndex)) continue;
+        const seg = doc.segments?.[segIndex];
+        if (!seg || seg.type !== 'markdown') continue;
+        if (!seg._editingPlainLists) seg._editingPlainLists = {};
+        seg._editingPlainLists[listIndex] = true;
+    }
+}
+
 function renderItemRow({ item, index, list, dragEnabled, totalVisible, onMutate, onStatus }) {
     const li = document.createElement('li');
     li.className = 'mdlist-item';
@@ -1337,28 +1926,4 @@ function attachPointerDrag(handle, row, { onDropIndex }) {
     handle.addEventListener('pointermove', onPointerMove);
     handle.addEventListener('pointerup', onPointerUp);
     handle.addEventListener('pointercancel', onPointerUp);
-}
-
-/**
- * Re-apply tag filters onto freshly parsed segments.
- */
-export function applyTagFilters(doc, tagFilters = {}) {
-    if (!tagFilters) return;
-    for (const seg of doc.segments || []) {
-        if (seg.type === 'mdlist' && seg.list && tagFilters[seg.list.id]) {
-            seg._tagFilter = tagFilters[seg.list.id];
-        }
-    }
-}
-
-/**
- * Re-apply which lists are in edit mode onto freshly parsed segments.
- */
-export function applyEditingLists(doc, editingListIds = {}) {
-    if (!editingListIds) return;
-    for (const seg of doc.segments || []) {
-        if (seg.type === 'mdlist' && seg.list && editingListIds[seg.list.id]) {
-            seg._editing = true;
-        }
-    }
 }
