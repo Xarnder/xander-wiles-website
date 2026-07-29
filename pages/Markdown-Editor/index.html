@@ -189,6 +189,7 @@
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>F</kbd> searches inside the open markdown file.</li>
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
                         <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
+                        <li>Export a list as <strong>JSON</strong> from To-Do List / Story Manager, then use <strong>Import</strong> here — tap Preview content and choose Above / Below to place it.</li>
                         <li>Use <strong>List</strong> / <strong>Preview</strong> for ranked <code>mdlist</code> blocks.</li>
                         <li>Tap a folder path segment in Finder to jump up the tree.</li>
                     </ul>
@@ -211,10 +212,12 @@
                     </div>
                 </div>
                 <div id="nav-actions-editor" class="nav-actions-panel nav-actions-editor" hidden>
+                    <button type="button" id="btn-import-list" class="btn btn-ghost" hidden title="Import a list JSON from To-Do List or Story Manager" aria-label="Import list JSON">Import</button>
                     <button type="button" id="btn-click-edit" class="btn btn-ghost" hidden>Edit here</button>
                     <button type="button" id="btn-insert-list" class="btn btn-ghost" hidden>+ List</button>
                     <button type="button" id="btn-rename-current" class="btn btn-ghost" hidden>Rename</button>
                     <button type="button" id="btn-save" class="btn btn-primary btn-save" hidden>Save</button>
+                    <input id="import-list-file" class="sr-only" type="file" accept="application/json,.json" hidden>
                 </div>
             </div>
             <div class="nav-bar-inner" role="tablist" aria-label="App modes">

@@ -700,7 +700,7 @@ export async function processAutomatedLists() {
 
     // Do not run automation moves or show the confirmation modal if there is text in any add task/idea input box
     if (typeof document !== 'undefined') {
-        const hasTextInAddInput = Array.from(document.querySelectorAll('input[name="taskText"]'))
+        const hasTextInAddInput = Array.from(document.querySelectorAll('[name="taskText"]'))
             .some(input => input.value && input.value.trim() !== '');
         if (hasTextInAddInput) return;
     }

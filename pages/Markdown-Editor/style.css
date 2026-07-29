@@ -264,19 +264,28 @@ body {
 .nav-actions-editor {
     flex-direction: row;
     align-items: stretch;
+    gap: 6px;
 }
 
 .nav-actions-editor .btn {
     flex: 1 1 0;
     min-width: 0;
+    border-radius: 8px;
+    min-height: 36px;
+    padding: 0.35rem 0.45rem;
+    font-size: 0.78rem;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .nav-actions-editor .btn-save {
     flex: 1.65 1 0;
-    min-height: 52px;
-    font-size: 1.08rem;
+    min-height: 36px;
+    font-size: 0.85rem;
     font-weight: 700;
-    padding: 0.85rem 1.1rem;
+    padding: 0.35rem 0.55rem;
 }
 
 .btn-save.is-flashing:not(:disabled) {
@@ -1124,9 +1133,13 @@ html[data-theme="oled"] .file-group--recent {
 }
 
 .btn-small {
-    min-height: 40px;
-    padding: 0.45rem 0.75rem;
-    font-size: 0.85rem;
+    min-height: 32px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .dialog-hint {
@@ -1407,14 +1420,18 @@ html[data-theme="light"] .editor::selection {
     border: 0;
     background: transparent;
     color: var(--text-muted);
-    border-radius: 10px;
-    min-height: 44px;
+    border-radius: 6px;
+    min-height: 34px;
     font: inherit;
     font-weight: 600;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
+    line-height: 1.2;
     cursor: pointer;
     touch-action: manipulation;
-    padding: 0 4px;
+    padding: 0 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .view-mode-btn.is-active {
@@ -1774,6 +1791,50 @@ html[data-theme="light"] .editor::selection {
     gap: 10px;
 }
 
+/* Keep Done / + Item chrome visible; only the item list scrolls. */
+.mdlist-block--editing {
+    max-height: calc(
+        100dvh - var(--safe-top) - var(--nav-offset, 88px) - var(--path-dock-offset, 0px) - 10.5rem
+    );
+    min-height: 0;
+}
+
+.mdlist-block--editing > .mdlist-header {
+    flex: 0 0 auto;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: -12px -12px 0;
+    padding: 12px 12px 8px;
+    background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-elevated);
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 1px 0 var(--hairline);
+}
+
+.mdlist-block--editing > .mdlist-filter-note {
+    flex: 0 0 auto;
+}
+
+.mdlist-block--editing > .mdlist-items {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+.mdlist-block--editing > .mdlist-actions {
+    flex: 0 0 auto;
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    margin: 0 -12px -12px;
+    padding: 8px 12px 12px;
+    background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-elevated);
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow: 0 -1px 0 var(--hairline);
+}
+
 .mdlist-header {
     display: flex;
     flex-direction: column;
@@ -1783,7 +1844,15 @@ html[data-theme="light"] .editor::selection {
 .mdlist-title-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
+}
+
+.mdlist-title-row .btn {
+    flex-shrink: 0;
+    border-radius: 6px;
+    min-height: 32px;
+    padding: 0.25rem 0.7rem;
+    white-space: nowrap;
 }
 
 .mdlist-title-input {
@@ -1845,11 +1914,11 @@ html[data-theme="light"] .editor::selection {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 6px;
     background: var(--edit-btn-bg);
     color: var(--text-muted);
     cursor: pointer;
@@ -1996,6 +2065,25 @@ html[data-theme="light"] .editor::selection {
     font: inherit;
     font-size: 16px;
     padding: 0 12px;
+    box-sizing: border-box;
+}
+
+.mdlist-text {
+    display: block;
+    resize: none;
+    overflow: hidden;
+    height: 44px;
+    max-height: 44px;
+    line-height: 1.35;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.mdlist-text.is-expanded {
+    overflow-y: auto;
+    max-height: min(45vh, 20rem);
 }
 
 .mdlist-item-meta {
@@ -2025,15 +2113,16 @@ html[data-theme="light"] .editor::selection {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 34px;
+    height: 32px;
     padding: 0;
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 6px;
     background: var(--edit-btn-bg);
     color: var(--text-muted);
     cursor: pointer;
     touch-action: manipulation;
+    flex-shrink: 0;
 }
 
 .mdlist-move-btn:hover:not(:disabled),
@@ -2067,6 +2156,11 @@ html[data-theme="light"] .editor::selection {
 .mdlist-delete {
     margin-left: auto;
     color: var(--danger);
+    flex-shrink: 0;
+    border-radius: 6px;
+    min-height: 32px;
+    padding: 0.25rem 0.7rem;
+    white-space: nowrap;
 }
 
 .mdlist-delete-list {
@@ -2087,6 +2181,14 @@ html[data-theme="light"] .editor::selection {
     align-items: center;
 }
 
+.mdlist-actions .btn {
+    flex-shrink: 0;
+    border-radius: 6px;
+    min-height: 32px;
+    padding: 0.25rem 0.7rem;
+    white-space: nowrap;
+}
+
 .mdlist-actions .mdlist-delete-list {
     margin-left: auto;
 }
@@ -2102,6 +2204,14 @@ html[data-theme="light"] .editor::selection {
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+}
+
+.mixed-md-toolbar .btn {
+    flex-shrink: 0;
+    border-radius: 6px;
+    min-height: 32px;
+    padding: 0.25rem 0.7rem;
+    white-space: nowrap;
 }
 
 .mixed-md-label {

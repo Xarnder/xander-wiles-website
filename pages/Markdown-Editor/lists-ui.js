@@ -11,6 +11,7 @@ import {
     filterItemsByTag,
     formatTagsInput,
     insertEmptyListAt,
+    insertImportedListAt,
     mdlistAgentNotePlain,
     moveItemByDelta,
     moveItemToIndex,
@@ -75,6 +76,7 @@ export function writePreviewTocSticky(sticky) {
  * @param {(msg: string, kind?: string) => void} [options.onStatus]
  * @param {string} [options.focusItemId]
  * @param {boolean} [options.placingList]
+ * @param {object | null} [options.pendingImportList] — when placing, insert this list instead of an empty one
  * @param {boolean} [options.clickEdit]
  * @param {(payload: { segIndex: number, localLine: number, prefix: string }) => void} [options.onEditSpot]
  */
@@ -86,6 +88,7 @@ export function renderListsUi(root, options) {
         onStatus,
         focusItemId,
         placingList = false,
+        pendingImportList = null,
         clickEdit = false,
         onEditSpot = null,
     } = options;
@@ -95,6 +98,7 @@ export function renderListsUi(root, options) {
     if (placingList) rootMods.push('lists-root--placing');
     if (clickEdit) rootMods.push('lists-root--click-edit');
     root.className = ['lists-root', ...rootMods].join(' ');
+    const place = (target) => placeListAt(doc, onChange, target, pendingImportList);
 
     ensureEditingForFocus(doc, focusItemId);
 
@@ -177,6 +181,7 @@ export function renderListsUi(root, options) {
                     placingList,
                     clickEdit,
                     onEditSpot,
+                    pendingImportList,
                     root,
                 })
             );
@@ -187,7 +192,7 @@ export function renderListsUi(root, options) {
             stack.id = `toc-list-${seg.list.id}`;
             stack.dataset.previewSegIndex = String(segIndex);
             if (placingList) {
-                enableListPlaceTarget(stack, segIndex, doc, onChange, root);
+                enableListPlaceTarget(stack, segIndex, doc, onChange, root, pendingImportList);
             } else if (clickEdit && typeof onEditSpot === 'function') {
                 enableListClickEditTarget(stack, segIndex, onEditSpot);
             }
@@ -202,7 +207,7 @@ export function renderListsUi(root, options) {
             err.textContent = seg.raw || '(invalid mdlist)';
             stack.appendChild(err);
             if (placingList) {
-                enableListPlaceTarget(stack, segIndex, doc, onChange, root);
+                enableListPlaceTarget(stack, segIndex, doc, onChange, root, pendingImportList);
             } else if (clickEdit && typeof onEditSpot === 'function') {
                 enableListClickEditTarget(stack, segIndex, onEditSpot);
             }
@@ -222,18 +227,25 @@ export function renderListsUi(root, options) {
             const emptyPlace = document.createElement('div');
             emptyPlace.className = 'list-place-empty';
             const p = document.createElement('p');
-            p.textContent = 'No content to anchor to yet. Place the list at the start of the document.';
+            p.textContent = pendingImportList
+                ? `No content to anchor to yet. Place “${pendingImportList.title || 'imported list'}” at the start.`
+                : 'No content to anchor to yet. Place the list at the start of the document.';
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'btn btn-primary';
             btn.textContent = 'Place list at start';
             btn.addEventListener('click', () => {
-                placeListAt(doc, onChange, { type: 'at-start' });
+                place({ type: 'at-start' });
             });
             emptyPlace.append(p, btn);
             root.appendChild(emptyPlace);
         }
-        onStatus?.('Tap a paragraph, heading, quote, code block, or list — then choose Above or Below.', 'ok');
+        onStatus?.(
+            pendingImportList
+                ? `Tap where to place “${pendingImportList.title || 'imported list'}”, then Above or Below.`
+                : 'Tap a paragraph, heading, quote, code block, or list — then choose Above or Below.',
+            'ok'
+        );
     } else if (clickEdit) {
         onStatus?.('Tap the text you want to edit — Raw opens at that spot.', 'ok');
     } else if (!validLists.length && !errorLists.length) {
@@ -266,17 +278,37 @@ export function renderListsUi(root, options) {
     focusItem(root, focusItemId);
 }
 
-function placeListAt(doc, onChange, target) {
-    const list = insertEmptyListAt(doc, target);
-    const item = addItem(list, '');
-    const seg = (doc.segments || []).find((s) => s.type === 'mdlist' && s.list === list);
-    if (seg) seg._editing = true;
+function placeListAt(doc, onChange, target, pendingImportList = null) {
+    let list;
+    let focusItemId = null;
+    const importedTitle = pendingImportList?.title || null;
+    const importedCount = Array.isArray(pendingImportList?.items)
+        ? pendingImportList.items.length
+        : 0;
+    if (pendingImportList) {
+        list = insertImportedListAt(doc, target, pendingImportList);
+        focusItemId = list.items?.[0]?.id || null;
+        const seg = (doc.segments || []).find((s) => s.type === 'mdlist' && s.list === list);
+        if (seg) seg._editing = Boolean(focusItemId);
+    } else {
+        list = insertEmptyListAt(doc, target);
+        const item = addItem(list, '');
+        focusItemId = item.id;
+        const seg = (doc.segments || []).find((s) => s.type === 'mdlist' && s.list === list);
+        if (seg) seg._editing = true;
+    }
     onChange(doc, {
         placingList: false,
-        focusItemId: item.id,
+        pendingImportList: null,
+        focusItemId,
         editingListIds: collectEditingLists(doc),
         tagFilters: collectTagFilters(doc),
+        statusMessage: importedTitle
+            ? `Imported “${importedTitle}” (${importedCount} item${importedCount === 1 ? '' : 's'})`
+            : 'Added ranked list',
+        statusKind: 'ok',
     });
+    return list;
 }
 
 function clearPlaceSelection(root) {
@@ -295,7 +327,7 @@ function showPlacePicker(anchorEl, root, { onAbove, onBelow }) {
 
     const label = document.createElement('p');
     label.className = 'list-place-picker-label';
-    label.textContent = 'Place new list';
+    label.textContent = 'Place list here';
 
     const actions = document.createElement('div');
     actions.className = 'list-place-picker-actions';
@@ -351,7 +383,7 @@ function blockInsertLines(previewEl, blockEl, sourceText) {
     };
 }
 
-function enableMarkdownPlaceTargets(previewEl, segIndex, sourceText, doc, onChange, root) {
+function enableMarkdownPlaceTargets(previewEl, segIndex, sourceText, doc, onChange, root, pendingImportList = null) {
     previewEl.classList.add('md-preview--placing');
     previewEl.addEventListener('click', (event) => {
         const block = findTopLevelMdBlock(event.target, previewEl);
@@ -365,20 +397,30 @@ function enableMarkdownPlaceTargets(previewEl, segIndex, sourceText, doc, onChan
                 // Align segment text with the preview source used for line numbers
                 const seg = doc.segments[segIndex];
                 if (seg?.type === 'markdown') seg.text = sourceText;
-                placeListAt(doc, onChange, {
-                    type: 'split-markdown',
-                    segmentIndex: segIndex,
-                    beforeLine: aboveBeforeLine,
-                });
+                placeListAt(
+                    doc,
+                    onChange,
+                    {
+                        type: 'split-markdown',
+                        segmentIndex: segIndex,
+                        beforeLine: aboveBeforeLine,
+                    },
+                    pendingImportList
+                );
             },
             onBelow: () => {
                 const seg = doc.segments[segIndex];
                 if (seg?.type === 'markdown') seg.text = sourceText;
-                placeListAt(doc, onChange, {
-                    type: 'split-markdown',
-                    segmentIndex: segIndex,
-                    beforeLine: belowBeforeLine,
-                });
+                placeListAt(
+                    doc,
+                    onChange,
+                    {
+                        type: 'split-markdown',
+                        segmentIndex: segIndex,
+                        beforeLine: belowBeforeLine,
+                    },
+                    pendingImportList
+                );
             },
         });
     });
@@ -497,7 +539,7 @@ function enableListClickEditTarget(stackEl, segIndex, onEditSpot) {
     });
 }
 
-function enableListPlaceTarget(stackEl, segIndex, doc, onChange, root) {
+function enableListPlaceTarget(stackEl, segIndex, doc, onChange, root, pendingImportList = null) {
     stackEl.dataset.placeSeg = String(segIndex);
     stackEl.classList.add('mdlist-stack--placing');
     stackEl.addEventListener('click', (event) => {
@@ -508,13 +550,23 @@ function enableListPlaceTarget(stackEl, segIndex, doc, onChange, root) {
         showPlacePicker(stackEl, root, {
             onAbove: () => {
                 if (segIndex <= 0) {
-                    placeListAt(doc, onChange, { type: 'at-start' });
+                    placeListAt(doc, onChange, { type: 'at-start' }, pendingImportList);
                 } else {
-                    placeListAt(doc, onChange, { type: 'after-segment', index: segIndex - 1 });
+                    placeListAt(
+                        doc,
+                        onChange,
+                        { type: 'after-segment', index: segIndex - 1 },
+                        pendingImportList
+                    );
                 }
             },
             onBelow: () => {
-                placeListAt(doc, onChange, { type: 'after-segment', index: segIndex });
+                placeListAt(
+                    doc,
+                    onChange,
+                    { type: 'after-segment', index: segIndex },
+                    pendingImportList
+                );
             },
         });
     });
@@ -647,6 +699,7 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
     const placingList = Boolean(options.placingList);
     const clickEdit = Boolean(options.clickEdit);
     const onEditSpot = options.onEditSpot;
+    const pendingImportList = options.pendingImportList || null;
     const listsRoot = options.root || null;
     const wrap = document.createElement('div');
     wrap.className = 'mixed-markdown-wrap';
@@ -711,7 +764,15 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
         }
         wrap.appendChild(preview);
         if (placingList && listsRoot && sourceText.trim()) {
-            enableMarkdownPlaceTargets(preview, segIndex, sourceText, doc, onChange, listsRoot);
+            enableMarkdownPlaceTargets(
+                preview,
+                segIndex,
+                sourceText,
+                doc,
+                onChange,
+                listsRoot,
+                pendingImportList
+            );
         } else if (clickEdit && typeof onEditSpot === 'function' && sourceText.trim()) {
             enableMarkdownClickEditTargets(preview, segIndex, onEditSpot);
         }
@@ -1099,17 +1160,36 @@ function renderItemRow({ item, index, list, dragEnabled, totalVisible, onMutate,
     const body = document.createElement('div');
     body.className = 'mdlist-item-body';
 
-    const textInput = document.createElement('input');
-    textInput.type = 'text';
+    const textInput = document.createElement('textarea');
+    textInput.rows = 1;
     textInput.className = 'mdlist-text';
     textInput.value = item.text || '';
     textInput.placeholder = 'Item text';
     textInput.setAttribute('aria-label', 'Item text');
+
+    const syncTextHeight = () => {
+        const expanded = document.activeElement === textInput;
+        textInput.classList.toggle('is-expanded', expanded);
+        if (!expanded) {
+            textInput.style.removeProperty('height');
+            return;
+        }
+        textInput.style.height = '0px';
+        const maxPx = Math.round(window.innerHeight * 0.45);
+        const next = Math.max(44, Math.min(textInput.scrollHeight, maxPx));
+        textInput.style.height = `${next}px`;
+    };
+
+    textInput.addEventListener('focus', () => {
+        requestAnimationFrame(syncTextHeight);
+    });
     textInput.addEventListener('input', () => {
         onMutate(() => setItemText(list, item.id, textInput.value), { skipRender: true });
+        syncTextHeight();
     });
+    textInput.addEventListener('blur', syncTextHeight);
     textInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
+        if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
             const created = addItem(list, '');
             onMutate(() => {}, { focusItemId: created.id });

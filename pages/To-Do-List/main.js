@@ -7,7 +7,7 @@ import * as API from './api.js';
 import * as UI from './ui.js';
 import * as Utils from './utils.js';
 import { getTerm } from './utils.js';
-import { toggleKanbanFocus, exitKanbanFocus, isKanbanFocused, KANBAN_STAGES, DEFAULT_KANBAN_LABELS, getKanbanColumnLabel } from './kanban.js';
+import { toggleKanbanFocus, exitKanbanFocus, isKanbanFocused, KANBAN_STAGES, DEFAULT_KANBAN_LABELS, getKanbanColumnLabel, isImportantTask } from './kanban.js';
 import {
     getTaskImportPrompt,
     getTaskImportInstructions,
@@ -23,6 +23,7 @@ import {
     allSubtasksComplete
 } from './nested.js';
 import { MISC_TAG_ID, ensureDefaultTags, getTagsById, getTagNameForTask } from './tags.js';
+import { buildXanderListV1 } from './list-interchange.js';
 
 const nestedRollupPromptedTaskIds = new Set();
 
@@ -342,6 +343,7 @@ window.openBoardManager = UI.openBoardManager;
 window.clearCompletedInList = API.clearCompletedInList;
 window.showConfirmModal = showConfirmModal;
 window.triggerSingleListCSVExport = triggerSingleListCSVExport;
+window.triggerSingleListJSONExport = triggerSingleListJSONExport;
 window.confirmDeleteTag = (tagId, tagName) => {
     showConfirmModal(
         'Delete Tag?',
@@ -2213,6 +2215,57 @@ async function triggerAllBoardsCSVExport() {
     downloadCSV(csvLines.join("\n"), `${(window.APP_CONFIG?.appName || "Task-Master").replace(/\s+/g, '-')}-Full-Project-Export`);
 }
 
+function triggerSingleListJSONExport(listId) {
+    const list = state.appData.rawLists.find((l) => l.id === listId);
+    if (!list) return Utils.showToast('List not found');
+
+    const taskIds = list.taskIds || [];
+    const hasTasks = taskIds.some((id) => state.appData.tasks[id]);
+    if (!hasTasks) {
+        return Utils.showToast(`List has no ${getTerm(false)} to export`);
+    }
+
+    try {
+        const tagsById = getTagsById(state.appData.settings.tags);
+        const source =
+            window.APP_CONFIG?.themeOverride === 'story-manager' ||
+            /story/i.test(window.APP_CONFIG?.appName || '')
+                ? 'story-manager'
+                : 'to-do-list';
+
+        const payload = buildXanderListV1({
+            list,
+            tasks: state.appData.tasks,
+            source,
+            isImportant: isImportantTask,
+            resolveTags: (task) => {
+                const name = getTagNameForTask(task, tagsById);
+                return name && name !== 'Misc' ? [name] : [];
+            },
+        });
+
+        const jsonStr = JSON.stringify(payload, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const safeTitle = String(list.title || getTerm(true, true))
+            .replace(/[^a-z0-9]+/gi, '-')
+            .replace(/^-|-$/g, '')
+            .toLowerCase() || 'list';
+        const dateStr = new Date().toISOString().split('T')[0];
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${safeTitle}-xander-list-${dateStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 100);
+        Utils.showToast('List JSON downloaded — import in Markdown Editor', 'success');
+    } catch (err) {
+        console.error('List JSON export failed:', err);
+        Utils.showToast(err.message || 'Could not export list JSON', 'warning');
+    }
+}
+
 async function triggerSingleListCSVExport(listId) {
     const list = state.appData.rawLists.find(l => l.id === listId);
     if (!list) return Utils.showToast("List not found");
@@ -2929,10 +2982,29 @@ function startCountdownForList(input, listId) {
     }, 100);
 }
 
+function isAddTaskTextField(el) {
+    return el && el.name === 'taskText' && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+}
+
+function syncAddTaskInputHeight(input) {
+    if (!input || input.tagName !== 'TEXTAREA') return;
+    const expanded = document.activeElement === input;
+    input.classList.toggle('is-expanded', expanded);
+    if (!expanded) {
+        input.style.removeProperty('height');
+        return;
+    }
+    input.style.height = '0px';
+    const maxPx = Math.round(window.innerHeight * 0.45);
+    const next = Math.max(42, Math.min(input.scrollHeight, maxPx));
+    input.style.height = `${next}px`;
+}
+
 // Event Delegation for input events
 document.addEventListener('input', (e) => {
     const input = e.target;
-    if (input && input.tagName === 'INPUT' && input.name === 'taskText') {
+    if (isAddTaskTextField(input)) {
+        syncAddTaskInputHeight(input);
         const listCol = input.closest('.list-column');
         if (!listCol) return;
         const listId = listCol.dataset.listId;
@@ -2964,7 +3036,8 @@ document.addEventListener('input', (e) => {
 // Focus/Blur Delegation
 document.addEventListener('focusin', (e) => {
     const input = e.target;
-    if (input && input.tagName === 'INPUT' && input.name === 'taskText') {
+    if (isAddTaskTextField(input)) {
+        requestAnimationFrame(() => syncAddTaskInputHeight(input));
         const listCol = input.closest('.list-column');
         if (!listCol) return;
         const listId = listCol.dataset.listId;
@@ -2976,7 +3049,8 @@ document.addEventListener('focusin', (e) => {
 
 document.addEventListener('focusout', (e) => {
     const input = e.target;
-    if (input && input.tagName === 'INPUT' && input.name === 'taskText') {
+    if (isAddTaskTextField(input)) {
+        syncAddTaskInputHeight(input);
         const listCol = input.closest('.list-column');
         if (!listCol) return;
         const listId = listCol.dataset.listId;
@@ -2984,6 +3058,16 @@ document.addEventListener('focusout', (e) => {
             startCountdownForList(input, listId);
         }
     }
+});
+
+// Enter submits add-task; Shift+Enter inserts a newline in the textarea
+document.addEventListener('keydown', (e) => {
+    const input = e.target;
+    if (!isAddTaskTextField(input) || input.tagName !== 'TEXTAREA') return;
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    const form = input.closest('form.add-task-form');
+    if (form) form.requestSubmit();
 });
 
 // Intercept form submission to clear timers

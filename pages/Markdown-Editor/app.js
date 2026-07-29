@@ -55,6 +55,7 @@ import {
     previewAnchorFromOffset,
     serializeDocument,
 } from './lists.js';
+import { parseXanderListJson, xanderListToMdlist } from './list-import.js';
 import { applyEditingLists, applyTagFilters, readPreviewTocSticky, renderListsUi, writePreviewTocSticky } from './lists-ui.js';
 import {
     getTextareaViewportOffset,
@@ -117,6 +118,8 @@ const state = {
     tagFilters: {},
     editingListIds: {},
     placingList: false,
+    /** @type {object | null} */
+    pendingImportList: null,
     clickEdit: false,
     parseWarnings: [],
 };
@@ -343,6 +346,7 @@ function renderStructuredEditor(extra = {}) {
         doc: state.documentModel,
         focusItemId: extra.focusItemId || null,
         placingList: state.viewMode === 'preview' && state.placingList,
+        pendingImportList: state.viewMode === 'preview' && state.placingList ? state.pendingImportList : null,
         clickEdit: state.viewMode === 'preview' && state.clickEdit,
         onEditSpot: (payload) => jumpToRawAtPreviewSpot(payload),
         onStatus: (msg, kind) => setStatus(msg, kind),
@@ -350,6 +354,13 @@ function renderStructuredEditor(extra = {}) {
             if (typeof opts.placingList === 'boolean') {
                 state.placingList = opts.placingList;
                 if (opts.placingList) state.clickEdit = false;
+                if (!opts.placingList) state.pendingImportList = null;
+            }
+            if (Object.prototype.hasOwnProperty.call(opts, 'pendingImportList')) {
+                state.pendingImportList = opts.pendingImportList || null;
+            }
+            if (opts.statusMessage) {
+                setStatus(opts.statusMessage, opts.statusKind || 'ok');
             }
             if (opts.tagFilters) state.tagFilters = opts.tagFilters;
             if (opts.editingListIds) state.editingListIds = opts.editingListIds;
@@ -388,6 +399,7 @@ function renderStructuredEditor(extra = {}) {
         },
     });
     syncInsertListButton();
+    syncImportListButton();
     syncClickEditButton();
     // Re-apply find highlights after the Preview/List DOM is rebuilt
     if (editorSearch?.isOpen()) {
@@ -398,13 +410,29 @@ function renderStructuredEditor(extra = {}) {
 function syncInsertListButton() {
     const els = getEls();
     if (!els.btnInsertList) return;
-    const placing = state.viewMode === 'preview' && state.placingList;
+    const placing = state.viewMode === 'preview' && state.placingList && !state.pendingImportList;
     els.btnInsertList.textContent = placing ? 'Cancel' : '+ List';
     els.btnInsertList.setAttribute(
         'aria-label',
         placing ? 'Cancel placing list' : 'Add ranked list'
     );
     els.btnInsertList.classList.toggle('btn-insert-list--cancel', placing);
+}
+
+function syncImportListButton() {
+    const els = getEls();
+    if (!els.btnImportList) return;
+    const placingImport = state.viewMode === 'preview' && state.placingList && Boolean(state.pendingImportList);
+    els.btnImportList.textContent = placingImport ? 'Cancel' : 'Import';
+    els.btnImportList.setAttribute(
+        'aria-label',
+        placingImport
+            ? 'Cancel importing list'
+            : 'Import list JSON from To-Do List or Story Manager'
+    );
+    els.btnImportList.classList.toggle('btn-click-edit--active', placingImport);
+    els.btnImportList.hidden = !state.editor.fileId;
+    els.btnImportList.disabled = state.editor.status === 'saving' || !state.editor.fileId;
 }
 
 function syncClickEditButton() {
@@ -436,6 +464,7 @@ function jumpToRawAtPreviewSpot(payload) {
     if (!state.documentModel || !state.editor.fileId) return;
     state.clickEdit = false;
     state.placingList = false;
+    state.pendingImportList = null;
 
     flushCurrentEditorContent();
     refreshDocumentModelFromText(state.editor.editorContent);
@@ -541,6 +570,7 @@ function applyViewMode(mode, {
     state.viewMode = mode;
     if (mode !== 'preview') {
         state.placingList = false;
+        state.pendingImportList = null;
         state.clickEdit = false;
     }
     if (persist && state.editor.fileId) writeViewMode(state.editor.fileId, mode);
@@ -553,6 +583,7 @@ function applyViewMode(mode, {
         els.editor.value = state.editor.editorContent;
         syncNavLayout();
         syncInsertListButton();
+        syncImportListButton();
         syncClickEditButton();
         const go = () => {
             const searchOpen = Boolean(editorSearch?.isOpen());
@@ -578,6 +609,7 @@ function applyViewMode(mode, {
 
     renderStructuredEditor();
     syncNavLayout();
+    syncImportListButton();
     syncClickEditButton();
     if (previewAnchor && els.listsRoot) {
         // After lists-ui restoreScroll rAF, place the matching Preview block in view.
@@ -597,6 +629,7 @@ function setupEditorForOpenFile() {
     state.tagFilters = {};
     state.editingListIds = {};
     state.placingList = false;
+    state.pendingImportList = null;
     state.clickEdit = false;
     editorSearch?.close({ restoreFocus: false });
     refreshDocumentModelFromText(state.editor.editorContent);
@@ -1080,13 +1113,63 @@ async function handleRenameCurrentFile() {
     });
 }
 
+function importXanderListFromText(text) {
+    if (!state.editor.fileId) {
+        setStatus('Open a markdown file first', 'warn');
+        return;
+    }
+    flushCurrentEditorContent();
+    refreshDocumentModelFromText(state.editor.editorContent);
+
+    const payload = parseXanderListJson(text);
+    const mdlist = xanderListToMdlist(payload);
+    state.clickEdit = false;
+    state.pendingImportList = mdlist;
+    state.placingList = true;
+
+    if (state.viewMode !== 'preview') {
+        applyViewMode('preview', { persist: true });
+        // applyViewMode clears placing when leaving other modes — re-enable place mode
+        state.pendingImportList = mdlist;
+        state.placingList = true;
+        renderStructuredEditor();
+    } else {
+        renderStructuredEditor();
+    }
+    syncInsertListButton();
+    syncImportListButton();
+    setStatus(
+        `Tap where to place “${mdlist.title}” (${mdlist.items.length} item${
+            mdlist.items.length === 1 ? '' : 's'
+        }), then Above or Below — or Cancel`,
+        'ok'
+    );
+}
+
+async function handleImportListFile(file) {
+    if (!file) return;
+    try {
+        const text = await file.text();
+        importXanderListFromText(text);
+    } catch (err) {
+        setStatus(err.message || 'Could not import list JSON', 'error');
+    }
+}
+
+function cancelListPlacement() {
+    state.placingList = false;
+    state.pendingImportList = null;
+    renderStructuredEditor();
+    syncInsertListButton();
+    syncImportListButton();
+    setStatus('Cancelled list placement');
+}
+
 function insertRankedList() {
     if (!state.editor.fileId) return;
 
     if (state.viewMode === 'preview' && state.placingList) {
-        state.placingList = false;
-        renderStructuredEditor();
-        setStatus('Cancelled list placement');
+        cancelListPlacement();
         return;
     }
 
@@ -1095,10 +1178,12 @@ function insertRankedList() {
 
     if (state.viewMode === 'preview') {
         state.clickEdit = false;
+        state.pendingImportList = null;
         state.placingList = true;
         applyEditingLists(state.documentModel, state.editingListIds);
         applyTagFilters(state.documentModel, state.tagFilters);
         renderStructuredEditor();
+        syncImportListButton();
         setStatus('Tap content to place the list, or Cancel', 'ok');
         return;
     }
@@ -1107,6 +1192,7 @@ function insertRankedList() {
     const item = addItem(list, '');
     state.editingListIds = { ...state.editingListIds, [list.id]: true };
     state.placingList = false;
+    state.pendingImportList = null;
     state.clickEdit = false;
     applyEditingLists(state.documentModel, state.editingListIds);
     const serialized = serializeDocument(state.documentModel);
@@ -1132,6 +1218,7 @@ function toggleClickEdit() {
     flushCurrentEditorContent();
     refreshDocumentModelFromText(state.editor.editorContent);
     state.placingList = false;
+    state.pendingImportList = null;
     state.clickEdit = true;
 
     if (state.viewMode !== 'preview') {
@@ -1289,6 +1376,7 @@ async function switchAppMode(mode) {
 
     if (leavingEditor) {
         state.placingList = false;
+        state.pendingImportList = null;
         state.clickEdit = false;
     }
 
@@ -1326,6 +1414,7 @@ function signOut() {
     state.tagFilters = {};
     state.editingListIds = {};
     state.placingList = false;
+    state.pendingImportList = null;
     state.clickEdit = false;
     state.viewMode = 'raw';
     state.parseWarnings = [];
@@ -1437,6 +1526,25 @@ function wireEvents() {
     if (els.btnInsertList) {
         els.btnInsertList.addEventListener('click', () => {
             insertRankedList();
+        });
+    }
+    if (els.btnImportList && els.importListFile) {
+        els.btnImportList.addEventListener('click', () => {
+            if (!hasOpenFile()) {
+                setStatus('Open a markdown file first', 'warn');
+                return;
+            }
+            if (state.viewMode === 'preview' && state.placingList && state.pendingImportList) {
+                cancelListPlacement();
+                return;
+            }
+            els.importListFile.value = '';
+            els.importListFile.click();
+        });
+        els.importListFile.addEventListener('change', () => {
+            const file = els.importListFile.files?.[0];
+            handleImportListFile(file);
+            els.importListFile.value = '';
         });
     }
     if (els.btnClickEdit) {

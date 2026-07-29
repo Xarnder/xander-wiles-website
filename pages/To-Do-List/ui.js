@@ -202,7 +202,7 @@ function populateKanbanFocus(list) {
     const addFormHtml = `
         <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
             <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                <input type="text" class="add-task-input" placeholder="Type an idea to add" name="taskText" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
+                <textarea class="add-task-input" placeholder="Type an idea to add" name="taskText" rows="1" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"></textarea>
                 <button type="submit" class="btn primary">+</button>
             </form>
         </div>`;
@@ -1462,7 +1462,7 @@ function renderListColumn(list, isOrphan, isCustomSort) {
     let addFormHtml = isOrphan ? '' : `
         <div class="add-task-container ${isBottom ? '' : 'add-v-top'}">
             <form class="add-task-form" onsubmit="window.handleAddTask(event, '${list.id}')">
-                <input type="text" class="add-task-input" placeholder="Type an idea to add" name="taskText" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences">
+                <textarea class="add-task-input" placeholder="Type an idea to add" name="taskText" rows="1" spellcheck="true" autocorrect="on" autocomplete="on" autocapitalize="sentences"></textarea>
                 <button type="submit" class="btn primary">+</button>
             </form>
         </div>`;
@@ -1810,8 +1810,8 @@ export function createNestedIdeaEditorItem(data, level = 1) {
     levelBadge.textContent = level;
     levelBadge.title = `Nesting Level ${level}`;
     
-    const input = document.createElement('input');
-    input.type = 'text';
+    const input = document.createElement('textarea');
+    input.rows = 1;
     input.value = data.text || '';
     input.placeholder = 'Nested idea...';
     input.className = 'nested-idea-input';
@@ -1819,6 +1819,27 @@ export function createNestedIdeaEditorItem(data, level = 1) {
     input.setAttribute('autocorrect', 'on');
     input.setAttribute('autocomplete', 'on');
     input.setAttribute('autocapitalize', 'sentences');
+    input.setAttribute('aria-label', 'Nested idea');
+
+    const syncNestedIdeaInputHeight = () => {
+        const expanded = document.activeElement === input;
+        input.classList.toggle('is-expanded', expanded);
+        if (!expanded) {
+            input.style.removeProperty('height');
+            return;
+        }
+        // Collapse to 0 so scrollHeight reflects full wrapped content, then grow.
+        input.style.height = '0px';
+        const maxPx = Math.round(window.innerHeight * 0.45);
+        const next = Math.max(40, Math.min(input.scrollHeight, maxPx));
+        input.style.height = `${next}px`;
+    };
+    input.addEventListener('focus', () => {
+        // rAF: let :focus / .is-expanded styles (pre-wrap) apply before measuring
+        requestAnimationFrame(syncNestedIdeaInputHeight);
+    });
+    input.addEventListener('input', syncNestedIdeaInputHeight);
+    input.addEventListener('blur', syncNestedIdeaInputHeight);
 
     if (state.nestedMultiSelectMode) {
         input.readOnly = true;
@@ -3827,6 +3848,13 @@ export function openEditListModal(listId) {
     const newExportCsv = exportCsvBtn.cloneNode(true);
     exportCsvBtn.parentNode.replaceChild(newExportCsv, exportCsvBtn);
 
+    const exportJsonBtn = document.getElementById('edit-list-export-json-btn');
+    let newExportJson = null;
+    if (exportJsonBtn) {
+        newExportJson = exportJsonBtn.cloneNode(true);
+        exportJsonBtn.parentNode.replaceChild(newExportJson, exportJsonBtn);
+    }
+
     if (quickTagBtn) {
         const newQuickTag = quickTagBtn.cloneNode(true);
         quickTagBtn.parentNode.replaceChild(newQuickTag, quickTagBtn);
@@ -3841,6 +3869,13 @@ export function openEditListModal(listId) {
             window.triggerSingleListCSVExport(listId);
         }
     };
+    if (newExportJson) {
+        newExportJson.onclick = () => {
+            if (window.triggerSingleListJSONExport) {
+                window.triggerSingleListJSONExport(listId);
+            }
+        };
+    }
 
     newBulk.onclick = () => {
         const text = bulkInput.value;

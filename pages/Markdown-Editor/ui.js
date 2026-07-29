@@ -28,6 +28,8 @@ export function bindUi() {
     els.btnNewFolder = document.getElementById('btn-new-folder');
     els.btnRenameCurrent = document.getElementById('btn-rename-current');
     els.btnInsertList = document.getElementById('btn-insert-list');
+    els.btnImportList = document.getElementById('btn-import-list');
+    els.importListFile = document.getElementById('import-list-file');
     els.btnClickEdit = document.getElementById('btn-click-edit');
     els.btnGoFinder = document.getElementById('btn-go-finder');
     els.createActions = document.getElementById('create-actions');
@@ -212,6 +214,7 @@ export function showView(name, options = {}) {
             els.editorActive.hidden = true;
             els.btnSave.hidden = true;
             if (els.btnInsertList) els.btnInsertList.hidden = true;
+            if (els.btnImportList) els.btnImportList.hidden = true;
             if (els.btnClickEdit) els.btnClickEdit.hidden = true;
             if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
             if (els.editorSearchBar) els.editorSearchBar.hidden = true;
@@ -251,6 +254,7 @@ export function setEditorLoading(loading, fileName = '') {
         els.viewTitle.removeAttribute('title');
         if (els.btnSave) els.btnSave.hidden = true;
         if (els.btnInsertList) els.btnInsertList.hidden = true;
+        if (els.btnImportList) els.btnImportList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
         if (els.btnRenameCurrent) els.btnRenameCurrent.hidden = true;
         if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
@@ -594,12 +598,14 @@ export function syncEditorChrome(state) {
         els.editorActive.hidden = false;
         els.btnSave.hidden = false;
         if (els.btnInsertList) els.btnInsertList.hidden = false;
+        if (els.btnImportList) els.btnImportList.hidden = false;
         if (els.btnClickEdit) els.btnClickEdit.hidden = false;
         if (els.btnEditorSearch) els.btnEditorSearch.hidden = false;
     } else {
         els.viewTitle.classList.remove('view-title--doc');
         els.viewTitle.removeAttribute('title');
         if (els.btnInsertList) els.btnInsertList.hidden = true;
+        if (els.btnImportList) els.btnImportList.hidden = true;
         if (els.btnClickEdit) els.btnClickEdit.hidden = true;
         if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
         if (els.editorSearchBar) {
@@ -614,6 +620,7 @@ export function syncEditorChrome(state) {
     els.btnRenameCurrent.hidden = !state.fileId;
     els.btnRenameCurrent.disabled = state.status === 'saving';
     if (els.btnInsertList) els.btnInsertList.disabled = state.status === 'saving' || !state.fileId;
+    if (els.btnImportList) els.btnImportList.disabled = state.status === 'saving' || !state.fileId;
     if (els.btnClickEdit) els.btnClickEdit.disabled = state.status === 'saving' || !state.fileId;
     if (els.btnEditorSearch) els.btnEditorSearch.disabled = state.status === 'saving' || !state.fileId;
 

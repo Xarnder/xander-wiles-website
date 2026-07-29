@@ -752,6 +752,57 @@ export function appendEmptyList(doc, title) {
 }
 
 /**
+ * Normalize an imported mdlist and ensure a unique id in the document.
+ * @param {object} doc
+ * @param {object} list
+ */
+export function prepareImportedList(doc, list) {
+    if (!doc || !list || typeof list !== 'object') {
+        throw new Error('Imported list is required');
+    }
+    const usedIds = new Set(
+        (doc.segments || [])
+            .filter((s) => s.type === 'mdlist' && s.list?.id)
+            .map((s) => s.list.id)
+    );
+    const next = {
+        version: 1,
+        id: list.id && !usedIds.has(list.id) ? String(list.id) : createId('list'),
+        title:
+            typeof list.title === 'string' && list.title.trim()
+                ? list.title.trim()
+                : nextDefaultListTitle(doc),
+        items: Array.isArray(list.items) ? list.items : [],
+    };
+    for (const [k, v] of Object.entries(list)) {
+        if (k === 'version' || k === 'id' || k === 'title' || k === 'items') continue;
+        next[k] = v;
+    }
+    return next;
+}
+
+/**
+ * Append a fully populated mdlist object (e.g. from xander-list-v1 import).
+ * @param {object} doc
+ * @param {object} list
+ */
+export function appendImportedList(doc, list) {
+    const next = prepareImportedList(doc, list);
+    const segments = [...(doc.segments || [])];
+    if (segments.length && segments[segments.length - 1].type === 'markdown') {
+        const last = segments[segments.length - 1];
+        if (!last.text.endsWith('\n\n') && last.text.length) {
+            last.text = `${last.text.replace(/\n?$/, '\n')}\n`;
+        }
+    } else if (!segments.length) {
+        segments.push({ type: 'markdown', text: '' });
+    }
+    segments.push({ type: 'mdlist', raw: '', list: next, repaired: false, error: null });
+    doc.segments = segments;
+    return next;
+}
+
+/**
  * Split markdown into sections at ATX / setext headers (skips fenced code).
  * @param {string} text
  * @returns {Array<{ startLine: number, endLine: number, title: string, level: number, text: string, isPreamble: boolean }>}
@@ -851,11 +902,40 @@ function ensureMarkdownBreak(text) {
  * @param {string} [title] defaults to next "List N"
  */
 export function insertEmptyListAt(doc, target, title) {
+    return insertListAt(doc, target, createEmptyList(title ?? nextDefaultListTitle(doc)));
+}
+
+/**
+ * Insert a prepared mdlist at a placement target (Preview Above/Below).
+ * @param {object} doc
+ * @param {{ type: 'at-start' } | { type: 'after-segment', index: number } | { type: 'split-markdown', segmentIndex: number, beforeLine: number }} target
+ * @param {object} list
+ */
+export function insertImportedListAt(doc, target, list) {
+    return insertListAt(doc, target, prepareImportedList(doc, list));
+}
+
+/**
+ * @param {object} doc
+ * @param {object} target
+ * @param {object} list
+ */
+function insertListAt(doc, target, list) {
     if (!target || typeof target !== 'object') {
-        return appendEmptyList(doc, title);
+        const segments = [...(doc.segments || [])];
+        if (segments.length && segments[segments.length - 1].type === 'markdown') {
+            const last = segments[segments.length - 1];
+            if (!last.text.endsWith('\n\n') && last.text.length) {
+                last.text = `${last.text.replace(/\n?$/, '\n')}\n`;
+            }
+        } else if (!segments.length) {
+            segments.push({ type: 'markdown', text: '' });
+        }
+        segments.push({ type: 'mdlist', raw: '', list, repaired: false, error: null });
+        doc.segments = segments;
+        return list;
     }
 
-    const list = createEmptyList(title ?? nextDefaultListTitle(doc));
     const newSeg = { type: 'mdlist', raw: '', list, repaired: false, error: null };
     const segments = [...(doc.segments || [])];
 
@@ -868,7 +948,7 @@ export function insertEmptyListAt(doc, target, title) {
     if (target.type === 'after-segment') {
         const index = Number(target.index);
         if (!Number.isInteger(index) || index < -1) {
-            return appendEmptyList(doc, title);
+            return insertListAt(doc, null, list);
         }
         const insertAt = Math.min(Math.max(index + 1, 0), segments.length);
         segments.splice(insertAt, 0, newSeg);
@@ -881,7 +961,7 @@ export function insertEmptyListAt(doc, target, title) {
         const beforeLine = Number(target.beforeLine);
         const seg = segments[segIndex];
         if (!seg || seg.type !== 'markdown' || !Number.isInteger(beforeLine) || beforeLine < 0) {
-            return appendEmptyList(doc, title);
+            return insertListAt(doc, null, list);
         }
 
         const lines = String(seg.text ?? '').split('\n');
@@ -895,8 +975,6 @@ export function insertEmptyListAt(doc, target, title) {
         }
         parts.push(newSeg);
         if (afterText.trim() || afterText.includes('\n')) {
-            // Keep trailing whitespace-only chunks only when they have structure;
-            // drop pure empty leftovers.
             if (afterText.trim()) {
                 parts.push({ type: 'markdown', text: afterText.replace(/^\n+/, '') });
             }
@@ -911,7 +989,7 @@ export function insertEmptyListAt(doc, target, title) {
         return list;
     }
 
-    return appendEmptyList(doc, title);
+    return insertListAt(doc, null, list);
 }
 
 export function parseTagsInput(value) {

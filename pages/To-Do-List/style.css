@@ -2363,7 +2363,7 @@ body {
 .add-task-form {
     display: flex;
     gap: 8px;
-    align-items: center;
+    align-items: flex-start;
 }
 
 .add-task-form .btn.primary {
@@ -2385,7 +2385,21 @@ body {
     padding: 8px;
     border-radius: 6px;
     font-size: 16px;
+    line-height: 1.35;
     min-width: 0;
+    font-family: inherit;
+    resize: none;
+    overflow: hidden;
+    height: 42px;
+    max-height: 42px;
+    box-sizing: border-box;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+textarea.add-task-input.is-expanded {
+    overflow-y: auto;
+    max-height: min(45vh, 20rem);
 }
 
 [data-theme="light"] .add-task-input {
@@ -5858,11 +5872,19 @@ body.compact-view .nested-ideas-list {
 .nested-idea-editor-row {
     display: flex;
     gap: 8px;
-    align-items: center;
+    align-items: flex-start;
 }
 
-.nested-idea-editor-row input {
+.nested-idea-editor-row .nested-level-badge,
+.nested-idea-editor-row .icon-btn {
+    margin-top: 6px;
+    flex-shrink: 0;
+}
+
+.nested-idea-input {
     flex-grow: 1;
+    min-width: 0;
+    box-sizing: border-box;
     background: oklch(0 0 0 / 0.1);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
@@ -5870,6 +5892,23 @@ body.compact-view .nested-ideas-list {
     border-radius: 8px;
     font-family: inherit;
     font-size: 0.9rem;
+    line-height: 1.35;
+    resize: none;
+    overflow: hidden;
+    height: 2.5rem;
+    max-height: 2.5rem;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.nested-idea-input.is-expanded {
+    overflow-y: auto;
+    max-height: min(45vh, 20rem);
+}
+
+.nested-idea-input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
 }
 
 .nested-idea-actions {
