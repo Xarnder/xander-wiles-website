@@ -2325,22 +2325,15 @@ body {
     background: oklch(0.320 0 0 / 0.7) !important;
 }
 
-.move-task-btn {
+.move-task-btn,
+.reassign-tag-btn {
     background: oklch(0.220 0 0 / 0.72) !important;
     color: oklch(1 0 0) !important;
 }
 
-.move-task-btn:hover {
-    background: oklch(0.340 0 0 / 0.72) !important;
-}
-
-.reassign-tag-btn {
-    background: oklch(0.200 0 0 / 0.72) !important;
-    color: oklch(1 0 0) !important;
-}
-
+.move-task-btn:hover,
 .reassign-tag-btn:hover {
-    background: oklch(0.330 0 0 / 0.72) !important;
+    background: oklch(0.340 0 0 / 0.72) !important;
 }
 
 .reassign-tag-modal {
