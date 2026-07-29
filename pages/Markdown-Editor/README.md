@@ -7,11 +7,13 @@ Live path: `/pages/Markdown-Editor/`
 
 1. Sign in with Google (OAuth access token via Google Identity Services)
 2. Browse Drive folders in-app (open folder, list markdown, navigate Up)
-3. Open a `.md` / `text/markdown` file
-4. Edit in a plain textarea
-5. Save back to the **same** Drive file
-6. Shows loading / dirty / saving / saved / error status
-7. Keeps a local draft on this device if the tab is killed (restore prompt on reopen)
+3. **Create** new markdown notes and folders in the current location
+4. **Rename** notes and folders from the list (or Rename while editing)
+5. Open a `.md` / `text/markdown` file
+6. Edit in a plain textarea
+7. Save back to the **same** Drive file
+8. Shows loading / dirty / saving / saved / error status
+9. Keeps a local draft on this device if the tab is killed (restore prompt on reopen)
 
 ## Auth approach & Drive scope
 

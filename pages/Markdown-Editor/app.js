@@ -11,11 +11,14 @@ import {
     requestAccessToken,
 } from './auth.js';
 import {
+    createFolder,
+    createMarkdownFile,
     getFileContent,
     getFileMetadata,
     isFolder,
     listComputerRootFolders,
     listFolder,
+    renameDriveItem,
     searchMarkdownFiles,
     updateFileContent,
 } from './drive.js';
@@ -34,16 +37,19 @@ import {
     bindUi,
     confirmLeaveUnsaved,
     getEls,
+    promptForName,
     renderFileList,
     renderFolderPath,
     setBrowseEmptyMessage,
     setBrowseModeUi,
     setConfigError,
+    setCreateActionsVisible,
     setLoadMoreVisible,
     setStatus,
     setUpEnabled,
     showView,
     syncEditorChrome,
+    syncNavLayout,
 } from './ui.js';
 
 const COMPUTERS_ROOT = { id: '__computers__', name: 'Computers' };
@@ -88,6 +94,26 @@ async function refreshBrowse(reset = true) {
     }
 }
 
+function canCreateInCurrentLocation() {
+    if (state.browseMode === 'search') return false;
+    if (state.browseMode === 'computers') {
+        // Virtual Computers root is not a real parent id.
+        return !(state.folderStack.length === 1 && state.folderStack[0].id === COMPUTERS_ROOT.id);
+    }
+    return state.browseMode === 'folder';
+}
+
+function updateCreateActions() {
+    setCreateActionsVisible(canCreateInCurrentLocation());
+}
+
+function renderCurrentFileList() {
+    renderFileList(state.files, {
+        onOpen: handleOpenEntry,
+        onRename: handleRenameEntry,
+    });
+}
+
 async function loadBrowse(reset = true) {
     const folder = currentFolder();
     state.loadingFolder = true;
@@ -96,8 +122,9 @@ async function loadBrowse(reset = true) {
     setUpEnabled(state.folderStack.length > 1);
     renderFolderPath(state.folderStack, 'folder');
     rememberFolder(folder.id);
+    updateCreateActions();
     setBrowseEmptyMessage(
-        'No folders or markdown files in this My Drive folder. If you sync with Drive for Desktop on a Mac, try “Find all .md” — files may live under Computers, not My Drive.'
+        'No folders or markdown files here yet. Tap + Note or + Folder to create one.'
     );
 
     try {
@@ -109,9 +136,9 @@ async function loadBrowse(reset = true) {
             state.files = state.files.concat(result.files);
         }
         state.nextPageToken = result.nextPageToken;
-        renderFileList(state.files, { onOpen: handleOpenEntry });
+        renderCurrentFileList();
         setLoadMoreVisible(Boolean(state.nextPageToken));
-        setStatus(state.files.length ? '' : 'This My Drive folder looks empty of .md files.');
+        setStatus(state.files.length ? '' : 'This folder is empty — create a note or folder.');
     } catch (err) {
         setStatus(err.message || 'Failed to list folder', 'error');
     } finally {
@@ -123,6 +150,7 @@ async function loadSearch(reset = true) {
     state.loadingFolder = true;
     setBrowseModeUi('search');
     setUpEnabled(false);
+    updateCreateActions();
     renderFolderPath([], 'search', state.searchQuery);
     setStatus('Searching Drive for markdown…');
     setBrowseEmptyMessage(
@@ -138,7 +166,7 @@ async function loadSearch(reset = true) {
             state.files = state.files.concat(result.files);
         }
         state.nextPageToken = result.nextPageToken;
-        renderFileList(state.files, { onOpen: handleOpenEntry });
+        renderCurrentFileList();
         setLoadMoreVisible(Boolean(state.nextPageToken));
         setStatus(
             state.files.length
@@ -161,6 +189,7 @@ async function loadComputers(reset = true) {
 
     const atComputersRoot =
         state.folderStack.length === 1 && state.folderStack[0].id === COMPUTERS_ROOT.id;
+    updateCreateActions();
 
     try {
         if (atComputersRoot) {
@@ -170,7 +199,7 @@ async function loadComputers(reset = true) {
             const computers = await listComputerRootFolders();
             state.files = computers;
             state.nextPageToken = null;
-            renderFileList(state.files, { onOpen: handleOpenEntry });
+            renderCurrentFileList();
             setLoadMoreVisible(false);
             setStatus(
                 computers.length
@@ -180,7 +209,6 @@ async function loadComputers(reset = true) {
             return;
         }
 
-        // Inside a computer (or subfolder): normal folder listing works with the folder id.
         const folder = currentFolder();
         setUpEnabled(true);
         renderFolderPath(state.folderStack, 'computers');
@@ -193,7 +221,7 @@ async function loadComputers(reset = true) {
             state.files = state.files.concat(result.files);
         }
         state.nextPageToken = result.nextPageToken;
-        renderFileList(state.files, { onOpen: handleOpenEntry });
+        renderCurrentFileList();
         setLoadMoreVisible(Boolean(state.nextPageToken));
         setStatus(state.files.length ? '' : 'No folders or markdown files here.');
     } catch (err) {
@@ -230,12 +258,14 @@ async function goUp() {
 async function switchToFolderMode() {
     state.browseMode = 'folder';
     state.folderStack = [{ id: ROOT_FOLDER_ID, name: ROOT_FOLDER_NAME }];
+    showAppView('finder');
     await loadBrowse(true);
 }
 
 async function switchToComputersMode() {
     state.browseMode = 'computers';
     state.folderStack = [{ ...COMPUTERS_ROOT }];
+    showAppView('finder');
     await loadComputers(true);
 }
 
@@ -245,6 +275,7 @@ async function switchToSearchMode() {
     if (els.searchInput && !state.searchQuery) {
         els.searchInput.value = '';
     }
+    showAppView('finder');
     await loadSearch(true);
 }
 
@@ -256,9 +287,109 @@ async function handleOpenEntry(file) {
     await openMarkdownFile(file);
 }
 
+async function handleRenameEntry(file) {
+    const folder = isFolder(file);
+    const name = await promptForName({
+        title: folder ? 'Rename folder' : 'Rename note',
+        hint: folder ? 'Folder name' : 'We’ll keep the .md ending for notes.',
+        confirmLabel: 'Rename',
+        initialValue: file.name || '',
+        selectStem: !folder,
+    });
+    if (!name || name === file.name) return;
+
+    setStatus('Renaming…');
+    try {
+        const updated = await renameDriveItem(file.id, name, { isMarkdown: !folder });
+        const idx = state.files.findIndex((f) => f.id === file.id);
+        if (idx >= 0) {
+            state.files[idx] = { ...state.files[idx], name: updated.name };
+            renderCurrentFileList();
+        }
+        if (state.editor.fileId === file.id) {
+            state.editor.fileName = updated.name;
+            syncEditorChrome(state.editor);
+        }
+        // Keep folder stack labels in sync if renaming current path folder
+        for (const frame of state.folderStack) {
+            if (frame.id === file.id) frame.name = updated.name;
+        }
+        if (state.browseMode !== 'search') {
+            renderFolderPath(
+                state.folderStack,
+                state.browseMode === 'computers' ? 'computers' : 'folder',
+                state.searchQuery
+            );
+        }
+        setStatus(`Renamed to ${updated.name}`, 'ok');
+    } catch (err) {
+        setStatus(err.message || 'Rename failed', 'error');
+    }
+}
+
+async function handleCreateNote() {
+    if (!canCreateInCurrentLocation()) return;
+    const parent = currentFolder();
+    const name = await promptForName({
+        title: 'New note',
+        hint: 'Name your markdown file. .md is added automatically if missing.',
+        confirmLabel: 'Create',
+        initialValue: 'Untitled.md',
+        selectStem: true,
+    });
+    if (!name) return;
+
+    setStatus('Creating note…');
+    try {
+        const created = await createMarkdownFile(parent.id, name, `# ${name.replace(/\.md$/i, '')}\n\n`);
+        setStatus(`Created ${created.name}`, 'ok');
+        await openMarkdownFile(created);
+    } catch (err) {
+        setStatus(err.message || 'Could not create note', 'error');
+    }
+}
+
+async function handleCreateFolder() {
+    if (!canCreateInCurrentLocation()) return;
+    const parent = currentFolder();
+    const name = await promptForName({
+        title: 'New folder',
+        hint: 'Created inside the folder you’re viewing now.',
+        confirmLabel: 'Create',
+        initialValue: 'New folder',
+    });
+    if (!name) return;
+
+    setStatus('Creating folder…');
+    try {
+        const created = await createFolder(parent.id, name);
+        setStatus(`Created folder ${created.name}`, 'ok');
+        await refreshBrowse(true);
+    } catch (err) {
+        setStatus(err.message || 'Could not create folder', 'error');
+    }
+}
+
+async function handleRenameCurrentFile() {
+    if (!state.editor.fileId) return;
+    await handleRenameEntry({
+        id: state.editor.fileId,
+        name: state.editor.fileName,
+        mimeType: state.editor.mimeType || 'text/markdown',
+    });
+}
+
+function hasOpenFile() {
+    return Boolean(state.editor.fileId);
+}
+
+function showAppView(name) {
+    showView(name, { hasOpenFile: hasOpenFile() });
+}
+
 async function openMarkdownFile(file) {
     const els = getEls();
-    showView('editor');
+    showAppView('editor');
     state.editor.status = 'loading';
     syncEditorChrome(state.editor);
     setStatus('Opening file…');
@@ -271,7 +402,7 @@ async function openMarkdownFile(file) {
                 `This file is about ${Math.round(size / 1024 / 1024)} MB. Opening large files may be slow on iPhone. Continue?`
             );
             if (!ok) {
-                showView('browse');
+                showAppView('finder');
                 setStatus('');
                 return;
             }
@@ -296,6 +427,7 @@ async function openMarkdownFile(file) {
         }
 
         els.editor.value = state.editor.editorContent;
+        showAppView('editor');
         syncEditorChrome(state.editor);
         els.editor.focus();
     } catch (err) {
@@ -325,14 +457,26 @@ async function saveCurrentFile() {
     }
 }
 
-function leaveEditorIfAllowed() {
-    if (state.editor.dirty && !confirmLeaveUnsaved()) {
-        return false;
+/**
+ * Switch app mode tabs. Open files stay in memory across Finder / Edit / Settings.
+ * @param {'finder' | 'editor' | 'settings'} mode
+ */
+async function switchAppMode(mode) {
+    if (mode === 'editor') {
+        showAppView('editor');
+        if (hasOpenFile()) syncEditorChrome(state.editor);
+        return;
     }
-    state.editor = createEditorState();
-    showView('browse');
-    setStatus('');
-    return true;
+
+    if (mode === 'finder') {
+        showAppView('finder');
+        await refreshBrowse(true);
+        return;
+    }
+
+    if (mode === 'settings') {
+        showAppView('settings');
+    }
 }
 
 async function signIn() {
@@ -359,7 +503,7 @@ function signOut() {
 }
 
 async function afterSignedIn() {
-    showView('browse');
+    showAppView('finder');
     setStatus('');
     state.browseMode = 'folder';
 
@@ -391,6 +535,19 @@ function registerServiceWorker() {
 function wireEvents() {
     const els = getEls();
 
+    els.tabFinder.addEventListener('click', () => {
+        switchAppMode('finder');
+    });
+    els.tabEditor.addEventListener('click', () => {
+        switchAppMode('editor');
+    });
+    els.tabSettings.addEventListener('click', () => {
+        switchAppMode('settings');
+    });
+    els.btnGoFinder.addEventListener('click', () => {
+        switchAppMode('finder');
+    });
+
     els.btnSignIn.addEventListener('click', () => {
         signIn();
     });
@@ -399,11 +556,6 @@ function wireEvents() {
     });
     els.btnSave.addEventListener('click', () => {
         saveCurrentFile();
-    });
-    els.btnBack.addEventListener('click', () => {
-        if (leaveEditorIfAllowed()) {
-            refreshBrowse(true);
-        }
     });
     els.btnUp.addEventListener('click', () => {
         goUp();
@@ -419,14 +571,31 @@ function wireEvents() {
     els.btnModeComputers.addEventListener('click', () => {
         switchToComputersMode();
     });
-    els.btnModeSearch.addEventListener('click', () => {
-        switchToSearchMode();
+    els.btnModeSearch.addEventListener('click', async () => {
+        await switchToSearchMode();
+    });
+    els.btnNewNote.addEventListener('click', () => {
+        handleCreateNote();
+    });
+    els.btnNewFolder.addEventListener('click', () => {
+        handleCreateFolder();
+    });
+    els.btnRenameCurrent.addEventListener('click', () => {
+        handleRenameCurrentFile();
     });
     els.searchForm.addEventListener('submit', (event) => {
         event.preventDefault();
         state.browseMode = 'search';
         state.searchQuery = els.searchInput.value || '';
         loadSearch(true);
+    });
+    els.nameForm.addEventListener('submit', (event) => {
+        // Let method="dialog" close; block empty confirm
+        const submitter = event.submitter;
+        if (submitter && submitter.value === 'confirm' && !els.nameInput.value.trim()) {
+            event.preventDefault();
+            els.nameInput.focus();
+        }
     });
 
     els.editor.addEventListener('input', () => {
@@ -445,6 +614,10 @@ function wireEvents() {
         if (document.visibilityState === 'hidden' && state.editor.dirty && state.editor.fileId) {
             setEditorText(state.editor, els.editor.value);
         }
+    });
+
+    window.addEventListener('resize', () => {
+        syncNavLayout();
     });
 }
 

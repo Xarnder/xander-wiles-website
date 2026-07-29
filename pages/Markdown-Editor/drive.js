@@ -203,3 +203,77 @@ export async function updateFileContent(fileId, text, mimeType = 'text/markdown'
     );
     return response.json();
 }
+
+function ensureMdExtension(name) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return 'untitled.md';
+    const lower = trimmed.toLowerCase();
+    if (lower.endsWith('.md') || lower.endsWith('.markdown')) return trimmed;
+    return `${trimmed}.md`;
+}
+
+/** Create an empty markdown file in a folder. */
+export async function createMarkdownFile(parentId, name, content = '') {
+    const fileName = ensureMdExtension(name);
+    const metadata = {
+        name: fileName,
+        mimeType: 'text/markdown',
+        parents: [parentId || ROOT_FOLDER_ID],
+    };
+    const boundary = 'mdeditor_boundary';
+    const body =
+        `--${boundary}\r\n` +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        `${JSON.stringify(metadata)}\r\n` +
+        `--${boundary}\r\n` +
+        'Content-Type: text/markdown; charset=UTF-8\r\n\r\n' +
+        `${content}\r\n` +
+        `--${boundary}--`;
+
+    const response = await driveFetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,modifiedTime,size',
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': `multipart/related; boundary=${boundary}`,
+            },
+            body,
+        }
+    );
+    return response.json();
+}
+
+/** Create a folder inside a parent folder. */
+export async function createFolder(parentId, name) {
+    const folderName = (name || '').trim() || 'Untitled folder';
+    const response = await driveFetch(
+        'https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType,modifiedTime',
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: folderName,
+                mimeType: FOLDER_MIME,
+                parents: [parentId || ROOT_FOLDER_ID],
+            }),
+        }
+    );
+    return response.json();
+}
+
+/** Rename a file or folder. For markdown, keeps/adds .md if appropriate. */
+export async function renameDriveItem(fileId, newName, { isMarkdown = false } = {}) {
+    let name = (newName || '').trim();
+    if (!name) throw new Error('Name cannot be empty');
+    if (isMarkdown) name = ensureMdExtension(name);
+
+    const response = await driveFetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,name,mimeType,modifiedTime,size`,
+        {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+        }
+    );
+    return response.json();
+}

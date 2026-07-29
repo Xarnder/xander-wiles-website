@@ -36,19 +36,10 @@
 
 <body>
     <div id="app" class="app">
-        <header class="top-bar">
-            <div class="top-bar-left">
-                <button type="button" id="btn-back" class="btn btn-ghost" hidden>Back</button>
-                <button type="button" id="btn-up" class="btn btn-ghost" hidden>Up</button>
-                <h1 id="view-title" class="view-title">Markdown Editor</h1>
-            </div>
-            <div class="top-bar-right">
-                <button type="button" id="btn-sign-out" class="btn btn-ghost" hidden>Sign out</button>
-                <button type="button" id="btn-save" class="btn btn-primary" hidden>Save</button>
-            </div>
-        </header>
-
-        <p id="status" class="status" role="status" aria-live="polite">Loading…</p>
+        <div class="context-strip">
+            <h1 id="view-title" class="view-title">Markdown Editor</h1>
+            <p id="status" class="status" role="status" aria-live="polite">Loading…</p>
+        </div>
 
         <main id="main" class="main">
             <section id="view-login" class="view" hidden>
@@ -60,24 +51,12 @@
                 </div>
             </section>
 
-            <section id="view-browse" class="view" hidden>
-                <div class="browse-toolbar">
-                    <div class="browse-mode-row" role="group" aria-label="Browse mode">
-                        <button type="button" id="btn-mode-folders" class="btn btn-ghost btn-mode is-active">My Drive</button>
-                        <button type="button" id="btn-mode-computers" class="btn btn-ghost btn-mode">Computers</button>
-                        <button type="button" id="btn-mode-search" class="btn btn-ghost btn-mode">Find .md</button>
-                    </div>
-                    <form id="search-form" class="search-form" hidden>
-                        <label class="sr-only" for="search-input">Search markdown file names</label>
-                        <input id="search-input" class="search-input" type="search" placeholder="Filter by name (optional)" enterkeyhint="search" autocomplete="off">
-                        <button type="submit" class="btn btn-primary">Search</button>
-                    </form>
-                    <p class="browse-hint">
-                        Prefer notes in <strong>My Drive</strong> for the most reliable sync with your phone.
-                        The <strong>Computers</strong> tab can work for Drive for Desktop folders, but Google’s API support for that section is unofficial/incomplete — if a computer doesn’t appear, move the folder into My Drive on
-                        <a href="https://drive.google.com" target="_blank" rel="noopener noreferrer">drive.google.com</a>.
-                    </p>
-                </div>
+            <section id="view-finder" class="view" hidden>
+                <form id="search-form" class="search-form" hidden>
+                    <label class="sr-only" for="search-input">Search markdown file names</label>
+                    <input id="search-input" class="search-input" type="search" placeholder="Filter by name (optional)" enterkeyhint="search" autocomplete="off">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </form>
                 <p id="folder-path" class="folder-path"></p>
                 <div id="file-list" class="file-list" role="list"></div>
                 <button type="button" id="btn-load-more" class="btn btn-ghost btn-block" hidden>Load more</button>
@@ -85,14 +64,70 @@
             </section>
 
             <section id="view-editor" class="view view-editor" hidden>
-                <div class="editor-meta">
-                    <p id="file-name" class="file-name"></p>
-                    <p id="dirty-label" class="dirty-label" hidden>Unsaved</p>
+                <div id="editor-empty" class="empty-panel" hidden>
+                    <p class="empty-panel-title">No file open</p>
+                    <p class="empty-panel-copy">Open a markdown file from Finder to start editing.</p>
+                    <button type="button" id="btn-go-finder" class="btn btn-primary">Go to Finder</button>
                 </div>
-                <label class="sr-only" for="editor">Markdown content</label>
-                <textarea id="editor" class="editor" spellcheck="true" autocomplete="off" autocapitalize="off"></textarea>
+                <div id="editor-active" class="editor-active" hidden>
+                    <div class="editor-meta">
+                        <p id="file-name" class="file-name"></p>
+                        <p id="dirty-label" class="dirty-label" hidden>Unsaved</p>
+                    </div>
+                    <label class="sr-only" for="editor">Markdown content</label>
+                    <textarea id="editor" class="editor" spellcheck="true" autocomplete="off" autocapitalize="off"></textarea>
+                </div>
+            </section>
+
+            <section id="view-settings" class="view view-settings" hidden>
+                <div class="settings-card">
+                    <h2 class="settings-heading">Settings</h2>
+                    <p class="settings-lede">Search Drive for markdown files, or sign out of this device.</p>
+                    <div class="settings-actions">
+                        <button type="button" id="btn-mode-search" class="btn btn-primary btn-large">Find .md</button>
+                        <button type="button" id="btn-sign-out" class="btn btn-ghost btn-large">Sign out</button>
+                    </div>
+                    <p class="browse-hint settings-hint">
+                        Prefer notes in <strong>My Drive</strong> for the most reliable sync with your phone.
+                        The <strong>Computers</strong> location can work for Drive for Desktop folders, but Google’s API support for that section is unofficial/incomplete — if a computer doesn’t appear, move the folder into My Drive on
+                        <a href="https://drive.google.com" target="_blank" rel="noopener noreferrer">drive.google.com</a>.
+                    </p>
+                </div>
             </section>
         </main>
+
+        <nav id="nav-bar" class="nav-bar" aria-label="App navigation" hidden>
+            <div id="nav-actions" class="nav-actions" hidden>
+                <div id="nav-actions-finder" class="nav-actions-panel" hidden>
+                    <div class="browse-mode-row" role="group" aria-label="Browse location">
+                        <button type="button" id="btn-mode-folders" class="btn btn-ghost btn-mode is-active">My Drive</button>
+                        <button type="button" id="btn-mode-computers" class="btn btn-ghost btn-mode">Computers</button>
+                    </div>
+                    <div class="finder-actions">
+                        <button type="button" id="btn-up" class="btn btn-ghost" hidden>Up</button>
+                        <div id="create-actions" class="create-actions" hidden>
+                            <button type="button" id="btn-new-note" class="btn btn-primary">+ Note</button>
+                            <button type="button" id="btn-new-folder" class="btn btn-ghost">+ Folder</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="nav-actions-editor" class="nav-actions-panel nav-actions-editor" hidden>
+                    <button type="button" id="btn-rename-current" class="btn btn-ghost" hidden>Rename</button>
+                    <button type="button" id="btn-save" class="btn btn-primary" hidden>Save</button>
+                </div>
+            </div>
+            <div class="nav-bar-inner" role="tablist" aria-label="App modes">
+                <button type="button" id="tab-finder" class="nav-tab" role="tab" aria-selected="false" data-mode="finder">
+                    <span class="nav-tab-label">Finder</span>
+                </button>
+                <button type="button" id="tab-editor" class="nav-tab" role="tab" aria-selected="false" data-mode="editor">
+                    <span class="nav-tab-label">Edit</span>
+                </button>
+                <button type="button" id="tab-settings" class="nav-tab" role="tab" aria-selected="false" data-mode="settings">
+                    <span class="nav-tab-label">Settings</span>
+                </button>
+            </div>
+        </nav>
     </div>
 
     <dialog id="draft-dialog" class="dialog">
@@ -102,6 +137,19 @@
             <div class="dialog-actions">
                 <button type="submit" value="discard" class="btn btn-ghost">Discard draft</button>
                 <button type="submit" value="restore" class="btn btn-primary">Restore draft</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="name-dialog" class="dialog">
+        <form method="dialog" id="name-form" class="dialog-body">
+            <h2 id="name-dialog-title">Name</h2>
+            <p id="name-dialog-hint" class="dialog-hint"></p>
+            <label class="sr-only" for="name-input">Name</label>
+            <input id="name-input" class="name-input" type="text" autocomplete="off" autocapitalize="sentences" enterkeyhint="done" required>
+            <div class="dialog-actions">
+                <button type="submit" value="cancel" class="btn btn-ghost" formnovalidate>Cancel</button>
+                <button type="submit" value="confirm" class="btn btn-primary" id="name-dialog-confirm">Save</button>
             </div>
         </form>
     </dialog>
