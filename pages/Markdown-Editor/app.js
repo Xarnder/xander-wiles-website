@@ -30,6 +30,7 @@ import {
     listChildFolders,
     listComputerRootFolders,
     listFolder,
+    fetchVisiblePage,
     moveDriveItem,
     renameDriveItem,
     searchMarkdownFiles,
@@ -49,14 +50,20 @@ import {
 import {
     addItem,
     appendEmptyList,
+    offsetFromPreviewAnchor,
     parseDocument,
+    previewAnchorFromOffset,
     serializeDocument,
 } from './lists.js';
-import { applyEditingLists, applyTagFilters, renderListsUi } from './lists-ui.js';
+import { applyEditingLists, applyTagFilters, readPreviewTocSticky, renderListsUi, writePreviewTocSticky } from './lists-ui.js';
 import {
-    getTextareaFocusLine,
+    getTextareaViewportOffset,
+    getVisiblePreviewBlock,
+    scrollListsRootToAnchor,
     scrollTextareaToLine,
+    scrollTextareaToOffset,
 } from './markdown.js';
+import { createEditorSearch } from './search.js';
 import {
     applyEditorDisplayMode,
     applyFinderLayoutPrefs,
@@ -78,6 +85,7 @@ import {
     setEditorLoading,
     setListsStatus,
     setLoadMoreVisible,
+    setLoadMoreBusy,
     setStatus,
     setUpEnabled,
     showView,
@@ -85,6 +93,7 @@ import {
     syncFinderLayoutControls,
     syncNavLayout,
     syncThemeControl,
+    syncTocStickyControl,
 } from './ui.js';
 
 const COMPUTERS_ROOT = { id: '__computers__', name: 'Computers' };
@@ -108,8 +117,12 @@ const state = {
     tagFilters: {},
     editingListIds: {},
     placingList: false,
+    clickEdit: false,
     parseWarnings: [],
 };
+
+/** @type {ReturnType<typeof createEditorSearch> | null} */
+let editorSearch = null;
 
 function currentFolder() {
     return state.folderStack[state.folderStack.length - 1];
@@ -330,10 +343,13 @@ function renderStructuredEditor(extra = {}) {
         doc: state.documentModel,
         focusItemId: extra.focusItemId || null,
         placingList: state.viewMode === 'preview' && state.placingList,
+        clickEdit: state.viewMode === 'preview' && state.clickEdit,
+        onEditSpot: (payload) => jumpToRawAtPreviewSpot(payload),
         onStatus: (msg, kind) => setStatus(msg, kind),
         onChange: (doc, opts = {}) => {
             if (typeof opts.placingList === 'boolean') {
                 state.placingList = opts.placingList;
+                if (opts.placingList) state.clickEdit = false;
             }
             if (opts.tagFilters) state.tagFilters = opts.tagFilters;
             if (opts.editingListIds) state.editingListIds = opts.editingListIds;
@@ -372,6 +388,11 @@ function renderStructuredEditor(extra = {}) {
         },
     });
     syncInsertListButton();
+    syncClickEditButton();
+    // Re-apply find highlights after the Preview/List DOM is rebuilt
+    if (editorSearch?.isOpen()) {
+        requestAnimationFrame(() => editorSearch?.refresh());
+    }
 }
 
 function syncInsertListButton() {
@@ -386,14 +407,117 @@ function syncInsertListButton() {
     els.btnInsertList.classList.toggle('btn-insert-list--cancel', placing);
 }
 
-function applyViewMode(mode, { persist = true, reparseFromTextarea = false } = {}) {
+function syncClickEditButton() {
+    const els = getEls();
+    if (!els.btnClickEdit) return;
+    const picking = state.viewMode === 'preview' && state.clickEdit;
+    els.btnClickEdit.textContent = picking ? 'Cancel' : 'Edit here';
+    els.btnClickEdit.setAttribute(
+        'aria-label',
+        picking ? 'Cancel click-to-edit' : 'Click text in Preview to edit in Raw'
+    );
+    els.btnClickEdit.classList.toggle('btn-click-edit--active', picking);
+    els.btnClickEdit.hidden = !state.editor.fileId;
+    els.btnClickEdit.disabled = state.editor.status === 'saving' || !state.editor.fileId;
+}
+
+/**
+ * Jump from a Preview click-edit target into Raw at the matching source offset.
+ * @param {{
+ *   segIndex: number,
+ *   localLine: number,
+ *   nextLocalLine?: number,
+ *   prefix?: string,
+ *   word?: string,
+ *   blockText?: string
+ * }} payload
+ */
+function jumpToRawAtPreviewSpot(payload) {
+    if (!state.documentModel || !state.editor.fileId) return;
+    state.clickEdit = false;
+    state.placingList = false;
+
+    flushCurrentEditorContent();
+    refreshDocumentModelFromText(state.editor.editorContent);
+
+    const offset = offsetFromPreviewAnchor(
+        state.documentModel,
+        payload.segIndex,
+        payload.localLine,
+        payload
+    );
+    const serialized = serializeDocument(state.documentModel);
+    setEditorText(state.editor, serialized);
+    const els = getEls();
+    els.editor.value = serialized;
+
+    applyViewMode('raw', {
+        persist: true,
+        focusOffset: offset,
+        selectWord: true,
+        focusEditor: true,
+    });
+    setStatus('Editing in Raw', 'ok');
+}
+
+function applyViewMode(mode, {
+    persist = true,
+    reparseFromTextarea = false,
+    focusOffset = null,
+    focusLine: focusLineOpt = null,
+    selectWord = false,
+    focusEditor = false,
+} = {}) {
     if (!VIEW_MODES.has(mode)) mode = 'raw';
     const els = getEls();
     const previousMode = state.viewMode;
 
-    let focusLine = null;
-    if (previousMode === 'raw' && mode === 'preview' && els.editor) {
-        focusLine = getTextareaFocusLine(els.editor);
+    let focusLine = focusLineOpt;
+    let rawFocusOffset = focusOffset;
+    /** @type {{ segIndex: number, localLine: number, needle: string } | null} */
+    let previewAnchor = null;
+    let pendingPreviewOffset = null;
+
+    if (rawFocusOffset == null && focusLine == null && previewAnchor == null) {
+        if (previousMode === 'raw' && (mode === 'preview' || mode === 'list') && els.editor) {
+            // Capture wrapped viewport offset now; map after the document is refreshed.
+            pendingPreviewOffset = getTextareaViewportOffset(els.editor);
+        } else if (
+            (previousMode === 'preview' || previousMode === 'list') &&
+            mode === 'raw' &&
+            els.listsRoot &&
+            state.documentModel
+        ) {
+            const block = getVisiblePreviewBlock(els.listsRoot);
+            if (block) {
+                const preview = block.closest('.md-preview--segment');
+                const segIndex = Number(
+                    preview?.dataset?.segIndex ?? block.dataset.previewSegIndex
+                );
+                const localLine = Number(block.getAttribute('data-md-line')) || 1;
+                if (Number.isFinite(segIndex)) {
+                    const blocks = preview
+                        ? [...preview.querySelectorAll(':scope > [data-md-line]')]
+                        : [];
+                    const blockIndex = blocks.indexOf(block);
+                    const nextBlock =
+                        blockIndex >= 0 ? blocks[blockIndex + 1] : null;
+                    rawFocusOffset = offsetFromPreviewAnchor(
+                        state.documentModel,
+                        segIndex,
+                        localLine,
+                        {
+                            blockText: block.textContent || '',
+                            nextLocalLine: nextBlock
+                                ? Number(nextBlock.getAttribute('data-md-line')) || undefined
+                                : undefined,
+                        }
+                    );
+                } else {
+                    focusLine = localLine;
+                }
+            }
+        }
     }
 
     // Leaving editable surfaces: flush first
@@ -409,10 +533,16 @@ function applyViewMode(mode, { persist = true, reparseFromTextarea = false } = {
 
     if (mode === 'list' || mode === 'preview') {
         refreshDocumentModelFromText(state.editor.editorContent);
+        if (pendingPreviewOffset != null && state.documentModel) {
+            previewAnchor = previewAnchorFromOffset(state.documentModel, pendingPreviewOffset);
+        }
     }
 
     state.viewMode = mode;
-    if (mode !== 'preview') state.placingList = false;
+    if (mode !== 'preview') {
+        state.placingList = false;
+        state.clickEdit = false;
+    }
     if (persist && state.editor.fileId) writeViewMode(state.editor.fileId, mode);
 
     applyEditorDisplayMode(mode, { hasFile: Boolean(state.editor.fileId) });
@@ -423,16 +553,43 @@ function applyViewMode(mode, { persist = true, reparseFromTextarea = false } = {
         els.editor.value = state.editor.editorContent;
         syncNavLayout();
         syncInsertListButton();
-        if (focusLine != null) {
-            requestAnimationFrame(() => {
-                scrollTextareaToLine(els.editor, focusLine);
-            });
+        syncClickEditButton();
+        const go = () => {
+            const searchOpen = Boolean(editorSearch?.isOpen());
+            const shouldFocus =
+                !searchOpen && (focusEditor || selectWord || rawFocusOffset != null || focusLine != null);
+            if (rawFocusOffset != null) {
+                scrollTextareaToOffset(els.editor, rawFocusOffset, {
+                    selectWord: Boolean(selectWord),
+                    focus: shouldFocus,
+                });
+            } else if (focusLine != null) {
+                scrollTextareaToLine(els.editor, focusLine, { focus: shouldFocus });
+            }
+        };
+        requestAnimationFrame(() => {
+            requestAnimationFrame(go);
+        });
+        if (editorSearch?.isOpen()) {
+            requestAnimationFrame(() => editorSearch?.revealCurrent());
         }
         return;
     }
 
     renderStructuredEditor();
     syncNavLayout();
+    syncClickEditButton();
+    if (previewAnchor && els.listsRoot) {
+        // After lists-ui restoreScroll rAF, place the matching Preview block in view.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                scrollListsRootToAnchor(els.listsRoot, previewAnchor);
+            });
+        });
+    }
+    if (editorSearch?.isOpen()) {
+        requestAnimationFrame(() => editorSearch?.revealCurrent());
+    }
 }
 
 function setupEditorForOpenFile() {
@@ -440,6 +597,8 @@ function setupEditorForOpenFile() {
     state.tagFilters = {};
     state.editingListIds = {};
     state.placingList = false;
+    state.clickEdit = false;
+    editorSearch?.close({ restoreFocus: false });
     refreshDocumentModelFromText(state.editor.editorContent);
 
     const repaired = (state.documentModel.segments || []).some((s) => s.repaired);
@@ -514,7 +673,7 @@ async function loadBrowse(reset = true) {
     const folder = currentFolder();
     state.loadingFolder = true;
     setBrowseModeUi('folder');
-    setStatus('Loading folder…');
+    setStatus(reset ? 'Loading folder…' : 'Loading more…');
     setUpEnabled(state.folderStack.length > 1);
     renderFolderPath(state.folderStack, 'folder', '', jumpToFolderCrumb);
     rememberFolder(folder.id);
@@ -522,10 +681,20 @@ async function loadBrowse(reset = true) {
     setBrowseEmptyMessage(
         'No folders or markdown files here yet. Tap + Note or + Folder to create one.'
     );
+    if (reset) setLoadMoreVisible(false);
+    else setLoadMoreBusy(true);
 
     try {
         const pageToken = reset ? null : state.nextPageToken;
-        const result = await listFolder(folder.id, pageToken);
+        if (!reset && !pageToken) {
+            setLoadMoreVisible(false);
+            setStatus('');
+            return;
+        }
+        const result = await fetchVisiblePage(
+            (token) => listFolder(folder.id, token),
+            pageToken
+        );
         if (reset) {
             state.files = result.files;
         } else {
@@ -534,11 +703,17 @@ async function loadBrowse(reset = true) {
         state.nextPageToken = result.nextPageToken;
         renderCurrentFileList({ scrollToMarkdown: reset });
         setLoadMoreVisible(Boolean(state.nextPageToken));
-        setStatus(state.files.length ? '' : 'This folder is empty — create a note or folder.');
+        if (!reset && !result.files.length && !state.nextPageToken) {
+            setStatus('No more items to load.');
+        } else {
+            setStatus(state.files.length ? '' : 'This folder is empty — create a note or folder.');
+        }
     } catch (err) {
         setStatus(err.message || 'Failed to list folder', 'error');
+        setLoadMoreVisible(Boolean(state.nextPageToken));
     } finally {
         state.loadingFolder = false;
+        setLoadMoreBusy(false);
     }
 }
 
@@ -548,14 +723,23 @@ async function loadSearch(reset = true) {
     setUpEnabled(false);
     updateCreateActions();
     renderFolderPath([], 'search', state.searchQuery);
-    setStatus('Searching Drive for markdown…');
+    setStatus(reset ? 'Searching Drive for markdown…' : 'Loading more…');
     setBrowseEmptyMessage(
         'No markdown files found for this Google account. Check you signed in with the same account as Google Drive for Desktop, and that .md files finished uploading to the cloud.'
     );
+    if (reset) setLoadMoreVisible(false);
+    else setLoadMoreBusy(true);
 
     try {
         const pageToken = reset ? null : state.nextPageToken;
-        const result = await searchMarkdownFiles(state.searchQuery, pageToken);
+        if (!reset && !pageToken) {
+            setLoadMoreVisible(false);
+            return;
+        }
+        const result = await fetchVisiblePage(
+            (token) => searchMarkdownFiles(state.searchQuery, token),
+            pageToken
+        );
         if (reset) {
             state.files = result.files;
         } else {
@@ -571,8 +755,10 @@ async function loadSearch(reset = true) {
         );
     } catch (err) {
         setStatus(err.message || 'Search failed', 'error');
+        setLoadMoreVisible(Boolean(state.nextPageToken));
     } finally {
         state.loadingFolder = false;
+        setLoadMoreBusy(false);
     }
 }
 
@@ -608,9 +794,18 @@ async function loadComputers(reset = true) {
         const folder = currentFolder();
         setUpEnabled(true);
         renderFolderPath(state.folderStack, 'computers', '', jumpToFolderCrumb);
-        setStatus('Loading folder…');
+        setStatus(reset ? 'Loading folder…' : 'Loading more…');
+        if (reset) setLoadMoreVisible(false);
+        else setLoadMoreBusy(true);
         const pageToken = reset ? null : state.nextPageToken;
-        const result = await listFolder(folder.id, pageToken);
+        if (!reset && !pageToken) {
+            setLoadMoreVisible(false);
+            return;
+        }
+        const result = await fetchVisiblePage(
+            (token) => listFolder(folder.id, token),
+            pageToken
+        );
         if (reset) {
             state.files = result.files;
         } else {
@@ -622,8 +817,10 @@ async function loadComputers(reset = true) {
         setStatus(state.files.length ? '' : 'No folders or markdown files here.');
     } catch (err) {
         setStatus(err.message || 'Failed to load Computers', 'error');
+        setLoadMoreVisible(Boolean(state.nextPageToken));
     } finally {
         state.loadingFolder = false;
+        setLoadMoreBusy(false);
     }
 }
 
@@ -897,11 +1094,12 @@ function insertRankedList() {
     refreshDocumentModelFromText(state.editor.editorContent);
 
     if (state.viewMode === 'preview') {
+        state.clickEdit = false;
         state.placingList = true;
         applyEditingLists(state.documentModel, state.editingListIds);
         applyTagFilters(state.documentModel, state.tagFilters);
         renderStructuredEditor();
-        setStatus('Choose where to place the new list', 'ok');
+        setStatus('Tap content to place the list, or Cancel', 'ok');
         return;
     }
 
@@ -909,6 +1107,7 @@ function insertRankedList() {
     const item = addItem(list, '');
     state.editingListIds = { ...state.editingListIds, [list.id]: true };
     state.placingList = false;
+    state.clickEdit = false;
     applyEditingLists(state.documentModel, state.editingListIds);
     const serialized = serializeDocument(state.documentModel);
     setEditorText(state.editor, serialized);
@@ -918,6 +1117,30 @@ function insertRankedList() {
     renderStructuredEditor({ focusItemId: item.id });
     syncEditorChrome(state.editor);
     setStatus('Added ranked list', 'ok');
+}
+
+function toggleClickEdit() {
+    if (!state.editor.fileId) return;
+
+    if (state.viewMode === 'preview' && state.clickEdit) {
+        state.clickEdit = false;
+        renderStructuredEditor();
+        setStatus('Cancelled');
+        return;
+    }
+
+    flushCurrentEditorContent();
+    refreshDocumentModelFromText(state.editor.editorContent);
+    state.placingList = false;
+    state.clickEdit = true;
+
+    if (state.viewMode !== 'preview') {
+        applyViewMode('preview', { persist: true });
+    } else {
+        renderStructuredEditor();
+    }
+    syncClickEditButton();
+    setStatus('Tap text to edit in Raw, or Cancel', 'ok');
 }
 
 function hasOpenFile() {
@@ -1064,6 +1287,11 @@ async function switchAppMode(mode) {
         }
     }
 
+    if (leavingEditor) {
+        state.placingList = false;
+        state.clickEdit = false;
+    }
+
     if (mode === 'finder') {
         showAppView('finder');
         await refreshBrowse(true);
@@ -1098,8 +1326,10 @@ function signOut() {
     state.tagFilters = {};
     state.editingListIds = {};
     state.placingList = false;
+    state.clickEdit = false;
     state.viewMode = 'raw';
     state.parseWarnings = [];
+    editorSearch?.close({ restoreFocus: false });
     showView('login');
     setStatus('Signed out');
 }
@@ -1137,16 +1367,35 @@ function registerServiceWorker() {
 function wireEvents() {
     const els = getEls();
 
+    editorSearch = createEditorSearch({
+        getEls,
+        getText: () => {
+            flushCurrentEditorContent();
+            return getEls().editor?.value ?? state.editor.editorContent ?? '';
+        },
+        getViewMode: () => state.viewMode,
+        getHighlightRoot: () => getEls().listsRoot,
+        isActive: () => {
+            const nodes = getEls();
+            return Boolean(state.editor.fileId && nodes.viewEditor && !nodes.viewEditor.hidden);
+        },
+        onStatus: setStatus,
+    });
+    editorSearch.bind();
+
     els.tabFinder.addEventListener('click', () => {
+        editorSearch?.close({ restoreFocus: false });
         switchAppMode('finder');
     });
     els.tabEditor.addEventListener('click', () => {
         switchAppMode('editor');
     });
     els.tabSettings.addEventListener('click', () => {
+        editorSearch?.close({ restoreFocus: false });
         switchAppMode('settings');
     });
     els.btnGoFinder.addEventListener('click', () => {
+        editorSearch?.close({ restoreFocus: false });
         switchAppMode('finder');
     });
 
@@ -1190,17 +1439,35 @@ function wireEvents() {
             insertRankedList();
         });
     }
+    if (els.btnClickEdit) {
+        els.btnClickEdit.addEventListener('click', () => {
+            toggleClickEdit();
+        });
+    }
 
     const prefs = readFinderLayoutPrefs();
     applyFinderLayoutPrefs(prefs);
     syncFinderLayoutControls(prefs);
     applySavedTheme();
+    syncTocStickyControl(readPreviewTocSticky());
     if (els.prefTheme) {
         els.prefTheme.addEventListener('change', () => {
             const theme = THEME_VALUES.has(els.prefTheme.value) ? els.prefTheme.value : THEME_DEFAULT;
             writeTheme(theme);
             applyTheme(theme, { metaColor: THEME_META_COLORS[theme] || THEME_META_COLORS.blue });
             setStatus('Theme saved', 'ok');
+        });
+    }
+    if (els.prefTocSticky) {
+        els.prefTocSticky.addEventListener('change', () => {
+            writePreviewTocSticky(Boolean(els.prefTocSticky.checked));
+            if (state.viewMode === 'preview' && state.documentModel) {
+                renderStructuredEditor();
+            }
+            setStatus(
+                els.prefTocSticky.checked ? 'Contents will stay sticky' : 'Contents will scroll with the page',
+                'ok'
+            );
         });
     }
     if (els.prefMdOrderMobile) {

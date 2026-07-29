@@ -38,6 +38,14 @@ export const RECENT_FILES_MAX = 5;
 export const RECENT_FILES_MOBILE = 3;
 export const RECENT_FILES_DESKTOP = 5;
 
+/** Preview mode Contents panel: '1' open, '0' collapsed */
+export const PREVIEW_TOC_OPEN_KEY = 'md-editor:previewTocOpen';
+export const PREVIEW_TOC_OPEN_DEFAULT = true;
+
+/** Preview Contents sticky: '1' sticky, '0' scrolls with page (default) */
+export const PREVIEW_TOC_STICKY_KEY = 'md-editor:previewTocSticky';
+export const PREVIEW_TOC_STICKY_DEFAULT = false;
+
 export const PAGE_SIZE = 50;
 export const LARGE_FILE_BYTES = 2 * 1024 * 1024;
 

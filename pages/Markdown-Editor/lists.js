@@ -377,9 +377,11 @@ export function stripMdlistAgentNotes(text) {
 }
 
 /**
+ * Build serialized markdown parts (same rules as the joined document text).
  * @param {{ segments: Array<object> }} doc
+ * @returns {string[]}
  */
-export function serializeDocument(doc) {
+export function buildSerializeParts(doc) {
     const parts = [];
     for (const seg of doc.segments || []) {
         if (seg.type === 'markdown') {
@@ -404,7 +406,196 @@ export function serializeDocument(doc) {
             }
         }
     }
-    return parts.join('\n');
+    return parts;
+}
+
+/**
+ * @param {{ segments: Array<object> }} doc
+ * @returns {{ text: string, offsets: number[] }}
+ */
+export function serializeDocumentWithOffsets(doc) {
+    const parts = buildSerializeParts(doc);
+    /** @type {number[]} */
+    const offsets = [];
+    let pos = 0;
+    for (let i = 0; i < parts.length; i += 1) {
+        offsets.push(pos);
+        pos += parts[i].length;
+        if (i < parts.length - 1) pos += 1; // join('\n')
+    }
+    return { text: parts.join('\n'), offsets, parts };
+}
+
+/**
+ * @param {{ segments: Array<object> }} doc
+ */
+export function serializeDocument(doc) {
+    return serializeDocumentWithOffsets(doc).text;
+}
+
+/**
+ * Character offset in the serialized document for a preview block line.
+ * `localLine` is 1-based (matches `data-md-line` from the markdown renderer).
+ * @param {{ segments: Array<object> }} doc
+ * @param {number} segIndex
+ * @param {number} localLine
+ * @param {string | {
+ *   prefix?: string,
+ *   word?: string,
+ *   blockText?: string,
+ *   nextLocalLine?: number
+ * }} [anchor] — rendered text around the preview target
+ */
+export function offsetFromPreviewAnchor(doc, segIndex, localLine, anchor = '') {
+    const { offsets, parts } = serializeDocumentWithOffsets(doc);
+    if (!parts.length) return 0;
+    const index = Math.max(0, Math.min(Number(segIndex) || 0, parts.length - 1));
+    const base = offsets[index] ?? 0;
+    const part = parts[index] ?? '';
+    const seg = (doc.segments || [])[index];
+    const details =
+        typeof anchor === 'string'
+            ? { prefix: anchor }
+            : anchor && typeof anchor === 'object'
+              ? anchor
+              : {};
+
+    if (!seg || seg.type !== 'markdown') {
+        const visibleNeedle = firstSourceNeedle(details.word || details.blockText || '');
+        const found = visibleNeedle ? indexOfText(part, visibleNeedle) : -1;
+        return found >= 0 ? base + found : base;
+    }
+
+    // Preview line numbers come from the serialized markdown segment. Agent
+    // notes have already been stripped from markdown segments by serialization.
+    const lineIdx = Math.max(0, (Number(localLine) || 1) - 1);
+    const lines = part.split('\n');
+    const safeIdx = Math.min(lineIdx, Math.max(0, lines.length - 1));
+    let blockStart = 0;
+    for (let i = 0; i < safeIdx; i += 1) {
+        blockStart += (lines[i] || '').length + 1;
+    }
+
+    let blockEnd = part.length;
+    const nextLine = Number(details.nextLocalLine);
+    if (Number.isFinite(nextLine) && nextLine > safeIdx + 1) {
+        const nextIdx = Math.min(nextLine - 1, lines.length);
+        blockEnd = 0;
+        for (let i = 0; i < nextIdx; i += 1) {
+            blockEnd += (lines[i] || '').length + (i < lines.length - 1 ? 1 : 0);
+        }
+    }
+
+    const blockSource = part.slice(blockStart, Math.max(blockStart, blockEnd));
+    const clickedWord = firstSourceNeedle(details.word || '');
+    if (clickedWord) {
+        const occurrence = countNeedleOccurrences(details.prefix || '', clickedWord);
+        const found = indexOfOccurrence(blockSource, clickedWord, Math.max(1, occurrence));
+        if (found >= 0) return base + blockStart + found;
+        const fallback = nearestTextIndex(part, clickedWord, blockStart);
+        if (fallback >= 0) return base + fallback;
+    }
+
+    // For ordinary Preview → Raw switching, anchor to the first substantial
+    // visible token in the block. Markdown punctuation may sit before it, but
+    // the token itself exists verbatim in the source.
+    const blockNeedle = firstSourceNeedle(details.blockText || '');
+    if (blockNeedle) {
+        const found = indexOfText(blockSource, blockNeedle);
+        if (found >= 0) return base + blockStart + found;
+        const fallback = nearestTextIndex(part, blockNeedle, blockStart);
+        if (fallback >= 0) return base + fallback;
+    }
+
+    return Math.max(0, base + Math.min(blockStart, part.length));
+}
+
+/**
+ * Map a serialized-document character offset back to a Preview anchor.
+ * @param {{ segments: Array<object> }} doc
+ * @param {number} offset
+ * @returns {{ segIndex: number, localLine: number, needle: string }}
+ */
+export function previewAnchorFromOffset(doc, offset) {
+    const { offsets, parts, text } = serializeDocumentWithOffsets(doc);
+    if (!parts.length) {
+        return { segIndex: 0, localLine: 1, needle: '' };
+    }
+    const pos = Math.max(0, Math.min(Number(offset) || 0, text.length));
+    let segIndex = 0;
+    for (let i = 0; i < offsets.length; i += 1) {
+        if (offsets[i] <= pos) segIndex = i;
+        else break;
+    }
+    const base = offsets[segIndex] ?? 0;
+    const part = parts[segIndex] ?? '';
+    const local = Math.max(0, Math.min(pos - base, part.length));
+    const localLine = part.slice(0, local).split('\n').length || 1;
+    const ahead = part.slice(local, Math.min(part.length, local + 100));
+    const behind = part.slice(Math.max(0, local - 40), local);
+    const needle = firstSourceNeedle(ahead) || firstSourceNeedle(behind);
+    return { segIndex, localLine, needle };
+}
+
+function firstSourceNeedle(text) {
+    const value = String(text || '').trim();
+    if (!value) return '';
+    try {
+        const words = value.match(/[\p{L}\p{N}_][\p{L}\p{N}_'-]*/gu) || [];
+        return words.find((word) => word.length >= 2) || words[0] || '';
+    } catch {
+        const words = value.match(/[A-Za-z0-9_][A-Za-z0-9_'-]*/g) || [];
+        return words.find((word) => word.length >= 2) || words[0] || '';
+    }
+}
+
+function indexOfText(haystack, needle, fromIndex = 0) {
+    const exact = String(haystack || '').indexOf(String(needle || ''), fromIndex);
+    if (exact >= 0) return exact;
+    return String(haystack || '')
+        .toLocaleLowerCase()
+        .indexOf(String(needle || '').toLocaleLowerCase(), fromIndex);
+}
+
+function indexOfOccurrence(haystack, needle, occurrence) {
+    let from = 0;
+    let found = -1;
+    for (let i = 0; i < occurrence; i += 1) {
+        found = indexOfText(haystack, needle, from);
+        if (found < 0) return -1;
+        from = found + Math.max(1, needle.length);
+    }
+    return found;
+}
+
+function nearestTextIndex(haystack, needle, target) {
+    let nearest = -1;
+    let nearestDistance = Infinity;
+    let from = 0;
+    while (from <= String(haystack || '').length) {
+        const found = indexOfText(haystack, needle, from);
+        if (found < 0) break;
+        const distance = Math.abs(found - target);
+        if (distance < nearestDistance) {
+            nearest = found;
+            nearestDistance = distance;
+        }
+        from = found + Math.max(1, needle.length);
+    }
+    return nearest;
+}
+
+function countNeedleOccurrences(text, needle) {
+    if (!needle) return 1;
+    let count = 0;
+    let from = 0;
+    while (from <= String(text || '').length) {
+        const found = indexOfText(text, needle, from);
+        if (found < 0) break;
+        count += 1;
+        from = found + Math.max(1, needle.length);
+    }
+    return count + 1;
 }
 
 export function countValidLists(doc) {

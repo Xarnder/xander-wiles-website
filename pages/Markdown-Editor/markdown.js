@@ -9,6 +9,73 @@ export function escapeHtml(text) {
     return String(text ?? '').replace(/[&<>"']/g, (ch) => ESC[ch]);
 }
 
+/**
+ * Strip light inline markdown for outline labels.
+ * @param {string} text
+ */
+function plainHeadingText(text) {
+    return String(text ?? '')
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/(\*\*|__)(.*?)\1/g, '$2')
+        .replace(/(\*|_)(.*?)\1/g, '$2')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/**
+ * Collect ATX / setext headings from markdown (skips fenced code).
+ * @param {string} markdown
+ * @returns {Array<{ line: number, level: number, title: string }>}
+ */
+export function extractMarkdownHeadings(markdown) {
+    const lines = String(markdown ?? '').replace(/\r\n?/g, '\n').split('\n');
+    /** @type {Array<{ line: number, level: number, title: string }>} */
+    const headings = [];
+    let fence = null;
+
+    for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        const fenceOpen = line.match(/^(`{3,}|~{3,})(.*)$/);
+        if (fence) {
+            if (line.startsWith(fence.char) && line.trim().length >= fence.len) {
+                fence = null;
+            }
+            continue;
+        }
+        if (fenceOpen) {
+            fence = { char: fenceOpen[1][0], len: fenceOpen[1].length };
+            continue;
+        }
+
+        const trimmed = line.trim();
+        const atx = trimmed.match(/^(#{1,6})\s+(.+?)(?:\s+#*)?$/);
+        if (atx) {
+            const title = plainHeadingText(atx[2]);
+            if (title) {
+                headings.push({ line: i + 1, level: atx[1].length, title });
+            }
+            continue;
+        }
+
+        if (i + 1 < lines.length && trimmed) {
+            const next = lines[i + 1].trim();
+            if (/^=+\s*$/.test(next)) {
+                const title = plainHeadingText(trimmed);
+                if (title) headings.push({ line: i + 1, level: 1, title });
+                continue;
+            }
+            if (/^-+\s*$/.test(next) && next.length >= 2) {
+                const title = plainHeadingText(trimmed);
+                if (title) headings.push({ line: i + 1, level: 2, title });
+            }
+        }
+    }
+
+    return headings;
+}
+
 function sanitizeUrl(url) {
     const raw = String(url ?? '').trim();
     if (!raw) return '';
@@ -335,7 +402,40 @@ export function renderMarkdown(markdown) {
 }
 
 /**
+ * Block near the top of the preview/list scroll viewport.
+ * @param {HTMLElement} rootEl — usually `#lists-root`
+ * @returns {HTMLElement | null}
+ */
+export function getVisiblePreviewBlock(rootEl) {
+    if (!rootEl) return null;
+    const blocks = rootEl.querySelectorAll(
+        '.md-preview--segment > [data-md-line], .mdlist-stack[data-preview-seg-index]'
+    );
+    if (!blocks.length) return null;
+    const rootRect = rootEl.getBoundingClientRect();
+    const stickyToc = rootEl.querySelector('.preview-toc-mount--sticky');
+    const stickyBottom = stickyToc?.getBoundingClientRect().bottom || rootRect.top;
+    // Use a point inside the readable viewport rather than a block that may
+    // only have one pixel left on screen.
+    const top = Math.max(
+        rootRect.top + Math.min(96, rootEl.clientHeight * 0.2),
+        stickyBottom + 12
+    );
+    let chosen = blocks[0];
+    for (const el of blocks) {
+        const rect = el.getBoundingClientRect();
+        if (rect.bottom > top) {
+            chosen = el;
+            break;
+        }
+        chosen = el;
+    }
+    return chosen instanceof HTMLElement ? chosen : null;
+}
+
+/**
  * Line number (1-based) of the block currently near the top of the preview viewport.
+ * Prefer {@link getVisiblePreviewBlock} + document mapping when segments are split.
  * @param {HTMLElement} previewEl
  */
 export function getPreviewFocusLine(previewEl) {
@@ -385,11 +485,212 @@ export function scrollPreviewToLine(previewEl, line) {
 }
 
 /**
+ * Scroll a textarea to a character offset and place the caret (optionally select word).
+ * @param {HTMLTextAreaElement} textarea
+ * @param {number} offset
+ * @param {{ selectWord?: boolean, focus?: boolean }} [options]
+ */
+export function scrollTextareaToOffset(textarea, offset, options = {}) {
+    if (!textarea) return;
+    const value = textarea.value || '';
+    const pos = Math.max(0, Math.min(Number(offset) || 0, value.length));
+    const focus = options.focus !== false;
+
+    let start = pos;
+    let end = pos;
+    if (options.selectWord) {
+        try {
+            const re = /[\p{L}\p{N}_]/u;
+            while (start > 0 && re.test(value[start - 1])) start -= 1;
+            while (end < value.length && re.test(value[end])) end += 1;
+        } catch {
+            while (start > 0 && /\w/.test(value[start - 1])) start -= 1;
+            while (end < value.length && /\w/.test(value[end])) end += 1;
+        }
+        if (end <= start) {
+            start = pos;
+            end = pos;
+        }
+    }
+
+    if (focus) {
+        try {
+            textarea.focus({ preventScroll: true });
+        } catch {
+            textarea.focus();
+        }
+    }
+
+    try {
+        textarea.setSelectionRange(start, end);
+    } catch {
+        // ignore
+    }
+
+    // Source line counts are not enough for a wrapping textarea. Measure the
+    // exact rendered offset in a hidden mirror with the same typography/width.
+    const markerTop = measureTextareaOffsetTop(textarea, pos);
+    const maxScroll = Math.max(0, textarea.scrollHeight - textarea.clientHeight);
+    const ideal = markerTop - textarea.clientHeight * 0.3;
+    const targetScroll = Math.max(0, Math.min(maxScroll, ideal));
+    textarea.scrollTop = targetScroll;
+    // Safari can scroll the selection after setSelectionRange; reinforce once.
+    requestAnimationFrame(() => {
+        textarea.scrollTop = targetScroll;
+    });
+}
+
+/**
+ * Character offset near the top of the textarea viewport (accounts for wrapping).
+ * Prefers the caret when it is currently on-screen.
+ * @param {HTMLTextAreaElement} textarea
+ */
+export function getTextareaViewportOffset(textarea) {
+    if (!textarea) return 0;
+    const value = textarea.value || '';
+    if (!value) return 0;
+
+    const scrollTop = Math.max(0, textarea.scrollTop);
+    const viewBottom = scrollTop + textarea.clientHeight;
+    const caret = Number(textarea.selectionStart);
+    if (Number.isFinite(caret) && caret >= 0) {
+        const caretTop = measureTextareaOffsetTop(textarea, caret);
+        if (caretTop >= scrollTop - 4 && caretTop <= viewBottom - 4) {
+            return Math.max(0, Math.min(caret, value.length));
+        }
+    }
+
+    if (scrollTop <= 2) return 0;
+
+    const target = scrollTop + 12;
+    let lo = 0;
+    let hi = value.length;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (measureTextareaOffsetTop(textarea, mid) < target) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+
+/**
+ * Scroll the Preview/List root so an anchored block is near the top.
+ * @param {HTMLElement} rootEl
+ * @param {{ segIndex?: number, localLine?: number, needle?: string } | null} anchor
+ */
+export function scrollListsRootToAnchor(rootEl, anchor) {
+    if (!rootEl || !anchor) return;
+    const segIndex = Number(anchor.segIndex);
+    if (!Number.isFinite(segIndex)) return;
+
+    const preview = rootEl.querySelector(`.md-preview--segment[data-seg-index="${segIndex}"]`);
+    const stack = rootEl.querySelector(`.mdlist-stack[data-preview-seg-index="${segIndex}"]`);
+    let target = null;
+
+    if (preview) {
+        const blocks = [...preview.querySelectorAll(':scope > [data-md-line]')];
+        const needle = String(anchor.needle || '').trim();
+        const localLine = Math.max(1, Number(anchor.localLine) || 1);
+
+        if (needle) {
+            let best = null;
+            let bestDist = Infinity;
+            const lower = needle.toLocaleLowerCase();
+            for (const el of blocks) {
+                const text = (el.textContent || '').toLocaleLowerCase();
+                if (!text.includes(lower)) continue;
+                const n = Number(el.getAttribute('data-md-line')) || 1;
+                const dist = Math.abs(n - localLine);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = el;
+                }
+            }
+            target = best;
+        }
+
+        if (!target) {
+            for (const el of blocks) {
+                const n = Number(el.getAttribute('data-md-line')) || 1;
+                if (n <= localLine) target = el;
+                else break;
+            }
+        }
+        if (!target) target = blocks[0] || preview;
+    } else if (stack) {
+        target = stack;
+    }
+
+    if (!(target instanceof HTMLElement)) return;
+    const rootRect = rootEl.getBoundingClientRect();
+    const stickyToc = rootEl.querySelector('.preview-toc-mount--sticky');
+    const stickyBottom = stickyToc?.getBoundingClientRect().bottom || rootRect.top;
+    const topPad = Math.max(10, stickyBottom - rootRect.top + 8);
+    const elRect = target.getBoundingClientRect();
+    rootEl.scrollTop += elRect.top - rootRect.top - topPad;
+}
+
+/**
+ * Measure a character offset using textarea-equivalent wrapping.
+ * @param {HTMLTextAreaElement} textarea
+ * @param {number} offset
+ */
+function measureTextareaOffsetTop(textarea, offset) {
+    const style = window.getComputedStyle(textarea);
+    const mirror = document.createElement('div');
+    const properties = [
+        'fontFamily',
+        'fontSize',
+        'fontStyle',
+        'fontWeight',
+        'fontVariant',
+        'lineHeight',
+        'letterSpacing',
+        'textTransform',
+        'textIndent',
+        'textAlign',
+        'wordSpacing',
+        'tabSize',
+        'paddingTop',
+        'paddingRight',
+        'paddingBottom',
+        'paddingLeft',
+        'borderTopWidth',
+        'borderRightWidth',
+        'borderBottomWidth',
+        'borderLeftWidth',
+    ];
+    for (const property of properties) {
+        mirror.style[property] = style[property];
+    }
+    mirror.style.position = 'fixed';
+    mirror.style.left = '-10000px';
+    mirror.style.top = '0';
+    mirror.style.visibility = 'hidden';
+    mirror.style.pointerEvents = 'none';
+    mirror.style.boxSizing = 'border-box';
+    mirror.style.width = `${textarea.offsetWidth}px`;
+    mirror.style.whiteSpace = 'pre-wrap';
+    mirror.style.overflowWrap = 'break-word';
+    mirror.style.wordBreak = 'break-word';
+
+    const before = document.createTextNode((textarea.value || '').slice(0, offset));
+    const marker = document.createElement('span');
+    marker.textContent = '\u200b';
+    mirror.append(before, marker);
+    document.body.appendChild(mirror);
+    const top = marker.offsetTop;
+    mirror.remove();
+    return top;
+}
+
+/**
  * Scroll a textarea to approximately the given 1-based source line.
  * @param {HTMLTextAreaElement} textarea
  * @param {number} line
+ * @param {{ focus?: boolean }} [options]
  */
-export function scrollTextareaToLine(textarea, line) {
+export function scrollTextareaToLine(textarea, line, options = {}) {
     if (!textarea) return;
     const targetLine = Math.max(1, Number(line) || 1);
     const value = textarea.value || '';
@@ -398,25 +699,7 @@ export function scrollTextareaToLine(textarea, line) {
     for (let i = 0; i < targetLine - 1 && i < lines.length; i += 1) {
         pos += lines[i].length + 1;
     }
-
-    // Prefer measured line height; fall back to scroll ratio.
-    const style = window.getComputedStyle(textarea);
-    let lineHeight = parseFloat(style.lineHeight);
-    if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
-        const fontSize = parseFloat(style.fontSize) || 16;
-        lineHeight = fontSize * 1.5;
-    }
-    const paddingTop = parseFloat(style.paddingTop) || 0;
-    const ideal = paddingTop + (targetLine - 1) * lineHeight - textarea.clientHeight * 0.2;
-    const maxScroll = Math.max(0, textarea.scrollHeight - textarea.clientHeight);
-    textarea.scrollTop = Math.max(0, Math.min(maxScroll, ideal));
-
-    try {
-        textarea.focus({ preventScroll: true });
-    } catch {
-        textarea.focus();
-    }
-    textarea.setSelectionRange(pos, pos);
+    scrollTextareaToOffset(textarea, pos, { focus: options.focus !== false });
 }
 
 /**

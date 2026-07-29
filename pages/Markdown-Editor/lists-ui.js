@@ -19,14 +19,52 @@ import {
     setItemTags,
     setItemText,
     setListTitle,
-    splitMarkdownByHeaders,
     stripMdlistAgentNotes,
 } from './lists.js';
-import { renderMarkdown } from './markdown.js';
+import { extractMarkdownHeadings, renderMarkdown } from './markdown.js';
 import { confirmDeleteList } from './ui.js';
+import { PREVIEW_TOC_OPEN_DEFAULT, PREVIEW_TOC_OPEN_KEY, PREVIEW_TOC_STICKY_DEFAULT, PREVIEW_TOC_STICKY_KEY } from './config.js';
 
 /** Persist which LLM-note disclosures are expanded across list re-renders. */
 const expandedAgentNotes = new Set();
+
+function readPreviewTocOpen() {
+    try {
+        const raw = localStorage.getItem(PREVIEW_TOC_OPEN_KEY);
+        if (raw === '0') return false;
+        if (raw === '1') return true;
+    } catch {
+        // ignore
+    }
+    return PREVIEW_TOC_OPEN_DEFAULT;
+}
+
+function writePreviewTocOpen(open) {
+    try {
+        localStorage.setItem(PREVIEW_TOC_OPEN_KEY, open ? '1' : '0');
+    } catch {
+        // ignore
+    }
+}
+
+export function readPreviewTocSticky() {
+    try {
+        const raw = localStorage.getItem(PREVIEW_TOC_STICKY_KEY);
+        if (raw === '1') return true;
+        if (raw === '0') return false;
+    } catch {
+        // ignore
+    }
+    return PREVIEW_TOC_STICKY_DEFAULT;
+}
+
+export function writePreviewTocSticky(sticky) {
+    try {
+        localStorage.setItem(PREVIEW_TOC_STICKY_KEY, sticky ? '1' : '0');
+    } catch {
+        // ignore
+    }
+}
 
 /**
  * @param {HTMLElement} root
@@ -37,12 +75,26 @@ const expandedAgentNotes = new Set();
  * @param {(msg: string, kind?: string) => void} [options.onStatus]
  * @param {string} [options.focusItemId]
  * @param {boolean} [options.placingList]
+ * @param {boolean} [options.clickEdit]
+ * @param {(payload: { segIndex: number, localLine: number, prefix: string }) => void} [options.onEditSpot]
  */
 export function renderListsUi(root, options) {
-    const { mode, doc, onChange, onStatus, focusItemId, placingList = false } = options;
+    const {
+        mode,
+        doc,
+        onChange,
+        onStatus,
+        focusItemId,
+        placingList = false,
+        clickEdit = false,
+        onEditSpot = null,
+    } = options;
     const scrollTop = root.scrollTop;
     root.replaceChildren();
-    root.className = placingList ? 'lists-root lists-root--placing' : 'lists-root';
+    const rootMods = [];
+    if (placingList) rootMods.push('lists-root--placing');
+    if (clickEdit) rootMods.push('lists-root--click-edit');
+    root.className = ['lists-root', ...rootMods].join(' ');
 
     ensureEditingForFocus(doc, focusItemId);
 
@@ -106,33 +158,85 @@ export function renderListsUi(root, options) {
         return;
     }
 
-    // Preview
-    if (placingList) {
-        renderPlacementMode(root, doc, onChange, onStatus, scrollTop);
-        return;
+    // Preview — same layout while placing / click-editing; selection UI is layered on top
+    const outline = placingList || clickEdit ? [] : buildPreviewOutline(doc);
+    let tocMount = null;
+    if (outline.length) {
+        tocMount = document.createElement('div');
+        tocMount.className = readPreviewTocSticky()
+            ? 'preview-toc-mount preview-toc-mount--sticky'
+            : 'preview-toc-mount';
+        root.appendChild(tocMount);
     }
 
     for (let segIndex = 0; segIndex < (doc.segments || []).length; segIndex += 1) {
         const seg = doc.segments[segIndex];
         if (seg.type === 'markdown') {
-            root.appendChild(renderMarkdownSegment(seg, segIndex, doc, onChange));
+            root.appendChild(
+                renderMarkdownSegment(seg, segIndex, doc, onChange, {
+                    placingList,
+                    clickEdit,
+                    onEditSpot,
+                    root,
+                })
+            );
             continue;
         }
         if (seg.type === 'mdlist' && seg.list) {
-            root.appendChild(renderListStack(seg, doc, onChange, onStatus, focusItemId));
+            const stack = renderListStack(seg, doc, onChange, onStatus, focusItemId);
+            stack.id = `toc-list-${seg.list.id}`;
+            stack.dataset.previewSegIndex = String(segIndex);
+            if (placingList) {
+                enableListPlaceTarget(stack, segIndex, doc, onChange, root);
+            } else if (clickEdit && typeof onEditSpot === 'function') {
+                enableListClickEditTarget(stack, segIndex, onEditSpot);
+            }
+            root.appendChild(stack);
         } else if (seg.type === 'mdlist') {
             const stack = document.createElement('div');
             stack.className = 'mdlist-stack';
+            stack.dataset.previewSegIndex = String(segIndex);
             stack.appendChild(createAgentNoteDisclosure(null));
             const err = document.createElement('pre');
             err.className = 'mixed-markdown mixed-markdown--error';
             err.textContent = seg.raw || '(invalid mdlist)';
             stack.appendChild(err);
+            if (placingList) {
+                enableListPlaceTarget(stack, segIndex, doc, onChange, root);
+            } else if (clickEdit && typeof onEditSpot === 'function') {
+                enableListClickEditTarget(stack, segIndex, onEditSpot);
+            }
             root.appendChild(stack);
         }
     }
 
-    if (!validLists.length && !errorLists.length) {
+    if (tocMount && outline.length) {
+        tocMount.appendChild(renderPreviewToc(outline, root));
+    }
+
+    if (placingList) {
+        const hasPlaceable =
+            root.querySelector('.md-preview--segment [data-md-line], .mdlist-stack[data-place-seg]') !=
+            null;
+        if (!hasPlaceable) {
+            const emptyPlace = document.createElement('div');
+            emptyPlace.className = 'list-place-empty';
+            const p = document.createElement('p');
+            p.textContent = 'No content to anchor to yet. Place the list at the start of the document.';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-primary';
+            btn.textContent = 'Place list at start';
+            btn.addEventListener('click', () => {
+                placeListAt(doc, onChange, { type: 'at-start' });
+            });
+            emptyPlace.append(p, btn);
+            root.appendChild(emptyPlace);
+        }
+        onStatus?.('Tap a paragraph, heading, quote, code block, or list — then choose Above or Below.', 'ok');
+    } else if (clickEdit) {
+        onStatus?.('Tap the text you want to edit — Raw opens at that spot.', 'ok');
+    } else if (!validLists.length && !errorLists.length) {
         const hint = document.createElement('div');
         hint.className = 'lists-empty';
         const p = document.createElement('p');
@@ -162,113 +266,6 @@ export function renderListsUi(root, options) {
     focusItem(root, focusItemId);
 }
 
-function renderPlacementMode(root, doc, onChange, onStatus, scrollTop) {
-    const banner = document.createElement('div');
-    banner.className = 'list-place-banner';
-    const title = document.createElement('p');
-    title.className = 'list-place-banner-title';
-    title.textContent = 'Choose where to add the list';
-    const hint = document.createElement('p');
-    hint.className = 'list-place-banner-hint';
-    hint.textContent = 'Markdown is split by headings. Tap a slot to place the new list there.';
-    const cancel = document.createElement('button');
-    cancel.type = 'button';
-    cancel.className = 'btn btn-ghost btn-small';
-    cancel.textContent = 'Cancel';
-    cancel.addEventListener('click', () => {
-        onChange(doc, { soft: true, placingList: false, ...changeOpts(doc) });
-    });
-    banner.append(title, hint, cancel);
-    root.appendChild(banner);
-
-    const segments = doc.segments || [];
-    if (!segments.length) {
-        root.appendChild(
-            createPlaceSlot({
-                label: 'Place list here',
-                hint: 'Empty document',
-                onPick: () => placeListAt(doc, onChange, { type: 'at-start' }),
-            })
-        );
-        restoreScroll(root, scrollTop);
-        return;
-    }
-
-    root.appendChild(
-        createPlaceSlot({
-            label: 'Place list here',
-            hint: 'At start of document',
-            onPick: () => placeListAt(doc, onChange, { type: 'at-start' }),
-        })
-    );
-
-    for (let segIndex = 0; segIndex < segments.length; segIndex += 1) {
-        const seg = segments[segIndex];
-        if (seg.type === 'markdown') {
-            const text = seg.text || '';
-            const sections = splitMarkdownByHeaders(text);
-            for (let s = 0; s < sections.length; s += 1) {
-                const section = sections[s];
-                root.appendChild(renderPlacementSection(section));
-                const afterTitle = section.title
-                    ? `After “${truncateLabel(section.title)}”`
-                    : sections.length === 1
-                      ? 'After this markdown'
-                      : 'After this section';
-                root.appendChild(
-                    createPlaceSlot({
-                        label: 'Place list here',
-                        hint: afterTitle,
-                        onPick: () =>
-                            placeListAt(doc, onChange, {
-                                type: 'split-markdown',
-                                segmentIndex: segIndex,
-                                beforeLine: section.endLine,
-                            }),
-                    })
-                );
-            }
-            continue;
-        }
-
-        if (seg.type === 'mdlist' && seg.list) {
-            const wasEditing = Boolean(seg._editing);
-            seg._editing = false;
-            const preview = renderListBlock(seg, doc, () => {}, onStatus, null);
-            seg._editing = wasEditing;
-            preview.classList.add('mdlist-block--placement-preview');
-            preview.querySelectorAll('button, input, select, textarea').forEach((el) => {
-                el.disabled = true;
-                el.tabIndex = -1;
-            });
-            root.appendChild(preview);
-            root.appendChild(
-                createPlaceSlot({
-                    label: 'Place list here',
-                    hint: `After list “${truncateLabel(seg.list.title || 'List')}”`,
-                    onPick: () =>
-                        placeListAt(doc, onChange, { type: 'after-segment', index: segIndex }),
-                })
-            );
-        } else if (seg.type === 'mdlist') {
-            const err = document.createElement('pre');
-            err.className = 'mixed-markdown mixed-markdown--error';
-            err.textContent = seg.raw || '(invalid mdlist)';
-            root.appendChild(err);
-            root.appendChild(
-                createPlaceSlot({
-                    label: 'Place list here',
-                    hint: 'After invalid list block',
-                    onPick: () =>
-                        placeListAt(doc, onChange, { type: 'after-segment', index: segIndex }),
-                })
-            );
-        }
-    }
-
-    restoreScroll(root, scrollTop);
-}
-
 function placeListAt(doc, onChange, target) {
     const list = insertEmptyListAt(doc, target);
     const item = addItem(list, '');
@@ -282,64 +279,245 @@ function placeListAt(doc, onChange, target) {
     });
 }
 
-function createPlaceSlot({ label, hint, onPick }) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'list-place-slot';
-    btn.setAttribute('aria-label', hint ? `${label}. ${hint}` : label);
-
-    const line = document.createElement('span');
-    line.className = 'list-place-slot-line';
-    line.setAttribute('aria-hidden', 'true');
-
-    const copy = document.createElement('span');
-    copy.className = 'list-place-slot-copy';
-
-    const main = document.createElement('span');
-    main.className = 'list-place-slot-label';
-    main.textContent = label;
-    copy.appendChild(main);
-
-    if (hint) {
-        const sub = document.createElement('span');
-        sub.className = 'list-place-slot-hint';
-        sub.textContent = hint;
-        copy.appendChild(sub);
-    }
-
-    btn.append(line, copy);
-    btn.addEventListener('click', onPick);
-    return btn;
+function clearPlaceSelection(root) {
+    root.querySelectorAll('.is-place-target').forEach((el) => el.classList.remove('is-place-target'));
+    root.querySelectorAll('.list-place-picker').forEach((el) => el.remove());
 }
 
-function renderPlacementSection(section) {
-    const wrap = document.createElement('div');
-    wrap.className = 'list-place-section';
+function showPlacePicker(anchorEl, root, { onAbove, onBelow }) {
+    clearPlaceSelection(root);
+    anchorEl.classList.add('is-place-target');
 
-    if (section.title) {
-        const heading = document.createElement('div');
-        heading.className = 'list-place-section-label';
-        const level = section.level > 0 ? `H${section.level}` : 'Intro';
-        heading.textContent = `${level} · ${section.title}`;
-        wrap.appendChild(heading);
-    }
+    const picker = document.createElement('div');
+    picker.className = 'list-place-picker';
+    picker.setAttribute('role', 'group');
+    picker.setAttribute('aria-label', 'Place new list');
 
-    const preview = document.createElement('div');
-    preview.className = 'md-preview md-preview--segment list-place-section-preview';
-    const body = stripMdlistAgentNotes(section.text || '').trim();
-    if (!body) {
-        preview.innerHTML = '<p class="md-empty">Empty section</p>';
+    const label = document.createElement('p');
+    label.className = 'list-place-picker-label';
+    label.textContent = 'Place new list';
+
+    const actions = document.createElement('div');
+    actions.className = 'list-place-picker-actions';
+
+    const aboveBtn = document.createElement('button');
+    aboveBtn.type = 'button';
+    aboveBtn.className = 'btn btn-primary btn-small';
+    aboveBtn.textContent = 'Above';
+    aboveBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onAbove();
+    });
+
+    const belowBtn = document.createElement('button');
+    belowBtn.type = 'button';
+    belowBtn.className = 'btn btn-primary btn-small';
+    belowBtn.textContent = 'Below';
+    belowBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onBelow();
+    });
+
+    actions.append(aboveBtn, belowBtn);
+    picker.append(label, actions);
+
+    // Keep picker with the target: after lists put after stack; for md blocks after the block
+    if (anchorEl.classList.contains('mdlist-stack') || anchorEl.classList.contains('mdlist-block')) {
+        anchorEl.insertAdjacentElement('afterend', picker);
     } else {
-        preview.innerHTML = renderMarkdown(body);
+        anchorEl.insertAdjacentElement('afterend', picker);
     }
-    wrap.appendChild(preview);
-    return wrap;
+
+    requestAnimationFrame(() => {
+        picker.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
 }
 
-function truncateLabel(text, max = 42) {
-    const s = String(text || '').trim();
-    if (s.length <= max) return s;
-    return `${s.slice(0, max - 1)}…`;
+function blockInsertLines(previewEl, blockEl, sourceText) {
+    const start1 = Number(blockEl.getAttribute('data-md-line')) || 1;
+    const blocks = [...previewEl.querySelectorAll(':scope > [data-md-line]')];
+    const idx = blocks.indexOf(blockEl);
+    const lineCount = String(sourceText ?? '').split('\n').length;
+    let belowBeforeLine = lineCount;
+    if (idx >= 0 && idx < blocks.length - 1) {
+        const nextStart1 = Number(blocks[idx + 1].getAttribute('data-md-line')) || start1 + 1;
+        belowBeforeLine = Math.max(0, nextStart1 - 1);
+    }
+    return {
+        aboveBeforeLine: Math.max(0, start1 - 1),
+        belowBeforeLine,
+    };
+}
+
+function enableMarkdownPlaceTargets(previewEl, segIndex, sourceText, doc, onChange, root) {
+    previewEl.classList.add('md-preview--placing');
+    previewEl.addEventListener('click', (event) => {
+        const block = findTopLevelMdBlock(event.target, previewEl);
+        if (!block) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        const { aboveBeforeLine, belowBeforeLine } = blockInsertLines(previewEl, block, sourceText);
+        showPlacePicker(block, root, {
+            onAbove: () => {
+                // Align segment text with the preview source used for line numbers
+                const seg = doc.segments[segIndex];
+                if (seg?.type === 'markdown') seg.text = sourceText;
+                placeListAt(doc, onChange, {
+                    type: 'split-markdown',
+                    segmentIndex: segIndex,
+                    beforeLine: aboveBeforeLine,
+                });
+            },
+            onBelow: () => {
+                const seg = doc.segments[segIndex];
+                if (seg?.type === 'markdown') seg.text = sourceText;
+                placeListAt(doc, onChange, {
+                    type: 'split-markdown',
+                    segmentIndex: segIndex,
+                    beforeLine: belowBeforeLine,
+                });
+            },
+        });
+    });
+}
+
+function findTopLevelMdBlock(target, previewRoot) {
+    const blocks = [...previewRoot.querySelectorAll(':scope > [data-md-line]')];
+    let el = target instanceof Element ? target : target?.parentElement;
+    while (el && el !== previewRoot) {
+        if (blocks.includes(el)) return el;
+        el = el.parentElement;
+    }
+    return null;
+}
+
+/**
+ * Visible text around the caret under a pointer.
+ * @param {HTMLElement} blockEl
+ * @param {number} clientX
+ * @param {number} clientY
+ * @returns {{ prefix: string, word: string, blockText: string }}
+ */
+function textAnchorAtPoint(blockEl, clientX, clientY) {
+    const fallback = {
+        prefix: '',
+        word: '',
+        blockText: blockEl?.textContent || '',
+    };
+    if (!blockEl) return fallback;
+    let range = null;
+    try {
+        if (typeof document.caretRangeFromPoint === 'function') {
+            range = document.caretRangeFromPoint(clientX, clientY);
+        } else if (typeof document.caretPositionFromPoint === 'function') {
+            const pos = document.caretPositionFromPoint(clientX, clientY);
+            if (pos?.offsetNode) {
+                range = document.createRange();
+                range.setStart(pos.offsetNode, pos.offset);
+                range.collapse(true);
+            }
+        }
+    } catch {
+        range = null;
+    }
+    if (!range || !blockEl.contains(range.startContainer)) return fallback;
+    try {
+        const pre = document.createRange();
+        pre.selectNodeContents(blockEl);
+        pre.setEnd(range.startContainer, range.startOffset);
+        const nodeText =
+            range.startContainer.nodeType === Node.TEXT_NODE
+                ? range.startContainer.nodeValue || ''
+                : '';
+        let start = Math.min(range.startOffset, nodeText.length);
+        let end = start;
+        const isWord = (char) => {
+            try {
+                return /[\p{L}\p{N}_'-]/u.test(char);
+            } catch {
+                return /[A-Za-z0-9_'-]/.test(char);
+            }
+        };
+        while (start > 0 && isWord(nodeText[start - 1])) start -= 1;
+        while (end < nodeText.length && isWord(nodeText[end])) end += 1;
+        // Count repeated words using text strictly before the clicked word.
+        if (range.startContainer.nodeType === Node.TEXT_NODE) {
+            pre.setEnd(range.startContainer, start);
+        }
+        return {
+            prefix: pre.toString(),
+            word: nodeText.slice(start, end),
+            blockText: blockEl.textContent || '',
+        };
+    } catch {
+        return fallback;
+    }
+}
+
+function enableMarkdownClickEditTargets(previewEl, segIndex, onEditSpot) {
+    previewEl.classList.add('md-preview--click-edit');
+    previewEl.addEventListener('click', (event) => {
+        const block = findTopLevelMdBlock(event.target, previewEl);
+        if (!block) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const localLine = Number(block.getAttribute('data-md-line')) || 1;
+        const blocks = [...previewEl.querySelectorAll(':scope > [data-md-line]')];
+        const blockIndex = blocks.indexOf(block);
+        const nextBlock = blockIndex >= 0 ? blocks[blockIndex + 1] : null;
+        const anchor = textAnchorAtPoint(block, event.clientX, event.clientY);
+        onEditSpot({
+            segIndex,
+            localLine,
+            nextLocalLine: nextBlock
+                ? Number(nextBlock.getAttribute('data-md-line')) || undefined
+                : undefined,
+            ...anchor,
+        });
+    });
+}
+
+function enableListClickEditTarget(stackEl, segIndex, onEditSpot) {
+    stackEl.classList.add('mdlist-stack--click-edit');
+    stackEl.addEventListener('click', (event) => {
+        if (event.target.closest?.('button, input, select, textarea, a')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const target =
+            event.target.closest?.('.mdlist-view-text, .mdlist-title, .mdlist-view-tags') ||
+            stackEl;
+        onEditSpot({
+            segIndex,
+            localLine: 1,
+            ...textAnchorAtPoint(target, event.clientX, event.clientY),
+        });
+    });
+}
+
+function enableListPlaceTarget(stackEl, segIndex, doc, onChange, root) {
+    stackEl.dataset.placeSeg = String(segIndex);
+    stackEl.classList.add('mdlist-stack--placing');
+    stackEl.addEventListener('click', (event) => {
+        // Ignore clicks on the picker itself if re-bound somehow
+        if (event.target.closest?.('.list-place-picker')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        showPlacePicker(stackEl, root, {
+            onAbove: () => {
+                if (segIndex <= 0) {
+                    placeListAt(doc, onChange, { type: 'at-start' });
+                } else {
+                    placeListAt(doc, onChange, { type: 'after-segment', index: segIndex - 1 });
+                }
+            },
+            onBelow: () => {
+                placeListAt(doc, onChange, { type: 'after-segment', index: segIndex });
+            },
+        });
+    });
 }
 
 function restoreScroll(root, scrollTop) {
@@ -348,10 +526,131 @@ function restoreScroll(root, scrollTop) {
     });
 }
 
-function renderMarkdownSegment(seg, segIndex, doc, onChange) {
+/**
+ * @param {object} doc
+ * @returns {Array<{ id: string, level: number, title: string, kind: 'heading' | 'list' }>}
+ */
+function buildPreviewOutline(doc) {
+    /** @type {Array<{ id: string, level: number, title: string, kind: 'heading' | 'list' }>} */
+    const items = [];
+    (doc.segments || []).forEach((seg, segIndex) => {
+        if (seg.type === 'markdown') {
+            const text = stripMdlistAgentNotes(seg.text || '');
+            for (const heading of extractMarkdownHeadings(text)) {
+                items.push({
+                    id: `toc-s${segIndex}-l${heading.line}`,
+                    level: heading.level,
+                    title: heading.title,
+                    kind: 'heading',
+                });
+            }
+            return;
+        }
+        if (seg.type === 'mdlist' && seg.list) {
+            items.push({
+                id: `toc-list-${seg.list.id}`,
+                level: 2,
+                title: String(seg.list.title || 'List').trim() || 'List',
+                kind: 'list',
+            });
+        }
+    });
+    return items;
+}
+
+function renderPreviewToc(outline, root) {
+    const details = document.createElement('details');
+    details.className = 'preview-toc';
+    details.open = readPreviewTocOpen();
+    details.addEventListener('toggle', () => {
+        writePreviewTocOpen(details.open);
+    });
+
+    const summary = document.createElement('summary');
+    summary.className = 'preview-toc-summary';
+
+    const title = document.createElement('span');
+    title.className = 'preview-toc-title';
+    title.textContent = 'Contents';
+
+    const meta = document.createElement('span');
+    meta.className = 'preview-toc-meta';
+    const n = outline.length;
+    meta.textContent = `${n} section${n === 1 ? '' : 's'}`;
+
+    const hint = document.createElement('span');
+    hint.className = 'preview-toc-hint';
+    hint.textContent = details.open ? 'Collapse' : 'Expand';
+    details.addEventListener('toggle', () => {
+        hint.textContent = details.open ? 'Collapse' : 'Expand';
+    });
+
+    summary.append(title, meta, hint);
+    details.appendChild(summary);
+
+    const nav = document.createElement('nav');
+    nav.className = 'preview-toc-nav';
+    nav.setAttribute('aria-label', 'Document contents');
+
+    const list = document.createElement('ol');
+    list.className = 'preview-toc-list';
+
+    for (const item of outline) {
+        const li = document.createElement('li');
+        li.className = 'preview-toc-item';
+        li.dataset.level = String(item.level);
+        li.style.setProperty('--toc-level', String(Math.max(0, item.level - 1)));
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'preview-toc-link';
+        if (item.kind === 'list') btn.classList.add('preview-toc-link--list');
+        btn.textContent = item.title;
+        btn.title = item.kind === 'list' ? `Jump to list: ${item.title}` : `Jump to ${item.title}`;
+        btn.addEventListener('click', () => {
+            jumpToTocTarget(root, item.id);
+        });
+
+        li.appendChild(btn);
+        list.appendChild(li);
+    }
+
+    nav.appendChild(list);
+    details.appendChild(nav);
+    return details;
+}
+
+function jumpToTocTarget(root, id) {
+    const target = root.querySelector(`#${CSS.escape(id)}`);
+    if (!target) return;
+    target.classList.remove('toc-flash');
+    // Force reflow so the animation can replay
+    void target.offsetWidth;
+    target.classList.add('toc-flash');
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => target.classList.remove('toc-flash'), 1600);
+    if (typeof target.focus === 'function') {
+        const hadTabIndex = target.hasAttribute('tabindex');
+        if (!hadTabIndex) target.tabIndex = -1;
+        try {
+            target.focus({ preventScroll: true });
+        } catch {
+            target.focus();
+        }
+        if (!hadTabIndex) {
+            window.setTimeout(() => target.removeAttribute('tabindex'), 800);
+        }
+    }
+}
+
+function renderMarkdownSegment(seg, segIndex, doc, onChange, options = {}) {
+    const placingList = Boolean(options.placingList);
+    const clickEdit = Boolean(options.clickEdit);
+    const onEditSpot = options.onEditSpot;
+    const listsRoot = options.root || null;
     const wrap = document.createElement('div');
     wrap.className = 'mixed-markdown-wrap';
-    const editing = Boolean(seg._editing);
+    const editing = Boolean(seg._editing) && !placingList && !clickEdit;
 
     const toolbar = document.createElement('div');
     toolbar.className = 'mixed-md-toolbar';
@@ -362,18 +661,21 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange) {
     toggle.type = 'button';
     toggle.className = 'btn btn-ghost btn-small';
     toggle.textContent = editing ? 'Done' : 'Edit';
-    toggle.addEventListener('click', () => {
-        if (editing) {
-            seg._editing = false;
-        } else {
-            seg._editing = true;
-        }
-        onChange(doc, {
-            soft: true,
-            tagFilters: collectTagFilters(doc),
-            editingListIds: collectEditingLists(doc),
+    toggle.disabled = placingList || clickEdit;
+    if (!placingList && !clickEdit) {
+        toggle.addEventListener('click', () => {
+            if (editing) {
+                seg._editing = false;
+            } else {
+                seg._editing = true;
+            }
+            onChange(doc, {
+                soft: true,
+                tagFilters: collectTagFilters(doc),
+                editingListIds: collectEditingLists(doc),
+            });
         });
-    });
+    }
     toolbar.append(label, toggle);
     wrap.appendChild(toolbar);
 
@@ -398,16 +700,34 @@ function renderMarkdownSegment(seg, segIndex, doc, onChange) {
     } else {
         const preview = document.createElement('div');
         preview.className = 'md-preview md-preview--segment';
-        const text = stripMdlistAgentNotes(seg.text || '').trim();
-        if (!text) {
+        preview.dataset.segIndex = String(segIndex);
+        // Keep source lines stable for TOC ids / place-list anchors (do not trim)
+        const sourceText = stripMdlistAgentNotes(seg.text || '');
+        if (!sourceText.trim()) {
             preview.innerHTML = '<p class="md-empty">Empty markdown section — tap Edit to write.</p>';
         } else {
-            preview.innerHTML = renderMarkdown(text);
+            preview.innerHTML = renderMarkdown(sourceText);
+            assignHeadingTocIds(preview, segIndex);
         }
         wrap.appendChild(preview);
+        if (placingList && listsRoot && sourceText.trim()) {
+            enableMarkdownPlaceTargets(preview, segIndex, sourceText, doc, onChange, listsRoot);
+        } else if (clickEdit && typeof onEditSpot === 'function' && sourceText.trim()) {
+            enableMarkdownClickEditTargets(preview, segIndex, onEditSpot);
+        }
     }
 
     return wrap;
+}
+
+function assignHeadingTocIds(previewEl, segIndex) {
+    if (!previewEl) return;
+    const headings = previewEl.querySelectorAll(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6');
+    headings.forEach((heading) => {
+        const line = heading.getAttribute('data-md-line');
+        if (!line) return;
+        heading.id = `toc-s${segIndex}-l${line}`;
+    });
 }
 
 function focusItem(root, focusItemId) {

@@ -67,11 +67,17 @@ export function sortDriveEntries(files) {
 
 /**
  * List folders and markdown files in a folder.
+ * Query is scoped to folders + markdown candidates so pagination matches what the UI shows.
  * @returns {Promise<{ files: object[], nextPageToken: string|null }>}
  */
 export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null) {
     const parent = folderId || ROOT_FOLDER_ID;
-    const q = `'${parent.replace(/'/g, "\\'")}' in parents and trashed = false`;
+    const safeParent = parent.replace(/'/g, "\\'");
+    const q = [
+        `'${safeParent}' in parents`,
+        'trashed = false',
+        `(mimeType = '${FOLDER_MIME}' or mimeType = 'text/markdown' or name contains '.md' or name contains '.markdown')`,
+    ].join(' and ');
     const params = new URLSearchParams({
         q,
         spaces: 'drive',
@@ -91,6 +97,32 @@ export async function listFolder(folderId = ROOT_FOLDER_ID, pageToken = null) {
         files,
         nextPageToken: data.nextPageToken || null,
     };
+}
+
+/**
+ * Keep requesting pages until at least one visible entry arrives or pages run out.
+ * Avoids a "Load more" click that filters down to nothing.
+ * @param {(token: string|null) => Promise<{ files: object[], nextPageToken: string|null }>} fetchPage
+ * @param {string|null} startToken
+ * @param {{ maxPages?: number }} [options]
+ */
+export async function fetchVisiblePage(fetchPage, startToken, options = {}) {
+    const maxPages = options.maxPages ?? 8;
+    let pageToken = startToken;
+    /** @type {object[]} */
+    let files = [];
+    let pages = 0;
+    let nextPageToken = null;
+
+    do {
+        const result = await fetchPage(pageToken);
+        pages += 1;
+        files = files.concat(result.files || []);
+        nextPageToken = result.nextPageToken || null;
+        pageToken = nextPageToken;
+    } while (files.length === 0 && nextPageToken && pages < maxPages);
+
+    return { files, nextPageToken };
 }
 
 /**

@@ -28,6 +28,7 @@ export function bindUi() {
     els.btnNewFolder = document.getElementById('btn-new-folder');
     els.btnRenameCurrent = document.getElementById('btn-rename-current');
     els.btnInsertList = document.getElementById('btn-insert-list');
+    els.btnClickEdit = document.getElementById('btn-click-edit');
     els.btnGoFinder = document.getElementById('btn-go-finder');
     els.createActions = document.getElementById('create-actions');
     els.searchForm = document.getElementById('search-form');
@@ -41,12 +42,21 @@ export function bindUi() {
     els.editorLoading = document.getElementById('editor-loading');
     els.loadingFileName = document.getElementById('loading-file-name');
     els.editorActive = document.getElementById('editor-active');
+    els.btnEditorSearch = document.getElementById('btn-editor-search');
+    els.editorSearchBar = document.getElementById('editor-search-bar');
+    els.editorSearchInput = document.getElementById('editor-search-input');
+    els.editorSearchCount = document.getElementById('editor-search-count');
+    els.editorSearchCase = document.getElementById('editor-search-case');
+    els.editorSearchWord = document.getElementById('editor-search-word');
+    els.editorSearchPrev = document.getElementById('editor-search-prev');
+    els.editorSearchNext = document.getElementById('editor-search-next');
+    els.editorSearchClose = document.getElementById('editor-search-close');
     els.prefMdOrderMobile = document.getElementById('pref-md-order-mobile');
     els.prefMdOrderDesktop = document.getElementById('pref-md-order-desktop');
     els.prefTheme = document.getElementById('pref-theme');
+    els.prefTocSticky = document.getElementById('pref-toc-sticky');
     els.fileList = document.getElementById('file-list');
     els.browseEmpty = document.getElementById('browse-empty');
-    els.fileName = document.getElementById('file-name');
     els.dirtyLabel = document.getElementById('dirty-label');
     els.editor = document.getElementById('editor');
     els.viewModeBar = document.getElementById('view-mode-bar');
@@ -187,8 +197,12 @@ export function showView(name, options = {}) {
 
     if (name === 'finder') {
         els.viewTitle.textContent = 'Finder';
+        els.viewTitle.classList.remove('view-title--doc');
+        els.viewTitle.removeAttribute('title');
     } else if (name === 'settings') {
         els.viewTitle.textContent = 'Settings';
+        els.viewTitle.classList.remove('view-title--doc');
+        els.viewTitle.removeAttribute('title');
         setStatus('');
     } else if (name === 'editor') {
         const loading = Boolean(options.loading);
@@ -198,6 +212,9 @@ export function showView(name, options = {}) {
             els.editorActive.hidden = true;
             els.btnSave.hidden = true;
             if (els.btnInsertList) els.btnInsertList.hidden = true;
+            if (els.btnClickEdit) els.btnClickEdit.hidden = true;
+            if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
+            if (els.editorSearchBar) els.editorSearchBar.hidden = true;
             els.viewTitle.textContent = 'Opening…';
         } else {
             els.editorEmpty.hidden = hasOpenFile;
@@ -220,16 +237,24 @@ export function setEditorLoading(loading, fileName = '') {
     if (!els.editorLoading) return;
     els.editorLoading.hidden = !loading;
     if (els.loadingFileName) {
-        els.loadingFileName.textContent = fileName || '';
+        const label = displayNoteTitle(fileName);
+        els.loadingFileName.textContent = fileName ? label : '';
         els.loadingFileName.hidden = !fileName;
+        if (fileName) els.loadingFileName.title = fileName;
+        else els.loadingFileName.removeAttribute('title');
     }
     if (loading) {
         els.editorEmpty.hidden = true;
         els.editorActive.hidden = true;
         els.viewTitle.textContent = 'Opening…';
+        els.viewTitle.classList.remove('view-title--doc');
+        els.viewTitle.removeAttribute('title');
         if (els.btnSave) els.btnSave.hidden = true;
         if (els.btnInsertList) els.btnInsertList.hidden = true;
+        if (els.btnClickEdit) els.btnClickEdit.hidden = true;
         if (els.btnRenameCurrent) els.btnRenameCurrent.hidden = true;
+        if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
+        if (els.editorSearchBar) els.editorSearchBar.hidden = true;
     }
 }
 
@@ -434,6 +459,12 @@ export function syncThemeControl(theme) {
     }
 }
 
+export function syncTocStickyControl(sticky) {
+    if (els.prefTocSticky) {
+        els.prefTocSticky.checked = Boolean(sticky);
+    }
+}
+
 function buildFileGroup({ kind, title, files, onOpen, onMenu }) {
     const section = document.createElement('section');
     section.className = `file-group file-group--${kind}`;
@@ -504,7 +535,19 @@ function buildFileGroup({ kind, title, files, onOpen, onMenu }) {
 }
 
 export function setLoadMoreVisible(visible) {
-    els.btnLoadMore.hidden = !visible;
+    if (!els.btnLoadMore) return;
+    const show = Boolean(visible);
+    els.btnLoadMore.hidden = !show;
+    if (!show) {
+        els.btnLoadMore.disabled = false;
+        els.btnLoadMore.textContent = 'Load more';
+    }
+}
+
+export function setLoadMoreBusy(busy) {
+    if (!els.btnLoadMore || els.btnLoadMore.hidden) return;
+    els.btnLoadMore.disabled = Boolean(busy);
+    els.btnLoadMore.textContent = busy ? 'Loading…' : 'Load more';
 }
 
 export function setUpEnabled(enabled) {
@@ -513,10 +556,22 @@ export function setUpEnabled(enabled) {
     els.btnUp.disabled = !enabled;
 }
 
+/**
+ * Display title for a markdown file: strip trailing .md / .markdown.
+ * @param {string} [name]
+ */
+export function displayNoteTitle(name) {
+    const raw = String(name ?? '').trim();
+    if (!raw) return 'Untitled';
+    return raw.replace(/\.(md|markdown)$/i, '') || 'Untitled';
+}
+
 export function syncEditorChrome(state) {
-    els.fileName.textContent = state.fileName || '';
+    const title = displayNoteTitle(state.fileName);
+    const fullName = state.fileName || '';
+
     if (state.status === 'loading') {
-        setEditorLoading(true, state.fileName || '');
+        setEditorLoading(true, fullName);
         if (els.btnSave) els.btnSave.classList.remove('is-flashing');
         if (els.tabEditor) {
             els.tabEditor.classList.toggle('has-dirty', false);
@@ -530,15 +585,28 @@ export function syncEditorChrome(state) {
 
     if (state.fileId) {
         if (!els.viewEditor.hidden) {
-            els.viewTitle.textContent = state.fileName || 'Editor';
+            els.viewTitle.textContent = title;
+            els.viewTitle.title = fullName || title;
+            els.viewTitle.classList.add('view-title--doc');
             syncNavActions('editor', { hasOpenFile: true });
         }
         els.editorEmpty.hidden = true;
         els.editorActive.hidden = false;
         els.btnSave.hidden = false;
         if (els.btnInsertList) els.btnInsertList.hidden = false;
-    } else if (els.btnInsertList) {
-        els.btnInsertList.hidden = true;
+        if (els.btnClickEdit) els.btnClickEdit.hidden = false;
+        if (els.btnEditorSearch) els.btnEditorSearch.hidden = false;
+    } else {
+        els.viewTitle.classList.remove('view-title--doc');
+        els.viewTitle.removeAttribute('title');
+        if (els.btnInsertList) els.btnInsertList.hidden = true;
+        if (els.btnClickEdit) els.btnClickEdit.hidden = true;
+        if (els.btnEditorSearch) els.btnEditorSearch.hidden = true;
+        if (els.editorSearchBar) {
+            els.editorSearchBar.hidden = true;
+            els.editorSearchBar.setAttribute('aria-hidden', 'true');
+        }
+        if (els.btnEditorSearch) els.btnEditorSearch.setAttribute('aria-expanded', 'false');
     }
     els.dirtyLabel.hidden = !state.dirty;
     els.btnSave.disabled = state.status === 'saving' || !state.dirty;
@@ -546,6 +614,8 @@ export function syncEditorChrome(state) {
     els.btnRenameCurrent.hidden = !state.fileId;
     els.btnRenameCurrent.disabled = state.status === 'saving';
     if (els.btnInsertList) els.btnInsertList.disabled = state.status === 'saving' || !state.fileId;
+    if (els.btnClickEdit) els.btnClickEdit.disabled = state.status === 'saving' || !state.fileId;
+    if (els.btnEditorSearch) els.btnEditorSearch.disabled = state.status === 'saving' || !state.fileId;
 
     if (els.tabEditor) {
         els.tabEditor.classList.toggle('has-dirty', Boolean(state.dirty && state.fileId));
@@ -566,7 +636,8 @@ export function syncEditorChrome(state) {
     } else if (state.status === 'saved' && !state.dirty) {
         setStatus('Saved', 'ok');
     } else if (state.status === 'dirty') {
-        setStatus('Unsaved changes', 'warn');
+        // Dirty state is shown via #dirty-label — don't repeat in the status bar
+        setStatus('');
     } else if (state.status === 'error') {
         setStatus(state.errorMessage || 'Error', 'error');
     } else if (state.status === 'loading') {

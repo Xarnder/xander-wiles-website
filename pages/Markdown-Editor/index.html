@@ -101,8 +101,28 @@
                 </div>
                 <div id="editor-active" class="editor-active" hidden>
                     <div class="editor-meta">
-                        <p id="file-name" class="file-name"></p>
-                        <p id="dirty-label" class="dirty-label" hidden>Unsaved</p>
+                        <div class="editor-meta-main">
+                            <p id="dirty-label" class="dirty-label" hidden>Unsaved</p>
+                        </div>
+                        <button type="button" id="btn-editor-search" class="btn btn-ghost btn-small editor-search-toggle" hidden aria-expanded="false" aria-controls="editor-search-bar" title="Search in file (⌘/Ctrl+F)">Search</button>
+                    </div>
+                    <div id="editor-search-bar" class="editor-search-bar" hidden aria-hidden="true" role="search" aria-label="Find in markdown">
+                        <label class="sr-only" for="editor-search-input">Find</label>
+                        <input id="editor-search-input" class="editor-search-input" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Find in file…">
+                        <div class="editor-search-controls">
+                            <span id="editor-search-count" class="editor-search-count" aria-live="polite"></span>
+                            <label class="editor-search-opt" title="Match case">
+                                <input id="editor-search-case" type="checkbox">
+                                <span>Aa</span>
+                            </label>
+                            <label class="editor-search-opt" title="Whole word">
+                                <input id="editor-search-word" type="checkbox">
+                                <span>W</span>
+                            </label>
+                            <button type="button" id="editor-search-prev" class="btn btn-ghost btn-small editor-search-nav" aria-label="Previous match" title="Previous (Shift+Enter)">↑</button>
+                            <button type="button" id="editor-search-next" class="btn btn-ghost btn-small editor-search-nav" aria-label="Next match" title="Next (Enter)">↓</button>
+                            <button type="button" id="editor-search-close" class="btn btn-ghost btn-small editor-search-close" aria-label="Close search" title="Close (Esc)">✕</button>
+                        </div>
                     </div>
                     <div id="view-mode-bar" class="view-mode-bar" role="radiogroup" aria-label="Editor display mode" hidden>
                         <button type="button" class="view-mode-btn" role="radio" aria-checked="false" data-view-mode="list" id="mode-list">List</button>
@@ -136,6 +156,11 @@
                                 <option value="light">Light</option>
                             </select>
                         </label>
+                        <label class="settings-pref settings-pref--toggle">
+                            <span class="settings-pref-label">Sticky Contents in Preview</span>
+                            <input id="pref-toc-sticky" class="settings-toggle" type="checkbox">
+                        </label>
+                        <p class="settings-prefs-lede settings-prefs-lede--tight">When off, the Contents panel scrolls with the page. When on, it stays pinned at the top while you scroll.</p>
                     </div>
                     <div class="settings-prefs">
                         <h3 class="settings-subheading">Finder layout</h3>
@@ -161,8 +186,9 @@
                         <a href="https://drive.google.com" target="_blank" rel="noopener noreferrer">drive.google.com</a>.
                     </p>
                     <ul class="settings-tips">
+                        <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>F</kbd> searches inside the open markdown file.</li>
                         <li><kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> saves the open file.</li>
-                        <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
+                        <li><strong>Preview</strong> shows formatted markdown and ranked lists (tap the pen to edit a list). Use <strong>Edit here</strong> then tap text to jump into <strong>Raw</strong> at that spot. <strong>List</strong> focuses on lists only. <strong>Raw</strong> is the full file text.</li>
                         <li>Use <strong>List</strong> / <strong>Preview</strong> for ranked <code>mdlist</code> blocks.</li>
                         <li>Tap a folder path segment in Finder to jump up the tree.</li>
                     </ul>
@@ -185,6 +211,7 @@
                     </div>
                 </div>
                 <div id="nav-actions-editor" class="nav-actions-panel nav-actions-editor" hidden>
+                    <button type="button" id="btn-click-edit" class="btn btn-ghost" hidden>Edit here</button>
                     <button type="button" id="btn-insert-list" class="btn btn-ghost" hidden>+ List</button>
                     <button type="button" id="btn-rename-current" class="btn btn-ghost" hidden>Rename</button>
                     <button type="button" id="btn-save" class="btn btn-primary btn-save" hidden>Save</button>
