@@ -14,11 +14,12 @@ import {
   resetAudioSession,
   warmCaptureTracks,
   type FacingMode,
+  type VideoResolution,
 } from '../media/platform'
 
 export type SpeechStatus = 'idle' | 'loading' | 'listening' | 'error'
 
-export type SpeechErrorAction = 'preload' | 'start'
+export type SpeechErrorAction = 'preload' | 'start' | 'record'
 
 export interface RecordingResult {
   blob: Blob
@@ -33,25 +34,24 @@ export interface SpeechStreamState {
   committedTranscript: string
   errorMessage: string | null
   error: SpeechErrorInfo | null
-  /** Which user action to retry after dismissing the error popup. */
   errorAction: SpeechErrorAction | null
   modelReady: boolean
-  /** Live capture stream (includes video when recording). */
+  /** Live capture stream (includes video while recording). */
   captureStream: MediaStream | null
-  /** True while MediaRecorder is active. */
   recordingActive: boolean
-  /** Finished take waiting for the user to save/share. */
+  /** True while start/stop recording work is in flight. */
+  recordingBusy: boolean
+  /** Epoch ms when the current take started (for elapsed timer). */
+  recordingStartedAt: number | null
   recordingResult: RecordingResult | null
   recordingSupported: boolean
 }
 
 export interface UseSpeechStreamOptions {
-  /** Moonshine model id relative to asset base, e.g. "model/tiny". */
   modelId?: string
   deviceId?: string | null
-  /** Open camera and record A/V while listening (same mic feeds ASR). */
-  recordCamera?: boolean
   facingMode?: FacingMode
+  videoResolution?: VideoResolution
   onPartial?: (text: string) => void
   onCommitted?: (text: string) => void
 }
@@ -69,17 +69,29 @@ function makeRecordingFilename(mimeType: string): string {
   return `teleprompter-${stamp}.${extensionForMime(mimeType)}`
 }
 
+function hasLiveVideo(stream: MediaStream | null): boolean {
+  return Boolean(
+    stream?.getVideoTracks().some((t) => t.readyState === 'live' && t.enabled),
+  )
+}
+
+function hasLiveAudio(stream: MediaStream | null): boolean {
+  return Boolean(
+    stream?.getAudioTracks().some((t) => t.readyState === 'live' && t.enabled),
+  )
+}
+
 /**
  * On-device streaming ASR via MoonshineJS.
- * useVAD=false → onTranscriptionUpdated fires on a rapid interval (streaming).
- * Optional camera recording shares the same microphone tracks with ASR.
+ * Voice-follow (start/stop) and camera recording are independent;
+ * when both run, they share the same microphone tracks.
  */
 export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
   const {
     modelId = 'model/tiny',
     deviceId = null,
-    recordCamera = false,
     facingMode = 'user',
+    videoResolution = 'max',
     onPartial,
     onCommitted,
   } = options
@@ -92,6 +104,10 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
   const [modelReady, setModelReady] = useState(false)
   const [captureStream, setCaptureStream] = useState<MediaStream | null>(null)
   const [recordingActive, setRecordingActive] = useState(false)
+  const [recordingBusy, setRecordingBusy] = useState(false)
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(
+    null,
+  )
   const [recordingResult, setRecordingResult] = useState<RecordingResult | null>(
     null,
   )
@@ -107,10 +123,14 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
   const committedAccRef = useRef('')
   const loadingModelRef = useRef(false)
   const pendingActionRef = useRef<SpeechErrorAction | null>(null)
-  const recordCameraRef = useRef(recordCamera)
   const facingModeRef = useRef(facingMode)
-  const stopPromiseRef = useRef<Promise<void> | null>(null)
-  const stopSessionRef = useRef<() => Promise<void>>(async () => {})
+  const videoResolutionRef = useRef(videoResolution)
+  const listeningRef = useRef(false)
+  const recordingActiveRef = useRef(false)
+  const recordingOpRef = useRef<'idle' | 'starting' | 'stopping'>('idle')
+  const stopPromiseRef = useRef<Promise<RecordingResult | null> | null>(null)
+  const recordingStartedAtRef = useRef<number | null>(null)
+  const stopRecordingRef = useRef<() => Promise<void>>(async () => {})
 
   useEffect(() => {
     onPartialRef.current = onPartial
@@ -118,12 +138,20 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
   }, [onPartial, onCommitted])
 
   useEffect(() => {
-    recordCameraRef.current = recordCamera
-  }, [recordCamera])
-
-  useEffect(() => {
     facingModeRef.current = facingMode
   }, [facingMode])
+
+  useEffect(() => {
+    videoResolutionRef.current = videoResolution
+  }, [videoResolution])
+
+  useEffect(() => {
+    listeningRef.current = status === 'listening'
+  }, [status])
+
+  useEffect(() => {
+    recordingActiveRef.current = recordingActive
+  }, [recordingActive])
 
   const reportError = useCallback(
     (
@@ -161,15 +189,40 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     setCaptureStream(null)
   }, [])
 
+  const stopVideoTracks = useCallback(() => {
+    const stream = streamRef.current
+    if (!stream) {
+      setCaptureStream(null)
+      return
+    }
+    stream.getVideoTracks().forEach((t) => {
+      try {
+        t.stop()
+      } catch {
+        // ignore
+      }
+    })
+    // Keep audio-only stream for ASR; clear camera preview.
+    setCaptureStream(null)
+  }, [])
+
   const stopRecorder = useCallback(async (): Promise<RecordingResult | null> => {
+    if (stopPromiseRef.current) {
+      return stopPromiseRef.current
+    }
+
     const recorder = recorderRef.current
     if (!recorder || recorder.state === 'inactive') {
       recorderRef.current = null
       setRecordingActive(false)
+      recordingActiveRef.current = false
+      setRecordingStartedAt(null)
+      recordingStartedAtRef.current = null
       return null
     }
 
-    const result = await new Promise<RecordingResult | null>((resolve) => {
+    const startedAt = recordingStartedAtRef.current
+    const promise = new Promise<RecordingResult | null>((resolve) => {
       let settled = false
       const finish = () => {
         if (settled) return
@@ -180,13 +233,21 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
         chunksRef.current = []
         recorderRef.current = null
         setRecordingActive(false)
+        recordingActiveRef.current = false
+        setRecordingStartedAt(null)
+        recordingStartedAtRef.current = null
+
         if (!chunks.length) {
           resolve(null)
           return
         }
         const blob = new Blob(chunks, { type: mimeType })
-        // Tiny blobs are almost always a failed WebKit encode.
-        if (blob.size < 256) {
+        const elapsedMs = startedAt != null ? Date.now() - startedAt : 0
+        // Reject empty / near-empty captures; allow very short takes that still
+        // produced a real container once recording ran for a moment.
+        const tooSmall =
+          blob.size < 64 || (blob.size < 1024 && elapsedMs < 350)
+        if (tooSmall) {
           resolve(null)
           return
         }
@@ -200,7 +261,6 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
 
       recorder.onstop = finish
       try {
-        // Flush the current buffer before stop — important on iOS WebKit.
         if (typeof recorder.requestData === 'function') {
           recorder.requestData()
         }
@@ -215,11 +275,15 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
           finish()
         }
       }, isAppleMobile() ? 120 : 0)
-      // Safety: never hang if onstop never fires.
       window.setTimeout(finish, 4000)
     })
 
-    return result
+    stopPromiseRef.current = promise
+    try {
+      return await promise
+    } finally {
+      stopPromiseRef.current = null
+    }
   }, [])
 
   const startRecorder = useCallback(
@@ -271,17 +335,19 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
 
       recorder.onerror = () => {
         setRecordingActive(false)
+        recordingActiveRef.current = false
+        setRecordingStartedAt(null)
+        recordingStartedAtRef.current = null
         reportError(
           new Error(
             'Camera recording failed while capturing. On iPhone, keep Safari/Chrome in the foreground and try again.',
           ),
           'runtime',
-          'start',
+          'record',
         )
-        void stopSessionRef.current()
+        void stopRecordingRef.current()
       }
 
-      // timeslice helps WebKit deliver chunks before stop; fall back if rejected.
       try {
         recorder.start(1000)
       } catch {
@@ -304,10 +370,13 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
         )
       }
 
+      const startedAt = Date.now()
       recorderRef.current = recorder
+      recordingStartedAtRef.current = startedAt
+      setRecordingStartedAt(startedAt)
       setRecordingActive(true)
+      recordingActiveRef.current = true
 
-      // Watch for mid-session track loss (common if iOS interrupts capture).
       const onTrackEnded = () => {
         if (recorderRef.current !== recorder) return
         reportError(
@@ -315,9 +384,9 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
             'Camera or microphone stopped during recording. Keep the app open and avoid switching away mid-take.',
           ),
           'runtime',
-          'start',
+          'record',
         )
-        void stopSessionRef.current()
+        void stopRecordingRef.current()
       }
       for (const track of stream.getTracks()) {
         track.addEventListener('ended', onTrackEnded, { once: true })
@@ -325,52 +394,6 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     },
     [reportError],
   )
-
-  const stop = useCallback(async () => {
-    if (stopPromiseRef.current) {
-      await stopPromiseRef.current
-      return
-    }
-
-    const run = (async () => {
-      const expectFile = Boolean(
-        recorderRef.current && recorderRef.current.state !== 'inactive',
-      )
-      const recorded = await stopRecorder()
-      if (recorded) {
-        setRecordingResult(recorded)
-      } else if (expectFile) {
-        reportError(
-          new Error(
-            'Recording produced an empty video file. On iPhone, allow Camera and Microphone for Safari/Chrome, keep the screen on, and try a longer take.',
-          ),
-          'runtime',
-          'start',
-        )
-      }
-
-      try {
-        transcriberRef.current?.stop()
-      } catch {
-        // ignore
-      }
-      // Drop instance so the next start re-attaches a fresh mic graph.
-      // Model weights remain cached on Transcriber's static map.
-      transcriberRef.current = null
-      stopTracks()
-      resetAudioSession()
-      setStatus((s) => (s === 'error' ? 'error' : 'idle'))
-    })()
-
-    stopPromiseRef.current = run
-    try {
-      await run
-    } finally {
-      if (stopPromiseRef.current === run) stopPromiseRef.current = null
-    }
-  }, [reportError, stopRecorder, stopTracks])
-
-  stopSessionRef.current = stop
 
   const loadMoonshine = useCallback(async () => {
     if (moonshineRef.current) return moonshineRef.current
@@ -409,15 +432,26 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
         onError(error) {
           const context = loadingModelRef.current ? 'model-load' : 'runtime'
           loadingModelRef.current = false
-          void stopRecorder()
-          reportError(error, context)
-          stopTracks()
-          resetAudioSession()
+          try {
+            transcriberRef.current?.stop()
+          } catch {
+            // ignore
+          }
+          transcriberRef.current = null
+          listeningRef.current = false
+          // Keep camera recording running if it was started separately.
+          if (!recordingActiveRef.current) {
+            stopTracks()
+            resetAudioSession()
+          }
+          reportError(error, context, 'start')
         },
         onTranscribeStarted() {
           setStatus('listening')
+          listeningRef.current = true
         },
         onTranscribeStopped() {
+          listeningRef.current = false
           setStatus((s) => (s === 'error' ? 'error' : 'idle'))
         },
         onTranscriptionUpdated(text) {
@@ -434,13 +468,13 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
           onCommittedRef.current?.(value)
         },
       },
-      false, // streaming mode: disable VAD-only commits
+      false,
       'quantized',
     )
 
     transcriberRef.current = transcriber
     return transcriber
-  }, [loadMoonshine, modelId, reportError, stopRecorder, stopTracks])
+  }, [loadMoonshine, modelId, reportError, stopTracks])
 
   const loadModel = useCallback(async (transcriber: TranscriberInstance) => {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -465,7 +499,7 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     try {
       const transcriber = await ensureTranscriber()
       await loadModel(transcriber)
-      setStatus('idle')
+      setStatus(listeningRef.current ? 'listening' : 'idle')
       pendingActionRef.current = null
       return true
     } catch (err) {
@@ -474,34 +508,31 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     }
   }, [ensureTranscriber, loadModel, reportError])
 
+  /** Pause voice-follow only — leaves an active camera recording running. */
+  const stop = useCallback(async () => {
+    try {
+      transcriberRef.current?.stop()
+    } catch {
+      // ignore
+    }
+    transcriberRef.current = null
+    listeningRef.current = false
+
+    if (!recordingActiveRef.current) {
+      stopTracks()
+      resetAudioSession()
+    }
+
+    setStatus((s) => (s === 'error' ? 'error' : 'idle'))
+  }, [stopTracks])
+
+  /** Start voice-follow independently of recording. */
   const start = useCallback(async () => {
     pendingActionRef.current = 'start'
     setError(null)
     setErrorAction(null)
 
-    const wantRecord = recordCameraRef.current
-
     try {
-      if (stopPromiseRef.current) {
-        await stopPromiseRef.current
-      }
-
-      if (wantRecord && !isMediaRecorderSupported()) {
-        reportError(
-          new DOMException(
-            'Video recording is not supported in this browser.',
-            'NotSupportedError',
-          ),
-          'start',
-          'start',
-        )
-        return false
-      }
-
-      if (wantRecord) {
-        requireSecureContextForRecording()
-      }
-
       const permission = await navigator.permissions
         ?.query({ name: 'microphone' as PermissionName })
         .catch(() => null)
@@ -522,51 +553,37 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
         }
       }
 
-      await stopRecorder()
-      stopTracks()
-
-      const stream = await getCaptureStream({
-        deviceId,
-        recordCamera: wantRecord,
-        facingMode: facingModeRef.current,
-      })
-
-      if (wantRecord) {
-        await warmCaptureTracks(stream, { requireVideo: true })
+      // Reuse mic from an active recording when possible.
+      let stream = streamRef.current
+      if (!hasLiveAudio(stream)) {
+        stream = await getCaptureStream({
+          deviceId,
+          recordCamera: recordingActiveRef.current,
+          facingMode: facingModeRef.current,
+          videoResolution: videoResolutionRef.current,
+        })
+        streamRef.current = stream
+        if (hasLiveVideo(stream)) {
+          setCaptureStream(stream)
+        }
       }
 
-      streamRef.current = stream
-      setCaptureStream(stream)
-
-      // Same mic tracks feed ASR and (when enabled) the video file.
-      const asrStream = wantRecord ? audioOnlyStream(stream) : stream
+      const asrStream = hasLiveVideo(stream)
+        ? audioOnlyStream(stream!)
+        : stream!
       transcriber.attachStream(asrStream)
-
-      if (wantRecord) {
-        startRecorder(stream)
-      }
-
       await transcriber.start()
       setStatus('listening')
+      listeningRef.current = true
       pendingActionRef.current = null
       return true
     } catch (err) {
-      void stopRecorder()
-      stopTracks()
-      resetAudioSession()
-      const name = err instanceof DOMException ? err.name : ''
-      if (
-        wantRecord &&
-        (name === 'NotAllowedError' || name === 'PermissionDeniedError')
-      ) {
-        reportError(
-          new Error('Camera or microphone permission denied'),
-          'start',
-          'start',
-        )
-      } else {
-        reportError(err, 'start', 'start')
+      listeningRef.current = false
+      if (!recordingActiveRef.current) {
+        stopTracks()
+        resetAudioSession()
       }
+      reportError(err, 'start', 'start')
       return false
     }
   }, [
@@ -575,16 +592,196 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     loadModel,
     modelReady,
     reportError,
-    startRecorder,
-    stopRecorder,
     stopTracks,
   ])
+
+  /** Start camera recording independently of voice-follow. */
+  const startRecording = useCallback(async () => {
+    if (recordingOpRef.current !== 'idle') return false
+    if (recordingActiveRef.current) return true
+
+    recordingOpRef.current = 'starting'
+    setRecordingBusy(true)
+    pendingActionRef.current = 'record'
+    setError(null)
+    setErrorAction(null)
+
+    try {
+      if (!isMediaRecorderSupported()) {
+        reportError(
+          new DOMException(
+            'Video recording is not supported in this browser.',
+            'NotSupportedError',
+          ),
+          'start',
+          'record',
+        )
+        return false
+      }
+      requireSecureContextForRecording()
+
+      const wasListening = listeningRef.current
+
+      // Already have a live AV stream — just start the recorder.
+      if (hasLiveVideo(streamRef.current) && hasLiveAudio(streamRef.current)) {
+        startRecorder(streamRef.current!)
+        setCaptureStream(streamRef.current)
+        pendingActionRef.current = null
+        return true
+      }
+
+      // Need a fresh AV stream (upgrade from audio-only or cold start).
+      if (wasListening) {
+        try {
+          transcriberRef.current?.stop()
+        } catch {
+          // ignore
+        }
+      }
+
+      const oldStream = streamRef.current
+      const stream = await getCaptureStream({
+        deviceId,
+        recordCamera: true,
+        facingMode: facingModeRef.current,
+        videoResolution: videoResolutionRef.current,
+      })
+      await warmCaptureTracks(stream, { requireVideo: true })
+
+      // Aborted or superseded while awaiting camera.
+      if (recordingOpRef.current !== 'starting') {
+        stream.getTracks().forEach((t) => {
+          try {
+            t.stop()
+          } catch {
+            // ignore
+          }
+        })
+        return false
+      }
+
+      oldStream?.getTracks().forEach((t) => {
+        try {
+          t.stop()
+        } catch {
+          // ignore
+        }
+      })
+
+      streamRef.current = stream
+      setCaptureStream(stream)
+      startRecorder(stream)
+
+      if (wasListening) {
+        const transcriber = await ensureTranscriber()
+        if (!modelReady) {
+          await loadModel(transcriber)
+        }
+        transcriber.attachStream(audioOnlyStream(stream))
+        await transcriber.start()
+        setStatus('listening')
+        listeningRef.current = true
+      }
+
+      pendingActionRef.current = null
+      return true
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : ''
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        reportError(
+          new Error('Camera or microphone permission denied'),
+          'start',
+          'record',
+        )
+      } else {
+        reportError(err, 'start', 'record')
+      }
+      if (!listeningRef.current) {
+        stopTracks()
+        resetAudioSession()
+      }
+      return false
+    } finally {
+      if (recordingOpRef.current === 'starting') {
+        recordingOpRef.current = 'idle'
+      }
+      setRecordingBusy(false)
+    }
+  }, [
+    deviceId,
+    ensureTranscriber,
+    loadModel,
+    modelReady,
+    reportError,
+    startRecorder,
+    stopTracks,
+  ])
+
+  /** Stop camera recording only — leaves voice-follow running if active. */
+  const stopRecording = useCallback(async () => {
+    if (recordingOpRef.current === 'stopping') {
+      if (stopPromiseRef.current) await stopPromiseRef.current
+      return
+    }
+
+    // Still connecting camera — cancel the start path.
+    if (recordingOpRef.current === 'starting' && !recordingActiveRef.current) {
+      recordingOpRef.current = 'idle'
+      setRecordingBusy(false)
+      return
+    }
+
+    recordingOpRef.current = 'stopping'
+    setRecordingBusy(true)
+
+    try {
+      const expectFile = Boolean(
+        recorderRef.current && recorderRef.current.state !== 'inactive',
+      )
+      const recorded = await stopRecorder()
+
+      if (recorded) {
+        setRecordingResult(recorded)
+      } else if (expectFile) {
+        reportError(
+          new Error(
+            'Recording produced an empty video file. On iPhone, allow Camera and Microphone for Safari/Chrome, keep the screen on, and try a longer take.',
+          ),
+          'runtime',
+          'record',
+        )
+      }
+
+      if (listeningRef.current) {
+        stopVideoTracks()
+      } else {
+        stopTracks()
+        resetAudioSession()
+      }
+    } finally {
+      recordingOpRef.current = 'idle'
+      setRecordingBusy(false)
+    }
+  }, [reportError, stopRecorder, stopTracks, stopVideoTracks])
+
+  stopRecordingRef.current = stopRecording
 
   const resetTranscript = useCallback(() => {
     committedAccRef.current = ''
     setCommittedTranscript('')
     setPartialTranscript('')
   }, [])
+
+  // Warn before leaving mid-take.
+  useEffect(() => {
+    if (!recordingActive) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [recordingActive])
 
   useEffect(() => {
     return () => {
@@ -603,23 +800,24 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
     }
   }, [stopTracks])
 
-  const errorMessage = error?.summary ?? null
-  const recordingSupported = isMediaRecorderSupported()
-
   return {
     status,
     partialTranscript,
     committedTranscript,
-    errorMessage,
+    errorMessage: error?.summary ?? null,
     error,
     errorAction,
     modelReady,
     captureStream,
     recordingActive,
+    recordingBusy,
+    recordingStartedAt,
     recordingResult,
-    recordingSupported,
+    recordingSupported: isMediaRecorderSupported(),
     start,
     stop,
+    startRecording,
+    stopRecording,
     preload,
     resetTranscript,
     clearError,
@@ -627,6 +825,8 @@ export function useSpeechStream(options: UseSpeechStreamOptions = {}) {
   } satisfies SpeechStreamState & {
     start: () => Promise<boolean>
     stop: () => Promise<void>
+    startRecording: () => Promise<boolean>
+    stopRecording: () => Promise<void>
     preload: () => Promise<boolean>
     resetTranscript: () => void
     clearError: () => void

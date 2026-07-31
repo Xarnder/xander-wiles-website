@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CameraPreview } from './components/CameraPreview'
 import { Controls } from './components/Controls'
 import { HowToUse } from './components/HowToUse'
 import { AlertModal } from './components/Modal'
+import { RecordingReviewModal } from './components/RecordingReviewModal'
+import { ReplaceRecordingModal } from './components/ReplaceRecordingModal'
 import { ScriptEditor } from './components/ScriptEditor'
 import { ScriptView } from './components/ScriptView'
 import { useMicDevices } from './hooks/useMicDevices'
@@ -10,7 +12,6 @@ import { useTeleprompter } from './hooks/useTeleprompter'
 import { useWakeLock } from './hooks/useWakeLock'
 import {
   isMediaRecorderSupported,
-  saveRecordingBlob,
   type FacingMode,
 } from './media/platform'
 
@@ -26,12 +27,12 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export default function App() {
-  const [recordCamera, setRecordCamera] = useState(false)
   const [facingMode, setFacingMode] = useState<FacingMode>('user')
-  const [saveBusy, setSaveBusy] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const lastRecordingAtRef = useRef<number | null>(null)
 
-  const tp = useTeleprompter({ recordCamera, facingMode })
+  const tp = useTeleprompter({ facingMode })
   const {
     devices,
     selectedDeviceId,
@@ -45,6 +46,21 @@ export default function App() {
 
   const isListening = tp.speech.status === 'listening'
   useWakeLock(isListening)
+
+  // Open review whenever a new take finishes.
+  useEffect(() => {
+    const result = tp.speech.recordingResult
+    if (!result) {
+      lastRecordingAtRef.current = null
+      setReviewOpen(false)
+      return
+    }
+    if (lastRecordingAtRef.current !== result.recordedAt) {
+      lastRecordingAtRef.current = result.recordedAt
+      setReviewOpen(true)
+      setReplaceOpen(false)
+    }
+  }, [tp.speech.recordingResult])
 
   useEffect(() => {
     if (selectedDeviceId) {
@@ -109,36 +125,52 @@ export default function App() {
       void tp.speech.preload()
       return
     }
+    if (action === 'record') {
+      if (!tp.speech.recordingBusy && !tp.speech.recordingActive) {
+        void tp.speech.startRecording()
+      }
+      return
+    }
     void startSession()
   }, [startSession, tp.speech])
 
-  const dismissRecording = useCallback(() => {
-    setSaveError(null)
+  const toggleRecording = useCallback(() => {
+    if (tp.speech.recordingBusy) return
+    if (tp.speech.recordingActive) {
+      void tp.speech.stopRecording()
+      return
+    }
+    if (tp.speech.recordingResult) {
+      setReviewOpen(false)
+      setReplaceOpen(true)
+      return
+    }
+    void tp.speech.startRecording()
+  }, [tp.speech])
+
+  const closeReview = useCallback(() => {
+    setReviewOpen(false)
+  }, [])
+
+  const openReviewTake = useCallback(() => {
+    if (!tp.speech.recordingResult || tp.speech.recordingActive) return
+    setReplaceOpen(false)
+    setReviewOpen(true)
+  }, [tp.speech.recordingActive, tp.speech.recordingResult])
+
+  const discardRecording = useCallback(() => {
+    setReviewOpen(false)
+    setReplaceOpen(false)
     tp.speech.clearRecordingResult()
   }, [tp.speech])
 
-  const saveRecording = useCallback(async () => {
-    const result = tp.speech.recordingResult
-    if (!result || saveBusy) return
-    setSaveBusy(true)
-    setSaveError(null)
-    try {
-      await saveRecordingBlob(result.blob, result.filename)
-      tp.speech.clearRecordingResult()
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        // User cancelled the share sheet — keep the take.
-      } else {
-        setSaveError(
-          err instanceof Error
-            ? err.message
-            : 'Could not save the recording. Try again or use Share from Files.',
-        )
-      }
-    } finally {
-      setSaveBusy(false)
-    }
-  }, [saveBusy, tp.speech])
+  const confirmReplaceRecording = useCallback(() => {
+    if (tp.speech.recordingBusy) return
+    setReplaceOpen(false)
+    setReviewOpen(false)
+    tp.speech.clearRecordingResult()
+    void tp.speech.startRecording()
+  }, [tp.speech])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -149,9 +181,14 @@ export default function App() {
           void document.exitFullscreen()
           return
         }
-        if (tp.speech.recordingResult) {
+        if (replaceOpen) {
           e.preventDefault()
-          dismissRecording()
+          setReplaceOpen(false)
+          return
+        }
+        if (reviewOpen) {
+          e.preventDefault()
+          closeReview()
           return
         }
         if (tp.speech.error) {
@@ -203,6 +240,12 @@ export default function App() {
           e.preventDefault()
           void toggleFullscreen()
           break
+        case 'v':
+        case 'V':
+          e.preventDefault()
+          if (reviewOpen || replaceOpen) break
+          toggleRecording()
+          break
         case 'ArrowLeft':
           e.preventDefault()
           tp.nudge(-1)
@@ -228,14 +271,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [
     closePanels,
-    dismissRecording,
+    closeReview,
     dismissSpeechError,
     editorOpen,
     howToOpen,
     isListening,
+    replaceOpen,
+    reviewOpen,
     settingsOpen,
     startSession,
     toggleFullscreen,
+    toggleRecording,
     tp,
   ])
 
@@ -273,8 +319,9 @@ export default function App() {
         progress={tp.progress}
         wpm={tp.wpm}
         isFullscreen={isFullscreen}
-        recordCamera={recordCamera}
         recordingActive={tp.speech.recordingActive}
+        recordingBusy={tp.speech.recordingBusy}
+        hasRecordingTake={tp.speech.recordingResult != null}
         recordingSupported={tp.speech.recordingSupported && isMediaRecorderSupported()}
         facingMode={facingMode}
         onStart={startSession}
@@ -301,10 +348,8 @@ export default function App() {
           setSettingsOpen(false)
         }}
         onToggleFullscreen={() => void toggleFullscreen()}
-        onToggleRecordCamera={() => {
-          if (!isMediaRecorderSupported()) return
-          setRecordCamera((v) => !v)
-        }}
+        onToggleRecording={toggleRecording}
+        onReviewTake={openReviewTake}
         onFacingModeChange={setFacingMode}
         onNudge={tp.nudge}
         onNudgeSentence={tp.nudgeSentence}
@@ -346,6 +391,7 @@ export default function App() {
         stream={previewStream}
         mirror={facingMode === 'user'}
         recording={tp.speech.recordingActive}
+        recordingStartedAt={tp.speech.recordingStartedAt}
       />
 
       <AlertModal
@@ -359,25 +405,22 @@ export default function App() {
         dismissLabel="Dismiss"
       />
 
-      <AlertModal
-        open={recording != null}
-        title="Recording ready"
-        message={
-          saveError
-            ? saveError
-            : `Your take is ready (${recording?.filename ?? 'video'}). On iPhone and iPad, Share saves it to Photos or Files. The same microphone powered both the video audio and voice-follow scrolling.`
-        }
-        fix={
-          saveError
-            ? 'Try Share again, or dismiss and start a new take.'
-            : 'Tap Save / Share to keep the file, or Dismiss to discard it.'
-        }
-        onClose={dismissRecording}
-        actionLabel={saveBusy ? 'Saving…' : 'Save / Share'}
-        onAction={() => {
-          if (!saveBusy) void saveRecording()
+      <RecordingReviewModal
+        open={reviewOpen && recording != null}
+        recording={recording}
+        onClose={closeReview}
+        onDiscard={discardRecording}
+      />
+
+      <ReplaceRecordingModal
+        open={replaceOpen && recording != null}
+        recording={recording}
+        onCancel={() => setReplaceOpen(false)}
+        onConfirmReplace={confirmReplaceRecording}
+        onReviewOld={() => {
+          setReplaceOpen(false)
+          setReviewOpen(true)
         }}
-        dismissLabel="Discard"
       />
     </div>
   )

@@ -145,7 +145,7 @@ export function classifySpeechError(
       message:
         message ||
         'The camera recording could not be saved. This is often an iPhone permission or backgrounding issue.',
-      fix: 'In iPhone Settings → Safari (or Chrome) allow Camera and Microphone. Keep the app open while recording, then Pause to save. Try again.',
+      fix: 'In iPhone Settings → Safari (or Chrome) allow Camera and Microphone. Keep the app open while recording, then tap Stop to save. Try again.',
       summary: message || 'Camera recording failed.',
     }
   }

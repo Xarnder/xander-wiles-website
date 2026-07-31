@@ -11,7 +11,11 @@ import {
 } from '../hooks/useTeleprompter'
 import type { SpeechStatus } from '../asr/useSpeechStream'
 import type { AlignmentState } from '../alignment/AlignmentEngine'
-import type { FacingMode } from '../media/platform'
+import {
+  VIDEO_RESOLUTION_OPTIONS,
+  type FacingMode,
+  type VideoResolution,
+} from '../media/platform'
 import { ConfirmModal } from './Modal'
 import {
   IconArrowDown,
@@ -43,8 +47,9 @@ interface ControlsProps {
   }
   wpm: number | null
   isFullscreen: boolean
-  recordCamera: boolean
   recordingActive: boolean
+  recordingBusy?: boolean
+  hasRecordingTake?: boolean
   recordingSupported: boolean
   facingMode: FacingMode
   onStart: () => void
@@ -56,7 +61,8 @@ interface ControlsProps {
   onToggleSettings: () => void
   onToggleHowTo: () => void
   onToggleFullscreen: () => void
-  onToggleRecordCamera: () => void
+  onToggleRecording: () => void
+  onReviewTake?: () => void
   onFacingModeChange: (mode: FacingMode) => void
   onNudge: (delta: number) => void
   onNudgeSentence: (direction: 'up' | 'down') => void
@@ -139,8 +145,9 @@ export function Controls({
   progress,
   wpm,
   isFullscreen,
-  recordCamera,
   recordingActive,
+  recordingBusy = false,
+  hasRecordingTake = false,
   recordingSupported,
   facingMode,
   onStart,
@@ -152,7 +159,8 @@ export function Controls({
   onToggleSettings,
   onToggleHowTo,
   onToggleFullscreen,
-  onToggleRecordCamera,
+  onToggleRecording,
+  onReviewTake,
   onFacingModeChange,
   onNudge,
   onNudgeSentence,
@@ -168,17 +176,19 @@ export function Controls({
     ? recordingActive
       ? 'Live scroll · recording'
       : 'Live scroll'
-    : isHoldingOffScript
-      ? 'Paused — off script'
-      : status === 'loading'
-        ? modelReady
-          ? recordCamera
-            ? 'Starting camera…'
-            : 'Starting mic…'
-          : 'Loading speech model…'
-        : status === 'error'
-          ? 'Error'
-          : 'Paused'
+    : recordingActive
+      ? status === 'listening'
+        ? 'Listening · recording'
+        : 'Recording'
+      : isHoldingOffScript
+        ? 'Paused — off script'
+        : status === 'loading'
+          ? modelReady
+            ? 'Starting mic…'
+            : 'Loading speech model…'
+          : status === 'error'
+            ? 'Error'
+            : 'Paused'
 
   const resetSlider = (key: SliderKey) => {
     onUpdateSettings({ [key]: DEFAULT_SETTINGS[key] })
@@ -220,23 +230,44 @@ export function Controls({
           )}
           <button
             type="button"
-            className={`btn record-btn${recordCamera ? ' active' : ''}${recordingActive ? ' is-recording' : ''}`}
-            onClick={onToggleRecordCamera}
-            disabled={!recordingSupported || (isRunning && status === 'listening')}
+            className={`btn record-btn${recordingActive ? ' active is-recording' : ''}${hasRecordingTake && !recordingActive ? ' has-take' : ''}${recordingBusy ? ' is-busy' : ''}`}
+            onClick={onToggleRecording}
+            disabled={!recordingSupported || recordingBusy}
             title={
               !recordingSupported
                 ? 'Video recording is not supported in this browser'
-                : isRunning && status === 'listening'
-                  ? 'Stop the session before changing Record'
-                  : recordCamera
-                    ? 'Record camera is on — Start will capture video + audio while scrolling'
-                    : 'Record camera with audio (same mic powers speech recognition)'
+                : recordingBusy
+                  ? recordingActive
+                    ? 'Saving recording…'
+                    : 'Starting camera…'
+                  : recordingActive
+                    ? 'Stop camera recording (V)'
+                    : hasRecordingTake
+                      ? 'A take is kept — tap to record a new one (V)'
+                      : 'Start camera recording (V) — independent of Start/Pause'
             }
-            aria-pressed={recordCamera}
+            aria-pressed={recordingActive}
           >
             <span className="record-btn-dot" aria-hidden />
-            Record
+            {recordingBusy
+              ? recordingActive
+                ? 'Saving…'
+                : 'Starting…'
+              : recordingActive
+                ? 'Stop'
+                : 'Record'}
           </button>
+          {hasRecordingTake && !recordingActive && onReviewTake ? (
+            <button
+              type="button"
+              className="btn record-take-btn"
+              onClick={onReviewTake}
+              disabled={recordingBusy}
+              title="Review the kept recording"
+            >
+              Take
+            </button>
+          ) : null}
         </div>
 
         <div className="controls-rest">
@@ -477,7 +508,8 @@ export function Controls({
       )}
 
       {settingsOpen && (
-        <div className="panel settings-panel glass-panel">
+        <div className="panel settings-panel">
+          <div className="settings-panel-body">
           <div className="settings-grid">
             <SliderField
               label="Font size"
@@ -544,13 +576,14 @@ export function Controls({
                 }
               >
                 <option value="script">Full script</option>
-                <option value="one_word">One word (next only)</option>
+                <option value="one_word">One word (prev + next faded)</option>
                 <option value="two_word">Two words (said + next)</option>
               </select>
             </label>
             <p className="settings-hint">
-              One / two word modes use giant fullscreen cues on iPhone. Font size
-              still scales them. Line width only applies to full script mode.
+              One-word mode shows the current cue giant, with previous and next
+              small and faded. Two-word shows said + next. Font size still
+              scales them. Line width only applies to full script mode.
             </p>
             <label className="settings-mic">
               <span>Cursor position</span>
@@ -728,17 +761,36 @@ export function Controls({
                 onChange={(e) =>
                   onFacingModeChange(e.target.value as FacingMode)
                 }
-                disabled={!recordingSupported || (isRunning && status === 'listening')}
+                disabled={!recordingSupported || recordingActive || recordingBusy}
               >
                 <option value="user">Front camera</option>
                 <option value="environment">Back camera</option>
               </select>
             </label>
+            <label className="settings-mic">
+              <span>Recording resolution</span>
+              <select
+                value={settings.videoResolution}
+                onChange={(e) =>
+                  onUpdateSettings({
+                    videoResolution: e.target.value as VideoResolution,
+                  })
+                }
+                disabled={!recordingSupported || recordingActive || recordingBusy}
+              >
+                {VIDEO_RESOLUTION_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <p className="settings-hint">
-              Record uses the same microphone for the video file and for
-              voice-follow scrolling. On iPhone, watch the preview meters: Cam on
-              / Mic on, and the Mic bar should move when you speak. Works on
-              Safari &amp; Chrome (HTTPS).
+              Record / Stop is independent of Start / Pause. Default resolution
+              is full sensor 16:9; change it above before the next Record. The
+              same microphone can power both voice-follow and the video
+              soundtrack. On iPhone, watch Cam / Mic meters in the preview while
+              recording.
             </p>
 
             <div className="settings-section-label">Stats</div>
@@ -833,6 +885,7 @@ export function Controls({
             <p className="confidence-readout">
               Live confidence: {(confidence * 100).toFixed(0)}%
             </p>
+          </div>
           </div>
         </div>
       )}

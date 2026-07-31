@@ -74,6 +74,42 @@ function focusScaleFromFontSize(fontSize: number): number {
   return 0.75 + Math.min(1, Math.max(0, t)) * 0.55
 }
 
+function FocusCueWord({
+  word,
+  className,
+  onSeek,
+  registerWordRef,
+}: {
+  word: ScriptWord | null
+  className: string
+  onSeek?: (index: number) => void
+  registerWordRef: (index: number, el: HTMLSpanElement | null) => void
+}) {
+  if (!word) {
+    return <span className={`${className} is-empty`}>—</span>
+  }
+
+  const seekable = Boolean(onSeek)
+  return (
+    <span
+      ref={(el) => registerWordRef(word.index, el)}
+      className={`${className}${seekable ? ' is-seekable' : ''}`}
+      data-index={word.index}
+      onClick={
+        onSeek
+          ? (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onSeek(word.index)
+            }
+          : undefined
+      }
+    >
+      {word.raw}
+    </span>
+  )
+}
+
 function FocusWordView({
   words,
   cursor,
@@ -96,12 +132,17 @@ function FocusWordView({
   registerWordRef: (index: number, el: HTMLSpanElement | null) => void
 }) {
   const last = Math.max(0, words.length - 1)
-  const nextIndex = words.length === 0 ? -1 : Math.min(Math.max(0, cursor), last)
-  const pastIndex = nextIndex > 0 ? nextIndex - 1 : -1
-  const nextWord = nextIndex >= 0 ? words[nextIndex] : null
+  const currentIndex =
+    words.length === 0 ? -1 : Math.min(Math.max(0, cursor), last)
+  const pastIndex = currentIndex > 0 ? currentIndex - 1 : -1
+  const upcomingIndex =
+    currentIndex >= 0 && currentIndex < last ? currentIndex + 1 : -1
+  const currentWord = currentIndex >= 0 ? words[currentIndex] : null
   const pastWord = pastIndex >= 0 ? words[pastIndex] : null
+  const upcomingWord = upcomingIndex >= 0 ? words[upcomingIndex] : null
   const finished = words.length > 0 && cursor > last
   const scale = focusScaleFromFontSize(fontSize)
+  const frozen = alignState === 'off_script'
 
   const style = {
     ['--focus-scale' as string]: String(scale),
@@ -113,84 +154,56 @@ function FocusWordView({
       className="script-view script-focus"
       data-focus-mode={mode}
       data-mirrored={mirror ? 'true' : undefined}
-      data-off-script={alignState === 'off_script' ? 'true' : undefined}
+      data-off-script={frozen ? 'true' : undefined}
       style={style}
       aria-live="polite"
       aria-atomic="true"
     >
       <div className="script-mirror script-focus-inner">
-        {mode === 'two_word' ? (
+        {finished ? (
+          <span className="script-focus-word is-current is-done">Done</span>
+        ) : mode === 'one_word' ? (
+          <div className="script-focus-stack script-focus-stack-one">
+            <FocusCueWord
+              word={pastWord}
+              className="script-focus-word is-neighbor is-prev"
+              onSeek={onSeek}
+              registerWordRef={registerWordRef}
+            />
+            <FocusCueWord
+              word={currentWord}
+              className={`script-focus-word is-current${frozen ? ' is-frozen' : ''}`}
+              onSeek={onSeek}
+              registerWordRef={registerWordRef}
+            />
+            <FocusCueWord
+              word={upcomingWord}
+              className="script-focus-word is-neighbor is-next"
+              onSeek={onSeek}
+              registerWordRef={registerWordRef}
+            />
+          </div>
+        ) : (
           <div className="script-focus-stack">
             <span className="script-focus-label" aria-hidden>
               Said
             </span>
-            {pastWord ? (
-              <span
-                ref={(el) => registerWordRef(pastWord.index, el)}
-                className="script-focus-word is-past is-seekable"
-                data-index={pastWord.index}
-                onClick={
-                  onSeek
-                    ? (e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        onSeek(pastWord.index)
-                      }
-                    : undefined
-                }
-              >
-                {pastWord.raw}
-              </span>
-            ) : (
-              <span className="script-focus-word is-past is-empty">—</span>
-            )}
+            <FocusCueWord
+              word={pastWord}
+              className="script-focus-word is-past"
+              onSeek={onSeek}
+              registerWordRef={registerWordRef}
+            />
             <span className="script-focus-label" aria-hidden>
               Next
             </span>
-            {finished ? (
-              <span className="script-focus-word is-current is-done">Done</span>
-            ) : nextWord ? (
-              <span
-                ref={(el) => registerWordRef(nextWord.index, el)}
-                className={`script-focus-word is-current${alignState === 'off_script' ? ' is-frozen' : ''}${onSeek ? ' is-seekable' : ''}`}
-                data-index={nextWord.index}
-                onClick={
-                  onSeek
-                    ? (e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        onSeek(nextWord.index)
-                      }
-                    : undefined
-                }
-              >
-                {nextWord.raw}
-              </span>
-            ) : (
-              <span className="script-focus-word is-current is-empty">…</span>
-            )}
+            <FocusCueWord
+              word={currentWord}
+              className={`script-focus-word is-current${frozen ? ' is-frozen' : ''}`}
+              onSeek={onSeek}
+              registerWordRef={registerWordRef}
+            />
           </div>
-        ) : finished ? (
-          <span className="script-focus-word is-current is-done">Done</span>
-        ) : nextWord ? (
-          <span
-            ref={(el) => registerWordRef(nextWord.index, el)}
-            className={`script-focus-word is-current${alignState === 'off_script' ? ' is-frozen' : ''}${onSeek ? ' is-seekable' : ''}`}
-            data-index={nextWord.index}
-            onClick={
-              onSeek
-                ? (e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    onSeek(nextWord.index)
-                  }
-                : undefined
-            }
-          >
-            {nextWord.raw}
-          </span>
-        ) : (
-          <span className="script-focus-word is-current is-empty">…</span>
         )}
       </div>
     </div>

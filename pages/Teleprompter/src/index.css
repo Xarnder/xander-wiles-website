@@ -368,6 +368,10 @@ textarea {
 
 .controls {
   flex: 0 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
   padding: 0.35rem 0.7rem 0.4rem;
   border-radius: 0 0 var(--radius) var(--radius);
   background: var(--glass);
@@ -382,6 +386,7 @@ textarea {
   align-items: stretch;
   gap: 0.55rem;
   min-width: 0;
+  flex: 0 0 auto;
 }
 
 .controls-start {
@@ -437,6 +442,33 @@ textarea {
 
 .record-btn.is-recording {
   border-color: rgba(255, 90, 110, 0.55);
+}
+
+.record-btn.has-take {
+  border-color: rgba(255, 170, 80, 0.55);
+  box-shadow: 0 0 14px rgba(255, 150, 60, 0.28);
+}
+
+.record-btn.has-take .record-btn-dot {
+  background: var(--accent-hot, #ffb347);
+  box-shadow: 0 0 8px rgba(255, 170, 80, 0.65);
+}
+
+.record-btn.is-busy {
+  opacity: 0.85;
+  cursor: wait;
+}
+
+.controls-start .record-take-btn {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.75rem;
+  padding: 0.45rem 0.65rem;
+  font-weight: 650;
+  border-radius: calc(var(--radius) - 2px);
+  border-color: rgba(255, 170, 80, 0.45);
 }
 
 .controls-rest {
@@ -1016,9 +1048,9 @@ html[data-theme='light'] .progress-percent {
   width: 3px;
 }
 
-.app-shell[data-ui-scale='large'] .settings-panel {
-  max-height: min(62dvh, 34rem);
-  padding: 1rem 1.1rem 1.1rem;
+.app-shell[data-ui-scale='large'] .settings-panel-body {
+  max-height: min(80dvh, calc(100svh - 9.5rem));
+  padding: 1rem 1.1rem 1.25rem;
 }
 
 .app-shell[data-ui-scale='large'] .settings-grid {
@@ -1136,6 +1168,11 @@ html[data-theme='oled'] .modal-card {
   width: min(100%, 24rem);
 }
 
+.modal-card.modal-lg {
+  width: min(100%, 28rem);
+  max-height: min(92dvh, 52rem);
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -1219,6 +1256,120 @@ html[data-theme='light'] .modal-footer {
 html[data-theme='light'] .modal-fix {
   background: rgba(200, 110, 30, 0.1);
   border-color: rgba(180, 90, 20, 0.22);
+}
+
+/* ─── Recording review (post-take preview + share/download) ─── */
+
+.recording-review {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.recording-review-player {
+  position: relative;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  aspect-ratio: 3 / 4;
+  max-height: min(52dvh, 28rem);
+}
+
+.recording-review-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.recording-review-meta {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.recording-review-filename {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recording-review-stats {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.45rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-weight: 550;
+}
+
+.recording-review-hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.recording-review-error {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  background: var(--danger-soft);
+  border: 1px solid rgba(255, 107, 122, 0.4);
+  color: var(--text);
+}
+
+.recording-review-notice {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  background: var(--accent-soft, rgba(255, 170, 80, 0.12));
+  border: 1px solid rgba(255, 170, 80, 0.28);
+  color: var(--text);
+}
+
+.recording-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+.recording-review-primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.recording-review-primary .btn {
+  min-width: 6.5rem;
+}
+
+.replace-recording-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.replace-recording-name {
+  font-weight: 700;
+  word-break: break-all;
 }
 
 .modal-tone-danger .modal-header h2 {
@@ -1433,6 +1584,7 @@ html[data-theme='light'] .modal-fix {
   gap: 0.45rem;
   font-size: 0.82rem;
   color: var(--text-dim);
+  flex: 0 0 auto;
 }
 
 .loading-bar-fill {
@@ -1774,23 +1926,47 @@ html[data-theme='light'] .modal-fix {
 }
 
 /* ─── Settings ─── */
+/* settings-layout-v2 */
 
 .settings-panel {
   margin: 0.45rem 0 0;
-  max-height: min(58dvh, 28rem);
+  /* Outer shell clips to radius; scrolling lives on .settings-panel-body */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  z-index: 4;
+  flex: 0 0 auto;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-soft);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--glass-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.settings-panel-body {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  max-height: min(78dvh, calc(100svh - 8rem));
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  z-index: 4;
+  padding: 0.9rem 1rem 1.15rem;
+  scroll-padding-block: 0.75rem;
 }
 
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 0.95rem 1.15rem;
   align-items: start;
+  min-width: 0;
+  width: 100%;
 }
 
 .slider-field {
@@ -1861,6 +2037,9 @@ html[data-theme='light'] .modal-fix {
   color: var(--text);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .settings-grid select:focus,
@@ -1885,6 +2064,7 @@ html[data-theme='light'] .modal-fix {
 
 .settings-mic {
   grid-column: 1 / -1;
+  min-width: 0;
 }
 
 .settings-footer {
@@ -1894,7 +2074,9 @@ html[data-theme='light'] .modal-fix {
   gap: 0.75rem 1rem;
   margin-top: 1rem;
   padding-top: 0.85rem;
+  padding-bottom: 0.15rem;
   border-top: 1px solid var(--border-soft);
+  min-width: 0;
 }
 
 .settings-preload {
@@ -2130,6 +2312,10 @@ html[data-theme='light'] .settings-grid input[type='range']::-webkit-slider-runn
   min-height: 0;
 }
 
+.script-focus-stack-one {
+  gap: 0.55rem;
+}
+
 .script-focus-label {
   font-family: var(--font-ui, var(--font-display));
   font-size: clamp(0.65rem, 2.8vw, 0.85rem);
@@ -2163,12 +2349,26 @@ html[data-theme='light'] .settings-grid input[type='range']::-webkit-slider-runn
     text-shadow 160ms ease;
 }
 
-/* Next word — fill the phone screen */
+/* Current / next word — fill the phone screen */
 .script-focus[data-focus-mode='one_word'] .script-focus-word.is-current,
 .script-focus[data-focus-mode='two_word'] .script-focus-word.is-current {
   font-size: calc(min(28vw, 22dvh, 7.5rem) * var(--focus-scale, 1));
   color: var(--text);
   text-shadow: 0 0 28px rgba(255, 150, 60, 0.28);
+}
+
+/* One-word mode: prev / next as small faded context */
+.script-focus[data-focus-mode='one_word'] .script-focus-word.is-neighbor {
+  font-size: calc(min(11vw, 6.5dvh, 2.35rem) * var(--focus-scale, 1));
+  font-weight: 600;
+  color: var(--text-dim);
+  opacity: 0.38;
+  text-shadow: none;
+  line-height: 1.1;
+}
+
+.script-focus[data-focus-mode='one_word'] .script-focus-word.is-neighbor.is-empty {
+  opacity: 0.2;
 }
 
 .script-focus[data-focus-mode='two_word'] .script-focus-word.is-past {
@@ -2307,6 +2507,12 @@ html[data-bold-script='true'] .script-focus-word {
     font-size: 0.78rem;
   }
 
+  .controls-start .record-take-btn {
+    min-width: 3.25rem;
+    padding: 0.55rem 0.45rem;
+    font-size: 0.78rem;
+  }
+
   .camera-preview {
     width: min(38vw, 9.5rem);
   }
@@ -2389,9 +2595,12 @@ html[data-bold-script='true'] .script-focus-word {
   }
 
   .settings-panel {
-    max-height: min(62dvh, 70svh);
     margin-top: 0.4rem;
-    padding: 0.75rem 0.8rem 0.85rem;
+  }
+
+  .settings-panel-body {
+    max-height: min(68dvh, calc(100svh - 9.5rem));
+    padding: 0.8rem 0.85rem 1rem;
   }
 
   .settings-grid {
@@ -2449,6 +2658,10 @@ html[data-bold-script='true'] .script-focus-word {
     font-size: calc(min(32vw, 24dvh, 8.5rem) * var(--focus-scale, 1));
   }
 
+  .script-focus[data-focus-mode='one_word'] .script-focus-word.is-neighbor {
+    font-size: calc(min(12vw, 7dvh, 2.6rem) * var(--focus-scale, 1));
+  }
+
   .script-focus[data-focus-mode='two_word'] .script-focus-word.is-past {
     font-size: calc(min(16vw, 10dvh, 3.6rem) * var(--focus-scale, 1));
   }
@@ -2479,7 +2692,8 @@ html[data-bold-script='true'] .script-focus-word {
   }
 
   .modal-card,
-  .modal-card.modal-sm {
+  .modal-card.modal-sm,
+  .modal-card.modal-lg {
     width: min(100%, 28rem);
     max-height: min(88dvh, 88svh);
   }
@@ -2496,6 +2710,47 @@ html[data-bold-script='true'] .script-focus-word {
 
   .modal-footer .confidence-readout {
     margin-left: 0;
+  }
+
+  .recording-review-player {
+    max-height: min(48dvh, 24rem);
+    aspect-ratio: 3 / 4;
+  }
+
+  .recording-review-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .recording-review-primary {
+    width: 100%;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .recording-review-primary .btn,
+  .recording-review-discard {
+    width: 100%;
+    min-height: 2.6rem;
+  }
+
+  .recording-review-primary:has(> .btn:only-child) {
+    grid-template-columns: 1fr;
+  }
+
+  .recording-review-primary {
+    grid-template-columns: 1fr;
+  }
+
+  .replace-recording-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .replace-recording-actions .btn {
+    width: 100%;
+    min-height: 2.6rem;
   }
 }
 
@@ -2585,6 +2840,10 @@ html[data-bold-script='true'] .script-focus-word {
   .script-focus[data-focus-mode='one_word'] .script-focus-word.is-current,
   .script-focus[data-focus-mode='two_word'] .script-focus-word.is-current {
     font-size: calc(min(34vw, 26dvh, 9rem) * var(--focus-scale, 1));
+  }
+
+  .script-focus[data-focus-mode='one_word'] .script-focus-word.is-neighbor {
+    font-size: calc(min(13vw, 7.5dvh, 2.75rem) * var(--focus-scale, 1));
   }
 
   .script-focus[data-focus-mode='two_word'] .script-focus-word.is-past {

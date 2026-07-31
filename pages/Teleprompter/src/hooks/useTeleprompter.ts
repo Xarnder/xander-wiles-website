@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlignmentEngine, type AlignmentState } from '../alignment/AlignmentEngine'
 import { useSpeechStream } from '../asr/useSpeechStream'
-import type { FacingMode } from '../media/platform'
+import type { FacingMode, VideoResolution } from '../media/platform'
+import { isVideoResolution } from '../media/platform'
 import { useScrollController, type ScrollAnchorMode } from '../scroll/useScrollController'
 import { tokenizeTranscript } from '../utils/tokenize'
 import { isSentenceEnd, nextSentenceBoundary } from '../utils/sentences'
@@ -62,6 +63,8 @@ export interface TeleprompterSettings {
   allowJumpBack: boolean
   /** Where the live cursor sits in the viewport while scrolling. */
   scrollAnchor: ScrollAnchorMode
+  /** Camera recording resolution (16:9). */
+  videoResolution: VideoResolution
   /** Master switch — hide the entire stats strip when false. */
   showStats: boolean
   showProgressBar: boolean
@@ -91,6 +94,7 @@ export const DEFAULT_SETTINGS: TeleprompterSettings = {
   showCursorHighlight: true,
   allowJumpBack: true,
   scrollAnchor: 'hybrid',
+  videoResolution: 'max',
   showStats: true,
   showProgressBar: true,
   showPercent: true,
@@ -127,6 +131,9 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
     p.displayMode === 'script'
       ? p.displayMode
       : DEFAULT_SETTINGS.displayMode
+  const videoResolution: VideoResolution = isVideoResolution(p.videoResolution)
+    ? p.videoResolution
+    : DEFAULT_SETTINGS.videoResolution
 
   return {
     fontSize: clamp(
@@ -176,6 +183,7 @@ function sanitizeSettings(raw: unknown): TeleprompterSettings {
         : DEFAULT_SETTINGS.preserveBreaks,
     sentenceBreak,
     displayMode,
+    videoResolution,
     cursorOffset: clamp(
       typeof p.cursorOffset === 'number'
         ? Math.round(p.cursorOffset)
@@ -273,13 +281,11 @@ function persistDeviceId(deviceId: string | null): void {
 }
 
 export interface UseTeleprompterOptions {
-  /** Record camera+mic while listening; same mic tracks feed speech recognition. */
-  recordCamera?: boolean
   facingMode?: FacingMode
 }
 
 export function useTeleprompter(options: UseTeleprompterOptions = {}) {
-  const { recordCamera = false, facingMode = 'user' } = options
+  const { facingMode = 'user' } = options
   const [script, setScriptState] = useState(loadStoredScript)
   const [settings, setSettings] = useState<TeleprompterSettings>(loadStoredSettings)
   const [cursor, setCursor] = useState(0)
@@ -476,18 +482,22 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
     modelReady,
     captureStream,
     recordingActive,
+    recordingBusy,
+    recordingStartedAt,
     recordingResult,
     recordingSupported,
     start: startSpeech,
     stop: stopSpeech,
+    startRecording,
+    stopRecording,
     preload,
     resetTranscript,
     clearError,
     clearRecordingResult,
   } = useSpeechStream({
     deviceId,
-    recordCamera,
     facingMode,
+    videoResolution: settings.videoResolution,
     onPartial,
     onCommitted,
   })
@@ -669,9 +679,13 @@ export function useTeleprompter(options: UseTeleprompterOptions = {}) {
       clearError,
       captureStream,
       recordingActive,
+      recordingBusy,
+      recordingStartedAt,
       recordingResult,
       recordingSupported,
       clearRecordingResult,
+      startRecording,
+      stopRecording,
     },
   }
 }

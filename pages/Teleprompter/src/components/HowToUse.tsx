@@ -42,13 +42,16 @@ export function HowToUse({ onClose }: HowToUseProps) {
             (flips icons and labels without rearranging the layout).
           </li>
           <li>
-            Turn on <strong>Record</strong> to capture camera video. The same
-            microphone is used for the video soundtrack and for voice-follow
-            scrolling (iPhone / iPad Safari &amp; Chrome supported).
+            Turn on <strong>Record</strong> anytime to capture camera video
+            (independent of Start / Pause), or press <kbd>V</kbd>. Tap{' '}
+            <strong>Stop</strong> to finish the take — a review opens for
+            preview, Share, and Download. Use <strong>Keep for later</strong> to
+            hold the take (a <strong>Take</strong> button reopens it), or
+            Discard after confirming.
           </li>
           <li>
-            Press <strong>Start</strong> and allow microphone (and camera if
-            recording). The first run downloads the speech model (cached
+            Press <strong>Start</strong> for voice-follow scrolling (and allow
+            microphone access). The first run downloads the speech model (cached
             afterward).
           </li>
           <li>
@@ -56,9 +59,10 @@ export function HowToUse({ onClose }: HowToUseProps) {
             with you.
           </li>
           <li>
-            Press <strong>Pause</strong> to stop. If you recorded, use{' '}
-            <strong>Save / Share</strong> to keep the video (Photos or Files on
-            iOS), or <strong>Reset</strong> to jump back to the beginning.
+            Press <strong>Pause</strong> to stop voice-follow (recording keeps
+            going if active). If you recorded, use <strong>Stop</strong> then{' '}
+            <strong>Share</strong> / <strong>Download</strong> to keep the video,
+            or <strong>Reset</strong> to jump back to the beginning.
           </li>
         </ol>
 
@@ -140,6 +144,9 @@ export function HowToUse({ onClose }: HowToUseProps) {
           </li>
           <li>
             <kbd>F</kbd> — Fullscreen
+          </li>
+          <li>
+            <kbd>V</kbd> — Start / stop camera recording
           </li>
           <li>
             <kbd>Esc</kbd> — Close panel / exit fullscreen
@@ -238,7 +245,8 @@ export function HowToUse({ onClose }: HowToUseProps) {
           </li>
           <li>
             <strong>Display mode</strong> — full scrolling script, one giant
-            next-word cue, or two-word (said + next) for iPhone-sized prompts.
+            current-word cue (prev/next faded), or two-word (said + next) for
+            iPhone-sized prompts.
           </li>
           <li>
             <strong>Large controls</strong> — chunkier buttons, stats, and
@@ -249,8 +257,8 @@ export function HowToUse({ onClose }: HowToUseProps) {
             go on camera.
           </li>
           <li>
-            <strong>Record</strong> — capture front or back camera video while you
-            read. Audio is shared with speech recognition so scrolling still works.
+            <strong>Record</strong> — start/stop camera capture independently of
+            voice-follow. Audio is shared with speech recognition when both run.
           </li>
         </ul>
 

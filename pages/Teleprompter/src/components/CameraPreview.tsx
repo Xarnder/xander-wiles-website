@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCaptureMeters } from '../media/useCaptureMeters'
 
 interface CameraPreviewProps {
@@ -6,7 +6,16 @@ interface CameraPreviewProps {
   /** Mirror the preview for front-facing selfie framing (does not affect the file). */
   mirror?: boolean
   recording?: boolean
+  /** Epoch ms when the current take started. */
+  recordingStartedAt?: number | null
   className?: string
+}
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000))
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 /**
@@ -17,10 +26,12 @@ export function CameraPreview({
   stream,
   mirror = true,
   recording = false,
+  recordingStartedAt = null,
   className = '',
 }: CameraPreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const meters = useCaptureMeters(stream, Boolean(stream))
+  const [elapsedMs, setElapsedMs] = useState(0)
 
   useEffect(() => {
     const el = videoRef.current
@@ -51,6 +62,17 @@ export function CameraPreview({
     }
   }, [stream])
 
+  useEffect(() => {
+    if (!recording || recordingStartedAt == null) {
+      setElapsedMs(0)
+      return
+    }
+    const tick = () => setElapsedMs(Date.now() - recordingStartedAt)
+    tick()
+    const id = window.setInterval(tick, 250)
+    return () => window.clearInterval(id)
+  }, [recording, recordingStartedAt])
+
   if (!stream) return null
 
   const micPct = Math.round(meters.micLevel * 100)
@@ -77,7 +99,7 @@ export function CameraPreview({
         {recording ? (
           <span className="camera-preview-rec">
             <span className="camera-preview-rec-dot" aria-hidden />
-            REC
+            REC {formatElapsed(elapsedMs)}
           </span>
         ) : null}
 

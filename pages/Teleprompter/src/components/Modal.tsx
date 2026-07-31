@@ -8,8 +8,8 @@ interface ModalProps {
   onClose: () => void
   /** Optional footer actions (buttons). */
   footer?: ReactNode
-  /** Narrower card for confirms / alerts. */
-  size?: 'md' | 'sm'
+  /** Narrower card for confirms / alerts. Wider for media review. */
+  size?: 'md' | 'sm' | 'lg'
   /** Destructive accent for warning confirms. */
   tone?: 'default' | 'danger'
 }
