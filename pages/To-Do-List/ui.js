@@ -3855,6 +3855,13 @@ export function openEditListModal(listId) {
         exportJsonBtn.parentNode.replaceChild(newExportJson, exportJsonBtn);
     }
 
+    const exportMdBtn = document.getElementById('edit-list-export-md-btn');
+    let newExportMd = null;
+    if (exportMdBtn) {
+        newExportMd = exportMdBtn.cloneNode(true);
+        exportMdBtn.parentNode.replaceChild(newExportMd, exportMdBtn);
+    }
+
     if (quickTagBtn) {
         const newQuickTag = quickTagBtn.cloneNode(true);
         quickTagBtn.parentNode.replaceChild(newQuickTag, quickTagBtn);
@@ -3873,6 +3880,13 @@ export function openEditListModal(listId) {
         newExportJson.onclick = () => {
             if (window.triggerSingleListJSONExport) {
                 window.triggerSingleListJSONExport(listId);
+            }
+        };
+    }
+    if (newExportMd) {
+        newExportMd.onclick = () => {
+            if (window.triggerSingleListMarkdownExport) {
+                window.triggerSingleListMarkdownExport(listId);
             }
         };
     }

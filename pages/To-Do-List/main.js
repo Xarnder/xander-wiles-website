@@ -23,7 +23,7 @@ import {
     allSubtasksComplete
 } from './nested.js';
 import { MISC_TAG_ID, ensureDefaultTags, getTagsById, getTagNameForTask } from './tags.js';
-import { buildXanderListV1 } from './list-interchange.js';
+import { buildXanderListV1, xanderListToMarkdown } from './list-interchange.js';
 
 const nestedRollupPromptedTaskIds = new Set();
 
@@ -344,6 +344,7 @@ window.clearCompletedInList = API.clearCompletedInList;
 window.showConfirmModal = showConfirmModal;
 window.triggerSingleListCSVExport = triggerSingleListCSVExport;
 window.triggerSingleListJSONExport = triggerSingleListJSONExport;
+window.triggerSingleListMarkdownExport = triggerSingleListMarkdownExport;
 window.confirmDeleteTag = (tagId, tagName) => {
     showConfirmModal(
         'Delete Tag?',
@@ -2215,6 +2216,46 @@ async function triggerAllBoardsCSVExport() {
     downloadCSV(csvLines.join("\n"), `${(window.APP_CONFIG?.appName || "Task-Master").replace(/\s+/g, '-')}-Full-Project-Export`);
 }
 
+function buildSingleListExportPayload(list) {
+    const tagsById = getTagsById(state.appData.settings.tags);
+    const source =
+        window.APP_CONFIG?.themeOverride === 'story-manager' ||
+        /story/i.test(window.APP_CONFIG?.appName || '')
+            ? 'story-manager'
+            : 'to-do-list';
+
+    return buildXanderListV1({
+        list,
+        tasks: state.appData.tasks,
+        source,
+        isImportant: isImportantTask,
+        resolveTags: (task) => {
+            const name = getTagNameForTask(task, tagsById);
+            return name && name !== 'Misc' ? [name] : [];
+        },
+    });
+}
+
+function downloadListExportFile(content, mimeType, filename, successMessage) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+    Utils.showToast(successMessage, 'success');
+}
+
+function getSafeListExportBasename(list) {
+    return String(list.title || getTerm(true, true))
+        .replace(/[^a-z0-9]+/gi, '-')
+        .replace(/^-|-$/g, '')
+        .toLowerCase() || 'list';
+}
+
 function triggerSingleListJSONExport(listId) {
     const list = state.appData.rawLists.find((l) => l.id === listId);
     if (!list) return Utils.showToast('List not found');
@@ -2226,43 +2267,44 @@ function triggerSingleListJSONExport(listId) {
     }
 
     try {
-        const tagsById = getTagsById(state.appData.settings.tags);
-        const source =
-            window.APP_CONFIG?.themeOverride === 'story-manager' ||
-            /story/i.test(window.APP_CONFIG?.appName || '')
-                ? 'story-manager'
-                : 'to-do-list';
-
-        const payload = buildXanderListV1({
-            list,
-            tasks: state.appData.tasks,
-            source,
-            isImportant: isImportantTask,
-            resolveTags: (task) => {
-                const name = getTagNameForTask(task, tagsById);
-                return name && name !== 'Misc' ? [name] : [];
-            },
-        });
-
+        const payload = buildSingleListExportPayload(list);
         const jsonStr = JSON.stringify(payload, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const safeTitle = String(list.title || getTerm(true, true))
-            .replace(/[^a-z0-9]+/gi, '-')
-            .replace(/^-|-$/g, '')
-            .toLowerCase() || 'list';
         const dateStr = new Date().toISOString().split('T')[0];
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${safeTitle}-xander-list-${dateStr}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 100);
-        Utils.showToast('List JSON downloaded — import in Markdown Editor', 'success');
+        downloadListExportFile(
+            jsonStr,
+            'application/json',
+            `${getSafeListExportBasename(list)}-xander-list-${dateStr}.json`,
+            'List JSON downloaded — import in Markdown Editor'
+        );
     } catch (err) {
         console.error('List JSON export failed:', err);
         Utils.showToast(err.message || 'Could not export list JSON', 'warning');
+    }
+}
+
+function triggerSingleListMarkdownExport(listId) {
+    const list = state.appData.rawLists.find((l) => l.id === listId);
+    if (!list) return Utils.showToast('List not found');
+
+    const taskIds = list.taskIds || [];
+    const hasTasks = taskIds.some((id) => state.appData.tasks[id]);
+    if (!hasTasks) {
+        return Utils.showToast(`List has no ${getTerm(false)} to export`);
+    }
+
+    try {
+        const payload = buildSingleListExportPayload(list);
+        const markdown = xanderListToMarkdown(payload);
+        const dateStr = new Date().toISOString().split('T')[0];
+        downloadListExportFile(
+            markdown,
+            'text/markdown;charset=utf-8',
+            `${getSafeListExportBasename(list)}-${dateStr}.md`,
+            'List markdown downloaded'
+        );
+    } catch (err) {
+        console.error('List markdown export failed:', err);
+        Utils.showToast(err.message || 'Could not export list markdown', 'warning');
     }
 }
 

@@ -94,6 +94,26 @@ export function buildXanderListV1({
 }
 
 /**
+ * Convert interchange payload → plain markdown document.
+ * List title becomes an H1; items (and nested children) become a bullet list.
+ * @param {object} payload
+ * @returns {string}
+ */
+export function xanderListToMarkdown(payload) {
+    const parsed = normalizeXanderListPayload(payload);
+    const title = String(parsed.list.title || 'Untitled list').trim() || 'Untitled list';
+    const tree = parsed.items.map((item) => ({
+        text: item.text,
+        nested: item.nested || [],
+    }));
+    const body = formatNestedTree(tree, 0);
+    if (!body) {
+        return `# ${title}\n`;
+    }
+    return `# ${title}\n\n${body}\n`;
+}
+
+/**
  * Convert interchange payload → Markdown Editor mdlist object.
  * Nested children are flattened into the item text as indented bullets.
  * Scores are assigned from list order (first = highest).
